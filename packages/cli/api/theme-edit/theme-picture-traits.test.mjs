@@ -267,7 +267,7 @@ describe('traits from a picture', () => {
       verb: 'set',
       thing: '--size-element-md',
       value: '28px',
-      on: 'button-like',
+      on: 'controls',
     });
     expect(steps).toContainEqual({
       verb: 'set',
@@ -471,7 +471,7 @@ describe('traits from a picture', () => {
     ]);
   });
 
-  it('writes field height on the inputs when it differs from the buttons', () => {
+  it("writes one control height, and names the inputs' when it differs from the buttons", () => {
     const c = canvas(420, 200);
     for (let k = 0; k < 3; k++)
       c.box({
@@ -496,19 +496,17 @@ describe('traits from a picture', () => {
         label: true,
         labelAt: 'start',
       });
-    const steps = readTraits(c.png()).traits.map(t => t.step);
-    expect(steps).toContainEqual({
-      verb: 'set',
-      thing: '--size-element-md',
-      value: '36px',
-      on: 'button-like',
-    });
-    expect(steps).toContainEqual({
-      verb: 'set',
-      thing: '--size-element-md',
-      value: '56px',
-      on: 'inputs',
-    });
+    const {traits, unsure} = readTraits(c.png());
+    // Controls share one height at each size: the family read from more
+    // boxes is written for every control, and the other is named.
+    expect(
+      traits.filter(t => t.step.thing === '--size-element-md').map(t => t.step),
+    ).toEqual([
+      {verb: 'set', thing: '--size-element-md', value: '36px', on: 'controls'},
+    ]);
+    expect(
+      unsure.find(u => u.trait === 'height' && u.on === 'inputs')?.why,
+    ).toMatch(/read 56px, where .* read 36px: controls share one height/);
   });
 
   it("writes the buttons' height and names the inputs' when theirs is not clear", () => {
@@ -552,7 +550,7 @@ describe('traits from a picture', () => {
       verb: 'set',
       thing: '--size-element-md',
       value: '36px',
-      on: 'button-like',
+      on: 'controls',
     });
     expect(traits.some(t => t.on === 'inputs' && t.trait === 'height')).toBe(
       false,
@@ -594,18 +592,11 @@ describe('traits from a picture', () => {
     expect(steps.some(st => /^--size-element/.test(st.thing) && !st.on)).toBe(
       false,
     );
-    expect(steps).toContainEqual({
-      verb: 'set',
-      thing: '--size-element-md',
-      value: '23px',
-      on: 'button-like',
-    });
-    expect(steps).toContainEqual({
-      verb: 'set',
-      thing: '--size-element-md',
-      value: '21px',
-      on: 'inputs',
-    });
+    // Buttons and fields agree within the reading's tolerance: one height
+    // for every control.
+    expect(steps.filter(st => st.thing === '--size-element-md')).toEqual([
+      {verb: 'set', thing: '--size-element-md', value: '23px', on: 'controls'},
+    ]);
   });
 
   it("gives the same readings as the editor's trait slots, gradients included", () => {
@@ -702,7 +693,7 @@ describe('traits from a picture', () => {
       verb: 'set',
       thing: '--size-element-md',
       value: '28px',
-      on: 'button-like',
+      on: 'controls',
     });
     expect(traits.map(t => t.step)).toContainEqual({
       verb: 'set',
@@ -750,7 +741,7 @@ describe('how <picture>', () => {
     const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
     expect(
       commands.some((/** @type {string} */ c) =>
-        / set pt --size-element-md 28px --on button-like$/.test(c),
+        / set pt --size-element-md 28px --on controls$/.test(c),
       ),
     ).toBe(true);
     expect(
@@ -794,6 +785,25 @@ describe('how <picture>', () => {
     expect(
       d.unsure.some((/** @type {any} */ u) =>
         /sets --size-element-md 40px already, which stays/.test(u.text),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps a height the theme sets on a control, which every control takes', async () => {
+    await themeEditNew('ptc', {cwd, like: 'neutral'});
+    await themeEditSet('ptc', 'height', '40px', {cwd, on: 'button'});
+    const d = /** @type {any} */ (
+      (await themeEditHow('look.png', {cwd, theme: 'ptc'})).data
+    );
+    const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
+    expect(
+      commands.some((/** @type {string} */ c) => /--size-element-md/.test(c)),
+    ).toBe(false);
+    expect(
+      d.unsure.some((/** @type {any} */ u) =>
+        /sets --size-element-md on controls 40px already, which stays/.test(
+          u.text,
+        ),
       ),
     ).toBe(true);
   });

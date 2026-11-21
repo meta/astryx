@@ -2303,7 +2303,12 @@ async function pictureLook(cwd, name, read) {
   const familyHolds = (family, on) => {
     const families =
       family === 'controls' ? ['button-like', 'inputs'] : [family];
-    return families.some(f => on === f || (groups[f] ?? []).includes(on));
+    // (The family itself holds what is set on it: a height set on a
+    // control is saved on the controls.)
+    return (
+      on === family ||
+      families.some(f => on === f || (groups[f] ?? []).includes(on))
+    );
   };
   const env = await howTheme(ctx, cwd, name);
   const own = env.data.settings;

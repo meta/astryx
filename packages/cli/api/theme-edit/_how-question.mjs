@@ -94,11 +94,14 @@ import {
   partRuleTokens,
   positionalCornerToken,
   radiusAt,
+  chatRatio,
+  chatRadiusValue,
   partState,
   baseBlocksFor,
   partsOf,
   MOMENT_STATES,
   groupsOf,
+  growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
 } from './_settings.mjs';
@@ -112,6 +115,7 @@ import {
   inheritedReach,
   settableStates,
   stateSynonym,
+  pillDrawnRadios,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
@@ -135,6 +139,15 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * measured check keeps.
  * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean}} Draft
  */
+
+/** The words a badge style ask is made of when the style is all it asks. */
+const BADGE_STYLE_WORDS = new Set(
+  (
+    'soft tint tinted outline outlined solid filled badge badges tag tags ' +
+    'chip chips the a all every my our their its make made ' +
+    'use with in be to look style styled color colors colour colours'
+  ).split(' '),
+);
 
 /**
  * Words a near miss is corrected to (one or two letters off), besides the
@@ -488,6 +501,27 @@ const JOINING_WORD =
   /^(?:keep|keeps|leave|leaves|stay|stays|remain|remains|and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/;
 
 /**
+ * Whether words are only chat said to the editor ("thanks a lot", "no
+ * rush", "please", "love it"), never an ask.
+ * @param {string} text
+ */
+function chatOnly(text) {
+  // (A typed value, a hex or a number, is never chat.)
+  if (/[\d#]/.test(String(text))) return false;
+  const words =
+    String(text)
+      .toLowerCase()
+      .replace(
+        /\b(?:(?:thank(?:s| you| u)|thx)(?: so much| a lot| very much)?|many thanks|ty|tysm|cheers|hmm+|idk|cool|nice|great|(?:i\s+)?love it|asap|no rush|appreciate it|much appreciated)\b/g,
+        ' ',
+      )
+      .match(/[a-z']+/g) ?? [];
+  return words.every(
+    w => PRONOUN_WORD.test(w) || JOINING_WORD.test(w) || /^(?:i|u)$/.test(w),
+  );
+}
+
+/**
  * The opposite of a look a word names, for the word said with "un-" or
  * "non-" ("un-rounded" buttons are square; "non-bold" headings regular).
  * @type {Record<string, string>}
@@ -792,7 +826,7 @@ export function cornersNamed(text, part = null, names = []) {
   // for the context menu, names no corner either.)
   for (const re of names)
     t = t.replace(
-      new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`),
+      lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
       ' ',
     );
   t = t.replace(/\bupper\b/g, 'top').replace(/\blower\b/g, 'bottom');
@@ -947,6 +981,17 @@ const LOOK_NOUNS = String.raw`(?:theme|look|vibe|aesthetic|palette)`;
  */
 const TELLING_COMPARATIVES = String.raw`(?:darker|lighter|brighter|duller|bigger|smaller|heavier|thinner)`;
 const MARK_VERBS = String.raw`(?:circle|highlight|mark|ring|outline|underline|show)`;
+/** Words that say the whole theme: "everywhere", "throughout", "the whole app". */
+const THEME_WIDE_WORDS =
+  /\b(?:everywhere|throughout|across the (?:app|board|site|theme)|all over|the whole (?:app|theme|site|ui))\b/;
+/** A likeness said of a part before its list's colon: "menus look like Slack's:", "alerts like Bootstrap 1:". */
+const LIKENESS_TAIL = /^(?:(?:look|looks|feel|feels)\s+)?like\b[^:]*$/;
+/** A side a corner, edge or border look is said of: "on top", "at the bottom", "bottom corners", "bottom border". */
+const SIDE_SAID =
+  /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b|\b(?:top|bottom|left|right)\s+(?:borders?|lines?)\b/;
+/** The app's text said as the thing to change: "make the text a bit larger", "all text". */
+const THE_TEXT_SAID =
+  /\b(?:make|set|turn)\s+(?:the|all)\s+text\b|\ball\s+(?:the\s+)?text\b|^(?:and\s+)?the\s+text\s+(?:a\s+bit\s+|slightly\s+|much\s+)?(?:larger|bigger|smaller|darker|lighter)\b/;
 const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?|tools?|products?|platforms?|portals?)`;
 
 /**
@@ -1272,7 +1317,7 @@ function sharedAsk(q, partWords) {
         const middle = pieces.slice(1, -1).map(x => x.trim());
         const isPart = (/** @type {string} */ x) =>
           partWords.some(([re]) =>
-            new RegExp(`^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
+            lexAround(re, `^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
           );
         if (pieces.length > 2 && !middle.every(isPart)) return seg;
         const m = /\s+and\s+/.exec(seg);
@@ -1293,7 +1338,7 @@ function sharedAsk(q, partWords) {
         const right = seg.slice(lastAnd);
         for (const [re] of partWords) {
           // (A state word before the part, "hovered buttons", goes with it.)
-          const lm = new RegExp(`(?:${re.source})\\s*$`).exec(left);
+          const lm = lexAround(re, `(?:${re.source})\\s*$`).exec(left);
           if (!lm) continue;
           const lw = /(\b[a-z]+)\s+$/.exec(left.slice(0, lm.index));
           const withState = lw != null && stateWord(lw[1]) != null;
@@ -1303,9 +1348,10 @@ function sharedAsk(q, partWords) {
           };
           for (const [re2] of partWords) {
             const r =
-              new RegExp(`^\\s*(?:${re2.source})`).exec(right) ??
+              lexAround(re2, `^\\s*(?:${re2.source})`).exec(right) ??
               (() => {
-                const m2 = new RegExp(
+                const m2 = lexAround(
+                  re2,
                   `^\\s*([a-z]+)\\s+(?:${re2.source})`,
                 ).exec(right);
                 // (A word that describes the part, "the draft badge", "the
@@ -3038,9 +3084,115 @@ const NEEDS = new WeakMap();
  * @returns {RegExp}
  */
 function needing(source, need) {
-  const re = new RegExp(source);
+  const re = new NeedRegExp(source, '', need);
   NEEDS.set(re, need);
   return re;
+}
+
+/**
+ * A made lexicon pattern. A text without its word holds no match, so `exec`,
+ * and with it `test`, `match`, `matchAll`, `replace` and `split`, answers at
+ * once there without running the pattern, or compiling it first: an ask runs
+ * every lexicon pattern, and most never need compiling.
+ */
+export class NeedRegExp extends RegExp {
+  /**
+   * @param {string | RegExp} pattern
+   * @param {string} [flags]
+   * @param {string} [need]
+   */
+  constructor(pattern, flags, need) {
+    super(pattern, flags);
+    // A case-blind copy matches the word in any case: it holds no word.
+    /** @type {string | undefined} */
+    this.need = this.ignoreCase
+      ? undefined
+      : (need ?? (pattern instanceof NeedRegExp ? pattern.need : undefined));
+  }
+
+  /** @param {string} text */
+  exec(text) {
+    const s = String(text);
+    if (this.need !== undefined && !s.includes(this.need)) {
+      if (this.global || this.sticky) this.lastIndex = 0;
+      return null;
+    }
+    return super.exec(s);
+  }
+}
+
+/**
+ * `new RegExp(re.source, flags)`, kept a made pattern if `re` is one.
+ * @param {RegExp} re
+ * @param {string} flags
+ * @returns {RegExp}
+ */
+function lexCopy(re, flags) {
+  return re instanceof NeedRegExp
+    ? new NeedRegExp(re, flags)
+    : new RegExp(re.source, flags);
+}
+
+/**
+ * The patterns the every-word gate runs on each clause, listed once for each
+ * lexicon: its part patterns made global, and the state words without the
+ * global flag.
+ * @type {WeakMap<object, {parts: RegExp[], states: Array<[RegExp, string]>}>}
+ */
+const gatePatterns = new WeakMap();
+
+/**
+ * The every-word gate's patterns for `lex` (see gatePatterns).
+ * @param {{parts: Array<[RegExp, unknown]>}} lex
+ * @returns {{parts: RegExp[], states: Array<[RegExp, string]>}}
+ */
+export function gatePatternsOf(lex) {
+  let made = gatePatterns.get(lex);
+  if (!made) {
+    made = {
+      parts: lex.parts.map(([re]) => globalOf(re)),
+      states: STATE_WORDS.map(
+        ([re, st]) => /** @type {[RegExp, string]} */ ([plainOf(re), st]),
+      ),
+    };
+    gatePatterns.set(lex, made);
+  }
+  return made;
+}
+
+/**
+ * `text` with each part name the global patterns find blanked out, in their
+ * order. A made pattern finds nothing in a text without its word, so it is
+ * not run there.
+ * @param {string} text
+ * @param {RegExp[]} parts
+ * @returns {string}
+ */
+export function blankParts(text, parts) {
+  let out = text;
+  for (const re of parts) {
+    if (
+      re instanceof NeedRegExp &&
+      re.need !== undefined &&
+      !out.includes(re.need)
+    )
+      continue;
+    out = out.replace(re, ' ');
+  }
+  return out;
+}
+
+/**
+ * `new RegExp(source)` for a pattern every match of which holds a match of
+ * `re`: a made pattern with `re`'s word if `re` is one.
+ * @param {RegExp} re
+ * @param {string} source
+ * @returns {RegExp}
+ */
+function lexAround(re, source) {
+  return re instanceof NeedRegExp
+    ? new NeedRegExp(source, '', re.need)
+    : new RegExp(source);
 }
 
 /**
@@ -3066,10 +3218,7 @@ const PLAIN_COPIES = new WeakMap();
 function globalOf(re) {
   let copy = GLOBAL_COPIES.get(re);
   if (!copy) {
-    copy = new RegExp(
-      re.source,
-      re.flags.includes('g') ? re.flags : `${re.flags}g`,
-    );
+    copy = lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`);
     GLOBAL_COPIES.set(re, copy);
   }
   return copy;
@@ -3082,10 +3231,10 @@ function globalOf(re) {
  */
 function plainOf(re) {
   // A sticky pattern reads its own lastIndex: it is made anew each time.
-  if (re.sticky) return new RegExp(re.source, re.flags.replace('g', ''));
+  if (re.sticky) return lexCopy(re, re.flags.replace('g', ''));
   let copy = PLAIN_COPIES.get(re);
   if (!copy) {
-    copy = new RegExp(re.source, re.flags.replace('g', ''));
+    copy = lexCopy(re, re.flags.replace('g', ''));
     PLAIN_COPIES.set(re, copy);
   }
   return copy;
@@ -3408,7 +3557,7 @@ function clausesOf(q, partWords, words = null) {
       partWords
         .filter(([, x]) => x.on === p.on)
         .flatMap(([re, x]) =>
-          [...text.matchAll(new RegExp(re.source, 'g'))].map(m => ({
+          [...text.matchAll(lexCopy(re, 'g'))].map(m => ({
             index: m.index ?? 0,
             end: (m.index ?? 0) + m[0].length,
             ...(x.when ? {when: x.when} : {}),
@@ -3562,7 +3711,7 @@ function clausesOf(q, partWords, words = null) {
       const firstAt = p =>
         partWords
           .filter(([, x]) => x.on === p.on)
-          .map(([re]) => new RegExp(re.source, 'g').exec(text))
+          .map(([re]) => lexCopy(re, 'g').exec(text))
           .filter(m => m != null)
           .map(m => m.index)
           .sort((x, y) => x - y)[0] ?? null;
@@ -5021,6 +5170,49 @@ export function draftAnswer(ctx, env, question) {
       /\bno\s+borders?((?:\s+on\s+(?:the\s+)?[a-z]+(?:\s+[a-z]+)?)?)\s*,?\s*(?:except|but|apart from|other than)\s+(?:the\s+|a\s+)?(top|bottom|left|right)(?:\s+(?:one|side|edge|border))?\b/gi,
       'only a $2 border$1',
     )
+    // ("Density: roomy.", "Radius: small"): a one-word label that is the
+    // spacing or the corners dial's name, or a word only that dial lists,
+    // followed by one of that dial's own values, is that dial at that value. Only a label that
+    // starts its clause or its line: "Body weight: bold" is the body's,
+    // never a dial's.
+    .replace(
+      /(^|[.;,!?—\n]\s*)([a-z]+)[ \t]*:[ \t]*([a-z-]+)(?=[ \t]*(?:[.,;!\n]|$))/gim,
+      (m, lead, label, value, at, whole) => {
+        // (A label after a part is named, "Card\nRadius: large" or
+        // "cards: white, radius: large", is that part's: left to the
+        // part's readers.)
+        const before = ` ${String(whole).slice(0, at).toLowerCase()} `;
+        if (partLexicon(ctx).parts.some(([re]) => re.test(before))) return m;
+        const l = String(label).toLowerCase();
+        const v = String(value).toLowerCase();
+        // (The label is the dial's own name, or a word only that dial has;
+        // a dial whose name is also a part's, "headings", is left to the
+        // part's readers.)
+        const served = Object.entries(DIALS).filter(([name]) =>
+          ['spacing', 'corners'].includes(name),
+        );
+        const own = served.find(([name]) => name === l);
+        const byWord = Object.entries(DIALS).filter(([, d]) =>
+          String(d.words ?? '')
+            .split(/\s+/)
+            .includes(l),
+        );
+        const hit =
+          own ??
+          (byWord.length === 1 && served.some(([n]) => n === byWord[0][0])
+            ? byWord[0]
+            : null);
+        const dial =
+          hit &&
+          String(hit[1].values ?? '')
+            .split('|')
+            .includes(v) &&
+          !partLexicon(ctx).parts.some(([re]) => re.test(` ${hit[0]} `))
+            ? hit[0]
+            : null;
+        return dial ? `${lead}${dial} ${v}` : m;
+      },
+    )
     // ("a confident, modern look: deep navy, …"): the list after a look's
     // colon is pieces of their own.
     // (Never a part's style, "heading style: bold": that is the part's
@@ -6236,7 +6428,9 @@ export function draftAnswer(ctx, env, question) {
     .split(
       /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
-    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
+    // (A list's marker, "1." or "2)", never a decimal's whole part: "1.5
+    // leading" is one value.)
+    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)](?!\d))\s*/, ''))
     .filter(x => x.trim());
   // "drop shadow: x 0, y 4, …", "card shadow: 0 1px …, 0 2px …": a label
   // with its value is one clause, commas and all.
@@ -6575,6 +6769,13 @@ export function draftAnswer(ctx, env, question) {
     HYPOTHETICAL.test(question) ||
     (gated.length > 0 && gated.length === segments.length) ||
     segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
+  /**
+   * Held-back clauses that name no part and no thing ("spooky vibes"). The
+   * not-used line names them; chat words ("please", "thanks!") and a
+   * question back to the editor ("what do you think?") are not asks.
+   * @type {string[]}
+   */
+  const heldAside = [];
   if (gated.length && !gateAll) {
     // A held-back clause gives the next clause what it names: its part, and
     // the thing a "them" or "it" there stands for.
@@ -6627,6 +6828,22 @@ export function draftAnswer(ctx, env, question) {
           /\b(borders?|shadows?|radius|corners|padding|spacing|gap|font|underlines?|background)\b/i.exec(
             x,
           )?.[0];
+        const aside = x
+          .trim()
+          .replace(/^(?:and|or|but|also|plus)\s+/i, '')
+          .replace(/[\s,]+(?:please|pls|plz|thanks|thx)[.!]*$/i, '')
+          .trim();
+        if (
+          !part &&
+          !thing &&
+          /[a-z]{3}/i.test(aside) &&
+          !chatOnly(x) &&
+          !chatOnly(aside) &&
+          !/^(?:what|how|do|does|did|can|could|would|should|is|are|was|why|which|any|will|shall)\b[^?]*\?\s*$/i.test(
+            x.trim(),
+          )
+        )
+          heldAside.push(aside);
         carry = [part, thing].filter(Boolean).join(' ');
         carryPart = part ?? '';
         continue;
@@ -7507,7 +7724,7 @@ export function draftAnswer(ctx, env, question) {
       lex.parts
         .filter(([, x]) => x.on === on)
         .flatMap(([re]) =>
-          [...t.matchAll(new RegExp(re.source, 'g'))].map(m => [
+          [...t.matchAll(lexCopy(re, 'g'))].map(m => [
             m.index ?? 0,
             (m.index ?? 0) + m[0].length,
           ]),
@@ -7686,9 +7903,7 @@ export function draftAnswer(ctx, env, question) {
       const tail = lead.slice(m.index + m[0].length).trim();
       // (Or a likeness said of the part: "menus and popovers look like
       // Slack's: white, rounded, …".)
-      return (
-        !tail || /^(?:(?:look|looks|feel|feels)\s+)?like\b[^:]*$/.test(tail)
-      );
+      return !tail || LIKENESS_TAIL.test(tail);
     });
     if (!endsWithPart) return;
     const leadState = stateWord(lead);
@@ -7916,12 +8131,7 @@ export function draftAnswer(ctx, env, question) {
     // ("make headings semibold and make the text a bit larger": the text
     // said with its article as the thing to change, or "all text", is the
     // whole app's, never the part's before it.)
-    if (
-      /\b(?:make|set|turn)\s+(?:the|all)\s+text\b|\ball\s+(?:the\s+)?text\b|^(?:and\s+)?the\s+text\s+(?:a\s+bit\s+|slightly\s+|much\s+)?(?:larger|bigger|smaller|darker|lighter)\b/.test(
-        c.text,
-      )
-    )
-      return 'theme';
+    if (THE_TEXT_SAID.test(c.text)) return 'theme';
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
     // ("cards square on top, 6px rounded at the bottom", "input border
@@ -7930,9 +8140,7 @@ export function draftAnswer(ctx, env, question) {
     // a theme has no bottom border.)
     if (
       own.some(a => a === 'corners' || a === 'border') &&
-      /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b|\b(?:top|bottom|left|right)\s+(?:borders?|lines?)\b/.test(
-        c.text,
-      )
+      SIDE_SAID.test(c.text)
     )
       return 'inherit';
     const subject =
@@ -8305,7 +8513,7 @@ export function draftAnswer(ctx, env, question) {
         c.aspects.some(a => ['background', 'text', 'border'].includes(a))),
   );
   /** A word-table regex without its global flag. @param {RegExp} re */
-  const once = re => new RegExp(re.source, re.flags.replace('g', ''));
+  const once = re => lexCopy(re, re.flags.replace('g', ''));
   // The part the word table reads a list head as ("the progress bars"), and
   // the words it read; never a piece the part does not have.
   const headPartOf = (/** @type {string} */ headText) => {
@@ -8399,7 +8607,13 @@ export function draftAnswer(ctx, env, question) {
     // neutral, where no part is named before it or right with it. A color
     // whose own clause says it as a look, "a cool slate palette", is the
     // theme's beside parts too.)
+    // (Or the whole theme said in words, "silver #c0c0c0 everywhere": the
+    // color is the theme's by its role.)
+    // ("don't use red everywhere", "less blue everywhere": a color taken
+    // away or turned down is never the theme's.)
+    const themeWide = !c.neg && !c.dir && THEME_WIDE_WORDS.test(c.text);
     const ownLook =
+      themeWide ||
       /\b(?:theme|look|feel|vibe|style|palette|scheme|branding)\b/.test(c.text);
     const grayLook = /\b(?:gr[ae]y|bluegray|slate)\b/.test(c.text);
     const next = clauses[i + 1];
@@ -8543,7 +8757,7 @@ export function draftAnswer(ctx, env, question) {
     const listLook =
       lookSaid ||
       (grayLook && q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3);
-    if (!listLook && (c.colors.length > 1 || !alone)) continue;
+    if (!listLook && !themeWide && (c.colors.length > 1 || !alone)) continue;
     // (A look's own colors, "a sand palette", paint no part: only a part's
     // paint keeps the color off the dials.)
     const paints = c.aspects.some(
@@ -8560,16 +8774,33 @@ export function draftAnswer(ctx, env, question) {
     let accentTaken = false;
     // (Only colors said by name: a typed value continues the ask before
     // it, "their brand blue, #0057ff".)
-    const named = colorsFound(c.text)
-      .filter(x => !x[2])
+    // (Said for the whole theme, a typed value is the color itself.)
+    // ("navy #000080 everywhere": the one value typed, whatever word is
+    // said with it.)
+    const typedHere = colorsFound(c.text)
+      .filter(x => x[2])
       .map(x => x[1]);
-    if (colorsFound(c.text).some(x => x[2])) continue;
+    const typedToo =
+      themeWide &&
+      (new Set(c.colors).size === 1 || new Set(typedHere).size === 1);
+    const named = typedToo
+      ? [...new Set(typedHere.length ? typedHere : c.colors)]
+      : colorsFound(c.text)
+          .filter(x => !x[2])
+          .map(x => x[1]);
+    if (!typedToo && colorsFound(c.text).some(x => x[2])) continue;
     for (const color of named) {
       const rgb = parseColor(color);
       if (!rgb) continue;
       const hi = Math.max(...rgb.slice(0, 3));
       const lo = Math.min(...rgb.slice(0, 3));
-      if (hi - lo < 12 && (lo > 235 || hi < 20)) continue;
+      if (hi - lo < 12 && (lo > 235 || hi < 20)) {
+        // (White or black for the whole theme is its page, never a brand:
+        // "white everywhere".)
+        const page = themeWide ? clausesOf(`page ${color}`, lex.parts) : [];
+        if (page.length === 1) dials.push(...page);
+        continue;
+      }
       const quiet = hi - lo < 64 && hi > 120;
       if (!quiet && accentTaken) continue;
       const dial = clausesOf(
@@ -8581,6 +8812,8 @@ export function draftAnswer(ctx, env, question) {
       dials.push(...dial);
     }
     if (!dials.length) continue;
+    // ("red everywhere in dark mode": the mode said with the color.)
+    if (c.mode && themeWide) for (const d of dials) d.mode = c.mode;
     if (!c.aspects.length && !c.dir) clauses.splice(i, 1, ...dials);
     else {
       c.colors = [];
@@ -9074,6 +9307,8 @@ export function draftAnswer(ctx, env, question) {
   const prohibited = [];
   /** The clause each draft answers. @type {WeakMap<Draft, Clause>} */
   const draftClause = new WeakMap();
+  /** Clauses a clash's choice answers ("8px … 2px corners"). @type {Set<unknown>} */
+  const clashClauses = new Set();
   /** Parts a symmetric "match" ask already answered for. @type {Set<string>} */
   const symDone = new Set();
   /** Places the question names that the editor cannot keep apart. @type {Array<{c: any, text: string}>} */
@@ -11680,10 +11915,29 @@ export function draftAnswer(ctx, env, question) {
           : null;
       // Only the aspects a length can set: "headings 32px bold, captions
       // 12px" gives captions a size, not the headings' bold.
-      if (from)
+      // (Never from the clause after it when that clause gives its look a
+      // value of its own: "16px, 1.5 leading" is a size and a leading,
+      // never two leadings.)
+      if (
+        from &&
+        !(
+          from === next &&
+          (/\d/.test(next.text) ||
+            next.aspects.some(a =>
+              ['leading', 'tracking', 'family'].includes(a),
+            ))
+        )
+      )
         c.aspects = from.aspects.filter(
           a => !['weight', 'italic', 'case', 'family'].includes(a),
         );
+      // (A bare size said beside the type's own looks, "16px, 1.5
+      // leading", is the type's size.)
+      else if (
+        from === next &&
+        next.aspects.some(a => ['leading', 'tracking', 'family'].includes(a))
+      )
+        c.aspects = ['fontsize'];
     }
     // "in dark mode, cards are #1c1c1e": a clause that only names the mode
     // gives it to the clauses after it.
@@ -13354,19 +13608,10 @@ export function draftAnswer(ctx, env, question) {
     const values = steps.map(st => String(st.value ?? '').toLowerCase());
     // A state said, never in a step. (A part's own name holds no state:
     // "hover card".)
-    const noParts = lex.parts.reduce(
-      (t, [re]) =>
-        t.replace(
-          new RegExp(
-            re.source,
-            re.flags.includes('g') ? re.flags : `${re.flags}g`,
-          ),
-          ' ',
-        ),
-      text,
-    );
-    for (const [re, st] of STATE_WORDS) {
-      const m = new RegExp(re.source).exec(noParts);
+    const gate = gatePatternsOf(lex);
+    const noParts = blankParts(text, gate.parts);
+    for (const [re, st] of gate.states) {
+      const m = re.exec(noParts);
       if (
         m &&
         !steps.some(
@@ -13707,8 +13952,8 @@ export function draftAnswer(ctx, env, question) {
     let named = false;
     for (const [re, x] of lex.parts)
       if (c.parts.some(p => p.on === x.on)) {
-        const g = new RegExp(
-          re.source,
+        const g = lexCopy(
+          re,
           re.flags.includes('g') ? re.flags : `${re.flags}g`,
         );
         if (g.test(rest)) named = true;
@@ -15018,6 +15263,54 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // "soft badges", "outlined tags": the badges dial, the status and
+    // category badges together in the theme's colors. (A style for some
+    // badges only, "solid status badges", is not this dial.)
+    {
+      // (The style word said next to the badge noun: in "solid buttons and
+      // soft badges" the buttons' word is not the badges'.)
+      const STYLE = '(soft|tint(?:ed)?|outlined?|solid|filled)';
+      const NOUN = '(?:badges?|tags?|chips?)';
+      const style = (new RegExp(`\\b${STYLE}\\s+${NOUN}\\b`, 'i').exec(
+        c.text,
+      ) ??
+        new RegExp(
+          `\\b${NOUN}\\s+(?:(?:are|be|look|made|in|with)\\s+){0,2}${STYLE}\\b`,
+          'i',
+        ).exec(c.text))?.[1]?.toLowerCase();
+      // (Only when the style is the whole ask: "soft shadows on badges",
+      // "solid red error badges" or "filled pill badges" ask for more, and
+      // the rest of the answer reads them.)
+      const onlyStyle = (c.text.toLowerCase().match(/[a-z]+/g) ?? []).every(w =>
+        BADGE_STYLE_WORDS.has(w),
+      );
+      if (
+        style &&
+        onlyStyle &&
+        !c.except &&
+        !c.neg &&
+        !c.lengths.length &&
+        /\b(?:badges?|tags?|chips?)\b/.test(c.text) &&
+        c.parts.every(p => p.on === 'badge')
+      ) {
+        const value = /^(?:soft|tint)/.test(style)
+          ? 'soft'
+          : /^outline/.test(style)
+            ? 'outline'
+            : 'solid';
+        const d = {
+          text: `${value} badges: the badges dial (${
+            String(DIALS.badges?.help ?? '')
+              .split('. ')
+              .find(x => x.startsWith(value)) ?? value
+          })`,
+          options: [[set('badges', value)]],
+        };
+        push(d);
+        recordTop(c, d.options[0]);
+        continue;
+      }
+    }
     // "the controls 40px tall", "all controls taller by 4px": the control
     // heights every button, input and selector reads, each size moved by
     // the same amount, for the whole theme.
@@ -16288,7 +16581,9 @@ export function draftAnswer(ctx, env, question) {
           );
         });
         const pills =
-          r.dial === 'corners' && !c.parts.length ? pillsSquare(r.value) : null;
+          r.dial === 'corners' && !c.parts.length
+            ? pillsSquare(r.value, c)
+            : null;
         if (pills) steps.push(...pills.steps);
         const d = {
           text: `${r.dial} ${r.value}${ons[0] ? ` on ${ons.map(p => p?.on).join(', ')}` : ''}: the ${r.dial} dial set to ${r.value}, as set reads it${pills ? `, ${pills.said}` : ''}`,
@@ -19531,7 +19826,7 @@ export function draftAnswer(ctx, env, question) {
     const ons = new Set(c.parts.map(x => x.on));
     const text = lex.parts
       .filter(([, x]) => ons.has(x.on))
-      .reduce((t, [re]) => t.replace(new RegExp(re.source, 'g'), ' '), c.text);
+      .reduce((t, [re]) => t.replace(lexCopy(re, 'g'), ' '), c.text);
     // left/right/top/bottom/sides name a side anywhere; inline, block,
     // horizontal and vertical only beside the padding or margin they
     // qualify ("inline padding", "padding-inline", "padding 8px vertical"),
@@ -19567,18 +19862,39 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
-   * "No rounding anywhere", "… badges and avatars too": the corners dial at
-   * square squares every pill that is a styling choice itself (a badge, a
-   * progress track); the parts drawn as circles keep their shape unless the
-   * question names one, which then goes square on its own. Null unless the
-   * value is square and the question asks for it everywhere or names a
-   * pill or circle part.
+   * The corners dial at square, asked of the whole theme. When the corner
+   * clause itself says anywhere, everywhere, everything or at all ("no
+   * rounding anywhere"), the parts drawn with the pill radius go square
+   * too, circles included: --radius-full 0px, a radio's mark keeping its
+   * circle. Otherwise the dial squares every pill that is a styling choice
+   * itself (a badge, a progress track) and the parts drawn as circles keep
+   * their shape unless the question names one, which then goes square on
+   * its own. Null unless the value is square and the question asks for it
+   * everywhere, names a pill or circle part, or says pills, too or as well.
    * @param {string} value
+   * @param {Clause} corner the clause the corners ask is said in
    * @returns {{steps: Step[], said: string} | null}
    */
-  function pillsSquare(value) {
+  function pillsSquare(value, corner) {
     if (!/^(?:square|none|0(?:px)?)$/.test(value)) return null;
     const {pills, circles} = pillShapes(C);
+    // (The scope word read on the corner clause alone: "square corners, and
+    // bigger text too" says nothing of the circles.)
+    if (
+      /\b(?:anywhere|everywhere|everything|at all)\b/.test(
+        corner.text.toLowerCase(),
+      )
+    ) {
+      const radios = pillDrawnRadios(C);
+      const round = String(TOKENS['--radius-full'] ?? '9999px');
+      return {
+        steps: [
+          set('--radius-full', '0px'),
+          ...radios.map(m => set('--radius-full', round, {on: m})),
+        ],
+        said: `and --radius-full 0px for the parts drawn as pills and circles (${[...pills, ...circles].slice(0, 6).join(', ')}${pills.length + circles.length > 6 ? ` and ${pills.length + circles.length - 6} more` : ''})${radios.length ? `; the radio marks keep their circle (${radios.join(', ')})` : ''}`,
+      };
+    }
     const named = [
       ...new Set(
         clauses
@@ -19603,6 +19919,7 @@ export function draftAnswer(ctx, env, question) {
       said: `which squares the pills too (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${named.length ? `, and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own` : ''}${kept.length ? `; the parts drawn as circles keep their shape (${kept.slice(0, 6).join(', ')}${kept.length > 6 ? ` and ${kept.length - 6} more` : ''})` : ''}`,
     };
   }
+
   /**
    * Whether a part reads a token in any of its rules.
    * @param {string} part
@@ -22321,7 +22638,7 @@ export function draftAnswer(ctx, env, question) {
           const dial = /^\d*\.?\d+r?em$/.test(value)
             ? `${Math.round(parseFloat(value) * 16 * 100) / 100}px`
             : value;
-          const pills = pillsSquare(dial);
+          const pills = pillsSquare(dial, c);
           if (pills)
             return {
               text: `no rounding anywhere: the corners dial square, ${pills.said}`,
@@ -24236,7 +24553,14 @@ export function draftAnswer(ctx, env, question) {
                     };
                   })
                   .filter(x => x.tok);
-                if (!inner.length || inner.some(x => x.tok !== inner[0].tok))
+                // (A control that grows with its content keeps Core's block
+                // padding, so its padding never sets its height.)
+                if (
+                  !inner.length ||
+                  inner.some(
+                    x => x.tok !== inner[0].tok || growsWithContent(ctx, x.k),
+                  )
+                )
                   return null;
                 const px = (/** @type {string} */ t) =>
                   lengthPx(String(resolvedValue(t) || current(t) || ''));
@@ -28624,21 +28948,25 @@ export function draftAnswer(ctx, env, question) {
           last.delete(key);
           last.set(key, {step: merged, clause});
           continue;
-        } else clashes.push([prior.step, st]);
+        } else {
+          clashes.push([prior.step, st]);
+          clashClauses.add(prior.clause);
+          clashClauses.add(clause);
+        }
       }
       last.delete(key);
       last.set(key, {step: st, clause});
     }
   const MAX_STEPS = 12;
-  if (clashes.length) {
-    const [a, b] = clashes[0];
-    result.push({
-      text: `the question asks for ${a.thing} ${a.value} and ${b.thing} ${b.value}${a.on ? ` on ${a.on}` : ''}, which contradict each other; pick one`,
-      options: [[a], [b]],
-    });
-  } else if (last.size > 1 && clauses.length > 1) {
+  // (A clash holds back only its own two steps, named as a choice; every
+  // other clause of the ask is still answered and run in turn.)
+  const clashKeys = new Set(clashes.flatMap(([a, b]) => [idOf(a), idOf(b)]));
+  const unclashed = new Map(
+    [...last].filter(([, x]) => !clashKeys.has(idOf(x.step))),
+  );
+  if (unclashed.size > 1 && clauses.length > 1) {
     // The page never takes the color the text takes in the same mode.
-    const all = [...last.values()]
+    const all = [...unclashed.values()]
       .map(x => x.step)
       .filter(
         (st, i, list) =>
@@ -28694,7 +29022,9 @@ export function draftAnswer(ctx, env, question) {
     // clause's steps (its write and the keeps it needs, a status's border
     // written back) run together or not at all. The rest follow as the next
     // sequences, each runnable in turn.
-    const clauseOf = new Map([...last.values()].map(x => [x.step, x.clause]));
+    const clauseOf = new Map(
+      [...unclashed.values()].map(x => [x.step, x.clause]),
+    );
     /** @type {Step[][]} */
     let groups = [];
     for (const st of all) {
@@ -28776,6 +29106,12 @@ export function draftAnswer(ctx, env, question) {
         }),
       );
   }
+  // (Each clash its own choice, so none goes unanswered.)
+  for (const [a, b] of clashes)
+    result.push({
+      text: `the question asks for ${a.thing} ${a.value} and ${b.thing} ${b.value}${a.on ? ` on ${a.on}` : ''}, which contradict each other; pick one${unclashed.size ? ' (the rest of the ask is answered without them)' : ''}`,
+      options: [[a], [b]],
+    });
   // (A draft whose every step a later "then" clause replaces is not
   // offered: the sequence ends at the later value.)
   const replaced = new Set(
@@ -28817,7 +29153,33 @@ export function draftAnswer(ctx, env, question) {
         !/were said for the text/.test(d.text)
       )
         d.text += ` (${values.length === 2 ? 'two' : values.length} colors were said for the text, ${values.slice(0, -1).join(', ')} and ${values.at(-1)}; the last one, ${values.at(-1)}, is written)`;
-  result.push(...kept.slice(0, clashes.length ? 0 : undefined));
+  // (Every clause's own answer, without the clashing steps, which the
+  // choice above offers.)
+  result.push(
+    ...kept.flatMap(d => {
+      if (!clashes.length) return [d];
+      const options = d.options
+        .map(o => o.filter(st => !clashKeys.has(idOf(st))))
+        .filter(o => o.length);
+      // (An option the clash took whole means the other options write the
+      // same value another way: the clause is the choice's alone.)
+      if (options.length < d.options.length) return [];
+      if (
+        options.length === d.options.length &&
+        options.every((o, k) => o.length === d.options[k].length)
+      )
+        return [d];
+      return options.length
+        ? [
+            {
+              ...d,
+              text: `${d.text} (without the clashing values above)`,
+              options,
+            },
+          ]
+        : [];
+    }),
+  );
   // An undo of a setting the theme does not have ("…; also undo the
   // corners" with no corners set) is named as having nothing to take back;
   // the rest of the ask is written.
@@ -29017,9 +29379,7 @@ export function draftAnswer(ctx, env, question) {
               // A part's name is never a comparative ("the container like
               // dialogs", "a header like cards"): masked, same length.
               (t, [re]) =>
-                t.replace(new RegExp(re.source, 'g'), m =>
-                  'x'.repeat(m.length),
-                ),
+                t.replace(lexCopy(re, 'g'), m => 'x'.repeat(m.length)),
               c.text,
             )
             .replace(/\b(?:i|we|you)(?: would|'d)? like(?: to| for)?\b/g, m =>
@@ -29454,7 +29814,14 @@ export function draftAnswer(ctx, env, question) {
           );
           if (at < 0) continue;
           const value = String(o[at].value);
-          const over = DIAL_RADII.filter(t => {
+          // (The chat radius the dial writes from the container radius is
+          // held too, where the base keeps it apart.)
+          const over = [
+            ...DIAL_RADII,
+            ...(chatRatio(/** @type {any} */ (env.base))
+              ? ['--radius-chat']
+              : []),
+          ].filter(t => {
             const px = radiusAt(/** @type {any} */ (env.base), value, t);
             return lb.up
               ? lb.strict
@@ -29465,7 +29832,20 @@ export function draftAnswer(ctx, env, question) {
                 : px > lb.limit;
           });
           if (!over.length) continue;
-          o.splice(at + 1, 0, ...over.map(t => set(t, `${lb.limit}px`)));
+          // (The chat radius stays read from the container radius, so a
+          // container radius set later still moves it: held at the bound.)
+          o.splice(
+            at + 1,
+            0,
+            ...over.map(t =>
+              set(
+                t,
+                t === '--radius-chat'
+                  ? chatRadiusValue(/** @type {any} */ (env.base), lb)
+                  : `${lb.limit}px`,
+              ),
+            ),
+          );
           d.text = `${d.text} (${lb.said}: ${over.join(', ')}, which the dial would make ${lb.up ? 'smaller' : 'larger'}, held at ${lb.limit}px)`;
           d.sequence = true;
         }
@@ -32029,6 +32409,16 @@ export function draftAnswer(ctx, env, question) {
             !lex.vocab.includes(w) &&
             !Object.hasOwn(HUES, w) &&
             !lex.parts.some(([re]) => re.test(` ${w} `)) &&
+            // ("title bars", "everywhere": read as a part's phrase or as the
+            // whole theme.)
+            !(
+              q.toLowerCase().match(new RegExp(THEME_WIDE_WORDS.source, 'g')) ??
+              []
+            ).some(m => m.split(/\s+/).includes(w)) &&
+            !lex.parts.some(([re]) => {
+              const m = re.exec(q.toLowerCase());
+              return Boolean(m && m[0].split(/\s+/).includes(w));
+            }) &&
             !aspectsOf(w).length &&
             stateWord(w) == null &&
             !colorsIn(w).length &&
@@ -32268,6 +32658,7 @@ export function draftAnswer(ctx, env, question) {
       ...result.map(d => draftClause.get(d)).filter(x => x != null),
       ...foldedClauses,
       ...answeredByUndo,
+      ...clashClauses,
     ]);
     const silent = clauses.filter(c => {
       const t = c.text.trim();
@@ -32333,8 +32724,19 @@ export function draftAnswer(ctx, env, question) {
       ...new Set(silent.flatMap(asTyped).filter(w => !named.includes(w))),
     ];
     const lines = [
-      ...named.map(w => `"${w}"`),
-      ...(clauses.length > 1 ? silentTyped.map(w => `"${w}"`) : []),
+      ...named.filter(w => !chatOnly(w)).map(w => `"${w}"`),
+      ...(clauses.length > 1
+        ? silentTyped.filter(w => !chatOnly(w)).map(w => `"${w}"`)
+        : []),
+      // (A held-back clause with nothing of its own, "spooky vibes", once.)
+      ...heldAside
+        .filter(
+          x =>
+            !texts.includes(x.toLowerCase()) &&
+            !named.some(w => w.includes(x)) &&
+            !silentTyped.some(w => w.toLowerCase() === x.toLowerCase()),
+        )
+        .map(x => `"${x}"`),
       // (An ask of one clause no answer took at all, "pagination pages in
       // one bordered strip", is named in its own words.)
       ...(clauses.length === 1 &&
