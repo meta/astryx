@@ -4689,7 +4689,8 @@ jobs:
           retention-days: 7
 
       # A proof that keeps its failure output (BottomSheetDragRestyle: its
-      # Playwright trace, screenshot and rendering events) uploads it here.
+      # Playwright trace and screenshot) uploads it here. Its rendering
+      # events go with the interaction evidence above.
       - name: Upload failure traces
         if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/upload-artifact@v7
@@ -4698,7 +4699,6 @@ jobs:
           path: |
             interaction-proof-output/**/trace.zip
             interaction-proof-output/**/test-failed-*.png
-            interaction-proof-output/**/rendering-events.json
           if-no-files-found: ignore
           retention-days: 7
 

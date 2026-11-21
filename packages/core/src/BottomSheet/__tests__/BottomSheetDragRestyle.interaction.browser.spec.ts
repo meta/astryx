@@ -10,7 +10,6 @@
  *   BottomSheetDetent.interaction.browser.spec.ts, on the same harness.
  */
 
-import {writeFile} from 'node:fs/promises';
 import {
   expect,
   test,
@@ -24,6 +23,7 @@ import {
   traceRendering,
   waitForRest,
   withStorybook,
+  writeEvidence,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
 
@@ -110,12 +110,11 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
     )
     .map(event => event.elements ?? 0);
   if (Math.max(...restyled) > RESTYLED_PER_MOVE) {
-    const path = test.info().outputPath('rendering-events.json');
-    await writeFile(path, JSON.stringify({steady, events: trace.events}));
-    await test.info().attach('rendering-events', {
-      path,
-      contentType: 'application/json',
-    });
+    await writeEvidence(
+      'bottomsheet-drag-restyle',
+      {'rendering-events.json': JSON.stringify({steady, events: trace.events})},
+      test.info(),
+    );
   }
   // The drag wrote the scrim: a move's recalculation restyles the dialog too.
   expect(Math.max(...restyled), JSON.stringify(restyled)).toBeGreaterThan(1);
