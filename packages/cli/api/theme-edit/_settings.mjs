@@ -7028,71 +7028,114 @@ export function compileTheme(ctx, data, base) {
    * A resting background shorthand on a part whose hover and press Core
    * draws as a background image (a layer over the fill): the shorthand
    * resets that image too, so the part would show nothing under the
-   * pointer. Each such state gets Core's image back, for each variant that
-   * draws its own, unless the theme sets that state's background itself.
+   * pointer. Each such state, in the shorthand's own scope, takes the image
+   * back from Core's layer (`revert-layer`), so Core's own conditions hold:
+   * its enabled guard, its hover-capable media and its touch press. A state
+   * background the theme sets for this scope, or for a wider one, keeps
+   * what it set; one set for a narrower scope wins by its selector.
    * @param {Setting} s @param {string} target
    */
   const withOverlayStates = (s, target) => {
     const at = ctx.C.MAP[target]?.at?.['background-image'] ?? {};
-    const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
+    /** The `key:value` pieces of a scope. @param {unknown} when */
+    const piecesOf = when =>
+      when == null ? [] : String(when).split('+').filter(Boolean);
+    const scope = piecesOf(s.when);
+    /**
+     * A census element the setting's scope reaches. Core's overlay does not
+     * change with a size, a density or an elevation, and the census draws
+     * one of each only, so those pieces never rule an element out.
+     * @param {string} attrs
+     */
+    const inScope = attrs => {
+      const held = new Map(
+        attrs
+          .split(',')
+          .map(a => /** @type {[string, string]} */ (a.split('='))),
+      );
+      return scope.every(p => {
+        const [key, value] = p.split(':');
+        return (
+          /^(?:size|density|elevation)$/.test(key) ||
+          !held.has(key) ||
+          held.get(key) === value
+        );
+      });
+    };
     for (const state of ['hover', 'active']) {
-      if (
-        data.settings.some(
-          y =>
-            y.source === 'property' &&
-            /^background(-image)?$/.test(kebab(y.thing)) &&
-            y.state === state &&
-            (y.when == null || y.when === s.when) &&
-            partsOf(ctx, y).includes(target),
-        )
-      )
-        continue;
-      /** @type {Map<string, string>} */
-      const byVariant = new Map();
-      for (const [k, val] of Object.entries(at)) {
+      const drawn = Object.entries(at).some(([k, val]) => {
         const [attrs, ...rest] = k.split(' ');
-        if (!new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' '))) continue;
-        if (/^\s*none\s*$/i.test(String(val))) continue;
-        const variant =
-          attrs
-            .split(',')
-            .map(a => a.split('='))
-            .find(([key]) => key === 'variant')?.[1] ?? '';
-        if (!byVariant.has(variant)) byVariant.set(variant, String(val));
-      }
-      for (const [variant, image] of byVariant) {
-        if (asked && variant && variant !== asked) continue;
-        const when = asked
-          ? s.when
-          : variant
-            ? `variant:${variant}`
-            : undefined;
-        block({...s, state, when}, target).backgroundImage = image;
-      }
+        return (
+          new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' ')) &&
+          !/^\s*none\s*$/i.test(String(val)) &&
+          inScope(attrs)
+        );
+      });
+      if (!drawn) continue;
+      const setByTheme = data.settings.filter(
+        y =>
+          y.source === 'property' &&
+          /^background(-image)?$/.test(kebab(y.thing)) &&
+          y.state === state &&
+          piecesOf(y.when).every(p => scope.includes(p)) &&
+          partsOf(ctx, y).includes(target),
+      );
+      if (setByTheme.some(y => !y.mode)) continue;
+      // (A state background the theme sets for one mode keeps that mode:
+      // the other mode alone takes Core's back.)
+      const ownModes = new Set(setByTheme.map(y => y.mode));
+      if (!ownModes.size)
+        block({...s, state}, target).backgroundImage = 'revert-layer';
+      else
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          if (!ownModes.has(m))
+            modeBlock({...s, state}, target, m).backgroundImage =
+              'revert-layer';
     }
   };
   /**
    * A resting outline on a part that draws its keyboard focus as an
    * outline would hide that focus (an outline of none, or one of the
    * theme's that replaces Core's): the part's focus state gets Core's focus
-   * outline back, for each variant that draws its own, unless the theme
-   * sets an outline for that state itself.
+   * outline back, for each variant that draws its own. An outline
+   * property the theme sets for that state itself (for the whole part, or
+   * for that variant) keeps what it set; the others still come back.
    * @param {Setting} s @param {string} target
    */
   const withFocusOutline = (s, target) => {
     const at = ctx.C.MAP[target]?.at ?? {};
     const state = focusStateOf(ctx, target) ?? 'focus-visible';
-    // The theme's own outline for the part's focus keeps it as set.
-    if (
-      data.settings.some(
+    const ownFocus = data.settings.filter(
+      y =>
+        y.source === 'property' &&
+        /^outline/.test(kebab(y.thing)) &&
+        /^focus/.test(String(y.state ?? '')) &&
+        partsOf(ctx, y).includes(target),
+    );
+    /**
+     * Writes Core's focus value of an outline property for a scope, unless
+     * the theme sets that property for the focus state itself (for the
+     * whole part, or for that variant; '' for the whole). One the theme
+     * sets for one mode keeps that mode: the other mode alone takes Core's.
+     * @param {string} p @param {string} variant
+     * @param {string | undefined} when @param {string} x
+     */
+    const putFocus = (p, variant, when, x) => {
+      const own = ownFocus.filter(
         y =>
-          y.source === 'property' &&
-          /^outline/.test(kebab(y.thing)) &&
-          /^focus/.test(String(y.state ?? '')) &&
-          partsOf(ctx, y).includes(target),
-      )
-    )
-      return;
+          (kebab(y.thing) === 'outline' || kebab(y.thing) === p) &&
+          (y.when == null || (variant && y.when === `variant:${variant}`)),
+      );
+      if (own.some(y => !y.mode)) return;
+      const ownModes = new Set(own.map(y => y.mode));
+      if (!ownModes.size) {
+        block({...s, state, when}, target)[camel(p)] = x;
+        return;
+      }
+      for (const m of /** @type {const} */ (['light', 'dark']))
+        if (!ownModes.has(m))
+          modeBlock({...s, state, when}, target, m)[camel(p)] = x;
+    };
     /** Core's focus values of a property, by the variant each is for ('' for all). @param {string} p */
     const focusValues = p => {
       /** @type {Map<string, string>} */
@@ -7144,17 +7187,15 @@ export function compileTheme(ctx, data, base) {
       const common = [...counts].sort((a, b) => b[1] - a[1])[0][0];
       if (asked) {
         const x = vals.get(asked) ?? vals.get('');
-        if (x != null) block({...s, state}, target)[camel(p)] = x;
+        if (x != null) putFocus(p, asked, s.when, x);
         continue;
       }
       const everyVariant =
         vals.has('') || [...variants].every(x => !x || vals.has(x));
-      if (everyVariant)
-        block({...s, state, when: undefined}, target)[camel(p)] = common;
+      if (everyVariant) putFocus(p, '', undefined, common);
       for (const [variant, x] of vals)
         if (variant && (!everyVariant || x !== common))
-          block({...s, state, when: `variant:${variant}`}, target)[camel(p)] =
-            x;
+          putFocus(p, variant, `variant:${variant}`, x);
     }
   };
   /**
