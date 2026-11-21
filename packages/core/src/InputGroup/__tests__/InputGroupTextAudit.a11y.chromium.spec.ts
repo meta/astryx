@@ -190,7 +190,7 @@ async function observe(page: Page) {
         'background-color:var(--color-background-muted)',
         'color:var(--color-text-secondary)',
         'border-style:solid',
-        'border-color:var(--color-border-emphasized)',
+        'border-color:var(--color-border-control)',
         'border-width:var(--border-width)',
         'border-radius:var(--radius-element)',
         'padding-inline:var(--spacing-2)',

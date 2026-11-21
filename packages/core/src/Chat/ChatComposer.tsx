@@ -316,7 +316,7 @@ const styles = stylex.create({
 //   side (like Card) so total inset (border + padding) equals the elevated
 //   case and content geometry is unchanged. Border color, hover, and focus
 //   states mirror TextInput (shared `inputWrapperStyles.base` treatment):
-//   emphasized border at rest → accent on focus-within, with the same inset
+//   the control edge at rest → accent on focus-within, with the same inset
 //   shadow rings on hover and focus.
 const elevationStyles = stylex.create({
   low: {
@@ -334,7 +334,7 @@ const elevationStyles = stylex.create({
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': colorVars['--color-accent'],
     },
     // Draw the border *inside* the padding — subtract its width from the body
@@ -345,7 +345,7 @@ const elevationStyles = stylex.create({
       default: 'none',
       ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
         {
-          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-emphasized']} 30%, transparent)`,
+          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-control']} 30%, transparent)`,
         },
       ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },

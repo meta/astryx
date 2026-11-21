@@ -78,7 +78,7 @@ describe('the emphasized border', () => {
   it('follows a stronger border, and the result says so', () => {
     expect(changedNames(strong)).toContain('--color-border-emphasized');
     expect(strong.notes.join('\n')).toMatch(
-      /--color-border-emphasized follows it \(the frames of inputs and selectors/,
+      /--color-border-emphasized follows it \(cards, dividers and the other stronger edges/,
     );
   });
 

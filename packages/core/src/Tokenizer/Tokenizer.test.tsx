@@ -20,6 +20,8 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {createRef, Profiler, startTransition, useRef, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import {Tokenizer, type TokenizerHandle} from './Tokenizer';
@@ -1087,6 +1089,35 @@ describe('Tokenizer', () => {
         expect(container.querySelector('[disabled]')).toBeNull();
       },
     );
+
+    it('unfocusedLayer, disabled: the placeholder draws the control edge at rest', () => {
+      const edges = stylex.create({
+        control: {borderColor: colorVars['--color-border-control']},
+        emphasized: {borderColor: colorVars['--color-border-emphasized']},
+      });
+      const atoms = (style: stylex.StyleXStyles) =>
+        stylex
+          .props(style)
+          .className!.split(' ')
+          .filter(name => !name.includes('__'));
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={() => {}}
+          tokenOverflowBehavior="unfocusedLayer"
+          isDisabled
+        />,
+      );
+      const placeholder = screen.getAllByRole('group', {name: 'Members'})[0];
+      for (const name of atoms(edges.control)) {
+        expect(placeholder).toHaveClass(name);
+      }
+      for (const name of atoms(edges.emphasized)) {
+        expect(placeholder).not.toHaveClass(name);
+      }
+    });
 
     it('unfocusedLayer: RTL emits no justify-self into the inset-positioned popover', () => {
       // The popover positions itself with explicit anchor() insets

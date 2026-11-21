@@ -4,6 +4,7 @@ import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
 import {formatColor, parseColor} from '../utils/color';
 import {resolveThemeToken} from './tokens';
+import {defineTheme, type DefinedTheme} from './defineTheme';
 import {colorDefaults} from './tokens.stylex';
 
 describe('relativeLuminance', () => {
@@ -105,6 +106,63 @@ describe('the stock accent pair', () => {
   });
 });
 
+// architecture:theme-tokens INV13: a form control's edge is often the only cue
+// to where the control is, so --color-border-control meets 3:1 (WCAG 1.4.11)
+// against the surface and the page body. A card is checked too: a form often
+// sits on one.
+describe('the form-control edge (--color-border-control)', () => {
+  const MODES = ['light', 'dark'] as const;
+  const AGAINST = [
+    '--color-background-surface',
+    '--color-background-body',
+    '--color-background-card',
+  ] as const;
+
+  function expectControlEdge(theme: DefinedTheme | null, label: string): void {
+    for (const mode of MODES) {
+      const edge = resolveThemeToken(theme, '--color-border-control', {mode});
+      for (const background of AGAINST) {
+        const against = resolveThemeToken(theme, background, {mode});
+        const ratio = edge === '' ? 0 : contrastRatio(edge, against);
+        expect(
+          ratio,
+          `${label} ${mode}: ${edge || '(unset)'} on ${background} ${against}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  }
+
+  it("meets 3:1 in Core's defaults", () => {
+    expectControlEdge(null, 'Core');
+  });
+
+  // The first-party theme templates live in the CLI, outside Core's
+  // type-checked sources, so they load at run time.
+  const TEMPLATES = '../../../cli/assets/templates/themes';
+  it.each([
+    'butter',
+    'chocolate',
+    'gothic',
+    'matcha',
+    'neutral',
+    'stone',
+    'y2k',
+  ])('meets 3:1 in the %s theme template', async name => {
+    const module = (await import(
+      /* @vite-ignore */ `${TEMPLATES}/${name}/${name}Theme.ts`
+    )) as Record<string, DefinedTheme>;
+    expectControlEdge(module[`${name}Theme`], name);
+  });
+
+  it.each([
+    {accent: '#0064E0'},
+    {accent: '#B7410E', neutralStyle: 'warm'},
+    {accent: '#B7410E', neutralStyle: 'warm', contrast: 'high'},
+    {neutralStyle: 'neutral'},
+  ] as const)('meets 3:1 in a generated theme (%o)', color => {
+    expectControlEdge(defineTheme({name: 'generated', color}), 'generated');
+  });
+});
 describe('secondary text on the neutral fill', () => {
   // An unselected SegmentedControl label and AvatarGroup's overflow count are
   // secondary text on a translucent --color-neutral fill. The fill lifts the

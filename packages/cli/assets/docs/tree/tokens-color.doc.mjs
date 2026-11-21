@@ -354,6 +354,11 @@ export const docs = {
               "#494D53"
             ],
             [
+              "--color-border-control",
+              "#878D95",
+              "#666A70"
+            ],
+            [
               "--color-skeleton",
               "#CCD3DB",
               "#5A5E66"

@@ -436,7 +436,7 @@ const LATER_ASKS = [
     "a light border keeps the part's own dark-mode border",
     {
       q: 'inputs: 1px border #d5dbe1',
-      lead: "border '1px solid light-dark(#d5dbe1, var(--color-border-emphasized))' --on inputs",
+      lead: "border '1px solid light-dark(#d5dbe1, var(--color-border-control))' --on inputs",
     },
   ],
   [

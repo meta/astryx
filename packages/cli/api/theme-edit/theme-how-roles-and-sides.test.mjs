@@ -114,7 +114,7 @@ describe('sides', () => {
     );
     expect(lines).toEqual([
       'set q0 border none --on inputs',
-      "set q0 border-bottom '1px solid var(--color-border-emphasized)' --on inputs",
+      "set q0 border-bottom '1px solid var(--color-border-control)' --on inputs",
     ]);
     await follow(lines);
   }, 240_000);
