@@ -101,17 +101,18 @@ Then pick your setup below based on your framework and styling approach. The set
 
 ### Next.js (simplest)
 
-The fastest way to get started. No build plugins, no PostCSS, no Babel config — Astryx ships pre-built CSS and JS, so you import three stylesheets (order matters) and wrap your app in a theme provider.
+The fastest way to get started. No build plugins, no PostCSS, no Babel config — Astryx ships pre-built CSS and JS, so you import four stylesheets (order matters) and wrap your app in a theme provider.
 
 **`src/app/globals.css`**
 
 ```css
+@import '@astryxdesign/theme-neutral/fonts.css';
 @import '@astryxdesign/core/reset.css';
 @import '@astryxdesign/core/astryx.css';
 @import '@astryxdesign/theme-neutral/theme.css';
 ```
 
-The import order maps to the layer cascade: `reset.css` (`@layer reset`) → `astryx.css` component styles (`@layer astryx-base`) → `theme.css` token overrides (`@layer astryx-theme`).
+The import order maps to the layer cascade: `reset.css` (`@layer reset`) → `astryx.css` component styles (`@layer astryx-base`) → `theme.css` token overrides (`@layer astryx-theme`). `fonts.css` loads the theme's fonts: `@font-face` rules for font files the theme package ships, so the page requests nothing outside your app. Without it the page falls back to the system font stack.
 
 **`src/app/providers.tsx`**
 
@@ -160,6 +161,7 @@ This `globals.css` is the whole file for a new app. For an app that already uses
 ```css
 @layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
 
+@import '@astryxdesign/theme-neutral/fonts.css';
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/preflight.css' layer(base);
 @import '@astryxdesign/core/reset.css';
@@ -253,6 +255,7 @@ npm install @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 **`src/app/globals.css`**
 
 ```css
+@import '@astryxdesign/theme-neutral/fonts.css';
 @import '@astryxdesign/core/reset.css';
 @import '@astryxdesign/core/astryx.css';
 @import '@astryxdesign/theme-neutral/theme.css';

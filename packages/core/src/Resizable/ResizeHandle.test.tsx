@@ -168,6 +168,35 @@ describe('ResizeHandle', () => {
     );
   });
 
+  const ALL_KEYS = [
+    'ArrowRight',
+    'ArrowLeft',
+    'ArrowUp',
+    'ArrowDown',
+    'Home',
+    'End',
+    'Enter',
+  ];
+  it.each([
+    {modifiers: {altKey: true}, keys: ALL_KEYS},
+    {modifiers: {ctrlKey: true}, keys: ALL_KEYS},
+    {modifiers: {metaKey: true}, keys: ALL_KEYS},
+    {modifiers: {metaKey: true, shiftKey: true}, keys: ALL_KEYS},
+    {modifiers: {shiftKey: true}, keys: ['Home', 'End', 'Enter']},
+  ])(
+    'leaves a key with $modifiers that the map does not name to the page',
+    ({modifiers, keys}) => {
+      render(<Harness />);
+      const separator = getSeparator();
+      act(() => separator.focus());
+      for (const key of keys) {
+        const isNotConsumed = fireEvent.keyDown(separator, {key, ...modifiers});
+        expect(isNotConsumed, key).toBe(true);
+        expect(separator, key).toHaveAttribute('aria-valuenow', '200');
+      }
+    },
+  );
+
   it('jumps to the minimum on Home', () => {
     render(<Harness />);
     const separator = getSeparator();

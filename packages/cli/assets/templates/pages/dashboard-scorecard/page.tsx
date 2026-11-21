@@ -39,13 +39,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import {ArrowDownTrayIcon} from '@heroicons/react/24/outline';
+import {DownloadIcon} from '@astryxdesign/template-icons';
 import {
   ArrowUpIcon,
   ArrowDownIcon,
   ArrowRightIcon,
   StopIcon,
-} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -830,7 +830,7 @@ export default function ExecutiveReviewPage() {
               <Button
                 label="Export"
                 variant="secondary"
-                icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                icon={<Icon icon={DownloadIcon} size="sm" />}
                 onClick={() =>
                   // Demo only: replace this toast with the call that performs the action.
                   showToast({

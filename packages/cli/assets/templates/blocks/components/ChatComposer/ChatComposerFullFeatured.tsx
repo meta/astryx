@@ -16,12 +16,12 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {
-  AtSymbolIcon,
-  Cog6ToothIcon,
+  MentionIcon,
+  SettingsIcon,
   MicrophoneIcon,
-  PaperClipIcon,
+  AttachIcon,
   SparklesIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ChatComposerFullFeatured() {
@@ -61,7 +61,7 @@ export default function ChatComposerFullFeatured() {
               label="Mention"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={AtSymbolIcon} />}
+              icon={<Icon icon={MentionIcon} />}
               isIconOnly
             />
             <Button
@@ -71,7 +71,7 @@ export default function ChatComposerFullFeatured() {
               label="Attach file"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={PaperClipIcon} />}
+              icon={<Icon icon={AttachIcon} />}
               isIconOnly
             />
           </>
@@ -102,7 +102,7 @@ export default function ChatComposerFullFeatured() {
                 label: 'Settings',
                 variant: 'ghost',
                 size: 'md',
-                icon: <Icon icon={Cog6ToothIcon} size="sm" />,
+                icon: <Icon icon={SettingsIcon} size="sm" />,
                 children: 'Settings',
               }}
               menuWidth={200}

@@ -3,7 +3,7 @@
 'use client';
 
 import {useId, useRef, useState} from 'react';
-import {CheckIcon} from '@heroicons/react/24/outline';
+import {CheckIcon} from '@astryxdesign/template-icons';
 import {Card} from '@astryxdesign/core/Card';
 import {useAnnounce} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';

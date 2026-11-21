@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {render} from '@astryxdesign/cli/api/experimental';
 import {
   PREVIEW_IMAGE_WIDTH,
+  PREVIEW_MARKUP_RENDER,
   previewDocument,
   previewMarkup,
   previewPageSource,
@@ -141,6 +143,50 @@ describe('previewMarkup', () => {
     expect(markup).not.toContain('<style');
     expect(markup).not.toContain('<script');
     expect(markup).not.toContain('x-astryx-source');
+  });
+
+  it("carries StyleX's own class names, which the site's styles match, for a page that repeats an element", async () => {
+    const dir = fs.mkdtempSync(path.join(docsiteDir, '.preview-classes-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'page.tsx'),
+        `import {Button} from '@astryxdesign/core/Button';
+export default function Page() {
+  return <main>{Array.from({length: 400}, (_, i) => <Button key={i} label={\`Row \${i}\`} />)}</main>;
+}
+`,
+      );
+      await render('page.tsx', {
+        cwd: dir,
+        out: 'page.html',
+        ...PREVIEW_MARKUP_RENDER,
+      });
+      const out = previewMarkup(
+        fs.readFileSync(path.join(dir, 'page.html'), 'utf8'),
+      );
+      const lists = [...out.matchAll(/<button[^>]*\sclass="([^"]*)"/g)].map(
+        m => m[1],
+      );
+      expect(lists).toHaveLength(400);
+      for (const list of lists) {
+        expect(list).toMatch(/\sx[0-9a-z]{5,}/);
+        expect(list).not.toMatch(/(^|\s)_a[0-9a-z]+(\s|$)/);
+      }
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it("leaves out the page's script, a module script or a classic one", () => {
+    for (const tag of ['<script type="module">', '<script>']) {
+      const html = RENDERED.replace(
+        '</body>',
+        `${tag}document.title="drawn"</script></body>`,
+      );
+      const out = previewMarkup(html);
+      expect(out, tag).not.toContain('<script');
+      expect(out, tag).not.toContain('drawn');
+    }
   });
 
   it('keeps the image URLs of the rendered page and loads them at low priority', () => {

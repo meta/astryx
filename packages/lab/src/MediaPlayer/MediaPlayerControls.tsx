@@ -23,6 +23,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
@@ -34,8 +35,8 @@ import {
 } from '@astryxdesign/core/DropdownMenu';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
-import {Popover} from '@astryxdesign/core/Popover';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
+import {createModuleLoader} from '@astryxdesign/core/internal/module-loader';
 import {Slider} from '@astryxdesign/core/Slider';
 import {Theme, ThemeContext} from '@astryxdesign/core/theme';
 import {
@@ -54,6 +55,7 @@ import {
   mergeProps,
   observeResize,
   themeProps,
+  warnOnce,
 } from '@astryxdesign/core/utils';
 import {
   DEFAULT_PLAYBACK_RATES,
@@ -65,6 +67,13 @@ import {
   useMediaSelector,
 } from './MediaPlayerContext';
 import {useMediaIcon} from './mediaIcons';
+
+// A marker's popover is optional, so its module loads on intent: a timeline
+// with no marker content loads no Popover code. A failed load is not kept, so
+// the next press asks again, and the marker still jumps to its time.
+const markerPopover = createModuleLoader(
+  async () => import('./MediaMarkerPopover'),
+);
 
 /** Control height on the shared element-size scale: 28, 32, or 36px. */
 export type MediaControlSize = 'sm' | 'md' | 'lg';
@@ -143,7 +152,10 @@ const styles = stylex.create({
     transform: 'translateY(-50%)',
     overflow: 'hidden',
     borderRadius: radiusVars['--radius-full'],
-    backgroundColor: colorVars['--color-track'],
+    // The theme's track color can match a dark frosted surface. Such a
+    // surface, like the video control bar, sets a track color that shows on
+    // it.
+    backgroundColor: `var(--_media-timeline-track, ${colorVars['--color-track']})`,
   }),
   buffered: (width: number) => ({
     position: 'absolute',
@@ -703,39 +715,109 @@ function MarkerButton({
   // The popover shows page content, such as a comment thread, so it takes
   // the page's theme instead of the media surface's.
   const pageTheme = use(ThemeContext);
-  const popover = (
-    <Popover
-      label={marker.label}
-      content={
-        <div
-          {...{[MARKER_CONTENT_ATTRIBUTE]: ''}}
-          {...stylex.props(styles.markerContent)}>
-          {marker.content}
-        </div>
-      }
-      placement="above"
-      alignment="center"
-      width={MARKER_POPOVER_WIDTH}
-      padding={0}
-      onOpenChange={onOpenChange}>
-      <button
-        type="button"
-        aria-label={marker.label}
-        data-media-marker=""
-        onClick={onPress}
-        {...focusOutlineProps.focusVisible(styles.markerButton)}>
-        <span aria-hidden {...stylex.props(styles.markerDot)} />
-      </button>
-    </Popover>
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [LoadedPopover, setLoadedPopover] = useState(
+    () => markerPopover.loaded()?.default ?? null,
+  );
+  const [isOpen, setIsOpen] = useState(false);
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setIsOpen(next);
+      onOpenChange(next);
+    },
+    [onOpenChange],
+  );
+  const loadPopover = (openOnLoad: boolean) => {
+    void markerPopover.load().then(
+      module => {
+        // A marker removed while its popover loaded opens nothing.
+        if (buttonRef.current == null) {
+          return;
+        }
+        // The popover mounts closed and attaches to the button first, so a
+        // held press then opens it the way a later press does, growing out
+        // of the marker. Both commits run in the task the module lands in,
+        // so the open waits for no extra frame.
+        flushSync(() => {
+          setLoadedPopover(() => module.default);
+        });
+        if (openOnLoad) {
+          flushSync(() => {
+            setOpen(true);
+          });
+        }
+      },
+      (error: unknown) => {
+        warnOnce(
+          'media-marker-popover-load',
+          'MediaTimeSlider',
+          "A marker's popover did not load. The marker still jumps to its time; the next press tries again.",
+          error,
+        );
+      },
+    );
+  };
+  const button = (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-label={marker.label}
+      aria-haspopup="dialog"
+      aria-expanded={isOpen}
+      data-media-marker=""
+      onClick={() => {
+        onPress();
+        // Once loaded, the popover's own handler on this button toggles it.
+        // A press before then opens it when it lands.
+        if (LoadedPopover == null) {
+          loadPopover(true);
+        }
+      }}
+      onPointerEnter={() => {
+        if (LoadedPopover == null) {
+          loadPopover(false);
+        }
+      }}
+      onFocus={() => {
+        if (LoadedPopover == null) {
+          loadPopover(false);
+        }
+      }}
+      {...focusOutlineProps.focusVisible(styles.markerButton)}>
+      <span aria-hidden {...stylex.props(styles.markerDot)} />
+    </button>
+  );
+  const popover =
+    LoadedPopover != null ? (
+      <LoadedPopover
+        anchorRef={buttonRef}
+        label={marker.label}
+        content={
+          <div
+            {...{[MARKER_CONTENT_ATTRIBUTE]: ''}}
+            {...stylex.props(styles.markerContent)}>
+            {marker.content}
+          </div>
+        }
+        width={MARKER_POPOVER_WIDTH}
+        isOpen={isOpen}
+        onOpenChange={setOpen}
+      />
+    ) : null;
+  const parts = (
+    <>
+      {button}
+      {popover}
+    </>
   );
   return (
     <div {...stylex.props(styles.markerAnchor(x))}>
       {pageTheme != null ? (
         <Theme theme={pageTheme.theme} mode={pageTheme.mode}>
-          {popover}
+          {parts}
         </Theme>
       ) : (
-        popover
+        parts
       )}
     </div>
   );

@@ -9,11 +9,11 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
-  ClipboardDocumentIcon,
-  ScissorsIcon,
-  ClipboardIcon,
+  CopyTextIcon,
+  CutIcon,
+  PasteIcon,
   ChevronDownIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function ButtonGroupShowcase() {
   const showToast = useToast();
@@ -22,21 +22,21 @@ export default function ButtonGroupShowcase() {
       <ButtonGroup label="Clipboard actions">
         <Button
           label="Copy"
-          icon={<Icon icon={ClipboardDocumentIcon} />}
+          icon={<Icon icon={CopyTextIcon} />}
           onClick={() =>
             showToast({body: 'Demo: the selection would be copied here'})
           }
         />
         <Button
           label="Cut"
-          icon={<Icon icon={ScissorsIcon} />}
+          icon={<Icon icon={CutIcon} />}
           onClick={() =>
             showToast({body: 'Demo: the selection would be cut here'})
           }
         />
         <Button
           label="Paste"
-          icon={<Icon icon={ClipboardIcon} />}
+          icon={<Icon icon={PasteIcon} />}
           onClick={() =>
             showToast({body: 'Demo: the clipboard would be pasted here'})
           }

@@ -7,7 +7,7 @@ import {MobileNav} from '@astryxdesign/core/MobileNav';
 import {SideNavSection, SideNavItem} from '@astryxdesign/core/SideNav';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
-import {HomeIcon, FolderIcon} from '@heroicons/react/24/outline';
+import {HomeIcon, FolderIcon} from '@astryxdesign/template-icons';
 
 export default function MobileNavWithoutTitleMobileNav() {
   const [isOpen, setIsOpen] = useState(false);

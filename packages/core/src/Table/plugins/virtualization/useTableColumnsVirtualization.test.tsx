@@ -727,6 +727,28 @@ describe('column range changes', () => {
     expect([...new Set(built)].sort()).toEqual([...entering].sort());
     expect(built).toHaveLength(entering.length * ROW_COUNT);
   });
+
+  it('renders the column window once for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let renders = 0;
+    // The header row's transform runs once each time the column window
+    // renders the table.
+    const recorder: TablePlugin<Item> = {
+      transformHeaderRow: props => {
+        renders++;
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    renders = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(renders).toBe(1);
+  });
 });
 
 describe('pinning a mounted column', () => {
@@ -856,6 +878,18 @@ describe('first-visible-column anchor', () => {
     expect(viewport.writes).toEqual([]);
     expect(viewport.getLeft()).toBe(3050);
     expect(mountedKeys(container)).toContain('c30');
+  });
+
+  it('writes no scroll when the last column is unpinned near the end of the run', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = render(<Fixture endKeys={['c39']} />);
+    await settle();
+    // c34 is first visible, half shown, within one column of the run's end.
+    await viewport.scrollTo(3450);
+    rerender(<Fixture />);
+    await viewport.landWrites();
+    expect(viewport.writes).toEqual([]);
+    expect(viewport.getLeft()).toBe(3450);
   });
 
   it('keeps the first visible column when an earlier column is pinned', async () => {

@@ -87,13 +87,19 @@ rather than left to the command author.
    command tree, the answer reads other command lines' word orders (`add
 theme matcha` is `theme add matcha`) and the table of their words in
    `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
-   uses it and no word is a command or a command's plural. The answer only
+   uses it and no word is a command or a command's plural. A word that points
+   at nothing names the commands it is a typo of (one edit in a word of up to
+   four letters, two in a longer one, two swapped letters counting as one),
+   else `help`, which lists every command with what it does. A word that
+   names a script in the project's package.json names that script's run
+   first, with the project's package manager. The answer only
    suggests: it runs nothing and names no experimental command, except that a
    share word (`export`, `render`, `share`, `bundle`, `snapshot`,
    `standalone`) names `experimental export` under `spec:AST-017` FR27's
-   shareable-page exception, and a way-back word (`import`, `back`,
-   `restore`, `unrender`, `reverse`) names `experimental import` under the
-   same exception.
+   shareable-page exception, a way-back word (`import`, `back`, `restore`,
+   `unrender`, `reverse`) names `experimental import` under the same
+   exception, and where icon features are on, an icon word (`icon`, `icons`)
+   names `experimental icon` (`spec:AST-084` FR0).
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -167,6 +173,10 @@ and remains available through explicit Core package selection.
   command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
+  A hook whose doc lists its options as props prints that doc in the
+  component read's layout at each level, without an import line (the hook's
+  JSON names none); at `full` it prints each prop description whole and both
+  its description and its usage text.
   The detail level never changes a component read's JSON. A field shown in
   one section of the text projection is not repeated in another: a read of
   one family member prints its props once, under Props. The stdout of `astryx mcp` carries protocol messages only, and
@@ -319,7 +329,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -504,7 +514,9 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   installed, or has more source files than `doctor` reads, the check does not
   run and says why, whatever props the pages give. When there is a candidate
   and Core's types or the files that augment Core cannot be read, it reports
-  no prop and says why. The warning names up to eight props, each with its
+  no prop and says why. Where installing a package fixes the reason (no
+  installed Core, no TypeScript it can use, React's types unread), the reason
+  names what to install. The warning names up to eight props, each with its
   file, line and component and the documented prop that has the same words
   when there is one, and counts the rest. It never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
@@ -935,16 +947,46 @@ non-interactive guarantee.
   every restored file matches its recorded checksum.
   `astryx experimental import` follows the same rule: it reports the same
   `missing` and `exact`.
-- `api/render` and `foundation/discovery/core-augmentation-points.mjs` — the
-  `unknown-prop-value` warning of `astryx experimental export`: each string a
-  page writes for a Core component's prop whose type is a closed set of
-  strings, checked against Core's docs for that component in the page's own
-  Core. Where the prop's type in Core's source takes the keys of an interface
-  a theme can widen by declaration merging (the module theme build also
-  resolves its augmentations with), the keys the project's own TypeScript
-  files and its installed theme and integration packages' declaration files
-  add are values the prop has; a project that cannot be read in full leaves
-  such a prop unchecked.
+- `api/render`, `foundation/discovery/written-prop-values.mjs` and
+  `foundation/discovery/core-augmentation-points.mjs` — the
+  `unknown-prop-value` warning of `astryx experimental export`. It reads the
+  values a page certainly gives a Core component's prop: a literal, a
+  conditional of certain branches, a logical expression whose result is
+  certain, a `const` bound to one, or the first value of `useState`; a prop a
+  later spread attribute can replace, and a value cast to `never`, `any` or
+  `unknown`, is not read. Each such string for a prop
+  whose type is a closed set of strings is checked against Core's docs for
+  that component in the page's own Core. Where the
+  prop's type in Core's source takes the keys of an interface a theme can
+  widen by declaration merging (the module theme build also resolves its
+  augmentations with), the keys the project's own TypeScript files and its
+  installed theme and integration packages' declaration files add are values
+  the prop has; a project that cannot be read in full leaves such a prop
+  unchecked. Each such value of a kind the prop's declared type in Core's
+  source does not take (a string where it takes an object) warns too; a value
+  or a type the reader cannot be certain of is not checked. The same wrong kind
+  for one prop on several lines of a file is one warning that lists the lines.
+- `api/render` and `foundation/discovery/unknown-core-props.mjs` — the
+  `unknown-prop` warning of `astryx experimental export`: each prop name the
+  page's own files give a Core component, read and judged as INV42 reads and
+  judges it: with the docs and types of the Core the page finds installed,
+  read with the project's own TypeScript and React types. When a prop the
+  docs leave out is a candidate and INV42 would say why it was not judged
+  (no installed Core, no TypeScript it can use, React's or Core's types or
+  the files that augment Core unread, another JSX runtime or a `css` prop,
+  more source files than are read), one `props-not-checked` warning gives
+  that reason and, where an install fixes it, what to install; outside a
+  project (`spec:AST-081` FR3) it gives the reason alone. A candidate
+  INV42 leaves unjudged without a reason (a `paths` mapping, a generic or
+  unreadable component, a file that finds no installed Core while the
+  page's other files do) gets no line. Each element gets one warning, and a
+  cut list of props names the command that lists the rest, with the command
+  name `spec:AST-081` FR5 picks for the folder and
+  `--package @astryxdesign/core` (`spec:AST-035` FR12), so an integration
+  that replaces the component does not answer it. React's console
+  line for a prop a warning names is dropped from the page output before it
+  is cut to its first lines, so it never hides a line the page printed
+  itself. Only the docs are read while every prop is documented.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
@@ -1352,6 +1394,29 @@ the editor shows each mode itself.
 Rejected: following the viewer for every page (a one-mode theme is unreadable
 in the other scheme), and running the theme module to read its modes (a render
 runs no theme code).
+
+### DEC-20 — A refused template path names the same write from its folder
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+When `astryx template <name> <path>` refuses a destination outside the project
+and outside the temp folder (named absolutely, from the home folder, or through
+`..`), the refusal also names a command that writes that same destination: `cd`
+into the nearest folder on the destination's path that exists, then run the
+template command with the rest of the path, using the CLI command that folder
+would use (`spec:AST-081` FR5). Run from that folder, the write stays inside
+the folder the command runs from (INV10), so the caller gets the copy where
+they named it without a second refusal. The command is named only for a Core
+template that no integration replaces: outside the project the project's
+integrations do not load, so an integration's template would not be found
+there, and a replaced Core template would be the Core version instead of the
+project's replacement. No command is named when no folder on the path exists
+except the disk's root. A destination reached through `..` that lands in the
+temp folder is not a scratch copy (DEC-15); the refusal names the same
+destination as an absolute path, which DEC-15 accepts as a scratch copy.
+
+Rejected: writing the named destination from the current folder (it leaves the
+folder a template write is confined to).
 
 ## Verification
 

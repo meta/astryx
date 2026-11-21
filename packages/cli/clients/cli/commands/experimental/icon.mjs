@@ -181,7 +181,7 @@ export function registerExperimentalIcon(group, program) {
     if (result.type === 'icon.definitions') {
       const {definitions, set} = result.data;
       const unmappedUsed = definitions.filter(
-        each => each.mapped === false && each.templates > 0,
+        each => each.mapped === false && !each.fallback && each.templates > 0,
       ).length;
       emit(
         section(
@@ -199,7 +199,13 @@ export function registerExperimentalIcon(group, program) {
                 : []),
               ...(each.mapped == null
                 ? []
-                : [each.mapped ? 'mapped' : 'not mapped']),
+                : [
+                    each.mapped
+                      ? 'mapped'
+                      : each.fallback
+                        ? `drawn as ${each.fallback}`
+                        : 'not mapped',
+                  ]),
               ...(each.replaces ? [`replaces ${each.replaces}`] : []),
             ];
             return `${each.name} [${marks.join(', ')}]: ${each.description} Words: ${each.words.join(', ')}.`;
