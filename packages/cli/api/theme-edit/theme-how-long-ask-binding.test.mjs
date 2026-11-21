@@ -347,6 +347,15 @@ const ROWS = [
     },
   ],
   [
+    'an undo in a joined ask leaves no word of it not taken',
+    {
+      q: 'Make the headings bigger, make the headings bold, and undo the heading size change.',
+      has: ['headings bold'],
+      never: /--text-heading-\d-size/,
+      saysNot: /not taken/,
+    },
+  ],
+  [
     'an undo of an italic keeps the bold said earlier',
     {
       q: 'Make the headings italic. Make the headings bold. Undo the heading italic change.',

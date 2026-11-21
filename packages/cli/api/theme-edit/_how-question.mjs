@@ -32325,8 +32325,14 @@ export function draftAnswer(ctx, env, question) {
     ) ||
     q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
-    const answeredText = result
-      .map(d => `${d.text} ${JSON.stringify(d.options)}`)
+    // (The words of a clause an undo answered, "size" in "undo the heading
+    // size change", were read with the undo.)
+    const answeredText = [
+      ...result.map(d => `${d.text} ${JSON.stringify(d.options)}`),
+      ...[...answeredByUndo].map(c =>
+        String(/** @type {any} */ (c).text ?? ''),
+      ),
+    ]
       .join(' ')
       .toLowerCase();
     const STOP =
