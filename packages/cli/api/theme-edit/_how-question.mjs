@@ -27011,9 +27011,11 @@ export function draftAnswer(ctx, env, question) {
             current('--color-background-body', 'dark'),
           );
           const twin =
+            // (Only a link color for the whole theme: one placed, "links
+            // on cards", is that place's, as main reads it.)
+            !holder &&
             !c.mode &&
             modal &&
-            !barFill &&
             !bothAsked &&
             rgb &&
             darkPage &&

@@ -180,8 +180,11 @@ describe('clone and blind asks', () => {
     'wild: links unreadable on one page go to the other mode; dial clauses stay whole',
     async test => {
       needsBases(test);
+      // (Said once for the whole theme: the dark mode takes its twin.)
       expect((await answer('links dark blue #0033aa')).first).toEqual([
-        "--color-text-accent '#0033aa' --mode light",
+        expect.stringMatching(
+          /^--color-text-accent 'light-dark\(#0033aa, #[0-9a-f]{6}\)'$/,
+        ),
       ]);
       expect((await answer('pill buttons, larger text')).first).toEqual([
         'corners pill --on button',
