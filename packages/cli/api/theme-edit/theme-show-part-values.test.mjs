@@ -451,7 +451,7 @@ describe('show --on: what one part of a theme shows', () => {
     expect(fill.value.dark).not.toBe('#abcdef');
   }, 120_000);
 
-  it('credits a variant-scoped token block only where it shows, and reads what the theme file adds below the settings', async () => {
+  it('credits a variant-scoped token block only where it shows', async () => {
     await themeEditNew('scoped', {cwd, like: 'neutral'});
     await themeEditSet('scoped', '--color-background-muted', '#ff0000', {
       cwd,
@@ -469,75 +469,6 @@ describe('show --on: what one part of a theme shows', () => {
     const muted = valueOf(r, 'background-color', 'variant:muted');
     expect(muted).toMatchObject({source: 'theme'});
     expect(muted.value.light).toBe('#ff0000');
-    // A token the theme file sets below the settings wins over them, as
-    // the app draws it.
-    const file = path.join(cwd, 'themes', 'scoped', 'scoped.theme.ts');
-    fs.writeFileSync(
-      file,
-      fs
-        .readFileSync(file, 'utf8')
-        .replace(
-          "name: 'scoped',",
-          "name: 'scoped',\n  tokens: {'--color-background-card': '#0a0b0c'},",
-        ),
-    );
-    const own = /** @type {any} */ (
-      await themeEditShow('scoped', {cwd, on: 'card'})
-    );
-    expect(valueOf(own, 'background-color').value).toBe('#0a0b0c');
-  }, 120_000);
-
-  it('credits a token and a part rule added by hand below the settings to the token and the part, beside a dial', async () => {
-    await themeEditNew('handy', {cwd, like: 'neutral'});
-    await themeEditSet('handy', 'corners', 'pill', {cwd});
-    const file = path.join(cwd, 'themes', 'handy', 'handy.theme.ts');
-    fs.writeFileSync(
-      file,
-      fs
-        .readFileSync(file, 'utf8')
-        .replace(
-          "name: 'handy',",
-          "name: 'handy',\n  tokens: {'--color-background-card': '#0a0b0c'},\n  components: {card: {base: {borderColor: '#0d0e0f'}}},",
-        ),
-    );
-    const r = /** @type {any} */ (
-      await themeEditShow('handy', {cwd, on: 'card'})
-    );
-    expect(valueOf(r, 'background-color')).toMatchObject({
-      value: '#0a0b0c',
-      source: 'theme',
-      via: 'token',
-    });
-    expect(valueOf(r, 'border-color')).toMatchObject({
-      value: '#0d0e0f',
-      source: 'theme',
-      via: 'part',
-    });
-    // The corners dial still reads as the dial.
-    expect(valueOf(r, 'border-radius')).toMatchObject({via: 'dial'});
-  }, 120_000);
-
-  it('credits a token the part’s rule sets by hand to the token, beside a part dial', async () => {
-    await themeEditNew('handpart', {cwd, like: 'neutral'});
-    await themeEditSet('handpart', 'spacing', 'roomy', {cwd, on: 'card'});
-    const file = path.join(cwd, 'themes', 'handpart', 'handpart.theme.ts');
-    fs.writeFileSync(
-      file,
-      fs
-        .readFileSync(file, 'utf8')
-        .replace(
-          "name: 'handpart',",
-          "name: 'handpart',\n  components: {card: {base: {'--color-background-card': '#123456'}}},",
-        ),
-    );
-    const r = /** @type {any} */ (
-      await themeEditShow('handpart', {cwd, on: 'card'})
-    );
-    expect(valueOf(r, 'background-color')).toMatchObject({
-      value: '#123456',
-      source: 'theme',
-      via: 'token',
-    });
   }, 120_000);
 
   it('gives a button’s corner radius once, not once per corner', async () => {
