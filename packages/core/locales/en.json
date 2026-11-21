@@ -1695,6 +1695,10 @@
     "defaultMessage": "Shift",
     "description": "Abbreviated visible label of the Shift keycap on non-Apple platforms (Apple platforms show the Shift symbol). Localize to the keyboard's conventional short label."
   },
+  "@astryx.kbd.key.space": {
+    "defaultMessage": "Space",
+    "description": "Visible label and spoken name of the Space bar in a keyboard shortcut."
+  },
   "@astryx.kbd.key.tab": {
     "defaultMessage": "Tab",
     "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."

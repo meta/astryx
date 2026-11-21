@@ -12,7 +12,7 @@ const meta: Meta<typeof Kbd> = {
     keys: {
       control: 'text',
       description:
-        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod, ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.',
+        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod, ctrl, alt, shift, enter, backspace, escape, tab, space, up, down, left, right, plus. Aliases, the names useHotkeys also accepts: esc for escape, return for enter, and arrowup, arrowdown, arrowleft and arrowright for the arrows.',
     },
   },
 };
@@ -111,6 +111,15 @@ export const SpecialKeys: Story = {
         <Kbd keys="down" />
         <Kbd keys="left" />
         <Kbd keys="right" />
+      </div>
+      <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
+        <Text type="label" style={{width: '100px'}}>
+          Arrow names:
+        </Text>
+        <Kbd keys="arrowup" />
+        <Kbd keys="arrowdown" />
+        <Kbd keys="arrowleft" />
+        <Kbd keys="arrowright" />
       </div>
     </div>
   ),
