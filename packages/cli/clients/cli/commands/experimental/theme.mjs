@@ -3012,7 +3012,7 @@ function checkLines(d, name, fix) {
   const out = [
     ...(d.unmeasured
       ? [
-          `[warn] text on the components was not measured (${d.unmeasured.code}): ${d.unmeasured.cause}`,
+          `[error] text on the components was not measured (${d.unmeasured.code}): ${d.unmeasured.cause}`,
         ]
       : []),
     record({

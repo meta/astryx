@@ -1276,6 +1276,26 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(
         g.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
       ).toBe(false);
+      // A gradient written with the theme's own variables over a fill is
+      // read with them: dark stops over a white fallback are the ground.
+      const over = await check(
+        themeFile('varover', READABLE, {
+          card: {
+            base: {
+              '--x-dark': '#111111',
+              backgroundColor: '#ffffff',
+              backgroundImage: 'linear-gradient(var(--x-dark), var(--x-dark))',
+            },
+          },
+        }),
+      );
+      expect(
+        over.problems.some(
+          p =>
+            (p.part === 'card' && p.kind === 'page-image') ||
+            (p.kind === 'part-text' && p.part === 'card'),
+        ),
+      ).toBe(true);
       // A stop built from a variable, or written as one, may be
       // see-through: not a fill.
       const bare = await check(

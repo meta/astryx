@@ -467,6 +467,19 @@ export function paintAppPage(root, use) {
       ],
       protectedFiles: [],
     };
+  // The new stylesheet is classified as an existing file is: a protected
+  // path, or a link in its place, is not written.
+  const cssWhy = fs.lstatSync(css, {throwIfNoEntry: false})?.isSymbolicLink()
+    ? 'a link in its place'
+    : protectedBy(root, css);
+  if (cssWhy) {
+    const rel = path.relative(root, css);
+    return {
+      files: [],
+      declined: [`${rel} is protected (${cssWhy}); paint the page yourself`],
+      protectedFiles: [{file: rel, declaration: cssWhy}],
+    };
+  }
   fs.writeFileSync(css, sheet);
   if (!importsModule(text, `./${PAGE_CSS}`))
     fs.writeFileSync(

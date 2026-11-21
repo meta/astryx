@@ -185,8 +185,10 @@ export function partValue(components, part, keys, m, when = null) {
  * @param {Look['components']} components
  * @param {string | null | undefined} part @param {Mode} m
  * @param {string | null} [block]
+ * @param {Record<string, string> | null} [tokens] the tokens a gradient's
+ *   variables are read from
  */
-function ownFill(components, part, m, block = null) {
+function ownFill(components, part, m, block = null, tokens = null) {
   if (!part) return null;
   const color = partValue(
     components,
@@ -197,7 +199,8 @@ function ownFill(components, part, m, block = null) {
   );
   const image = partValue(components, part, ['backgroundImage'], m, block);
   // One opaque gradient paints over the color under it: text sits on it.
-  if (typeof image === 'string' && opaqueGradient(image)) return image;
+  const read = typeof image === 'string' ? withTokens(image, tokens) : null;
+  if (read && opaqueGradient(read)) return read;
   return color;
 }
 
@@ -209,12 +212,26 @@ function ownFill(components, part, m, block = null) {
 const opaqueGradient = image =>
   /^(linear|radial)-gradient\(/.test(image.trim()) &&
   (image.match(/gradient\(/g) ?? []).length === 1 &&
-  // (A stop written as a variable is not read here: the gradient may be
-  // see-through, so it is not a fill.)
-  !/\btransparent\b|var\(/i.test(image) &&
-  // (A stop the check cannot read, such as one built from a variable,
+  // (A stop still written as a variable, or one the check cannot read,
   // may be see-through: then the gradient is not a fill.)
+  !/\btransparent\b|var\(/i.test(image) &&
   colorsIn(image).every(c => parseColor(c) != null && alphaOf(c) >= 1);
+
+/**
+ * A value with each `var()` read from the tokens (the theme's own local
+ * ones included), its fallback when the token is not there.
+ * @param {string} v @param {Record<string, string> | null} tokens
+ */
+function withTokens(v, tokens) {
+  if (!tokens) return v;
+  let value = v;
+  for (let i = 0; i < 8 && /var\(--/.test(value); i++)
+    value = value.replace(
+      /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
+      (whole, name, fallback) => tokens[name] ?? fallback ?? whole,
+    );
+  return value;
+}
 
 /**
  * The opaque color a value shows over the page, or null.
@@ -292,9 +309,9 @@ function textProblems(look) {
       const own =
         side === 'fg'
           ? partValue(styles, s.target, ['color'], mode, block)
-          : (ownFill(styles, s.target, mode, block) ??
+          : (ownFill(styles, s.target, mode, block, tokens[mode]) ??
             (p.fg.target !== s.target
-              ? ownFill(styles, p.fg.target, mode, block)
+              ? ownFill(styles, p.fg.target, mode, block, tokens[mode])
               : null));
       if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
       let tok = s.tokens[0];
@@ -354,12 +371,12 @@ function textProblems(look) {
       : null;
     const ownFg = partValue(components, p.fg.target, ['color'], mode, block);
     const ownBg =
-      ownFill(components, p.bg.target, mode, block) ??
+      ownFill(components, p.bg.target, mode, block, res[mode]) ??
       (p.fg.target !== p.bg.target
-        ? ownFill(components, p.fg.target, mode, block)
+        ? ownFill(components, p.fg.target, mode, block, res[mode])
         : null);
     const bgPart =
-      ownFill(components, p.bg.target, mode, block) != null
+      ownFill(components, p.bg.target, mode, block, res[mode]) != null
         ? p.bg.target
         : p.fg.target;
     // A text token the text's part, or the part it sits on, sets for
@@ -707,7 +724,7 @@ function barTextProblems(look) {
     const within = inside(map, part);
     for (const m of look.modes) {
       const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
-      const barValue = ownFill(components, part, m);
+      const barValue = ownFill(components, part, m, null, res[m]);
       const bar =
         barValue != null ? shown(colorIn(barValue, res[m], m), page) : null;
       if (!bar) continue;
@@ -724,7 +741,7 @@ function barTextProblems(look) {
         // A ground inside the bar that paints its own fill is the text's;
         // a ground outside it (the page the census drew) is under the bar.
         if (within.has(q)) {
-          if (ownFill(components, q, m, block) != null) continue;
+          if (ownFill(components, q, m, block, res[m]) != null) continue;
           const fillValue = p.bg.tokens[0]
             ? `var(${p.bg.tokens[0]})`
             : p.bg.raw;
@@ -945,12 +962,7 @@ function hoverTextProblems(look) {
  * @param {string} v @param {Record<string, string>} tokens
  */
 function isPattern(v, tokens) {
-  let value = v;
-  for (let i = 0; i < 8 && /var\(--/.test(value); i++)
-    value = value.replace(
-      /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
-      (_, name, fallback) => tokens[name] ?? fallback ?? '',
-    );
+  const value = withTokens(v, tokens);
   return /url\(|gradient\(/.test(value);
 }
 
@@ -974,9 +986,13 @@ function partImageProblems(look) {
     if (typeof v !== 'string' || !isPattern(v, look.res.light)) continue;
     // One opaque gradient is measured; a see-through sheen over a fill the
     // part sets is measured on that fill.
-    if (!/url\(/.test(v) && opaqueGradient(v)) continue;
+    if (!/url\(/.test(v) && opaqueGradient(withTokens(v, look.res.light)))
+      continue;
+    // (A variable the theme's tokens do not answer leaves the image unread:
+    // it is said, never taken as a sheen over the fill.)
     if (
       !/url\(/.test(v) &&
+      !/var\(/.test(withTokens(v, look.res.light)) &&
       Object.values(blocks).some(
         (/** @type {any} */ b) =>
           b &&
