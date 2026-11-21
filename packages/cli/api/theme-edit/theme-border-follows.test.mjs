@@ -66,12 +66,12 @@ describe('the emphasized border', () => {
     // (A field keeps a boundary people can see, in the border's color.)
     expect(changedNames(faint)).toContain('--color-border-emphasized');
     expect(faint.notes.join('\n')).toMatch(
-      /fields kept at 3:1: their edge \(--color-border-emphasized\) is #[0-9a-f]{6} in light mode, the nearest shade of #e3e8ee/,
+      /fields kept at 3:1: their edge \(--color-border-control\) is #[0-9a-f]{6} in light mode, the nearest shade of #e3e8ee/,
     );
     // (The exact-color command runs as pasted: the editor's own command,
     // the color quoted so a shell keeps its #.)
     expect(faint.notes.join('\n')).toMatch(
-      /for the exact color: `\S*astryx experimental theme editor set \S+ --color-border-emphasized '#e3e8ee'/,
+      /for the exact color: `\S*astryx experimental theme editor set \S+ --color-border-control '#e3e8ee'/,
     );
   });
 

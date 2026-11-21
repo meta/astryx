@@ -8219,10 +8219,22 @@ async function changeOnce(
           ),
         )
         .map(([t]) => t);
-    if (followers.length) {
-      const also = [...new Set(followers.flatMap(drawnFrom))];
+    // Each border that follows the border says what it draws; the
+    // surface's fills share one line.
+    for (const group of s.thing === '--color-border'
+      ? followers.map(f => [f])
+      : followers.length
+        ? [followers]
+        : []) {
+      const also = [...new Set(group.flatMap(drawnFrom))];
+      const what =
+        s.thing !== '--color-border'
+          ? "the fills made from the surface, at the base theme's step from it"
+          : group[0] === '--color-border-control'
+            ? 'the frames of inputs and selectors, never fainter than the border'
+            : 'cards, dividers and the other stronger edges, never fainter than the border';
       notes.push(
-        `${followers.join(', ')} ${followers.length === 1 ? 'follows' : 'follow'} it (${s.thing === '--color-border' ? 'cards, dividers and the other stronger edges, never fainter than the border' : "the fills made from the surface, at the base theme's step from it"})${also.length ? `, and so do the parts the base theme draws from ${followers.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
+        `${group.join(', ')} ${group.length === 1 ? 'follows' : 'follow'} it (${what})${also.length ? `, and so do the parts the base theme draws from ${group.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${group.length === 1 ? 'it' : 'one'} keeps its own color`,
       );
     }
   }

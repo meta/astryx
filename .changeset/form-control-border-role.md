@@ -20,7 +20,7 @@ What changes on screen:
 - A flat ChatComposer (`elevation="none"`) uses it too, because its edge is the only cue to where you type. The raised default keeps its shadow and edge.
 - Every first-party theme sets its own value at 3:1 or more against its own surface and page body, and generated themes (`defineTheme({color})`) derive one.
 - Cards, dividers, the raised ChatComposer, and every other use of `--color-border-emphasized` keep their lighter edge.
-- The theme editor (`astryx experimental theme editor`) names the control edge as what inputs draw, but does not yet move it with `--color-border`: if you change `--color-border` in the editor, field and box edges keep your base theme's control edge. Set `--color-border-control` yourself for now.
+- The theme editor (`astryx experimental theme editor`) names the control edge as what inputs draw. A `--color-border` you set moves it to the nearest shade of that color that keeps 3:1 on the field fill, and cards, dividers and the parts drawn from `--color-border-emphasized` follow it as before.
 
 Custom themes: a theme that doesn't set `--color-border-control` gets Core's default. A custom theme that set only `--color-border-emphasized` for its field edges now gets Core's default control edge; set `--color-border-control` to a value that suits your palette and reaches 3:1 against your surface and page body.
 
