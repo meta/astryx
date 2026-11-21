@@ -15,6 +15,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {getComponent, resolveValue} from './resolveElements';
 import {formatElementCode} from './formatElementCode';
+import {syntaxPresetName} from './syntaxThemeChoices';
 import {AppShellMobileContext} from '@astryxdesign/core/AppShell';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -122,6 +123,10 @@ function formatValue(
   }
   if (value === null) {
     return 'null';
+  }
+  const syntaxPreset = syntaxPresetName(value);
+  if (syntaxPreset != null) {
+    return toIdentifierName(syntaxPreset);
   }
   if (
     value != null &&

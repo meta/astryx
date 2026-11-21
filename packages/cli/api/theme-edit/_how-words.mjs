@@ -48,9 +48,10 @@ export const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
     ['цвет\\p{L}*|colore|farbe', '颜色|色', 'color'],
     ['акцент\\p{L}*', '强调', 'accent'],
     ['más|mais|mehr|più|более', '更', 'more'],
-    // "sans" is a typeface word before serif or font.
+    // "sans" is a typeface word before serif or font, or after a kind of
+    // typeface ("humanist sans", "geometric sans").
     [
-      'sin|sans(?![\\s-]*(serif|fonts?|typefaces?))|ohne|без|sem|senza',
+      'sin|(?<!(?<!\\p{L})(?:humanist|geometric|grotesque|grotesk)[\\s-]+)sans(?![\\s-]*(serif|fonts?|typefaces?))|ohne|без|sem|senza',
       '没有|无',
       'without',
     ],

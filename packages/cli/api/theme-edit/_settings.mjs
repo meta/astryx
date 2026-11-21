@@ -181,6 +181,8 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {string} [state]
  * @property {'light' | 'dark'} [mode]
  * @property {boolean} [only]
+ * @property {boolean} [narrowed] - A group's height the narrowing copied onto
+ *   this member, with only, when one control of the group took its own.
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note]
  * @property {string} [stateNote] - The state word a command wrote as another state, said in its result.
@@ -1837,6 +1839,7 @@ const ENTRY_FIELDS = [
   'state',
   'mode',
   'only',
+  'narrowed',
 ];
 
 /**
@@ -2340,6 +2343,13 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       if (read) s.only = true;
       else delete s.only;
     } else if (s.only === false) delete s.only;
+    // (`narrowed` is the narrowing's own mark: true or absent.)
+    if (s.narrowed != null && s.narrowed !== true) {
+      notes.push(
+        `${s.thing} was saved with narrowed ${JSON.stringify(s.narrowed)}, read as kept on ${s.on ?? 'its part'} alone`,
+      );
+      delete s.narrowed;
+    }
     if (!['dial', 'token', 'property'].includes(s.source)) {
       const typed = typeof s.source === 'string' ? s.source.trim() : '';
       const read = typed
@@ -5034,8 +5044,20 @@ export function namesControls(ctx, on) {
 }
 
 /**
+ * Whether a height saved with --only on one control of a group is the
+ * group's plain height, narrowed off a control kept apart: the narrowing
+ * marks each copy it writes on the group's other members (`narrowed`). A
+ * height kept on one control, with --only, carries no mark.
+ * @param {Setting} x
+ */
+export function narrowedGroupHeight(x) {
+  return x.source === 'property' && x.only === true && x.narrowed === true;
+}
+
+/**
  * Whether a saved setting sets the height of some controls at a size:
- * a height (not `--only`, not in a state) that reaches a control, for that
+ * a height (not in a state, and with `--only` only as a group's narrowed
+ * height) that reaches a control, for that
  * size or for every size, or that size's token on controls. A height on
  * another part reaches controls when it spreads to them (a text area's
  * height reaches the inputs drawn alike).
@@ -5044,7 +5066,10 @@ export function namesControls(ctx, on) {
  * @param {'sm' | 'md' | 'lg'} size
  */
 export function setsControlHeight(ctx, x, size) {
-  if (x.state || x.only || !x.on) return false;
+  if (x.state || !x.on) return false;
+  // (A height kept on one control with --only is its own; one the
+  // narrowing left on a group's other controls is still the group's.)
+  if (x.only && !narrowedGroupHeight(x)) return false;
   // (A size token on one control is that control's own height, as --only
   // gives it; on a group it is the height of the controls in it, also on a
   // group that mixes controls with other parts, such as the button-like
@@ -8058,11 +8083,12 @@ export function compileTheme(ctx, data, base) {
           }
           // Chat surfaces (a composer, its drawer, a message bubble) read
           // --radius-chat, which Core defaults to the container radius and
-          // the bundled themes pin to a value of their own: the dial gives it
-          // back to the container radius, as Core's own default does, so it
-          // follows whatever container radius the theme ends up with (the
-          // dial's, or an exact one set after it).
-          putTok('--radius-chat', 'var(--radius-container)');
+          // the bundled themes pin to a value of their own. The dial writes
+          // it from the container radius, at the base's ratio of the two, so
+          // it follows whatever container radius the theme ends up with (the
+          // dial's, or an exact one set after it) and moves the way the
+          // corners move.
+          putTok('--radius-chat', chatRadiusValue(base));
         }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
@@ -8529,7 +8555,33 @@ export function compileTheme(ctx, data, base) {
         }
       }
     } else if (s.source === 'token') {
-      if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
+      if (parts.length)
+        for (const t of parts) {
+          // (A text size token no part reads, said of one part whose held
+          // parts read one: written into that one, as set's check says.)
+          const held =
+            parts.length === 1 &&
+            /^--text-[a-z0-9-]*size$/.test(String(s.thing)) &&
+            !baseComponentReads(ctx.project.cwd, data.like, t).has(
+              String(s.thing),
+            )
+              ? heldSizeTokenFor(
+                  ctx.C,
+                  s,
+                  t,
+                  String(s.thing),
+                  s.value,
+                  ctx.C.checkTokenOn?.(
+                    '',
+                    t,
+                    String(s.thing),
+                    String(s.value),
+                    '',
+                  ),
+                )
+              : null;
+          putComp(s, t, held ?? s.thing, s.value);
+        }
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
       // A background on the whole app shell is the page background. The
@@ -16226,6 +16278,43 @@ export function namesToken(value, token) {
 }
 
 /**
+ * The one text size token the parts a part holds read (a tab list's tabs,
+ * --text-label-size), for a text size token said of that part alone, with
+ * no state, that set's token check refused: the part reads none and draws
+ * no text of its own (no element inside it sets a text property). Read from that refusal's own list, so the
+ * refusal and the accept never differ. Null otherwise, and for a value that
+ * names that token (it would read itself).
+ * @param {{MAP: Record<string, any>}} C
+ * @param {{state?: string}} s
+ * @param {string} part
+ * @param {string} thing
+ * @param {unknown} value
+ * @param {{held?: string[], soft?: boolean} | null | undefined} refused
+ * @returns {string | null}
+ */
+export function heldSizeTokenFor(C, s, part, thing, value, refused) {
+  const held = refused && !refused.soft ? (refused.held ?? []) : [];
+  if (
+    s.state ||
+    held.length !== 1 ||
+    held[0] === thing ||
+    !/^--text-[a-z0-9-]*size$/.test(thing) ||
+    !/^--text-[a-z0-9-]*size$/.test(held[0]) ||
+    // (A part that draws text of its own, a paragraph with its inline code
+    // held, keeps that text at the size it inherits: refused as before.)
+    Object.values(C.MAP[part]?.inside ?? {}).some(props =>
+      /** @type {string[]} */ (props).some(p =>
+        /^(?:font-|line-height$|letter-spacing$)/.test(p),
+      ),
+    )
+  )
+    return null;
+  return new RegExp(`var\\(\\s*${held[0]}\\s*[,)]`).test(String(value))
+    ? null
+    : held[0];
+}
+
+/**
  * The tokens of the lines in a part's text column, when its text sits in one
  * column part of its own that holds no text itself (a banner's message
  * column: its title, --text-label-size, and description,
@@ -16454,10 +16543,59 @@ export function radiusAt(base, value, token) {
     return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
   }
   // Chat surfaces are on the container step (Core's chat radius defaults to
-  // the container radius): the container radius at this value.
-  if (token === '--radius-chat')
-    return radiusAt(base, value, '--radius-container');
+  // the container radius), at the base's ratio of the two.
+  if (token === '--radius-chat') {
+    const container = radiusAt(base, value, '--radius-container');
+    const chat = chatRatio(base);
+    return chat == null
+      ? container
+      : Math.min(
+          Math.round((container * chat.chat) / chat.container),
+          chat.cap,
+        );
+  }
   return pill ? 9999 : px;
+}
+
+/**
+ * The base theme's chat and container radii in px, when the base pins a
+ * chat radius other than its container radius. Null when the base sets no
+ * length for either, has square containers, or gives both the same radius:
+ * then the chat radius is the container radius. (The two stay a fraction,
+ * so the base's own corners give its chat radius exactly.)
+ * @param {{light: Record<string, string>}} base
+ * @returns {{chat: number, container: number, cap: number} | null}
+ */
+export function chatRatio(base) {
+  const chat = lengthPx(base.light?.['--radius-chat'] ?? '');
+  const container = lengthPx(base.light?.['--radius-container'] ?? '');
+  if (chat == null || container == null || container <= 0) return null;
+  // (A chat surface is never rounder than one and a half times the base's
+  // own chat radius: a composer one line tall has room for no more, and
+  // its drawer tucks under it by that radius.)
+  return chat === container
+    ? null
+    : {chat, container, cap: Math.round(chat * 1.5)};
+}
+
+/**
+ * The chat radius the corners dial writes: the container radius at the
+ * base's ratio of the two, up to the cap {@link chatRatio} names, or the
+ * container radius when the base pins no other. A bound (`at most 8px`)
+ * holds it there too, still read from the container radius.
+ * @param {{light: Record<string, string>}} base
+ * @param {{limit: number, up: boolean} | null} [bound]
+ */
+export function chatRadiusValue(base, bound = null) {
+  const chat = chatRatio(base);
+  const follow =
+    chat == null
+      ? 'var(--radius-container)'
+      : `min(calc(var(--radius-container) * ${chat.chat} / ${chat.container}), ${chat.cap}px)`;
+  if (!bound) return follow;
+  if (!bound.up && chat)
+    return `min(calc(var(--radius-container) * ${chat.chat} / ${chat.container}), ${Math.min(chat.cap, bound.limit)}px)`;
+  return `${bound.up ? 'max' : 'min'}(${follow}, ${bound.limit}px)`;
 }
 
 /**

@@ -136,6 +136,12 @@ describe('component detail prop controls', () => {
     }
   });
 
+  it('gives a SyntaxThemeDefinition prop the syntax theme preset control', () => {
+    expect(parsePropType('SyntaxThemeDefinition', 'theme')).toEqual({
+      kind: 'syntax-theme',
+    });
+  });
+
   it('derives IconType options from the canonical icon registry', () => {
     const control = parsePropType('IconType', 'labelIcon');
 
