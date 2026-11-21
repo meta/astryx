@@ -1900,6 +1900,9 @@
     "scripts/vitest-node-legs.test.mjs": 0.8,
     "scripts/vitest-setup-node.test.mjs": 0,
     "scripts/vitest-shard-sequencer.test.mjs": 4.7,
-    "scripts/vitest-shard-watchdog.test.mjs": 26.1
+    "scripts/vitest-shard-watchdog.test.mjs": 26.1,
+    "packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs": 25.6,
+    "packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.tsc.test.mjs": 3,
+    "packages/cli/assets/codemods/transforms/next/__tests__/preserve-chat-radius.test.mjs": 0.4
   }
 }
