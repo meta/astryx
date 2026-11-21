@@ -533,14 +533,6 @@ export function trackLayerFocus(
   return record;
 }
 
-/** Whether focus in `layerDoc` is inside `layer` or on nothing. */
-function isInsideOrLost(layerDoc: Document, layer: Element | null): boolean {
-  return (
-    isFocusDetached(layerDoc) ||
-    (layer != null && layer.contains(layerDoc.activeElement))
-  );
-}
-
 /**
  * The default return move. A control takes a plain focus, which scrolls it
  * into view. A container that only stands in (an ancestor, `main`) takes
@@ -660,8 +652,8 @@ function nameOf(record: LayerFocusRecord, layer: Element | null): string {
   return id ? `layer "${id}"` : 'a layer';
 }
 
-/** The element itself when it takes focus, else its first tab stop. */
-function focusableWithin(element: Element | null): HTMLElement | null {
+/** The element itself when it takes focus, else its first tab stop. Internal. */
+export function focusableWithin(element: Element | null): HTMLElement | null {
   if (element == null) {
     return null;
   }
@@ -759,7 +751,7 @@ export function isLayerFocusStranded(record: LayerFocusRecord): boolean {
     isInside ||
     (frameHost != null &&
       active === frameHost &&
-      isInsideOrLost(layerDoc, layer)) ||
+      isFocusLost(layer, layerDoc)) ||
     (active != null && isInsideClosingLayer(active))
   );
 }

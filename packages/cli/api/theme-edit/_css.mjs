@@ -1125,3 +1125,33 @@ export function familyListMeant(value) {
   if (!changed || families.some(f => f.includes('\\'))) return null;
   return families.join(', ');
 }
+
+/** A side word in a longhand's name, in the order a box value lists sides. */
+const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's
+ * value, as each side's property and value by the shorthand rules; null for
+ * any other property.
+ * @param {string} prop kebab-case
+ * @param {string} v
+ * @returns {Record<string, string> | null}
+ */
+export function sidesOf(prop, v) {
+  const direct = [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
+  const w = splitTop(v.trim(), ' ').map(x => x.trim());
+  if (!w.length || /!important/i.test(v)) return null;
+  const start = direct.find(p => /-start(-|$)/.test(p));
+  const end = direct.find(p => /-end(-|$)/.test(p));
+  if (direct.length === 2 && start && end && w.length <= 2)
+    return {[start]: w[0], [end]: w[1] ?? w[0]};
+  const named = BOX_SIDES.map(side =>
+    direct.find(p => new RegExp(`-${side}(-|$)`).test(p)),
+  );
+  if (direct.length !== 4 || named.some(x => !x) || w.length > 4) return null;
+  const [t, r = t, bo = t, l = r] = w;
+  const vals = [t, r, bo, l];
+  return Object.fromEntries(
+    named.map((p, i) => [/** @type {string} */ (p), vals[i]]),
+  );
+}
