@@ -48,7 +48,7 @@ type AuditCase = {
 
 const DESKTOP = {width: 900, height: 640};
 
-test.describe.configure({retries: 0, timeout: 600_000});
+test.describe.configure({mode: 'serial', retries: 0, timeout: 600_000});
 
 let server: StaticServer;
 let checkoutSha: string;
