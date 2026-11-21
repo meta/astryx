@@ -22,7 +22,7 @@ import {
   themeEditShow,
   themeEditUndo,
 } from './theme-edit.mjs';
-import {withAccepted} from './_settings.mjs';
+import {keptNow, withAccepted} from './_settings.mjs';
 import {editorKeptContrastAt} from './_adapter.mjs';
 import {acceptedContrastCheck} from '../doctor/theme-checks.mjs';
 import {
@@ -479,5 +479,26 @@ describe('a kept pair, measured alone', () => {
   });
   it('lapses when the same pair is drawn lower (a see-through fill over a darker part)', () => {
     expect(problem('#17a2b8', '3.10').note).toBeUndefined();
+  });
+});
+
+describe('a kept problem, read against what is drawn now', () => {
+  const kept = /** @type {any} */ ({
+    part: 'heading',
+    ground: 'card',
+    when: 'variant:blue',
+    mode: 'light',
+    ratio: 3,
+    reason: 'r s t',
+  });
+  it('is not called passing while one failure across several variants names its part', () => {
+    const grouped = /** @type {any} */ ({
+      key: 'text-variants|heading|card',
+      text: 'text in heading (variants blue, green, purple) ("Title") is 1.17:1 in light (#1e293b on card\'s #1e293b); text needs 4.5:1',
+    });
+    expect(keptNow(kept, [grouped])).toEqual({inEffect: false, ratioNow: 1.17});
+  });
+  it('is no longer needed where nothing at its place fails', () => {
+    expect(keptNow(kept, [])).toEqual({inEffect: false, ratioNow: null});
   });
 });
