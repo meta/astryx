@@ -170,7 +170,12 @@ describe('a fine primary pointer', () => {
         buttons: 1,
         time,
       });
-      pointer('pointerup', box, {pointerType: 'mouse', x: 5, y: 5, time: time + 1});
+      pointer('pointerup', box, {
+        pointerType: 'mouse',
+        x: 5,
+        y: 5,
+        time: time + 1,
+      });
     };
     try {
       press(0);
