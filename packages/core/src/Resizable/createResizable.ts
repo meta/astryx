@@ -506,6 +506,10 @@ export function createResizableAs(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
+  // Storage keeps a size someone chose: a drag or key step, or a collapse,
+  // expand or resize call. The default's first resolution and a restored
+  // size are not written.
+  let hasBeenResized = false;
   let snapshot: ResizableSnapshot | null = null;
   const snapshotListeners = new Set<() => void>();
 
@@ -840,10 +844,18 @@ export function createResizableAs(
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
   }
 
-  /** Nothing is written while the basis stands in, nor while a gesture runs. */
+  /**
+   * Nothing is written before the region is first resized, while the basis
+   * stands in, nor while a gesture runs.
+   */
   function persist(): void {
     const key = opts.autoSaveId;
-    if (key == null || key === '' || !derived.isBasisMeasured) {
+    if (
+      key == null ||
+      key === '' ||
+      !hasBeenResized ||
+      !derived.isBasisMeasured
+    ) {
       return;
     }
     if (isGestureActive) {
@@ -926,6 +938,7 @@ export function createResizableAs(
     if (isDestroyed || !collapsible() || derived.isCollapsed) {
       return;
     }
+    hasBeenResized = true;
     setCollapsed(true);
     commit();
     opts.onCollapseChange?.(true);
@@ -936,6 +949,7 @@ export function createResizableAs(
     if (isDestroyed) {
       return;
     }
+    hasBeenResized = true;
     const wasCollapsed = derived.isCollapsed;
     setCollapsed(false);
     commit();
@@ -962,6 +976,7 @@ export function createResizableAs(
     }
     const clamped = clampSize(next, derived.min, derived.max, snaps());
     const wasCollapsed = derived.isCollapsed;
+    hasBeenResized = true;
     chosenSize = clamped;
     setCollapsed(false);
     commit();
@@ -989,6 +1004,7 @@ export function createResizableAs(
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
+      hasBeenResized = true;
       isCarryingToSnap = false;
       // Only a pointer catches a slide or a spring-back; a key steps.
       const isPointer = regionSlot?.isPointerDragging() === true;

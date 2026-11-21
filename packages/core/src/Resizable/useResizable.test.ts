@@ -235,6 +235,37 @@ describe('useResizable persistence', () => {
     expect(readStored()).toEqual({size: 300, isCollapsed: false});
   });
 
+  it('writes nothing before a person resizes, even for a percentage default', () => {
+    // A default's first resolution is not a size anyone chose: saving it
+    // would bring back that pixel size on every later visit, at any width.
+    const {result} = renderHook(() =>
+      useResizable({
+        defaultSize: '67%',
+        minSize: 180,
+        autoSaveId: AUTO_SAVE_ID,
+      }),
+    );
+    expect(result.current.size).toBeGreaterThan(0);
+    expect(localStorage.getItem(KEY)).toBeNull();
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-20));
+    act(() => result.current.props._onResizeEnd());
+    expect(readStored()).toEqual({
+      size: result.current.size,
+      isCollapsed: false,
+    });
+  });
+
+  it('does not write a restored size back before a person resizes', () => {
+    localStorage.setItem(KEY, JSON.stringify({size: 300, isCollapsed: false}));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const {result} = renderHook(() => useResizable(BASE_CONFIG));
+    expect(result.current.size).toBe(300);
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
   it('does not touch storage without an autoSaveId', () => {
     const {result} = renderHook(() =>
       useResizable({defaultSize: 260, collapsible: true}),
@@ -380,11 +411,15 @@ describe('useResizable controlled collapse', () => {
     expect(result.current.isCollapsed).toBe(false);
   });
 
-  it('persists the collapse state the owner holds', () => {
+  it('persists the collapse state the owner holds once a person resizes', () => {
     const {result} = renderHook(() =>
       useResizable({...BASE_CONFIG, collapsible: true, isCollapsed: true}),
     );
     expect(result.current.isCollapsed).toBe(true);
+    // The owner's starting state is not a size a person chose.
+    expect(localStorage.getItem(KEY)).toBeNull();
+
+    act(() => result.current.expand());
     expect(readStored()).toEqual({size: 260, isCollapsed: true});
   });
 });
@@ -1062,9 +1097,11 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(
         setItem.mock.calls.some(([, value]) => value.includes('"size":480')),
       ).toBe(false);
+      // The default's resolution against the real container is not saved:
+      // nobody has resized the region.
       expect(
         localStorage.getItem('astryx-resizable:structured-hydration'),
-      ).toBe(JSON.stringify({size: 333, isCollapsed: false}));
+      ).toBeNull();
 
       await act(async () => root.unmount());
       consoleError.mockRestore();
@@ -1097,9 +1134,9 @@ describe('useResizable percentage configuration (AST-010)', () => {
         StubResizeObserver.resizeAll();
       });
       expect(result.current.size).toBe(333);
-      expect(localStorage.getItem('astryx-resizable:structured-zero')).toBe(
-        JSON.stringify({size: 333, isCollapsed: false}),
-      );
+      expect(
+        localStorage.getItem('astryx-resizable:structured-zero'),
+      ).toBeNull();
       expect(onSizeChange).not.toHaveBeenCalled();
       expect(observedTargets()).not.toContain(containerRef.current);
     });
@@ -1736,9 +1773,7 @@ describe('useResizable percentage configuration (AST-010)', () => {
         StubResizeObserver.resizeAll();
       });
       expect(region?.size).toBe(240);
-      expect(localStorage.getItem('astryx-resizable:pct-activity')).toBe(
-        JSON.stringify({size: 240, isCollapsed: false}),
-      );
+      expect(localStorage.getItem('astryx-resizable:pct-activity')).toBeNull();
       localStorage.clear();
     });
 
