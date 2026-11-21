@@ -1503,7 +1503,7 @@ describe('the default variant on every path', () => {
       .replaceAll('<module>', lib.moduleOf(variant))
       .replaceAll('<Export>', lib.exportOf('Search', variant))
       .replaceAll('<icon>', pair?.icon ?? 'search')
-      .replaceAll('<meaning>', pair?.definition ?? 'search');
+      .replaceAll('<definition>', pair?.definition ?? 'search');
   }
 
   /**
