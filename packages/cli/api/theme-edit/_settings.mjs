@@ -13620,7 +13620,8 @@ function nearestReading(from, grounds, need) {
  * the theme's setting on the part, else the theme's color. Below 4.5:1 is
  * a problem, fixed with the nearest on-color that reads, set on the same
  * part. Only a part that holds a part reading the on-color is measured,
- * and only where the theme sets that on-color on no other part: a
+ * and only where the theme sets that on-color on no part around it or
+ * inside it, and for no variant or state there: a
  * part that reads it itself is the text pairs' to measure, and one that
  * holds no reader draws no such text. A see-through fill is left out: what
  * shows under it is the part, not one known color.
@@ -13676,17 +13677,28 @@ function scopedFillPairProblems(ctx, data, res) {
     const readers = (map[x.on]?.contains ?? []).filter(
       (/** @type {string} */ c) => readsItself(c, pair.on),
     );
-    // (An on-color the theme sets on any other part, one around this part
-    // or a reader inside it, or for one variant, is drawn there as set:
-    // this part's scope alone does not say what its readers draw.)
+    // (An on-color the theme sets on this part through a group, on a part
+    // around it or a reader inside it (by the parts a group names), or for
+    // one variant or state of the whole theme or of those parts, is drawn
+    // there as set: this part's scope alone does not say what its readers
+    // draw. One set for the whole theme, or on parts elsewhere, is what the
+    // scope reads.)
+    const around = (/** @type {string} */ t) =>
+      (map[t]?.contains ?? []).includes(x.on);
+    const touches = (/** @type {Setting} */ y) =>
+      y.on == null
+        ? Boolean(y.when || y.state)
+        : partsOf(ctx, y).some(
+            t =>
+              around(t) ||
+              readers.includes(t) ||
+              (t === x.on && (y.on !== x.on || y.when || y.state)),
+          );
     if (
       readsItself(x.on, pair.on) ||
       !readers.length ||
       data.settings.some(
-        y =>
-          y.source === 'token' &&
-          y.thing === pair.on &&
-          (y.on !== x.on || y.when || y.state),
+        y => y.source === 'token' && y.thing === pair.on && touches(y),
       )
     )
       continue;
