@@ -4617,6 +4617,49 @@ function clauseBefore(text, at) {
 }
 
 /**
+ * The pixel lengths a clause says as its text size and as its line height,
+ * each the first one its own words name. A word after the length names it
+ * ("18px leading", "13px text"); a word before it names it when no word
+ * after it does ("line height 18px", "font size 13px"). A label followed
+ * by its own length ("13px line height 18px") names that later length.
+ * @param {string} text
+ * @returns {{lead: number | null, text: number | null}}
+ */
+export function pxLengthsSaid(text) {
+  const LEAD = String.raw`(?:line[- ]?height|leading)`;
+  const TEXT = String.raw`(?:(?:body|base|main)\s+)?(?:text|font|type)`;
+  const lengths = [...text.matchAll(/\b(\d+(?:\.\d+)?)\s?px\b/gi)].map(m => {
+    const before = text.slice(0, m.index);
+    const after = text.slice((m.index ?? 0) + m[0].length);
+    const labelsNext = new RegExp(
+      String.raw`^\s*(?:of\s+)?(?:${LEAD}|${TEXT}(?:[- ]size)?)\s*:?\s*\d`,
+      'i',
+    ).test(after);
+    return {
+      px: Number(m[1]),
+      leadAfter: new RegExp(String.raw`^\s*(?:of\s+)?${LEAD}\b`, 'i').test(
+        after,
+      ),
+      textAfter:
+        !labelsNext && new RegExp(String.raw`^\s+${TEXT}\b`, 'i').test(after),
+      leadBefore: new RegExp(
+        String.raw`\b${LEAD}\s*(?:of\s+)?:?\s*$`,
+        'i',
+      ).test(before),
+      textBefore: /\b(?:text|font)(?:[- ]size)?\s*:?\s*$/i.test(before),
+      labelsNext,
+    };
+  });
+  const sized = lengths.find(
+    l =>
+      l.textAfter ||
+      (l.textBefore && !(l.leadAfter && !l.labelsNext) && !l.leadBefore),
+  );
+  const lead = lengths.find(l => l !== sized && (l.leadAfter || l.leadBefore));
+  return {lead: lead?.px ?? null, text: sized?.px ?? null};
+}
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -12673,30 +12716,24 @@ export function draftAnswer(ctx, env, question) {
    * in pixels beside it.
    * Null when no clause says one.
    * @param {Clause} c the leading's own clause
-   * @param {number} [leadAt] where the leading's own pixels sit in it
    * @returns {number | null}
    */
-  const saidTextPx = (c, leadAt = -1) => {
-    // (Each form read on its own, so one never hides the other: "line
-    // height 18px font size 13px".)
-    const forms = [
-      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b/gi,
-      /\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b/gi,
-    ];
-    for (const o of [c, ...clauses.filter(x => x !== c)])
-      for (const re of forms)
-        for (const m of o.text.matchAll(re)) {
-          const at = (m.index ?? 0) + m[0].indexOf(m[1]);
-          // (Never the leading's own pixels.)
-          if (o === c && at === leadAt) continue;
-          return Number(m[1]);
-        }
+  const saidTextPx = c => {
+    // (Its own clause first; then another clause on the body or the whole
+    // theme, never one on another part: "heading font size 24px, body 14px
+    // text".)
+    const onBody = (/** @type {Clause} */ o) =>
+      o.parts.every(x => x.on === 'body');
+    for (const o of [c, ...clauses.filter(x => x !== c && onBody(x))]) {
+      const px = pxLengthsSaid(o.text).text;
+      if (px != null) return px;
+    }
     // (Or the whole theme's text size another clause asks, "Type:
     // Helvetica 13px".)
     for (const o of clauses) {
       if (
         o === c ||
-        o.parts.length ||
+        !onBody(o) ||
         !o.aspects.includes('fontsize') ||
         /\b(?:line[- ]?height|leading)\b/i.test(o.text)
       )
@@ -22254,27 +22291,10 @@ export function draftAnswer(ctx, env, question) {
         // A leading in pixels ("18px leading") is that many pixels over the
         // text size: the size the question says for the text ("13px text,
         // 18px leading" is 1.385), else the size the text has now.
-        // ("line height 18px" first: in "font size 13px line height 18px"
-        // the 13px is the text size.)
-        const pxAfter =
-          /\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/i.exec(
-            c.text,
-          );
-        const pxBefore = pxAfter
-          ? null
-          : /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i.exec(
-              c.text,
-            );
-        const pxLeading = pxAfter ?? pxBefore;
-        const leadPx = pxLeading ? Number(pxLeading[1]) : null;
-        // (Where those pixels sit, so the text size is never read from them.)
-        const leadAt = pxLeading
-          ? pxLeading.index + pxLeading[0].lastIndexOf(pxLeading[1])
-          : -1;
+        const leadPx = pxLengthsSaid(c.text).lead;
         // (On a part, the pixels as typed: its text size is its own.)
         const leadOnBody = !on || on === 'body' || p?.role === 'body';
-        const textPxSaid =
-          leadPx == null || !leadOnBody ? null : saidTextPx(c, leadAt);
+        const textPxSaid = leadPx == null || !leadOnBody ? null : saidTextPx(c);
         const textPx =
           textPxSaid ??
           (leadPx == null || !leadOnBody
@@ -25086,18 +25106,17 @@ export function draftAnswer(ctx, env, question) {
           };
         // (Never the pixels said as the line height beside it: "line height
         // 18px font size 13px" is a 13px text size.)
-        const leadSaid = (
-          /\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?\s?px)\b/i.exec(
-            c.text,
-          )?.[1] ??
-          /\b(\d+(?:\.\d+)?\s?px)\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i.exec(
-            c.text,
-          )?.[1]
-        )?.replace(/\s/g, '');
+        const pxSaid = pxLengthsSaid(c.text);
+        const isPx = (
+          /** @type {string} */ l,
+          /** @type {number | null} */ n,
+        ) => n != null && /px$/i.test(l.trim()) && parseFloat(l) === n;
         const px =
-          (leadSaid
-            ? c.lengths.find(l => l.replace(/\s/g, '') !== leadSaid)
-            : null) ?? c.lengths[0];
+          c.lengths.find(l => isPx(l, pxSaid.text)) ??
+          (pxSaid.lead != null
+            ? c.lengths.find(l => !isPx(l, pxSaid.lead))
+            : undefined) ??
+          c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
         // An exact amount ("double", "half") of the size there now.
         // (A size said as a look, "small labels", "tiny captions", is the

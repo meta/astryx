@@ -3397,6 +3397,16 @@ const QUESTIONS_J = [
   ['body text 18px leading', {top: /^set q --text-body-leading 1\.286$/}],
   ['font size 13px line height 18px', {top: /--text-body-leading 1\.385$/}],
   ['line height 18px font size 13px', {top: /--text-body-leading 1\.385$/}],
+  ['18px leading 13px text', {top: /--text-body-leading 1\.385$/}],
+  ['18px line height 13px font', {top: /--text-body-leading 1\.385$/}],
+  [
+    'heading font size 24px, body 14px text, 20px leading',
+    {top: /--text-body-leading 1\.429$/},
+  ],
+  [
+    'Type: Helvetica 13px body, 18px leading, headings 24px',
+    {top: /--text-body-leading 1\.385/},
+  ],
   ['headings 32px line height', {top: /^set q line-height 32px --on heading$/}],
   ['Type: Helvetica 13px, 18px leading', {top: /--text-body-leading 1\.385$/}],
   // superlatives
