@@ -375,6 +375,49 @@ describe('show --on: what one part of a theme shows', () => {
     ).toBe(false);
   }, 120_000);
 
+  it('shows a one-mode state color as its own row, and a bundled theme’s bare state rule as the state set takes', async () => {
+    await themeEditNew('dusk', {cwd, like: 'neutral'});
+    await themeEditSet('dusk', 'background-color', '#123456', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+      mode: 'light',
+    });
+    const r = /** @type {any} */ (
+      await themeEditShow('dusk', {cwd, on: 'button'})
+    );
+    const hover = r.data.values.filter(
+      (/** @type {any} */ v) =>
+        v.property === 'background-color' && v.state === 'hover',
+    );
+    // The build writes the hover color under each variant the button
+    // draws: one row each, with the light value from the setting.
+    expect(hover.length).toBeGreaterThan(0);
+    expect(new Set(hover.map((/** @type {any} */ v) => v.when)).size).toBe(
+      hover.length,
+    );
+    for (const v of hover) {
+      expect(v).toMatchObject({source: 'theme', via: 'part'});
+      expect(v.notSettable).toBeUndefined();
+      expect(v.value.light).toBe('#123456');
+      expect(v.expression.light).toBe('#123456');
+    }
+    // neutral's own `segmented-control-item: {selected: …}` rule is the
+    // part's selected state, which set takes as --state selected.
+    const seg = /** @type {any} */ (
+      await themeEditShow('neutral', {cwd, on: 'segmented-control-item'})
+    );
+    const selected = seg.data.values.filter(
+      (/** @type {any} */ v) =>
+        v.property === 'box-shadow' && v.source !== 'core',
+    );
+    expect(selected.length).toBeGreaterThan(0);
+    for (const v of selected) expect(v.notSettable).toBeUndefined();
+    expect(
+      selected.some((/** @type {any} */ v) => v.state === 'selected'),
+    ).toBe(true);
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})

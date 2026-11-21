@@ -422,7 +422,7 @@ export function partValues(comp) {
  * @param {Record<string, string>} map
  * @param {'light' | 'dark'} mode
  */
-function resolveIn(v, map, mode) {
+export function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out

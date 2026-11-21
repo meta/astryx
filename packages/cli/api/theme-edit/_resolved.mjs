@@ -36,6 +36,7 @@ import {
   ownTokens,
   partShows,
   partValues,
+  resolveIn,
   scopedTokens,
 } from './_how-commands.mjs';
 import {FAMILIES, P} from './_tables.mjs';
@@ -167,22 +168,6 @@ const sameWhen = (a, b) => {
 /** @param {string} k */
 const kebab = k =>
   k.startsWith('--') ? k : k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
-
-/**
- * A value with each var() written out from a token map, the way the part
- * draws it; a token with no value and no fallback leaves the var().
- * @param {string} value
- * @param {Record<string, string>} map
- */
-function resolveVars(value, map) {
-  let out = value;
-  for (let i = 0; i < 8 && /var\(/.test(out); i++)
-    out = out.replace(
-      /var\((--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
-      (m, t, fb) => map[t] ?? (fb != null ? fb.trim() : m),
-    );
-  return out;
-}
 
 /** A token Core keeps to itself (`--_x`, `--astryx-x`). @param {string} t */
 const isPrivate = t => /^--(?:_|astryx-)/.test(t);
@@ -487,6 +472,55 @@ export async function themePartValues(cwd, name, part) {
       .map(([, , p]) => physical(p));
     return parts.every(p => later.some(l => l === p || longhandsOf(l).has(p)));
   };
+  const t = ctx.project.target.get(key);
+  /**
+   * A rule key's condition as the flags `set` takes, the way `how` gives
+   * it: a theme rule a property setting wrote takes that setting's own
+   * --when and --state; any other key is read the way Core reads a style
+   * key (`variant:ghost+selected`, `variant=ghost`) and given to the same
+   * converter `how <part>` uses. A condition no flag reaches keeps Core's
+   * words and says why.
+   * @param {string} when @param {string} state
+   * @param {string | null} ruleProperty the property of the theme's own
+   *   rule, or null for one of Core's
+   * @returns {{when: string | null, state: string | null, notSettable?: string}}
+   */
+  const condOf = (when, state, ruleProperty) => {
+    const wrote =
+      ruleProperty != null && theme.settingAt
+        ? theme.settingAt(ruleProperty, key, when, state)
+        : null;
+    if (wrote?.exact) return {when: wrote.when, state: wrote.state};
+    const words = [
+      ...(when === 'base' ? [] : when.split(/\+|\s+/)),
+      ...(state ? [state] : []),
+    ]
+      .filter(Boolean)
+      .map(w =>
+        /^[a-z][\w-]*:[^\s:]+$/i.test(w)
+          ? w.replace(':', '=')
+          : /^[a-z][\w-]*$/i.test(w) && (t?.states ?? []).includes(w)
+            ? `${w}=${t?.stateValues?.[w] ?? w}`
+            : w,
+      );
+    const coreCond = words.join(' ');
+    const flags = condition(ctx, key, coreCond);
+    const unsettable = /\(not settable: (.*)\)$/.exec(flags);
+    if (unsettable)
+      return {
+        // (Core's attribute words in one order, so one condition is one row.)
+        when: [
+          ...words.filter(w => /^[a-z][\w-]*=/i.test(w)).sort(),
+          ...words.filter(w => !/^[a-z][\w-]*=/i.test(w)),
+        ].join(' '),
+        state: null,
+        notSettable: unsettable[1],
+      };
+    return {
+      when: /--when (\S+)/.exec(flags)?.[1] ?? null,
+      state: /--state (\S+)/.exec(flags)?.[1] ?? null,
+    };
+  };
   for (const [k, v] of shows) {
     const [when, state, property] = k.split('|');
     if (!own.has(k) && ruledOver(when, property)) continue;
@@ -542,43 +576,10 @@ export async function themePartValues(cwd, name, part) {
       source = 'base';
       if (onPart) via = 'part';
     }
-    // The row's condition as the flags `set` takes, the way `how` gives
-    // it; a condition no flag reaches keeps Core's words and says why.
-    // (A theme's own rule names a variant `variant:ghost`; Core writes
-    // `variant=ghost`: one spelling for both.)
-    const coreCond = [when === 'base' ? '' : when, state]
-      .filter(Boolean)
-      .join(' ')
-      .split(' ')
-      .map(w => (/^[a-z][\w-]*:[^\s:]+$/i.test(w) ? w.replace(':', '=') : w))
-      .join(' ');
-    // A theme rule a property setting wrote takes that setting's own
-    // --when and --state.
-    const wrote =
-      own.has(k) && theme.settingAt
-        ? theme.settingAt(property, key, when, state)
-        : null;
-    const flags = wrote?.exact
-      ? [
-          wrote.when ? `--when ${wrote.when}` : '',
-          wrote.state ? `--state ${wrote.state}` : '',
-        ].join(' ')
-      : condition(ctx, key, coreCond);
-    const unsettable = /\(not settable: (.*)\)$/.exec(flags);
+    const cond = condOf(when, state, own.has(k) ? property : null);
     const row = {
       property,
-      // (Core's attribute words in one order, so one condition is one row.)
-      when: unsettable
-        ? [
-            ...coreCond
-              .split(' ')
-              .filter(w => /^[a-z][\w-]*=/i.test(w))
-              .sort(),
-            ...coreCond.split(' ').filter(w => !/^[a-z][\w-]*=/i.test(w)),
-          ].join(' ')
-        : (/--when (\S+)/.exec(flags)?.[1] ?? null),
-      state: unsettable ? null : (/--state (\S+)/.exec(flags)?.[1] ?? null),
-      ...(unsettable ? {notSettable: unsettable[1]} : {}),
+      ...cond,
       value:
         v.light === v.dark
           ? orNull(v.light)
@@ -592,39 +593,71 @@ export async function themePartValues(cwd, name, part) {
     rawKey.set(row, {when, state, own: own.has(k)});
   }
   // What a rule's `@light` or `@dark` block sets: that mode's value of the
-  // property under the rule's condition.
+  // property under the rule's condition, with that mode's declaration and
+  // tokens; a block with no row of its own (a state Core's map leaves out,
+  // a property the part reads nowhere else) is a row of its own.
   for (const m of folded.modeSets) {
-    const target =
-      values.find(v => {
-        const r = rawKey.get(v);
-        return (
-          v.property === m.property &&
-          r != null &&
-          sameWhen(r.when, m.when) &&
-          r.state === m.state
-        );
-      }) ??
-      values.find(
-        v =>
-          v.property === m.property &&
-          m.when === 'base' &&
-          m.state === '' &&
-          v.when == null &&
-          v.state == null,
-      );
-    if (!target) continue;
+    const other = m.mode === 'light' ? 'dark' : 'light';
     const at = inside(m.when);
-    const shown = orNull(resolveVars(m.value, at.theme[m.mode]));
-    const now =
-      target.value && typeof target.value === 'object'
-        ? {...target.value}
-        : {light: target.value, dark: target.value};
-    now[m.mode] = shown;
-    target.value = now.light === now.dark ? now.light : now;
-    target.source = 'theme';
-    target.via = theme.propertyVia
+    const shown = orNull(resolveIn(m.value, at.theme[m.mode], m.mode));
+    const chain = tokenChain(m.value, at.theme[m.mode]);
+    const via = theme.propertyVia
       ? theme.propertyVia(m.property, key, m.when, m.state)
       : 'part';
+    /** @param {any} x @param {'light' | 'dark'} mode */
+    const half = (x, mode) =>
+      x && typeof x === 'object' && !Array.isArray(x) ? x[mode] : x;
+    /** @param {any} a @param {any} b */
+    const pair = (a, b) =>
+      JSON.stringify(a) === JSON.stringify(b)
+        ? a
+        : m.mode === 'light'
+          ? {light: a, dark: b}
+          : {light: b, dark: a};
+    let target = values.find(v => {
+      const r = rawKey.get(v);
+      return (
+        v.property === m.property &&
+        r != null &&
+        sameWhen(r.when, m.when) &&
+        r.state === m.state
+      );
+    });
+    if (!target) {
+      // The other mode shows what the part shows there without the block:
+      // the row for the same condition, else the part at rest.
+      const cond = condOf(m.when, m.state, m.property);
+      const base =
+        values.find(
+          v =>
+            v.property === m.property &&
+            v.when === cond.when &&
+            v.state === cond.state,
+        ) ??
+        values.find(
+          v => v.property === m.property && v.when == null && v.state == null,
+        );
+      target = {
+        property: m.property,
+        ...cond,
+        value: base ? half(base.value, other) : null,
+        expression: base ? half(base.expression, other) : '',
+        tokens: base ? half(base.tokens, other) : [],
+        source: 'theme',
+        via,
+      };
+      // (Filled in for this mode below, as for a row the block joins.)
+      target.value = pair(null, target.value);
+      target.expression = pair('', target.expression);
+      target.tokens = pair([], target.tokens);
+      values.push(target);
+      rawKey.set(target, {when: m.when, state: m.state, own: true});
+    }
+    target.value = pair(shown, half(target.value, other));
+    target.expression = pair(m.value, half(target.expression, other));
+    target.tokens = pair(chain, half(target.tokens, other));
+    target.source = 'theme';
+    target.via = via;
   }
   // At rest first, then each variant, in the order the part reads them.
   values.sort((a, b) => Number(a.when != null) - Number(b.when != null));
