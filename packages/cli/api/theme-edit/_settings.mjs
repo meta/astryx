@@ -17671,7 +17671,6 @@ function partTokenChanges(before, after, modes) {
  * @returns {Array<{setting: string, parts: string[], keep: string | null}>}
  */
 function recordReach(ctx, slug, data, before) {
-  const savedKeys = new Set((before?.settings ?? []).map(x => keyOf(x)));
   const recorded =
     data.reached &&
     typeof data.reached === 'object' &&
@@ -17699,7 +17698,9 @@ function recordReach(ctx, slug, data, before) {
       Array.isArray(was) || Array.isArray(prior)
         ? parts.filter(t => !known.includes(t))
         : [];
-    if (added.length && savedKeys.has(k))
+    // (A setting with no record names nothing; one an undo puts back with
+    // its older record names what it now reaches past it.)
+    if (added.length)
       out.push({
         setting: describe(s),
         parts: added,
