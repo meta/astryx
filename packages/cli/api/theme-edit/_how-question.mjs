@@ -14501,6 +14501,44 @@ export function draftAnswer(ctx, env, question) {
     return dark && parseColor(String(dark)) ? String(dark) : null;
   };
   /**
+   * A color said once for the whole theme, in the other mode: the theme's
+   * gray for a gray (as {@link grayTwin} reads it), else the color moved
+   * toward white or black the least that stands off that mode's page as
+   * far as it stands off its own page, and at least `min` (4.5 for text).
+   * Null when no such color is found.
+   * @param {string} v the color as said, read as the light mode's
+   * @param {number} [min] the least contrast on the dark page
+   * @param {string[]} [grounds] other dark-mode grounds it is drawn on, by
+   *   token, each read at `min` too (accent text on the muted accent fill)
+   * @returns {string | null}
+   */
+  const darkTwin = (v, min = 0, grounds = []) => {
+    const rgb = parseColor(v);
+    const [lightPage, darkPage] = /** @type {const} */ (['light', 'dark']).map(
+      m => parseColor(String(current('--color-background-body', m))),
+    );
+    if (!rgb || !lightPage || !darkPage) return null;
+    const want = Math.max(min, ratio(rgb.slice(0, 3), lightPage.slice(0, 3)));
+    const gray = min ? null : grayTwin(v);
+    if (gray) return gray;
+    /** @type {{c: string, over: number} | null} */
+    let best = null;
+    for (let i = 1; i <= 19; i++)
+      for (const k of [i * 0.05, -i * 0.05]) {
+        const c = shift(hex(rgb.slice(0, 3)), k);
+        const p = c ? parseColor(c) : null;
+        if (!c || !p) continue;
+        const over = ratio(p.slice(0, 3), darkPage.slice(0, 3)) - want;
+        const onGrounds = grounds.every(g => {
+          const gc = parseColor(String(current(g, 'dark') ?? ''));
+          return !gc || ratio(p.slice(0, 3), gc.slice(0, 3)) >= min;
+        });
+        if (over >= 0 && onGrounds && (!best || over < best.over))
+          best = {c, over};
+      }
+    return best?.c ?? null;
+  };
+  /**
    * A color word's shade in the theme's own family for its hue: grey (and
    * gray, neutral) the theme's grays, which every theme has; another hue
    * its palette family when the theme's colors define one; at the stop
@@ -26963,21 +27001,51 @@ export function draftAnswer(ctx, env, question) {
               : parseColor(current('--color-background-body', m));
             return !rgb || !page || ratio(rgb, page) >= 2.5;
           });
-          const oneMode =
+          // (A link color said once for the whole theme covers both
+          // modes: one the dark page leaves under 4.5:1 takes its twin
+          // there, as far off the dark page as it is off the light one.)
+          const bothAsked = /\b(?:both|all)\s+modes\b|\beverywhere\b/i.test(
+            question,
+          );
+          const darkPage = parseColor(
+            current('--color-background-body', 'dark'),
+          );
+          const twin =
             !c.mode &&
             modal &&
-            readable.length === 1 &&
-            !/\b(?:both|all)\s+modes\b|\beverywhere\b/i.test(question)
+            !barFill &&
+            !bothAsked &&
+            rgb &&
+            darkPage &&
+            readable.includes('light') &&
+            ratio(rgb, darkPage) < 4.5
+              ? // (Accent text is also drawn on the muted accent fill, an
+                // applied preset's: the twin reads there too, where it can.)
+                (darkTwin(color, 4.5, ['--color-accent-muted']) ??
+                darkTwin(color, 4.5))
+              : null;
+          // (Accent text on the muted accent fill in light mode, the color
+          // as said: measured and named when it reads under 4.5:1, never
+          // changed, as the color is the one asked.)
+          const lightMuted = parseColor(
+            String(current('--color-accent-muted', 'light') ?? ''),
+          );
+          const mutedMiss =
+            rgb && lightMuted && !barFill && ratio(rgb, lightMuted) < 4.5
+              ? ratio(rgb, lightMuted).toFixed(2)
+              : null;
+          const oneMode =
+            !twin && !c.mode && modal && readable.length === 1 && !bothAsked
               ? readable[0]
               : null;
           return {
-            text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}`,
+            text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${mutedMiss ? `; on the muted accent fill (an applied preset or a selected row) it reads ${mutedMiss}:1 in light mode, under 4.5:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable` : ''}${twin ? `; on the dark page ${color} would read under 4.5:1, so the dark mode takes its twin as far off the dark page, ${twin}` : oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}`,
             options: [
               [
                 set(
                   '--color-text-accent',
-                  color,
-                  oneMode ? {mode: oneMode} : modeOf(c),
+                  twin ? `light-dark(${color}, ${twin})` : color,
+                  twin ? {} : oneMode ? {mode: oneMode} : modeOf(c),
                 ),
               ],
             ],
@@ -31672,21 +31740,21 @@ export function draftAnswer(ctx, env, question) {
               );
               continue;
             }
-            // (A light gray border color said once for the whole theme
-            // covers both modes: the dark mode takes the theme's gray as far
-            // off the dark page, so the line is as plain on each page. One
-            // said for a part, or a color off the grays, stays the light
-            // mode's, the dark mode keeping the border color the part draws
-            // now, an input's emphasized one, else the theme's: on the dark
-            // page it would be a glaring edge.)
-            const twin = st.on ? null : grayTwin(v);
+            // (A light border color said once for the whole theme covers
+            // both modes: the dark mode takes its twin as far off the dark
+            // page (the theme's gray for a gray), so the line is as plain
+            // on each page. One said for a part stays the light mode's, the
+            // dark mode keeping the border color the part draws now, an
+            // input's emphasized one, else the theme's: on the dark page it
+            // would be a glaring edge.)
+            const twin = st.on ? null : darkTwin(v);
             if (twin) {
               st.value = String(st.value).replace(
                 v,
                 `light-dark(${v}, ${twin})`,
               );
               notes.add(
-                `(a light border color said once covers both modes: the dark mode takes the theme's gray as far off the dark page, ${twin}; for another dark color, set it with --mode dark)`,
+                `(a light border color said once covers both modes: the dark mode takes its twin as far off the dark page, ${twin}; for another dark color, set it with --mode dark)`,
               );
               continue;
             }

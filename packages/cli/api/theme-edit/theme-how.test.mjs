@@ -2328,8 +2328,8 @@ const QUESTIONS_F = [
   [
     'Make the link color #2563eb',
     {
-      top: /^set q --color-text-accent '#2563eb'$/,
-      adds: /--color-text-accent=#2563eb/,
+      top: /^set q --color-text-accent 'light-dark\(#2563eb, #[0-9a-f]{6}\)'$/,
+      adds: /--color-text-accent=light-dark\(#2563eb/,
     },
   ],
   [

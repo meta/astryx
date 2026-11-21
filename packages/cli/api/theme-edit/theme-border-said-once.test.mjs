@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A whole-theme border said once ("1px #ccc borders") covers both
- * modes, the dark one at the theme's gray as far off the dark page, and
+ * @file A whole-theme color said once covers both modes: a border ("1px
+ * #ccc borders") at its twin as far off the dark page, a link color the
+ * dark page leaves under 4.5:1 at its twin that reads there. A border also
  * reaches the surfaces, fields and controls Core draws with none, never a
  * small box nor the layout frame.
  */
@@ -62,9 +63,9 @@ describe('a whole-theme border said once', () => {
     expect(cmds).toMatch(
       /set bo --color-border 'light-dark\(#ccc, #(?!1b1b1b)[0-9a-f]{6}\)'/,
     );
-    // A color off the grays stays the light mode's.
+    // A color off the grays takes its twin too.
     expect((await commands('border color #ffd6e0')).join('\n')).toMatch(
-      /--color-border '#ffd6e0' --mode light/,
+      /--color-border 'light-dark\(#ffd6e0, #[0-9a-f]{6}\)'/,
     );
   }, 240_000);
 
@@ -141,5 +142,42 @@ describe('a whole-theme border said once', () => {
     const withForm = await commands('overlays with a 1px #4d4d4d border', 'br');
     expect(withForm.some(x => / --on popover$/.test(x))).toBe(true);
     expect(withForm.some(x => / --on button$/.test(x))).toBe(false);
+  }, 240_000);
+});
+
+describe('a whole-theme link color said once', () => {
+  it('takes a twin in dark mode where the dark page leaves it under 4.5:1', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('lk', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow(
+      'Color: green #1f883d primary buttons, blue #0969da links, neutral grays.',
+      {cwd, theme: 'lk'},
+    );
+    const cmds = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    );
+    const m = cmds
+      .map(c =>
+        /--color-text-accent 'light-dark\(#0969da, (#[0-9a-f]{6})\)'$/.exec(c),
+      )
+      .find(Boolean);
+    expect(m, cmds.join('\n')).toBeTruthy();
+    // (The twin reads at 4.5:1 on the dark page, #1b1b1b on neutral.)
+    const lum = (/** @type {string} */ h) => {
+      const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+      const [r, g, b] = c.map(x =>
+        x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4,
+      );
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    expect(
+      (lum(/** @type {RegExpExecArray} */ (m)[1]) + 0.05) /
+        (lum('#1b1b1b') + 0.05),
+    ).toBeGreaterThanOrEqual(4.5);
+    // (In light mode, on the muted accent fill an applied preset draws, it
+    // reads under 4.5:1: named, the color kept as asked.)
+    expect(data.results[0].text).toMatch(
+      /on the muted accent fill .* in light mode/,
+    );
   }, 240_000);
 });
