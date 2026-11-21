@@ -164,7 +164,7 @@ describe('a rendered file describes itself', () => {
     const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
     const after = html.slice(html.indexOf('</script>', start) + '</script>'.length);
     expect(after.startsWith(
-      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script>`,
+      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script type="module">`,
     )).toBe(true);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
   });

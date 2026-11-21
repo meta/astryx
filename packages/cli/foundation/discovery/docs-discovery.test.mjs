@@ -641,6 +641,44 @@ describe('mergeTopic', () => {
     expect(merged.title).toBe('Theme');
     expect(merged.description).toBe('Theming.');
   });
+
+  it('never lets one package replace a section another package added', () => {
+    const install = (/** @type {string} */ text) => ({
+      title: 'Install',
+      content: [{type: 'prose', text}],
+    });
+    const ocean = mergeTopic(
+      {...base, sections: [{title: 'Tokens', content: []}]},
+      {sections: [install('ocean')]},
+      {contributor: '@acme/ocean-theme'},
+    );
+    const both = mergeTopic(
+      ocean,
+      {sections: [install('dune')]},
+      {contributor: '@acme/dune-theme'},
+    );
+    expect(both.sections.map(s => [s.title, s.content[0]?.text])).toEqual([
+      ['Tokens', undefined],
+      ['Install', 'ocean'],
+      ['Install', 'dune'],
+    ]);
+    // The base topic's own sections, and a package's own sections, still
+    // take a replacement.
+    const again = mergeTopic(
+      mergeTopic(
+        both,
+        {sections: [install('ocean v2')]},
+        {contributor: '@acme/ocean-theme'},
+      ),
+      {sections: [{title: 'Tokens', content: [{type: 'prose', text: 'dune'}]}]},
+      {contributor: '@acme/dune-theme'},
+    );
+    expect(again.sections.map(s => [s.title, s.content[0]?.text])).toEqual([
+      ['Tokens', 'dune'],
+      ['Install', 'ocean v2'],
+      ['Install', 'dune'],
+    ]);
+  });
 });
 
 describe('problemsInTopic section keys', () => {

@@ -30,7 +30,7 @@ import {PAGE_EXTENSIONS, embeddedPathProblem, renderToFile, reverseToFile} from 
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse | import('./render.type.mjs').RenderReverseResponse>}
  */
 export async function render(file, options = {}) {
-  const {cwd = process.cwd(), reverse = false, overwrite = false, title} = options;
+  const {cwd = process.cwd(), reverse = false, overwrite = false, title, keepClassNames = false} = options;
   if (typeof file !== 'string' || !file.trim()) {
     throw new AstryxError(
       reverse ? 'A rendered HTML file is required' : 'A page file is required',
@@ -54,6 +54,9 @@ export async function render(file, options = {}) {
   if (reverse) {
     if (title != null) {
       throw new AstryxError('--title applies only to rendering, not to --reverse', [], ERROR_CODES.ERR_INVALID_ARGUMENT);
+    }
+    if (keepClassNames) {
+      throw new AstryxError('keepClassNames applies only to rendering, not to reverse', [], ERROR_CODES.ERR_INVALID_ARGUMENT);
     }
     if (!/\.html?$/i.test(input)) {
       throw new AstryxError(
@@ -108,6 +111,6 @@ export async function render(file, options = {}) {
   const target = output ?? input.replace(/\.[^.]+$/, '.html');
   return {
     type: 'render.page',
-    data: await renderToFile({cwd, input, output: target, title, absolute: Boolean(options.out) && path.isAbsolute(/** @type {string} */ (options.out))}),
+    data: await renderToFile({cwd, input, output: target, title, keepClassNames, absolute: Boolean(options.out) && path.isAbsolute(/** @type {string} */ (options.out))}),
   };
 }

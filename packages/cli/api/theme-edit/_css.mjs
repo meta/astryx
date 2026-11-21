@@ -18,6 +18,8 @@ import {
 } from '../../foundation/runtime/css-tree.mjs';
 
 export {coversProperty, longhandsOf};
+export {cssNumber, splitTop} from '../../foundation/color/css-color.mjs';
+import {splitTop} from '../../foundation/color/css-color.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -785,55 +787,6 @@ export function initialOf(prop) {
 }
 
 /**
- * One CSS number, percentage or dimension, read by css-tree's tokenizer as
- * the browser reads it (`1.5e0`, `+1.5`, `15E-1`, `1.5EM`; never `50.%`),
- * or null for anything else.
- * @param {string} value
- * @returns {{value: number, unit: string} | null}
- */
-export function cssNumber(value) {
-  /** @type {any} */
-  let ast;
-  try {
-    ast = csstree().parse(value.trim(), {context: 'value'});
-  } catch {
-    return null;
-  }
-  const nodes = ast.children?.toArray?.() ?? [];
-  if (nodes.length !== 1) return null;
-  const [n] = nodes;
-  if (n.type === 'Number') return {value: Number(n.value), unit: ''};
-  if (n.type === 'Percentage') return {value: Number(n.value), unit: '%'};
-  if (n.type === 'Dimension')
-    return {value: Number(n.value), unit: String(n.unit).toLowerCase()};
-  return null;
-}
-
-/**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' ' | '/'} sep
- * @returns {string[]}
- */
-export function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
-}
-
-/**
  * Several values of one kind (`-4px -8px`, `1.5 2`, `var(--a) var(--b)`):
  * the items, split as CSS splits them, and their kind (a number's unit, ''
  * for a bare number, `var` for a var()), when every item is of the first
@@ -1171,4 +1124,34 @@ export function familyListMeant(value) {
   // A family that would hold a quote (escaped) is never a suggestion.
   if (!changed || families.some(f => f.includes('\\'))) return null;
   return families.join(', ');
+}
+
+/** A side word in a longhand's name, in the order a box value lists sides. */
+const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's
+ * value, as each side's property and value by the shorthand rules; null for
+ * any other property.
+ * @param {string} prop kebab-case
+ * @param {string} v
+ * @returns {Record<string, string> | null}
+ */
+export function sidesOf(prop, v) {
+  const direct = [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
+  const w = splitTop(v.trim(), ' ').map(x => x.trim());
+  if (!w.length || /!important/i.test(v)) return null;
+  const start = direct.find(p => /-start(-|$)/.test(p));
+  const end = direct.find(p => /-end(-|$)/.test(p));
+  if (direct.length === 2 && start && end && w.length <= 2)
+    return {[start]: w[0], [end]: w[1] ?? w[0]};
+  const named = BOX_SIDES.map(side =>
+    direct.find(p => new RegExp(`-${side}(-|$)`).test(p)),
+  );
+  if (direct.length !== 4 || named.some(x => !x) || w.length > 4) return null;
+  const [t, r = t, bo = t, l = r] = w;
+  const vals = [t, r, bo, l];
+  return Object.fromEntries(
+    named.map((p, i) => [/** @type {string} */ (p), vals[i]]),
+  );
 }

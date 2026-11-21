@@ -9,7 +9,6 @@
  * @position api/theme-edit — data read by the engine and the help text
  */
 
-import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {
   SYSTEM_FONTS_BY_PLATFORM,
   appleFaceGeneric,
@@ -19,30 +18,8 @@ import {
 
 export {appleFaceGeneric, systemFontFamilies};
 
-/**
- * A lookup table that only answers for its own keys: a word typed by a
- * person (`constructor`, `__proto__`, `toString`) never reaches
- * `Object.prototype`. Plain objects inside it, in arrays too, get the same.
- * @template T
- * @param {T} table
- * @returns {T}
- */
-export function wordTable(table) {
-  /** @param {any} v @returns {any} */
-  const own = v => {
-    if (Array.isArray(v)) return v.map(own);
-    if (
-      !v ||
-      typeof v !== 'object' ||
-      Object.getPrototypeOf(v) !== Object.prototype
-    )
-      return v;
-    const out = Object.create(null);
-    for (const [k, x] of Object.entries(v)) out[k] = own(x);
-    return out;
-  };
-  return own(table);
-}
+export {wordTable} from '../../foundation/runtime/word-table.mjs';
+import {wordTable} from '../../foundation/runtime/word-table.mjs';
 
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
@@ -56,10 +33,51 @@ export const COLOR_PROP_PARTS = ['text', 'heading', 'link'];
 /** The lookup command: what a part reads, a setting, a question, a picture. */
 export const HOW = `${P} how`;
 
-/** The built-in themes a theme can build on (`new --like`, `set base`), neutral first. */
-export const LIKE = discoverBundledThemes()
-  .map(t => t.slug)
-  .sort((a, b) => Number(b === 'neutral') - Number(a === 'neutral'));
+/** The built-in themes, once the adapter has found them. @type {string[] | null} */
+let builtIn = null;
+
+/**
+ * The built-in themes a theme can build on (`new --like`, `set base`),
+ * neutral first. Finding them reads the installed packages, which is the
+ * adapter's to do: the adapter hands them in once, as it loads
+ * (knowBuiltInThemes), and this table stays pure. Read before then (code
+ * that runs the editor around its adapter), it says so rather than act as
+ * if no built-in theme were installed.
+ * @type {string[]}
+ */
+export const LIKE = /** @type {string[]} */ (
+  new Proxy([], {
+    get(_empty, key) {
+      if (!builtIn)
+        throw new Error(
+          'the built-in themes are not known yet: the theme editor runs through its adapter (api/theme-edit/_adapter.mjs), which finds them',
+        );
+      const v = Reflect.get(builtIn, key);
+      return typeof v === 'function' ? v.bind(builtIn) : v;
+    },
+  })
+);
+
+/**
+ * Hand the editor the built-in themes the adapter found; they are listed
+ * neutral first, and the base dial names them.
+ * @param {string[]} slugs
+ */
+export function knowBuiltInThemes(slugs) {
+  builtIn = [...slugs].sort(
+    (a, b) => Number(b === 'neutral') - Number(a === 'neutral'),
+  );
+  Object.assign(DIALS.base, baseDialWords());
+}
+
+/** What the base dial's help and values say: the built-in themes, or none. */
+function baseDialWords() {
+  const names = builtIn ?? [];
+  return {
+    help: `The built-in theme this theme builds on: ${names.join(', ')}, or none. Changing it keeps all your settings.`,
+    values: `${[...names, 'none'].join('|')}`,
+  };
+}
 
 /**
  * Groups of parts that should look alike. `--on <group>` styles every member.
@@ -79,6 +97,7 @@ export const FAMILIES = wordTable({
     'complex-selector',
     'typeahead',
     'tokenizer',
+    'file-input',
   ],
   containers: [
     'card',
@@ -107,11 +126,44 @@ export const FAMILIES = wordTable({
  */
 export const AUTO_SPREAD = ['inputs', 'checks'];
 
+/** The family roles `--on` takes as groups. */
+export const GROUP_ROLES = /** @type {const} */ ([
+  'button-like',
+  'overlays',
+  'option-rows',
+  'selected-items',
+  'accent-fills',
+  'inset-fields',
+  'status-surfaces',
+  'overlay-headers',
+]);
+
 /** @param {string} target @returns {string | null} */
 export const familyOf = target =>
   Object.entries(FAMILIES).find(([, members]) =>
     members.includes(target),
   )?.[0] ?? null;
+
+/**
+ * What `--only` means on a place, the one rule `set --only` and the
+ * settings reader share: on a member of a group that spreads (a text input
+ * of inputs) it keeps the change on that member (`member`); on any other
+ * part it changes nothing, as the part is styled on its own already
+ * (`own`); on a group itself, the editor's own (inputs) or a family role
+ * (button-like), or with no part, it means nothing at all (`group`).
+ * @param {string | undefined} on
+ * @returns {'member' | 'own' | 'group'}
+ */
+export const onlyMeans = on => {
+  if (
+    !on ||
+    Object.hasOwn(FAMILIES, on) ||
+    GROUP_ROLES.includes(/** @type {any} */ (on))
+  )
+    return 'group';
+  const fam = familyOf(on);
+  return fam && AUTO_SPREAD.includes(fam) ? 'member' : 'own';
+};
 
 /** @type {Array<[string, number]>} */
 export const CORNERS = [
@@ -197,14 +249,8 @@ export const FONTS = wordTable({
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
 });
-/** The CSS-wide keywords: valid in any declaration, never a value of their own. */
-export const CSS_WIDE = [
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
-];
+export {CSS_WIDE} from '../../foundation/color/css-color.mjs';
+import {CSS_WIDE} from '../../foundation/color/css-color.mjs';
 
 /** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
 export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
@@ -365,6 +411,25 @@ export const CLOSEST_OPEN_FONT = wordTable({
 });
 
 /** Heading weights (`headings` dial): rung -> font-weight. */
+/**
+ * Where the theme's page color shows, said by every answer that sets or
+ * names it: `--color-background-body` paints inside AppShell only.
+ */
+export const PAGE_COLOR_NOTE =
+  "Your theme's page color shows inside AppShell. Wrap the page in AppShell; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer AppShell). An Astryx area embedded in a page another app owns adds no body rule: that page is not its own.";
+
+/**
+ * The page color note for a theme in its mode: a theme that ships one mode
+ * draws its text for that mode's page, so the host page must take the
+ * theme's page color in every OS mode too.
+ * @param {string | undefined} mode the theme's mode setting
+ * @returns {string}
+ */
+export const pageColorNote = mode =>
+  /^(?:dark|light)-only$/.test(String(mode ?? ''))
+    ? `${PAGE_COLOR_NOTE} This theme has one mode (${mode}): its text is drawn for its own page, so the page must take the theme's page color in every OS mode, or its text lands on the browser's own page color in the other OS mode.`
+    : PAGE_COLOR_NOTE;
+
 export const HEADING_WEIGHTS = wordTable(
   /** @type {Record<string, string>} */ ({
     light: '300',
@@ -615,8 +680,7 @@ export const DIALS = wordTable({
     words: 'text size font size small big large scale',
   },
   base: {
-    help: `The built-in theme this theme builds on: ${LIKE.join(', ')}, or none. Changing it keeps all your settings.`,
-    values: `${LIKE.join('|')}|none`,
+    ...baseDialWords(),
     examples: ['set my base neutral', 'set my base none'],
     words: 'base start starting built-in extends foundation',
   },
@@ -979,6 +1043,24 @@ export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
   'first-letter',
   'first-line',
 ]);
+
+/** Other words for a state, each read as the first of these there is. */
+export const STATE_SYNONYMS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    pressed: ['isPressed', 'active'],
+    press: ['isPressed', 'active'],
+    on: ['isPressed', 'checked', 'selected'],
+    down: ['active'],
+    clicked: ['active'],
+    hovered: ['hover'],
+    focused: ['focus-visible', 'focus-within', 'focus'],
+    checked: ['checked', 'selected'],
+    selected: ['selected', 'checked'],
+    open: ['open', 'expanded'],
+    expanded: ['expanded', 'open'],
+    inactive: ['disabled'],
+  }),
+);
 
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [

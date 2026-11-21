@@ -13,7 +13,7 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 
 const styles = stylex.create({
   field: {
@@ -69,7 +69,7 @@ export default function UseInputContainerHookUsage() {
       onClick={onClick}
       onMouseUp={onMouseUp}
       {...stylex.props(styles.field)}>
-      <Icon icon={MagnifyingGlassIcon} color="secondary" />
+      <Icon icon={SearchIcon} color="secondary" />
       <input
         ref={inputRef}
         type="text"

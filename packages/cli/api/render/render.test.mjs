@@ -260,7 +260,7 @@ describe('render(): page to one HTML file', () => {
     expect(renderedMarkupOf(html)).not.toMatch(/<script\b/i);
     expect(html.split('<script type="application/x-astryx-source">')).toHaveLength(2);
     // The page's script follows the note after the embedded source.
-    expect(html).toMatch(/ -->\n<script>[^<]/);
+    expect(html).toMatch(/ -->\n<script type="module">[^<]/);
   });
 
   it('keeps text safe and the page title from its heading', () => {
@@ -322,7 +322,78 @@ export default function Page() {
     const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
     expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
       'values.tsx:9: Button has no size "huge"; its sizes are sm, md, lg.',
+      'values.tsx:11: Button has no size "huge"; its sizes are sm, md, lg.',
       'values.tsx:12: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive.',
+    ]);
+  });
+
+  it('warns for a value of a kind the prop does not take, and only when both sides are certain', async () => {
+    put(
+      'kinds.tsx',
+      `import {useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+import {DateInput} from '@astryxdesign/core/DateInput';
+import {Grid} from '@astryxdesign/core/Grid';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {VStack} from '@astryxdesign/core/Stack';
+const columns = 3;
+export default function Page({valid = true, note}: {valid?: boolean; note?: string}) {
+  const [born, setBorn] = useState<Date | null>(new Date(1990, 5, 15));
+  return (
+    <main>
+      <DateInput label="Born" value={born} onChange={setBorn} />
+      <TextInput label="Hook" status={valid ? undefined : 'error'} />
+      <Grid columns="3"><span /></Grid>
+      <TextInput label="Name" status={valid ? undefined : {type: 'error', message: 'Required'}} />
+      <TextInput label="Note" status={note} />
+      <Grid columns={columns}><span /></Grid>
+      <Button label="Off" isDisabled onClick={() => {}} />
+      <VStack gap="md"><span /></VStack>
+      <VStack gap="3"><span /></VStack>
+      <TextInput label="Spread" status="error" {...{status: undefined}} />
+    </main>
+  );
+}
+`,
+    );
+    const answer = /** @type {any} */ (await render('kinds.tsx', {cwd: dir, out: 'kinds.html'}));
+    const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
+    expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
+      'kinds.tsx:12: DateInput value expects a string; got a Date.',
+      'kinds.tsx:13: TextInput status expects an object {type, message}; got a string.',
+      'kinds.tsx:14: Grid columns expects a number or an object {minWidth, max, repeat}; got a string.',
+      'kinds.tsx: VStack gap expects one of 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10; got a string on 2 lines (19, 20).',
+    ]);
+  });
+
+  it('checks each branch of a prop value whose branches are all string literals', async () => {
+    put(
+      'branches.tsx',
+      `import {Button} from '@astryxdesign/core/Button';
+import {Icon} from '@astryxdesign/core/Icon';
+import {Text} from '@astryxdesign/core/Text';
+export default function Page({busy = false, ok = true, tone}: {busy?: boolean; ok?: boolean; tone?: string}) {
+  return (
+    <main>
+      <Button label="A" variant={busy ? 'ghost' : 'danger'} />
+      <Button label="B" size={busy ? 'sm' : 'lg'} />
+      <Button label="C" size={busy ? 'sm' : tone} />
+      <Button label="D" size={busy ? undefined : 'huge'} />
+      <Icon icon="check" size="sm" color={ok ? 'success' : 'danger'} />
+      <Text color={busy && 'subtle'}>Skipped</Text>
+      <Text color={busy ? null : 'muted'}>Muted</Text>
+    </main>
+  );
+}
+`,
+    );
+    const answer = /** @type {any} */ (await render('branches.tsx', {cwd: dir, out: 'branches.html'}));
+    const unknown = answer.data.warnings.filter((/** @type {any} */ w) => w.code === 'unknown-prop-value');
+    expect(unknown.map((/** @type {any} */ w) => w.message)).toEqual([
+      'branches.tsx:7: Button has no variant "danger"; its variants are primary, secondary, ghost, destructive.',
+      'branches.tsx:10: Button has no size "huge"; its sizes are sm, md, lg.',
+      'branches.tsx:11: Icon has no color "danger"; its colors are primary, secondary, tertiary, disabled, accent, info, success, error, warning, inherit, blue, red, green, gray, cyan, teal, yellow, orange, pink, purple.',
+      'branches.tsx:13: Text has no color "muted"; its colors are primary, secondary, disabled, placeholder, accent, inherit.',
     ]);
   });
 
@@ -970,6 +1041,195 @@ describe('render(): embedded files stay inside the current folder', () => {
 });
 
 describe('render(): what a page imports', () => {
+  /**
+   * A built theme package: its module and the stylesheet that scopes its tokens.
+   * @param {string} name the package and theme name
+   * @param {string} css
+   * @param {string} [extra] more of the module, such as a colorModes export
+   */
+  const themePackage = (name, css, extra = '') => {
+    put(`node_modules/@acme/${name}/package.json`, JSON.stringify({name: `@acme/${name}`, version: '1.0.0', type: 'module', main: 'index.js'}));
+    put(`node_modules/@acme/${name}/index.js`, `export const theme = {name: '${name}', __built: true, tokens: {}};\n${extra}`);
+    put(`node_modules/@acme/${name}/theme.css`, css);
+  };
+  /** @param {string} name */
+  const themedPage = name =>
+    `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from '@acme/${name}';
+import '@acme/${name}/theme.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`;
+
+  it('keeps a light-only theme light in a dark viewer: light scheme and the theme\'s page color on the document', async () => {
+    themePackage('retro', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('retro/page.tsx', themedPage('retro'));
+    await render('retro/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'retro/page.html'), 'utf8');
+    expect(html).toContain('<meta name="color-scheme" content="light">');
+    expect(html).toContain(':where(:root){color-scheme:light;background-color:var(--color-background-body)}');
+    expect(html).not.toContain(':root{color-scheme:light dark}');
+  }, 60_000);
+
+  it('reads the colorModes of a theme package whose stylesheet sits beside a nested package.json', async () => {
+    put('node_modules/@acme/split/package.json', JSON.stringify({name: '@acme/split', version: '1.0.0', main: 'dist/index.js'}));
+    put('node_modules/@acme/split/dist/package.json', JSON.stringify({type: 'module'}));
+    put('node_modules/@acme/split/dist/index.js', "export const theme = {name: 'split', __built: true, tokens: {}};\nexport const colorModes = ['light'];\n");
+    put('node_modules/@acme/split/dist/theme.css', '[data-astryx-theme="split"]{--color-background-body:var(--brand-page)}');
+    put('split/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from '@acme/split';
+import '@acme/split/dist/theme.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('split/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'split/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light">');
+  }, 60_000);
+
+  it('reads the colorModes of a theme package linked in from outside node_modules', async () => {
+    put('linked-src/linked/package.json', JSON.stringify({name: '@acme/linked', version: '1.0.0', type: 'module', main: 'index.js'}));
+    put('linked-src/linked/index.js', "export const theme = {name: 'linked', __built: true, tokens: {}};\nexport const colorModes = ['light'];\n");
+    put('linked-src/linked/theme.css', '[data-astryx-theme="linked"]{--color-background-body:var(--brand-page)}');
+    fs.mkdirSync(path.join(dir, 'node_modules/@acme'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'linked-src/linked'), path.join(dir, 'node_modules/@acme/linked'), 'dir');
+    put('linked/page.tsx', themedPage('linked'));
+    await render('linked/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'linked/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light">');
+  }, 60_000);
+
+  it('reads a built theme whose stylesheet the page reaches through an @import in its own CSS', async () => {
+    put('via-import/retro.js', "export const theme = {name: 'retro', __built: true, tokens: {}};\n");
+    put('via-import/retro.css', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('via-import/app.css', "@import './retro.css';\nmain { margin: 0; }\n");
+    put('via-import/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from './retro.js';
+import './app.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('via-import/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'via-import/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light">');
+  }, 60_000);
+
+  it('keeps both schemes when the page imports the theme\'s stylesheet for one scheme only', async () => {
+    put('via-media/retro.js', "export const theme = {name: 'retro', __built: true, tokens: {}};\n");
+    put('via-media/retro.css', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('via-media/app.css', "@import './retro.css' (prefers-color-scheme: light);\n");
+    put('via-media/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from './retro.js';
+import './app.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('via-media/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'via-media/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light dark">');
+  }, 60_000);
+
+  it('keeps both schemes when an outer import scopes the theme\'s stylesheet to one scheme', async () => {
+    put('via-chain/retro.js', "export const theme = {name: 'retro', __built: true, tokens: {}};\n");
+    put('via-chain/retro.css', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000}');
+    put('via-chain/entry.css', "@import './retro.css';\n");
+    put('via-chain/app.css', "@import './entry.css' (prefers-color-scheme: dark);\n");
+    put('via-chain/page.tsx', `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from './retro.js';
+import './app.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`);
+    await render('via-chain/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'via-chain/page.html'), 'utf8')).toContain('<meta name="color-scheme" content="light dark">');
+  }, 60_000);
+
+  it('keeps both schemes in a markup-only render, where the theme editor shows each mode itself', async () => {
+    const {renderPage} = await import('../../foundation/render/render-page.mjs');
+    const page = await renderPage(path.join(dir, 'retro/page.tsx'), {cwd: dir, markupOnly: true});
+    expect(page.html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(page.html).not.toContain('background-color:var(--color-background-body)}');
+  }, 60_000);
+
+  it('follows a theme\'s colorModes export over its stylesheet: one mode, and both modes', async () => {
+    themePackage('night', '[data-astryx-theme="night"]{--color-background-body:light-dark(#fff,#111)}', "export const colorModes = ['dark'];\n");
+    put('night/page.tsx', themedPage('night'));
+    await render('night/page.tsx', {cwd: dir});
+    const night = fs.readFileSync(path.join(dir, 'night/page.html'), 'utf8');
+    expect(night).toContain('<meta name="color-scheme" content="dark">');
+    expect(night).toContain(':where(:root){color-scheme:dark;background-color:var(--color-background-body)}');
+    // Its stylesheet alone would read as light only; the export says both.
+    themePackage('pair', '[data-astryx-theme="pair"]{--color-background-body:#c0c0c0;--color-text-primary:#000}', "export const colorModes = ['light', 'dark'];\n");
+    put('pair/page.tsx', themedPage('pair'));
+    await render('pair/page.tsx', {cwd: dir});
+    const pair = fs.readFileSync(path.join(dir, 'pair/page.html'), 'utf8');
+    expect(pair).toContain('<meta name="color-scheme" content="light dark">');
+    expect(pair).not.toContain('background-color:var(--color-background-body)}');
+  }, 60_000);
+
+  it('keeps a two-mode theme\'s scheme as before', async () => {
+    themePackage('duo', '[data-astryx-theme="duo"]{--color-background-body:light-dark(#fff,#111)}');
+    put('duo/page.tsx', themedPage('duo'));
+    await render('duo/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'duo/page.html'), 'utf8');
+    expect(html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(html).toContain(':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}');
+    expect(html).not.toContain('background-color:var(--color-background-body)}');
+  }, 60_000);
+
+  it('reads themes built with theme build: light page colors are light only, a fonts or accent theme keeps both modes', async () => {
+    const themes = {
+      retro: "'--color-background-body': '#c0c0c0', '--color-background-surface': '#c0c0c0', '--color-text-primary': '#000000'",
+      serif: "'--font-family-body': 'Georgia, serif'",
+      accent: "'--color-accent': '#c2185b'",
+    };
+    /** @type {Record<string, string>} */
+    const scheme = {};
+    for (const [name, tokens] of Object.entries(themes)) {
+      put(`built/${name}/${name}.ts`, `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ${name}Theme = defineTheme({name: '${name}', tokens: {${tokens}}});\n`);
+      const built = spawnSync(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'theme', 'build', `built/${name}/${name}.ts`], {cwd: dir, encoding: 'utf8', timeout: 60_000});
+      expect(built.status, built.stderr).toBe(0);
+      put(
+        `built/${name}/page.tsx`,
+        `import {Theme} from '@astryxdesign/core/theme';
+import {${name}Theme} from './${name}.js';
+import './${name}.css';
+export default function Page() {
+  return (<Theme theme={${name}Theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`,
+      );
+      await render(`built/${name}/page.tsx`, {cwd: dir});
+      scheme[name] = /<meta name="color-scheme" content="([^"]*)">/.exec(fs.readFileSync(path.join(dir, `built/${name}/page.html`), 'utf8'))?.[1] ?? '';
+    }
+    expect(scheme).toEqual({retro: 'light', serif: 'light dark', accent: 'light dark'});
+  }, 240_000);
+
+  it('reads the dark-only Gothic theme, built with theme build, as dark only', async () => {
+    fs.cpSync(path.join(CLI_DIR, 'assets/templates/themes/gothic'), path.join(dir, 'gothic'), {recursive: true});
+    // The template's icons come from lucide-react, which the theme package lists.
+    const lucide = path.dirname(createRequire(path.join(CLI_DIR, '../themes/gothic/package.json')).resolve('lucide-react/package.json'));
+    fs.mkdirSync(path.join(dir, 'gothic/node_modules'), {recursive: true});
+    fs.symlinkSync(lucide, path.join(dir, 'gothic/node_modules/lucide-react'), 'junction');
+    const built = spawnSync(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'theme', 'build', 'gothic/gothicTheme.ts'], {cwd: dir, encoding: 'utf8', timeout: 120_000});
+    expect(built.status, built.stderr).toBe(0);
+    put(
+      'gothic/page.tsx',
+      `import {Theme} from '@astryxdesign/core/theme';
+import {gothicTheme} from './gothic.js';
+import './gothic.css';
+export default function Page() {
+  return (<Theme theme={gothicTheme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`,
+    );
+    await render('gothic/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'gothic/page.html'), 'utf8');
+    expect(html).toContain('<meta name="color-scheme" content="dark">');
+    expect(html).toContain(':where(:root){color-scheme:dark;background-color:var(--color-background-body)}');
+  }, 240_000);
+
   it('inlines an imported theme stylesheet, embeds local CSS, JSON and images, and gives them all back', async () => {
     put('node_modules/@acme/theme/package.json', JSON.stringify({name: '@acme/theme', version: '1.0.0'}));
     put('node_modules/@acme/theme/theme.css', ':root{--acme-brand:#123456}.acme-unused{color:red}');
@@ -1214,7 +1474,9 @@ import '@astryxdesign/core/astryx.css';
     expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
     const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
     // The script draws the image from the file's own data, not from its path.
-    expect(html.slice(html.lastIndexOf('<script>'))).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
+    const scriptAt = html.lastIndexOf('<script type="module">');
+    expect(scriptAt).toBeGreaterThan(0);
+    expect(html.slice(scriptAt)).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
     expect(back.data.exact).toBe(true);
   }, 120_000);
 
@@ -2280,8 +2542,8 @@ describe('render(): every write stays inside the current folder', () => {
   }, 60_000);
 
   it('handles every kind of stylesheet import', async () => {
-    const themeFonts = fs.readFileSync(path.join(CLI_DIR, '../themes/butter/fonts.css'), 'utf8');
-    put('kinds/fonts.css', themeFonts);
+    // A font stylesheet that imports a remote one.
+    put('kinds/fonts.css', "@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap');\n");
     put('kinds/legacy.css', '.legacy-btn { padding: 3px; }\n');
     put('kinds/main.css', "@import './fonts.css';\n@import './legacy.css' layer(reset);\n@import './print.css' print;\n@import '@astryxdesign/core/astryx.css';\n.k { color: red; }\n");
     put('kinds/print.css', '.p { color: black; }\n');

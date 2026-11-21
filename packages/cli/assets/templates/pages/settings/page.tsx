@@ -22,7 +22,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Typeahead} from '@astryxdesign/core/Typeahead';
-import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {SearchIcon} from '@astryxdesign/template-icons';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {useToast} from '@astryxdesign/core/Toast';
 
@@ -102,7 +102,7 @@ export default function SettingsTemplate() {
               value={searchValue}
               onChange={setSearchValue}
               hasEntriesOnFocus
-              startIcon={MagnifyingGlassIcon}
+              startIcon={SearchIcon}
             />
           </HStack>
         </LayoutHeader>
