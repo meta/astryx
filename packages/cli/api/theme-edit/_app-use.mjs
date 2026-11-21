@@ -15,7 +15,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {parse as parseModule} from '@babel/parser';
-import {CORE_THEME_SOURCES} from '../../foundation/config/theme-state.mjs';
+import {
+  CORE_THEME_SOURCES,
+  themeModuleDefault,
+} from '../../foundation/config/theme-state.mjs';
 import {renderedElements} from '../../foundation/discovery/module-exports.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {listProjectSourceFiles} from '../../foundation/fs/project-source-files.mjs';
@@ -122,6 +125,30 @@ function importEnd(source, specifier = CORE_CSS) {
 }
 
 /**
+ * Whether the map of themes an app picks from wears one of some files: for
+ * the generated theme module, its default theme (with the mode it pins);
+ * for any other map, whether it imports one. False when it does not.
+ * @param {string} file @param {Set<string>} files absolute paths
+ * @returns {{mode: 'light' | 'dark' | null} | null | false}
+ */
+function mapDefault(file, files) {
+  let source;
+  try {
+    source = fs.readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  const picked = themeModuleDefault(source);
+  if (!picked) return importsOneOf(file, files) ? null : false;
+  const stem = (/** @type {string} */ f) => f.replace(/\.(m?[jt]sx?)$/, '');
+  const stems = new Set([...files].map(stem));
+  return picked.module.startsWith('.') &&
+    stems.has(stem(path.resolve(path.dirname(file), picked.module)))
+    ? {mode: picked.mode}
+    : false;
+}
+
+/**
  * Whether a module imports one of some files: a map of themes the app picks
  * from (`themes[slug]`) wears each theme it imports.
  * @param {string} file @param {Set<string>} files absolute paths
@@ -194,12 +221,25 @@ export async function appThemeUse(root, themeFiles) {
       sources: CORE_THEME_SOURCES,
       name: 'Theme',
       prop: 'theme',
-    }))
-      if (
-        (el.origin && wears.has(path.resolve(el.origin.file))) ||
-        (el.memberOf && importsOneOf(el.memberOf.file, wears))
-      )
+    })) {
+      if (el.origin && wears.has(path.resolve(el.origin.file))) {
         elements.push({file, nameEnd: el.nameEnd, mode: el.attributes.mode});
+        continue;
+      }
+      if (!el.memberOf) continue;
+      // The generated theme module (`themes[defaultThemeSlug]`): the app
+      // wears its default theme, in the mode its `themeModes` gives.
+      const picked = mapDefault(el.memberOf.file, wears);
+      if (picked === false) continue;
+      elements.push({
+        file,
+        nameEnd: el.nameEnd,
+        mode:
+          picked && el.attributes.mode === null
+            ? (picked.mode ?? undefined)
+            : el.attributes.mode,
+      });
+    }
   }
   const modes = new Set(elements.map(e => e.mode));
   const one = modes.size === 1 ? [...modes][0] : null;

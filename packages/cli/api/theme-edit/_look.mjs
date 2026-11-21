@@ -84,7 +84,8 @@ import {
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
  * @property {{themed: boolean, pinned: Mode | null, modeByExpression?: boolean, painted: boolean, fonts: Set<string> | null, entry: string | null, pageImage: {file: string, value: string} | null} | null} app what the app does with the theme, the font families it loads (as family keys) and the file that loads Core's stylesheet; null outside an app
  * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
- * @property {(family: string) => string | null} fontPackage the package that installs a font family, or null
+ * @property {(extra: Record<string, [string, string]>) => Record<Mode, Record<string, string>>} [resolveWith] the theme's tokens resolved again with more set, as Core resolves them
+ * @property {(family: string) => {pkg: string, known: boolean, install: string} | null} fontInstall the package to suggest for a font family (`known` false when Fontsource may not publish it) and the command that installs it; null for a font a system ships
  * @property {string[]} unloadedFonts the font families the theme names that are neither generic nor installed with the system
  * @property {(pair: TextPair, fill: string | null, tokens: Record<string, string>, mode: Mode) => string[]} textTokens
  *   the text tokens a pair's text reads on its fill in a mode, as the
@@ -287,6 +288,8 @@ function textProblems(look) {
   const drawn = drawnBy(res, components);
   let accepted = 0;
   for (const x of problems) {
+    // A pair Core's own look draws as low is not this theme's doing.
+    if (/** @type {any} */ (x).base) continue;
     /** @type {TextPair} */
     const p = x.pair;
     const mode = /** @type {Mode} */ (x.mode);
@@ -313,13 +316,25 @@ function textProblems(look) {
       mode,
       block,
     );
+    // A text token the text's part, or the part it sits on, sets for
+    // itself draws it: the part's own line, not the theme's token.
+    const tok = p.fg.tokens[0] ?? null;
+    const tokenPart =
+      ownFg == null && tok
+        ? ([p.fg.target, p.bg.target].find(
+            q => q && partValue(components, q, [tok], mode, block) != null,
+          ) ?? null)
+        : null;
     const part =
-      ownBg != null ? p.bg.target : ownFg != null ? p.fg.target : null;
-    const token = ownFg == null ? (p.fg.tokens[0] ?? null) : null;
+      ownBg != null ? p.bg.target : ownFg != null ? p.fg.target : tokenPart;
+    const token = ownFg == null && !tokenPart ? tok : null;
     const on = ownBg == null ? (p.bg.tokens[0] ?? null) : null;
     // A record keeps only a color the theme's author set: a color the
     // check or compile made that does not read is a fault, never a design.
-    const authored = ownFg != null || (token != null && look.own.has(token));
+    const authored =
+      ownFg != null ||
+      tokenPart != null ||
+      (token != null && look.own.has(token));
     if (
       record &&
       authored &&
@@ -599,6 +614,27 @@ function hoverProblems(look) {
     }
     return null;
   };
+  /**
+   * The theme's tokens as a part inside a painted part reads them: with the
+   * custom properties the painted part's own style sets (a dark card's own
+   * hover tint) over the theme's.
+   * @param {string} part @param {Mode} m
+   */
+  const aroundTokens = (part, m) => {
+    for (const [outer, rec] of Object.entries(map)) {
+      if (!(rec?.contains ?? []).includes(part)) continue;
+      const style = components?.[outer]?.base;
+      if (!style || typeof style !== 'object') continue;
+      /** @type {Record<string, string>} */
+      const vars = {};
+      for (const inner of [style, style[`@${m}`]])
+        if (inner && typeof inner === 'object')
+          for (const [k, v] of Object.entries(inner))
+            if (k.startsWith('--') && typeof v === 'string') vars[k] = v;
+      if (Object.keys(vars).length) return {...res, [m]: {...res[m], ...vars}};
+    }
+    return res;
+  };
   for (const [part, rec] of Object.entries(map)) {
     const at = rec?.at?.['background-color'] ?? {};
     // A hover is a fill that replaces the part's own, or a layer drawn
@@ -662,7 +698,11 @@ function hoverProblems(look) {
             top && rest ? compositeOver(top, alphaOf(c), rest) : rest;
           return rest && hover ? oklabDistance(rest, hover) : null;
         };
-        const theme = paints(res, components, around(part, m));
+        const theme = paints(
+          aroundTokens(part, m),
+          components,
+          around(part, m),
+        );
         const core = paints(base, {}, null);
         if (theme == null || core == null) continue;
         if (core < HOVER_SHOWS || theme >= HOVER_SAME) continue;
@@ -736,12 +776,12 @@ function fontProblems(look) {
         )
         .filter(f => fonts && !fonts.has(fontKey(f)));
       if (lost.length) {
-        const pkg = look.fontPackage(lost[0]);
+        const font = look.fontInstall(lost[0]);
         out.push({
           kind: 'font-unloaded',
           mode: 'both',
           token: t,
-          message: `${t} names ${lost.join(', ')}, which the app does not load, so the page shows the fallback${pkg ? `: install ${pkg} and add import '${pkg}'; to ${look.app?.entry ?? "the file that loads Core's stylesheet"}` : ''}`,
+          message: `${t} names ${lost.join(', ')}, which the app does not load, so the page shows the fallback${font ? `: ${font.known ? '' : 'if Fontsource publishes it, '}${font.install} installs it, and import '${font.pkg}'; in ${look.app?.entry ?? "the file that loads Core's stylesheet"} loads it` : ''}`,
         });
       }
       continue;
@@ -1156,6 +1196,24 @@ export function lookRepair(look, problems) {
         `${filledHad.has(t) ? 'unset: filled from the colors the theme sets, ' : 'unset: '}as light or dark as the text Core draws on it needs to read`;
     else why[t] ??= "unset: filled with Core's own color, which reads";
   }
+  // Core derives some tokens from others (the status roles from the
+  // category colors): resolved again with the filled colors, so each one
+  // is measured as the theme will draw it.
+  if (look.resolveWith) {
+    /** @type {Record<string, [string, string]>} */
+    const extra = {};
+    for (const [t, mv] of Object.entries(perMode))
+      extra[t] = [
+        String(mv.light ?? res.light[t] ?? ''),
+        String(mv.dark ?? res.dark[t] ?? ''),
+      ];
+    const again = look.resolveWith(extra);
+    for (const m of /** @type {Mode[]} */ (['light', 'dark'])) {
+      res[m] = {...again[m]};
+      for (const [t, mv] of Object.entries(perMode))
+        if (mv[m]) res[m][t] = /** @type {string} */ (mv[m]);
+    }
+  }
   const filled = new Set(Object.keys(perMode));
   /** @type {Record<string, Array<Omit<AcceptRecord, 'reason'>>>} */
   const keep = {};
@@ -1170,9 +1228,9 @@ export function lookRepair(look, problems) {
     if (
       p.token &&
       p.mode !== 'both' &&
-      ((p.kind === 'text' &&
-        (own.has(p.token) || filled.has(p.token)) &&
-        DRAWN_AS_TEXT.test(p.token)) ||
+      // (Text the theme leaves unset moves too: Core's own value that does
+      // not read on the theme's colors is written as the one that does.)
+      ((p.kind === 'text' && DRAWN_AS_TEXT.test(p.token)) ||
         (p.kind === 'edge' && filled.has(p.token)))
     )
       nudge.set(`${p.token}|${p.mode}`, {
@@ -1201,7 +1259,9 @@ export function lookRepair(look, problems) {
     (perMode[token] ??= {})[mode] = nearestReadingLightness(fg, grounds, needs);
     why[token] = own.has(token)
       ? 'did not read on every surface it sits on'
-      : 'unset: filled, then moved until it shows on every surface';
+      : filled.has(token)
+        ? 'unset: filled, then moved until it shows on every surface'
+        : "unset: Core's own did not read on the theme's colors, moved until it shows";
     // A color the author set is moved in the open: the line names the
     // record that keeps it as designed instead.
     if (own.has(token))

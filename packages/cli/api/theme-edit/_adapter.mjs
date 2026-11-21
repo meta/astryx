@@ -2160,13 +2160,31 @@ async function lookOf(ctx, root, file, built) {
       ),
     },
     own: new Set(Object.keys(theme.tokens ?? {})),
+    resolveWith: extra => {
+      const more = {...theme, tokens: {...theme.tokens, ...extra}};
+      return {
+        light: withLocalTokens(
+          theme,
+          'light',
+          core.resolveThemeTokens(more, {mode: 'light'}),
+        ),
+        dark: withLocalTokens(
+          theme,
+          'dark',
+          core.resolveThemeTokens(more, {mode: 'dark'}),
+        ),
+      };
+    },
     components: theme.components ?? {},
     base: {light: base.light, dark: base.dark},
     defaults: core.tokenDefaults ?? {},
     pairs: ctx.parts.pairs,
     accepted,
     unloadedFonts: collectUnloadedFonts(theme),
-    fontPackage: fontsourcePackageOf,
+    fontInstall: family => {
+      const s = fontsourceSuggestion(family);
+      return s ? {...s, install: installLine(root, [s.pkg])} : null;
+    },
     map: ctx.C.MAP,
     contrast: ctx.C.contrast,
     // (Core's rule reads its colors as drawn: each one it reads resolved.)
@@ -2215,6 +2233,35 @@ function withLocalTokens(theme, mode, tokens) {
     if (typeof value === 'string') out[k] = value;
   }
   return {...out, ...tokens};
+}
+
+/**
+ * The edit that repairs a problem fix left, in plain words, in the file
+ * it belongs in: the theme's, or the app's for its mode and page.
+ * @param {import('./theme-edit.type.mjs').ThemeEditCheckProblem} p
+ * @param {string} file the theme file, as shown
+ * @param {Array<{file: string}>} kept the app files protection kept back
+ * @returns {string}
+ */
+function checkNextEdit(p, file, kept) {
+  const app = kept[0]?.file ?? "the app's file that renders <Theme>";
+  if (p.kind === 'one-look')
+    return `in ${app}, add mode="${/mode="(light|dark)"/.exec(p.message)?.[1] ?? 'dark'}" to the <Theme> that wears the theme`;
+  if (p.kind === 'page')
+    return `in a stylesheet ${app === "the app's file that renders <Theme>" ? 'the app loads' : `${app} loads`}, add body { background: var(--color-background-body); }`;
+  const at = `in ${file}, `;
+  if (p.kind === 'hover')
+    return `${at}give ${p.part}${p.parts?.length ? ` ${p.parts[0].replace(/^\S+ /, '')}` : ''} a ':hover' fill that differs from its fill at rest`;
+  if (p.kind === 'blend' && p.part) {
+    const edit = p.message.split('. In ')[1];
+    return edit
+      ? `in ${edit}`
+      : `${at}give ${p.part}'s style a shadow or a border`;
+  }
+  if (p.token && p.needs != null)
+    return `${at}set ${p.token} to a color that reads at ${p.needs}:1${p.on ? ` on ${p.on}` : ''} in ${p.mode}${p.kind === 'text' || p.kind === 'part-text' ? ", or, for a color you set, keep it as designed with a record in the theme's .accepted.json" : ''}`;
+  if (p.part) return `${at}change ${p.part}'s own style: ${p.message}`;
+  return p.message;
 }
 
 /**
@@ -2342,20 +2389,25 @@ export async function themeEditCheck(target, options = {}) {
       problems = measured.problems;
     }
   }
+  // (One file can keep back both app repairs: it is listed once.)
+  const kept = [...new Map(protectedFiles.map(p => [p.file, p])).values()];
+  const next = !problems.length
+    ? null
+    : options.fix
+      ? checkNextEdit(problems[0], shown(file), kept)
+      : 'run the check again with --fix';
   return {
     type: 'themeEdit.check',
     data: {
       file: shown(file),
       modes: look.modes,
       problems,
+      ...(next ? {next} : {}),
       accepted: measured.accepted,
       fixed,
       files: [...new Set(files)],
       notes,
-      // (One file can keep back both app repairs: it is listed once.)
-      protectedFiles: [
-        ...new Map(protectedFiles.map(p => [p.file, p])).values(),
-      ],
+      protectedFiles: kept,
       ...(ctx.unchecked
         ? {
             unmeasured: {
