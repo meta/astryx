@@ -294,6 +294,25 @@ describe('a saved setting and how far it reaches', () => {
     );
   }, 240_000);
 
+  it('an undo that puts a setting back names the parts it now reaches past its record', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('putb', {cwd, like: 'neutral'});
+    await themeEditSet('putb', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+    });
+    narrowRecord('putb', 'border-color|');
+    await themeEditUndo('putb', {
+      cwd,
+      thing: 'border-color',
+      on: 'text-input',
+    });
+    const u = /** @type {any} */ (await themeEditUndo('putb', {cwd}));
+    expect(u.data.widened?.[0]?.parts).toEqual(
+      expect.arrayContaining(['text-area']),
+    );
+  }, 240_000);
+
   it('undoing a change that named a growth names it no second time', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('once', {cwd, like: 'neutral'});
