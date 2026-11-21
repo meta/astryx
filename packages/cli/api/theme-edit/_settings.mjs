@@ -16457,10 +16457,12 @@ function partTokenValues(css) {
  * only what it holds counts.
  * @param {Ctx} ctx
  * @param {'light' | 'dark'} other the mode the theme does not have
+ * @param {string[]} mediaRule the tokens the base's media rule for that side
+ *   replaces for what it holds
  * @returns {{parts: Set<string>, tokens: Set<string>}} the parts held, and
  *   every token they or the surface's own elements read
  */
-function otherModeSeen(ctx, other) {
+function otherModeSeen(ctx, other, mediaRule) {
   const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
   /** @type {Set<string>} */
   const parts = new Set();
@@ -16476,21 +16478,11 @@ function otherModeSeen(ctx, other) {
       for (const k of ctx.C.allReads(held)) tokens.add(k);
     }
   }
-  // (Core's media surface points these at its on-color for everything it
-  // holds, in either scheme: the theme's own values are never drawn there.)
-  for (const k of MEDIA_SURFACE_TOKENS) tokens.delete(k);
+  // (The base's media rule for that side points these at its on-color for
+  // everything it holds: the theme's own values are never drawn there.)
+  for (const k of mediaRule) tokens.delete(k);
   return {parts, tokens};
 }
-
-/**
- * The tokens Core's media surface (a toast's card, a lightbox) sets from
- * its on-color for what it holds (Core's onMediaTokens).
- */
-const MEDIA_SURFACE_TOKENS = [
-  '--color-accent',
-  '--color-text-primary',
-  '--color-icon-primary',
-];
 
 /**
  * Each part token whose built value changed between two stylesheets, as a
@@ -16958,6 +16950,13 @@ export async function commitTheme(
     );
     /** @type {{parts: Set<string>, tokens: Set<string>} | null} */
     let otherSeen = null;
+    /** The tokens the base's media rule for the other side replaces. */
+    const mediaRule =
+      modes.length === 1
+        ? await baseResolved(ctx.project, data.like)
+            .then(b => Object.keys(other === 'light' ? b.onLight : b.onDark))
+            .catch(() => [])
+        : [];
     if (resBefore) {
       /** @param {unknown} a @param {unknown} b */
       const same = (a, b) =>
@@ -16980,7 +16979,7 @@ export async function commitTheme(
         /** @type {string} */ k,
         /** @type {string} */ m,
       ) => {
-        otherSeen ??= otherModeSeen(ctx, other);
+        otherSeen ??= otherModeSeen(ctx, other, mediaRule);
         return (
           otherSeen.tokens.has(k) ||
           [...data.settings, ...settingsBefore].some(
@@ -17021,7 +17020,7 @@ export async function commitTheme(
           cssBefore,
           cssNow(),
           modes,
-          (otherSeen ??= otherModeSeen(ctx, other)).parts,
+          (otherSeen ??= otherModeSeen(ctx, other, mediaRule)).parts,
         ),
       );
     const found = await contrastProblems(ctx, data, res);
