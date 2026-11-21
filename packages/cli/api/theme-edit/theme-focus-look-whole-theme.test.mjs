@@ -75,6 +75,36 @@ describe('the focus dial', () => {
     );
   }, 240_000);
 
+  it('glow keeps the theme ring where even the whole accent does not read', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('gy', {cwd, like: 'neutral'});
+    await themeEditSet('gy', 'accent', '#ffd400', {cwd});
+    await themeEditSet('gy', 'focus', 'glow', {cwd});
+    const css = cssOf('gy');
+    // (Light keeps the palette's readable ring shade, never the accent.)
+    expect(css).toMatch(
+      /--focus-outline-color: light-dark\(#(?!ffd400)[0-9a-f]{6}, color-mix/i,
+    );
+  }, 240_000);
+
+  it('glow is still searched in the mode the theme sets no ring for', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('gm', {cwd, like: 'neutral'});
+    await themeEditSet('gm', '--focus-outline-color', '#123456', {
+      cwd,
+      mode: 'light',
+    });
+    await themeEditSet('gm', 'focus', 'glow', {cwd});
+    const css = cssOf('gm');
+    expect(css).toMatch(/#123456/);
+    const share = Number(
+      /--focus-outline-color: [^;]*color-mix\(in srgb, var\(--color-accent\) (\d+)%, transparent\)/.exec(
+        css,
+      )?.[1],
+    );
+    expect(share).toBeGreaterThan(25);
+  }, 240_000);
+
   it('glow goes over a resting shadow the theme gives the fields', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('s', {cwd, like: 'neutral'});

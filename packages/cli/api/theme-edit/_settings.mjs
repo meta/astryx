@@ -7160,6 +7160,8 @@ export function compileTheme(ctx, data, base) {
     }
   };
   /** The focus dial's look for the whole theme, if any. */
+  /** The ring color before the focus dial's glow, per mode. @type {{light?: string, dark?: string} | null} */
+  let ringBeforeGlow = null;
   const focusLook =
     [...data.settings]
       .reverse()
@@ -7664,6 +7666,9 @@ export function compileTheme(ctx, data, base) {
         if (s.value === 'glow') {
           putTok('--focus-outline-width', '0.25rem');
           putTok('--focus-outline-offset', '0px');
+          // (The ring color the theme had before, the palette's readable
+          // shade, stays at hand for a mode where no glow reads.)
+          ringBeforeGlow = {...(tok['--focus-outline-color'] ?? {})};
           putTok(
             '--focus-outline-color',
             'color-mix(in srgb, var(--color-accent) 25%, transparent)',
@@ -8520,25 +8525,35 @@ export function compileTheme(ctx, data, base) {
     }
   }
   // The focus dial's glow is the accent mixed with transparent: as soft
-  // as it can be while it reads at 3:1 on the page and on a surface, in
-  // each mode (a ring a theme sets itself stays as set).
-  if (
-    focusLook === 'glow' &&
-    !data.settings.some(
-      y => y.thing === '--focus-outline-color' && !y.on && !y.state,
-    )
-  )
+  // as it can be while it reads at 3:1 on the page, a surface, a card and
+  // a menu, in each mode. Where even the whole accent does not read there,
+  // the theme's own ring color stays (Core moves it to a shade that reads).
+  // A ring a theme sets itself for a mode stays as set in that mode.
+  if (focusLook === 'glow')
     for (const m of /** @type {const} */ (['light', 'dark'])) {
+      if (
+        data.settings.some(
+          y =>
+            y.thing === '--focus-outline-color' &&
+            !y.on &&
+            !y.state &&
+            (!y.mode || y.mode === m),
+        )
+      )
+        continue;
       const accent = shown('--color-accent', m);
       const grounds = [
-        shown('--color-background-body', m),
-        shown('--color-background-surface', m),
-      ].filter(g => g != null);
-      if (!accent || !grounds.length) continue;
-      let share = 25;
-      while (
-        share < 100 &&
-        grounds.some(
+        '--color-background-body',
+        '--color-background-surface',
+        '--color-background-card',
+        '--color-background-popover',
+      ]
+        .map(g => shown(g, m))
+        .filter(g => g != null && parseColor(String(g)));
+      if (!accent || !parseColor(accent) || !grounds.length) continue;
+      /** Whether the accent at a share reads at 3:1 on every ground. @param {number} share */
+      const reads = share =>
+        grounds.every(
           g =>
             ratio(
               compositeOver(
@@ -8547,15 +8562,21 @@ export function compileTheme(ctx, data, base) {
                 /** @type {[number, number, number]} */ (parseColor(String(g))),
               ),
               /** @type {[number, number, number]} */ (parseColor(String(g))),
-            ) < 3,
-        )
-      )
-        share += 5;
-      putTok(
-        '--focus-outline-color',
-        `color-mix(in srgb, var(--color-accent) ${share}%, transparent)`,
-        m,
-      );
+            ) >= 3,
+        );
+      let share = 25;
+      while (share < 100 && !reads(share)) share += 5;
+      if (reads(share))
+        putTok(
+          '--focus-outline-color',
+          `color-mix(in srgb, var(--color-accent) ${share}%, transparent)`,
+          m,
+        );
+      else if (tok['--focus-outline-color']) {
+        const before = ringBeforeGlow?.[m];
+        if (before != null) tok['--focus-outline-color'][m] = before;
+        else delete tok['--focus-outline-color'][m];
+      }
     }
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? shownHalf(k, 'light');
