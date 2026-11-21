@@ -423,12 +423,34 @@ describe('a look said, then taken away by a pronoun', () => {
         'the shadows on cards and buttons in dark mode are too strong, remove them',
         'the shadows are too strong on cards and buttons in dark mode, remove them',
         'the card and dialog border is ugly, hide it',
-        'the card border is ugly and heavy, hide it',
         'the cards in the dialog have a shadow, remove it',
         'the card border radius is too big, remove it',
       ]) {
         const lines = (first(await answer(q)) ?? []).join('\n');
         expect(lines, q).not.toMatch(/\bnone --on\b|transparent --on/);
+      }
+    },
+    T,
+  );
+});
+
+describe('judging words joined to a look taken away by a pronoun', () => {
+  it(
+    'only judge it: the look goes, nothing else is written',
+    async () => {
+      for (const [q, want] of [
+        ['the card border is ugly and thick, hide it', 'border none --on card'],
+        ['the card border is ugly and heavy, hide it', 'border none --on card'],
+        [
+          'the card shadow is too strong and harsh, remove it',
+          'box-shadow none --on card',
+        ],
+      ]) {
+        const lines = first(await answer(String(q))) ?? [];
+        expect(lines.join('\n'), String(q)).toContain(String(want));
+        expect(lines.join('\n'), String(q)).not.toMatch(
+          /weight|border-width|--text/,
+        );
       }
     },
     T,

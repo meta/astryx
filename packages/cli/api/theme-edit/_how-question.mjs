@@ -4679,8 +4679,19 @@ export function draftAnswer(ctx, env, question) {
       const word = look.toLowerCase().replace(/s$/, '');
       // (Only an ask said on its own: one joined to another by "and",
       // "but" or "then" keeps the reading it has without the pronoun.)
-      if (/\b(?:and|but|then)\b/i.test(said)) return m;
-      const own = String(said);
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      // ("the card border is ugly and thick, hide it": words joined after
+      // the look that only judge it are the look's own, never an ask.)
+      const own = said.replace(/\s+\b(?:and|but)\s+([a-z' ]+)$/i, (x, words) =>
+        String(words)
+          .split(/[^a-z]+/)
+          .filter(Boolean)
+          .every(w => JUDGING.test(w))
+          ? ` ${words}`
+          : x,
+      );
+      if (/\b(?:and|but|then)\b/i.test(own)) return m;
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
         .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
@@ -4700,8 +4711,6 @@ export function draftAnswer(ctx, env, question) {
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
-      const JUDGING =
-        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
       if (!others.every(w => JUDGING.test(w))) return m;
       // ("them" names more than one thing: read it only over one part said
       // in the plural.)
