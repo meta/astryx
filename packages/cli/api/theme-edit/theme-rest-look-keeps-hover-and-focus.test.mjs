@@ -55,6 +55,23 @@ const needBases = ctx => {
 const cssOf = slug =>
   fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8');
 
+/**
+ * The rules for a state whose selector holds every attribute given (one
+ * mode's blocks left out), joined.
+ * @param {string} css @param {string} state @param {string[]} attrs
+ */
+const scoped = (css, state, attrs) =>
+  (css.match(/[^{}]*\{[^}]*\}/g) ?? [])
+    .filter(r => {
+      const sel = r.split('{')[0];
+      return (
+        sel.includes(state) &&
+        !/@/.test(sel) &&
+        attrs.every(a => sel.includes(a))
+      );
+    })
+    .join('\n');
+
 /** The declarations of a rule, by its exact selector. @param {string} css @param {string} sel */
 const ruleOf = (css, sel) =>
   new RegExp(
@@ -157,6 +174,48 @@ describe('a resting outline', () => {
       /outline-style: var\(--focus-outline-style\)/,
     );
     expect(rules.join('\n')).not.toMatch(/outline-color: var\(/);
+    // (The theme's own color is written there, so it outweighs the resting
+    // outline.)
+    expect(rules.join('\n')).toMatch(/outline-color: #ff0000/);
+  }, 240_000);
+
+  it("keeps a variant's whole focus outline under a resting outline for that variant and a size", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('vw', {cwd, like: 'neutral'});
+    await themeEditSet('vw', 'outline', '2px dotted #000000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      when: 'variant:ghost',
+    });
+    await themeEditSet('vw', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const rules = scoped(cssOf('vw'), ':focus-visible', [
+      'data-variant="ghost"',
+      'data-size="sm"',
+    ]);
+    expect(rules).toMatch(/outline: 2px dotted #000000/);
+  }, 240_000);
+
+  it('keeps a whole-part focus color under a resting outline for one variant', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('wf', {cwd, like: 'neutral'});
+    await themeEditSet('wf', 'outline-color', '#ff0000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+    });
+    await themeEditSet('wf', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+    });
+    expect(
+      scoped(cssOf('wf'), ':focus-visible', ['data-variant="ghost"']),
+    ).toMatch(/outline-color: #ff0000/);
   }, 240_000);
 
   it('gives a large or raised button its hover back under a scoped resting background', async ctx => {
@@ -284,6 +343,43 @@ describe('a resting background shorthand', () => {
     });
     expect(cssOf('h')).not.toMatch(
       /\.astryx-button\[data-variant="ghost"\]:hover[^{]*\{[^}]*overlay-hover/,
+    );
+  }, 240_000);
+
+  it("keeps a variant's own hover under a resting background for that variant and a size", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('vh', {cwd, like: 'neutral'});
+    await themeEditSet('vh', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+      state: 'hover',
+    });
+    await themeEditSet('vh', 'background', 'transparent', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    expect(
+      scoped(cssOf('vh'), ':hover', ['data-variant="ghost"', 'data-size="sm"']),
+    ).toMatch(/#eeeeee/);
+  }, 240_000);
+
+  it('keeps a whole-part hover under a resting background for one variant', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('wh', {cwd, like: 'neutral'});
+    await themeEditSet('wh', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+    });
+    await themeEditSet('wh', 'background', 'transparent', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+    });
+    expect(scoped(cssOf('wh'), ':hover', ['data-variant="ghost"'])).toMatch(
+      /#eeeeee/,
     );
   }, 240_000);
 
