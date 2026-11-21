@@ -15526,10 +15526,10 @@ export function draftAnswer(ctx, env, question) {
   addRunLooks(clauses, Object.keys(HUES));
   /** Clauses a strip's answer writes, after the strip's own. @type {Set<Clause>} */
   const absorbed = new Set();
-  // (Looks the strip does not write: said with it, they are answered on
-  // their own, after it.)
-  const STRIP_UNSAID =
-    /\b(?:thick|thin|heavy|bold|hairline|double|groove|ridge|inset|outset|large|big|huge|deep|strong|subtle|faint|glow(?:ing)?)\b/;
+  // (Looks other than the strip's corners and line color: said with it,
+  // each is answered on its own, on the row.)
+  const STRIP_OTHER =
+    /\b(?:shadows?|glow(?:ing)?|thick|thin|heavy|bold|hairline|double|dashed|dotted|groove|ridge|inset|outset|wide|narrow|large|big|huge|deep|strong|subtle|faint|soft|hard)\b/;
   /**
    * "pagination pages in one bordered strip", "joined page buttons": a row
    * of controls drawn as one strip. Read from the parts, not a list of
@@ -15537,9 +15537,11 @@ export function draftAnswer(ctx, env, question) {
    * (`first` and `last` states), the row is the smallest part of the same
    * component that holds them, and a cell beside them in the row is a part
    * of that component there that takes a control's size (a pager's
-   * ellipsis). The row draws the border, corners (and a shadow when one is
-   * said) with no gap; each cell draws a separator after it, the end cells
-   * the row's corners just inside its border, and the last none.
+   * ellipsis). The row draws the border and corners with no gap; each cell
+   * draws a separator after it, the end cells the row's corners just
+   * inside its border, and the last none. It takes only the corners and a
+   * line color said with it; any other look said with it is answered on
+   * its own, on the row.
    * @param {Clause} c
    * @returns {Draft | null}
    */
@@ -15549,7 +15551,9 @@ export function draftAnswer(ctx, env, question) {
         noMode(c.text),
       ) ||
       c.neg ||
-      STRIP_UNSAID.test(noMode(c.text))
+      c.colors.length ||
+      c.lengths.length ||
+      STRIP_OTHER.test(noMode(c.text))
     )
       return null;
     const targets = [...TARGET.values()];
@@ -15569,45 +15573,46 @@ export function draftAnswer(ctx, env, question) {
           (a, b) => contains(a.key).length - contains(b.key).length,
         )[0]?.key;
       if (!row) continue;
-      // ("… strip with 3px corners and a soft shadow, #dddddd lines"): the
-      // clauses after it that say how the strip looks, naming no part
-      // outside this component (a part carried to them from the strip's
-      // subject included), are the strip's, written in its answer.
+      /** A clause that says only the strip's corners. @param {Clause} x */
+      const cornersOnly = x =>
+        /\b(?:corners?|radius|rounded)\b/.test(x.text) &&
+        !x.colors.length &&
+        !STRIP_OTHER.test(noMode(x.text));
+      /** A clause that says only the color of the strip's lines. @param {Clause} x */
+      const lineColorOnly = x =>
+        /\b(?:lines?|borders?|separators?|dividers?|edges?)\b/.test(x.text) &&
+        x.colors.length > 0 &&
+        !x.lengths.length &&
+        !/\b(?:corners?|radius|rounded)\b/.test(x.text) &&
+        !STRIP_OTHER.test(noMode(x.text));
+      // ("… strip with 3px corners, a soft shadow and #dddddd lines"): the
+      // clauses after it, up to a sentence break, that say only its corners
+      // or its line color, naming no part outside this component, are the
+      // strip's, written in its answer. Any other look said of the same
+      // controls there is answered on its own, on the row.
       const after = [];
       for (let i = clauses.indexOf(c) + 1; i < clauses.length; i++) {
         const x = clauses[i];
         if (
-          x.neg ||
-          x.parts.some(p => TARGET.get(one(p.on))?.component !== component) ||
-          !/^(?:with|and|,|(?:,\s*)?and(?:\s*with)?)?$/.test(
-            String(x.joint ?? '').trim(),
-          ) ||
-          !/\b(?:shadows?|lines?|borders?|separators?|dividers?|corners?|radius|rounded|edges?)\b/.test(
-            x.text,
-          ) ||
-          STRIP_UNSAID.test(noMode(x.text))
-        ) {
-          // (A look the strip does not write, said right after it of the
-          // controls the strip names, is the strip's: it goes on the row,
-          // and so does each look said after it of those controls, until
-          // one names its own part.)
-          if (STRIP_UNSAID.test(noMode(x.text)))
-            for (let k = i; k < clauses.length; k++) {
-              const y = clauses[k];
-              if (
-                !y.parts.length ||
-                !y.parts.every(p => p.on === item) ||
-                /\b(?:pages?|cells?|items?|buttons?)\b/.test(y.text)
-              )
-                break;
-              y.parts = y.parts.map(p => ({...p, on: row}));
-            }
+          /[.;!?\n]|\bthen\b/.test(String(x.joint ?? '')) ||
+          x.parts.some(p => TARGET.get(one(p.on))?.component !== component)
+        )
           break;
+        if (!x.neg && (cornersOnly(x) || lineColorOnly(x))) {
+          after.push(x);
+          continue;
         }
-        after.push(x);
+        // (Said of the strip's subject or its controls, carried: the
+        // controls' look goes on the row; the subject's is routed as said.)
+        if (
+          !x.parts.length ||
+          !x.parts.every(p => p.on === item || p.on === subject.on) ||
+          /\b(?:pages?|cells?|items?|buttons?)\b/.test(x.text)
+        )
+          break;
+        x.parts = x.parts.map(p => (p.on === item ? {...p, on: row} : p));
       }
       const said = [c, ...after];
-      const words = said.map(x => noMode(x.text)).join(', ');
       const cells = contains(row).filter(
         k =>
           k !== item &&
@@ -15616,32 +15621,14 @@ export function draftAnswer(ctx, env, question) {
             /^--size-element-/.test(r.token),
           ),
       );
-      // Every line is the border token, so a line color said is that
-      // token on the row, reaching its cells, in the mode it is said for.
-      const lineColor = said.flatMap(x => x.colors)[0];
-      // A width or a dashed or dotted style said of the lines is every
-      // line's.
-      const lineClauses = said.filter(
-        x =>
-          /\b(?:lines?|borders?|separators?|dividers?|edges?)\b/.test(x.text) &&
-          !/\b(?:corners?|radius|rounded)\b/.test(x.text),
-      );
-      const lineWidth =
-        lineClauses.flatMap(x => x.lengths)[0] ??
-        lineClauses
-          .map(x => /\b\d*\.?\d+px\b/.exec(x.text)?.[0])
-          .find(Boolean) ??
-        '1px';
-      const lineStyle =
-        lineClauses
-          .map(x => /\b(dashed|dotted)\b/.exec(x.text)?.[1])
-          .find(Boolean) ?? 'solid';
-      const line = `${lineWidth} ${lineStyle} var(--color-border)`;
+      // Every line is the border token, so a line color said of the lines
+      // is that token on the row, reaching its cells, in the mode it is
+      // said for.
+      const lineColor = after.filter(lineColorOnly).flatMap(x => x.colors)[0];
+      const line = '1px solid var(--color-border)';
       // A length said with corners is the strip's radius; the end cells'
       // corners sit just inside its border.
-      const cornerLength = said.find(x =>
-        /\b(?:corners?|radius|rounded)\b/.test(x.text),
-      )?.lengths[0];
+      const cornerLength = after.find(cornersOnly)?.lengths[0];
       const outer = cornerLength ?? 'var(--radius-element)';
       const px = /^(\d*\.?\d+)px$/.exec(String(outer));
       const inner = px
@@ -15658,9 +15645,6 @@ export function draftAnswer(ctx, env, question) {
         set('gap', '0', {on: row}),
         set('border', line, {on: row}),
         set('border-radius', outer, {on: row}),
-        ...(/\bshadows?\b/.test(words)
-          ? [set('box-shadow', 'var(--shadow-low)', {on: row})]
-          : []),
         set('border-radius', '0', {on: item}),
         set('border', '0', {on: item}),
         set('border-inline-end', line, {on: item}),
@@ -15671,17 +15655,16 @@ export function draftAnswer(ctx, env, question) {
         set('border-inline-end', '0', {on: item, state: 'last'}),
         ...cells.map(k => set('border-inline-end', line, {on: k})),
       ];
-      // (A strip is its border, its corners and no gap, and its shadow when
-      // one is said: those are what the ask changes.)
+      // (A strip is its border, its corners and no gap: those are what the
+      // ask changes.)
       const drawn = ['border', 'corners', 'spacing'];
-      if (/\bshadows?\b/.test(words)) drawn.push('shadow');
       for (const x of after) absorbed.add(x);
       for (const k of [row, item, ...cells]) seenPart(k);
       for (const a of drawn) seenAspect(a);
       return {
         intent: {
           ...intentOf(c, []),
-          typed: said.flatMap(x => [...x.colors, ...x.lengths]),
+          typed: after.flatMap(x => [...x.colors, ...x.lengths]),
           families: [...new Set(drawn.flatMap(a => ASPECT_FAMILIES[a]))],
         },
         text: `${component} as one strip: ${row} draws the border and corners with no gap between its controls; each ${item} draws a separator after it${cells.length ? ` (and ${cells.join(', ')}, a cell of the row too)` : ''}, and the first and last take the row's corners, the last with no separator${after.length ? ` (with ${after.map(x => `"${x.text.trim()}"`).join(', ')})` : ''}${said.some(x => x.mode) ? `; the strip's shape is the same in light and dark${lineColor ? `, and its line color is for ${said.find(x => x.mode)?.mode} mode` : `, so nothing of it is ${said.find(x => x.mode)?.mode} mode's own`}` : ''}`,
@@ -15734,6 +15717,8 @@ export function draftAnswer(ctx, env, question) {
       const strip = joinedStrip(c);
       if (strip) {
         push(strip);
+        // (It joins the ask's other answers in "all of it, in order".)
+        recordTop(c, strip.options[0]);
         continue;
       }
     }
@@ -29546,6 +29531,9 @@ export function draftAnswer(ctx, env, question) {
       const st = all[i];
       if (st.verb !== 'set' || !st.on || !roundsCorners(st)) continue;
       if (C.showsCorners(one(st.on))) continue;
+      // (Corners that already follow an edge on their part stay where
+      // they are: a strip's corners after its border.)
+      if (all.slice(0, i).some(t => t.on === st.on && edgeFor(t, st))) continue;
       let edge = -1;
       for (let j = i + 1; j < all.length; j++)
         if (all[j].on === st.on && edgeFor(all[j], st)) edge = j;
