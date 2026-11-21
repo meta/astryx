@@ -26915,16 +26915,33 @@ export function draftAnswer(ctx, env, question) {
           // ("…on striped tables too", "every table, even on striped tables",
           // "on plain and on striped tables": the ask adds those tables, so
           // it stays on every table.)
-          // (Words tied to striped tables, "striped tables too", "even on
-          // striped tables", "plain and on striped tables", "striped tables
-          // and on plain tables" (or "but also", "plus", "along with", "as
-          // well as", "(and plain tables)"), are read from the question, the last only
-          // where its clause ends with the tables (a mode, "in dark mode",
-          // may follow them): "…and every table header bold" asks about the
-          // headers. A loose "every table" or "plain
-          // tables" counts only in the stripe's own clause.)
+          // (Words tied to striped tables are read from the question:
+          // "striped tables too", "even on striped tables", "plain and on
+          // striped tables". So are tables added after the striped ones,
+          // "…on striped tables and on plain tables" (or "but also", "plus",
+          // "along with", "as well as", "(and plain tables)"), where that
+          // clause ends with the tables or a mode ("in dark mode"): "…and
+          // every table header bold" asks about the headers, and "…, and
+          // all tables and buttons get rounded corners" joins the tables
+          // with another part in an ask of its own. A loose "every table" or
+          // "plain tables" counts only in the stripe's own clause.)
+          const tieAfter =
+            /\bstriped\s+tables?\s*,?\s*(?:and\s+(?:also\s+)?|(?:but\s+)?also\s+|plus\s+|(?:along|together)\s+with\s+|as\s+well\s+as\s+|\(\s*(?:and\s+|also\s+|plus\s+)?)(?:(?:on|in|for)\s+)?(?:the\s+)?(?:every|all|plain|other|non-striped|unstriped)(?:\s+other)?\s+tables?\b(?:\s+(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode(?:\s+only)?\b)?(?=\s*(?:$|[,;.!?)]|and\b|but\b|too\b|as\s+well\b))/.exec(
+              q,
+            );
+          const joinedPart = tieAfter
+            ? /^\s*and\s+(?:the\s+)?([a-z][a-z-]*)/.exec(
+                q.slice(tieAfter.index + tieAfter[0].length),
+              )?.[1]
+            : null;
+          const joinsPart =
+            !!joinedPart &&
+            [joinedPart, joinedPart.replace(/(?<=[a-z]{3})e?s$/, '')].some(w =>
+              Object.hasOwn(C.MAP, w),
+            );
           const widens =
-            /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\bstriped\s+tables?\s*,?\s*(?:and\s+(?:also\s+)?|(?:but\s+)?also\s+|plus\s+|(?:along|together)\s+with\s+|as\s+well\s+as\s+|\(\s*(?:and\s+|also\s+|plus\s+)?)(?:(?:on|in|for)\s+)?(?:the\s+)?(?:every|all|plain|other|non-striped|unstriped)(?:\s+other)?\s+tables?\b(?:\s+(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode(?:\s+only)?\b)?(?=\s*(?:$|[,;.!?)]|and\b|but\b|too\b|as\s+well\b))|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:tables?\s+)?and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+tables?\b/.test(
+            (!!tieAfter && !joinsPart) ||
+            /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:tables?\s+)?and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+tables?\b/.test(
               q,
             ) ||
             /(?<!\b(?:not|except|without|but|leave|leaving)\s+(?:(?:on|in|for)\s+)?(?:the\s+)?)\b(?:every|all|plain|other|non-striped|unstriped)\s+tables?\b/.test(

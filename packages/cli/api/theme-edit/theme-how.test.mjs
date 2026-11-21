@@ -1084,6 +1084,14 @@ describe('stripe answers keep to the stripe', () => {
       'odd rows #f9f9f9 on striped tables and plain tables get a 1px border',
       /'#f9f9f9' --on table-row --when parity:odd --state striped/,
     ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables and buttons get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and every table and card gets a 1px border',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
   ])('keeps the striped scope for %s', async (question, want) => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     const commands = (data.results ?? [])
