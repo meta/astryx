@@ -150,6 +150,10 @@ function useControlsVisibility(store: MediaStore) {
     () => false,
   );
   const [isIdle, setIsIdle] = useState(false);
+  // Whether a menu or marker popover the player opened is open. Each layer
+  // reports itself by its own owner, so one closing leaves another open.
+  const [isLayerOpen, setIsLayerOpen] = useState(false);
+  const layersRef = useRef(new Set<string>());
   const holdsRef = useRef(new Set<MediaControlsHold>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTouchRef = useRef(false);
@@ -198,6 +202,20 @@ function useControlsVisibility(store: MediaStore) {
     [clearTimer, scheduleIdle],
   );
 
+  const holdLayer = useCallback(
+    (owner: string, isOpen: boolean) => {
+      if (isOpen) {
+        layersRef.current.add(owner);
+      } else {
+        layersRef.current.delete(owner);
+      }
+      const isAnyOpen = layersRef.current.size > 0;
+      setIsLayerOpen(isAnyOpen);
+      holdControls('menu', isAnyOpen);
+    },
+    [holdControls],
+  );
+
   const hideControls = useCallback(() => {
     if (holdsRef.current.size === 0) {
       clearTimer();
@@ -228,6 +246,8 @@ function useControlsVisibility(store: MediaStore) {
 
   return {
     isControlsVisible: !isPlaying || !isIdle,
+    isLayerOpen,
+    holdLayer,
     wakeControls,
     markTouch,
     holdControls,
@@ -288,8 +308,14 @@ export function MediaPlayer({
   );
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const visibility = useControlsVisibility(store);
-  const {wakeControls, markTouch, holdControls, hideControls, toggleControls} =
-    visibility;
+  const {
+    wakeControls,
+    markTouch,
+    holdControls,
+    holdLayer,
+    hideControls,
+    toggleControls,
+  } = visibility;
   const announce = useAnnounce({hasReplace: true});
   const t = useTranslator();
   const locale = useLocale();
@@ -329,8 +355,10 @@ export function MediaPlayer({
     () => ({
       store,
       isControlsVisible: visibility.isControlsVisible,
+      isLayerOpen: visibility.isLayerOpen,
       wakeControls,
       holdControls,
+      holdLayer,
       toggleControls,
       focusPlayer,
       scrubTime,
@@ -339,8 +367,10 @@ export function MediaPlayer({
     [
       store,
       visibility.isControlsVisible,
+      visibility.isLayerOpen,
       wakeControls,
       holdControls,
+      holdLayer,
       toggleControls,
       focusPlayer,
       scrubTime,
