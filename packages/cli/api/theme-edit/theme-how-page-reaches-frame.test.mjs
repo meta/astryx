@@ -94,3 +94,20 @@ describe('a dark surface in a light page', () => {
     ]);
   }, 240_000);
 });
+
+describe('the page named with an article before a colon', () => {
+  it('"the page: a gradient" is the page, as "page: a gradient" is', async () => {
+    for (const ask of [
+      'the page: a purple-to-pink gradient',
+      'page: a purple-to-pink gradient',
+    ])
+      expect(writes(await how('q0', ask)), ask).toEqual([
+        "set q0 background 'linear-gradient(#7c3aed, #db2777)' --on app-shell",
+      ]);
+  }, 240_000);
+  it('a label with a part word before "page:" still names the product', async () => {
+    expect(
+      writes(await how('q0', 'the notifications page: rounder corners')),
+    ).toEqual(['set q0 corners more']);
+  }, 240_000);
+});
