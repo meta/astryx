@@ -466,6 +466,10 @@ function keyProblem(key, value, kind, pseudoProblem) {
   if (isBlock(value)) {
     if (key.startsWith(':') && kind !== 'pseudo') return pseudoProblem(key);
     if (kind === 'style' && MODE_KEYS.includes(key)) return null;
+    // Variants written as other styling libraries write them: named with
+    // the style keys that write them, by the build and the editor alike.
+    const keys = kind === 'style' ? variantMapKeys(key, value) : null;
+    if (keys) return variantMapMessage(key, keys);
     return `${key} holds a block, but ${kind === 'pseudo' ? 'a pseudo key holds properties only' : `only a pseudo key (':hover', '::before')${kind === 'style' ? ' or @light / @dark' : ''} holds one here`}, so the build writes it as a declaration the browser drops`;
   }
   if (key.startsWith(':') || key.startsWith('@')) return null;
@@ -492,6 +496,155 @@ export function partCustomPropertyProblem(name) {
 /**
  * @typedef {{path: string[], why: string}} StyleKeyProblem
  */
+
+/**
+ * The style keys a map of values to blocks stands for, as a part-level
+ * `variants` map writes them inside a style block (`variant: {secondary:
+ * {…}}`), or null when the value is not one: a named key that is no pseudo
+ * key, at-rule or `selectors` block, holding blocks named by plain value
+ * words (no selector), that each hold a block. Core writes it as a
+ * declaration the browser drops; a variant is a style key of its own here
+ * (`'variant:secondary'`).
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {string[] | null}
+ */
+export function variantMapKeys(key, value) {
+  // (A `selectors` block holds selectors, never values: `'&:hover': {…}`
+  // is the part's own hover, written as it is.)
+  if (
+    key === '' ||
+    key === 'selectors' ||
+    /^[:@&]/.test(key) ||
+    !isBlock(value)
+  )
+    return null;
+  const entries = Object.entries(value);
+  // A value is one plain word (`secondary`, `sm`): a key with a selector's
+  // marks in it (`&:hover`, `[data-x]`, `> span`) is no value.
+  if (
+    entries.length === 0 ||
+    entries.some(([val]) => !/^[\w-]+$/.test(val)) ||
+    !entries.every(([, v]) => isBlock(v) && Object.keys(v).length > 0)
+  )
+    return null;
+  // The `variants` wrapper (`variants: {variant: {…}}`) stands for the
+  // style keys of the maps inside it. Any other key's blocks are the
+  // values' own, a hover or selectors block included (`variant: {ghost:
+  // {'&:hover': {…}}}` is `'variant:ghost'`).
+  if (key === 'variants') {
+    const inner = entries.map(([val, v]) => variantMapKeys(val, v));
+    if (inner.every(keys => keys != null)) return inner.flat();
+  }
+  return entries.map(([val]) => `${key}:${val}`);
+}
+
+/**
+ * The warning for a map of values to blocks, naming the style keys that
+ * write it.
+ * @param {string} key
+ * @param {string[]} keys
+ */
+function variantMapMessage(key, keys) {
+  const shown = keys.slice(0, 3).map(k => `'${k}': {…}`);
+  return `${key} holds a block for each value, as other styling libraries write variants, and the build writes it as a declaration the browser drops: write each value as a style key of the part, such as ${shown.join(', ')}${keys.length > 3 ? ', …' : ''} (join keys with + for several props at once)`;
+}
+
+/**
+ * Whether a style key's block holds only maps of values to blocks, so the
+ * style key itself is a wrapper (`variants: {variant: {…}}`) that the
+ * warning on each map explains.
+ * @param {unknown} block
+ */
+export function holdsOnlyVariantMaps(block) {
+  return (
+    isBlock(block) &&
+    Object.keys(block).length > 0 &&
+    Object.entries(block).every(([k, v]) => variantMapKeys(k, v) != null)
+  );
+}
+
+/**
+ * A theme with each map of values to blocks left out of its parts' style
+ * blocks: Core drops each with a warning of its own, and the build warns it
+ * at its line with the keys that write it, so the output is the same. The
+ * same object when it holds none.
+ * @template T
+ * @param {T} theme
+ * @returns {T}
+ */
+export function withoutVariantMaps(theme) {
+  /** @param {any} surface */
+  const surfaceWithout = surface => {
+    if (!isBlock(surface) || !isBlock(surface.components)) return surface;
+    let changed = false;
+    /** @type {Record<string, any>} */
+    const components = {};
+    for (const [name, styles] of Object.entries(surface.components)) {
+      if (!isBlock(styles)) {
+        components[name] = styles;
+        continue;
+      }
+      /** @type {Record<string, any>} */
+      const kept = {};
+      for (const [key, rules] of Object.entries(styles)) {
+        if (!isBlock(rules)) {
+          kept[key] = rules;
+          continue;
+        }
+        const left = Object.fromEntries(
+          Object.entries(rules).filter(([k, v]) => !variantMapKeys(k, v)),
+        );
+        if (Object.keys(left).length !== Object.keys(rules).length)
+          changed = true;
+        kept[key] = left;
+      }
+      components[name] = kept;
+    }
+    return changed ? {...surface, components} : surface;
+  };
+  const t = /** @type {any} */ (theme);
+  if (!isBlock(t)) return theme;
+  /** @type {Record<string, any>} */
+  const next = {...t};
+  let changed = false;
+  for (const field of ['onDark', 'onLight', '__onDark', '__onLight']) {
+    const s = surfaceWithout(t[field]);
+    if (s !== t[field]) {
+      next[field] = s;
+      changed = true;
+    }
+  }
+  const page = surfaceWithout(t);
+  if (page !== t) {
+    next.components = page.components;
+    changed = true;
+  }
+  for (const field of ['adaptations', '__adaptations']) {
+    const rules = t[field]?.rules;
+    if (!Array.isArray(rules)) continue;
+    const values = rules.map((/** @type {any} */ r) =>
+      surfaceWithout(r?.value),
+    );
+    if (values.every((v, i) => v === rules[i]?.value)) continue;
+    next[field] = {
+      ...t[field],
+      rules: rules.map((/** @type {any} */ r, /** @type {number} */ i) => ({
+        ...r,
+        value: values[i],
+      })),
+    };
+    changed = true;
+  }
+  if (Array.isArray(t.__adaptationRules)) {
+    const values = t.__adaptationRules.map(surfaceWithout);
+    if (values.some((v, i) => v !== t.__adaptationRules[i])) {
+      next.__adaptationRules = values;
+      changed = true;
+    }
+  }
+  return changed ? /** @type {T} */ (next) : theme;
+}
 
 /**
  * What {@link pseudoKeyProblem} and {@link pseudoKeyNotes} give each key in

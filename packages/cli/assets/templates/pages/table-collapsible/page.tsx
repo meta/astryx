@@ -122,11 +122,11 @@ import {
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TableSortComparator} from '@astryxdesign/core/Table';
 import {
-  ArrowsRightLeftIcon,
-  BuildingLibraryIcon,
+  TransferIcon,
+  BankIcon,
   CreditCardIcon,
-  PresentationChartLineIcon,
-} from '@heroicons/react/24/outline';
+  ActivityIcon,
+} from '@astryxdesign/template-icons';
 
 // ============= SHARED VOCABULARY =============
 
@@ -1381,7 +1381,7 @@ export default function ConnectedAccountsTemplate() {
           <LayoutContent role="main" padding={4}>
             <VStack gap={4} ref={contentRef}>
               <AccountGroup
-                icon={BuildingLibraryIcon}
+                icon={BankIcon}
                 title="Bank accounts"
                 count={BANK_ACCOUNTS.length}
                 summaryLabel="Available"
@@ -1423,7 +1423,7 @@ export default function ConnectedAccountsTemplate() {
               </AccountGroup>
 
               <AccountGroup
-                icon={ArrowsRightLeftIcon}
+                icon={TransferIcon}
                 title="Payment processors"
                 count={PROCESSORS.length}
                 summaryLabel="Pending payout"
@@ -1445,7 +1445,7 @@ export default function ConnectedAccountsTemplate() {
               </AccountGroup>
 
               <AccountGroup
-                icon={PresentationChartLineIcon}
+                icon={ActivityIcon}
                 title="Investment accounts"
                 count={INVESTMENTS.length}
                 summaryLabel="Market value"

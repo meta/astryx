@@ -28,7 +28,12 @@ import {
 } from '../../../foundation/discovery/template-adapter.mjs';
 import {analyzeTemplateNeeds} from '../../../foundation/discovery/template-needs.mjs';
 import {templateDestination} from '../../../foundation/discovery/template-destination.mjs';
-import {quoteCommandArgument} from '../../../foundation/env/package-manager.mjs';
+import {CORE_PACKAGE_NAME} from '../../../foundation/identity/package-names.mjs';
+import {nearestFolder} from '../_adapter.mjs';
+import {
+  commandInFolder,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 import {
   NO_ICON_SETS,
   mapTemplateIcons,
@@ -38,12 +43,14 @@ import {
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}, command?: string}} ctx
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}, command?: string, replaced?: boolean}} ctx
  *   `iconSets`: the project's icon sets; without them the icons are unchanged.
  *   `components`: how `astryx component` reads the project's components
  *   (loadComponentLookup); without it the receipt names no component.
  *   `command`: the command that selects this template, without a path; the
  *   refusal of a path outside the project suggests it
+ *   `replaced`: whether an integration in the project replaces this
+ *   template's id
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
  */
 export function templateCopy(
@@ -55,6 +62,7 @@ export function templateCopy(
     iconSets = NO_ICON_SETS,
     components = {ownersOf: () => [], qualified: false},
     command = `astryx template ${match.dirName} --type ${match.type}`,
+    replaced = false,
   },
 ) {
   if (!fs.existsSync(match.filePath)) {
@@ -94,30 +102,73 @@ export function templateCopy(
     });
   } catch (err) {
     if (!(err instanceof PathSafetyError)) throw err;
+    // A path that leaves the project, absolute or through `..`; a link that
+    // carries it out is refused as before.
     const outsideProject =
-      path.isAbsolute(target) &&
-      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
-      !err.viaSymlink;
-    const temp = outsideProject ? tempFolderOf(target) : null;
+      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL && !err.viaSymlink;
+    // Only a path named absolutely in the temp folder is a scratch copy.
+    const temp =
+      outsideProject && path.isAbsolute(target) ? tempFolderOf(target) : null;
     if (temp) {
       outputFilePath = inTempFolder(fileTarget, given, temp);
       scratch = true;
     } else if (outsideProject) {
       // Outside the project and the temp folder there is nothing to write,
-      // so the refusal names a place inside the project and the print that
-      // writes nothing.
+      // so the refusal names a place inside the project, the same path run
+      // from its own folder, and the print that writes nothing.
       const folder = templateDestination(cwd, match.type, match.dirName);
       const [scratchFolder] = tempFolders();
+      // A `..` path that lands in the temp folder: its absolute path takes
+      // the scratch copy it is not.
+      const absolute = path.isAbsolute(target)
+        ? null
+        : path.resolve(cwd, target) + (/[\\/]$/.test(target) ? path.sep : '');
+      const scratchPath = absolute && tempFolderOf(absolute) ? absolute : null;
+      // The file the copy would write, so a folder named with a trailing
+      // separator is named by its file, not as a file of that name. Only a
+      // Core template no integration replaces: outside the project its
+      // integrations do not load, so an integration's template is not found
+      // there, and a replaced one would be the Core version.
+      const there =
+        scratchPath || replaced || pkgOf(match) !== CORE_PACKAGE_NAME
+          ? null
+          : fromNearestFolder(path.resolve(cwd, fileTarget));
+      // A command that writes the destination the caller named keeps
+      // `--overwrite`, so it does not refuse a second time. The place inside
+      // the project is another file, which it never overwrites unasked.
+      const sameWrite = (/** @type {string} */ destination) =>
+        `${command} ${quoteCommandArgument(destination)}` +
+        (overwrite ? ' --overwrite' : '');
       throw new AstryxError(
         `Invalid template target path "${given}": it is outside the project root (${path.resolve(cwd)}). ` +
-          (scratchFolder
-            ? `The template is written only inside the project, or as a scratch copy in the system temp folder (${scratchFolder}). Give a path inside one, or print the source.`
-            : 'The template is written only inside the project. Give a path inside it, or print the source.'),
+          (scratchPath
+            ? `A scratch copy in the system temp folder takes its absolute path, ${scratchPath}.`
+            : there
+              ? `The template is written only inside the folder the command runs in${scratchFolder ? `, or as a scratch copy in the system temp folder (${scratchFolder})` : ''}. Give a path inside the project, run the command from the destination's folder, or print the source.`
+              : scratchFolder
+                ? `The template is written only inside the project, or as a scratch copy in the system temp folder (${scratchFolder}). Give a path inside one, or print the source.`
+                : 'The template is written only inside the project. Give a path inside it, or print the source.'),
         [
           {
             name: `${command} ${quoteCommandArgument(folder)}`,
             reason: `write the ${match.type} inside the project`,
           },
+          ...(scratchPath
+            ? [
+                {
+                  name: sameWrite(scratchPath),
+                  reason: 'take a scratch copy in the system temp folder',
+                },
+              ]
+            : []),
+          ...(there
+            ? [
+                {
+                  name: commandInFolder(there.dir, sameWrite(there.path)),
+                  reason: `write the ${match.type} where you named it, from its folder`,
+                },
+              ]
+            : []),
           {name: command, reason: 'print the source and write nothing'},
         ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
@@ -226,4 +277,19 @@ function inTempFolder(file, given, temp) {
       ERROR_CODES.ERR_PATH_TRAVERSAL,
     );
   }
+}
+
+/**
+ * Where a command run from another folder writes `target`: the nearest folder
+ * of it that exists, and the path from there. From that folder the path is
+ * inside the current folder, so the copy writes it there. Null when only the
+ * disk's root exists, which is no place to run a project command from.
+ * @param {string} target the file the copy would write, absolute
+ * @returns {{dir: string, path: string} | null}
+ */
+function fromNearestFolder(target) {
+  const dir = nearestFolder(path.dirname(target));
+  if (path.dirname(dir) === dir) return null;
+  const rel = path.relative(dir, target).split(path.sep).join('/');
+  return {dir, path: `./${rel}`};
 }

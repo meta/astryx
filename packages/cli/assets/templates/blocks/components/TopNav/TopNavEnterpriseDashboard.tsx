@@ -7,11 +7,11 @@ import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
-  CubeIcon,
+  PackageIcon,
   HomeIcon,
-  DocumentTextIcon,
-  BellIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+  NotificationIcon,
+} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 
 export default function TopNavEnterpriseDashboard() {
@@ -22,7 +22,7 @@ export default function TopNavEnterpriseDashboard() {
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
           headingHref="#"
         />
       }
@@ -37,7 +37,7 @@ export default function TopNavEnterpriseDashboard() {
           <TopNavItem
             label="Reports"
             href="#"
-            icon={<Icon icon={DocumentTextIcon} size="sm" />}
+            icon={<Icon icon={DocumentIcon} size="sm" />}
           />
         </>
       }
@@ -56,7 +56,7 @@ export default function TopNavEnterpriseDashboard() {
             }
             label="Notifications"
             variant="ghost"
-            icon={<Icon icon={BellIcon} />}
+            icon={<Icon icon={NotificationIcon} />}
             isIconOnly
           />
           <Button href={'#'} label="Upgrade" variant="primary" />

@@ -11,16 +11,16 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  ArrowDownTrayIcon,
+  DownloadIcon,
   ShareIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
-import {SpeakerWaveIcon} from '@heroicons/react/24/solid';
+  DeleteIcon,
+} from '@astryxdesign/template-icons';
+import {AudioIcon} from '@astryxdesign/template-icons/24/solid';
 
 const actions = [
-  {label: 'Download', icon: ArrowDownTrayIcon},
+  {label: 'Download', icon: DownloadIcon},
   {label: 'Share', icon: ShareIcon},
-  {label: 'Delete', icon: TrashIcon},
+  {label: 'Delete', icon: DeleteIcon},
 ] as const;
 
 /**
@@ -75,7 +75,7 @@ export default function VisuallyHiddenShowcase() {
         <Card variant="muted">
           <VStack gap={4} hAlign="start">
             <HStack gap={2} vAlign="center">
-              <Icon icon={SpeakerWaveIcon} size="sm" />
+              <Icon icon={AudioIcon} size="sm" />
               <Text type="supporting" color="secondary">
                 What a screen reader hears
               </Text>

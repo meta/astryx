@@ -129,6 +129,31 @@ describe('withSectionKeys', () => {
     }
     expect(sourceTitle(doc.sections[0])).toBe('Install advanced');
   });
+
+  it('keys a title another extending package holds by the section’s package', () => {
+    const from = (/** @type {any} */ each, /** @type {string} */ provider) =>
+      Object.assign(each, {provider});
+    const doc = withSectionKeys(
+      {
+        sections: [
+          from(section('Install'), '@acme/ocean-theme'),
+          from(section('Install'), '@acme/dune-theme'),
+          from(section('Install'), '@acme/ocean-theme'),
+          section('Usage', {id: 'use'}),
+          from(section('Use'), 'dune'),
+        ],
+      },
+      {providerOf: each => each.provider},
+    );
+    // A collision with the topic's own section keeps the numeric suffix.
+    expect(doc.sections.map(s => s.id)).toEqual([
+      'install',
+      'acme-dune-theme-install',
+      'install-2',
+      'use',
+      'use-2',
+    ]);
+  });
 });
 
 describe('findDocSection', () => {

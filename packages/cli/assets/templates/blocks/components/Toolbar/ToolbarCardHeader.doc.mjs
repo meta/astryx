@@ -11,5 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Toolbar', 'Button', 'Icon', 'Text', 'Card', 'Section'],
-  icons: {FunnelIcon: 'funnel', PlusIcon: 'add'},
 };

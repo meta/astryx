@@ -17,6 +17,7 @@ import {nodeView} from '../docs/node/node.mjs';
 import {
   sectionKey,
   sectionSummary,
+  sectionTitleKey,
 } from '../../foundation/discovery/docs-section-key.mjs';
 import {sectionProse, codeTerms, headings, plain} from './_doc-text.mjs';
 import {loadAuthoringSelfDocs} from '../../foundation/discovery/authoring-self-docs.mjs';
@@ -75,16 +76,24 @@ export async function gatherDocs(cwd) {
     }
     const read = lowered?.doc ?? null;
     if (isExperimentalDoc(read)) continue;
-    const hiddenHere = new Set([
-      ...hidden,
-      ...(await experimentalSectionKeys(entry.extensions)),
-    ]);
+    const experimental = await experimentalSections(entry.extensions);
+    /** @param {any} section */
+    const isHidden = section => {
+      if (hidden.has(section.id)) return true;
+      const provider = lowered?.sectionProviders?.[section.id];
+      const titleKey = sectionTitleKey(lowered?.sourceTitles?.[section.id]);
+      return [section.id, titleKey].some(key =>
+        experimental.has(sectionOf(provider, key)),
+      );
+    };
     const doc =
-      read && hiddenHere.size > 0 && Array.isArray(read.sections)
+      read &&
+      (hidden.size > 0 || experimental.size > 0) &&
+      Array.isArray(read.sections)
         ? {
             ...read,
             sections: read.sections.filter(
-              (/** @type {any} */ section) => !hiddenHere.has(section.id),
+              (/** @type {any} */ each) => !isHidden(each),
             ),
           }
         : read;
@@ -207,14 +216,16 @@ export async function gatherDocs(cwd) {
 }
 
 /**
- * The keys of the sections that experimental extensions add to a topic: like
- * an experimental topic, they are read on their own and never searched.
- * @param {ReadonlyArray<{path: string}>} extensions
- * @returns {Promise<string[]>}
+ * The sections that experimental extensions add to a topic: like an
+ * experimental topic, they are read on their own and never searched. Each is
+ * named by its provider and the key its file gives it, because the merged
+ * topic may read it by a key that names its package.
+ * @param {ReadonlyArray<{package: string, path: string, providerId?: string}>} extensions
+ * @returns {Promise<Set<string>>}
  */
-async function experimentalSectionKeys(extensions) {
-  /** @type {string[]} */
-  const keys = [];
+async function experimentalSections(extensions) {
+  /** @type {Set<string>} */
+  const sections = new Set();
   for (const extension of extensions) {
     let doc;
     try {
@@ -223,10 +234,19 @@ async function experimentalSectionKeys(extensions) {
       continue;
     }
     if (!isExperimentalDoc(doc) || !Array.isArray(doc.sections)) continue;
-    keys.push(...doc.sections.map(sectionKey));
+    const provider = extension.providerId ?? extension.package;
+    for (const section of doc.sections) {
+      sections.add(sectionOf(provider, sectionKey(section)));
+    }
   }
-  return keys;
+  return sections;
 }
+
+/**
+ * @param {string | undefined} provider
+ * @param {string} key
+ */
+const sectionOf = (provider, key) => `${provider}\u0000${key}`;
 
 /**
  * Is this experimental guide one that search returns (spec:AST-017 FR27): a
