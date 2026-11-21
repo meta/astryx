@@ -578,6 +578,76 @@ describe('VideoPlayer control bar', () => {
     expect(hasDeclaration(bar, probe.barPadding)).toBe(true);
   });
 
+  it('keeps the controls through two idle seconds of playback while a marker popover opened from the keyboard is open', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup({
+      advanceTimers: ms => vi.advanceTimersByTime(ms),
+    });
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const {video, container} = renderVideoPlayer({
+      markers: [
+        {
+          time: 20,
+          label: 'Lin: hold on this',
+          content: <input aria-label="Reply" />,
+        },
+      ],
+    });
+    fakePlayback(video, {duration: 60});
+    const bar = () => container.querySelector('[data-visible]');
+    act(() => {
+      void video.play();
+    });
+    const marker = screen.getByRole('button', {name: 'Lin: hold on this'});
+    act(() => marker.focus());
+    await user.keyboard('{Enter}');
+    const reply = await screen.findByRole('textbox', {
+      name: 'Reply',
+      hidden: true,
+    });
+    act(() => reply.focus());
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(bar()).toHaveAttribute('data-visible', 'true');
+  });
+
+  it('lets the controls idle-hide again after a marker is removed while its popover is open', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup({
+      advanceTimers: ms => vi.advanceTimersByTime(ms),
+    });
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const marker = {
+      time: 20,
+      label: 'Lin: hold on this',
+      content: <input aria-label="Reply" />,
+    };
+    const {video, container, rerender} = renderVideoPlayer({
+      markers: [marker],
+    });
+    fakePlayback(video, {duration: 60});
+    const bar = () => container.querySelector('[data-visible]');
+    act(() => {
+      void video.play();
+    });
+    await user.click(screen.getByRole('button', {name: marker.label}));
+    await screen.findByRole('textbox', {name: 'Reply', hidden: true});
+    // The host removes the marker while its popover is open.
+    rerender(<VideoPlayer src="/clip.mp4" label="Product tour" markers={[]} />);
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(bar()).toHaveAttribute('data-visible', 'false');
+  });
+
   it('drops by its own inset while hidden, so a compact bar drops less', () => {
     vi.useFakeTimers();
     const {bar, video} = renderBar();
@@ -734,7 +804,10 @@ describe('MediaTimeSlider', () => {
     });
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('textbox', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('textbox', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{PageUp}');
     expect(playback.getCurrentTime()).toBe(20);
@@ -763,7 +836,10 @@ describe('MediaTimeSlider', () => {
     const playback = fakePlayback(video, {duration: 60});
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('button', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('button', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{ArrowLeft}jl5{ArrowUp}{ArrowDown}mk');
     expect(playback.getCurrentTime()).toBe(20);
