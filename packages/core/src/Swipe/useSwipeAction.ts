@@ -47,9 +47,16 @@ import {
 } from '../motion/spring';
 import {swipeActions as SWIPE} from '../motion/uikit/swipeActions';
 import {setPressHeld} from '../privateAttributes/pressHeld.stylex';
+import {setPressDragHold} from '../privateAttributes/pressHoldsDrag.stylex';
+import {registerDragClaimWait} from '../utils/dragClaimWait';
+import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {subscribeInput} from '../utils/inputStream';
 import {lockSelection} from '../utils/selectionLock';
 import type {CompositorPart} from '../dragToSnapPoints/compositorSettle';
+
+// The module registers the drag-claim wait as it loads, so a page with no
+// swipe carries none of it.
+registerDragClaimWait();
 
 // A UIKit list row fires its outermost action only from a confirmed full swipe.
 // The finger dragged past the confirm point, and is still past it when it
@@ -1039,6 +1046,15 @@ export function useSwipeAction({
       wasConfirmed: false,
       layout,
     };
+    // A finger's or a pen's swipe keeps the row's press through its drag. A
+    // press that has not painted by the claim ends at its travel, so a flick
+    // paints no tint.
+    if (
+      move.input !== 'scroll' &&
+      root.getAttribute(PRESSED_ATTRIBUTE) === 'on'
+    ) {
+      setPressDragHold(root, 'held');
+    }
     return true;
   };
 
@@ -1153,6 +1169,14 @@ export function useSwipeAction({
     return {offset};
   };
 
+  // The drag is over: the row's next press waits for the next claim.
+  const awaitNextClaim = () => {
+    const root = rootRef.current;
+    if (root != null) {
+      setPressDragHold(root, 'claim');
+    }
+  };
+
   const stopLeadFrames = () => {
     if (leadFrameRef.current != null) {
       cancelAnimationFrame(leadFrameRef.current);
@@ -1187,6 +1211,7 @@ export function useSwipeAction({
     const drag = dragRef.current;
     dragRef.current = null;
     stopLeadFrames();
+    awaitNextClaim();
     // A drag that never became a swipe changed nothing: the row stays where
     // it was caught.
     if (drag == null || !drag.started) {
@@ -1247,6 +1272,7 @@ export function useSwipeAction({
     const drag = dragRef.current;
     dragRef.current = null;
     stopLeadFrames();
+    awaitNextClaim();
     // The browser took a touch the row was following: it closes.
     if (drag != null && drag.started) {
       settle(drag.layout, 'rest', 'idle', {
@@ -1344,9 +1370,13 @@ export function useSwipeAction({
       },
     });
     snapRef.current = snap;
+    // A press on the row waits a frame for the swipe's claim before its
+    // travel ends it.
+    setPressDragHold(root, 'claim');
     return () => {
       snapRef.current = null;
       snap.destroy();
+      setPressDragHold(root, 'none');
       // The root outlives the swipe: it gets its own styles back.
       root.style.removeProperty(SWIPE_TRAVEL_PROPERTY);
       root.style.removeProperty(SWIPE_CONFIRM_PROPERTY);

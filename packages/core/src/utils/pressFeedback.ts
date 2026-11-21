@@ -7,7 +7,8 @@
  *   input clock (inputAge.ts) and the document's pointer, keyboard, scroll
  *   and visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
- *   pressFadeMs, installPressFeedback, cancelPress and installBoxHold
+ *   pressFadeMs, installPressFeedback, cancelPress, installBoxHold and
+ *   installDragClaimWait
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -186,6 +187,24 @@ let boxHold: BoxHold | null = null;
  */
 export function installBoxHold(hold: BoxHold): void {
   boxHold = hold;
+}
+
+/** The wait for a drag that may still claim a travelled touch (utils/dragClaimWait.ts). */
+export interface DragClaimWait {
+  /** Holds `travel` back while a drag on `element` may claim the touch; false if none may. */
+  readonly hold: (element: Element, travel: () => void) => boolean;
+  /** Runs a held-back travel at once. */
+  readonly settle: () => void;
+}
+
+let dragClaimWait: DragClaimWait | null = null;
+
+/**
+ * @internal Installs the drag-claim wait. Only a page with a swipe loads it,
+ * so a page without one carries none of its code.
+ */
+export function installDragClaimWait(wait: DragClaimWait): void {
+  dragClaimWait = wait;
 }
 const button: Slot = {live: null};
 /** How many callers hold the controller installed; listeners exist while > 0. */
@@ -703,14 +722,24 @@ function onPointerMove(event: PointerEvent): void {
   if (holdsPressThroughDrag(live.element)) {
     return;
   }
-  apply(
-    finger,
-    pressGestureStep(live.gesture, {
-      kind: 'move',
-      x: event.clientX,
-      y: event.clientY,
-    }),
-  );
+  const step = pressGestureStep(live.gesture, {
+    kind: 'move',
+    x: event.clientX,
+    y: event.clientY,
+  });
+  // A swipe may claim this touch from the touch event that follows this
+  // pointer event. Its wait holds the travel back to the next frame.
+  if (
+    step.gesture.phase === 'dead' &&
+    dragClaimWait?.hold(live.element, () => {
+      if (finger.live === live && !holdsPressThroughDrag(live.element)) {
+        apply(finger, step);
+      }
+    })
+  ) {
+    return;
+  }
+  apply(finger, step);
 }
 
 function onPointerUp(event: PointerEvent): void {
@@ -725,6 +754,9 @@ function onPointerUp(event: PointerEvent): void {
     }
     return;
   }
+  // A travel held back for a drag's claim settles before the lift reads the
+  // press. A drag that travelled and lifted in one frame is not a tap.
+  dragClaimWait?.settle();
   // The lift is when momentum starts, so it is the clock the brake wants most.
   lastTouchAt = Date.now();
   if (event.target instanceof Node) {
