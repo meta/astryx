@@ -299,9 +299,9 @@ draws each meaning a bundled template imports.
   Core, one word or several (`popover`, `code block`), the last plural or
   not, say where the icon goes, so they count only to break a tie, when a
   word that names something stands before that `icon` and no `of` or `for`
-  follows it (`information icon popover links` ranks by `information`). Then
-  word matches rank by fewer id parts that no query word names, then by
-  `id`.
+  follows it (`information icon popover links` ranks by `information`); a
+  word also written before that `icon` keeps its full weight. Then word
+  matches rank by fewer id parts that no query word names, then by `id`.
   Suggestions for a missing `<set>/<id>` (FR7) and
   the definitions that fit an icon (FR13) never include word matches. An
   icon also answers to

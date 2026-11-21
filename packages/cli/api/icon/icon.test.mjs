@@ -802,6 +802,18 @@ describe('a word matches whole words (FR6)', () => {
     expect(firstBlock('settings icon code block')).toBe('settings');
     expect(firstBlock('settings icon code blocks')).toBe('settings');
     expect(firstBlock('settings icon block')).toBe('block');
+    // A word also written before the icon word keeps its full weight.
+    const charts = setOf([{id: 'table'}, {id: 'chart'}, {id: 'chart-bar'}]);
+    /** @param {string} query */
+    const firstChart = query =>
+      answeringMatches(
+        rankIcons([charts], query, {
+          words: true,
+          componentNames: () => ['Table'],
+        }),
+      )[0]?.id;
+    expect(firstChart('table chart icon table')).toBe('table');
+    expect(firstChart('chart icon table')).toBe('chart');
   });
 
   it('names the meaning import by the definition the query ranks first, with its place words', async () => {
