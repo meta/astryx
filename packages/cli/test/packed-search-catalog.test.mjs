@@ -34,10 +34,10 @@ import {hasModuleHooks} from '../test-utils/packed-gather-cache-fixture.mjs';
 
 /**
  * The registry every CLI run here installs from: a local port that refuses at
- * once (as global-local.shared.mjs's OFFLINE). The copies keep the global
- * copy's background Core step, and a run without `CI` starts it; it must
- * install from here, never from npm, so a run on a person's computer behaves
- * as one in CI and no published release lands in a test's cache.
+ * once (as global-local.shared.mjs's OFFLINE). An installed copy
+ * (`packPublishedCli`) is a global copy, and a run of it without `CI` starts
+ * its background Core step; the step must install from here, never from npm,
+ * so no published release lands in a test's cache.
  */
 const OFFLINE_REGISTRY = 'http://127.0.0.1:9/';
 
@@ -98,8 +98,6 @@ function run(cliRoot, args, extraEnv = {}, cwd = project) {
     NO_COLOR: '1',
     COLUMNS: '100',
     npm_config_registry: OFFLINE_REGISTRY,
-    // npm retries a refused registry for over a minute by default.
-    npm_config_fetch_retries: '0',
     ...extraEnv,
   };
   for (const key of Object.keys(env)) {
