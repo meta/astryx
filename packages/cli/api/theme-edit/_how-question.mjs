@@ -2316,7 +2316,10 @@ function clearTakesAway(group, ask, partWords) {
   // put in another clause, "and shadow", is a word this clause does not
   // explain.)
   rest = rest.replace(new RegExp(`\\b${REMOVABLE}\\b`, 'g'), w => {
-    const said = aspectsOf(w);
+    // (A plural, "the card and button backgrounds", names the look too.)
+    const said = aspectsOf(w).length
+      ? aspectsOf(w)
+      : aspectsOf(w.replace(/s$/, ''));
     return said.length && said.every(a => aspects.includes(a)) ? ' ' : w;
   });
   // (An "and" between the parts the ask names joins them.)
@@ -7979,22 +7982,50 @@ export function draftAnswer(ctx, env, question) {
     /** @type {Clause | null} */
     let last = null;
     const ons = (/** @type {Clause} */ c) => new Set(c.parts.map(p => p.on));
-    /** Whether an ask names a part of the clause. @param {Clause} c @param {string | undefined} ask */
-    const names = (c, ask) =>
-      ask != null &&
-      lex.parts.some(([re, ref]) => ons(c).has(ref.on) && re.test(` ${ask} `));
+    /** Whether an ask says every look of the clause, in the plural too ("backgrounds"). @param {Clause} c @param {string} ask */
+    const looksOf = (c, ask) => {
+      const said = [
+        ...aspectsOf(ask),
+        ...ask.split(/\s+/).flatMap(w => aspectsOf(w.replace(/s$/, ''))),
+      ];
+      return c.aspects.every(a => said.includes(a));
+    };
+    /** The parts an ask names, in the order it says them. @param {string} ask */
+    const partsSaid = ask =>
+      lex.parts
+        .flatMap(([re, ref]) => {
+          const m = globalOf(re).exec(` ${ask} `);
+          globalOf(re).lastIndex = 0;
+          return m ? [{on: ref.on, at: m.index}] : [];
+        })
+        .sort((a, b) => a.at - b.at)
+        .map(x => x.on);
     for (const c of clauses) {
       if (!/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text)) {
         last = null;
         continue;
       }
-      if (last == null || !names(c, asks[k])) {
-        // (A clause that starts the next ask: it says that ask's lead, or
-        // names that ask's part, as the reader's own copy for one part does.)
-        if (
-          k + 1 >= leads.length ||
-          (!new RegExp(CLEAR_LEAD, 'i').test(c.text) && !names(c, asks[k + 1]))
-        ) {
+      const own = ons(c);
+      const group = groups[k] ?? [];
+      const taken = new Set(group.flatMap(x => x.parts.map(p => p.on)));
+      // (The clause reader's copy of the ask for another part: the ask
+      // names that part, and no clause of the group has it yet.)
+      const sameAsk =
+        last != null &&
+        own.size > 0 &&
+        looksOf(c, asks[k] ?? '') &&
+        [...own].every(
+          on => !taken.has(on) && partsSaid(asks[k] ?? '').includes(on),
+        );
+      if (!sameAsk) {
+        // (A clause opens the next ask when it says that ask's lead, or is
+        // the reader's copy of it for the first part the ask names.)
+        const next = asks[k + 1];
+        const opens =
+          next != null &&
+          (new RegExp(CLEAR_LEAD, 'i').test(c.text) ||
+            (own.has(partsSaid(next)[0] ?? '') && looksOf(c, next)));
+        if (!opens) {
           last = null;
           continue;
         }

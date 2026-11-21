@@ -93,6 +93,24 @@ describe('an ask that starts with "clear the ..."', () => {
       await commands('clear the card, button and input borders'),
     ).toContain('set ne border none --on inputs');
     for (const ask of [
+      'clear the card and button backgrounds',
+      'clear the dark mode card and button backgrounds',
+    ]) {
+      const fills = await commands(ask);
+      expect(fills, ask).toMatch(/background-color transparent --on card\b/);
+      expect(fills, ask).toMatch(/background-color transparent --on button\b/);
+    }
+    // (A later ask about the same part is an ask of its own.)
+    for (const ask of [
+      'clear the card shadow and clear my card border changes',
+      'clear my card border changes and clear the card shadow',
+      'clear borders on cards and clear the card shadow',
+    ]) {
+      const each = await commands(ask);
+      expect(each, ask).toContain('set ne box-shadow none --on card');
+      expect(each, ask).not.toContain('set ne border none --on card');
+    }
+    for (const ask of [
       'clear the card shadow and clear the button border',
       'clear the card shadow; clear the button border',
       'clear the card shadow and then clear the button border',
