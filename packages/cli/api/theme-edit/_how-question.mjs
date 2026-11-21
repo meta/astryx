@@ -5110,6 +5110,49 @@ export function draftAnswer(ctx, env, question) {
       /\bno\s+borders?((?:\s+on\s+(?:the\s+)?[a-z]+(?:\s+[a-z]+)?)?)\s*,?\s*(?:except|but|apart from|other than)\s+(?:the\s+|a\s+)?(top|bottom|left|right)(?:\s+(?:one|side|edge|border))?\b/gi,
       'only a $2 border$1',
     )
+    // ("Density: roomy.", "Radius: small"): a one-word label that is the
+    // spacing or the corners dial's name, or a word only that dial lists,
+    // followed by one of that dial's own values, is that dial at that value. Only a label that
+    // starts its clause or its line: "Body weight: bold" is the body's,
+    // never a dial's.
+    .replace(
+      /(^|[.;,!?—\n]\s*)([a-z]+)[ \t]*:[ \t]*([a-z-]+)(?=[ \t]*(?:[.,;!\n]|$))/gim,
+      (m, lead, label, value, at, whole) => {
+        // (A label after a part is named, "Card\nRadius: large" or
+        // "cards: white, radius: large", is that part's: left to the
+        // part's readers.)
+        const before = ` ${String(whole).slice(0, at).toLowerCase()} `;
+        if (partLexicon(ctx).parts.some(([re]) => re.test(before))) return m;
+        const l = String(label).toLowerCase();
+        const v = String(value).toLowerCase();
+        // (The label is the dial's own name, or a word only that dial has;
+        // a dial whose name is also a part's, "headings", is left to the
+        // part's readers.)
+        const served = Object.entries(DIALS).filter(([name]) =>
+          ['spacing', 'corners'].includes(name),
+        );
+        const own = served.find(([name]) => name === l);
+        const byWord = Object.entries(DIALS).filter(([, d]) =>
+          String(d.words ?? '')
+            .split(/\s+/)
+            .includes(l),
+        );
+        const hit =
+          own ??
+          (byWord.length === 1 && served.some(([n]) => n === byWord[0][0])
+            ? byWord[0]
+            : null);
+        const dial =
+          hit &&
+          String(hit[1].values ?? '')
+            .split('|')
+            .includes(v) &&
+          !partLexicon(ctx).parts.some(([re]) => re.test(` ${hit[0]} `))
+            ? hit[0]
+            : null;
+        return dial ? `${lead}${dial} ${v}` : m;
+      },
+    )
     // ("a confident, modern look: deep navy, …"): the list after a look's
     // colon is pieces of their own.
     // (Never a part's style, "heading style: bold": that is the part's
