@@ -751,6 +751,54 @@ container step.
 Rejected: the page radius; Core's chat default is the container radius.
 Rejected: a copied pixel value, which drifts from a container radius set later.
 
+### DEC-14 — The editor's `how` reads a container's own pieces and places
+
+**Reference:** `spec:AST-050/DEC-14`
+**Decider:** `josephfarina`, `2026-11-19`
+
+When `experimental theme editor how` reads an ask about a container, it
+reads the words for the container's pieces, in the forms below, as that
+container's own. A container is a dialog, modal, card, drawer, sheet,
+popover, panel, section, table or menu, or a one-word catalog part with a
+header or footer part of its own. A container word that ends a longer
+part's name ("context menu", "hover card", "side panel") is no container
+here. Case does not matter.
+
+- "Its header", "its footer" or "its title bar" is the header, footer or
+  title bar of the nearest container named before it in the same clause,
+  never the app's top bar. A comma outside parentheses, a sentence's end,
+  another container or a joining word ends the clause; "the dialog and its
+  header" is the dialog's too. "The header" said again in that sentence,
+  each time, is the same one.
+- A look said for a container's piece ("a drawer with its header navy") is
+  the piece's alone; a container said as well ("the dialog and its header")
+  takes it too. A table's header or footer look also fills its rows.
+- A header, footer or title bar after a container word that Core draws
+  with no such part is the container itself, said missing ("a menu
+  header", "a card title bar").
+- "The dialog body" or "the card's body" is the dialog or card itself when
+  Core draws no body part of its own; a body said with a text word ("the
+  dialog body text", "… body copy", "… body type", "… body font") stays
+  its text.
+- "Dialog title bar" or "drawer header bar" is that container's header
+  part, never its title text block.
+- "At", "along" or "across the top (bottom, left, right) edge of" a part,
+  said after a verb that places a part its clause names ("the title bar
+  sits at the top edge of the dialog"), only says where that part sits, so
+  it writes nothing; a header, footer, title bar or close button so placed
+  is the container's. An ask whose sentence draws a border, line, rule,
+  stroke, outline, shadow, divider, stripe, strip, band or accent bar (never a
+  line height or a part such as a tab bar) keeps the edge as the place it
+  draws, and any other edge gives the ask its side and part ("a card with
+  padding 24px along the left edge of the card").
+- "Full width" or "spans the whole width" makes the part fill what holds
+  it (`width: 100%`), with no content-width cap; a max-width the theme
+  sets on the part is lifted. A share of the full width ("80% of the full
+  width", "half the full width") is no full width.
+
+Rejected: reading "its header" as the app's top bar when its own clause
+names a container, which changes a part the ask never named.
+
 ## Open questions
 
 None.
