@@ -30,6 +30,7 @@ import {getInteractionModality} from '../utils/interactionModality';
 import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
+  noInvoker,
   useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
@@ -293,7 +294,6 @@ export interface TooltipReturn {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
-
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -318,6 +318,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onShow,
     onHide,
     keepsAnchorClear: true,
+    getInvoker: noInvoker,
   });
   const {
     ref: layerRef,
