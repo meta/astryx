@@ -16,8 +16,10 @@ import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   installedPackageOf,
+  linkedPackageOf,
   packageLookups,
   packageModuleUrl,
+  packageResolveHooks,
 } from './package-resolve-hooks.mjs';
 
 const HOOKS = new URL('./package-resolve-hooks.mjs', import.meta.url).href;
@@ -79,6 +81,73 @@ beforeAll(() => {
   put(
     'node_modules/@scope/lib/node_modules/vend/x.js',
     "module.exports = {vend: 'cjs'};\n",
+  );
+  // A package linked from outside node_modules, as a workspace or `npm link`
+  // links one, by a relative link and by an absolute one.
+  put(
+    'linked/lib/package.json',
+    JSON.stringify({
+      name: '@scope/linked',
+      type: 'module',
+      exports: {'.': './dist/index.js', './sub': './dist/sub.js'},
+    }),
+  );
+  put(
+    'linked/lib/dist/index.js',
+    "export {a} from './a.js';\nexport {s, c} from './sub.js';\n",
+  );
+  put('linked/lib/dist/a.js', "export const a = 'a';\n");
+  put(
+    'linked/lib/dist/sub.js',
+    "export {c} from './inner/c.js';\nexport const s = 's';\n",
+  );
+  put('linked/lib/dist/inner/c.js', "export const c = 'c';\n");
+  put(
+    'linked/lib/dist/legacy/package.json',
+    JSON.stringify({type: 'commonjs'}),
+  );
+  put('linked/lib/dist/legacy/l.js', "exports.l = 'l';\n");
+  put(
+    'linked/lib/dist/stray/package.json',
+    JSON.stringify({name: 'stray', type: 'module'}),
+  );
+  put('linked/lib/dist/stray/x.js', "export const x = 'x';\n");
+  put(
+    'linked/lib/node_modules/vend/v.js',
+    "module.exports = {vend: 'linked'};\n",
+  );
+  fs.symlinkSync(
+    path.join(dir, 'linked', 'lib', 'dist', 'a.js'),
+    path.join(dir, 'linked', 'lib', 'dist', 'alias.js'),
+  );
+  put(
+    'linked/lib/dist/edges.js',
+    [
+      "export {l} from './legacy/l.js';",
+      "export {x} from './stray/x.js';",
+      "export {a as viaLink} from './alias.js';",
+      "import v from '../node_modules/vend/v.js';",
+      'export {v};',
+      '',
+    ].join('\n'),
+  );
+  fs.symlinkSync(
+    path.join('..', '..', 'linked', 'lib'),
+    path.join(dir, 'node_modules', '@scope', 'linked'),
+  );
+  put(
+    'linked/abs/package.json',
+    JSON.stringify({
+      name: 'abs-linked',
+      type: 'module',
+      exports: './dist/main.js',
+    }),
+  );
+  put('linked/abs/dist/main.js', "export {b} from './b.js';\n");
+  put('linked/abs/dist/b.js', "export const b = 'b';\n");
+  fs.symlinkSync(
+    path.join(dir, 'linked', 'abs'),
+    path.join(dir, 'node_modules', 'abs-linked'),
   );
 });
 
@@ -152,6 +221,133 @@ describe('packageModuleUrl', () => {
       packageModuleUrl('./b.js', 'data:text/javascript,1', packageLookups()),
     ).toBeNull();
   });
+});
+
+describe('a linked package', () => {
+  const lib = () => path.join(dir, 'linked', 'lib');
+  /** @param {string} file */
+  const linkedUrl = file => pathToFileURL(path.join(lib(), file)).href;
+  /** Resolve `specifier` from `parent` through the hooks, with Node's answer given. @param {any} hooks @param {string} specifier @param {string} url */
+  const through = (hooks, specifier, url) =>
+    hooks.resolve(
+      specifier,
+      {parentURL: pathToFileURL(path.join(dir, 'page', 'page.js')).href},
+      () => ({url, format: 'module'}),
+    );
+
+  it('is noted from a bare import Node resolved outside node_modules, by its package.json name', () => {
+    const lookups = packageLookups();
+    const hooks = packageResolveHooks(lookups);
+    const answer = through(
+      hooks,
+      '@scope/linked/sub',
+      linkedUrl('dist/sub.js'),
+    );
+    expect(answer).toEqual({url: linkedUrl('dist/sub.js'), format: 'module'});
+    expect(linkedPackageOf(path.join(lib(), 'dist', 'a.js'), lookups)).toBe(
+      lib(),
+    );
+    expect(
+      packageModuleUrl('./a.js', linkedUrl('dist/index.js'), lookups),
+    ).toBe(linkedUrl('dist/a.js'));
+    expect(
+      packageModuleUrl('./inner/c.js', linkedUrl('dist/sub.js'), lookups),
+    ).toBe(linkedUrl('dist/inner/c.js'));
+  });
+
+  it('is not noted from a file whose nearest package.json names another package, or from a folder skipped', () => {
+    const lookups = packageLookups();
+    // The nearest package.json of a file in a folder of its own names that
+    // folder's package, not the one the import names.
+    through(
+      packageResolveHooks(lookups),
+      '@scope/linked',
+      linkedUrl('dist/stray/x.js'),
+    );
+    through(
+      packageResolveHooks(lookups, {skip: f => f === lib() + path.sep}),
+      '@scope/linked',
+      linkedUrl('dist/index.js'),
+    );
+    expect(lookups.linked.size).toBe(0);
+    expect(
+      packageModuleUrl('./a.js', linkedUrl('dist/index.js'), lookups),
+    ).toBeNull();
+  });
+
+  it('leaves to Node every import inside it that Node answers otherwise', () => {
+    const lookups = packageLookups();
+    through(
+      packageResolveHooks(lookups),
+      '@scope/linked',
+      linkedUrl('dist/index.js'),
+    );
+    for (const specifier of [
+      './legacy/l.js',
+      './alias.js',
+      '../node_modules/vend/v.js',
+      './nope.js',
+      './a',
+      '../package.json',
+    ]) {
+      expect(
+        packageModuleUrl(specifier, linkedUrl('dist/edges.js'), lookups),
+        specifier,
+      ).toBeNull();
+    }
+    expect(
+      linkedPackageOf(
+        path.join(lib(), 'node_modules', 'vend', 'v.js'),
+        lookups,
+      ),
+    ).toBeNull();
+  });
+});
+
+/**
+ * Import each specifier from the fixture in one fresh Node, with or without
+ * the hook, and print every import Node resolved (its specifier, the URL and
+ * format it resolved to) and what each import gave or how it failed.
+ * @param {string[]} specifiers
+ * @param {boolean} hook
+ */
+const resolutionsIn = (specifiers, hook) => {
+  const code = [
+    "const {registerHooks} = await import('node:module');",
+    hook
+      ? `const {packageLookups, packageResolveHooks} = await import(${JSON.stringify(HOOKS)}); globalThis.lookups = packageLookups(); registerHooks(packageResolveHooks(globalThis.lookups));`
+      : '',
+    'const seen = [];',
+    'registerHooks({resolve(s, c, next) { const r = next(s, c); seen.push([s, c.parentURL ?? null, r.url, r.format ?? null]); return r; }});',
+    `for (const s of ${JSON.stringify(specifiers)}) {`,
+    '  try { const m = await import(s); seen.push([s, JSON.stringify(Object.entries(m).sort())]); }',
+    '  catch (e) { seen.push([s, e.code, String(e.message).replace(/\\s+/g, " ")]); }',
+    '}',
+    'console.log(JSON.stringify({seen, linked: [...(globalThis.lookups?.linked ?? [])].length, typed: globalThis.lookups?.types.size ?? 0}));',
+  ].join('\n');
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  return r.stdout.trim();
+};
+
+describe.skipIf(!hasHooks)('a linked package through the hook', () => {
+  it('resolves every import to the URL and format Node gives with no hook', () => {
+    const specifiers = [
+      '@scope/linked',
+      '@scope/linked/sub',
+      pathToFileURL(path.join(dir, 'linked', 'lib', 'dist', 'edges.js')).href,
+      'abs-linked',
+    ];
+    const plain = JSON.parse(resolutionsIn(specifiers, false));
+    const hooked = JSON.parse(resolutionsIn(specifiers, true));
+    expect(plain.seen.length).toBeGreaterThan(specifiers.length);
+    expect(hooked.seen).toEqual(plain.seen);
+    // The hook noted both linked packages and answered imports inside them.
+    expect(hooked.linked).toBe(2);
+    expect(hooked.typed).toBeGreaterThan(0);
+  }, 60_000);
 });
 
 /**
