@@ -8,7 +8,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -62,7 +62,6 @@ describe('an ask that starts with "clear the ..."', () => {
     for (const ask of [
       'clear the card border',
       "clear the card's shadow",
-      "clear the card's border and shadow",
       'clear the borders on inputs',
       'cards: clear the border',
       'please clear the card shadow',
@@ -84,7 +83,17 @@ describe('an ask that starts with "clear the ..."', () => {
       'clear the card background to white',
       'clear the card background so it is white',
       'clear the button background to #ffffff',
-      // A way back.
+      // Two looks: the clause reader puts the second in a clause of its own.
+      "clear the card's border and shadow",
+      // A way back, also in a next ask that points back at the look.
+      'clear the card shadow and set it back to the default',
+      'clear the card border and reset it',
+      'clear the card background and restore it',
+      'clear the card shadow and revert it to the base value',
+      'clear the card shadow and undo it',
+      'clear the card shadow and put it back',
+      'clear the card shadow but keep it as the base theme has it',
+      'clear the card shadow and restore the shadow',
       'clear the card shadow, back to the default',
       'clear the card shadow; back to the base value',
       'clear the card shadow, as before',
@@ -113,4 +122,24 @@ describe('an ask that starts with "clear the ..."', () => {
     ])
       expect(await commands(ask), ask).not.toMatch(REMOVAL);
   }, 600_000);
+
+  it('takes away a look the theme sets; an ask for the edits still undoes them', async () => {
+    await themeEditNew('rs', {cwd, like: 'neutral'});
+    await themeEditSet('rs', 'background-color', '#fef3c7', {cwd, on: 'card'});
+    /** @param {string} ask */
+    const rs = async ask => {
+      const {data} = /** @type {any} */ (
+        await themeEditHow(ask, {cwd, theme: 'rs'})
+      );
+      return data.results
+        .flatMap((/** @type {any} */ r) => r.commands)
+        .join(' ;; ');
+    };
+    expect(await rs('clear the card background')).toContain(
+      'set rs background-color transparent --on card',
+    );
+    expect(await rs('clear my card background changes')).toMatch(
+      /\bundo rs background-color --on card\b/,
+    );
+  }, 300_000);
 });

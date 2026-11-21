@@ -2230,21 +2230,35 @@ const GOING_BACK =
 /** The things a removal can take away. */
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
+/** The words that may follow a clear that takes looks away. */
+const CLEAR_LEAD = String.raw`\bclear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|every|any)\b`;
+
 /**
  * The ask that starts at a word of the question, as asked: up to the end of
  * its sentence or line, or an "and", "then" or "but" that starts another
- * ask with a verb of its own.
+ * ask with a verb of its own. A next ask that points back ("and reset it")
+ * or goes back without a part of its own ("and restore the shadow") stays
+ * in the ask.
  * @param {string} asked the question as asked, lower case
  * @param {number} at
  * @param {(w: string) => boolean} isVerb
+ * @param {Array<[RegExp, PartRef]>} partWords
  * @returns {string}
  */
-function askFrom(asked, at, isVerb) {
+function askFrom(asked, at, isVerb, partWords) {
   let ask = asked.slice(at);
   const end = ask.search(/[.!?\n](?=\s|$)|\n/);
   if (end >= 0) ask = ask.slice(0, end);
-  for (const m of ask.matchAll(/\s(?:and|then|but)\s+([a-z']+)/g))
-    if (isVerb(m[1])) return ask.slice(0, m.index);
+  for (const m of ask.matchAll(/\s(?:and|then|but)\s+([a-z']+)/g)) {
+    if (!isVerb(m[1])) continue;
+    const next = ` ${ask.slice((m.index ?? 0) + m[0].length)} `;
+    const pointsBack = /\b(?:it|them|that|those|this|these)\b/.test(next);
+    const ownPart = partWords.some(
+      ([re]) => mayMatch(re, next) && re.test(next),
+    );
+    if (!pointsBack && (ownPart || !GOING_BACK.test(next)))
+      return ask.slice(0, m.index);
+  }
   return ask;
 }
 
@@ -2260,9 +2274,7 @@ function askFrom(asked, at, isVerb) {
  */
 function clearTakesAway(c, ask, partWords) {
   if (
-    !/^clear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|every|any)\b/.test(
-      ask,
-    ) ||
+    !new RegExp(`^${CLEAR_LEAD}`).test(ask) ||
     !/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text) ||
     !c.parts.length ||
     !c.aspects.length ||
@@ -2278,7 +2290,7 @@ function clearTakesAway(c, ask, partWords) {
   const ons = new Set(c.parts.map(p => p.on));
   let rest = ` ${ask} `;
   for (const [re, ref] of partWords)
-    if (ons.has(ref.on)) rest = rest.replace(lexCopy(re, 'g'), ' ');
+    if (ons.has(ref.on)) rest = rest.replace(globalOf(re), ' ');
   for (const p of c.parts) {
     const value = /:([a-z-]+)$/.exec(p.when ?? '')?.[1];
     if (value) rest = rest.replace(new RegExp(`\\b${value}\\b`, 'g'), ' ');
@@ -2288,15 +2300,19 @@ function clearTakesAway(c, ask, partWords) {
       /\b(?:in\s+)?(?:dark|light)(?:\s+(?:mode|theme))?\b/g,
       ' ',
     );
+  // (Only the looks this clause placed: a look the clause reader put in
+  // another clause, "and shadow", is a word this clause does not explain.)
+  for (const a of c.aspects)
+    rest = rest.replace(new RegExp(`\\b${a}s?\\b`, 'g'), ' ');
   rest = rest
-    .replace(new RegExp(`\\b${REMOVABLE}\\b`, 'g'), ' ')
     .replace(/'s\b/g, ' ')
     .replace(
-      /\b(?:clear|all|the|my|our|their|its|this|that|these|those|every|any|on|of|from|in|for|and)\b/g,
+      /\b(?:clear|all|the|my|our|their|its|this|that|these|those|every|any|on|of|from|in|for)\b/g,
       ' ',
     );
   return /^[\s,]*$/.test(rest);
 }
+
 /**
  * A removal lead and a list of two or more removable items ("the card's
  * border and shadow", "border, shadow and background"), with the part the
@@ -7915,14 +7931,15 @@ export function draftAnswer(ctx, env, question) {
   // this reader found asks to take those looks away, as remove does. Any
   // other word in it, a way back included, leaves the reset reading.)
   {
-    const det = String.raw`\bclear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|every|any)\b`;
-    const leads = [...asked0.matchAll(new RegExp(det, 'g'))];
+    const leads = [...asked0.matchAll(new RegExp(CLEAR_LEAD, 'g'))];
     let k = 0;
     for (const c of clauses) {
-      if (!new RegExp(det, 'i').test(c.text)) continue;
+      if (!new RegExp(CLEAR_LEAD, 'i').test(c.text)) continue;
       const at = leads[k++]?.index;
       if (at == null) break;
-      if (!clearTakesAway(c, askFrom(asked0, at, verbWord), lex.parts))
+      if (
+        !clearTakesAway(c, askFrom(asked0, at, verbWord, lex.parts), lex.parts)
+      )
         continue;
       c.text = c.text.replace(/\bclear\b/i, 'remove');
       c.neg = true;
