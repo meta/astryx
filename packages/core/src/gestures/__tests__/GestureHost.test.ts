@@ -6582,19 +6582,21 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
   /** The page listeners live now, by type: what was added and not removed. */
   function pageListeners(): () => string[] {
     const counts = new Map<string, number>();
+    // The prototype's own methods: the test environment's window forwards
+    // its methods through the global object, which the spy replaces.
+    const add = EventTarget.prototype.addEventListener;
+    const remove = EventTarget.prototype.removeEventListener;
     for (const target of [document, window] as EventTarget[]) {
-      const add = target.addEventListener.bind(target);
-      const remove = target.removeEventListener.bind(target);
       vi.spyOn(target, 'addEventListener').mockImplementation(
         (type, listener, options) => {
           counts.set(type, (counts.get(type) ?? 0) + 1);
-          add(type, listener, options);
+          add.call(target, type, listener, options);
         },
       );
       vi.spyOn(target, 'removeEventListener').mockImplementation(
         (type, listener, options) => {
           counts.set(type, (counts.get(type) ?? 0) - 1);
-          remove(type, listener, options);
+          remove.call(target, type, listener, options);
         },
       );
     }
@@ -6644,7 +6646,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
     vi.useRealTimers();
   });
 
-  it('keeps one passive pointerdown listener on each element that uses a gesture and, on the page while idle, only the shared selectionchange listener; a disabled one keeps none', () => {
+  it('keeps one passive pointerdown listener on each element that uses a gesture and no gesture listener on the page while idle; a disabled one keeps none', () => {
     const {box, row, off} = mount(
       '<div id="box"></div><div id="row"></div><div id="off"></div>',
     );
@@ -6662,7 +6664,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
       fine.attach(row, new TapGestureRecognizer()),
       fine.attach(off, new TapGestureRecognizer({isEnabled: false})),
     );
-    expect(live()).toEqual(['selectionchange']);
+    expect(live()).toEqual([]);
     expect(boxDowns()).toEqual([
       ['pointerdown', expect.any(Function), {capture: true, passive: true}],
     ]);
@@ -6682,7 +6684,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
     press(box, {pointerType: 'pen', button: 2});
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
     press(box, {pointerType: 'mouse', button: 0, ctrlKey: true});
-    expect(live()).toEqual(['selectionchange']);
+    expect(live()).toEqual([]);
     expect(transitions).toEqual([]);
     expect(host.arena.touches).toEqual([]);
   });
