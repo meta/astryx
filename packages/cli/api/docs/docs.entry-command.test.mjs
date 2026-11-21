@@ -109,7 +109,7 @@ describe('the docs hint', () => {
     expect(entryCommand('wobble', NAMES)?.name).toBe('astryx template wobble');
   });
 
-  it('gives nothing for a near name, a route, or an empty name', () => {
+  it('gives nothing for a near name, a route without a docs tail, or an empty name', () => {
     expect(entryCommand('Zorblt', NAMES)).toBeNull();
     expect(entryCommand('ZorbletCards', NAMES)).toBeNull();
     expect(entryCommand('components/Zorblet', NAMES)).toBeNull();
@@ -268,6 +268,61 @@ describe('docs() for a name another command reads', () => {
       }
       for (const suggestion of error.suggestions) {
         expect(Object.keys(suggestion).sort()).toEqual(['name', 'reason']);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    "names a Core component or hook a route's last segment names, singular or not",
+    async () => {
+      for (const [typed, command] of [
+        ['widgets/Buttons', 'astryx component Button'],
+        ['Buttons', 'astryx component Button'],
+        // Only experimental docs are named `table`; they never win.
+        ['widgets/Tables', 'astryx component Table'],
+        // Plurals that add `es`, and words that end in `s` before a plural.
+        ['widgets/Switches', 'astryx component Switch'],
+        ['widgets/StatusDots', 'astryx component StatusDot'],
+        ['widgets/FieldStatuses', 'astryx component FieldStatus'],
+        // A Core hook not named `use…` matches by its full name too.
+        ['widgets/createSwipe', 'astryx hook createSwipe'],
+        ['widgets/use-collapsible', 'astryx hook useCollapsible'],
+      ]) {
+        const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);
+        expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+        expect(error.suggestions[0].name).toBe(command);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps a child the route names ahead of the command',
+    async () => {
+      const error = await docs('cli/commands/component/Button', undefined, {
+        cwd: tmpDir,
+      }).catch(e => e);
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      expect(error.suggestions.slice(0, 2).map(s => s.name)).toEqual([
+        'cli/commands/component',
+        'astryx component Button',
+      ]);
+    },
+    SLOW,
+  );
+
+  it(
+    'lets a doc keep a last segment that also names a component',
+    async () => {
+      // `icons` is a topic, though Core has an Icon component; a singular
+      // last segment meets the topic's name read as singular.
+      for (const typed of ['guides/icons', 'guides/icon']) {
+        const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);
+        expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+        expect(error.suggestions.some(s => s.name.startsWith('astryx '))).toBe(
+          false,
+        );
       }
     },
     SLOW,

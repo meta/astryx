@@ -22,7 +22,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {MATCH_TIER, otherCommand, withOtherCommand} from './other-command.mjs';
+import {
+  MATCH_TIER,
+  otherCommand,
+  tailForms,
+  withOtherCommand,
+} from './other-command.mjs';
 import {component} from '../../api/component/component.mjs';
 import {docs} from '../../api/docs/docs.mjs';
 import {hook} from '../../api/hook/hook.mjs';
@@ -701,4 +706,20 @@ describe("each lookup's not-found error for another command's entry", () => {
     },
     SLOW,
   );
+});
+
+describe('tailForms', () => {
+  it('folds the last path segment, as typed and with its words singular', () => {
+    expect(tailForms('widgets/Zorblet-Cards')).toEqual([
+      'zorbletcards',
+      'zorbletcard',
+    ]);
+    expect(tailForms('widgets/Glimmer-Boxes')).toEqual([
+      'glimmerboxes',
+      'glimmerboxe',
+      'glimmerbox',
+    ]);
+    expect(tailForms('Zorblet')).toEqual(['zorblet']);
+    expect(tailForms('widgets/')).toEqual([]);
+  });
 });
