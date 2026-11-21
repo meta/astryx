@@ -709,10 +709,18 @@ function ungroup(element: Element): void {
 
 /** The page's interactive elements and their rects: one read. */
 function readCandidates(doc: Document): Candidate[] {
-  return interactiveElements(doc).map(element => ({
-    element,
-    rect: plainRect(element),
-  }));
+  // Reading a skipped descendant's bounds forces its subtree to render.
+  // It cannot obstruct a visible target until it renders.
+  return interactiveElements(doc)
+    .filter(
+      element =>
+        typeof element.checkVisibility !== 'function' ||
+        element.checkVisibility({contentVisibilityAuto: true}),
+    )
+    .map(element => ({
+      element,
+      rect: plainRect(element),
+    }));
 }
 
 /**

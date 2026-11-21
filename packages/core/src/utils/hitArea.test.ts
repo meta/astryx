@@ -325,6 +325,45 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('reads no bounds for a skipped neighbour and includes it when it renders again', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const visibility = vi.fn(() => false);
+    Object.defineProperty(link, 'checkVisibility', {value: visibility});
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(log).not.toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 10, bottom: 10, left: 10});
+
+    visibility.mockReturnValue(true);
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(log).toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    stop();
+  });
+
+  it('keeps measuring neighbours where checkVisibility is unavailable', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    Object.defineProperty(link, 'checkVisibility', {value: undefined});
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(log).toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    stop();
+  });
+
   it('measures a control in an opening layer by its layout box, so its insets hold once the layer settles', () => {
     // The layer opens from half size about the page origin, so every rect on
     // screen is half its layout box during the first pass.
