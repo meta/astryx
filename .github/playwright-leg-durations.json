@@ -18,6 +18,7 @@
     "packages/core/src/Button/__tests__/ButtonTextSize.interaction.browser.spec.ts": 3.1,
     "packages/core/src/ButtonGroup/__tests__/ButtonGroupCorners.interaction.browser.spec.ts": 0.8,
     "packages/core/src/ButtonGroup/__tests__/ButtonGroupTracking.interaction.browser.spec.ts": 14.3,
+    "packages/core/src/Calendar/__tests__/CalendarMonthButtonPress.interaction.browser.spec.ts": 2.8,
     "packages/core/src/Calendar/__tests__/CalendarTextSize.interaction.browser.spec.ts": 2.3,
     "packages/core/src/Calendar/__tests__/CalendarTodayHydration.interaction.browser.spec.ts": 3.1,
     "packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts": 2.1,
