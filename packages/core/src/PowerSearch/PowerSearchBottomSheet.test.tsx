@@ -4230,6 +4230,34 @@ describe('PowerSearch step changes move focus and speak from the handler (archit
     expect(landed).toEqual([row]);
   });
 
+  it('moves focus inside the action that changes the step, before any later work', () => {
+    render(
+      <PowerSearch
+        config={config}
+        filters={[openFilter]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+      />,
+    );
+    openEditFlow('Status is Open');
+    const cancel = within(sheet()).getByRole('button', {name: 'Cancel'});
+    // A listener on the document runs after the component's own handler,
+    // in the same dispatch, before React runs any Effect the update queued.
+    let focusedDuringAction: Element | null = null;
+    const readFocus = () => {
+      focusedDuringAction = document.activeElement;
+    };
+    document.addEventListener('click', readFocus);
+    try {
+      fireEvent.click(cancel);
+    } finally {
+      document.removeEventListener('click', readFocus);
+    }
+    const row = within(sheet()).getByRole('button', {name: 'Status is Open'});
+    expect(focusedDuringAction).toBe(row);
+    expect(row).toHaveFocus();
+  });
+
   it('moves focus once to a one-tap filter added from the keyboard, and speaks the addition once', async () => {
     const spy = mockModalDialogs();
     try {
