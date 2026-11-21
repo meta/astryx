@@ -76,6 +76,19 @@ const T = 300_000;
 
 describe('a color said for one mode is its page', () => {
   it(
+    "a gray dark mode: the dark page in a neutral gray at that page's lightness",
+    async test => {
+      needsBases(test);
+      const lines = await first('dark mode is gray');
+      const dark = /** @type {string} */ (pageIn(lines, 'dark'));
+      expect(hexToOklch(dark).C).toBeLessThan(0.02);
+      expect(hexToOklch(dark).L).toBeLessThan(0.3);
+      expect(pageIn(lines, 'light')).toBeNull();
+    },
+    T,
+  );
+
+  it(
     'a deep dark plum dark mode: the dark page, light mode kept, never dark-only',
     async test => {
       needsBases(test);
@@ -169,7 +182,7 @@ describe('a color said for one mode is its page', () => {
       'light mode should be cream with blue buttons',
       'dark mode should be slate with rounder buttons',
       'dark mode is navy and light mode is cream',
-      'dark mode is gray',
+      'gray everything',
       'header navy, gray everything else',
       'buttons in dark mode should be blue',
       'the accent in dark mode should be purple',
@@ -201,6 +214,10 @@ describe('a color said for one mode is its page', () => {
         isShade,
       ),
     ).toBe('calm and minimal\n- dark mode: page deep dark plum');
+    // (A gray said for one mode is that mode's page.)
+    expect(colorsSaidForPages('dark mode is gray', isHue, isShade)).toBe(
+      'dark mode: page gray',
+    );
     // (The color reader's shade words count as tone words too.)
     expect(
       colorsSaidForPages('light mode is pastel pink', isHue, isShade),

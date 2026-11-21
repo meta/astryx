@@ -2010,11 +2010,12 @@ const TONE_WORDS = new Set([
  * with a purple tint" is the tint's hue; "blush pink everything" is the
  * page. Never a theme of one mode, or an accent. The mode stays said
  * first, so a clause after it keeps that mode ("dark mode is plum, gold
- * buttons"). Only a color said by
- * itself, said at the start of its clause (or of a line or a list item)
- * and ending it, is read so: a
- * phrase with a part, role or token word ("a red accent", "blue links", "red for errors"), one a
- * "with", "and" or "but" goes on from, and a gray, are left as said.
+ * buttons"). Only a color said by itself, said at the start of its clause
+ * (or of a line or a list item) and ending it, is read so: a phrase with a
+ * part, role or token word ("a red accent", "blue links", "red for
+ * errors"), one a "with", "and" or "but" goes on from, and a gray said
+ * for everything (the theme's neutral), are left as said. A gray said for
+ * one mode ("dark mode is gray") is that mode's page.
  * @param {string} question
  * @param {(word: string) => boolean} isHue
  * @param {(word: string) => boolean} isShade the color reader's shade words
@@ -2027,12 +2028,17 @@ export function colorsSaidForPages(question, isHue, isShade) {
       .toLowerCase()
       .split(/[\s-]+/)
       .filter(Boolean);
-  // (A gray is the theme's own neutral, not a hue to tone.)
+  // (A gray is the theme's own neutral, not a hue to tone; said for one
+  // mode's page, "dark mode is gray", it is that page's gray.)
   /** @param {string} w */
   const hue = w => isHue(w) && !/^gr[ae]y$/.test(w);
-  /** A color by itself: every word a hue or a tone word, one a hue. @param {string} words */
-  const colorAlone = words =>
-    wordsOf(words).some(hue) &&
+  /**
+   * A color by itself: every word a hue or a tone word, one a hue (or,
+   * with grayOk, a gray).
+   * @param {string} words @param {boolean} [grayOk]
+   */
+  const colorAlone = (words, grayOk = false) =>
+    wordsOf(words).some(w => hue(w) || (grayOk && /^gr[ae]y$/.test(w))) &&
     wordsOf(words).every(w => hue(w) || isShade(w) || TONE_WORDS.has(w));
   return question
     .replace(
@@ -2044,7 +2050,7 @@ export function colorsSaidForPages(question, isHue, isShade) {
             wordsOf(String(phrase)).every(
               w => hue(w) || isShade(w) || TONE_WORDS.has(w),
             )
-          : colorAlone(String(phrase));
+          : colorAlone(String(phrase), true);
         return said
           ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}`
           : m;
