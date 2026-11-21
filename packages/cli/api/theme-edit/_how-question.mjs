@@ -4044,7 +4044,15 @@ function clausesOf(q, partWords, words = null) {
           )) ||
         (new RegExp(String.raw`^${PRODUCT_WORDS}$`).test(m[0].trim()) &&
           /^\s*:/.test(afterPart) &&
-          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)))
+          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)) &&
+          // (Never after an article alone as written, "the page: a
+          // gradient": that is the page itself. The written clause is read,
+          // since part words before it, "the notifications page:", are
+          // already taken out of the rest.)
+          !new RegExp(
+            String.raw`(?:^|[,.;:!?])\s*(?:the|a|an|my|our|your|this|that)\s+${m[0].trim()}\s*:`,
+            'i',
+          ).test(text))
       ) {
         rest = rest.replace(re, ' ');
         continue;
