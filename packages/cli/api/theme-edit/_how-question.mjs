@@ -12185,8 +12185,16 @@ export function draftAnswer(ctx, env, question) {
           ].includes(a),
         )
       )
-    )
+    ) {
       c.mode = prev.mode;
+      // (A mode a change said before it is carried, never said: "make the
+      // card background darker in dark mode. reset the accent" does not
+      // limit the reset. A clause that names only the mode, "in dark mode,
+      // reset …", says it.)
+      /** @type {any} */ (c).modeCarried = Boolean(
+        prev.parts.length || prev.aspects.length || prev.colors.length,
+      );
+    }
     // "on focus, inputs get a 2px outline": a clause that only names a state
     // gives it to the clause after it.
     // (Never an except's state: "except when focused, and rounder".)
@@ -12532,14 +12540,13 @@ export function draftAnswer(ctx, env, question) {
   fillAspect();
   const modal = env.data.mode === 'both';
   /**
-   * The mode a clause says in its own words: a mode carried in from the
-   * clause before limits nothing.
+   * The mode a clause says: its own, or one a clause naming only the mode
+   * gives it; a mode carried in from a change said before it limits
+   * nothing.
    * @param {any} c
    */
   const saidMode = c =>
-    c?.mode && new RegExp(`\\b${c.mode}\\b`, 'i').test(c.text ?? '')
-      ? /** @type {string} */ (c.mode)
-      : null;
+    c?.mode && !c.modeCarried ? /** @type {string} */ (c.mode) : null;
   /**
    * The mode a page color is for: the mode said, else, on a theme with
    * both modes, a clearly light color's light mode and a clearly dark

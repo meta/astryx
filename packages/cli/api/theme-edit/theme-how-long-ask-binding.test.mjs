@@ -1020,4 +1020,36 @@ describe('an undo that names a mode, on a theme that sets the thing', () => {
       /the same in both modes, so it cannot be taken back in light mode only/,
     );
   }, 300_000);
+
+  it('reads a mode said in a clause of its own, before or after the undo', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    // (A card background saved for each mode.)
+    await themeEditNew('mc', {cwd, like: 'neutral'});
+    for (const mode of ['light', 'dark'])
+      await themeEditSet('mc', 'background-color', '#336699', {
+        cwd,
+        on: 'card',
+        mode,
+      });
+    for (const q of [
+      'in dark mode, reset the card background',
+      'reset the card background, in dark mode',
+      'reset the card background, dark mode only',
+      'in dark mode: reset the card background',
+    ]) {
+      const r = await lines('mc', q);
+      expect(r.writes.length, q).toBeGreaterThan(0);
+      for (const w of r.writes) expect(w, q).toMatch(/--mode dark$/);
+    }
+    // (A change of light mode said before an undo of dark mode stays.)
+    const kept = await lines(
+      'mc',
+      'make the card background #224466 in light mode. undo the card background change, in dark mode',
+    );
+    expect(kept.text).not.toMatch(/taken back by its undo/);
+    expect(kept.writes.some(w => /#224466.*--mode light$/.test(w))).toBe(true);
+  }, 300_000);
 });
