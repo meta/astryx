@@ -47,7 +47,7 @@ describe('getLocaleDirection without Intl.Locale text info', () => {
   );
   const removeTextInfo = () => {
     for (const [name] of saved) {
-      delete prototype[name];
+      Reflect.deleteProperty(prototype, name);
     }
   };
   afterEach(() => {
