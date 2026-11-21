@@ -725,7 +725,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
   }, [mode, ScrollWrapper, admission.rowModel, identity, textOverflowProp]);
   // Admission reads the resolved columns: widened row-number columns are new
   // objects that the admission registry does not know.
-  const hasFixedHeightColumns = resolvedColumns.every(isFixedHeightColumn);
+  const customCellColumn = resolvedColumns.find(
+    column => !isFixedHeightColumn(column),
+  );
+  const hasFixedHeightColumns = customCellColumn == null;
   const windowFallbackReason =
     invalidReason ??
     (config == null
@@ -733,8 +736,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       : (sharedFallbackReason ??
         (rowIndexStart != null || rowCount != null
           ? 'legacy row offsets or counts conflict with windowed metadata'
-          : !hasFixedHeightColumns
-            ? 'a custom cell renderer has no fixed-height admission'
+          : customCellColumn != null
+            ? `column "${customCellColumn.key}" has a custom renderCell, which is not height-safe, so row virtualization is off for this table. Default cells (no renderCell) and the row-number and selection columns stay windowed; render this column's value without renderCell to window the rows`
             : !Number.isFinite(config.rowHeight) ||
                 config.rowHeight <= 0 ||
                 !Number.isFinite(config.initialViewportHeight) ||

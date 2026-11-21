@@ -223,6 +223,16 @@ describe('Table windowing admission diagnostics', () => {
       expect(warning).toHaveBeenCalledTimes(1);
     },
   );
+  it('names the column with a custom renderCell and what keeps rows windowed', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<Fixture reason="renderer" />);
+    const message = warning.mock.calls[0].join(' ');
+    expect(message).toContain(
+      'column "name" has a custom renderCell, which is not height-safe',
+    );
+    expect(message).toContain('Default cells (no renderCell)');
+    expect(message).toContain('Rendering all rows.');
+  });
   it('reports invalid identity once without a duplicate error for the same fallback', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
