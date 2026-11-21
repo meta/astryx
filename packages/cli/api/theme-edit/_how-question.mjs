@@ -12639,16 +12639,22 @@ export function draftAnswer(ctx, env, question) {
     // (A color word said for one mode that is not already of that mode's
     // lightness, a mid tone: that mode's page, at its own lightness there.)
     if (c.mode) {
-      const rgb = parseColor(String(color));
+      // (A gray word reads as the neutral ramp's light-dark() pair: the
+      // said mode's half is its color.)
+      const pair = /^light-dark\(\s*([^,()]+?)\s*,\s*([^,()]+?)\s*\)$/i.exec(
+        String(color),
+      );
+      const own = pair ? pair[c.mode === 'light' ? 1 : 2] : String(color);
+      const rgb = parseColor(own);
       // (As readable as that mode's page already: kept as said.)
       if (
         !rgb ||
-        question.toLowerCase().includes(String(color).toLowerCase()) ||
+        question.toLowerCase().includes(own.toLowerCase()) ||
         ratio(rgb, c.mode === 'light' ? [0, 0, 0] : [255, 255, 255]) >= 12
       )
         return null;
       const one = toneLike(
-        color,
+        own,
         String(current('--color-background-body', c.mode) ?? ''),
       );
       return one ? {[c.mode]: one} : null;
@@ -12687,11 +12693,18 @@ export function draftAnswer(ctx, env, question) {
     const modes = /** @type {const} */ (['light', 'dark']).filter(
       m => tones[m],
     );
+    // (A gray word's light-dark() pair is named by the said mode's half.)
+    const shown =
+      (c.mode &&
+        /^light-dark\(\s*([^,()]+?)\s*,\s*([^,()]+?)\s*\)$/i.exec(color)?.[
+          c.mode === 'light' ? 1 : 2
+        ]) ||
+      color;
     // (Said for one mode, the second line paints the frame, and the main
     // panel where it draws a fill of its own, in that toned color.)
     const one = c.mode ? String(tones[c.mode]) : null;
     return {
-      text: `the page background: --color-background-body, ${color}'s color at ${c.mode ? `the ${c.mode} page's own lightness (${tones[c.mode]})${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}` : `each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`}`,
+      text: `the page background: --color-background-body, ${shown}'s color at ${c.mode ? `the ${c.mode} page's own lightness (${tones[c.mode]})${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}` : `each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`}`,
       options: [
         modes.map(m =>
           set('--color-background-body', String(tones[m]), {mode: m}),

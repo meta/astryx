@@ -2012,7 +2012,9 @@ const TONE_WORDS = new Set([
  * buttons", "navy and light mode is cream") is a clause of its own; one
  * that only adds a color ("navy and white") is left as said. A phrase
  * with a part, role or token word ("a red accent", "blue links", "red for
- * errors"), and a gray, are left as said.
+ * errors"), and a gray said for everything (the theme's neutral), are
+ * left as said. A gray said for one mode ("dark mode is gray") is that
+ * mode's page.
  * @param {string} question
  * @param {(word: string) => boolean} isHue
  * @param {(word: string) => boolean} isShade the color reader's shade words
@@ -2025,12 +2027,17 @@ export function colorsSaidForPages(question, isHue, isShade) {
       .toLowerCase()
       .split(/[\s-]+/)
       .filter(Boolean);
-  // (A gray is the theme's own neutral, not a hue to tone.)
+  // (A gray is the theme's own neutral, not a hue to tone; said for one
+  // mode's page, "dark mode is gray", it is that page's gray.)
   /** @param {string} w */
   const hue = w => isHue(w) && !/^gr[ae]y$/.test(w);
-  /** A color by itself: every word a hue or a tone word, one a hue. @param {string} words */
-  const colorAlone = words =>
-    wordsOf(words).some(hue) &&
+  /**
+   * A color by itself: every word a hue or a tone word, one a hue (or,
+   * with grayOk, a gray).
+   * @param {string} words @param {boolean} [grayOk]
+   */
+  const colorAlone = (words, grayOk = false) =>
+    wordsOf(words).some(w => hue(w) || (grayOk && /^gr[ae]y$/.test(w))) &&
     wordsOf(words).every(w => hue(w) || isShade(w) || TONE_WORDS.has(w));
   /**
    * Whether what a "with", "and" or "but" after the color goes on to says
@@ -2071,7 +2078,7 @@ export function colorsSaidForPages(question, isHue, isShade) {
             wordsOf(String(phrase)).every(
               w => hue(w) || isShade(w) || TONE_WORDS.has(w),
             )
-          : colorAlone(String(phrase));
+          : colorAlone(String(phrase), true);
         return said
           ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}${after}`
           : m;
