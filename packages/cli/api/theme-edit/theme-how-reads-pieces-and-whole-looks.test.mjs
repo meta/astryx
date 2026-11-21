@@ -455,6 +455,11 @@ describe('a look taken away by a pronoun in one state', () => {
           'the disabled button background is ugly, hide it',
           /background-color transparent --on button --state disabled\b/,
         ],
+        // ("active tab" is the selected one.)
+        [
+          'the border on the active tab is ugly, hide it',
+          /border none --on tab --state selected\b/,
+        ],
         // ("hover card" is a part, never a state.)
         [
           'the hover card shadow is too strong, remove it',

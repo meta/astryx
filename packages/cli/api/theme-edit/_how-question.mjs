@@ -4694,15 +4694,26 @@ export function draftAnswer(ctx, env, question) {
       // ugly", "the shadow on the cards is too strong". Any other word, a
       // side, a state, a variant, a mode or a second part, keeps the
       // earlier reading.)
-      // (A state said with the look, "the border on the selected tab",
-      // takes it away in that state only. The part's own words go first:
-      // "hover card" names no state.)
-      const besidePart = own.toLowerCase().replace(longest[0].trim(), ' ');
-      const state = stateWord(besidePart);
-      const others = STATE_WORDS.reduce(
-        (t, [re]) => t.replace(re, ' '),
-        besidePart,
-      )
+      // (A state word said just before the part, "the border on the selected
+      // tab", "hovered cards", takes the look away in that state only. It is
+      // read with the part, so "active tab" is the selected one; the part's
+      // own words never name a state, "hover card".)
+      const before = own
+        .slice(0, own.toLowerCase().indexOf(longest[0].trim()))
+        .trim()
+        .split(/\s+/)
+        .pop()
+        ?.toLowerCase();
+      const state = before
+        ? stateWord(
+            before === 'active' ? `${before} ${longest[0].trim()}` : before,
+          )
+        : null;
+      const besidePart = own
+        .toLowerCase()
+        .replace(longest[0].trim(), ' ')
+        .replace(state ? new RegExp(`\\b${before}\\b`) : /$^/, ' ');
+      const others = besidePart
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
