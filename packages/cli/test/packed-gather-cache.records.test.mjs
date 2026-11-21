@@ -35,11 +35,16 @@ import {
   readKept,
   templatesEntry,
   templatesEntries,
-  allInodes,
   expectWarmHit,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
+
+/** @param {string} text */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * What each kept entry in a temp folder's cache folder holds, by kind, once
@@ -91,6 +96,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     );
     expect(plain).toContain("the CLI's own docs tree");
     expect(plain).toContain(
+      "what template reads from a template's source to name the components it uses",
+    );
+    expect(plain).toContain(
       "Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords",
     );
     expect(plain).toContain(
@@ -100,10 +108,16 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "the JavaScript theme build compiles from a theme's local TypeScript or JSX modules",
     );
     expect(plain).toContain(
-      "what theme build finds when it checks a theme's pseudo-class keys and token names",
+      "what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written",
     );
     expect(plain).toContain(
       "npm's list of the files an integration package packs",
+    );
+    expect(plain).toContain(
+      "what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used",
+    );
+    expect(plain).toContain(
+      "what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used",
     );
     expect(plain).toContain(
       'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
@@ -121,6 +135,25 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       `the transpile cache in ${path.join(tmp, 'astryx', 'transpiled')} keeps its copies in 256 subfolders, each holding at most 1/256 of that, and drops the copies made longest ago first.`,
     );
+    // Text prints only the brief: the folder, its entries and size, the
+    // command that prints the whole message, and the command that clears the
+    // kept folders. The transpile folder is named once it exists.
+    const catalogs = path.join(tmp, CACHE_NAME);
+    const transpiled = path.join(tmp, 'astryx', 'transpiled');
+    const brief = new RegExp(
+      `^\\d+ (entry|entries) \\(\\d+\\.\\d MB\\) in ${escapeRegExp(catalogs)}\\. \`[^\`]* doctor --json\` lists every kept item and the size limits\\. To clear the caches, run: rm -rf ${escapeRegExp(catalogs)}( ${escapeRegExp(transpiled)})?\\.$`,
+    );
+    expect(row().brief).toMatch(brief);
+    fs.mkdirSync(transpiled, {recursive: true});
+    expect(row().brief).toContain(`rm -rf ${catalogs} ${transpiled}.`);
+    const shown = run(['doctor'], {tmp, json: false}).stdout;
+    expect(shown).toContain(
+      'Each check: status, id, label, message (or brief), fix',
+    );
+    expect(shown.replace(/\s+/g, ' ')).toContain(
+      `To clear the caches, run: rm -rf ${catalogs} ${transpiled}.`,
+    );
+    expect(shown).not.toContain('keep what they gather');
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -378,9 +411,9 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         );
         return answered;
       });
+      const warm = expectWarmHit(tmp, asks, {cwd: bare, json: false});
+      expect(warm.map(answer)).toEqual(fresh);
       if (hasModuleHooks) {
-        const warm = expectWarmHit(tmp, asks, {cwd: bare, json: false});
-        expect(warm.map(answer)).toEqual(fresh);
         expect(templatesEntries(tmp).size).toBe(1);
         // Besides template discovery: the stored docs' parses the recorded
         // runs keep, and the summaries any lookup keeps once the folder
@@ -394,7 +427,17 @@ Module._resolveFilename = function (request, parent, isMain, options) {
           'template discovery',
         ]);
       } else {
-        expect(allInodes(tmp).size).toBe(0);
+        // File-stamped summaries do not need module hooks. The gathers and
+        // stored doc parses still need a recorded run and keep nothing here.
+        expect(entries(tmp).size).toBe(0);
+        expect(templatesEntries(tmp).size).toBe(0);
+        expect(derivedEntries(tmp)).toEqual([]);
+        expect(keptKinds(tmp)).toEqual([
+          'summary core-component-views',
+          'summary core-hook-keywords',
+          'summary hint-names',
+          'summary stored-component-list-check',
+        ]);
       }
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
@@ -511,8 +554,9 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     () => {
       const tmp = keptTmp('doctor-core');
       // A project with no installed Core, and an opted-in integration whose
-      // component replaces a Core one: everyday commands read the Core the CLI
-      // carries, doctor only the project's (none), so their lists differ.
+      // component replaces a name Core does not have: everyday commands read
+      // the Core the CLI carries and find it, doctor reads only the project's
+      // (none) and cannot judge it, so their lists differ.
       const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
       // The Core the CLI carries: the repository's, beside the installed CLI,
       // for this case only.
@@ -556,7 +600,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             name: 'AcmeSideNav',
             displayName: 'AcmeSideNav',
             import: '@acme/nav/components/AcmeSideNav',
-            replaces: 'SideNav',
+            replaces: 'NoSuchCoreNav',
             keywords: ['acme'],
             usage: {description: 'AcmeSideNav for Acme apps.'},
             props: [],
@@ -571,15 +615,18 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
           );
         const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
-        // Doctor, reading no Core, finds the replaced component missing; the
-        // everyday command, reading the carried Core, finds nothing.
-        expect(JSON.stringify(fresh)).toContain('SideNav');
+        // Doctor, reading no Core, cannot judge the replacement and names
+        // nothing; the everyday command, reading the carried Core, finds the
+        // missing target and prints it itself, since doctor cannot.
+        expect(JSON.stringify(fresh)).not.toContain('NoSuchCoreNav');
         const everyday = run(['template', '--list'], {
           tmp,
           cwd: dir,
           json: false,
         });
-        expect(everyday.stderr).not.toContain('@acme/nav');
+        expect(everyday.stderr).toContain(
+          'Warning: @acme/nav: Component "AcmeSideNav" replaces "NoSuchCoreNav", which is not a Core component.',
+        );
         run(['template', '--list'], {tmp, cwd: dir, json: false});
         // The everyday command kept its lists (the integration's and the
         // project's); doctor still answers as a fresh doctor does.
@@ -613,10 +660,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             stderr: r.stderr,
             // The cache row counts what the folder holds, which a write
             // earlier in the run adds to: the rest must match exactly.
-            stdout: r.stdout
-              .split(tmp)
-              .join('<tmp>')
-              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+            stdout: maskCacheCount(r.stdout.split(tmp).join('<tmp>')),
           };
         } finally {
           fs.chmodSync(path.dirname(catalogs), 0o700);

@@ -360,6 +360,17 @@ export function renderPmStep(step, pm) {
  * @typedef {object} RenderOptions
  * @property {string} stem how the reader runs the CLI, e.g. `pnpm exec astryx`
  * @property {DocPackageManager} pm the reader's package manager
+ * @property {DocPin} [pin] the version the reader's project installs a
+ *   package at, when it has one
+ */
+
+/**
+ * The version a reader's project installs the package `name` at, written as
+ * the install names it (`name@version`, a range quoted), and whether the
+ * project saves it exactly. Null to leave the package as the doc writes it.
+ * @callback DocPin
+ * @param {string} name
+ * @returns {{spec: string, exact: boolean} | null}
  */
 
 /**
@@ -369,7 +380,7 @@ export function renderPmStep(step, pm) {
  * @param {RenderOptions} options
  * @returns {{command: string, note: string | null}}
  */
-export function renderStep(step, {stem, pm}) {
+export function renderStep(step, {stem, pm, pin}) {
   if (step.kind === 'command') {
     return {command: [stem, ...step.args].join(' '), note: null};
   }
@@ -379,7 +390,46 @@ export function renderStep(step, {stem, pm}) {
       note: `only with ${managerName(step.manager)}: ${step.reason}`,
     };
   }
-  return {command: renderPmStep(step, pm), note: null};
+  return {command: renderPmStep(pinStep(step, pin), pm), note: null};
+}
+
+/** Where a shell line moves to another folder: `cd` or `pushd` as a command. */
+const CHANGES_FOLDER = /(?:^|&&|;|\|\|)\s*(?:cd|pushd)\s/u;
+
+/**
+ * A package name with no version after it. A `<placeholder>` may stand for
+ * part of the name, as in `@astryxdesign/theme-<name>`.
+ */
+const BARE_PACKAGE = /^(?:@[a-z0-9][\w.<>-]*\/)?[a-z0-9<][\w.<>-]*$/u;
+
+/**
+ * `step` with each package an install adds by bare name at the version
+ * `pin` gives it, saved exactly when every package it adds is pinned to
+ * one exact release. When the project saves a pinned package as written, not
+ * exactly, the step saves nothing exactly, whatever the doc wrote: an exact
+ * flag beside a range keeps the range in every package manager but npm. A
+ * package the doc names with a version keeps it, and a global install, which
+ * no project holds, is left as written.
+ * @param {PmStep} step
+ * @param {DocPin | undefined} pin
+ * @returns {PmStep}
+ */
+function pinStep(step, pin) {
+  if (!pin || step.verb !== 'install' || step.flags.has('--global')) {
+    return step;
+  }
+  const pinned = step.args.map(arg =>
+    BARE_PACKAGE.test(arg) ? pin(arg) : null,
+  );
+  if (pinned.every(p => p == null)) return step;
+  const flags = new Set(step.flags);
+  if (pinned.every(p => p?.exact === true)) flags.add('--exact');
+  else if (pinned.some(p => p != null && !p.exact)) flags.delete('--exact');
+  return {
+    ...step,
+    args: step.args.map((arg, i) => pinned[i]?.spec ?? arg),
+    flags,
+  };
 }
 
 /**
@@ -424,25 +474,39 @@ export function renderCommandTokens(text, options, lang = null) {
    * @param {string[]} notes where a one-manager step's reason goes
    * @param {boolean} wrap print a rendered command as a code span
    */
-  const render = (part, notes, wrap) =>
+  const render = (part, notes, wrap, stepOptions = options) =>
     part.replace(TOKEN, (whole, escaped, name, body = '') => {
       if (escaped) return whole.replace('{@@', '{@');
       if (!COMMAND_TOKENS.has(name)) return whole;
       const step = parseCommandToken(name, body);
       if ('error' in step) return whole;
-      const {command, note} = renderStep(step, options);
+      const {command, note} = renderStep(step, stepOptions);
       // In prose the reason follows its own command, inside the sentence.
       if (note != null && wrap) return `\`${command}\` (${note})`;
       if (note != null) notes.push(note);
       return wrap ? `\`${command}\`` : command;
     });
   if (inBlock) {
+    // After a shell block changes folder, its steps run in another project
+    // than the reader's, so they take no release from the reader's project.
+    let moved = false;
     return source
       .split('\n')
       .map(line => {
         /** @type {string[]} */
         const notes = [];
-        const out = render(line, notes, false);
+        const unpinned = {...options, pin: undefined};
+        const at = shell ? line.search(CHANGES_FOLDER) : -1;
+        const out =
+          at < 0
+            ? render(line, notes, false, moved ? unpinned : options)
+            : render(
+                line.slice(0, at),
+                notes,
+                false,
+                moved ? unpinned : options,
+              ) + render(line.slice(at), notes, false, unpinned);
+        if (at >= 0) moved = true;
         if (notes.length === 0) return out;
         return shell
           ? `${out}  # ${notes.join('; ')}`
@@ -465,7 +529,7 @@ export function renderCommandTokens(text, options, lang = null) {
       .join('');
   // A fence inside prose is a code block: its lines render as one, in the
   // fence's language.
-  /** @type {{marker: string, lang: string} | null} */
+  /** @type {{marker: string, lang: string, moved: boolean} | null} */
   let fence = null;
   return source
     .split('\n')
@@ -473,15 +537,26 @@ export function renderCommandTokens(text, options, lang = null) {
       const marker = /^\s*(`{3,}|~{3,})\s*([\w-]*)/.exec(line);
       if (marker) {
         if (fence == null) {
-          fence = {marker: marker[1], lang: marker[2].toLowerCase()};
+          fence = {
+            marker: marker[1],
+            lang: marker[2].toLowerCase(),
+            moved: false,
+          };
         } else if (marker[1].startsWith(fence.marker)) {
           fence = null;
         }
         return line;
       }
-      return fence == null
-        ? prose(line)
-        : renderCommandTokens(line, options, fence.lang);
+      if (fence == null) return prose(line);
+      const out = renderCommandTokens(
+        line,
+        fence.moved ? {...options, pin: undefined} : options,
+        fence.lang,
+      );
+      if (SHELL_LANGS.has(fence.lang) && CHANGES_FOLDER.test(line)) {
+        fence.moved = true;
+      }
+      return out;
     })
     .join('\n');
 }

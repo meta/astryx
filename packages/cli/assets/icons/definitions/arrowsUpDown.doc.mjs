@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'arrowsUpDown',
+  group: 'arrows',
   description: 'Show that a column can be sorted.',
   words: ['sort', 'sortable', 'reorder', 'arrow up down'],
   builtIn: true,

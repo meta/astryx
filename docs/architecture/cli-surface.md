@@ -88,7 +88,12 @@ rather than left to the command author.
 theme matcha` is `theme add matcha`) and the table of their words in
    `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
    uses it and no word is a command or a command's plural. The answer only
-   suggests: it runs nothing and never names an experimental command.
+   suggests: it runs nothing and names no experimental command, except that a
+   share word (`export`, `render`, `share`, `bundle`, `snapshot`,
+   `standalone`) names `experimental export` under `spec:AST-017` FR27's
+   shareable-page exception, and a way-back word (`import`, `back`,
+   `restore`, `unrender`, `reverse`) names `experimental import` under the
+   same exception.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -154,7 +159,21 @@ and remains available through explicit Core package selection.
   detection, no width wrapping, byte-for-byte identical printed or piped. A
   projection may shorten a prose field to its first sentence; a command's
   `--verbose`, where it has one, prints such a field whole, and `--json` carries
-  every field. The stdout of `astryx mcp` carries protocol messages only, and
+  every field. A component read (`astryx component <Name>` with no `--detail`)
+  prints the short answer, the `--detail compact` level: the description's
+  first paragraph, the import, a usage line, each prop with its description's
+  first sentence, the accessibility requirements, the component's pieces, a
+  hook's parameters and returns, and as its last line the `--detail full`
+  command that prints the whole doc.
+  `component <Name> --props` prints each prop description whole. A list prints
+  `brief` and a hook or docs read prints `full` when no `--detail` is given.
+  A hook whose doc lists its options as props prints that doc in the
+  component read's layout at each level, without an import line (the hook's
+  JSON names none); at `full` it prints each prop description whole and both
+  its description and its usage text.
+  The detail level never changes a component read's JSON. A field shown in
+  one section of the text projection is not repeated in another: a read of
+  one family member prints its props once, under Props. The stdout of `astryx mcp` carries protocol messages only, and
   each answer in them is a command's `--json` output (`spec:AST-121` FR4).
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
@@ -166,10 +185,15 @@ and remains available through explicit Core package selection.
   from it.** Help text, the README command and error-code tables, and the
   manifest are generated. None of them is written by hand. Every command and
   subcommand's `CommandDoc` declares `outsideProject`, which the manifest
-  publishes (`spec:AST-081` FR4). A component doc's optional
-  `playground.mobile` holds the props of its render at a phone viewport,
-  merged over `defaults`; the theme editor's part census renders it as the
-  component's mobile layout.
+  publishes (`spec:AST-081` FR4). A `CommandDoc` marks text that names other
+  commands or options as `pointers`: a command's pointers follow its summary,
+  and an option's `pointers` are the parts that continue its description,
+  each plain text or a pointer with the command paths it names. Help leaves
+  out a pointer when the run's base does not serve every path it names; the
+  manifest, `astryx docs`, and search read the whole text. A component doc's
+  optional `playground.mobile` holds the props of its render at a phone
+  viewport, merged over `defaults`; the theme editor's part census renders it
+  as the component's mobile layout.
 - **INV8 — Exit codes do not depend on the output mode.** The same condition
   exits the same way with and without `--json`, so a command works as a gate
   without parsing stdout.
@@ -298,8 +322,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
-  integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  integration check results, template discovery's records, the component list, whether the installed Core matches the component list the CLI was published with, Core's and each integration's components with the doc parts the not-found matcher scores, Core hooks' declared keywords for the not-found hint, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands'
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, what template reads from a template's source to name the components it uses, keyed by the source's text and the parser's release, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used, what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -307,7 +331,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   a POSIX system; never a temp folder that is a disk's root or holds the home
   folder), under the checks a write in the project has: no link carries it out
   of that folder, and an existing file is replaced only with `--overwrite`
-  (DEC-15). The one HTML file `astryx experimental render` writes may also go
+  (DEC-15). For `astryx template <name> <path>` and `--cdn <path>`, a
+  destination that is `~`, or starts with `~/` or `~\`, names the home folder,
+  as a shell reads it, and then follows the rules of an absolute path; a
+  destination written that way never makes a folder named `~` in the project.
+  Reading it so is a compatible `[fix]`. The one HTML file
+  `astryx experimental export` writes may also go
   to an absolute path the caller names with `--out`, in any folder; it never
   replaces a file that a render did not write (DEC-16).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
@@ -371,6 +400,117 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   from source (`withAstryx()`, `astryxStylex()`, an `@astryx;` rule, or an
   `@stylex;` rule with `@astryxdesign/build` in the PostCSS config) gets
   neither warning.
+- **INV41 — `astryx doctor` warns on a Core button that does nothing when
+  pressed.** In a project on Core, `doctor` reads the app's own source as
+  syntax trees and never runs it; it leaves out test, story and fixture files,
+  and it reports no button in a folder named `test`, `tests`, `stories`,
+  `fixtures` or `e2e`, though it reads those folders for where they render
+  components. When the project has more source files than `doctor` reads, the
+  check does not run and says so. The `button-actions` check warns for each
+  `Button` or `IconButton` from `@astryxdesign/core` that has no `onClick`,
+  `clickAction`, `href`, or `submit` or `reset` type, or whose handler does
+  nothing (an empty body, or a body that only returns `null`, `undefined` or
+  `void 0`) or whose link goes nowhere, and that nothing around it can act on.
+  A link goes nowhere when it is an empty link, a `javascript:` link, or `#`,
+  except in an app that routes by the URL hash (it imports a hash router or a
+  hash history, or listens for `hashchange`), where `#` opens the first page.
+  Nothing acts on a button when each element around it is a Core layout
+  component, a React wrapper, a package's provider, an object's `Provider`,
+  such as a React context's (not one read off a namespace or default import of
+  the app's own module), or HTML that holds no control, that no script defines
+  (a custom element, or an element with an `is` attribute) and that has no
+  handler, link, widget role or spread props, none of them disabled or inert,
+  and when each place the app renders the component that holds it is the same;
+  relative imports (where `.` and `..` name the folder they read), path
+  aliases and package.json `imports` are followed to the app's own code. The
+  check reads a folder named `build`, `dist` or `coverage` except in a folder
+  with a package.json, where a build writes its output; when the walk skips a
+  linked folder or source file, no component counts as one that nothing
+  renders. A component that nothing in the app renders or refers to, while its
+  module exports it, is a page or an entry point, and nothing is around it.
+  The check does not report a button that it cannot judge: one with props
+  spread in, a ref, an id, a tooltip, a disabled or loading state, or a prop
+  it does not know; one that holds content that may act, such as an HTML
+  control, a custom element, another package's component other than an icon
+  (an export named like `PencilIcon`), or content the scan cannot read
+  anywhere in it (`{children}`, `{children ?? 'Start'}`, or an element prop
+  that holds a variable or a call); one inside an element, or a prop of an
+  element, that it does not trust; or one in a component that the app refers
+  to in a way the scan cannot follow, such as through `lazy` or `import()`
+  (directly or through a module that passes its exports on), a list of
+  components, a prop, a namespace read as a value, a renamed re-export, a
+  `require()`, a module path only a bundler resolves, or the package name of a
+  workspace member (a package.json in a folder of the project, installed or
+  not); one in a module that another module may load by a path the scan cannot
+  read (a computed `import()` or `require()` path, `import.meta.glob` or
+  `require.context`, which may load any module in the folder the path starts
+  in (for a path joined with `+`, the folder its first part names): the
+  loading module's own folder when the scan reads none of the path, the
+  project folder for a root path (`/src/…`), or any module when the path
+  starts with an alias, while a glob of data, style or image files, or a
+  tool's config file beside a package.json (`next.config.js`), loads no
+  component; an MDX or Astro page, or a module that does not parse, counts as
+  loading by such a path); or one that an MDX or Astro page names. A module
+  that imports a component and exports it again under the same name passes it
+  on, as a re-export does, and so does a barrel that a module may load by such
+  a path; and a component that the module refers to other than by rendering
+  it, in any function or block, is not judged. A React Router `Route` renders
+  its `element` where its `Routes` sit: a router (`BrowserRouter`,
+  `HashRouter`, `MemoryRouter`, `Router` or `StaticRouter`), `Routes`, and a
+  `Route` with only props that match a path (`path`, `index`, `caseSensitive`,
+  `id`, `key`) render what they hold in place, and a route nested in any other
+  `Route` (one with an `element`, a `Component` or a `lazy` load) renders in
+  that route's `Outlet`, which the check does not follow, so it is not judged.
+  A hash router named only in a comment is not hash routing. When the app's
+  own code listens for a press through the DOM (`addEventListener`, also
+  called as `?.()`, `.call()` or `.apply()`, for a click, or a pointer, mouse
+  or touch press, or for an event that a variable names; a library's `.on()`
+  for such a press; or an `onclick`-style property), doctor judges no button
+  and reports `info`, since a script may act on any button that way. The
+  warning names each button's file, line and label, and never fails `doctor`.
+- **INV42 — `astryx doctor` warns on a prop a Core component does not take.**
+  In a project on Core, `doctor` reads the app's own source as syntax trees
+  and never runs it; it leaves out test, story and fixture files (`.test.`,
+  `.spec.`, `.cy.`, `.fixture.`, `.stories.` and `.story.` modules) and the
+  folders named `test`, `tests`, `stories`, `fixtures`, `e2e`, `__tests__`,
+  `__mocks__`, `__fixtures__` or `__stories__`. It reads each prop the source
+  gives a component imported from `@astryxdesign/core` or one of its subpaths,
+  except `key`, `ref`, `children`, the styling props and any name with a
+  hyphen (`data-`, `aria-` and others), which JSX never checks against a props
+  type. A prop that Core's docs for the component do not list is a candidate.
+  The `core-props` check reads Core's own published types with the project's
+  own TypeScript, as the page's config has TypeScript read them: Core and
+  React as the page finds them from its own folder, with the docs of that
+  Core, each component from the module path the page imports it from, the type
+  packages that config names, the files of the project and of the installed
+  theme and integration packages of the project and of the page's own package
+  that augment Core's modules, and the project's own modules that widen
+  React's JSX. It warns on a candidate only when TypeScript says the
+  component's props do not take it. It never warns on a prop name that React's
+  types give an HTML or SVG element, which a component can pass on to the
+  element it renders, or on a prop that JSX gives every component. It does not
+  judge a component that Core's docs do not describe, one whose type
+  TypeScript cannot read, a generic one, or one from outside Core, and it does
+  not judge a module whose `@jsxImportSource` or `@jsx` pragma names another
+  JSX runtime, a page whose config maps the Core module path it imports
+  elsewhere (`paths`), or a page that finds no installed Core. When the
+  project has no TypeScript that it can use, has a `tsconfig` or `jsconfig`,
+  read by a page that imports Core, whose `jsxImportSource` or `jsxFactory`
+  names another runtime, has a build config in the folder of such a page or a
+  folder above it, up to the workspace root (as `spec:AST-048` FR15 defines
+  it) (Babel, SWC, Vite, Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or
+  tsup, or the `babel` key of a `package.json`), that sets another JSX runtime
+  or factory (or Next.js's `styledComponents` option), has a `package.json` in
+  such a folder that depends on a transform that compiles a `css` prop
+  (emotion's css-prop preset, the styled-components Babel or SWC plugin, or a
+  Compiled plugin or loader) or has such a transform installed where the
+  project finds packages, has pages that import Core and none that finds it
+  installed, or has more source files than `doctor` reads, the check does not
+  run and says why, whatever props the pages give. When there is a candidate
+  and Core's types or the files that augment Core cannot be read, it reports
+  no prop and says why. The warning names up to eight props, each with its
+  file, line and component and the documented prop that has the same words
+  when there is one, and counts the rest. It never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or
@@ -444,9 +584,10 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   - Upgrade refreshes every copy where it is and moves none.
   - The managed block is Astryx-owned: `spec:AST-040`'s protections cover
     consumer-owned content, not the block; INV10 still confines every write.
-  - `--remove-agents` removes the block at the project root and in the working
-    folder. Every file it would change resolves inside its own folder, or it
-    changes nothing.
+  - `--remove-agents` (the same option as `--remove`) removes the block at the
+    project root and in the working folder when no `--to` is given or `--to`
+    names `agents-md`. Every file it would change resolves inside its own
+    folder, or it changes nothing.
 - **INV14 — An installed integration is discoverable without configuration, and
   autolinking it can only add.** A dependency the project DECLARES in
   package.json, and that ships a root `astryx.integration.*` manifest, is
@@ -638,6 +779,17 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   `isReady: false` `(not ready)` wherever a result lists or returns it.
   `discover` names a package's templates only by id, often for a package the
   project has not installed, so its results carry neither.
+- **INV40 — A template names its components for one read.** The
+  `template.copy` receipt's `components` and the `template.show` response's
+  `componentsToRead` list the components the source uses that
+  `astryx component` answers in the project, in the order the source first
+  renders them, each once, each in the form that command takes
+  (`<package>/<Name>`, for the package the import names, in a project with
+  an integration), and text
+  prints them as one
+  `Read the components it uses in one call: <command> component A B C` line,
+  after the copy line or on stderr for a printed template, and prints no line
+  when the list is empty.
 
 - **INV30 — A host's package set fills only what the project leaves open, from
   one root.** A package set is a package root whose `node_modules` holds a CLI,
@@ -779,16 +931,60 @@ non-interactive guarantee.
   verification.
 - `foundation/discovery/theme-discovery.mjs` and `api/theme` — typed integration
   theme descriptor discovery, package-aware selection, source copy, and build.
+- `api/render` and `foundation/render` — `astryx experimental export`, which
+  writes a page as one HTML file that records the files it could not carry,
+  and `--reverse`, which gives the page back. Its `missing` lists every file
+  the restored page imports that it lacks, and every file the rendered file
+  records as not carried; `exact` is true only when `missing` is empty and
+  every restored file matches its recorded checksum.
+  `astryx experimental import` follows the same rule: it reports the same
+  `missing` and `exact`.
+- `api/render`, `foundation/discovery/written-prop-values.mjs` and
+  `foundation/discovery/core-augmentation-points.mjs` — the
+  `unknown-prop-value` warning of `astryx experimental export`. It reads the
+  values a page certainly gives a Core component's prop: a literal, a
+  conditional of certain branches, a logical expression whose result is
+  certain, a `const` bound to one, or the first value of `useState`; a prop a
+  later spread attribute can replace, and a value cast to `never`, `any` or
+  `unknown`, is not read. Each such string for a prop
+  whose type is a closed set of strings is checked against Core's docs for
+  that component in the page's own Core. Where the
+  prop's type in Core's source takes the keys of an interface a theme can
+  widen by declaration merging (the module theme build also resolves its
+  augmentations with), the keys the project's own TypeScript files and its
+  installed theme and integration packages' declaration files add are values
+  the prop has; a project that cannot be read in full leaves such a prop
+  unchecked. Each such value of a kind the prop's declared type in Core's
+  source does not take (a string where it takes an object) warns too; a value
+  or a type the reader cannot be certain of is not checked. The same wrong kind
+  for one prop on several lines of a file is one warning that lists the lines.
+- `api/render` and `foundation/discovery/unknown-core-props.mjs` — the
+  `unknown-prop` warning of `astryx experimental export`: each prop name the
+  page's own files give a Core component, read and judged as INV42 reads and
+  judges it: with the docs and types of the Core the page finds installed,
+  read with the project's own TypeScript and React types; a page that finds
+  no installed Core, or a project without them, gets no judgment. Each
+  element gets one warning, and React's console line for a prop it names is
+  not printed as page output. Only the docs are read while every prop is
+  documented.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
-- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental render` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
+- `foundation/render/remote-images.mjs` and `foundation/render/image-attributes.mjs` — the https images a file `astryx experimental export` carries (DEC-18): how a render fetches them, and where an element shows an image.
+- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental export` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
+- `foundation/render/render-page.mjs` — the CSS a file `astryx experimental export` writes: Core's and the page's stylesheets cut to the classes the first paint uses and the names in the page's script, each name also as the class Core's naming module (`@astryxdesign/core/naming`) builds from it, so a theme's rules for every Core part the script can draw stay in the file; a Core without the naming module keeps the cut to the first paint and the script's names. The export also drops each web font face that no character in the page, its stylesheet or its script reaches; the theme editor's renders keep every face, because the text typed into them is not known ahead of time.
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
   re-exports every subject's functions.
 - `api/<subject>/…` — the scriptable functions the commands wrap, laid out as
   INV20 describes; each owns the `type` on its own envelope.
 - `api/<subject>/_adapter.mjs` — the subject's only access to the environment
   (INV21).
+- `foundation/render/render-page.mjs` sizes and `clients/cli/commands/experimental/render-output.mjs`
+  — the size output of `astryx experimental export`: a `bytes` line, with a
+  note when the page's script is more than half of the file, then one line per
+  part under its JSON key (`scriptBytes`, `cssBytes`, `markupBytes`,
+  `sourceBytes`); `markupBytes` (the markup with its inlined images) and
+  `sourceBytes` (the embedded source) are experimental fields.
 - `authoring/example/preview.mjs` — `previewableExample`, the rule for whether
   a component example runs on its own, which Doctor and preview tools share
   (DEC-14).
@@ -1083,12 +1279,12 @@ app builds, typechecks and lints).
 Agents that make a page to share often keep it with other files to upload, in
 a folder outside the page's project, and name that folder's file by an
 absolute path. A path the caller names absolutely is their choice of place, so
-`astryx experimental render` writes its one HTML file there instead of
+`astryx experimental export` writes its one HTML file there instead of
 refusing it (INV10). The file it writes there is still never one a render did
 not write: an existing file is replaced only when its head shows that a render
 wrote it, as everywhere else. A relative `--out` stays inside the current
-folder, and `--reverse`, which writes files the embedded source names, keeps
-every write inside it.
+folder, and the way back (`experimental import`, or `export --reverse`),
+which writes files the embedded source names, keeps every write inside it.
 
 Rejected: refusing every path outside the current folder (most agents that
 render a page for an artifact name an absolute path, and retry after the
@@ -1115,6 +1311,93 @@ Rejected: naming a folder that holds `page.tsx` (an import of the folder does
 not resolve without an index file); writing an index file beside each scaffold
 (a second file that the template does not own).
 
+### DEC-18 — A render fetches the remote images a page names
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+A rendered page is one file that shows the page in any viewer, and a viewer
+that blocks the network cannot load an image the page names by its web
+address. So `astryx experimental export` fetches each image the page names by
+an `https` address, once, while the page renders, and the file carries it.
+The page names an image where its markup shows one, in an `<img>`'s or an
+`<input>`'s `src`, an `<img>`'s or a `<source>`'s `srcset` or a `<video>`'s
+`poster`, and in a CSS `url()`. An `https` address in the page's own code
+counts where the page puts it in one of those attributes, directly or
+through a variable that the same file reads there; by an image extension at
+the end of its path; or by a name alone: a component's or an object's `src`,
+`srcSet` or `poster`, or a name with an image word. A link's address, an
+address whose path names a type that is never an image, and an address
+written only where an element takes it for something else (an `<iframe>`'s
+or a `<video>`'s `src`) never count, and the file puts carried data only
+where an element shows an image or in a CSS `url()`.
+These are the only requests a render makes for the page itself. A fetch sends
+no cookies or credentials and takes only an image, by its content type and
+its bytes, up to the size a render carries of one file. Each image has a time
+limit for its first answer and one for its last byte, and all the images of
+one render have one more; when the network answers none of the first images
+a render asks for, it asks for no more. A failure leaves the address as the
+page wrote it, with the warning a remote image gets. An address that counts
+only by a name can be an API's or a player's: when its answer is another
+type, the result lists it, and the fetch adds no warning. The result names
+every address
+fetched and every one that was not, with why. The embedded source keeps the
+addresses, so `--reverse` gives back the page as written.
+
+Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
+broken), and carrying a fetched image in the embedded source (the way back
+would no longer be the page as written).
+
+### DEC-19 — A render keeps a theme that draws in one mode in that mode
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+A rendered page is one file that shows the page in any viewer. A page whose
+root theme draws in one mode is readable only in that mode: in a viewer of the
+other scheme, its text sits on the viewer's own canvas. So `astryx experimental
+export` writes one color scheme when the page's root theme is a built theme
+that draws in one mode, and paints the theme's page color on the document. A
+built theme is one whose compiled stylesheet the page imports, directly or
+through an `@import`. A theme passed to `Theme` unbuilt injects its CSS only
+at run time, which the render does not read: only what the page's own
+stylesheets set on that theme's root decides, by the same rule. The theme module's
+`colorModes` export decides, read without running the module. A theme with no
+`colorModes` export draws in one mode when every page and text color its root
+rule sets is a fixed color (an opaque one, for a page color) and all of them
+read as that mode by their lightness (a light page or dark text is light, a
+dark page or light text is dark), and no stylesheet that names the theme sets a
+page or text color under a light or dark condition. A media surface's own
+colors (`data-astryx-media`) do not count.
+Every other theme, and a page with no theme, keeps both schemes, and its file
+is written as before. The theme editor's previews keep both schemes, because
+the editor shows each mode itself.
+
+Rejected: following the viewer for every page (a one-mode theme is unreadable
+in the other scheme), and running the theme module to read its modes (a render
+runs no theme code).
+
+### DEC-20 — A refused template path names the same write from its folder
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+When `astryx template <name> <path>` refuses a destination outside the project
+and outside the temp folder (named absolutely, from the home folder, or through
+`..`), the refusal also names a command that writes that same destination: `cd`
+into the nearest folder on the destination's path that exists, then run the
+template command with the rest of the path, using the CLI command that folder
+would use (`spec:AST-081` FR5). Run from that folder, the write stays inside
+the folder the command runs from (INV10), so the caller gets the copy where
+they named it without a second refusal. The command is named only for a Core
+template that no integration replaces: outside the project the project's
+integrations do not load, so an integration's template would not be found
+there, and a replaced Core template would be the Core version instead of the
+project's replacement. No command is named when no folder on the path exists
+except the disk's root. A destination reached through `..` that lands in the
+temp folder is not a scratch copy (DEC-15); the refusal names the same
+destination as an absolute path, which DEC-15 accepts as a scratch copy.
+
+Rejected: writing the named destination from the current folder (it leaves the
+folder a template write is confined to).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -1122,7 +1405,7 @@ not resolve without an index file); writing an index file beside each scaffold
 | INV1      | `clients/cli/commands/interactive-guard.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                          | The subprocess hangs: `signal === 'SIGTERM'` and `status === null`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | INV2      | `clients/cli/commands/json-contract.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                              | `--json` stdout does not parse, or parses to a shape outside the two.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV3      | `foundation/response/error-codes.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                 | A shipped code disappears, or an envelope carries an unregistered one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| INV4      | `clients/cli/formatters/index.test.mjs`, `clients/cli/commands/search.test.mjs`, type tests                                                                                                                                                                                                                                                                                                                                                                                | `emit` accepts a bare string, output varies between pipe and TTY, or a field the text shortens is missing from `--verbose` or `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| INV4      | `clients/cli/formatters/index.test.mjs`, `clients/cli/commands/search.test.mjs`, `clients/cli/commands/component.short-answer.test.mjs`, type tests                                                                                                                                                                                                                                                                                                                        | `emit` accepts a bare string, output varies between pipe and TTY, or a field the text shortens is missing from `--verbose` or `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV6      | `pnpm check:cli-structure`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | A command's file or its doc is missing, or sits at the wrong path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | INV8      | `clients/cli/cli-exit-codes.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                      | The same condition exits differently with and without `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV10b    | `api/upgrade/run/run.test.mjs` (a folder that installs Core without declaring it upgrades the project above it; a member its workspace lists and one that declares Astryx keep their own), `clients/cli/commands/upgrade.subfolder-path.test.mjs`                                                                                                                                                                                                                          | A folder that installs Core without declaring Astryx upgrades only itself, or a declaring folder or a listed member upgrades the project above it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -1139,9 +1422,10 @@ not resolve without an index file); writing an index file beside each scaffold
 | INV24     | `api/integration/add-contribution.test.mjs`, `api/integration/add-theme.test.mjs`, `foundation/discovery/theme-discovery.test.mjs`                                                                                                                                                                                                                                                                                                                                         | New authoring emits an untyped or non-`.doc.mjs` item, adding one item edits a shared file, or an item catalog becomes authoritative.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV25     | `foundation/discovery/cli-self-docs.test.mjs`, `api/doctor/doctor.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                | A CLI doc with no namespace, a namespace no topic reads, or no section in its topic passes doctor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | INV28     | `test/inv28-package-provenance.test.mjs`, `clients/cli/commands/text-json-parity.test.mjs`, `cli-api-types-verify`, `clients/cli/commands/not-ready.test.mjs`                                                                                                                                                                                                                                                                                                              | A result about one artifact has no envelope `package`, a listed artifact has no `package`, or text omits the package the envelope names. A result that lists or returns a template has no boolean `isReady` on it, another artifact carries `isReady`, or the text of an unready template's result lacks `(not ready)`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| INV40     | `api/template/copy/copy.components.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                               | A listed name `astryx component` does not answer in the project (a chart library part, a local file's helper), a name out of source order or listed twice, a text line missing after the copy line or on stdout for a printed template, a line printed for an empty list, or a changed existing receipt field.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV29     | `api/doctor/doctor.test.mjs` (configured-integrations: not installed, no manifest, manifest throws; self-named authored package, direct and through a symlinked `node_modules` or `cwd`; provider-conflict set-aside; an astryx.config that imports but cannot load the project → failed `config` check)                                                                                                                                                                   | A configured integration that cannot load leaves `doctor` at exit 0, or an installed-but-unnamed one fails it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | INV30     | `foundation/runtime/package-set.test.mjs`, `foundation/runtime/hosted-runtime.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                    | A run resolves from two roots; a root contributes an integration inside a project, including an `@astryxdesign/*` package that ships an integration manifest; a run the starting copy answers resolves from a root other than the one that holds it, or is announced as a fallback when that copy is the release `spec:AST-081` FR2 names; a run another named release answers resolves from a root whose CLI is not that release, from one that lacks a version the project would install, or from a later root when an earlier one qualifies; a hosted run installs a release, or a named-release run with no qualifying root does not fall back as FR2 says; a lookup consults a root before the project's own install, or with no set active; an approved integration resolves from another root or skips its validation; a root's config is read; a run writes into a package root or outside the places `spec:AST-081` FR7 names; the host entry's result lacks a resolved package or its source; or a project check judges the package set. |
-| INV31     | `foundation/agent-docs/agent-docs.test.mjs`, `foundation/agent-docs/agent-docs.path-safety.test.mjs`, `clients/cli/commands/init.behavior.test.mjs`, `api/init/remove/remove.test.mjs`, `clients/cli/commands/doctor.test.mjs`                                                                                                                                                                                                                                             | A layout test finds the block missing from a file INV31 names or present in a file it excludes, a managed import of a block-less `AGENTS.md` passes doctor, agent docs land in the home folder or in a settings folder outside a project, or `--remove-agents` leaves a block at the project root or in the working folder.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| INV31     | `foundation/agent-docs/agent-docs.test.mjs`, `foundation/agent-docs/agent-docs.path-safety.test.mjs`, `clients/cli/commands/init.behavior.test.mjs`, `api/init/remove/remove.test.mjs`, `clients/cli/commands/doctor.test.mjs`                                                                                                                                                                                                                                             | A layout test finds the block missing from a file INV31 names or present in a file it excludes, a managed import of a block-less `AGENTS.md` passes doctor, agent docs land in the home folder or in a settings folder outside a project, or `--remove-agents` without `--to` (or with `--to agents-md`) leaves a block at the project root or in the working folder.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV32     | `test/cli-strict-guard.test.mjs` lists every command offering `--strict` and every command whose exit depends on warnings; `api/integration/check/check.test.mjs` compares a strict run with the default run                                                                                                                                                                                                                                                               | A second command offers `--strict`, a command exits 1 on a warning alone without `--strict`, or a strict run reports a finding the default run does not or outside the command's issue format.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV33     | `foundation/discovery/prop-drift.test.mjs`, `foundation/discovery/doc-consistency.test.mjs`, `foundation/discovery/type-text.test.mjs`, `clients/cli/commands/doctor-integration.test.mjs`, `test/core-prop-docs.test.mjs`                                                                                                                                                                                                                                                 | A removed or renamed prop or a changed union passes unreported, a missing compiler reads as a pass, or a table that leaves out `ref`, `key`, `xstyle`, `className`, `style`, `data-testid`, or an `@internal` prop draws a warning.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | INV34     | `foundation/discovery/doc-types.test.mjs`, `foundation/discovery/doc-consistency.test.mjs`, `clients/cli/commands/doctor-integration.test.mjs`, `test/core-doc-types.test.mjs`                                                                                                                                                                                                                                                                                             | An unknown, missing, or mistyped field passes unreported, or a missing compiler reads as a pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -1149,6 +1433,8 @@ not resolve without an index file); writing an index file beside each scaffold
 | INV36     | `api/gap-report/gap-report.test.mjs`, `clients/cli/commands/gap-report.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                           | A run without `--to` reaches an `issuesUrl` the handlers did not choose, `--to` runs a handler or files on GitHub without `--confirm-public`, an unknown `--to` sends anything, or the destinations list or its line telling the agent to ask the person is missing while a destination exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV37     | `api/integration/validate-integration.test.mjs`, `api/integration/validate-integration-fixes.test.mjs`, `api/integration/pack-check.test.mjs`                                                                                                                                                                                                                                                                                                                              | A top-level source with no doc passes `--strict` (a dotted template id such as `landing.page` included), or a test, spec or story file or a subfolder helper is flagged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | INV39     | `api/doctor/doctor.test.mjs`, `api/doctor/built-checks.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                           | An app with no import of or link to Core's `astryx.css` passes `core-stylesheets`, output that uses Astryx without Core's component styles passes `built-astryx-styles`, or an app that compiles Core from source is warned by either.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| INV41     | `foundation/discovery/button-actions.test.mjs`, `api/doctor/button-actions.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                       | A button with an action, one inside a link, a press handler, a trigger prop or an element the scan does not trust, or one in a test or story file is reported; a button with no action in a layout, a page or an entry point is not; or a Core layout component the scan trusts listens for a press or clones what it renders.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| INV42     | `foundation/discovery/core-props.test.mjs`, `api/doctor/core-props.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                               | A prop a Core component takes, an HTML or ARIA attribute, a prop Core's types take that its docs leave out, a prop JSX gives every component (from the project's own modules or a type package its config names), a generic component's prop, another component's prop, or a test file's prop is reported; a prop a Core component does not take is not; or the check runs without TypeScript or on another JSX runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Open questions
 

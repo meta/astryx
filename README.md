@@ -55,6 +55,12 @@ yarn add @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 yarn add -D @astryxdesign/cli
 ```
 
+Then finish setup with `init`, once, before you write UI. It asks no questions, prints the getting-started steps (styles, theme), and saves the Astryx guide to `AGENTS.md`/`CLAUDE.md` so you and your agents build with Astryx instead of guessing:
+
+```bash
+npx @astryxdesign/cli init   # or: pnpm exec astryx init / yarn astryx init
+```
+
 You can also install the CLI once for your computer, so `astryx` works in any folder and every coding agent knows Astryx; in a project, it still runs that project's own version:
 
 ```bash

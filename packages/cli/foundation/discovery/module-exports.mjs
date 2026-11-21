@@ -25,6 +25,7 @@ import {findInstalledPackage} from '../fs/paths.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {TS_SOURCES} from '../render/ts-paths.mjs';
 
 const MODULE_EXTENSIONS = [
   '.mjs',
@@ -280,14 +281,6 @@ function collectNodesOfType(node, type, found) {
 /** What a bundler also adds to an extensionless specifier. */
 const BUNDLER_EXTENSIONS = [...MODULE_EXTENSIONS, '.json'];
 
-/** The TypeScript files a bundler tries for a `.js`-family specifier. */
-const TYPESCRIPT_FOR = /** @type {Record<string, string[]>} */ ({
-  '.js': ['.ts', '.tsx'],
-  '.jsx': ['.tsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
-});
-
 /** @param {string} file */
 function isFileOnDisk(file) {
   try {
@@ -323,7 +316,7 @@ export function resolveLocalModule(specifier, fromFile, options = {}) {
   const candidates = [base];
   if (bundler) {
     const extension = path.extname(base);
-    for (const typed of TYPESCRIPT_FOR[extension] ?? []) {
+    for (const typed of TS_SOURCES[extension] ?? []) {
       candidates.push(`${base.slice(0, -extension.length)}${typed}`);
     }
   }
@@ -418,11 +411,13 @@ function resolveSelfReference(specifier, fromFile) {
 }
 
 /**
+ * The module file a bare package specifier names from a file: the
+ * package's exports map, else its `module`, `main` or index file.
  * @param {string} specifier a bare package specifier, with an optional subpath
  * @param {string} fromFile
  * @returns {string | null}
  */
-function resolvePackageModule(specifier, fromFile) {
+export function resolvePackageModule(specifier, fromFile) {
   if (specifier.startsWith('node:') || specifier.startsWith('/')) return null;
   const self = resolveSelfReference(specifier, fromFile);
   if (self) return self.target;

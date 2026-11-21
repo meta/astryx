@@ -97,6 +97,41 @@ export const Basic: Story = {
   },
 };
 
+/** No headings: the navigation renders an empty list and its track. */
+export const Empty: Story = {
+  args: {
+    items: [],
+  },
+};
+
+const longLabelItems: OutlineItem[] = [
+  {
+    id: 'long-overview',
+    label:
+      'An overview of every setting the workspace administrator can change',
+    level: 2,
+  },
+  {
+    id: 'long-installation',
+    label: 'Installing the package in a monorepo with several build targets',
+    level: 3,
+  },
+  {id: 'long-short', label: 'Short', level: 2},
+];
+
+/** Long labels truncate with an ellipsis in a narrow column. */
+export const LongLabels: Story = {
+  args: {
+    items: longLabelItems,
+    activeId: 'long-installation',
+  },
+  render: args => (
+    <div style={{width: 200}}>
+      <Outline {...args} />
+    </div>
+  ),
+};
+
 export const Controlled: Story = {
   args: {
     items: outlineItems,

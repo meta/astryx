@@ -3,7 +3,7 @@
 'use client';
 
 import {useState, type CSSProperties} from 'react';
-import {ShieldCheckIcon} from '@heroicons/react/24/outline';
+import {ShieldIcon} from '@astryxdesign/template-icons';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Center} from '@astryxdesign/core/Center';
 import {Text} from '@astryxdesign/core/Text';
@@ -187,7 +187,7 @@ export default function LoginSSO() {
               <Card padding={0}>
                 <Section variant="muted" padding={4}>
                   <HStack gap={2} vAlign="center">
-                    <Icon icon={ShieldCheckIcon} color="secondary" />
+                    <Icon icon={ShieldIcon} color="secondary" />
                     <VStack gap={0}>
                       <Text type="label">{provider.name}</Text>
                       <Text type="supporting" color="secondary">

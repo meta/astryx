@@ -12,7 +12,8 @@
  *   - validateLocalIntegration(cwd)  — the package rooted at `cwd` (nearest
  *     package.json + sibling astryx.integration.{ts,mjs,js}).
  *   - validateInstalledIntegration(spec, cwd) — an installed package resolved
- *     from the node_modules chain at or above `cwd`.
+ *     from the node_modules chain at or above `cwd`, or, for `doctor
+ *     integration validate` outside a project, the copy the folder loads.
  *
  * Both return a { found, name, version, manifestFile, issues } result. `found`
  * is false only for the no-manifest local case, which is guidance (not an
@@ -35,7 +36,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-import {integrationDocTypes} from '../docs/_adapter.mjs';
+import {
+  integrationDocTypes,
+  packageTemplateLinkProblems,
+} from '../docs/_adapter.mjs';
+import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {
   iconSetCoverage,
   iconSetIssues,
@@ -51,6 +56,7 @@ import {
   integrationDocCommands,
   integrationDocTargets,
   integrationExampleCode,
+  loadedCopy,
   projectUsesIconSets,
 } from './_adapter.mjs';
 import {
@@ -96,11 +102,13 @@ import {
   shippedImportFindings,
 } from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
+const CORE_PEER_VERSION = 'core_peer_version';
 
 /** A doc replaces or extends a name that holds no topic and no guide. */
 const DOC_TARGET_NOT_FOUND = 'doc_target_not_found';
@@ -312,8 +320,10 @@ async function findUnreachableContributionIssues(
  * Shared core for the local and installed entry points.
  * @param {string} packageDir
  * @param {{name: string, version?: string}} identity
- * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean, shippedImports?: boolean}} [options]
+ * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean, shippedImports?: boolean, skipped?: string | null}} [options]
  *   `own`: the package is the one being authored in the current folder;
+ *   `skipped`: why this CLI skips the copy, one installed for the computer,
+ *   outside a project;
  *   `shippedImports`: check the relative imports of the modules the package
  *   ships (default true; `integration verify` checks them in the packed
  *   tree instead, which holds exactly what npm packs);
@@ -332,6 +342,7 @@ async function validateAtPackageDir(
     cwd = packageDir,
     iconSets = true,
     shippedImports = true,
+    skipped = null,
   } = {},
 ) {
   /** @type {Issue[]} */
@@ -511,12 +522,23 @@ async function validateAtPackageDir(
     choice.inProject && choice.copy === 'starting' && choice.coreVersion
       ? choice.coreVersion
       : undefined;
-  const peerProblem = cliPeerVersionProblem(loaded, undefined, cwd, {
+  const cliProblem = cliPeerVersionProblem(loaded, undefined, cwd, {
     own,
     from,
   });
-  if (peerProblem) {
-    (result.notes ??= []).push({code: CLI_PEER_VERSION, message: peerProblem});
+  // A copy installed for the computer that this CLI skips outside a project
+  // gets doctor's reason and fix, whichever peer range keeps it out: the
+  // project steps would set up a project the folder does not have.
+  if (skipped) {
+    const label = identity.version
+      ? `${identity.name}@${identity.version}`
+      : identity.name;
+    (result.notes ??= []).push({
+      code: cliProblem ? CLI_PEER_VERSION : CORE_PEER_VERSION,
+      message: `Outside a project, the other commands skip ${label}: ${skipped}. Install a release of ${identity.name} that supports this CLI.`,
+    });
+  } else if (cliProblem) {
+    (result.notes ??= []).push({code: CLI_PEER_VERSION, message: cliProblem});
   }
   if (loaded.themes && !rootProblem(loaded.themes))
     issues.push(...unreadThemeFolderIssues(packageDir, loaded));
@@ -769,16 +791,18 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * at or above `cwd`, resolved the way the project loads it.
  * @param {string} spec package name
  * @param {string} [cwd]
- * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
+ * @param {{iconSets?: boolean, shippedImports?: boolean, computer?: boolean}} [options]
  *   `iconSets`: check the package's experimental icon sets; by default only
  *   where icon features are on in the project at `cwd`.
  *   `shippedImports: false` skips the shipped-import check.
+ *   `computer`: outside a project, check the copy the folder loads, the copy
+ *   installed for the computer included.
  * @returns {Promise<ValidateResult>}
  */
 export async function validateInstalledIntegration(
   spec,
   cwd = process.cwd(),
-  {iconSets, shippedImports = true} = {},
+  {iconSets, shippedImports = true, computer = false} = {},
 ) {
   // The resolver throws (path-safety guard) on a spec with path segments,
   // `..`, or an absolute path. Every other malformed input to this command
@@ -795,6 +819,19 @@ export async function validateInstalledIntegration(
       version: undefined,
       issues: [error('invalid_package_spec', /** @type {any} */ (err).message)],
     };
+  }
+  /** @type {string | null} why this CLI skips the computer copy checked */
+  let skipped = null;
+  let own = false;
+  if (computer && isOutsideProject(cwd)) {
+    const copy = await loadedCopy(spec, cwd);
+    if (copy && 'skipped' in copy) {
+      packageDir = copy.skipped.packageDir;
+      skipped = copy.skipped.incompatible;
+    } else if (copy) {
+      packageDir = copy.dir;
+      own = copy.own;
+    }
   }
   const pkgJsonPath = path.join(packageDir, 'package.json');
 
@@ -826,6 +863,8 @@ export async function validateInstalledIntegration(
       cwd,
       iconSets: iconSets ?? (await projectUsesIconSets(cwd)),
       shippedImports,
+      skipped,
+      own,
     },
   );
 }
@@ -957,7 +996,7 @@ export async function validateIntegration(pkg, options = {}) {
 async function validateIntegrationOnce(pkg, options) {
   const {cwd = process.cwd()} = options;
   const result = pkg
-    ? await validateInstalledIntegration(pkg, cwd)
+    ? await validateInstalledIntegration(pkg, cwd, {computer: true})
     : await validateLocalIntegration(cwd);
   // Each doc the package ships, against the published authoring type for its
   // kind, read with the project's own compiler. Findings are warnings only.
@@ -1028,6 +1067,21 @@ async function validateIntegrationOnce(pkg, options) {
       ...(await docTargetNotes(integration)).map(note => ({
         ...note,
         next: true,
+      })),
+    );
+  }
+  // Each link in a template's description that names no doc: a `next` note
+  // until the next minor release makes it a warning.
+  if (integration?.templates) {
+    const ownDocs = integration.docs
+      ? await discoverIntegrationDocs(integration)
+      : null;
+    const links = await packageTemplateLinkProblems(integration, ownDocs);
+    notes.push(
+      ...links.map(message => ({
+        code: 'invalid_doc_graph',
+        message,
+        next: /** @type {const} */ (true),
       })),
     );
   }

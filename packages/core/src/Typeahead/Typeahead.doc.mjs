@@ -45,6 +45,12 @@ const anatomy = [
       'Shared clear action that removes the selected item when hasClear is enabled.',
   },
   {
+    name: 'Status icon',
+    required: false,
+    description:
+      'Error, warning, or success icon at the end of the input. With statusVariant tooltip it is a button that reveals the status message.',
+  },
+  {
     name: 'Popup surface',
     required: false,
     description:
@@ -286,8 +292,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'SVG icon component displayed at the start of the input.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'containerXstyle',

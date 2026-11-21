@@ -89,8 +89,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   inline start is the right edge, so every trigger opens the drawer on the far
   side. `design:bidirectionality` DR7 requires a layered surface to keep
   its start and end relationship to its trigger.
-- **A caller `id` disconnects the Toggle.** A caller `id` prop, even
-  `undefined`, replaces the drawer id on the dialog, so inside AppShell the
+- **A caller `id` disconnects the Toggle.** A defined caller `id` prop
+  replaces the drawer id on the dialog, so inside AppShell the
   Toggle's `aria-controls` names no element, breaking `component:AppShell` FR13
   and AR3. `architecture:public-component-api` INV5 keeps component-owned
   accessibility from being overwritten by accident.

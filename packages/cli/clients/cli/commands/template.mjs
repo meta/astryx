@@ -48,6 +48,18 @@ export {
  */
 
 /**
+ * The line naming the one `component` call that reads every component a
+ * template uses, or null when it uses none.
+ * @param {string} run the CLI invocation
+ * @param {string[]} components
+ * @returns {string | null}
+ */
+function componentsLine(run, components) {
+  if (components.length === 0) return null;
+  return `Read the components it uses in one call: \`${run} component ${components.join(' ')}\``;
+}
+
+/**
  * The line saying how many docs-only demo content elements became a
  * placeholder, in the copied file when one is named.
  * @param {number} count
@@ -305,11 +317,14 @@ export function registerTemplate(program) {
               demoContentReplaced,
               icons,
               isReady,
+              componentsToRead,
             } = result.data;
             console.error(`package: ${result.package}`);
             if (isReady === false)
               console.error(`template: ${markNotReady(tName, isReady)}`);
             emit(code(source));
+            const readLine = componentsLine(run, componentsToRead);
+            if (readLine) console.error(readLine);
             if (demoMediaReplaced > 0) {
               console.error(
                 `Replaced ${demoMediaReplaced} Astryx demo media reference${demoMediaReplaced === 1 ? '' : 's'}: ` +
@@ -335,6 +350,7 @@ export function registerTemplate(program) {
               notes,
               icons,
               givenPath,
+              components,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
             const givenRelative =
@@ -342,12 +358,14 @@ export function registerTemplate(program) {
                 ? path.join(outputDir, fileName)
                 : outputDir;
             const iconText = iconLines(icons);
+            const readLine = componentsLine(run, components);
             emit(
               text(
                 isReady === false
                   ? `Copied template ${markNotReady(tName, isReady)} to ${file}`
                   : `Copied template to ${file}`,
               ),
+              readLine !== null && text(readLine),
               givenPath !== undefined &&
                 text(
                   `${givenPath} is inside the project, so it was written as its relative path, ${givenRelative}.`,

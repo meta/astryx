@@ -1,0 +1,661 @@
+{
+  "schemaVersion": 1,
+  "module": "@astryxdesign/template-icons",
+  "looks": {
+    "24/outline": "@heroicons/react/24/outline",
+    "24/solid": "@heroicons/react/24/solid",
+    "20/solid": "@heroicons/react/20/solid",
+    "16/solid": "@heroicons/react/16/solid",
+    "lucide": "lucide-react"
+  },
+  "meanings": {
+    "activity": {
+      "heroicons": "PresentationChartLineIcon"
+    },
+    "add": {
+      "heroicons": "PlusIcon",
+      "lucide": "Plus"
+    },
+    "adjustments": {
+      "heroicons": "AdjustmentsHorizontalIcon",
+      "lucide": "SlidersHorizontal"
+    },
+    "alert": {
+      "heroicons": "ExclamationCircleIcon",
+      "fallback": "warning"
+    },
+    "alignBottom": {
+      "lucide": "ArrowDownToLine"
+    },
+    "alignCenter": {
+      "lucide": "TextAlignCenter"
+    },
+    "alignEnd": {
+      "lucide": "TextAlignEnd"
+    },
+    "alignJustify": {
+      "lucide": "TextAlignJustify"
+    },
+    "alignMiddle": {
+      "lucide": "FoldVertical"
+    },
+    "alignStart": {
+      "lucide": "TextAlignStart"
+    },
+    "alignTop": {
+      "lucide": "ArrowUpToLine"
+    },
+    "angle": {
+      "lucide": "TriangleRight"
+    },
+    "announcement": {
+      "heroicons": "MegaphoneIcon"
+    },
+    "apps": {
+      "heroicons": "SquaresPlusIcon",
+      "lucide": "LayoutGrid"
+    },
+    "archive": {
+      "heroicons": "ArchiveBoxIcon"
+    },
+    "arrowDown": {
+      "heroicons": "ArrowDownIcon"
+    },
+    "arrowLeft": {
+      "heroicons": "ArrowLeftIcon"
+    },
+    "arrowRight": {
+      "heroicons": "ArrowRightIcon"
+    },
+    "arrowUp": {
+      "heroicons": "ArrowUpIcon"
+    },
+    "arrowsUpDown": {
+      "heroicons": "ArrowsUpDownIcon"
+    },
+    "attach": {
+      "heroicons": "PaperClipIcon"
+    },
+    "audio": {
+      "heroicons": "SpeakerWaveIcon",
+      "lucide": "AudioLines"
+    },
+    "bank": {
+      "heroicons": "BuildingLibraryIcon"
+    },
+    "block": {
+      "heroicons": "NoSymbolIcon",
+      "fallback": "error"
+    },
+    "bold": {
+      "heroicons": "BoldIcon"
+    },
+    "bolt": {
+      "heroicons": "BoltIcon",
+      "lucide": "Zap"
+    },
+    "book": {
+      "heroicons": "BookOpenIcon",
+      "lucide": "BookOpen"
+    },
+    "bookmark": {
+      "heroicons": "BookmarkIcon",
+      "lucide": "Bookmark"
+    },
+    "bookmarkAdd": {
+      "lucide": "BookmarkPlus"
+    },
+    "building": {
+      "heroicons": "BuildingOffice2Icon"
+    },
+    "calendar": {
+      "heroicons": "CalendarIcon",
+      "lucide": "Calendar"
+    },
+    "cart": {
+      "heroicons": "ShoppingCartIcon"
+    },
+    "channel": {
+      "heroicons": "HashtagIcon",
+      "fallback": "tag"
+    },
+    "chart": {
+      "heroicons": "ChartBarIcon",
+      "lucide": "ChartColumn"
+    },
+    "check": {
+      "heroicons": "CheckIcon"
+    },
+    "checklist": {
+      "heroicons": "ClipboardDocumentCheckIcon",
+      "fallback": "clipboard"
+    },
+    "chevronDown": {
+      "heroicons": "ChevronDownIcon",
+      "lucide": "ChevronDown"
+    },
+    "chevronLeft": {
+      "heroicons": "ChevronLeftIcon"
+    },
+    "chevronRight": {
+      "heroicons": "ChevronRightIcon"
+    },
+    "chevronUp": {
+      "heroicons": "ChevronUpIcon"
+    },
+    "click": {
+      "heroicons": "CursorArrowRaysIcon"
+    },
+    "clipboard": {
+      "heroicons": "ClipboardDocumentIcon"
+    },
+    "clock": {
+      "heroicons": "ClockIcon"
+    },
+    "close": {
+      "heroicons": "XMarkIcon",
+      "lucide": "X"
+    },
+    "cloud": {
+      "heroicons": "CloudIcon"
+    },
+    "code": {
+      "heroicons": "CodeBracketIcon",
+      "lucide": "Code"
+    },
+    "collection": {
+      "heroicons": "RectangleStackIcon"
+    },
+    "columnSettings": {
+      "lucide": "Columns3Cog",
+      "fallback": "viewColumns"
+    },
+    "compose": {
+      "heroicons": "PencilSquareIcon"
+    },
+    "contrast": {
+      "lucide": "Contrast"
+    },
+    "conversation": {
+      "heroicons": "ChatBubbleLeftRightIcon"
+    },
+    "copy": {
+      "heroicons": "DocumentDuplicateIcon"
+    },
+    "copyText": {
+      "heroicons": "ClipboardDocumentIcon",
+      "fallback": "copy"
+    },
+    "cornerRadius": {
+      "lucide": "SquareRoundCorner"
+    },
+    "cpu": {
+      "heroicons": "CpuChipIcon",
+      "lucide": "Cpu"
+    },
+    "create": {
+      "heroicons": "PlusCircleIcon",
+      "fallback": "add"
+    },
+    "creditCard": {
+      "heroicons": "CreditCardIcon",
+      "lucide": "CreditCard"
+    },
+    "currency": {
+      "heroicons": "CurrencyDollarIcon",
+      "fallback": "money"
+    },
+    "cut": {
+      "heroicons": "ScissorsIcon"
+    },
+    "database": {
+      "heroicons": "CircleStackIcon"
+    },
+    "delete": {
+      "heroicons": "TrashIcon"
+    },
+    "desktop": {
+      "heroicons": "ComputerDesktopIcon"
+    },
+    "discount": {
+      "heroicons": "ReceiptPercentIcon"
+    },
+    "document": {
+      "heroicons": "DocumentTextIcon",
+      "lucide": "FileText"
+    },
+    "documentSearch": {
+      "heroicons": "DocumentMagnifyingGlassIcon"
+    },
+    "download": {
+      "heroicons": "ArrowDownTrayIcon",
+      "lucide": "Download"
+    },
+    "drag": {
+      "lucide": "GripVertical"
+    },
+    "edit": {
+      "heroicons": "PencilIcon",
+      "lucide": "Pencil"
+    },
+    "emoji": {
+      "heroicons": "FaceSmileIcon"
+    },
+    "error": {
+      "heroicons": "XCircleIcon",
+      "lucide": "CircleX"
+    },
+    "expand": {
+      "heroicons": "ArrowsPointingOutIcon"
+    },
+    "experiment": {
+      "heroicons": "BeakerIcon"
+    },
+    "externalLink": {
+      "heroicons": "ArrowTopRightOnSquareIcon"
+    },
+    "eye": {
+      "heroicons": "EyeIcon",
+      "lucide": "Eye"
+    },
+    "eyeSlash": {
+      "heroicons": "EyeSlashIcon"
+    },
+    "file": {
+      "heroicons": "DocumentIcon",
+      "lucide": "File"
+    },
+    "fingerprint": {
+      "heroicons": "FingerPrintIcon"
+    },
+    "fire": {
+      "heroicons": "FireIcon"
+    },
+    "flag": {
+      "heroicons": "FlagIcon"
+    },
+    "flipHorizontal": {
+      "lucide": "TrianglesCenterlineDashedVertical"
+    },
+    "flipVertical": {
+      "lucide": "TrianglesCenterlineDashedHorizontal"
+    },
+    "folder": {
+      "heroicons": "FolderIcon",
+      "lucide": "Folder"
+    },
+    "folderAdd": {
+      "heroicons": "FolderPlusIcon"
+    },
+    "frame": {
+      "lucide": "Frame"
+    },
+    "funnel": {
+      "heroicons": "FunnelIcon"
+    },
+    "gift": {
+      "heroicons": "GiftIcon"
+    },
+    "gitBranch": {
+      "lucide": "GitBranch"
+    },
+    "gitFork": {
+      "lucide": "GitFork"
+    },
+    "globe": {
+      "heroicons": "GlobeAltIcon"
+    },
+    "gridView": {
+      "heroicons": "Squares2X2Icon"
+    },
+    "group": {
+      "lucide": "Group"
+    },
+    "groupRows": {
+      "lucide": "Table2",
+      "fallback": "group"
+    },
+    "halftone": {
+      "lucide": "Grip",
+      "fallback": "drag"
+    },
+    "heart": {
+      "heroicons": "HeartIcon"
+    },
+    "help": {
+      "heroicons": "QuestionMarkCircleIcon",
+      "fallback": "info"
+    },
+    "home": {
+      "heroicons": "HomeIcon"
+    },
+    "house": {
+      "heroicons": "HomeModernIcon",
+      "fallback": "home"
+    },
+    "image": {
+      "heroicons": "PhotoIcon",
+      "lucide": "Image"
+    },
+    "inbox": {
+      "heroicons": "InboxIcon"
+    },
+    "info": {
+      "heroicons": "InformationCircleIcon"
+    },
+    "integration": {
+      "heroicons": "PuzzlePieceIcon"
+    },
+    "italic": {
+      "heroicons": "ItalicIcon",
+      "lucide": "Italic"
+    },
+    "key": {
+      "heroicons": "KeyIcon"
+    },
+    "keyboard": {
+      "heroicons": "CommandLineIcon"
+    },
+    "language": {
+      "heroicons": "LanguageIcon"
+    },
+    "lightbulb": {
+      "heroicons": "LightBulbIcon"
+    },
+    "link": {
+      "heroicons": "LinkIcon"
+    },
+    "list": {
+      "heroicons": "ListBulletIcon",
+      "lucide": "List"
+    },
+    "listView": {
+      "heroicons": "Bars4Icon",
+      "fallback": "list"
+    },
+    "location": {
+      "heroicons": "MapPinIcon",
+      "lucide": "MapPin"
+    },
+    "lock": {
+      "heroicons": "LockClosedIcon",
+      "lucide": "Lock"
+    },
+    "lowercase": {
+      "lucide": "CaseLower"
+    },
+    "mail": {
+      "heroicons": "EnvelopeIcon"
+    },
+    "media": {
+      "heroicons": "PlayCircleIcon",
+      "fallback": "play"
+    },
+    "mention": {
+      "heroicons": "AtSymbolIcon"
+    },
+    "menu": {
+      "heroicons": "Bars3Icon",
+      "lucide": "Menu"
+    },
+    "message": {
+      "heroicons": "ChatBubbleLeftIcon"
+    },
+    "microphone": {
+      "heroicons": "MicrophoneIcon",
+      "lucide": "Mic"
+    },
+    "mobile": {
+      "heroicons": "DevicePhoneMobileIcon",
+      "lucide": "Smartphone"
+    },
+    "money": {
+      "heroicons": "BanknotesIcon",
+      "lucide": "Banknote"
+    },
+    "moon": {
+      "heroicons": "MoonIcon"
+    },
+    "moreHorizontal": {
+      "heroicons": "EllipsisHorizontalIcon"
+    },
+    "moveToFolder": {
+      "heroicons": "FolderArrowDownIcon",
+      "fallback": "folder"
+    },
+    "notification": {
+      "heroicons": "BellIcon"
+    },
+    "notificationActive": {
+      "heroicons": "BellAlertIcon"
+    },
+    "notificationOff": {
+      "heroicons": "BellSlashIcon"
+    },
+    "package": {
+      "heroicons": "CubeIcon",
+      "lucide": "Box"
+    },
+    "paddingHorizontal": {
+      "lucide": "PanelLeftRightDashed"
+    },
+    "paddingPerSide": {
+      "lucide": "SquareSquare"
+    },
+    "paddingVertical": {
+      "lucide": "PanelTopBottomDashed"
+    },
+    "paintBrush": {
+      "heroicons": "PaintBrushIcon"
+    },
+    "panelBottom": {
+      "lucide": "PanelBottom"
+    },
+    "panelLeft": {
+      "heroicons": "Bars3BottomLeftIcon",
+      "lucide": "PanelLeft"
+    },
+    "panelRight": {
+      "lucide": "PanelRight"
+    },
+    "paste": {
+      "heroicons": "ClipboardIcon",
+      "fallback": "clipboard"
+    },
+    "photoEffect": {
+      "lucide": "Aperture"
+    },
+    "pin": {
+      "lucide": "Pin"
+    },
+    "play": {
+      "heroicons": "PlayIcon"
+    },
+    "radiusPerCorner": {
+      "lucide": "Scan"
+    },
+    "raiseHand": {
+      "heroicons": "HandRaisedIcon"
+    },
+    "redo": {
+      "lucide": "Redo2"
+    },
+    "refresh": {
+      "heroicons": "ArrowPathIcon"
+    },
+    "remove": {
+      "heroicons": "MinusIcon",
+      "lucide": "Minus"
+    },
+    "review": {
+      "heroicons": "CheckBadgeIcon",
+      "fallback": "info"
+    },
+    "rocket": {
+      "heroicons": "RocketLaunchIcon"
+    },
+    "rotate": {
+      "lucide": "RotateCw"
+    },
+    "rotateCounterclockwise": {
+      "lucide": "RotateCcw"
+    },
+    "save": {
+      "heroicons": "ArrowDownOnSquareIcon"
+    },
+    "scale": {
+      "lucide": "Scale"
+    },
+    "schedule": {
+      "heroicons": "CalendarDaysIcon",
+      "fallback": "calendar"
+    },
+    "search": {
+      "heroicons": "MagnifyingGlassIcon",
+      "lucide": "Search"
+    },
+    "send": {
+      "heroicons": "PaperAirplaneIcon"
+    },
+    "server": {
+      "heroicons": "ServerStackIcon"
+    },
+    "settings": {
+      "heroicons": "Cog6ToothIcon"
+    },
+    "share": {
+      "heroicons": "ShareIcon"
+    },
+    "shield": {
+      "heroicons": "ShieldCheckIcon",
+      "lucide": "ShieldCheck"
+    },
+    "shipping": {
+      "heroicons": "TruckIcon"
+    },
+    "shoppingBag": {
+      "heroicons": "ShoppingBagIcon",
+      "lucide": "ShoppingBag"
+    },
+    "signal": {
+      "heroicons": "SignalIcon",
+      "fallback": "activity"
+    },
+    "sparkles": {
+      "heroicons": "SparklesIcon",
+      "lucide": "Sparkles"
+    },
+    "star": {
+      "heroicons": "StarIcon",
+      "lucide": "Star"
+    },
+    "stop": {
+      "heroicons": "StopIcon"
+    },
+    "strikethrough": {
+      "heroicons": "StrikethroughIcon",
+      "lucide": "Strikethrough"
+    },
+    "success": {
+      "heroicons": "CheckCircleIcon",
+      "lucide": "CircleCheck"
+    },
+    "sun": {
+      "heroicons": "SunIcon"
+    },
+    "swatch": {
+      "heroicons": "SwatchIcon"
+    },
+    "table": {
+      "heroicons": "TableCellsIcon",
+      "lucide": "Table"
+    },
+    "tablet": {
+      "heroicons": "DeviceTabletIcon"
+    },
+    "tag": {
+      "heroicons": "TagIcon",
+      "lucide": "Tag"
+    },
+    "team": {
+      "heroicons": "UserGroupIcon",
+      "fallback": "users"
+    },
+    "text": {
+      "lucide": "Type"
+    },
+    "textCase": {
+      "lucide": "CaseSensitive"
+    },
+    "textRegular": {
+      "lucide": "Baseline"
+    },
+    "thumbsDown": {
+      "heroicons": "HandThumbDownIcon"
+    },
+    "thumbsUp": {
+      "heroicons": "HandThumbUpIcon"
+    },
+    "transfer": {
+      "heroicons": "ArrowsRightLeftIcon"
+    },
+    "trendDown": {
+      "heroicons": "ArrowTrendingDownIcon"
+    },
+    "underline": {
+      "heroicons": "UnderlineIcon",
+      "lucide": "Underline"
+    },
+    "undo": {
+      "heroicons": "ArrowUturnLeftIcon",
+      "lucide": "Undo2"
+    },
+    "unlock": {
+      "lucide": "LockOpen"
+    },
+    "uppercase": {
+      "lucide": "CaseUpper"
+    },
+    "user": {
+      "heroicons": "UserIcon",
+      "lucide": "User"
+    },
+    "userAdd": {
+      "heroicons": "UserPlusIcon",
+      "lucide": "UserPlus"
+    },
+    "userCircle": {
+      "heroicons": "UserCircleIcon"
+    },
+    "userRemove": {
+      "heroicons": "UserMinusIcon"
+    },
+    "users": {
+      "heroicons": "UsersIcon"
+    },
+    "verified": {
+      "heroicons": "CheckBadgeIcon",
+      "fallback": "success"
+    },
+    "video": {
+      "lucide": "Video"
+    },
+    "viewColumns": {
+      "heroicons": "ViewColumnsIcon",
+      "lucide": "Columns3"
+    },
+    "wallet": {
+      "heroicons": "WalletIcon",
+      "lucide": "Wallet"
+    },
+    "warning": {
+      "heroicons": "ExclamationTriangleIcon"
+    },
+    "work": {
+      "heroicons": "BriefcaseIcon"
+    },
+    "wrench": {
+      "heroicons": "WrenchScrewdriverIcon"
+    }
+  }
+}

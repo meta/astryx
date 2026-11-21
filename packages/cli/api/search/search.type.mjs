@@ -20,7 +20,8 @@
  * @property {number} score - How strongly the query matched this entry (higher is
  *   stronger). Search keeps the lexical ranker's order between score bands,
  *   including its domain priority, which can place a weaker non-doc match above
- *   a stronger doc; within a run of one score band and kind it orders matches
+ *   a stronger doc, except that a family's root can move directly before a
+ *   part of its own family; within a run of one score band and kind it orders matches
  *   by its static ordering weights, so a lower score can lead inside a band.
  *   Build's `blocks` use their own order.
  * @property {string} reason - Human-readable reason the candidate matched (e.g. `keyword "button"`).
@@ -73,8 +74,11 @@
  *   removed in a patch release. Present only when an icon set
  *   is installed, the search has no `type`, the query asks for an icon (one
  *   word as typed is `icon` or `icons`, an installed set's name, or an icon
- *   export name such as `SearchIcon`, and is not a component or hook name),
- *   and an icon answers it. It never changes `results` or `matchCount`.
+ *   export name such as `SearchIcon`, and is not a component or hook name;
+ *   an `icon` or `icons` right after `with`, with only `a`, `an` or `the`
+ *   between, that no `of` or `for` follows names a feature of an answered
+ *   component or template, as in `card with an icon`, and asks for none, while
+ *   `card with an icon of a star` still asks), and an icon answers it. It never changes `results` or `matchCount`.
  * @property {{partial?: {skipped: SearchDomain[], reason: string}}} [meta] -
  *   `partial`, when an open search could not get the Core that components,
  *   hooks, and templates are read from (such as outside a project, offline,

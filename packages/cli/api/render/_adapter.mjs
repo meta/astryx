@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -41,18 +40,24 @@ import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedd
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
-import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {reachableFiles, receivingAliases, resolutionCandidates} from '../../foundation/render/embedded-imports.mjs';
+import {relativeSpecifierBetween} from '../../foundation/fs/relative-specifier.mjs';
 import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {resolveProjectTypeScript} from '../../foundation/discovery/project-typescript.mjs';
+import {judgeCoreProps, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
+import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
+import {COMPONENT_BATCH_SELECTOR_LIMIT, component} from '../component/component.mjs';
+import {projectAugmentations, propValueKinds, propWideningInterfaces, unacceptedKind} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -429,20 +434,22 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      const guidance = samePackage ? installGuidanceFor(packages, cwd) : undefined;
+      // At installCommandFor's versions: Core, the CLI and a package Astryx
+      // releases with Core at the project's Core release, in the guidance
+      // too; any other at the CLI's range in the command, bare in the
+      // guidance; no command when the project's lockfiles disagree.
+      const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
+      const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
         suggestions.push({name: e.detail.install, reason: needs});
-      } else if (pageRoot == null) {
+      } else if (pageRoot == null || step == null) {
         // In a folder no package.json holds, an install would make the folder
         // a project, so the message names the packages for the project that
         // uses the page instead, as template and build do.
         message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
       } else {
-        // With the CLI's version ranges, as template and build give it; none
-        // when the project's lockfiles disagree.
-        const step = installCommandFor(packages, pageDir, cwd);
         const line = step.installGuidance ?? step.installCommand;
         if (line && samePackage) {
           suggestions.push({name: line, reason: what});
@@ -489,13 +496,258 @@ function servedSet(input) {
   }
 }
 
+/** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
+const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
+
+/** A documented type that is only string literals, or `string` itself. */
+const STRING_TYPE = /^\s*(?:string|'[^']*'(?:\s*\|\s*'[^']*')*)\s*$/;
+
+/**
+ * Whether a prop's documented type (as `astryx component` shows it) plainly
+ * takes every written kind: strings for a string union or `string`, numbers
+ * for `number`, true or false for `boolean`. Only a yes skips the read of
+ * Core's source; any other type is read there.
+ * @param {unknown} docType
+ * @param {string[]} kinds
+ * @returns {boolean}
+ */
+function docTypeTakes(docType, kinds) {
+  if (typeof docType !== 'string') return false;
+  const type = docType.trim();
+  return kinds.every(kind =>
+    kind === 'string' ? STRING_TYPE.test(type) : kind === 'number' ? type === 'number' : kind === 'boolean' && type === 'boolean',
+  );
+}
+
+/** How a warning names each kind of value. */
+const KIND_WORDS = /** @type {Record<import('../../foundation/discovery/core-augmentation-points.mjs').ValueKind, string>} */ ({
+  string: 'a string',
+  number: 'a number',
+  boolean: 'true or false',
+  object: 'an object',
+  array: 'an array',
+  Date: 'a Date',
+  function: 'a function',
+});
+
+/**
+ * A warning for each value a page certainly gives a Core component's prop
+ * that the prop does not take.
+ * - A value of the wrong kind for the prop's declared type in the page's
+ *   Core (`<TextInput status="error">`, where status takes an object): both
+ *   the written value and the declared type must be certain, else the prop
+ *   is not checked.
+ * - A string the prop's closed union does not hold (`<Button
+ *   variant="danger">`), each branch of a literal-only conditional included:
+ *   the component draws no look for it, and nothing else says so. The union
+ *   comes from Core's own docs for the component in the page's Core, the
+ *   props `astryx component <Name> --package @astryxdesign/core` reads, so an
+ *   integration that replaces the component does not change it. Where the
+ *   prop's type takes the keys of an interface a theme can widen by
+ *   declaration merging (`interface ButtonVariantMap`, `interface
+ *   TextColorMap` for Link's `color`), the keys the page's project adds to it
+ *   are values the prop has too; when the project cannot be read in full, or
+ *   the prop's type cannot be followed, such a prop is not checked. A
+ *   component or prop with no doc entry, and a prop whose type is not a
+ *   closed union, are not checked.
+ * @param {NonNullable<import('../../foundation/render/render-page.mjs').RenderedPage['propValues']>} values
+ * @param {string} page the page file; its folder's Core gives the docs
+ * @param {(name: string) => Promise<any[] | null>} docsOf the documented
+ *   props of a Core component, read once for both prop checks
+ * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
+ */
+async function propValueWarnings(values, page, docsOf) {
+  const dir = path.dirname(page);
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  const seen = new Set();
+  /** @param {string} key @param {string} message */
+  const warn = (key, message) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    warnings.push({code: 'unknown-prop-value', message});
+  };
+  const coreDir = values.length ? findCoreDir(dir) : null;
+  /** @type {ReturnType<typeof projectAugmentations> | undefined} */
+  let added;
+  /** @type {Map<string, ReturnType<typeof propValueKinds>>} */
+  const declaredKinds = new Map();
+  // The same wrong kind for one prop on several lines of a file is one
+  // warning that names every line.
+  /** @type {Map<string, {file: string, said: string, lines: number[], at: number}>} */
+  const kindGroups = new Map();
+  for (const v of values) {
+    const docType = (await docsOf(v.component))?.find(p => p?.name === v.prop)?.type;
+    const kindKey = `${v.component}.${v.prop}`;
+    // A documented string union, `string`, `number` or `boolean` that takes
+    // every written kind decides the prop without Core's source, which costs
+    // a parse per component.
+    if (!declaredKinds.has(kindKey) && !docTypeTakes(docType, v.kinds)) {
+      declaredKinds.set(kindKey, propValueKinds(coreDir, v.component, v.prop));
+    }
+    const declared = declaredKinds.get(kindKey) ?? null;
+    const wrong = declared ? unacceptedKind(v.kinds, declared) : null;
+    if (declared && wrong) {
+      const fields = declared.fields ? ` {${declared.fields.join(', ')}}` : '';
+      const numbers =
+        !declared.anyNumber && declared.numbers.size > 0 ? `one of ${[...declared.numbers].join(', ')}` : null;
+      const expected = [...declared.kinds].map(kind =>
+        kind === 'object' ? KIND_WORDS.object + fields : kind === 'number' && numbers ? numbers : KIND_WORDS[kind],
+      );
+      const said = `${v.component} ${v.prop} expects ${expected.join(' or ')}; got ${KIND_WORDS[wrong]}`;
+      const group = kindGroups.get(`${v.file}\0${said}`) ?? {file: v.file, said, lines: [], at: warnings.length};
+      if (group.lines.length === 0) {
+        kindGroups.set(`${v.file}\0${said}`, group);
+        warnings.push({code: 'unknown-prop-value', message: ''});
+      }
+      if (!group.lines.includes(v.line)) group.lines.push(v.line);
+      continue;
+    }
+    if (!v.strings || v.strings.length === 0) continue;
+    const prop = (await docsOf(v.component))?.find(p => p?.name === v.prop);
+    if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
+    const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
+    const unknown = v.strings.filter(value => !allowed.includes(value));
+    if (unknown.length === 0) continue;
+    // The project read can walk a large tree; only a value the docs lack needs it.
+    const widening = await propWideningInterfaces(coreDir, v.component, v.prop);
+    if (widening === null) continue;
+    if (widening.size > 0) {
+      added ??= projectAugmentations(findPackageRoot(dir) ?? dir, page);
+      if (!added.complete) continue;
+      for (const name of widening) {
+        for (const key of added.keys.get(name) ?? []) if (!allowed.includes(key)) allowed.push(key);
+      }
+    }
+    const kinds = v.prop.endsWith('s') ? `${v.prop} values` : `${v.prop}s`;
+    for (const value of unknown) {
+      if (allowed.includes(value)) continue;
+      warn(
+        `${v.file}:${v.line}:${v.component}:${v.prop}:${value}`,
+        `${v.file}:${v.line}: ${v.component} has no ${v.prop} "${value}"; its ${kinds} are ${allowed.join(', ')}.`,
+      );
+    }
+  }
+  for (const {file, said, lines, at} of kindGroups.values()) {
+    warnings[at].message =
+      lines.length === 1 ? `${file}:${lines[0]}: ${said}.` : `${file}: ${said} on ${lines.length} lines (${lines.join(', ')}).`;
+  }
+  return warnings;
+}
+
+/**
+ * The documented props of each Core component, read from the Core of the
+ * folder `dir` with doctor's reader (`readCoreDocs`); null for a component
+ * the docs do not describe. `load` reads the components it is given in
+ * batches; `of` reads one component that was not loaded. Each component is
+ * read once.
+ * @param {string} dir
+ */
+function coreDocsReader(dir) {
+  /** @type {Map<string, any[] | null>} */
+  const docs = new Map();
+  /** @param {string[]} names */
+  const load = async names => {
+    const missing = [...new Set(names)].filter(name => !docs.has(name));
+    for (const name of missing) docs.set(name, null);
+    try {
+      for (const [name, props] of await readCoreDocs(component, missing, dir, COMPONENT_BATCH_SELECTOR_LIMIT)) docs.set(name, props);
+    } catch {
+      // A component the docs do not describe is not checked.
+    }
+  };
+  /** @param {string} name */
+  const of = async name => {
+    await load([name]);
+    return docs.get(name) ?? null;
+  };
+  return {load, of};
+}
+
+/**
+ * The console line React prints for a prop that reaches a DOM element it
+ * does not know, with the prop's name.
+ */
+const REACT_UNKNOWN_PROP = /React does not recognize the `([^`]+)` prop|Unknown event handler property `([^`]+)`/;
+
+/** How many of a component's props a warning names before it counts the rest. */
+const PROPS_LISTED = 12;
+
+/**
+ * A warning for each Core component element a page's file gives props it
+ * does not take (`<AlertDialog onConfirm={…}>`), judged as `astryx doctor`
+ * judges them (`judgeCoreProps`): the prop does nothing, and a callback the
+ * page passes is never called. Each prop gets the documented prop with the
+ * same words, when there is one; when a prop has none, the warning lists the
+ * props the component takes. Core's types are read with the project's
+ * TypeScript and React's types, as the page finds them; without them, the
+ * props are not judged. Only the docs are read while every prop is
+ * documented.
+ * @param {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}}>} names
+ *   each with the file's absolute path and where its element opens
+ * @param {string} page the page file
+ * @param {(name: string) => Promise<any[] | null>} docsOf
+ * @returns {Promise<{warnings: import('../../foundation/render/render-page.mjs').RenderWarning[], props: Set<string>}>}
+ *   the warnings, and the props they name
+ */
+async function propNameWarnings(names, page, docsOf) {
+  if (names.length === 0) return {warnings: [], props: new Set()};
+  const dir = path.dirname(page);
+  const projectDir = runChoice(dir).inProject ? (findPackageRoot(dir) ?? dir) : dir;
+  const shown = (/** @type {string} */ file) => path.relative(dir, file).split(path.sep).join('/');
+  const {found} = await judgeCoreProps({
+    projectDir,
+    uses: names.map(use => ({...use, file: shown(use.file), path: use.file})),
+    pages: [...new Set(names.map(use => use.file))],
+    readDocs: async components => {
+      /** @type {Map<string, any[]>} */
+      const documented = new Map();
+      for (const name of components) {
+        const props = await docsOf(name);
+        if (props) documented.set(name, props);
+      }
+      return documented;
+    },
+    typescript: () => {
+      const compiler = resolveProjectTypeScript([projectDir]);
+      return compiler?.ts ? {ts: compiler.ts} : {skipped: 'the project has no TypeScript to read the types with'};
+    },
+  });
+  /** @type {Map<string, {line: number, column: number}>} */
+  const elementOf = new Map(names.map(use => [`${shown(use.file)}\0${use.line}\0${use.column}`, use.element]));
+  /** @type {Map<string, typeof found>} */
+  const byElement = new Map();
+  for (const use of found) {
+    const element = elementOf.get(`${use.file}\0${use.line}\0${use.column}`);
+    const key = `${use.file}\0${element?.line}\0${element?.column}`;
+    (byElement.get(key) ?? byElement.set(key, []).get(key))?.push(use);
+  }
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  for (const uses of byElement.values()) {
+    const {file, line, component: name} = uses[0];
+    /** @type {Map<string, string | null>} */
+    const props = new Map(uses.map(use => [use.prop, use.suggestion]));
+    const named = [...props].map(([prop, suggestion]) => (suggestion ? `${prop} (did you mean ${suggestion}?)` : prop));
+    let message = `${file}:${line}: ${name} has no ${named.join(', ')}`;
+    if ([...props.values()].some(suggestion => suggestion === null)) {
+      const takes = propNamesOf((await docsOf(name)) ?? []);
+      const rest = takes.length - PROPS_LISTED;
+      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more` : ''}`;
+    }
+    warnings.push({code: 'unknown-prop', message: `${message}.`});
+  }
+  return {warnings, props: new Set(found.map(use => use.prop))};
+}
+
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
- *   `absolute`: the caller named the output by an absolute path
+ * @param {{cwd: string, input: string, output: string, title?: string, keepClassNames?: boolean, absolute?: boolean}} args absolute paths;
+ *   `absolute`: the caller named the output by an absolute path;
+ *   `keepClassNames`: keep every class of the first paint as written
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title, absolute = false}) {
+export async function renderToFile({cwd, input, output, title, keepClassNames = false, absolute = false}) {
   readInput(input, cwd);
   // An absolute --out is the caller's choice of place, also outside the
   // current folder (cli-surface DEC-16). The file there is still never one a
@@ -507,7 +759,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true, keepClassNames});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
@@ -522,6 +774,23 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   } catch (e) {
     throw asAstryxError(e, path.dirname(input), cwd);
   }
+  const docs = coreDocsReader(path.dirname(input));
+  await docs.load([...(page.propValues ?? []), ...(page.propNames ?? [])].map(use => use.component));
+  const docsOf = docs.of;
+  /** @type {Awaited<ReturnType<typeof propNameWarnings>>} */
+  let named = {warnings: [], props: new Set()};
+  try {
+    named = await propNameWarnings(page.propNames ?? [], input, docsOf);
+  } catch {
+    // The check only warns: a project whose types cannot be read still exports.
+  }
+  // React's own console line for a prop the warning names says less, cut
+  // short, so it goes.
+  page.warnings = page.warnings.filter(warning => {
+    const prop = warning.code === 'page-output' ? REACT_UNKNOWN_PROP.exec(warning.message) : null;
+    return !prop || !named.props.has(prop[1] ?? prop[2]);
+  });
+  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input, docsOf)), ...named.warnings);
   for (const {name, dir} of page.fromSet) {
     let version = null;
     try {
@@ -568,6 +837,9 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     }
   }
   writeOutput(output, page.html, cwd, {replace: true, ...(existingMode === undefined ? {} : {mode: existingMode & 0o7777})});
+  // The checks read the bytes on disk, not the string in memory: they vouch
+  // for the file that will be shared.
+  const written = fs.readFileSync(output, 'utf8');
   return {
     input: shown(cwd, input),
     output: shown(cwd, output),
@@ -576,11 +848,15 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     stylesheets: page.stylesheets,
     classes: page.classes,
     cssBytes: page.cssBytes,
+    markupBytes: page.markupBytes,
+    sourceBytes: page.sourceBytes,
     images: page.images,
     warnings: page.warnings,
     ...(page.notCarried ? {notCarried: page.notCarried} : {}),
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
+    checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
+    ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
   };
 }
 
@@ -814,7 +1090,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   };
   if (block.found && 'newer' in block) {
     const {format, cli} = block.newer;
-    const command = `${cliCommand(cli ?? 'latest')} experimental render --reverse ${shellArg(shown(cwd, input))}`;
+    const command = `${cliCommand(cli ?? 'latest')} experimental import ${shellArg(shown(cwd, input))}`;
     throw new AstryxError(
       `${shown(cwd, input)} is in render format ${format}${cli ? `, written by @astryxdesign/cli ${cli}` : ''}, which is newer than this CLI reads (render format ${RENDER_FORMAT}, @astryxdesign/cli ${cliVersion()}); nothing was written. Give it back with ${cli ? 'the CLI that wrote it' : 'the latest CLI'}: ${command}`,
       [{name: command, reason: cli ? 'give it back with the CLI version that wrote the file' : 'give it back with the latest CLI'}],
@@ -871,16 +1147,45 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      const aliases = receivingAliases(requested);
+      const first = reachableFiles(source.files, {aliases, recorded: source.aliases, publicDir: source.publicDir});
+      const unreached = first.missing;
+      let {reached} = first;
+      // A file the render could not carry is missing too, also when no
+      // import here names it (an alias this reverse cannot resolve). An
+      // import already in missing names one recorded file, the one it
+      // resolves to as the walk resolves it (the path as written, then each
+      // extension in order, then its folder's index), so only that file is
+      // not listed again.
+      const recordedOut = (Array.isArray(source.notCarried) ? source.notCarried : []).filter(
+        (/** @type {unknown} */ file) => typeof file === 'string' && file !== '',
+      );
+      const recordedSet = new Set(recordedOut);
+      const covered = new Set(
+        unreached.map(spec => resolutionCandidates(spec).find(candidate => recordedSet.has(candidate))).filter(Boolean),
+      );
+      const missing = [...unreached];
+      const listed = new Set(missing);
+      for (const file of recordedOut) {
+        if (covered.has(file) || listed.has(file)) continue;
+        listed.add(file);
+        missing.push(file);
+      }
       // A carried image, font or media file needs no import to be part of the
       // page (it may be named in markup, a stylesheet, JSON or a computed
       // path): the render's own list is the authority, so it is kept when its
       // bytes are a known image, font or media format (any, whatever the
       // extension), and goes where the layout puts it.
+      /** @type {Set<string>} */
+      const listedAssets = new Set();
       for (const f of source.files) {
         if (reached.has(f.path) || !isAssetPath(f.path)) continue;
-        if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set(), unaliased: new Set()});
+        if (isAssetBytes(Buffer.from(f.base64, 'base64'))) listedAssets.add(f.path);
       }
+      const keepListedAssets = (/** @type {typeof reached} */ map) => {
+        for (const p of listedAssets) if (!map.has(p)) map.set(p, {relative: true, aliased: new Set(), unaliased: new Set()});
+      };
+      keepListedAssets(reached);
       const stray = source.files.filter(f => !reached.has(f.path)).map(f => f.path);
       if (stray.length > 0) {
         throw new AstryxError(
@@ -913,39 +1218,117 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       const home = folder ?? newFolderOf(requested);
       const within = (/** @type {string} */ file) => isInside(file, home);
       const target = path.join(anchor, path.basename(requested));
-      // The alias imports no alias here names: their files come back in the
-      // page's own layout, and the page needs the alias to build, in the config
-      // TypeScript reads for it.
-      const unaliased = [...reached]
-        .flatMap(([p, r]) => [...r.unaliased].map(spec => ({spec, file: placeFrom(p)})))
-        .sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0));
-      const aliased = unaliased.length === 0 ? null : aliasedResult(unaliased, requested, cwd);
+      const byPath = new Map(source.files.map(f => [f.path, f]));
+      const carried = (/** @type {string} */ p) => Buffer.from(/** @type {{base64: string}} */ (byPath.get(p)).base64, 'base64');
+      const sameFile = (/** @type {string} */ file, /** @type {Buffer} */ bytes) => fs.existsSync(file) && fs.statSync(file).isFile() && fs.readFileSync(file).equals(bytes);
+      // A file an alias leads to outside the new folder is used as the
+      // project has it only when it and every carried file it reaches, where
+      // the project would find each one, are byte for byte the page's copies:
+      // otherwise the page would build against files it was not rendered with.
+      /** @type {Set<string>} */
+      const reused = new Set();
+      /** @type {Map<string, string[]>} */
+      const changedBelow = new Map();
+      for (const [p, r] of reached) {
+        for (const abs of r.aliased) {
+          if (abs === target || within(abs) || reused.has(abs) || changedBelow.has(abs) || !sameFile(abs, carried(p))) continue;
+          const sub = reachableFiles([/** @type {{path: string, base64: string}} */ (byPath.get(p)), ...source.files.filter(f => f.path !== p)], {aliases, recorded: {}, publicDir: source.publicDir});
+          /** @type {string[]} */
+          const changed = [];
+          for (const [q, below] of sub.reached) {
+            if (q === p) continue;
+            const where = [...(below.relative ? [path.resolve(path.dirname(abs), path.posix.relative(path.posix.dirname(p), q))] : []), ...below.aliased];
+            for (const file of where) if (!sameFile(file, carried(q))) changed.push(file);
+          }
+          if (changed.length === 0) reused.add(abs);
+          else changedBelow.set(abs, [...new Set(changed)].map(file => shown(cwd, file)).sort());
+        }
+      }
+      // What the page reaches when those files are the project's: what they
+      // import is the project's too, so its copies are not written.
+      if (reused.size > 0) {
+        reached = reachableFiles(source.files, {aliases, recorded: source.aliases, publicDir: source.publicDir, reused}).reached;
+        keepListedAssets(reached);
+      }
       /** @type {{file: string, bytes: Buffer}[]} */
       const writes = [];
       const placed = new Set();
       /** @type {string[]} */
       const outside = [];
-      /** @type {string[]} */
-      const aliasedOutside = [];
+      // The alias imports no alias here names: their files come back in the
+      // page's own layout, and the page needs the alias to build, in the config
+      // TypeScript reads for it.
+      const unaliased = [...reached].flatMap(([p, r]) => [...r.unaliased].map(spec => ({spec, file: placeFrom(p)})));
+      /** @type {{import: string, file: string}[]} */
+      const sameAsProject = [];
+      /** @typedef {{import: string, project: string, exists: boolean, file: string, changed?: string[], projectWide: true, instead: {file: string, import: string}[]}} Differs */
+      /** @type {Differs[]} */
+      const differs = [];
+      /** @type {{entry: Differs, importers: string[], copy: string}[]} */
+      const insteadFor = [];
       source.files.forEach((f, i) => {
-        const reach = /** @type {import('../../foundation/render/embedded-imports.mjs').Reach} */ (reached.get(f.path));
-        const relative = i === 0 ? [target] : reach.relative ? [placeFrom(f.path)] : [];
-        for (const [file, aliased] of [...relative.map(x => /** @type {[string, boolean]} */ ([x, false])), ...[...reach.aliased].map(x => /** @type {[string, boolean]} */ ([x, true]))]) {
-          if (placed.has(file)) continue;
+        const reach = reached.get(f.path);
+        // Reached only through a file the page uses as the project has it.
+        if (!reach) return;
+        const bytes = Buffer.from(f.base64, 'base64');
+        const own = i === 0 ? target : placeFrom(f.path);
+        /** @param {string} file */
+        const place = file => {
+          if (placed.has(file)) return;
           placed.add(file);
-          // Every copy but the page at its target, the page's own copy that an
-          // alias places included, lands in the one new folder.
-          if (file !== target && !within(file)) (aliased ? aliasedOutside : outside).push(file);
-          writes.push({file, bytes: Buffer.from(f.base64, 'base64')});
+          if (file !== target && !within(file)) outside.push(file);
+          writes.push({file, bytes});
+        };
+        if (i === 0 || reach.relative) place(own);
+        for (const file of reach.aliased) {
+          const names = [...(reach.via?.get(file) ?? [])];
+          // Where this project's alias points inside the new folder, the copy
+          // goes there. Outside it, a received file never adds or replaces a
+          // file: the page uses the project's file when it is the same, and
+          // otherwise its own copy comes back in its layout, with the alias
+          // entry that reaches it.
+          if (file === target || within(file)) {
+            place(file);
+            continue;
+          }
+          if (reused.has(file)) {
+            for (const name of names) sameAsProject.push({import: name, file: shown(cwd, file)});
+            continue;
+          }
+          const exists = fs.existsSync(file) && fs.statSync(file).isFile();
+          const changed = changedBelow.get(file);
+          place(own);
+          for (const name of names) {
+            unaliased.push({spec: name, file: own});
+            // With it, an entry that leads this import to the copy changes
+            // what every other importer of it in the project gets too.
+            const entry = {import: name, project: shown(cwd, file), exists, file: shown(cwd, own), ...(changed ? {changed} : {}), projectWide: /** @type {const} */ (true), instead: /** @type {{file: string, import: string}[]} */ ([])};
+            differs.push(entry);
+            insteadFor.push({entry, importers: [...(reach.by?.get(name) ?? [])], copy: own});
+          }
         }
       });
-      if (aliasedOutside.length > 0) {
-        throw new AstryxError(
-          `${shown(cwd, input)} imports ${aliasedOutside.map(file => shown(cwd, file)).join(', ')} through a path alias that points outside the folder the restore creates; nothing was written. A received page never adds files to your existing folders: change those imports to relative ones before rendering, or restore it in a project whose alias points somewhere new.`,
-          [],
-          ERROR_CODES.ERR_PATH_TRAVERSAL,
-        );
+      // The narrower fix than a `paths` entry, which every file in the
+      // project reads: each restored file that makes the import (the page, a
+      // file it reaches by a relative import, or another restored copy)
+      // imports the copy by a relative path. Known once every file is placed.
+      const restoredAt = (/** @type {string} */ q) =>
+        q === source.files[0].path ? [target] : [placeFrom(q), ...(reached.get(q)?.aliased ?? [])].filter(file => placed.has(file));
+      for (const {entry, importers, copy} of insteadFor) {
+        entry.instead = [...new Set(importers.flatMap(restoredAt))]
+          .sort()
+          .map(from => ({file: shown(cwd, from), import: relativeSpecifierBetween(from, copy)}));
       }
+      unaliased.sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0));
+      const byImport = (/** @type {{import: string}} */ a, /** @type {{import: string}} */ b) => (a.import < b.import ? -1 : a.import > b.import ? 1 : 0);
+      const aliased =
+        unaliased.length === 0 && sameAsProject.length === 0
+          ? null
+          : {
+              ...(unaliased.length === 0 ? {imports: []} : aliasedResult(unaliased, requested, cwd)),
+              ...(sameAsProject.length > 0 ? {sameAsProject: sameAsProject.sort(byImport)} : {}),
+              ...(differs.length > 0 ? {differs: differs.sort(byImport)} : {}),
+            };
       if (outside.length > 0) {
         const top = entryDir === '.' ? '' : `${entryDir}/`;
         let fresh = 'restored';

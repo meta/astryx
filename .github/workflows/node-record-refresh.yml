@@ -4,9 +4,11 @@
 # fresh from main's own runs. A missing or low entry costs leg balance and can
 # make a leg run long until the next refresh; no pull request fails on the
 # record. After each successful full unit run of main, this compares the
-# record with that run's measured times. When fewer than nine in ten of the
-# Node project's test files have a recorded time, or a recorded file ran far
-# past its entry, it regenerates the record from that run's Node legs and
+# record with that run's measured times. When more than one in twenty of the
+# Node project's test files have no recorded time (an early warning, named in
+# the job summary and the pull request), or a recorded file ran far
+# past its entry, it regenerates the record from that run's Node legs (each
+# leg's slowdown taken out; new and far-off entries only) and
 # opens one durations-only pull request on a fixed branch, or force-updates
 # that branch and refreshes the open one
 # (.github/scripts/node-record-refresh.mjs). It never pushes to main.
@@ -74,7 +76,23 @@ jobs:
             echo "::error title=No run to record from::main has no successful full unit run."
             exit 1
           fi
-          gh run view "$run" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/main-run.log"
+          # Each leg's complete job log. `gh run view --log` stops reading a
+          # job's log at its first line over 64 KiB, and a test can print one,
+          # so the results after it never reach the record. Each line gets the
+          # leg's name and a step column, the shape the readers expect. The
+          # logs carry colour codes, which `gh api` writes out only with
+          # --allow-escape-sequences.
+          : > "$RUNNER_TEMP/main-run.log"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
+            --jq '.jobs[] | select(.name | test("^test-node \\([0-9]+\\)$")) | "\(.id)\t\(.name)"' > "$RUNNER_TEMP/node-legs.tsv"
+          if [ ! -s "$RUNNER_TEMP/node-legs.tsv" ]; then
+            echo "::error title=No Node legs::Run $run has no test-node job."
+            exit 1
+          fi
+          while IFS=$'\t' read -r job name; do
+            gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/leg.log"
+            sed "s/^/${name}\tlog\t/" "$RUNNER_TEMP/leg.log" >> "$RUNNER_TEMP/main-run.log"
+          done < "$RUNNER_TEMP/node-legs.tsv"
           echo "url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
 
       - name: Check the record's coverage and drift against that run
@@ -85,7 +103,7 @@ jobs:
         id: record
         if: steps.check.outputs.refresh == 'true'
         run: |
-          node scripts/vitest-shard-sequencer.mjs record "$RUNNER_TEMP/main-run.log"
+          node .github/scripts/node-record-refresh.mjs regenerate --log "$RUNNER_TEMP/main-run.log"
           if git diff --quiet -- scripts/vitest-node-durations.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else

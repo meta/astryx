@@ -23,6 +23,7 @@ import {
   hasModuleHooks,
   readKept,
   writeKept,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -187,10 +188,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
         const r = run(ask, {tmp: where, cwd: other.dir});
         return {
           ...r,
-          stdout: r.stdout
-            .split(where)
-            .join('<cache>')
-            .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          stdout: maskCacheCount(r.stdout.split(where).join('<cache>')),
         };
       });
 

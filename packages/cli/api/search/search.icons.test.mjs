@@ -43,8 +43,8 @@ const OTHER_QUERIES = [
 ];
 
 /**
- * The fixture set, with an icon tagged `icon` and four more icons that share
- * the word `shape`.
+ * The fixture set, with an icon tagged `icon`, a plus icon, icons tagged
+ * `card` and `avatar`, and four more icons that share the word `shape`.
  */
 function shapesData() {
   const data = glyphsData();
@@ -52,6 +52,18 @@ function shapesData() {
     id: 'image',
     export: 'ImageIcon',
     words: ['icon', 'picture'],
+  });
+  data.icons.push({id: 'plus', export: 'PlusIcon', words: ['add', 'new']});
+  // Icons the feature phrases would list without the rule.
+  data.icons.push({
+    id: 'credit-card',
+    export: 'CreditCardIcon',
+    words: ['card', 'payment'],
+  });
+  data.icons.push({
+    id: 'user',
+    export: 'UserIcon',
+    words: ['avatar', 'person'],
   });
   for (const id of ['circle', 'square', 'triangle', 'star']) {
     data.icons.push({
@@ -140,6 +152,7 @@ describe('asksForIcon', () => {
   const names = {
     setNames: ['glyphs'],
     declaredNames: ['Icon', 'IconButton', 'NavIcon'],
+    answersEntry: true,
   };
 
   it('reads `icon` and `icons` as typed, set names, and icon export names', () => {
@@ -150,6 +163,18 @@ describe('asksForIcon', () => {
     expect(asksForIcon('ChevronDownIcon', names)).toBe(true);
     expect(asksForIcon('glyphs trash', names)).toBe(true);
     expect(asksForIcon('Glyphs', names)).toBe(true);
+  });
+
+  it('an icon word that names a feature of an answered entry asks for nothing', () => {
+    expect(asksForIcon('card with an icon', names)).toBe(false);
+    expect(asksForIcon('avatar with icon', names)).toBe(false);
+    expect(asksForIcon('list with the icons', names)).toBe(false);
+    expect(asksForIcon('card with an icon of a star', names)).toBe(true);
+    expect(asksForIcon('menu with icons for actions', names)).toBe(true);
+    expect(asksForIcon('button with plus icon', names)).toBe(true);
+    expect(
+      asksForIcon('card with an icon', {...names, answersEntry: false}),
+    ).toBe(true);
   });
 
   it('a component or hook name, or a word that only holds `icon`, asks for nothing', () => {
@@ -309,6 +334,33 @@ describe('search icon section', () => {
       for (const entry of entries) {
         const detail = await icon(entry.name, {cwd: twin});
         expect(detail.type, entry.name).toBe('icon.detail');
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'an icon that is a feature of an answered component lists no icons and keeps the answer',
+    async () => {
+      for (const query of ['card with an icon', 'avatar with icon']) {
+        const withPack = await search(query, {cwd: packed});
+        expect(withPack.data.icons, query).toBeUndefined();
+        expect(
+          withPack.data.results.some(result => result.domain === 'component'),
+          query,
+        ).toBe(true);
+        expect(withPack, query).toEqual(await search(query, {cwd: bare}));
+      }
+      for (const [query, id] of [
+        ['card with an icon of a star', 'star'],
+        ['button with plus icon', 'plus'],
+        ['trash icon', 'trash'],
+      ]) {
+        const {data} = await search(query, {cwd: packed});
+        expect(
+          data.icons?.results.map(each => each.id),
+          query,
+        ).toContain(id);
       }
     },
     SLOW,
