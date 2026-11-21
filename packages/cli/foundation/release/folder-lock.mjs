@@ -111,10 +111,16 @@ const readOwner = file => {
  * @template T
  * @param {string} lockDir
  * @param {() => Promise<T>} fn
- * @param {{waitMs?: number, onBusy: (owner: any, heldSeconds: number | null) => never}} options
+ * @param {{waitMs?: number, silentMs?: number, onBusy: (owner: any, heldSeconds: number | null) => never}} options
+ *   `silentMs`: how long a record may stand unrenewed before a holder that
+ *   does not run here is taken over ({@link SILENT_MS})
  * @returns {Promise<T>}
  */
-export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
+export async function withFolderLock(
+  lockDir,
+  fn,
+  {waitMs = 30_000, silentMs = SILENT_MS, onBusy},
+) {
   const ownerFile = path.join(lockDir, 'owner.json');
   /** @returns {number | null} seconds since the holder took the lock */
   const held = () => {
@@ -141,7 +147,7 @@ export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
     const judged = lockIdentity(lockDir);
     if (
       judged &&
-      foreignLockIsSilent(lockDir, Date.now(), SILENT_MS) &&
+      foreignLockIsSilent(lockDir, Date.now(), silentMs) &&
       !aliveHere(readOwner(ownerFile))
     ) {
       takeOver(lockDir, judged);
