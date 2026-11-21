@@ -152,6 +152,45 @@ describe('a saved setting and how far it reaches', () => {
     );
   }, 240_000);
 
+  it('a part setting saved with no record names the family it now reaches, with its keep line', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('fam', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'fam',
+      'background-image',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {cwd, on: 'button'},
+    );
+    const data = saved('fam');
+    delete data.reached;
+    save('fam', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('fam', 'corners', '4px', {cwd})
+    );
+    const widened = /** @type {any[]} */ (r.data.widened ?? []);
+    expect(widened).toHaveLength(1);
+    expect(widened[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
+    expect(widened[0].keep).toContain('--on button --only');
+  }, 240_000);
+
+  it('an input setting saved with no record names the members it reaches past the values it matched', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('inp', {cwd, like: 'neutral'});
+    await themeEditSet('inp', 'height', '40px', {cwd, on: 'text-input'});
+    const data = saved('inp');
+    delete data.reached;
+    save('inp', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('inp', 'corners', '4px', {cwd})
+    );
+    // (The editors before family reach matched the values themselves: a
+    // member that draws its height another way is new, and named.)
+    const widened = /** @type {any[]} */ (r.data.widened ?? []);
+    expect(widened).toHaveLength(1);
+    expect(widened[0].parts).toEqual(expect.arrayContaining(['tokenizer']));
+    expect(widened[0].parts).not.toContain('number-input');
+  }, 240_000);
+
   it('--only on the same setting replaces it, so the look leaves the group', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('narrow', {cwd, like: 'neutral'});

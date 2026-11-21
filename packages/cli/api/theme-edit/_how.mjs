@@ -15,7 +15,6 @@ import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {cssProperties} from './_css.mjs';
 import {
-  AUTO_SPREAD,
   COLOR_PROPS,
   COMMON_PROPERTIES,
   DIALS,
@@ -47,6 +46,8 @@ import {
   selfSizedBoxLines,
   selfSizedWhy,
   sizesItsOwnBox,
+  reachGroupOf,
+  groupReachesByDefault,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -389,7 +390,7 @@ async function answer(subject, options, cwd, blindSaid = false) {
       subject: t,
       group: key,
       members: groupsOf(ctx)[key],
-      spreads: AUTO_SPREAD.includes(key),
+      spreads: groupReachesByDefault(key),
     };
   }
   if (ctx.project.target.has(key))
@@ -1228,7 +1229,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const target = /** @type {{component?: string, states: string[]}} */ (
     ctx.project.target.get(key)
   );
-  const group = familyOf(key);
+  // (The family a setting on this part reaches by default: its group, or
+  // the first of its family roles.)
+  const group = reachGroupOf(ctx, {on: key, thing: ''}) ?? familyOf(key);
   const states = settableStates(ctx, env.slug, env.data, key);
   // A token the base theme points at another one on the part or a part
   // around it (neutral's progress track reads the muted fill, which it
@@ -1303,7 +1306,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     recorded,
     group,
     groupMembers: group ? groupsOf(ctx)[group] : [],
-    spreads: group ? AUTO_SPREAD.includes(group) : false,
+    spreads: group ? groupReachesByDefault(group) : false,
     variants: C.variantValues(key),
     states,
     reads,
@@ -1987,7 +1990,7 @@ async function listItems(kind, filter, cwd) {
         .map(([name, members]) => ({
           name,
           members,
-          spreads: AUTO_SPREAD.includes(name),
+          spreads: groupReachesByDefault(name),
         })),
     };
   if (kind === 'properties') {

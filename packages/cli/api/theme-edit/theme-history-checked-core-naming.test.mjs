@@ -102,7 +102,7 @@ describe('history checked core naming', () => {
     expect(r.message).toMatch(/does not parse|did not build/);
   }, 240_000);
 
-  it('F7-3: a later spread that covers an --only setting is named', async () => {
+  it('F7-3: a member set alone keeps its own against a later spread, and the result names it', async () => {
     await themeEditNew('m', {cwd});
     await themeEditSet('m', 'corners', 'large', {
       cwd,
@@ -113,7 +113,8 @@ describe('history checked core naming', () => {
       cwd,
       on: 'text-input',
     });
-    expect(r.data.notes.join(' ')).toMatch(/text-area only no longer shows/);
+    expect(r.data.group?.kept).toEqual(['text-area']);
+    expect(r.data.notes.join(' ')).toMatch(/text-area keeps its own corners/);
   }, 240_000);
 
   it('F7-2: a CSS number in px is a size', async () => {
