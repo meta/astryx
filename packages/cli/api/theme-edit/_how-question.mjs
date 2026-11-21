@@ -4770,6 +4770,17 @@ const PROPERTY_WORDS = wordTable(
   }),
 );
 
+/** The start of a CSS gradient. */
+const GRADIENT_START = /(?:repeating-)?(?:linear|radial|conic)-gradient\(/;
+
+/**
+ * One gradient layer of a background as text: the gradient with its
+ * position, size and repeat words ("linear-gradient(#0001 1px, transparent
+ * 1px) 0 0 / 24px 24px").
+ */
+const GRADIENT_LAYER =
+  /(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\([^()]*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|\/|repeat(?:-x|-y)?|no-repeat|space|round|center|top|bottom|left|right|fixed|scroll|local|cover|contain|auto))*/;
+
 /**
  * The words of a value, with each function call kept whole, nested calls
  * included ("linear-gradient(135deg, rgba(0,0,0,.1) 0%, #fff 100%)").
@@ -7641,6 +7652,56 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /(\)|#[0-9a-f]{3,8}\b)\s*,\s*(?=(?:inset\s+)?-?\d+(?:px)?\s+-?\d)/g,
       '$1\u2e34 ',
+    )
+    // A background's gradient layers stay one value: a comma after a
+    // gradient layer (with its position, size and repeat words) that another
+    // gradient layer or the final color follows is not a clause break, in a
+    // background said with its property word. (A layer after it that names
+    // a part of its own, "… on cards", is an ask of its own.)
+    .replace(
+      new RegExp(`(${GRADIENT_LAYER.source})\\s*,\\s*`, 'gi'),
+      (m, layer, at, all) => {
+        const text = String(all);
+        // The ask this layer is in: back to the last break outside
+        // parentheses (a comma, a semicolon or a sentence's end).
+        let depth = 0;
+        let start = 0;
+        for (let i = at - 1; i >= 0; i--) {
+          const ch = text[i];
+          if (ch === ')') depth++;
+          else if (ch === '(') depth--;
+          else if (
+            depth === 0 &&
+            (ch === ',' ||
+              ch === ';' ||
+              (ch === '.' && /\s/.test(text[i + 1] ?? ' ')))
+          ) {
+            start = i + 1;
+            break;
+          }
+        }
+        const lead = text.slice(start, at);
+        const next =
+          text
+            .slice(at + m.length)
+            .match(/^(?:[^(),;.]|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ?? '';
+        // (A gradient layer after it belongs to the same value; a layer
+        // said with a part of its own is that part's ask; the page keeps its
+        // own reading.)
+        const ownPart =
+          /\b(?:on|for|in|of)\s+(?:the\s+|all\s+|every\s+)?[a-z]/.test(
+            next.replace(/\bin\s+(?:dark|light)\s+mode\b/g, ' '),
+          ) ||
+          lex.parts.some(([re]) =>
+            re.test(` ${next.replace(GRADIENT_LAYER, ' ')} `),
+          );
+        return /\bbackground(?:-image)?\b/.test(lead) &&
+          !/\b(?:page|body)\b/.test(lead) &&
+          !ownPart &&
+          GRADIENT_START.test(next)
+          ? `${layer}\u2e34 `
+          : m;
+      },
     )
     // "font-family: Georgia, serif": the font list is one value.
     .replace(
