@@ -59,4 +59,10 @@ describe('themeProps', () => {
       'data-size': 'sm',
     });
   });
+
+  it('omits inherited properties', () => {
+    const proto = {variant: 'ghost'};
+    const inherited = Object.create(proto);
+    expect(themeDataAttributes(inherited)).toEqual({});
+  });
 });
