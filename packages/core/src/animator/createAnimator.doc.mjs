@@ -33,9 +33,9 @@ export const docs = {
   returns: [
     {
       name: 'animate',
-      type: '(target: {x?, y?, scale?, rotate?, opacity?}, options?: {velocity?}) => Promise<void>',
+      type: '(target: {x?, y?, scale?, rotate?, opacity?}, options?: {velocity?, at?}) => Promise<void>',
       description:
-        "Springs the given channels to `target` from wherever they are on screen, on the state-change motion Astryx's components use, and resolves when they arrive (or as soon as a later call takes them over). `x` and `y` are px, `scale` is 1 at the element's size, `rotate` is degrees and `opacity` runs from 0 to 1. Pass `velocity` (units per second, such as a drag's release velocity) to start with it; without it a channel keeps the velocity it has on screen, so interrupting a motion never jumps.",
+        "Springs the given channels to `target` from wherever they are on screen, on the state-change motion Astryx's components use, and resolves when they arrive (or as soon as a later call takes them over). `x` and `y` are px, `scale` is 1 at the element's size, `rotate` is degrees and `opacity` runs from 0 to 1. Pass `velocity` (units per second, such as a drag's release velocity) to start with it; without it a channel keeps the velocity it has on screen, so interrupting a motion never jumps. Pass `at`, a start time on the document timeline in ms (the `performance.now()` clock), to start the motion at that time, such as when a FLIP measured its layout; without it the motion starts when the browser commits the call. One `at` for several animators puts their motions on one clock.",
     },
     {
       name: 'decay',
@@ -127,7 +127,7 @@ export const docsDense = {
   },
   returnDescriptions: {
     animate:
-      '(target, {velocity?}) => Promise<void>; springs on the state-change motion.',
+      '(target, {velocity?, at?}) => Promise<void>; springs on the state-change motion.',
     decay:
       '({x?, y?, scale?, rotate?, opacity?}) => Promise<void>; coasts from a release velocity.',
     set: '(values) => void; jumps, ending motion.',

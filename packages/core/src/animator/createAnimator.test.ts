@@ -7,7 +7,7 @@
  *   no animations, and the spring and decay math checks the curves.
  * @output Checks `spec:AST-107` FR3 and FR6 for the factory, over every
  *   method and channel. `animate` plays the `springs.stateChange` role from a
- *   given or on-screen velocity. `decay` coasts on the normal deceleration.
+ *   given or on-screen velocity, and starts at a given `at`. `decay` coasts on the normal deceleration.
  *   It also covers `set`, `get`, `getVelocity`, `stop`, `destroy` and the
  *   promises. Reduce Motion is checked on a coarse and a fine pointer, and the
  *   handle exposes nothing internal.
@@ -226,6 +226,52 @@ describe('createAnimator', () => {
     expect(before).not.toBe(0);
     void animator.animate({x: 0});
     expect(animator.getVelocity().x).toBeCloseTo(before, 4);
+  });
+
+  it('animate starts at a given `at` at once, not at the frame that commits the call (spec:AST-107 FR3)', async () => {
+    const animator = createAnimator(element());
+    await advance(100);
+    // A FLIP dates its motion at its own call. Here the call measured its
+    // layout 40 ms into a long task, and the next frame comes after the task.
+    const at = performance.now() - 40;
+    void animator.animate({x: 100}, {at});
+    const animation = recorded.at(-1);
+    expect(animation?.startTime).toBe(at);
+    await animation?.ready;
+    await advance(FRAME_MS);
+    expect(animation?.startTime).toBe(at);
+  });
+
+  it('a later animate on the same channels with its own `at` starts on that clock (spec:AST-107 FR3)', async () => {
+    const animator = createAnimator(element());
+    await advance(100);
+    void animator.animate({x: 100}, {at: performance.now() - 40});
+    await advance(50);
+    const later = performance.now() - 10;
+    void animator.animate({x: 20}, {at: later});
+    expect(recorded.at(-1)?.startTime).toBe(later);
+  });
+
+  it('several animators given one `at` start on one clock (spec:AST-107 FR3)', async () => {
+    await advance(100);
+    const at = performance.now() - 40;
+    void createAnimator(element()).animate({x: 100}, {at});
+    void createAnimator(element()).animate({y: 50}, {at});
+    expect(recorded.map(animation => animation.startTime)).toEqual([at, at]);
+  });
+
+  it('animate without `at`, or with an `at` that is not a finite number, starts at the frame that commits the call', async () => {
+    const animator = createAnimator(element());
+    const called = performance.now();
+    void animator.animate({x: 100});
+    expect(recorded.at(-1)?.startTime).toBeNull();
+    expect(await started()).toBeGreaterThan(called);
+
+    const other = createAnimator(element());
+    const calledAgain = performance.now();
+    void other.animate({x: 100}, {at: Number.NaN});
+    expect(recorded.at(-1)?.startTime).toBeNull();
+    expect(await started()).toBeGreaterThan(calledAgain);
   });
 
   it('animate resolves once the channels arrive, with the values at the target', async () => {

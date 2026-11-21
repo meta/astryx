@@ -54,6 +54,13 @@ export interface AnimatorAnimateOptions {
    * carries on smoothly.
    */
   velocity?: AnimatorValues;
+  /**
+   * Start time on the document timeline (ms, `performance.now()` clock),
+   * such as the time of the call that measured a FLIP. Without it, the
+   * motion starts when the browser commits the call. Pass one value to
+   * several animators to put their animations on one clock.
+   */
+  at?: number;
 }
 
 /**
@@ -216,10 +223,15 @@ export function createAttachableAnimator(): {
       // registers nothing new.
       registerSpringsTable();
       const velocity = motionValues(options?.velocity);
-      await motion.animate(to, {
-        spring: springs.stateChange,
-        ...(Object.keys(velocity).length > 0 ? {velocity} : {}),
-      }).finished;
+      const at = options?.at;
+      await motion.animate(
+        to,
+        {
+          spring: springs.stateChange,
+          ...(Object.keys(velocity).length > 0 ? {velocity} : {}),
+        },
+        typeof at === 'number' && Number.isFinite(at) ? {at} : {},
+      ).finished;
     },
     async decay(velocity) {
       if (inactive()) {

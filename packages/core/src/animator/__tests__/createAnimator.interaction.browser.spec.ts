@@ -8,7 +8,8 @@
  *   and samples its motion.
  * @output Proof of the public animator in a real engine. `animate` plays the
  *   `springs.stateChange` curve on screen, seeked frame by frame. It rests on
- *   its target when its promise resolves. `decay` coasts to the analytic rest
+ *   its target when its promise resolves. With `at` it starts at that time
+ *   at once, and without it the browser starts it at its commit. `decay` coasts to the analytic rest
  *   of the normal deceleration. `stop` holds the box where it is. Under
  *   Reduce Motion, a move cross-fades on a touch screen, and the box jumps
  *   only while transparent. With a mouse, it lands at once.
@@ -123,6 +124,42 @@ test('animate resolves with the card resting on its target', async ({page}) => {
   expect(await left(page)).toBeCloseTo(TRAVEL, 0);
   const values = await page.evaluate(() => window.card.get());
   expect(values.x).toBeCloseTo(TRAVEL, 3);
+});
+
+test('animate with `at` starts at that time at once; without it, the call waits for the commit', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async () => {
+    const element = document.getElementById('card') as HTMLElement;
+    const read = () => {
+      const animation = element.getAnimations().at(-1);
+      return animation == null
+        ? null
+        : {startTime: animation.startTime, pending: animation.pending};
+    };
+    // A FLIP: the card shows at its old place, then moves home. The call
+    // dates the motion at the time it measured, 40 ms back in its task.
+    window.card.set({y: 40});
+    const at = (document.timeline.currentTime as number) - 40;
+    void window.card.animate({y: 0}, {at});
+    const atCall = read();
+    await element.getAnimations().at(-1)?.ready;
+    const atReady = read();
+    // A later call on the same channel with its own time starts on it.
+    const later = (document.timeline.currentTime as number) - 10;
+    void window.card.animate({y: 20}, {at: later});
+    const laterCall = read();
+    // Without `at`, the call waits for the browser's commit, as before.
+    window.card.set({y: 40});
+    void window.card.animate({y: 0});
+    const defaultCall = read();
+    return {at, atCall, atReady, later, laterCall, defaultCall};
+  });
+  expect(result.atCall).toEqual({startTime: result.at, pending: false});
+  expect(result.atReady).toEqual({startTime: result.at, pending: false});
+  expect(result.laterCall).toEqual({startTime: result.later, pending: false});
+  expect(result.defaultCall).toEqual({startTime: null, pending: true});
 });
 
 test('decay coasts to the rest of the normal deceleration', async ({page}) => {
