@@ -69,17 +69,14 @@ describe('publishRowState', () => {
     expect(paint(row)).toEqual(PLAIN);
   });
 
-  it('writes nothing when the fill does not change', () => {
+  it('writes nothing when the fill does not change', async () => {
     const row = document.createElement('tr');
     publishRowState(row, 'selection', {selected: true, highlight: true});
-    const writes: string[] = [];
-    const style = row.style;
-    const setProperty = style.setProperty.bind(style);
-    style.setProperty = (name, value) => {
-      writes.push(name);
-      setProperty(name, value);
-    };
+    const observer = new MutationObserver(() => {});
+    observer.observe(row, {attributes: true, attributeFilter: ['style']});
     publishRowState(row, 'selection', {selected: true, highlight: true});
-    expect(writes).toEqual([]);
+    publishRowState(row, 'activation', {});
+    expect(observer.takeRecords()).toEqual([]);
+    observer.disconnect();
   });
 });

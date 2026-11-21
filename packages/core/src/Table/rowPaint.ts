@@ -13,6 +13,7 @@
  */
 
 import {colorVars} from '../theme/tokens.stylex';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 /** A row plugin that publishes row state. */
 export type RowPaintSource = 'selection' | 'activation';
@@ -35,11 +36,11 @@ const SELECTED_WASH = colorVars['--color-accent-muted'];
  */
 const ROW_OVERLAY_VAR = '--table-row-overlay';
 
-/** Each mounted row's published state, by source. */
-const rowStates = new WeakMap<
+/** Each mounted row's published state, by source. Every copy of Core shares it. */
+const rowStates = sharedWeakMap<
   HTMLTableRowElement,
   Map<RowPaintSource, RowState>
->();
+>('table/row-paint/row-states', 1);
 
 function resolveFill(states: Map<RowPaintSource, RowState> | undefined) {
   const selection = states?.get('selection');
