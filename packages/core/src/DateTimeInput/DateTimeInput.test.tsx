@@ -183,6 +183,33 @@ describe('DateTimeInput', () => {
     },
   );
 
+  it.each([
+    ['en-GB', 'ltr'],
+    ['ar-EG', 'rtl'],
+  ])(
+    'reads the native date text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      const {container} = render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput
+              label="Meeting"
+              presentation="native"
+              value={'2026-03-15T09:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      const dateInput =
+        container.querySelector<HTMLInputElement>('input[type="date"]')!;
+      expect(dateInput).toHaveAttribute('dir', direction);
+      const overlay = dateInput.nextElementSibling;
+      expect(overlay).toHaveAttribute('aria-hidden', 'true');
+      expect(overlay).toHaveAttribute('dir', direction);
+    },
+  );
+
   it('derives the time input label from the field label (forms-15)', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
     // Not a hardcoded "Time" — tied to the field label so it is localizable
