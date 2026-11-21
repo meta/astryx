@@ -2327,7 +2327,12 @@ async function acceptContrast(slug, reason, options) {
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `A contrast problem is kept only with the reason the original draws it so, said specifically (what it copies, and from where: "matches the original's .btn-info label"): "${reason.slice(0, 80)}" does not say.`,
-        {run: [line]},
+        // (The caller's own place, with only the reason left to say.)
+        {
+          run: [
+            `${P} set ${slug} contrast-accepted '<why the original draws it so>' ${scope}`,
+          ],
+        },
       );
     if (!here)
       refuse(
