@@ -1,6 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 export {Chart, type ChartProps} from './Chart';
+export {
+  MetricTile,
+  type MetricTileProps,
+  type MetricTileDelta,
+  type MetricTileDeltaDirection,
+  type MetricTileDeltaSentiment,
+  type MetricTileSize,
+} from './MetricTile';
 export {ChartAxis, type ChartAxisProps} from './ChartAxis';
 export {ChartGrid, type ChartGridProps} from './ChartGrid';
 export {

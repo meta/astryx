@@ -541,6 +541,15 @@
     }
   },
   {
+    "component": "MetricTile",
+    "storyId": "charts-metrictile--inverted-delta",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"0.42%\")",
+      "next": "span:text-is(\"0.42%\") + span"
+    }
+  },
+  {
     "component": "MobileNav",
     "storyId": "core-mobilenav--default",
     "dims": ["D4"],

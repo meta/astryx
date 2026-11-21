@@ -753,6 +753,7 @@ describe('audited package and story routing', () => {
       'ChartLegend',
       'ChartSwatch',
       'ChartTooltip',
+      'MetricTile',
     ]);
     expect(richTextComponents).toEqual([
       'RichTextEditor',
@@ -957,7 +958,7 @@ describe('audited package and story routing', () => {
         filters: [
           'Button',
           'Chart',
-          ...chartsComponents.slice(1),
+          ...chartsComponents.filter(component => component !== 'Chart'),
           ...richTextComponents,
           ...vegaComponents,
         ],
@@ -1034,6 +1035,11 @@ describe('audited package and story routing', () => {
           storyId: 'charts-chrome-legend--default',
           rollup: 'RTL-ready',
         },
+        {
+          component: 'charts/MetricTile',
+          storyId: 'charts-metrictile--inverted-delta',
+          rollup: 'RTL-ready',
+        },
       ],
       verifiedNa: ['ChartAxis', 'ChartGrid', 'ChartSwatch', 'ChartTooltip'].map(
         component => ({
@@ -1044,8 +1050,8 @@ describe('audited package and story routing', () => {
     });
 
     expect(coverage).toMatchObject({
-      total: 6,
-      measured: 2,
+      total: 7,
+      measured: 3,
       verifiedNa: 4,
       gaps: 0,
       staleVerifiedNa: 0,
