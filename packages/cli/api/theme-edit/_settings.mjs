@@ -13848,7 +13848,9 @@ function barFitProblems(ctx, data, res) {
  * accepted, the exact pair (`color`, the text or value drawn, and
  * `groundColor`, what it is drawn on) and why. It covers that pair only: a
  * later change to either color makes it a problem again.
- * @typedef {{part: string, ground: string, mode: 'light' | 'dark', ratio: number, color: string, groundColor: string, reason: string}} AcceptedContrast
+ * A miss in one variant of the part (`variant:info`) names it in `when`, and
+ * covers that variant only.
+ * @typedef {{part: string, ground: string, when?: string, mode: 'light' | 'dark', ratio: number, color: string, groundColor: string, reason: string}} AcceptedContrast
  */
 
 /**
@@ -13887,10 +13889,11 @@ export function drawnPair(p, res, mode) {
 
 /**
  * A contrast problem's place, read from its key: what kind of check (text
- * or track), the part drawn, the part under it, the mode and its ratio
- * now; null for any other problem.
+ * or track), the part drawn, the part under it, the variant it is drawn in
+ * ('' for the part as a whole), the mode and its ratio now; null for any
+ * other problem.
  * @param {ThemeProblem} p
- * @returns {{part: string, ground: string, mode: 'light' | 'dark', ratio: number} | null}
+ * @returns {{part: string, ground: string, when: string, mode: 'light' | 'dark', ratio: number} | null}
  */
 export function contrastPlace(p) {
   const ratioNow = Number(/ is ([\d.]+):1\b/.exec(p.text)?.[1]);
@@ -13902,6 +13905,7 @@ export function contrastPlace(p) {
     return {
       part: k[2] || k[1],
       ground: k[4] || 'page',
+      when: k[6] || '',
       mode,
       ratio: ratioNow,
     };
@@ -13909,7 +13913,7 @@ export function contrastPlace(p) {
   if (k[0] === 'track' && k.length === 4) {
     const mode = k[3];
     if (mode !== 'light' && mode !== 'dark') return null;
-    return {part: k[2], ground: k[1], mode, ratio: ratioNow};
+    return {part: k[2], ground: k[1], when: '', mode, ratio: ratioNow};
   }
   return null;
 }
@@ -13929,6 +13933,7 @@ export function acceptedContrast(data) {
       a &&
       typeof a.part === 'string' &&
       typeof a.ground === 'string' &&
+      (a.when == null || typeof a.when === 'string') &&
       (a.mode === 'light' || a.mode === 'dark') &&
       typeof a.ratio === 'number' &&
       typeof a.color === 'string' &&
@@ -13980,7 +13985,7 @@ export function withAccepted(data, list, res) {
   /** The pairs each place is drawn in. @type {Map<string, Set<string>>} */
   const pairsAt = new Map();
   /** @param {NonNullable<ReturnType<typeof contrastPlace>>} at */
-  const placeKey = at => `${at.part}|${at.ground}|${at.mode}`;
+  const placeKey = at => `${at.part}|${at.ground}|${at.when ?? ''}|${at.mode}`;
   for (const p of list) {
     const at = p.note ? null : contrastPlace(p);
     if (!at) continue;
@@ -14003,6 +14008,7 @@ export function withAccepted(data, list, res) {
           a =>
             a.part === at.part &&
             a.ground === at.ground &&
+            (a.when ?? '') === at.when &&
             a.mode === at.mode &&
             a.color === pair.color &&
             a.groundColor === pair.groundColor &&
@@ -14025,7 +14031,7 @@ export function withAccepted(data, list, res) {
     if (!pair || !colors.some(c => typed.has(c)) || mixedAt(at)) return p;
     return {
       ...p,
-      accept: `${P} set ${data.name} contrast-accepted '<why the original draws it so>' --on ${at.part} --ground ${at.ground} --mode ${at.mode}`,
+      accept: `${P} set ${data.name} contrast-accepted '<why the original draws it so>' --on ${at.part}${at.when ? ` --when ${at.when}` : ''} --ground ${at.ground} --mode ${at.mode}`,
     };
   });
 }
