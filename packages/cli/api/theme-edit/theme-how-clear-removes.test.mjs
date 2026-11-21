@@ -119,4 +119,16 @@ describe('clear said of a removable thing', () => {
       );
     }
   }, 240_000);
+
+  it('takes away a thing when another ask follows after "and"', async () => {
+    const cmds = (
+      await how('clear the card shadow and make the text color white')
+    ).flatMap(r => r.commands);
+    expect(cmds.join(' ;; ')).toContain('set ne box-shadow none --on card');
+    expect(
+      (await how('clear the card border and undo my heading edits')).flatMap(
+        r => r.commands,
+      ),
+    ).toContain('set ne border none --on card');
+  }, 120_000);
 });
