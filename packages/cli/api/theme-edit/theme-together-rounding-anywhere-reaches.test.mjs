@@ -91,6 +91,28 @@ describe('answers that hold together', () => {
     T,
   );
   it(
+    'square corners with another ask saying "too" or naming a pill keep the circles',
+    async test => {
+      needsBases(test);
+      // (The scope word belongs to the corner clause alone.)
+      for (const q of [
+        'square corners, and bigger text too',
+        'square corners and red badges',
+      ]) {
+        const r = await answer(q);
+        expect(r.first, q).toContain('set n corners square');
+        for (const line of r.first) {
+          expect(line, q).not.toMatch(/--radius-full/);
+          expect(line, q).not.toMatch(/corners square --on avatar/);
+        }
+      }
+      expect((await answer('square badge corners')).first).toEqual([
+        'set n corners square --on badge',
+      ]);
+    },
+    T,
+  );
+  it(
     'a part and an aspect alone say what to look at',
     async test => {
       needsBases(test);

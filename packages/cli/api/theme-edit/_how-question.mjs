@@ -16399,7 +16399,9 @@ export function draftAnswer(ctx, env, question) {
           );
         });
         const pills =
-          r.dial === 'corners' && !c.parts.length ? pillsSquare(r.value) : null;
+          r.dial === 'corners' && !c.parts.length
+            ? pillsSquare(r.value, c)
+            : null;
         if (pills) steps.push(...pills.steps);
         const d = {
           text: `${r.dial} ${r.value}${ons[0] ? ` on ${ons.map(p => p?.on).join(', ')}` : ''}: the ${r.dial} dial set to ${r.value}, as set reads it${pills ? `, ${pills.said}` : ''}`,
@@ -19678,18 +19680,39 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
-   * "No rounding anywhere", "… badges and avatars too": the corners dial at
-   * square squares every pill that is a styling choice itself (a badge, a
-   * progress track); the parts drawn as circles keep their shape unless the
-   * question names one, which then goes square on its own. Null unless the
-   * value is square and the question asks for it everywhere or names a
-   * pill or circle part.
+   * The corners dial at square, asked of the whole theme. When the corner
+   * clause itself says anywhere, everywhere, everything or at all ("no
+   * rounding anywhere"), the parts drawn with the pill radius go square
+   * too, circles included: --radius-full 0px, a radio's mark keeping its
+   * circle. Otherwise the dial squares every pill that is a styling choice
+   * itself (a badge, a progress track) and the parts drawn as circles keep
+   * their shape unless the question names one, which then goes square on
+   * its own. Null unless the value is square and the question asks for it
+   * everywhere, names a pill or circle part, or says pills, too or as well.
    * @param {string} value
+   * @param {Clause} corner the clause the corners ask is said in
    * @returns {{steps: Step[], said: string} | null}
    */
-  function pillsSquare(value) {
+  function pillsSquare(value, corner) {
     if (!/^(?:square|none|0(?:px)?)$/.test(value)) return null;
     const {pills, circles} = pillShapes(C);
+    // (The scope word read on the corner clause alone: "square corners, and
+    // bigger text too" says nothing of the circles.)
+    if (
+      /\b(?:anywhere|everywhere|everything|at all)\b/.test(
+        corner.text.toLowerCase(),
+      )
+    ) {
+      const radios = pillDrawnRadios(C);
+      const round = String(TOKENS['--radius-full'] ?? '9999px');
+      return {
+        steps: [
+          set('--radius-full', '0px'),
+          ...radios.map(m => set('--radius-full', round, {on: m})),
+        ],
+        said: `and --radius-full 0px for the parts drawn as pills and circles (${[...pills, ...circles].slice(0, 6).join(', ')}${pills.length + circles.length > 6 ? ` and ${pills.length + circles.length - 6} more` : ''})${radios.length ? `; the radio marks keep their circle (${radios.join(', ')})` : ''}`,
+      };
+    }
     const named = [
       ...new Set(
         clauses
@@ -19698,29 +19721,20 @@ export function draftAnswer(ctx, env, question) {
           .filter(p => circles.includes(p)),
       ),
     ];
-    // ("no rounding anywhere", "… badges and switches too": the corners dial
-    // leaves the parts drawn with --radius-full round, so that token goes
-    // square too, as before; a radio's mark keeps its circle.)
-    const everywhere =
+    if (!(
+      named.length ||
       /\b(?:anywhere|everywhere|everything|at all|pills?|too|as well)\b/.test(
         question.toLowerCase(),
       ) ||
       clauses.some(
         o => !o.except && o.parts.some(p => pills.includes(one(p.on))),
-      );
-    if (!named.length && !everywhere) return null;
-    const radios = everywhere ? pillDrawnRadios(C) : [];
-    const round = String(TOKENS['--radius-full'] ?? '9999px');
+      )
+    ))
+      return null;
+    const kept = circles.filter(p => !named.includes(p));
     return {
-      steps: everywhere
-        ? [
-            set('--radius-full', '0px'),
-            ...radios.map(m => set('--radius-full', round, {on: m})),
-          ]
-        : named.map(m => set('corners', 'square', {on: m})),
-      said: everywhere
-        ? `and --radius-full 0px for the parts drawn as pills and circles (${[...pills, ...circles].slice(0, 6).join(', ')}${pills.length + circles.length > 6 ? ` and ${pills.length + circles.length - 6} more` : ''})${radios.length ? `; the radio marks keep their circle (${radios.join(', ')})` : ''}`
-        : `and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own`,
+      steps: named.map(m => set('corners', 'square', {on: m})),
+      said: `which squares the pills too (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${named.length ? `, and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own` : ''}${kept.length ? `; the parts drawn as circles keep their shape (${kept.slice(0, 6).join(', ')}${kept.length > 6 ? ` and ${kept.length - 6} more` : ''})` : ''}`,
     };
   }
 
@@ -22442,7 +22456,7 @@ export function draftAnswer(ctx, env, question) {
           const dial = /^\d*\.?\d+r?em$/.test(value)
             ? `${Math.round(parseFloat(value) * 16 * 100) / 100}px`
             : value;
-          const pills = pillsSquare(dial);
+          const pills = pillsSquare(dial, c);
           if (pills)
             return {
               text: `no rounding anywhere: the corners dial square, ${pills.said}`,
