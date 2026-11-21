@@ -1006,14 +1006,15 @@ export function editorThemesAt(cwd) {
 /**
  * The contrast problems the editor themes of the app the folder `cwd` is in
  * keep as designed, each with its theme, read by the editor's own reader,
- * and whether it still covers a problem: a record whose colors changed
- * since covers nothing (the editor's `show` lists that problem as open
- * again). None when the folder is in no app or a theme cannot be read.
+ * whether it still covers a problem, and the ratio its place is drawn at
+ * now when it does not: a record whose colors changed since covers
+ * nothing (the place is a problem again, or passes). None when the folder
+ * is in no app or a theme cannot be read.
  * @param {string} cwd
- * @returns {Promise<Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean}>>}
+ * @returns {Promise<Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean, ratioNow: number | null}>>}
  */
 export async function editorKeptContrastAt(cwd) {
-  /** @type {Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean}>} */
+  /** @type {Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean, ratioNow: number | null}>} */
   const out = [];
   try {
     const root = projectRoot(cwd);
@@ -1024,26 +1025,41 @@ export async function editorKeptContrastAt(cwd) {
         if (!kept.length) continue;
         const ctx = await context(root);
         const res = await resolvedTokens(ctx, slug);
-        const covered = withAccepted(
+        const now = withAccepted(
           data,
           await contrastProblems(ctx, data, res),
           res,
-        )
-          .filter(p => p.accepted)
-          .map(p => contrastPlace(p));
-        for (const a of kept)
+        ).map(p => ({accepted: Boolean(p.accepted), at: contrastPlace(p)}));
+        for (const a of kept) {
+          const here = now.filter(
+            ({at}) =>
+              at != null &&
+              at.part === a.part &&
+              at.ground === a.ground &&
+              at.when === (a.when ?? '') &&
+              at.mode === a.mode,
+          );
+          // (A failure the editor reports across several variants at once
+          // names no one variant: one at the same part, ground and mode
+          // still says the place is not passing.)
+          const near = now.filter(
+            ({at}) =>
+              at != null &&
+              at.part === a.part &&
+              at.ground === a.ground &&
+              at.when === '' &&
+              at.mode === a.mode,
+          );
+          const open = (here.length ? here : near).filter(x => !x.accepted);
           out.push({
             slug,
             ...a,
-            inEffect: covered.some(
-              at =>
-                at != null &&
-                at.part === a.part &&
-                at.ground === a.ground &&
-                at.when === (a.when ?? '') &&
-                at.mode === a.mode,
-            ),
+            inEffect: here.some(x => x.accepted),
+            ratioNow: open.length
+              ? Math.min(...open.map(x => Number(x.at?.ratio)))
+              : null,
           });
+        }
       } catch {
         // A theme that cannot be read keeps nothing doctor can list.
       }
