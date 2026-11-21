@@ -22236,20 +22236,9 @@ export function draftAnswer(ctx, env, question) {
               one(/** @type {string} */ (on)),
               'corners',
             )?.[0]?.token;
-            // (A part that shows no corners of its own, a heading, takes the
-            // corners dial as before.)
-            if (
-              !C.showsCorners(/** @type {string} */ (on)) &&
-              !(env.data?.settings ?? []).some(
-                (/** @type {any} */ x) =>
-                  x.source === 'property' &&
-                  x.on === on &&
-                  /^(?:background|border|box-shadow|outline)/.test(
-                    String(x.thing),
-                  ),
-              )
-            )
-              break cornersAt;
+            // (A part that shows no corners of its own still takes only the
+            // corners named: the check refuses them, with why, until the
+            // part has an edge, and an edge the same ask gives runs first.)
             // (A token that resolves to 0 rounds nothing: the round rung.)
             const tokRounds =
               tok != null && parseFloat(String(current(tok))) > 0;
