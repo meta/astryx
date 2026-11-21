@@ -32,8 +32,9 @@ import {
 import {Icon} from '../Icon';
 import {mergeProps} from '../utils';
 import {useLinkComponent} from '../Link/useLinkComponent';
+import {useTokenFocus} from './useTokenFocus';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
-import {TokenLink} from './TokenLink';
+import {TokenLink, disabledTokenInteractionProps} from './TokenLink';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -46,6 +47,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {cancelNestedPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {isSafeDestination} from '../utils/safeUrl';
 import {TokenNamingContext} from './TokenNamingContext';
 import {textDirectionProps} from '../utils/textDirection';
 import {
@@ -331,7 +333,8 @@ export function Token({
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
   const LinkComponent = useLinkComponent();
-  const role = useInteractiveRole({href, onClick, isDisabled});
+  const role = useInteractiveRole({href, onClick});
+  const contentRef = useTokenFocus(isDisabled);
   const naming = use(TokenNamingContext);
 
   // When role is 'button' via context (no explicit onClick), treat as
@@ -361,6 +364,7 @@ export function Token({
     <>
       {icon}
       <span
+        ref={contentRef}
         {...textDirectionProps(label)}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
@@ -388,13 +392,7 @@ export function Token({
     ...(description != null ? {'aria-description': description} : {}),
   };
 
-  // A disabled link keeps a focusable link with aria-disabled and no
-  // destination, as a disabled Link does (spec:AST-085 FR1, FR5;
-  // component:Link FR5). useInteractiveRole reports no link role once
-  // disabled, so the structure is chosen here.
-  const isDisabledLink = isDisabled && href != null && effectiveOnClick == null;
-
-  if (isDisabledLink && onRemove == null) {
+  if (role === 'link' && isDisabled && onRemove == null) {
     // A disabled link is an <a> with no href, as Link renders one: nothing can
     // navigate, it keeps a Tab stop and the link role (spec:AST-085 FR1, FR5).
     // The router LinkComponent is skipped, since a custom router link may
@@ -403,9 +401,6 @@ export function Token({
     return (
       <DisabledAnchor
         ref={ref as React.Ref<HTMLAnchorElement>}
-        role="link"
-        aria-disabled={true}
-        tabIndex={0}
         {...mergeProps(
           themeProps('token', {color, size, disabled: 'disabled'}),
           focusOutlineProps.focusVisible(
@@ -421,6 +416,10 @@ export function Token({
         )}
         {...rest}
         {...labellingProps}
+        role={rest.role ?? 'link'}
+        aria-disabled={true}
+        tabIndex={rest.tabIndex ?? (isSafeDestination(href) ? 0 : undefined)}
+        {...disabledTokenInteractionProps(rest)}
         {...disabledInteractionProps(rest.onKeyDown)}
         {...sharedProps}>
         {content}
@@ -428,7 +427,7 @@ export function Token({
     );
   }
 
-  if (role === 'link' || isDisabledLink) {
+  if (role === 'link') {
     if (onRemove == null) {
       return (
         <LinkComponent
@@ -487,6 +486,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
+            ref={contentRef}
             {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
