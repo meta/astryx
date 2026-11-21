@@ -1051,7 +1051,7 @@ export function libraryIcons(file, options = {}) {
     icons =>
       icons.length === all.length
         ? `Found ${icons.length} icons in ${label}.`
-        : `Found ${icons.length} icons in ${label}, drawn by ${all.length} exports in their looks.`,
+        : `Found ${icons.length} icons in ${label}, drawn by ${all.length} exports in their variants.`,
   );
 }
 
