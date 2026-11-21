@@ -58,7 +58,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {
-  textDirectionProps,
+  cutTextDirection,
   truncatedTextStyles,
 } from '../utils/textDirection';
 import type {HeadingTypeMap} from './index';
@@ -306,11 +306,7 @@ export function Heading({
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
-  // A cut heading keeps its start under a right-to-left page.
-  const cutDirection =
-    maxLines > 0 && justify === 'start'
-      ? textDirectionProps(children).dir
-      : undefined;
+  const cutDirection = cutTextDirection(children, maxLines, justify);
 
   return (
     <>

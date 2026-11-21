@@ -58,7 +58,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {TextClampContext} from './textClampContext';
-import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 
 export type {TextType, TextSize};
 
@@ -289,11 +289,7 @@ export function Text({
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
-  // A cut label keeps its start under a right-to-left page.
-  const cutDirection =
-    maxLines > 0 && justify === 'start'
-      ? textDirectionProps(children).dir
-      : undefined;
+  const cutDirection = cutTextDirection(children, maxLines, justify);
 
   return (
     <>
