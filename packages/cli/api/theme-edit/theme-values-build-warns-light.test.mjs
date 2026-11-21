@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file theme build warns a [light, dark] pair of sizes (light-dark() takes
- * colors only) and a pair half that reads a token nothing sets, as it warns
+ * @file theme build warns a [light, dark] pair with a half that is no color
+ * (light-dark() takes colors only) and a pair half that reads a token nothing sets, as it warns
  * the same CSS written as text; and both judges read a var() name as CSS
  * reads one, letters beyond ASCII included.
  */
@@ -77,11 +77,11 @@ const compileOwn = slug => compile(`themes/${slug}/${slug}.theme.ts`);
 const warned = p => JSON.stringify(p.env.data?.warnings ?? []);
 
 describe('a [light, dark] pair', () => {
-  it('of sizes, or with a half that reads no token, is warned', () => {
+  it('with a half that is no color, or that reads no token, is warned', () => {
     for (const [fields, why] of [
       [
         "tokens: {'--radius-element': ['4px', '12px']}",
-        'tokens.--radius-element (line 4): --radius-element gives a [light, dark] pair of sizes (4px)',
+        'tokens.--radius-element (line 4): --radius-element gives a light half that is no color (4px)',
       ],
       [
         "tokens: {'--spacing-2': ['4px', '8px']}",
@@ -105,7 +105,42 @@ describe('a [light, dark] pair', () => {
     expect(json(['theme', 'build', 'plain/p.ts']).env.data.warnings).toEqual(
       [],
     );
+    // Any half that is no color, not sizes only; a color function, which
+    // may be newer than the CSS data, is never judged.
+    for (const [pair, why] of [
+      ["['200ms', '400ms']", 'gives a light half that is no color (200ms)'],
+      ["['#fff', 'Inter']", 'gives a dark half that is no color (Inter)'],
+    ]) {
+      plain(`tokens: {'--color-accent': ${pair}}`);
+      expect(warned(json(['theme', 'build', 'plain/p.ts'])), pair).toContain(
+        why,
+      );
+    }
+    plain(
+      "tokens: {'--color-accent': ['color-mix(in oklab, red, blue)', 'rgb(from red r g b)']}",
+    );
+    expect(json(['theme', 'build', 'plain/p.ts']).env.data.warnings).toEqual(
+      [],
+    );
   });
+
+  it(
+    'computed in the file is named as computed, and a theme it extends that does not hold it is not blamed',
+    () => {
+      write(
+        'k/base.ts',
+        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const base = defineTheme({name: 'base'});\n",
+      );
+      write(
+        'k/p.ts',
+        "import {base} from './base';\nconst k = '--color-' + 'accent';\nexport default {\n  name: 'p',\n  extends: base,\n  tokens: {[k]: true as any},\n};\n",
+      );
+      expect(warned(json(['theme', 'build', 'k/p.ts']))).toContain(
+        'tokens.--color-accent (not written in this file as it is: computed in it, or from a module it imports): ',
+      );
+    },
+    T,
+  );
 });
 
 describe('a var() name with a letter beyond ASCII', () => {

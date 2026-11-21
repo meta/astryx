@@ -53,6 +53,7 @@
     {
       "from": "packages/core/src/RadioList/",
       "specs": [
+        "packages/core/src/CheckboxInput/__tests__/SlotFollowsMark.interaction.browser.spec.ts",
         "packages/core/src/Indicator/__tests__/TouchTargets.interaction.browser.spec.ts"
       ]
     },

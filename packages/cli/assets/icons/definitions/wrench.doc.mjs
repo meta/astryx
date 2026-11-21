@@ -4,7 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'wrench',
-  description: 'Open settings or configuration tools.',
+  description: 'Tools for a technical fix or setup, such as developer tools.',
   words: ['tools', 'configure', 'fix'],
   builtIn: true,
 };

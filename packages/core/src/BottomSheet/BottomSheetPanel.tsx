@@ -50,6 +50,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -861,16 +862,16 @@ export function BottomSheetPanel({
   if (keyedSnapPoints.key !== snapPointsKey) {
     setKeyedSnapPoints({key: snapPointsKey, points: snapPoints});
   }
-  const {snapHeights, ignoredSnapPointsMessage} = useMemo(() => {
+  const {snapHeights, ignoredSnapPointsWarning} = useMemo(() => {
     const {key, points} = keyedSnapPoints;
     if (key === '') {
-      return {snapHeights: undefined, ignoredSnapPointsMessage: ''};
+      return {snapHeights: undefined, ignoredSnapPointsWarning: ''};
     }
     const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
     return {
       snapHeights: () =>
         resolveSnapPoints(points ?? [], layoutViewportHeight()),
-      ignoredSnapPointsMessage:
+      ignoredSnapPointsWarning:
         ignored.length === 0
           ? ''
           : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
@@ -878,8 +879,8 @@ export function BottomSheetPanel({
   }, [keyedSnapPoints]);
   useDevWarning(
     'BottomSheet',
-    ignoredSnapPointsMessage,
-    ignoredSnapPointsMessage !== '',
+    ignoredSnapPointsWarning,
+    ignoredSnapPointsWarning !== '',
   );
 
   // A caller's height owns the element's height: the drag never writes it.
@@ -1298,7 +1299,10 @@ export function BottomSheetPanel({
       )}>
       <div
         ref={handleRef}
-        {...stylex.props(styles.handleBar)}
+        {...mergeProps(
+          themeProps('bottom-sheet-handle'),
+          stylex.props(styles.handleBar),
+        )}
         {...handleProps}
         aria-hidden="true"
       />
@@ -1357,7 +1361,11 @@ export function BottomSheetPanel({
               ),
             ),
           )}>
-          <LayerContentBoundary>{children}</LayerContentBoundary>
+          <LayerContentBoundary>
+            <LayoutContainerContext value="bottom-sheet">
+              {children}
+            </LayoutContainerContext>
+          </LayerContentBoundary>
         </div>
       </div>
     </div>

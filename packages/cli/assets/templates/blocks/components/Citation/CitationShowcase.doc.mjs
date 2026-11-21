@@ -11,5 +11,5 @@ export const doc = {
   isReady: true,
   isShowcase: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Citation', 'Layout', 'Text'],
+  componentsUsed: ['Citation', 'Icon', 'Layout', 'Text'],
 };

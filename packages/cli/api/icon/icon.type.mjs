@@ -45,11 +45,25 @@
  */
 
 /**
+ * A definition in the same group as another (its family of related
+ * meanings), so a reader picks the one that fits.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconDefinitionRelative
+ * @property {string} definition - The related definition's name.
+ * @property {string} description - What it means.
+ */
+
+/**
  * One ranked icon match. When the project picks a look and the match's set
  * is in its list, `module`, `export`, and `import` draw that look; `look`
- * is present when the icon does not have it.
+ * is present when the icon does not have it. `relatives` is present when the
+ * groups of the definitions it draws have other members: those definitions,
+ * Astryx's and its set's own. In the `icon.search` answer, `meaningImport` is
+ * present when the set's `map` names the icon for a definition: the import
+ * line that names the icon by that meaning
+ * (`import {TrashIcon as DeleteIcon} from '…'`).
  * @experimental May change or be removed in a patch release.
- * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}}} IconMatchEntry
+ * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}, relatives?: IconDefinitionRelative[], meaningImport?: string}} IconMatchEntry
  */
 
 /**
@@ -60,6 +74,8 @@
  * @property {string} name - The definition's name.
  * @property {boolean} builtIn - Core draws it by name with no icon set.
  * @property {string} description - What the definition means.
+ * @property {string} [group] - Present when the definition names one: the family of related definitions it belongs to.
+ * @property {IconDefinitionRelative[]} [relatives] - Present when its group has other members: those definitions, so a reader picks the one that fits.
  */
 
 /**
@@ -72,7 +88,7 @@
  * @property {number} data.matchCount - Every match, before `limit`.
  * @property {IconMatchEntry[]} data.matches - The ranked matches, at most `limit`.
  * @property {string} [data.reason] - Present when no icon set is installed: why nothing matches.
- * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, at most `limit`.
+ * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, with the built-in that draws in place of a matching definition Core does not draw (`help` brings `info`) unless a match ranked above it has none, at most `limit`.
  * @property {string} [data.next] - Present when no icon set is installed: how to get one.
  */
 
@@ -187,6 +203,7 @@
  * @property {Array<{definition: string, icon: string, previous: string | null, changed: boolean}>} data.entries - Each pair, in order, and what it replaced.
  * @property {boolean} data.changed - Whether the file was written.
  * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
+ * @property {Array<{key: string, definition: string}>} [data.replacedKeys] - Each `map` key that named a replaced icon definition; the command wrote it under the definition that replaced it.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
  * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
@@ -205,6 +222,7 @@
  * @property {string | null} data.previous - The icon id it replaced.
  * @property {boolean} data.changed - Whether the file was written.
  * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
+ * @property {Array<{key: string, definition: string}>} [data.replacedKeys] - Each `map` key that named a replaced icon definition; the command wrote it under the definition that replaced it.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
  * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
@@ -309,7 +327,7 @@
  * @property {'icon.definitions'} type
  * @property {object} data
  * @property {string | null} data.set - The set `mapped` describes, as `<package>/<set>`: the one `set` names, else the project's main set, else the only set of the icon-set package the command runs in; null when there is none.
- * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
+ * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], group?: string, replaces?: string, templates: number, mapped?: boolean, fallback?: string}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `group`: the family of related definitions it belongs to, present when it names one. `replaces`: the older definition it took the place of, whose name answers with it. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null. `fallback`: when it is not mapped, the definition's fallback the set maps, which a template icon with it draws by.
  */
 
 /**
@@ -317,7 +335,7 @@
  * name.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconTemplateMeanings
- * @property {Array<{definition: string, templates: number}>} unmapped - Each such definition and how many bundled templates use it, most used first, then by name; empty when the set maps them all.
+ * @property {Array<{definition: string, templates: number}>} unmapped - Each such definition and how many bundled templates use it, most used first, then by name, leaving out a definition whose fallback the set maps; empty when the set maps them all.
  */
 
 /**
@@ -414,6 +432,7 @@
  * @property {string} package - The integration package that ships the set.
  * @property {import('../../authoring/doctypes/icon-set/type').IconSetData} data - The set's data file.
  * @property {Array<{doc: Record<string, unknown>}>} definitions - The set's own icon definitions.
+ * @property {Array<{name: string, definition: string}>} [replacedDefinitions] - The old names of the set's own definitions, each with the current definition it answers with.
  * @property {string} [look] - The look the folder's project draws the set in (`experimental.iconVariant`), when the set is in its list.
  */
 

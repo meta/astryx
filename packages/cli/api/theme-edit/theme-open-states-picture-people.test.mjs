@@ -25,6 +25,10 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read drawn components: drawn for real.)
+realRenders(true);
 
 // The renders are stood in for, and a picture is a few bytes where the
 // browser would write it: these tests are about which pictures are taken.
@@ -35,14 +39,14 @@ vi.mock('./_preview.mjs', async importOriginal => {
   ).stubRenders(real);
   return {
     ...stubbed,
-    screenshot: async (
+    screenshots: async (
       /** @type {any} */ _project,
-      /** @type {string} */ _html,
-      /** @type {string} */ png,
-    ) => {
-      fs.writeFileSync(png, 'png');
-      return {ok: true};
-    },
+      /** @type {Array<{png: string}>} */ jobs,
+    ) =>
+      jobs.map(({png}) => {
+        fs.writeFileSync(png, 'png');
+        return {ok: true};
+      }),
   };
 });
 
@@ -78,6 +82,10 @@ describe('the open states picture', () => {
         'preview-dark.png',
         'sheet-overlays.png',
         'sheet-overlays-dark.png',
+        // (The family the theme sets a part of: the buttons, when it sets
+        // none or only dials.)
+        'sheet-actions.png',
+        'sheet-actions-dark.png',
       ]);
       const changed = /** @type {any} */ (
         await themeEditSet('t', 'corners', 'square', {cwd, png: true})

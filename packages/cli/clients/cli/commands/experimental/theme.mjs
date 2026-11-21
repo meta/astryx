@@ -582,19 +582,46 @@ function changeBlocks(r) {
             c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
           ),
   };
+  // A change that leaves the setting as it was says so, never "x -> x".
+  const unchanged = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) => n.startsWith('no change: '),
+  );
+  const drawnAlready = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) =>
+      n.startsWith('no change: ') && n.includes(' already draws '),
+  );
+  // A dial step on a part (`corners large --on card`) says what it drew
+  // there, when that is a value or two: a part's own scale can give a step
+  // another size than the dial's help names for the whole theme.
+  const stepOn = d.action === 'set' && s.source === 'dial' ? s.on : null;
+  const drawnOn = stepOn
+    ? /** @type {string[]} */ (/** @type {any} */ (d).styled ?? [])
+        .filter(x => x.startsWith(`${stepOn}: `))
+        .map(x => x.slice(stepOn.length + 2))
+    : [];
+  const drawnAs = drawnOn.length <= 2 ? drawnOn : [];
   const done =
-    d.was != null
-      ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+    unchanged && d.action === 'set'
+      ? drawnAlready
+        ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
+        : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
+      : d.was != null
+        ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
+        : `[ok] ${d.theme}: ${d.action === 'set' ? `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}` : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
   // reach it, before the rest a head-cut output drops.
   const {
     newProblems = [],
+    leftProblems = [],
     leftOut = [],
-    missed = 0,
-    missedParts = missed,
+    fontNotLoaded = [],
+    missed: _missed,
+    missedParts: _missedParts,
+    missedOn: _missedOn,
+    missedWhere: _missedWhere,
+    missedNew: _missedNew,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -605,6 +632,25 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    // Problems it moved but left failing: said under the new ones.
+    ...(leftProblems.length
+      ? [
+          `still failing after this change (${leftProblems.length}):`,
+          ...problemList(leftProblems),
+        ]
+      : []),
+    ...(fontNotLoaded.length
+      ? [
+          list(
+            fontNotLoaded.map(
+              (/** @type {{family: string, run: string[]}} */ x) => [
+                `${x.family} is not installed, so the pictures and the app draw the next font in the stack until it is`,
+                ...x.run,
+              ],
+            ),
+          ),
+        ]
+      : []),
     ...(leftOut.length
       ? [
           list(
@@ -615,17 +661,34 @@ function changeBlocks(r) {
           ),
         ]
       : []),
-    // The parts the theme's own changes still do not reach, counted near
-    // the top, so a head of the output keeps it; show names the first ones
-    // with their lines, and show --json lists each.
-    ...(missed
-      ? [
-          record({
-            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists the first with their lines; show --json lists each)`,
-          }),
-        ]
-      : []),
+    ...missedLine(d),
     ...changeFields(rest),
+  ];
+}
+
+/**
+ * The parts the theme's own changes still do not reach, counted and
+ * named, near the top of a change or a new theme, so a head of the
+ * output keeps it; show names the first ones with their lines, and show
+ * --json lists each.
+ * A change says them only when it brought some (`missedNew`): the ones it
+ * found are show's to list, not every change's to repeat.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[], missedNew?: number}} d
+ */
+function missedLine(d) {
+  const {
+    missed = 0,
+    missedParts = missed,
+    missedOn = [],
+    missedWhere = [],
+    missedNew,
+  } = d;
+  const named = missedWhere.length ? missedWhere : missedOn;
+  if (!missed || missedNew === 0) return [];
+  return [
+    record({
+      missed: `${missedNew ? `this change left ${missedNew} new miss${missedNew > 1 ? 'es' : ''}; ` : ''}${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
+    }),
   ];
 }
 
@@ -1598,9 +1661,9 @@ function defineGroup(parent, doc) {
               commands: (cmd.commands ?? [])
                 .filter(command => commandAvailable(command, helpBase()))
                 .map(command => ({
-                name: command.name(),
-                summary: command.summary() || command.description(),
-              })),
+                  name: command.name(),
+                  summary: command.summary() || command.description(),
+                })),
             },
           }),
         );
@@ -1657,9 +1720,18 @@ export function registerExperimentalTheme(group, program) {
   explained(theme, groupDoc);
   // The run's base may not serve a line's command; help then leaves it out.
   const overrides = [
-    ['experimental theme targets', `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`],
-    ['experimental theme editor how', `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`],
-    ['component <Name>', `  ${getCliInvocation()} component <Name>                    One component's theming table\n`],
+    [
+      'experimental theme targets',
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`,
+    ],
+    [
+      'experimental theme editor how',
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    ],
   ];
   theme.addHelpText(
     'after',
@@ -1992,8 +2064,11 @@ export function registerExperimentalTheme(group, program) {
                   // not (`"like": "neutral"`), in either order (`red=accent`,
                   // `stone=like`), as set reads a pair swapped; `like` is
                   // never a value (`neutral=like` is the base neutral).
+                  // Pairs apart at `;`, or at a comma when a key comes next
+                  // (`like: neutral, corners: pill`); a comma inside a value
+                  // (`font: Inter, Arial`) is the value's.
                   const byColon = w
-                    .split(/\s*;\s*/)
+                    .split(/\s*;\s*|\s*,\s*(?=["']?[a-z][a-z-]*["']?\s*[=:])/i)
                     .map(x =>
                       /^((["'])[a-z-]+\2|[a-z0-9#(][^=:]*?)\s*[=:]\s*(.+)$/i.exec(
                         x.trim(),
@@ -2242,7 +2317,18 @@ export function registerExperimentalTheme(group, program) {
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
-            ...changeFields(/** @type {any} */ (r.data)),
+            ...missedLine(/** @type {any} */ (r.data)),
+            ...changeFields(
+              /** @type {any} */ (
+                (({
+                  missed: _m,
+                  missedParts: _p,
+                  missedOn: _o,
+                  missedWhere: _w,
+                  ...x
+                }) => x)(/** @type {any} */ (r.data))
+              ),
+            ),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
             `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and a picture of each family of components the theme sets a part of (sheet-actions.png, the buttons, while it sets none) from real components, and --section <family> --png pictures any other family (actions, inputs, selection, navigation, feedback, data, containers); open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
           ],

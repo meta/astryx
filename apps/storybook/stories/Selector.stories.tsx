@@ -1137,6 +1137,50 @@ export const OverlayBesideKeyboard: Story = {
   },
 };
 
+/**
+ * Overlay Beside Keyboard with nine options, so the open list must rise to
+ * end above a software keyboard. On a phone, focus the field so that its
+ * keyboard rises, then open the Selector. The list ends above the keyboard.
+ * The trigger sits where Overlay Beside Keyboard's does. On an iPhone with the
+ * keyboard up, a tap on a trigger just above Safari's bottom bars closed the
+ * keyboard and opened nothing.
+ */
+export const FlippedOverlayBesideKeyboard: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [name, setName] = useState('');
+    const [value, setValue] = useState<string | undefined>('Banana');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          padding: '96px 24px 0',
+        }}>
+        <TextInput label="Name" value={name} onChange={setName} />
+        <div style={{height: 64}} />
+        <Selector
+          label="Fruit"
+          options={[
+            'Apple',
+            'Banana',
+            'Cherry',
+            'Date',
+            'Elderberry',
+            'Fig',
+            'Grape',
+            'Honeydew',
+            'Kiwi',
+          ]}
+          value={value}
+          onChange={v => setValue(v)}
+        />
+      </div>
+    );
+  },
+};
+
 // All variations
 export const AllVariations: Story = {
   render: () => {

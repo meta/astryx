@@ -48,11 +48,16 @@ import {
 } from '../../../foundation/response/json.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {unknownSubcommandSuggestions} from './cli-error.mjs';
+import {
+  answerBareSubcommand,
+  answersBareSubcommands,
+} from './define-command.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
   setCommand,
   setOutcome,
   recordHelp,
+  recordCommandResult,
 } from '../../../foundation/debug/index.mjs';
 import {
   formatCliCommand,
@@ -1117,6 +1122,14 @@ export function handleCommanderError(err) {
   if (code === 'commander.unknownOption' && rejected)
     return answerStrayOption(err, rejected, message, exitCode);
 
+  // A subcommand called bare without the argument it needs: its group may
+  // answer in its place, or add a suggestion to the error.
+  if (
+    code === 'commander.missingArgument' &&
+    answersBareSubcommands(rejected?.parent)
+  )
+    return answerBareMissingArgument(err, rejected, message, exitCode);
+
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
   // The editor's reader also reads an option given without its value and
@@ -1152,8 +1165,14 @@ async function answerStrayOption(err, rejected, message, exitCode) {
   const stray = /unknown option '([^']+)'/.exec(message)?.[1] ?? '';
   const {strayOptionAnswer, withoutStray} = await import('./stray-option.mjs');
   if (!rejected.parent) {
-    const {findEntry, firstWord, unknownCommandAnswer} =
-      await import('./unknown-command.mjs');
+    const {
+      findEntry,
+      firstWord,
+      iconFeaturesOn,
+      projectScript,
+      unknownCommandAnswer,
+    } = await import('./unknown-command.mjs');
+    const context = {findEntry, iconFeatures: iconFeaturesOn, projectScript};
     // Only a word before the stray option is read as the command: after it,
     // the word may be the option's value (`astryx --format text component
     // Table`), and the unknown option stays the fault.
@@ -1164,9 +1183,14 @@ async function answerStrayOption(err, rejected, message, exitCode) {
       first &&
       !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
     ) {
-      const answer = await unknownCommandAnswer(rejected, cleaned, {
-        findEntry,
-      });
+      /** @param {Awaited<ReturnType<typeof unknownCommandAnswer>>} a */
+      const withRun = a => (a && !a.fallback && !a.near ? a : null);
+      // The whole run first: a command the words point at can take the
+      // option (`migrate --from 0.6.0` is `upgrade --from 0.6.0`). Without a
+      // run, the run without the option.
+      const answer =
+        withRun(await unknownCommandAnswer(rejected, words, context)) ??
+        (await unknownCommandAnswer(rejected, cleaned, context));
       setOutcome('parse-error', {
         exitCode: exitCode || 1,
         error: new Error(answer?.message ?? message),
@@ -1179,15 +1203,17 @@ async function answerStrayOption(err, rejected, message, exitCode) {
         exitCode,
         answer && {
           message: answer.message,
-          // Only the runs: a near or listed command name is no run to print
-          // after `Run:`, so the program's help stands in for those.
-          suggestions: answer.suggestions.some(s =>
-            s.name.startsWith('astryx '),
-          )
-            ? answer.suggestions
-                .filter(s => s.name.startsWith('astryx '))
-                .map(s => ({name: formatCliCommand(s.name), reason: s.reason}))
-            : [{name: formatCliCommand('--help'), reason: 'every command'}],
+          // Only runs: a near command name is no run to print after `Run:`,
+          // so the program's help stands in for those. A run of the
+          // project's own script keeps its package manager.
+          suggestions: answer.near
+            ? [{name: formatCliCommand('--help'), reason: 'every command'}]
+            : answer.suggestions.map(s => ({
+                name: s.name.startsWith('astryx ')
+                  ? formatCliCommand(s.name)
+                  : s.name,
+                reason: s.reason,
+              })),
         },
         ERROR_CODES.ERR_UNKNOWN_COMMAND,
       );
@@ -1207,6 +1233,44 @@ async function answerStrayOption(err, rejected, message, exitCode) {
 }
 
 /**
+ * The answer to a missing argument. When the subcommand was called bare and
+ * its group answers in its place, that answer is the run's result and the
+ * run succeeds. Otherwise the error is Commander's, with the group's
+ * suggestion after the usage when it gives one.
+ * @param {unknown} err
+ * @param {any} rejected the command that is missing its argument
+ * @param {string} message Commander's message
+ * @param {number} exitCode
+ * @returns {Promise<boolean>}
+ */
+async function answerBareMissingArgument(err, rejected, message, exitCode) {
+  const code = 'commander.missingArgument';
+  const bare = await answerBareSubcommand(rejected);
+  if (bare && 'result' in bare) {
+    recordCommandResult(bare.result);
+    setOutcome('ok', {exitCode: 0});
+    process.exit(0);
+    return true;
+  }
+  return finishParseError(
+    err,
+    code,
+    message,
+    exitCode,
+    bare && {
+      message: message.replace(/^error:\s*/i, ''),
+      // Text prints a suggestion's name as the run to type.
+      suggestions: [
+        ...(usageSuggestion(err, code) ?? []),
+        jsonActive()
+          ? bare.suggestion
+          : {...bare.suggestion, name: formatCliCommand(bare.suggestion.name)},
+      ],
+    },
+  );
+}
+
+/**
  * The rest of {@link handleCommanderError} for a parse failure: the message
  * and suggestions written (the theme reader's answer when it read the
  * option), and the exit.
@@ -1214,7 +1278,7 @@ async function answerStrayOption(err, rejected, message, exitCode) {
  * @param {string} code
  * @param {string} message
  * @param {number} exitCode
- * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined | null} read
+ * @param {{message: string, suggestions: import('../../../foundation/response/base').Suggestion[]} | undefined | null} read
  * @param {string} [errorCode] the code the answer reports, when it is not
  *   the one Commander's code maps to
  * @returns {boolean}

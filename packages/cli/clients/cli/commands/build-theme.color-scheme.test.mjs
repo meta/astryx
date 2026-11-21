@@ -4,17 +4,17 @@
  * @file Regression test for the `color-scheme` declaration `astryx theme build`
  * emits alongside `light-dark()` token output (see #3658).
  *
- * `astryx theme build` injects a `color-scheme` declaration into
- * `@layer astryx-theme` whenever the generated CSS contains `light-dark()`,
- * so LightningCSS/browsers can resolve it. That declaration must mirror
- * reset.css's own `html[data-theme]` -> `color-scheme` mapping (a bare
- * `:root { color-scheme: light dark; }` alone permanently pins the page to
- * "light dark", defeating `<Theme mode="light|dark">` forcing regardless of
- * `@layer astryx-theme` being declared after `@layer reset` in layer order):
+ * `astryx theme build` pins the page's scheme in `@layer astryx-theme`, when
+ * the generated CSS contains `light-dark()`, only where the page or the Theme
+ * provider forces a mode, as reset.css maps it:
  *
- *   :root { color-scheme: light dark; }
  *   html[data-theme="light"] { color-scheme: light; }
  *   html[data-theme="dark"] { color-scheme: dark; }
+ *
+ * It never declares `:root { color-scheme: light dark; }`: a theme follows the
+ * page's scheme, and following the reader's device is the page's choice
+ * (reset.css, or the app's own `color-scheme` on html). A host with no scheme
+ * of its own keeps it when it loads a theme stylesheet.
  *
  * Themes that never use `light-dark()` have no `color-scheme` ambiguity to
  * resolve, so none of the three rules should be emitted for them. Canonical data
@@ -94,8 +94,9 @@ describe('theme build color-scheme output', () => {
 
     expect(css).toContain('light-dark(#0077B6, #48CAE4)');
 
-    // All 3 rules must be present...
-    expect(css).toContain(COLOR_SCHEME_ROOT_DECL);
+    // The two mode pins are present, and the root keeps the page's scheme...
+    expect(css).not.toContain(COLOR_SCHEME_ROOT_DECL);
+    expect(css).not.toMatch(/color-scheme:\s*light dark/);
     expect(css).toContain(COLOR_SCHEME_LIGHT_DECL);
     expect(css).toContain(COLOR_SCHEME_DARK_DECL);
 
@@ -105,7 +106,6 @@ describe('theme build color-scheme output', () => {
     const themeLayerStart = css.indexOf('@layer astryx-theme');
     expect(themeLayerStart).toBeGreaterThanOrEqual(0);
     const themeLayerBody = css.slice(themeLayerStart);
-    expect(themeLayerBody).toContain(COLOR_SCHEME_ROOT_DECL);
     expect(themeLayerBody).toContain(COLOR_SCHEME_LIGHT_DECL);
     expect(themeLayerBody).toContain(COLOR_SCHEME_DARK_DECL);
   });

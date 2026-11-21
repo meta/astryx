@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Every icon a bundled template or block imports is declared in its
- * descriptor's `icons` with the icon definition it draws, so a project's icon
- * set replaces it (AST-084 FR9). The CLI knows no icon library; only this
+ * @file A bundled template or block imports each icon by meaning from
+ * `@astryxdesign/template-icons` (AST-084 FR21), never from an icon library.
+ * An icon still imported from a library would need its descriptor's `icons`
+ * to declare the icon definition it draws, so a project's icon set replaces
+ * it (AST-084 FR9). The CLI knows no icon library; only this
  * test names the libraries the bundled templates happen to import, to find
  * their icon imports. No icon is exempt. Two different icons in one template
  * never share a definition: a set draws one icon per definition, so they
@@ -24,6 +26,10 @@ const {
   sharedTemplateMeanings,
   undeclaredTemplateIcons,
 } = require('../foundation/discovery/template-icons.mjs');
+/** @type {typeof import('../foundation/discovery/template-placeholders.mjs')} */
+const {
+  templatePlaceholderProblems,
+} = require('../foundation/discovery/template-placeholders.mjs');
 /** @type {typeof import('../foundation/discovery/icon-definition-discovery.mjs')} */
 const {
   astryxDefinitionsByName,
@@ -108,5 +114,30 @@ describe('bundled template icon declarations', () => {
       undeclared: [],
       unchecked: [],
     });
+  }, 60_000);
+
+  it('import placeholders only by meaning, from a look the table draws', async () => {
+    const definitions = astryxDefinitionsByName();
+    const templates = (await discoverCoreTemplates()).map(template => ({
+      id: `${template.type}/${template.dirName}`,
+      source: fs.readFileSync(template.filePath, 'utf-8'),
+      declared: template.icons ?? {},
+    }));
+    expect(templatePlaceholderProblems(templates, definitions)).toEqual([]);
+  }, 60_000);
+
+  it('import icons only by meaning, never from an icon library', async () => {
+    /** @type {string[]} */
+    const direct = [];
+    for (const template of await discoverCoreTemplates()) {
+      for (const name of iconImports(
+        fs.readFileSync(template.filePath, 'utf-8'),
+      )) {
+        direct.push(
+          `${template.type}/${template.dirName}: imports ${name} from an icon library. Fix: import its meaning, <Meaning>Icon, from @astryxdesign/template-icons (node packages/cli/scripts/migrate-template-icons.mjs moves it by its declared meaning).`,
+        );
+      }
+    }
+    expect(direct).toEqual([]);
   }, 60_000);
 });

@@ -166,6 +166,10 @@ export function registerHook(program) {
                 ? formatHookCompact(
                     result.data,
                     result.data.importPath || '@astryxdesign/core/hooks',
+                    {
+                      propsCommand: `component ${result.data.name} --props`,
+                      fullCommand: `hook ${result.data.name} --detail full`,
+                    },
                   )
                 : formatHookFull(result.data);
 
@@ -174,6 +178,9 @@ export function registerHook(program) {
           const related = result.data.relatedComponents ?? [];
           emit(
             record({package: result.package}),
+            // A hook documented with a component names it.
+            'subComponentOf' in result.data &&
+              record(result.data, {fields: ['subComponentOf']}),
             code(doc),
             related.length > 0 &&
               text(

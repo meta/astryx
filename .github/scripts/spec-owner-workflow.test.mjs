@@ -93,7 +93,7 @@ describe('spec-only workflow contract', () => {
       );
       expect(result.status, result.stderr).toBe(0);
       expect(fs.readFileSync(output, 'utf8')).toBe(
-        'spec_only=true\ndocsite_only=false\ntooling_only=false\nlab_only=false\nfull_suite=false\nvitest_full_suite=false\n',
+        'spec_only=true\ntimes_only=false\ndocsite_only=false\ntooling_only=false\nlab_only=false\nfull_suite=false\nvitest_full_suite=false\n',
       );
 
       fs.rmSync(path.join(classifierDir, 'knowledge-paths.cjs'));
@@ -179,7 +179,7 @@ describe('spec-only workflow contract', () => {
     // and tests off for the spec-only lane.
     const docsiteJob = block('docsite-build', 'docsite-browser');
 
-    const checkout = docsiteJob.indexOf('- uses: actions/checkout@v7');
+    const checkout = docsiteJob.indexOf('uses: actions/checkout@v7');
     const setup = docsiteJob.indexOf('- uses: ./.github/actions/setup');
     const validate = docsiteJob.indexOf('- name: Validate spec records');
     expect(checkout).toBeGreaterThanOrEqual(0);

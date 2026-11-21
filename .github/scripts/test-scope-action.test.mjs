@@ -183,6 +183,7 @@ describe('per-job scope step', () => {
         'lab_specs_path',
         'release_bump',
         'spec_only',
+        'times_only',
         'tooling_only',
         'touches',
         'truncated',
@@ -217,6 +218,7 @@ describe('per-job scope step', () => {
         'packages/core/package.json',
         'packages/cli/assets/codemods/__tests__/registry.test.mjs',
         'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
+        'docs/specs/AST-057-row-actions/spec.md',
       ),
     });
     expect(outputs).toMatchObject({

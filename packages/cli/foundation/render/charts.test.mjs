@@ -8,7 +8,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {parseHTML} from 'linkedom';
-import {CHART_CSS, CHART_WIDTHS, FOLLOWS_WIDTH, boxHeights, chartDrawings, roundCoordinates, separateIds} from './charts.mjs';
+import {CHART_CSS, CHART_WIDTHS, FOLLOWS_WIDTH, boxHeights, chartDrawings, roundCoordinates, separateIds, smallSvgText} from './charts.mjs';
 
 /** The width ranges the CSS shows each drawing in, from its container queries. */
 function bands() {
@@ -163,5 +163,56 @@ describe('separateIds', () => {
     const alone = parseHTML(`<!doctype html><html><body><div ${FOLLOWS_WIDTH}="" class="recharts-responsive-container">${drawing(60)}</div></body></html>`).document;
     separateIds(alone.body, 4);
     expect(alone.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-chart4-at-60');
+  });
+});
+
+describe('smallSvgText', () => {
+  const drawing = (attrs, inner) => `<div><svg ${attrs}>${inner}</svg></div>`;
+
+  it('finds text that a wide drawing shrinks on a phone', () => {
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="100%"', '<text x="0" y="20" font-size="13">Jan</text>'))).toEqual({count: 1, px: 5});
+    expect(smallSvgText(drawing('viewBox="0 0 700 180"', '<text style="font-size:12px">421</text>'))).toEqual({count: 1, px: 6});
+  });
+
+  it('uses the browser default size when the drawing states none', () => {
+    expect(smallSvgText(drawing('viewBox="0 0 960 300"', '<text>Jan</text>'))).toEqual({count: 1, px: 6});
+  });
+
+  it('reads a size set on the drawing or a group', () => {
+    expect(smallSvgText(drawing('viewBox="0 0 600 300" font-size="20"', '<text>Jan</text>'))).toBeNull();
+    expect(smallSvgText(drawing('viewBox="0 0 600 300"', '<g font-size="20"><text>Jan</text></g>'))).toBeNull();
+  });
+
+  it('skips a drawing that keeps its size, fits a phone or has no text', () => {
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="300"', '<text font-size="13">Jan</text>'))).toBeNull();
+    expect(smallSvgText(drawing('viewBox="0 0 320 200"', '<text font-size="13">Jan</text>'))).toBeNull();
+    expect(smallSvgText(drawing('viewBox="0 0 960 300"', '<rect width="10" height="10"></rect>'))).toBeNull();
+    expect(smallSvgText('<svg width="24" height="24" viewBox="0 0 24 24"><path d="M0 0h24"></path></svg>')).toBeNull();
+  });
+
+  it('reads the width a style gives the drawing', () => {
+    const text = '<text font-size="13">Jan</text>';
+    // A pixel width that a percentage max-width caps, or a percentage width, scales.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="960" style="max-width:100%;height:auto"', text))).toEqual({count: 1, px: 5});
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="80%"', text))).toEqual({count: 1, px: 4});
+    // A pixel width in the style keeps the drawing's size, even with no width attribute.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" style="width:960px"', text))).toBeNull();
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="100%" style="width: 960px"', text))).toBeNull();
+    // A pixel height with no width fixes the drawing's size too.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" height="300"', text))).toBeNull();
+    // A percentage max-width never widens a drawing narrower than the phone.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="240" style="max-width:100%"', '<text font-size="30">Jan</text>'))).toEqual({count: 1, px: 8});
+  });
+
+  it('skips a recharts surface, which the render draws at the reader\'s width', () => {
+    const surface = 'class="recharts-surface" width="960" height="300" viewBox="0 0 960 300" style="width:100%;height:100%;display:block"';
+    expect(smallSvgText(drawing(surface, '<text font-size="12">Jan</text>'))).toBeNull();
+  });
+
+  it('counts each drawing once, nested drawings included', () => {
+    const page =
+      drawing('viewBox="0 0 960 300"', '<svg viewBox="0 0 10 10"><text>a</text></svg><text font-size="13">Jan</text>') +
+      drawing('viewBox="0 0 720 300"', '<text font-size="12">Feb</text>');
+    expect(smallSvgText(page)).toEqual({count: 2, px: 5});
   });
 });

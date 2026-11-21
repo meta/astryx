@@ -9,8 +9,10 @@ export default function Page() {
   return (
     <Layout
       content={
-        <LayoutContent>
-          <Text type="large">New Page</Text>
+        <LayoutContent role="main">
+          <Text as="h1" type="large">
+            New Page
+          </Text>
         </LayoutContent>
       }
     />

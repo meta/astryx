@@ -242,6 +242,46 @@ describe('astryx docs --depth', () => {
   );
 
   it(
+    'marks each experimental child the same way in its namespace and on the list',
+    async () => {
+      const json = await runCli(['--json', 'docs', 'cli/experimental']);
+      expect(json.status).toBe(0);
+      /** @type {Array<{route: string, name: string, stability?: string}>} */
+      const children = JSON.parse(json.stdout).data.slots.flatMap(
+        (/** @type {{children: Array<any>}} */ slot) => slot.children,
+      );
+      const read = await runCli(['docs', 'cli/experimental']);
+      const list = await runCli(['docs', '--depth', '2']);
+      expect(read.status).toBe(0);
+      expect(list.status).toBe(0);
+      /**
+       * @param {string} stdout
+       * @param {string} name the row's first column
+       */
+      const marked = (stdout, name) => {
+        const row = stdout
+          .split('\n')
+          .find(line => line.split(/\s{2,}/u)[0] === name);
+        expect(row, name).toBeDefined();
+        return /^\S+\s{2,}\[experimental\]/u.test(/** @type {string} */ (row));
+      };
+      const inNamespace = children.map(child =>
+        marked(read.stdout, child.name),
+      );
+      const onList = children.map(child => marked(list.stdout, child.route));
+      expect(onList).toEqual(inNamespace);
+      // The namespace holds both kinds: an experimental child that is marked,
+      // and one whose own summary already says so and is not marked twice.
+      expect(children.every(child => child.stability === 'experimental')).toBe(
+        true,
+      );
+      expect(inNamespace).toContain(true);
+      expect(inNamespace).toContain(false);
+    },
+    SLOW,
+  );
+
+  it(
     'the topic list names the docs below each namespace with a depth',
     async () => {
       const plain = await runCli(['docs']);

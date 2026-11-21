@@ -40,7 +40,8 @@ export type GridAlignment = 'start' | 'center' | 'end' | 'stretch';
  *
  * - `number` — exactly N `1fr` tracks (e.g. `columns={3}`); never reflows
  * - `object` — responsive columns based on minimum child width:
- *   - `minWidth` — minimum width (px) for each column track
+ *   - `minWidth` — minimum width (px) for each column track; in a container
+ *     narrower than `minWidth`, one track shrinks to the container width
  *   - `repeat` — `'fill'` (default) preserves empty tracks for consistent widths;
  *     `'fit'` collapses empty tracks so items stretch to fill
  *   - `max` — caps the maximum number of columns. The grid stretches to 100%
@@ -419,7 +420,9 @@ export function Grid({
         columnGap,
       );
     } else {
-      gridTemplateColumns = `repeat(${repeatMode}, minmax(${columns.minWidth}px, 1fr))`;
+      // `min(100%, …)` lets a lone track shrink to a container narrower than
+      // `minWidth` instead of overflowing it.
+      gridTemplateColumns = `repeat(${repeatMode}, minmax(min(100%, ${columns.minWidth}px), 1fr))`;
     }
   } else if (typeof columns === 'number' && columns > 0) {
     // Fixed columns mode
