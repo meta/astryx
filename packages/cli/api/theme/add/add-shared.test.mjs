@@ -758,7 +758,7 @@ describe('theme add with a shared theme', () => {
         expect(again.data.copy?.workingFiles?.notCopied).toMatch(
           /already holds/,
         );
-      else expect(again.data.copy).not.toHaveProperty('editor');
+      else expect(again.data.copy).not.toHaveProperty('workingFiles');
       const removed = await themeRemove('ocean', {cwd: app});
       expect(removed.data.undo?.removed).toEqual(
         expect.arrayContaining(['themes/ocean/ocean.settings.json']),
@@ -906,7 +906,7 @@ describe('theme add with a shared theme', () => {
   it('adds no editor state when the shared theme carries none', async () => {
     writeTheme(path.join(shared, 'ocean'), 'ocean');
     const result = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
-    expect(result.data.copy).not.toHaveProperty('editor');
+    expect(result.data.copy).not.toHaveProperty('workingFiles');
     expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
   });
 

@@ -170,9 +170,10 @@
  * dependencies it added, and `workingFiles` the working files (settings and
  * palette data) the bundle carries for the theme: where they sat (`from`),
  * the folder they are copied to (`outputDir`), the files copied there, and
- * `notCopied`, why none were (settings this CLI does not read, a palette
- * recipe no Astryx CLI makes, more than one folder of them, or a folder there
- * that holds files theme add did not write).
+ * `notCopied`, why none were (settings this CLI does not read or larger than
+ * settings hold, a palette recipe this CLI does not make, a theme source with
+ * edits of its own, more than one folder of them, or a folder there that holds
+ * files theme add did not write).
  * `undo` is present when `theme remove` removed a theme `theme add` copied
  * from a shared theme: `removed` the files of the copy it deleted, `kept`
  * those changed since the add (left as they are), `uninstalled` the packages

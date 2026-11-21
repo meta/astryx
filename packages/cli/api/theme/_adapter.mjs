@@ -2152,7 +2152,9 @@ export async function addSharedThemeToApp(source, options) {
         editorWriting = true;
         // (Data files only: the editor builds the theme's source when it
         // opens the theme, so no shared code is copied or run.)
-        editorFiles = filesUnder(staged.editor.dir).filter(isDataFile);
+        editorFiles = filesUnder(staged.editor.dir).filter(file =>
+          isDataFile(name, file),
+        );
         for (const file of editorFiles) {
           const to = path.join(editorDir, file);
           fs.mkdirSync(path.dirname(to), {recursive: true});
@@ -2375,11 +2377,14 @@ function installLockfiles(projectDir) {
 }
 
 /**
- * Whether a file of the editor's saved state is data (its settings and
- * palette, JSON), which a shared theme's add copies.
+ * Whether a file of the editor's saved state is the data a shared theme's
+ * add copies: the theme's settings and its palette data, nothing else (no
+ * code, no undo history).
+ * @param {string} slug
  * @param {string} file
  */
-const isDataFile = file => file.endsWith('.json');
+const isDataFile = (slug, file) =>
+  file === `${slug}.settings.json` || file === 'palette.config.json';
 
 /**
  * Every file under `dir`, relative to it, in `/` form.

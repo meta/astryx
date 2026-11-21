@@ -396,7 +396,7 @@ function walkFolders(from, visit) {
  * @param {string} to
  * @param {(name: string) => boolean} [skip] file names left out
  */
-export function copyTree(from, to, skip = (/** @type {string} */ _) => false) {
+function copyTree(from, to, skip = (/** @type {string} */ _) => false) {
   fs.mkdirSync(to, {recursive: true});
   for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
     const src = path.join(from, entry.name);
