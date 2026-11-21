@@ -22339,7 +22339,7 @@ export function draftAnswer(ctx, env, question) {
                   : '0',
               );
               return {
-                text: `${sideWords(named.corners)} on ${on}: already rounded (now ${nowSaid}); ${sideWords(others)} stay as they are. To square ${sideWords(others)} too, as "only" says, run this line`,
+                text: `${sideWords(named.corners)} on ${on}: already rounded (now ${nowSaid}); ${sideWords(others)} stay as they are. To square ${sideWords(others)} too${/\bonly\b/i.test(c.text) ? ', as "only" says' : ''}, run this line`,
                 options: [
                   writeAll(
                     Object.fromEntries(ALL.map((k, n) => [k, squared[n]])),
@@ -29149,10 +29149,29 @@ export function draftAnswer(ctx, env, question) {
     for (const d of kept)
       if (d.options.length && !/replaces the earlier/.test(d.text))
         d.text += ` (said after "then", this replaces the earlier ${thenReplaced.map(st => `${st.thing} ${st.value}`).join(', ')})`;
-  if (saidTwice.length)
+  // (Each run of text colors said one after another, "white text and gray
+  // text and black text", is named whole, on the text result that writes
+  // its last color only.)
+  /** @type {Array<{last: Step, values: string[]}>} */
+  const textRuns = [];
+  for (const {earlier, later} of saidTwice) {
+    const run = textRuns.find(r => r.last === earlier);
+    if (run) {
+      run.values.push(String(later.value));
+      run.last = later;
+    } else
+      textRuns.push({
+        last: later,
+        values: [String(earlier.value), String(later.value)],
+      });
+  }
+  for (const {last, values} of textRuns)
     for (const d of kept)
-      if (d.options.length && !/were said for the text/.test(d.text))
-        d.text += ` (${saidTwice.map(({earlier, later}) => `two colors were said for the text, ${earlier.value} and ${later.value}; the later one, ${later.value}, is written`).join('; ')})`;
+      if (
+        d.options.some(o => o.includes(last)) &&
+        !/were said for the text/.test(d.text)
+      )
+        d.text += ` (${values.length === 2 ? 'two' : values.length} colors were said for the text, ${values.slice(0, -1).join(', ')} and ${values.at(-1)}; the last one, ${values.at(-1)}, is written)`;
   result.push(...kept.slice(0, clashes.length ? 0 : undefined));
   // An undo of a setting the theme does not have ("…; also undo the
   // corners" with no corners set) is named as having nothing to take back;

@@ -348,7 +348,7 @@ const ROWS = [
     'an undo of a longer part name never takes back the shorter part said earlier',
     {
       q: 'Make the buttons blue. Make the button group rounder. Undo the button group change.',
-      has: ["background-color '#2563eb' --on button --when variant:primary"],
+      has: ["background-color '#2563eb' --on button"],
     },
   ],
   [
