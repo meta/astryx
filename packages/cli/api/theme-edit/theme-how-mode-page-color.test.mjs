@@ -204,15 +204,15 @@ describe('a color said for one mode is its page', () => {
     for (const [ask, read] of [
       [
         'light mode should be cream with blue buttons',
-        'light mode: page cream, with blue buttons',
+        'light mode: page cream, light mode: blue buttons',
       ],
       [
         'dark mode should be slate with rounder buttons',
-        'dark mode: page slate, with rounder buttons',
+        'dark mode: page slate, dark mode: rounder buttons',
       ],
       [
         'dark mode is navy and light mode is cream',
-        'dark mode: page navy, and light mode: page cream',
+        'dark mode: page navy, light mode: page cream',
       ],
       [
         'make the buttons rounder, and dark mode should be a deep dark plum',
@@ -290,6 +290,33 @@ describe('a color said for one mode is its page', () => {
       const accent = links.filter(l => /--color-text-accent/.test(l));
       expect(accent.length).toBeGreaterThan(0);
       for (const l of accent) expect(l).toMatch(/--mode dark$/);
+    },
+    T,
+  );
+
+  it(
+    "a look said after the page stays the theme's: navy and more contrast in dark mode",
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow('dark mode is navy and more contrast', {
+        cwd,
+        theme: 'c',
+      });
+      const lines = /** @type {string[]} */ (
+        (data.results ?? []).flatMap(r => r.commands ?? [])
+      ).map(x =>
+        String(x)
+          .replace(/^.* editor /, '')
+          .replace(/^set c /, ''),
+      );
+      expect(pageIn(lines, 'dark')).not.toBeNull();
+      expect(
+        lines.some(
+          l =>
+            /^--color-(?:text-secondary|border) /.test(l) &&
+            /--mode dark$/.test(l),
+        ),
+      ).toBe(true);
     },
     T,
   );
