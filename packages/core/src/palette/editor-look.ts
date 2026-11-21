@@ -290,8 +290,8 @@ export function grownFamilies(
 }
 
 /**
- * The colors the theme editor grows beyond `themePalette()`'s mapping,
- * written into `tokens` as shades of the palette.
+ * The colors a look grows beyond the seeds' own, written into `tokens`
+ * as shades of the palette.
  */
 export function growLook(input: EditorLookInput): EditorLookResult {
   const {candidate, dials, context, tokens, modes, setExactly, t} = input;

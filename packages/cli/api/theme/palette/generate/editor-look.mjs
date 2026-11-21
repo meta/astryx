@@ -322,8 +322,8 @@ export function grownFamilies(dials, context) {
   return out;
 }
 /**
- * The colors the theme editor grows beyond `themePalette()`'s mapping,
- * written into `tokens` as shades of the palette.
+ * The colors a look grows beyond the seeds' own, written into `tokens`
+ * as shades of the palette.
  * @param {EditorLookInput} input
  * @returns {EditorLookResult}
  */

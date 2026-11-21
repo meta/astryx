@@ -270,7 +270,16 @@ TypeScript declaration metadata is not executable runtime behavior.
     text, borders, and icons; and for the accent and each status color its
     fill, the text on that fill, its text, icon, muted fill, and border,
     picked by contrast against the surfaces as the editor picks them: text
-    at 4.5:1, and an icon, a graphic, at 3:1.
+    at 4.5:1, and an icon, a graphic, at 3:1. A tinted `neutral` seed's
+    primary text, primary icons and text on dark surfaces carry its tint;
+    the `neutral` seed reaches the slider track and the `danger` seed the
+    error toast's fill, each at the shade nearest Core's own; a coloured
+    card keeps its own secondary text.
+  - It also grows the colors a look derives from the seeds, as the editor
+    grows them: category, chart and code colors, the scrim, and the status
+    roles the input leaves unset, each kept readable on the surfaces. A
+    theme made in the editor and one made with `themePalette()` from the
+    same seeds and recipe get the same colors.
   - `defineTheme({palette})` writes those tokens under the theme's own
     `tokens`: an explicit token wins, token by token. A theme without
     `palette`, `color`, and every official theme build exactly as before.
