@@ -131,7 +131,7 @@ export async function rankIconIndex(query, indexes, options = {}) {
   for (const index of list) {
     if (index == null || !Array.isArray(index.sets)) {
       throw new AstryxError(
-        'An icon index is {version, sets, withdrawn}, as exportIconIndex() returns it.',
+        'An icon index is {version, sets, withdrawn, components}, as exportIconIndex() returns it.',
         undefined,
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );

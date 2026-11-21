@@ -804,6 +804,24 @@ describe('a word matches whole words (FR6)', () => {
     expect(firstBlock('settings icon block')).toBe('block');
   });
 
+  it('names the meaning import by the definition the query ranks first, with its place words', async () => {
+    const app = writeIconSetProject(path.join(tmp, 'boards'), {
+      packages: [
+        {
+          data: {
+            ...glyphsData(),
+            icons: [{id: 'board', export: 'BoardIcon', words: ['board']}],
+            map: {clipboard: 'board', list: 'board'},
+          },
+        },
+      ],
+    });
+    const found = await icon('clipboard icon list', {cwd: app});
+    expect(
+      found.type === 'icon.search' && found.data.matches[0]?.meaningImport,
+    ).toBe("import {BoardIcon as ClipboardIcon} from '@acme/glyphs';");
+  });
+
   it("reads the names of the project's Core components for the words after the icon word", async () => {
     const app = writeIconSetProject(path.join(tmp, 'places'), {
       packages: [

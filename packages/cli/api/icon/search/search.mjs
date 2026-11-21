@@ -100,9 +100,11 @@ export async function iconSearch(query, {cwd, set, limit}) {
  * @param {string} query
  * @param {Parameters<typeof rankIcons>[0]} sets the searched sets, whose own
  *   definitions rank with Astryx's
+ * @param {() => Iterable<string>} [componentNames] the component names a
+ *   query's words may name to say where the icon goes
  * @returns {import('../icon.type.mjs').IconMatchEntry[]}
  */
-function withMeaningImports(matches, query, sets) {
+function withMeaningImports(matches, query, sets, componentNames) {
   if (!matches.some(match => match.definitions.length > 0)) return matches;
   /** @type {Map<unknown, (name: string) => number>} */
   const ranks = new Map();
@@ -116,7 +118,7 @@ function withMeaningImports(matches, query, sets) {
     const key = own.length > 0 ? set : null;
     let rank = ranks.get(key);
     if (!rank) {
-      rank = meaningRank(query, set);
+      rank = meaningRank(query, set, componentNames);
       ranks.set(key, rank);
     }
     return rank;
@@ -147,9 +149,11 @@ function withMeaningImports(matches, query, sets) {
  * @param {string} query
  * @param {Parameters<typeof rankIcons>[0][number] | undefined} set the
  *   match's set
+ * @param {() => Iterable<string>} [componentNames] the component names a
+ *   query's words may name to say where the icon goes
  * @returns {(name: string) => number}
  */
-function meaningRank(query, set) {
+function meaningRank(query, set, componentNames) {
   const own = set?.definitions ?? [];
   const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
   const names = new Set(astryx.map(doc => doc.name));
@@ -157,7 +161,7 @@ function meaningRank(query, set) {
     ...astryx,
     ...own.map(each => each.doc).filter(doc => !names.has(doc.name)),
   ];
-  const matched = definitionMatches(query, docs, set).map(
+  const matched = definitionMatches(query, docs, set, {componentNames}).map(
     match => match.doc.name,
   );
   const place = new Map(matched.map((name, index) => [name, index]));
@@ -236,6 +240,7 @@ export function rankIconSets(
           ),
         query,
         searched,
+        componentNames,
       ),
     },
   };
