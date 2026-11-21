@@ -18,6 +18,7 @@ import {
   alphaOf,
   compositeOver,
   hex,
+  oklabOf,
   parseColor,
   ratio,
   ratioWords,
@@ -71,9 +72,11 @@ import {
 } from './_project.mjs';
 import {
   PALETTE_DIALS,
+  PALETTE_TOKENS,
   STATUS_TOKEN,
   familyRamp,
   isGraySeed,
+  modesOf,
   nearestShade,
   paletteDialOf,
   seedOf,
@@ -119,7 +122,14 @@ import {
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
-import {NUMBER_WORDS, commaNumbers, modeNear, pluralOf} from './_normal.mjs';
+import {
+  NUMBER_WORDS,
+  commaNumbers,
+  modeNear,
+  pluralOf,
+  bareNeutralGrays,
+  isBareGraysClause,
+} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -4617,6 +4627,23 @@ function clauseBefore(text, at) {
 }
 
 /**
+ * The most OKLab chroma a gray may have and still read as having no hue: a
+ * gray stored as 8-bit hex is off by a rounding step at most.
+ */
+const UNTINTED_CHROMA = 0.004;
+
+/**
+ * A color's OKLab chroma (0 for a value that is no opaque color).
+ * @param {string} value
+ */
+const chromaOf = value => {
+  const rgb = parseColor(value);
+  if (!rgb || alphaOf(value) < 1) return 0;
+  const [, a, b] = oklabOf(rgb);
+  return Math.hypot(a, b);
+};
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -5428,7 +5455,85 @@ export function draftAnswer(ctx, env, question) {
     // tints are the neutral color.
     .replace(/\b([a-z]+)[- ]tinted\s+(?:gr[ae]ys|neutrals?)\b/gi, (m, color) =>
       colorsIn(String(color).toLowerCase()).length ? `neutral ${color}` : m,
+    );
+  // (Only a bare neutral-grays clause is read, beside clauses that each
+  // name a part, a dial or a value, and only on a theme that
+  // sets no color in a part rule, no page, surface or card color of its
+  // own, and whose base keeps no tinted gray in a part rule: every other
+  // ask keeps its old reading.)
+  /** @param {string} v */
+  const hasTint = v =>
+    (
+      String(v).match(
+        /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch|oklab)a?\([^)]*\)/gi,
+      ) ?? []
+    ).some(h => chromaOf(h) > UNTINTED_CHROMA);
+  const setsColors =
+    env.data.settings.some(
+      st =>
+        (st.on &&
+          (parseColor(String(st.value)) != null ||
+            /#[0-9a-f]{3,8}\b|var\(\s*--color-/i.test(String(st.value)))) ||
+        (!st.on && /^--color-background-(?:body|surface|card)$/.test(st.thing)),
+    ) ||
+    Object.values(
+      /** @type {{components?: Record<string, Record<string, Record<string, unknown>>>}} */ (
+        /** @type {unknown} */ (env.base)
+      ).components ?? {},
+    ).some(rules =>
+      Object.values(rules ?? {}).some(decls =>
+        Object.entries(decls ?? {}).some(
+          ([k, v]) => paletteDialOf(k) === 'neutral' && hasTint(String(v)),
+        ),
+      ),
+    );
+  // (The clause is flagged, never rewritten: words a person types, even
+  // the ones a rewrite would write, keep their own reading. A clause beside
+  // it counts only when it names a thing whose own look is no tint of the
+  // grays: a hue or a warm or cool word, or the page, the surfaces, the
+  // backgrounds or the neutral color itself, is a look on what the grays
+  // make, so the plain gray would undo it.)
+  // (A ground, the page, the surfaces, the backgrounds, counts only when
+  // every other word of its clause is a dial's value, "flat surfaces";
+  // "sandy surfaces" or "a golden page" is a look on it.)
+  const dialValues = new Set(
+    Object.values(DIALS).flatMap(d =>
+      String(/** @type {{values?: string}} */ (d).values ?? '').split('|'),
+    ),
+  );
+  const graysLook = (/** @type {string} */ text) => {
+    const words = text.toLowerCase().match(/[a-z#0-9-]+/g) ?? [];
+    if (
+      words.some(w =>
+        /^(?:neutrals?|gr[ae]ys?|warm\w*|cool\w*|cold\w*|tint\w*|hues?|toned?|beige|cream\w*|ivory|sand\w*|taupe|stone\w*|slate|gold\w*|earth\w*)$/.test(
+          w,
+        ),
+      )
     )
+      return true;
+    if (
+      !words.some(w => /^(?:pages?|surfaces?|backgrounds?|grounds?)$/.test(w))
+    )
+      return false;
+    return words.some(
+      w =>
+        !/^(?:pages?|surfaces?|backgrounds?|grounds?|the|a|an|and|with|use|make|all)$/.test(
+          w,
+        ) && !dialValues.has(w),
+    );
+  };
+  const untintedAsk =
+    !setsColors &&
+    bareNeutralGrays(question, text => {
+      const t = ` ${text.toLowerCase()} `;
+      return (
+        !graysLook(text) &&
+        (/[\d#]/.test(text) ||
+          partLexicon(ctx).parts.some(([re]) => re.test(t)) ||
+          Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t)))
+      );
+    });
+  question = question
     // ("mint green for positive numbers", "red for destructive actions"):
     // a color for a thing a status role names, in the words its own dial
     // gives for it (success: done, valid, positive; danger: errors,
@@ -28339,6 +28444,63 @@ export function draftAnswer(ctx, env, question) {
             (C.typeOf(t) === 'color' || isColorToken(t)),
         )
         .flatMap(t => perMode(t, t, {}, fn, c));
+    // ("neutral grays", "grays with no tint"): grays without a hue. The
+    // answer is judged from the shades a plain gray seed (Neutral's own mid
+    // gray) makes: it is offered when it takes a tint out of the grays. A
+    // color the theme sets itself keeps its value whatever the seed is, so
+    // it is named, never taken for a tint of the grays.
+    if (
+      untintedAsk &&
+      dial === 'neutral' &&
+      !c.mode &&
+      !given &&
+      isBareGraysClause(c.text)
+    ) {
+      const SEED = '#777777';
+      const chroma = chromaOf;
+      const modes = modesOf(env.data);
+      const after = env.tokensAfter([set('neutral', SEED)]);
+      /** @param {string} k @param {'light' | 'dark'} m @param {number} [depth] @returns {string} */
+      const seeded = (k, m, depth = 0) => {
+        if (!after) return String(current(k, m) ?? '');
+        const v = String(after[m]?.[k] ?? env.base[m]?.[k] ?? TOKENS[k] ?? '');
+        const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(v.trim())?.[1];
+        return ref && depth < 6 ? seeded(ref, m, depth + 1) : v;
+      };
+      // (The inverted fill, the text on dark and light, and the washes are
+      // not grays a page shows as its own.)
+      const grays = [...PALETTE_TOKENS].filter(
+        k =>
+          paletteDialOf(k) === 'neutral' &&
+          !/inverted|^--color-on-|overlay/.test(k),
+      );
+      /** @param {(k: string, m: 'light' | 'dark') => string} read */
+      const tintedBy = read =>
+        grays.filter(k =>
+          modes.some(m => chroma(read(k, m)) > UNTINTED_CHROMA),
+        );
+      const tintedNow = tintedBy((k, m) => String(current(k, m) ?? ''));
+      const kept = tintedBy(seeded);
+      const inModes = modes.length > 1 ? 'in both modes' : 'in its one mode';
+      const keptSaid = kept.length
+        ? `; ${kept.join(', ')} ${kept.length > 1 ? 'keep their' : 'keeps its'} tint whatever the seed is: set ${kept.length > 1 ? 'them' : 'it'} to a plain gray to lose it`
+        : '';
+      if (tintedNow.some(k => !kept.includes(k)))
+        return {
+          text: `the theme's grays without a tint: the page, surfaces, cards, popovers, muted fills, text and borders the seed makes take plain grays ${inModes}${keptSaid || `; a part ${env.slug} sets itself keeps its own`}`,
+          options: [[set('neutral', SEED)]],
+        };
+      return kept.length
+        ? {
+            text: `the grays the seed of ${env.slug} makes have no tint, so a new seed changes nothing${keptSaid}`,
+            options: [],
+          }
+        : {
+            text: `the theme's own grays in ${env.slug} are already neutral, with no tint ${modes.length > 1 ? 'in either mode' : 'in its one mode'}: nothing to change`,
+            options: [],
+            already: true,
+          };
+    }
     let color =
       given &&
       !(
@@ -32762,8 +32924,10 @@ export function draftAnswer(ctx, env, question) {
                 ),
               )
             ) &&
-            // (A warm or cool look is read by the neutral dial's grays.)
+            // (A warm or cool look is read by the neutral dial's grays, and
+            // so is the bare "untinted grays" ask it answered.)
             !/^(?:warm|cool)(?:er)?$/.test(w) &&
+            !(untintedAsk && w === 'untinted') &&
             !/^(?:dark|light)(?:-only)?$/.test(w) &&
             // (A way, "softer", is read by the way readers.)
             !/[a-z]{3}er$/.test(w) &&

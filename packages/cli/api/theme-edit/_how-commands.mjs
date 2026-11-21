@@ -75,6 +75,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
+ * @property {(steps: Step[]) => {light: Record<string, string>, dark: Record<string, string>} | null} tokensAfter the theme's own token values after the steps, built in memory, or null when a step does not apply
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -275,6 +276,21 @@ export async function howTheme(ctx, cwd, name) {
             ? 'dark'
             : null;
       return measureFit(ctx, base, was, now, intent, steps, visible);
+    },
+    /**
+     * The theme's own token values after the steps, built in memory with
+     * the same compile `set` builds from (nothing is written).
+     * @param {Step[]} steps
+     */
+    tokensAfter(steps) {
+      const d = JSON.parse(JSON.stringify(theme));
+      const checkCtx = /** @type {any} */ ({...ctx, base});
+      try {
+        for (const st of steps) apply(checkCtx, slug, d, st);
+      } catch {
+        return null;
+      }
+      return ownTokens(compileTheme(ctx, d, base), base, ctx.project?.core);
     },
     /**
      * What a part shows for a property at rest after the steps (built in
