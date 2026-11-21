@@ -192,7 +192,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {boolean} [only]
  * @property {boolean} [narrowed] - A group's height the narrowing copied onto
  *   this member, with only, when one control of the group took its own.
- * @property {string[]} [hold] - Variants of its part (axis:value) drawn on another ground, where it would make text unreadable: they keep Core's look; the editor writes it.
+ * @property {string[]} [hold] - Variants of its part (axis:value) drawn on another ground, where it would make text unreadable: they keep Core's look, apart from a state the theme fills where the color reads; the editor writes it.
  * @property {string[]} [keep] - Members of the group or family it reaches
  *   that keep their own look: the editor writes it when reaching them would
  *   make their text unreadable.
@@ -5220,7 +5220,8 @@ export function placementHolds(ctx, data, s) {
  * The settings that keep a part's held variants (`hold`) at Core's look:
  * the same property, in each held variant, at the value Core draws it with
  * there (a top nav link's color in the phone menu, where a color set for
- * the dark bar would be unreadable).
+ * the dark bar would be unreadable); a state the theme fills there keeps a
+ * color that reads on that fill, per mode.
  * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s
  * @returns {Setting[]}
  */
@@ -5262,9 +5263,6 @@ export function holdCopies(ctx, data, s) {
       s.mode || (modesOf(data).length > 1 && open.length < 2)
         ? [s.mode ?? open[0]]
         : [undefined];
-    // (A state the theme paints a fill of its own for, a selected link's
-    // block, keeps the setting's color there: Core's would sit on the
-    // theme's fill.)
     // (A state the theme paints a fill of its own for, set on the part or
     // reaching it through its family, for this placement: a selected
     // link's block keeps a readable color there, the theme's own color for
@@ -5290,40 +5288,118 @@ export function holdCopies(ctx, data, s) {
         keep: undefined,
         note: undefined,
       });
+      // (A copy per mode where the theme draws both, so each mode takes
+      // its own fill and color, a pair's half included.)
+      const stateModes = mode
+        ? [mode]
+        : modesOf(data).length > 1
+          ? modesOf(data)
+          : [undefined];
       const seen = new Set();
-      for (const x of fills) {
-        if (mode && x.mode && x.mode !== mode) continue;
-        const m = mode ?? x.mode ?? undefined;
-        const key = `${x.state}|${m ?? ''}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const own = [...data.settings]
-          .reverse()
-          .find(
-            y =>
-              y !== s &&
-              y.on &&
-              kebab(String(y.thing)) === kebab(String(s.thing)) &&
-              (y.state ?? '') === String(x.state) &&
-              (!y.when || y.when === variant) &&
-              (!y.mode || !m || y.mode === m) &&
-              partsOf(ctx, y).includes(String(s.on)),
-          );
-        out.push({
-          ...s,
-          ...(m ? {mode: m} : {}),
-          value: own ? own.value : s.value,
-          when: variant,
-          state: String(x.state),
-          only: true,
-          hold: undefined,
-          keep: undefined,
-          note: undefined,
-        });
-      }
+      for (const m of stateModes)
+        for (const x of fills) {
+          if (m && x.mode && x.mode !== m) continue;
+          const key = `${x.state}|${m ?? ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const own = [...data.settings]
+            .reverse()
+            .find(
+              y =>
+                y !== s &&
+                y.on &&
+                kebab(String(y.thing)) === kebab(String(s.thing)) &&
+                (y.state ?? '') === String(x.state) &&
+                (!y.when || y.when === variant) &&
+                (!y.mode || !m || y.mode === m) &&
+                partsOf(ctx, y).includes(String(s.on)),
+            );
+          const value = String(own ? own.value : s.value);
+          // (Only where that color reads 4.5:1 on the state's fill as built:
+          // a light or see-through block keeps Core's color, the hold's.)
+          if (
+            !(m ? [m] : modesOf(data)).every(mm =>
+              readsOn(
+                ctx,
+                data,
+                halfOf(value, mm),
+                halfOf(String(x.value), mm),
+                mm,
+              ),
+            )
+          )
+            continue;
+          out.push({
+            ...s,
+            ...(m ? {mode: m} : {}),
+            value: m ? halfOf(value, m) : value,
+            when: variant,
+            state: String(x.state),
+            only: true,
+            hold: undefined,
+            keep: undefined,
+            note: undefined,
+          });
+        }
     }
   }
   return out;
+}
+
+/**
+ * Whether a text color reads 4.5:1 on a solid fill in a mode, each value
+ * with the theme tokens it reads put in (as the build writes them). A fill
+ * that is see-through, an image, or cannot be read does not count.
+ * @param {Ctx} ctx @param {ThemeData} data
+ * @param {string} fg @param {string} bg @param {string} m
+ */
+function readsOn(ctx, data, fg, bg, m) {
+  const base = /** @type {any} */ (ctx).base ?? {};
+  /** @param {string} v */
+  const resolve = v => {
+    let out = String(v).trim();
+    for (let i = 0; i < 6; i++) {
+      out = halfOf(out, m);
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(out)?.[1];
+      if (!ref) break;
+      const set = [...data.settings]
+        .reverse()
+        .find(
+          x =>
+            x.source === 'token' &&
+            x.thing === ref &&
+            !x.on &&
+            !x.state &&
+            !x.when &&
+            (!x.mode || x.mode === m),
+        );
+      out = String(set?.value ?? base[m]?.[ref] ?? '').trim();
+    }
+    return out;
+  };
+  const b = resolve(bg);
+  const f = resolve(fg);
+  const bc = parseColor(b);
+  const fc = parseColor(f);
+  if (!bc || !fc || alphaOf(b) < 1) return false;
+  return (
+    ratio(
+      /** @type {[number, number, number]} */ (fc),
+      /** @type {[number, number, number]} */ (bc),
+    ) >= 4.5
+  );
+}
+
+/**
+ * A value's half for one mode: the matching half of a `light-dark()` pair,
+ * else the value itself.
+ * @param {string} v @param {string} m
+ */
+function halfOf(v, m) {
+  const pair = /^light-dark\((.*)\)$/is.exec(String(v).trim());
+  if (!pair) return v;
+  const halves = splitTop(pair[1], ',');
+  return halves.length === 2 ? halves[m === 'dark' ? 1 : 0].trim() : v;
 }
 
 /**
