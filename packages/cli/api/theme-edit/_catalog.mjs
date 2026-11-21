@@ -726,7 +726,8 @@ export const SHEET_CSS = [
   'body:has(#cs-light:checked) .cs-dark,body:has(#cs-dark:checked) .cs-light{display:none!important}',
   '.cs-group-name{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}',
   // Cells wrap, about three to a row; a cell is never narrower than what it
-  // holds (a calendar, a stepper, a toolbar), so nothing is cut at its edge:
+  // holds (a date input's calendar, a date range's two months), so nothing
+  // is cut at its edge:
   // a wide part takes a row of its own.
   '.cs-sheet{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;padding:14px}',
   '.cs-sheet>.cs-cell{flex:1 1 360px;min-width:min-content;max-width:100%;box-sizing:border-box}',
@@ -775,9 +776,9 @@ export const SHEET_CSS = [
   '.cs-cell [data-astryx-layer-nest] > [data-astryx-layer-root]{margin-top:8px!important}',
   // A part shown for its open look that opened nothing has no cell.
   '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
-  // The overlays section's own page (sheet-overlays.png): five to a row,
-  // a panel over the page cropped to its top at 260px, the small overlays
-  // first.
+  // The overlays section's own page (sheet-overlays.png): the small
+  // overlays first, about five to a row (a panel over the page, wider,
+  // about four), a panel cropped to its top at 260px.
   '.cs-section-overlays .cs-open-group .cs-sheet>.cs-cell{flex-basis:200px}',
   // (A panel over the page is drawn at least a fifth of the page wide, as
   // wide as a column of five.)

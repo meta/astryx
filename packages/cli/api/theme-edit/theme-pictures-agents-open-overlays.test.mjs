@@ -3,7 +3,7 @@
 /**
  * @file The pictures agents open show the overlays: the sample page has a
  * strip of a tooltip, a popover, a menu and a list drawn open below it; the
- * overlays sheet shows the small overlays first, five to a row, without the
+ * overlays sheet shows the small overlays first, about five to a row, without the
  * parts of an overlay alone. A change names the pictures to take, and
  * counts what the theme's changes did not reach near its top; show lists
  * those last, where a tail of its output keeps them.
@@ -68,7 +68,7 @@ describe('the sample page', () => {
 
 describe('the overlays sheet', () => {
   it(
-    'shows the small overlays first, five to a row, and no part of an overlay alone',
+    'shows the small overlays first, about five to a row, and no part of an overlay alone',
     async () => {
       await themeEditShow('t', {cwd, section: 'overlays'});
       const html = fs.readFileSync(
