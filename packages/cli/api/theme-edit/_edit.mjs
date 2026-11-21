@@ -2491,26 +2491,54 @@ function aloneFlag(ctx, part, thing, state = null) {
 }
 
 /**
+ * Whether a value rolls the theme's rule back to Core's layer
+ * (`revert-layer`), so Core's paints show as Core draws them. `revert` goes
+ * past Core's styles too, so it is not one.
+ * @param {unknown} value
+ */
+function keepsCoreLook(value) {
+  return /^revert-layer$/i.test(String(value ?? '').trim());
+}
+
+/**
  * The parts a setting reaches because their element is drawn as one of the
  * parts it writes (the census saw both targets on one element: a calendar's
  * nav arrow is a button), and which keep no setting of the same thing of
  * their own: each with the part it is drawn as and the line that keeps it
  * as Core draws it there, in every state (`revert-layer`: the theme's rule
- * rolls back to Core's layer). A part drawn on its own (a Button) is never
- * one: only a part that rides on the part written is.
+ * rolls back to Core's layer); no line for a look set with `--when`, which
+ * names only the parts drawn with that variant. A part drawn on its own (a
+ * Button) is never one: only a part that rides on the part written is.
  * @param {any} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {import('./_settings.mjs').Setting} s
  * @param {string[]} parts the parts the setting writes
- * @returns {Array<{part: string, as: string, keep: string}>}
+ * @returns {Array<{part: string, as: string, keep?: string}>}
  */
 function embeddedReach(ctx, slug, data, s, parts) {
+  /**
+   * Whether the census saw a part drawn with every condition of a `--when`
+   * (`variant:ghost`, `variant:ghost+size:sm`), on its own element's
+   * attributes or the ones it
+   * borrows from the part it is drawn as.
+   * @param {any} rec @param {string} when
+   */
+  const drawnWith = (rec, when) =>
+    when
+      .split(/[+,\s]+/)
+      .filter(Boolean)
+      .every(cond => {
+        const [k, v] = cond.split(':');
+        return [rec?.attrs?.[k], rec?.borrowed?.[k]].some(
+          vals => Array.isArray(vals) && vals.map(String).includes(String(v)),
+        );
+      });
   if (!s.on || s.source !== 'property' || !parts.length) return [];
   const prop = kebab(String(s.thing));
   /** @type {Record<string, any>} */
   const MAP = ctx.C?.MAP ?? {};
-  /** @type {Array<{part: string, as: string, keep: string}>} */
+  /** @type {Array<{part: string, as: string, keep?: string}>} */
   const out = [];
   for (const [part, rec] of Object.entries(MAP)) {
     if (!ctx.project.target.has(part) || parts.includes(part)) continue;
@@ -2519,6 +2547,10 @@ function embeddedReach(ctx, slug, data, s, parts) {
       (/** @type {string} */ t) => parts.includes(t) && hosts.includes(t),
     );
     if (!as) continue;
+    // (A look set for a variant reaches only a part the census saw drawn
+    // with that variant: a pagination cell is a ghost Button, which a
+    // primary look never matches.)
+    if (s.when && !drawnWith(rec, String(s.when))) continue;
     if (
       data.settings.some(
         x =>
@@ -2530,10 +2562,17 @@ function embeddedReach(ctx, slug, data, s, parts) {
     )
       continue;
     const value = 'revert-layer';
+    // (A look set for a variant is a rule on the variant's attribute,
+    // which a rule on the embedded part, with no such variant, never
+    // outranks: no line keeps it, so none is offered.)
     out.push({
       part,
       as,
-      keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}${aloneFlag(ctx, part, String(s.thing), s.state ?? null)}`,
+      ...(s.when
+        ? {}
+        : {
+            keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}${aloneFlag(ctx, part, String(s.thing), s.state ?? null)}`,
+          }),
     });
   }
   return out;
@@ -7422,7 +7461,7 @@ async function changeOnce(
     sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
   if (embedded.length)
     notes.push(
-      `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}`,
+      `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}${embedded.every(x => x.keep) ? `; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}` : `; a look set for ${s.when} reaches ${embedded.length > 1 ? 'them' : 'it'} with ${s.on}, and no line on ${embedded.length > 1 ? 'them' : 'it'} keeps ${embedded.length > 1 ? 'them' : 'it'} out`}`,
     );
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
@@ -7432,7 +7471,9 @@ async function changeOnce(
     s.on &&
     !s.state &&
     !s.when &&
-    /^background(-color)?$/.test(s.thing)
+    /^background(-color)?$/.test(s.thing) &&
+    // (A rollback to Core's layer keeps Core's paints: nothing covered.)
+    !keepsCoreLook(s.value)
   ) {
     // One note for each cause: the parts of a group whose fill covers the
     // same paints (every input's status and disabled fills) are said
@@ -7564,7 +7605,8 @@ async function changeOnce(
         !x.on ||
         x.state ||
         x.when ||
-        !/^background(-color)?$/.test(x.thing)
+        !/^background(-color)?$/.test(x.thing) ||
+        keepsCoreLook(x.value)
       )
         continue;
       const lost = [
