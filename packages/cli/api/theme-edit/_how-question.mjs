@@ -5313,15 +5313,27 @@ export function draftAnswer(ctx, env, question) {
       ),
     );
   // (The clause is flagged, never rewritten: words a person types, even
-  // the ones a rewrite would write, keep their own reading.)
+  // the ones a rewrite would write, keep their own reading. A clause beside
+  // it counts only when it names a thing whose own look is no tint of the
+  // grays: a hue or a warm or cool word, or the page, the surfaces, the
+  // backgrounds or the neutral color itself, is a look on what the grays
+  // make, so the plain gray would undo it.)
+  const graysLook = (/** @type {string} */ text) =>
+    /\b(?:neutrals?|gr[ae]ys?|warm(?:er|th)?|cool(?:er)?|tint(?:ed)?|hues?|beige|cream|creamy|ivory|sand|taupe)\b/i.test(
+      text,
+    ) ||
+    (/\b(?:pages?|surfaces?|backgrounds?|grounds?)\b/i.test(text) &&
+      (colorsIn(text.toLowerCase()).length > 0 ||
+        /#[0-9a-f]{3,8}\b/i.test(text)));
   const untintedAsk =
     !setsColors &&
     bareNeutralGrays(question, text => {
       const t = ` ${text.toLowerCase()} `;
       return (
-        /[\d#]/.test(text) ||
-        partLexicon(ctx).parts.some(([re]) => re.test(t)) ||
-        Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t))
+        !graysLook(text) &&
+        (/[\d#]/.test(text) ||
+          partLexicon(ctx).parts.some(([re]) => re.test(t)) ||
+          Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t)))
       );
     });
   question = question

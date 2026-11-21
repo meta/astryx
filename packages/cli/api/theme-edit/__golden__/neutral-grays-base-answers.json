@@ -454,5 +454,127 @@
       ["not taken: \"calm\", \"untinted\": no setting reads these words;", []],
       ["not used: \"a calm untinted theme\": no setting reads this as ", []]
     ]
+  ],
+  [
+    "neutral grays, warm surfaces",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"warm surfaces\": no setting reads this as said; sa", []]
+    ]
+  ],
+  [
+    "neutral grays, warm surfaces",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"warm surfaces\": no setting reads this as said; sa", []]
+    ]
+  ],
+  [
+    "neutral grays, but warmer surfaces",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"warmer surfaces\": no setting reads this as said; ", []]
+    ]
+  ],
+  [
+    "neutral grays, but warmer surfaces",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"warmer surfaces\": no setting reads this as said; ", []]
+    ]
+  ],
+  [
+    "neutral grays and a warm page",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"a warm page\": no setting reads this as said; say ", []]
+    ]
+  ],
+  [
+    "neutral grays and a warm page",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"a warm page\": no setting reads this as said; say ", []]
+    ]
+  ],
+  [
+    "neutral grays, warm neutral",
+    "warm",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #78",
+        ["set warm --color-neutral '#78716c0f'"]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays, warm neutral",
+    "plain",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #78",
+        ["set plain neutral '#78716c'", "set plain --color-neutral '#78716c0f'"]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays, beige surfaces",
+    "warm",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #f5",
+        ["set warm neutral '#f5f5dc'", "set warm --color-neutral '#f5f5dc0f'"]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays, beige surfaces",
+    "plain",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #f5",
+        ["set plain neutral '#f5f5dc'", "set plain --color-neutral '#f5f5dc0f'"]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
   ]
 ]
