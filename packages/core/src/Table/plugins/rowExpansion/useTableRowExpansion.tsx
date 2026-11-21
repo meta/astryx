@@ -61,6 +61,7 @@ import type {
   ScrollWrapperRenderProps,
 } from '../../types';
 import {LayoutChangeSnapshot} from '../../../motion/LayoutChangeSnapshot';
+import {useCommittedRef} from '../../../hooks/useCommittedRef';
 import {
   applyLayoutChangeTransition,
   glideOf,
@@ -286,8 +287,8 @@ const expansionStyles = stylex.create({
  * So the row gives up its border and the panel takes one. On a table with no
  * row dividers the suppression is a no-op (there was no border to remove) and
  * the panel's is never applied, so neither needs to consult the divider mode.
- * The open panel marks its row (`data-expansion-panel-open`), and TableCell's
- * own divider style drops the row's divider while the mark is there, so a
+ * The open panel sets its row's private divider width to 0
+ * (OPEN_ROW_DIVIDER_WIDTH), which TableCell's own divider style reads, so a
  * toggle needs no render of the row.
  */
 const dividerStyles = stylex.create({
@@ -613,6 +614,12 @@ function ExpansionSnapshot({
 // =============================================================================
 
 /**
+ * The private divider width an open row's cells read (TableCell): the panel
+ * below carries the divider, so the row shows none.
+ */
+const OPEN_ROW_DIVIDER_WIDTH = '--_table-open-row-divider-width';
+
+/**
  * The expanded keys, held outside the plugin object. A toggle changes only
  * the store, so the plugin keeps its identity and the table re-renders no
  * row: the chevron, the panel and the glide's measurement each subscribe to
@@ -620,22 +627,20 @@ function ExpansionSnapshot({
  */
 interface ExpansionStore {
   get: () => Set<string>;
-  /** Counts the plugin's renders, so an open panel shows the latest content. */
-  version: () => number;
   set: (next: Set<string>) => void;
   subscribe: (listener: () => void) => () => void;
 }
 
 function createExpansionStore(initial: Set<string>): ExpansionStore {
   let current = initial;
-  let version = 0;
   const listeners = new Set<() => void>();
   return {
     get: () => current,
-    version: () => version,
     set: next => {
+      if (Object.is(next, current)) {
+        return;
+      }
       current = next;
-      version += 1;
       // Each subscriber re-renders only if what it reads changed.
       for (const listener of [...listeners]) {
         listener();
@@ -695,19 +700,26 @@ function ExpansionPanelRow<T>({
   item: T;
   renderExpanded: (item: T) => ReactNode;
 }) {
-  // While open, the panel follows every render of the plugin, as a row's
-  // own content does; while closed, nothing re-renders it.
-  const read = () => (store.get().has(rowKey) ? store.version() : -1);
-  const isOpen = useSyncExternalStore(store.subscribe, read, read) !== -1;
-  // Marks the row above while this panel is mounted, in the same commit.
-  const markRow = useCallback((panel: HTMLTableRowElement | null) => {
-    const row = panel?.previousElementSibling;
-    if (row == null) {
-      return;
-    }
-    row.setAttribute('data-expansion-panel-open', '');
-    return () => row.removeAttribute('data-expansion-panel-open');
-  }, []);
+  const isOpen = useIsExpanded(store, rowKey);
+  // While mounted, the panel hands its row's divider to itself: it sets the
+  // row's private divider width (TableCell reads it), in the same commit.
+  // The row is found by its key, as another plugin's afterRow may sit
+  // between them.
+  const markRow = useCallback(
+    (panel: HTMLTableRowElement | null) => {
+      const row = panel?.parentElement?.querySelector<HTMLElement>(
+        `:scope > tr[data-expansion-key="${CSS.escape(rowKey)}"]`,
+      );
+      if (row == null) {
+        return;
+      }
+      row.style.setProperty(OPEN_ROW_DIVIDER_WIDTH, '0px');
+      return () => {
+        row.style.removeProperty(OPEN_ROW_DIVIDER_WIDTH);
+      };
+    },
+    [rowKey],
+  );
   if (!isOpen) {
     return null;
   }
@@ -753,6 +765,8 @@ function ExpansionSnapshotFromStore({
 }) {
   const value = useSyncExternalStore(store.subscribe, store.get, store.get);
   useLayoutEffect(() => {
+    // Plays the pending glides (Web Animations) after the commit that changed
+    // the panels.
     onAfterChange();
   }, [value, onAfterChange]);
   return (
@@ -778,8 +792,16 @@ function ExpansionSnapshotFromStore({
  * For hierarchical data (child rows sharing the parent columns) use
  * `useTableTreeData` + `useTableTreeState` instead.
  *
+ * A toggle re-renders no other row while `getRowKey`, `getRowLabel`,
+ * `getIsItemExpandable` and `renderExpanded` keep their identity (defined
+ * outside the component, or memoized). `onToggle` can be written inline.
+ *
  * @example
  * ```
+ * const getRowKey = (item: Order) => item.id;
+ * const getRowLabel = (item: Order) => item.name;
+ * const renderExpanded = (item: Order) => <OrderDetails order={item} />;
+ *
  * const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
  * const expansion = useTableRowExpansion({
  *   expandedKeys,
@@ -789,9 +811,9 @@ function ExpansionSnapshotFromStore({
  *       next.has(key) ? next.delete(key) : next.add(key);
  *       return next;
  *     }),
- *   getRowKey: item => item.id,
- *   getRowLabel: item => item.name,
- *   renderExpanded: item => <OrderDetails order={item} />,
+ *   getRowKey,
+ *   getRowLabel,
+ *   renderExpanded,
  * });
  * <Table data={data} columns={columns} idKey="id" plugins={{expansion}} />;
  * ```
@@ -801,6 +823,11 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
 ): TablePlugin<T> {
   const {
     expandedKeys,
+    onToggle,
+    getRowKey,
+    renderExpanded,
+    getRowLabel,
+    getIsItemExpandable,
     hasRowClickExpansion,
     panelVariant = 'transparent',
     animatedLayout,
@@ -808,32 +835,22 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
 
   const t = useComponentTranslator();
 
-  // The plugin object keeps its identity across renders, so a toggle or a
-  // caller's new inline callback re-renders no row. Rows read the callbacks
-  // through this ref, and the expanded keys reach the chevrons, the panels
-  // and the glide through the store, after each commit and before the frame
-  // paints. The selection plugin reads its config the same way.
-  const latestRef = useRef(config);
-  latestRef.current = config;
+  // The expanded keys live in a store, so a toggle leaves the plugin object
+  // as it is and re-renders no row: the chevron, the panel and the glide's
+  // measurement each subscribe to the keys they show. The caller's other
+  // callbacks stay memo inputs, so a changed callback re-renders the rows.
   const [store] = useState(() => createExpansionStore(expandedKeys));
   useLayoutEffect(() => {
-    // Publishes the committed expanded keys to the store the chevrons, the
-    // panels and the glide's measurement read, after each commit.
+    // Syncs the expansion store with the controlled expandedKeys, after the
+    // commit and before the frame paints.
     store.set(expandedKeys);
-  });
+  }, [store, expandedKeys]);
+  // Read only in the chevron, row-click and menu handlers.
+  const onToggleRef = useCommittedRef(onToggle);
   const toggle = useCallback(
-    (key: string) => latestRef.current.onToggle(key),
-    [],
+    (key: string) => onToggleRef.current(key),
+    [onToggleRef],
   );
-  const renderPanel = useCallback(
-    (item: T): ReactNode => latestRef.current.renderExpanded(item),
-    [],
-  );
-  const isExpandable = useCallback(
-    (item: T) => latestRef.current.getIsItemExpandable?.(item) ?? true,
-    [],
-  );
-  const keyOf = useCallback((item: T) => latestRef.current.getRowKey(item), []);
 
   // Final rendered column count, captured in transformColumns (pipeline step
   // 1) and read in transformBodyRow for the detail panel's colSpan.
@@ -1069,22 +1086,23 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       width: EXPANSION_COLUMN_WIDTH,
       resizable: false,
       renderCell: (item: T) => {
-        if (!isExpandable(item)) {
+        const expandable = getIsItemExpandable
+          ? getIsItemExpandable(item)
+          : true;
+        if (!expandable) {
           return null;
         }
         return (
           <ExpansionChevronCell
             store={store}
-            rowKey={keyOf(item)}
-            rowLabel={
-              latestRef.current.getRowLabel?.(item)?.trim() || undefined
-            }
+            rowKey={getRowKey(item)}
+            rowLabel={getRowLabel?.(item)?.trim() || undefined}
             onToggle={toggle}
           />
         );
       },
     }),
-    [store, toggle, keyOf, isExpandable, t],
+    [store, toggle, getRowKey, getIsItemExpandable, getRowLabel, t],
   );
 
   return useMemo(
@@ -1122,10 +1140,13 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       ): BodyCellRenderProps {
         // Contribute the expand/collapse action on every cell; BaseTable
         // aggregates them into one menu per row. Skip non-expandable rows.
-        if (!isExpandable(item)) {
+        const expandable = getIsItemExpandable
+          ? getIsItemExpandable(item)
+          : true;
+        if (!expandable) {
           return props;
         }
-        const key = keyOf(item);
+        const key = getRowKey(item);
         // Read when the menu opens: a toggle does not render this row again.
         const isOpen = () => store.get().has(key);
         return {
@@ -1205,21 +1226,35 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       },
 
       transformBodyRow(props: BodyRowRenderProps, item: T): BodyRowRenderProps {
-        if (!isExpandable(item)) {
+        const expandable = getIsItemExpandable
+          ? getIsItemExpandable(item)
+          : true;
+        if (!expandable) {
           return props;
         }
-        const key = keyOf(item);
+        const key = getRowKey(item);
         // The row a glide measures from, found again after the commit.
         const keyAttribute: Record<string, string> = {
           'data-expansion-key': key,
-          // A row that renders open carries the panel's mark in its own
-          // markup too, so a server render draws the divider on the panel
-          // before hydration. After that, the panel sets and removes it.
-          ...(store.get().has(key) ? {'data-expansion-panel-open': ''} : {}),
         };
+        // A row that renders open carries its private divider width in its
+        // own markup too, so a server render draws the divider on the panel
+        // before hydration. After that, the panel sets and clears it.
+        const isOpenNow = store.get().has(key);
         const keyed = {
           ...props,
-          htmlProps: {...props.htmlProps, ...keyAttribute},
+          htmlProps: {
+            ...props.htmlProps,
+            ...keyAttribute,
+            ...(isOpenNow
+              ? {
+                  style: {
+                    ...props.htmlProps.style,
+                    [OPEN_ROW_DIVIDER_WIDTH]: '0px',
+                  } as React.CSSProperties,
+                }
+              : {}),
+          },
         };
 
         // Whole-row-click expansion (opt-in), applied before the collapsed
@@ -1280,7 +1315,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
             cellsRef={panelCellsRef}
             isMuted={panelVariant === 'muted'}
             item={item}
-            renderExpanded={renderPanel}
+            renderExpanded={renderExpanded}
           />
         );
 
@@ -1299,9 +1334,9 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     }),
     [
       store,
-      keyOf,
-      renderPanel,
-      isExpandable,
+      getRowKey,
+      renderExpanded,
+      getIsItemExpandable,
       hasRowClickExpansion,
       panelVariant,
       toggle,

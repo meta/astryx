@@ -158,13 +158,14 @@ const dividerRowStyles = stylex.create({
     // The width this cell's divider draws, for a pinned cell's own divider
     // to match (plugins/stickyColumns). Private plumbing, not a theme API.
     '--_table-row-divider-width': {
-      default: borderVars['--border-width'],
+      default: `var(--_table-open-row-divider-width, ${borderVars['--border-width']})`,
       [stylex.when.ancestor(':last-child', tableRowMarker)]: '0px',
-      [stylex.when.ancestor('[data-expansion-panel-open]', tableRowMarker)]:
-        '0px',
     },
     borderBottomWidth: {
-      default: borderVars['--border-width'],
+      // An open row expansion sets --_table-open-row-divider-width to 0 on
+      // its row: its panel carries the divider below the row
+      // (plugins/rowExpansion), so the row and its panel read as one unit.
+      default: `var(--_table-open-row-divider-width, ${borderVars['--border-width']})`,
       // Skip border on cells in the last body row to avoid a
       // redundant line at the bottom of the table.
       // Scoped to tableRowMarker so only the parent <tr> is checked —
@@ -175,11 +176,6 @@ const dividerRowStyles = stylex.create({
         tableRowMarker,
       )]: '0',
       [stylex.when.ancestor('[data-table-final-row="true"]', tableRowMarker)]:
-        '0',
-      // A row expansion's open panel carries the divider below its row, and
-      // marks the row while it is open (plugins/rowExpansion), so the row and
-      // its panel read as one unit.
-      [stylex.when.ancestor('[data-expansion-panel-open]', tableRowMarker)]:
         '0',
     },
     borderBottomStyle: 'solid',

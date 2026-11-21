@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `useTableRowExpansion`: expanding or collapsing a row no longer re-renders every other row, even when the plugin's callbacks are written inline. On a long table the toggle used to rebuild every row, which froze the page for seconds and could make iOS Safari reload the tab; now only that row's chevron and panel update.
+[fix] `useTableRowExpansion`: expanding or collapsing a row no longer re-renders the other rows; only the toggled row's chevron and panel update. This holds while `getRowKey`, `getRowLabel`, `getIsItemExpandable` and `renderExpanded` keep their identity (defined outside the component or memoized); `onToggle` can be written inline. On a long table the toggle used to rebuild every row, which held the page for seconds.
 
 @cixzhang

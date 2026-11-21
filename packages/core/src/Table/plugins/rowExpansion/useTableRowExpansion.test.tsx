@@ -3,7 +3,7 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
-import {useState} from 'react';
+import {useCallback, useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableRowExpansion} from './useTableRowExpansion';
@@ -307,26 +307,28 @@ describe('useTableRowExpansion (detail panel)', () => {
     expect(cellRenders).toBe(0);
   });
 
-  it('re-renders no other row when the callbacks are written inline', () => {
+  it('passes a changed getIsItemExpandable or getRowLabel result on to mounted rows', () => {
     type Row = {id: string; name: string};
-    const rows: Row[] = Array.from({length: 40}, (_, i) => ({
-      id: `r${i}`,
-      name: `Row ${i}`,
-    }));
-    let cellRenders = 0;
-    const cols: TableColumn<Row>[] = [
-      {
-        key: 'name',
-        header: 'Name',
-        renderCell: item => {
-          cellRenders++;
-          return item.name;
-        },
-      },
+    const rows: Row[] = [
+      {id: 'a', name: 'Ada'},
+      {id: 'b', name: 'Bo'},
     ];
-    function Harness() {
+    const cols: TableColumn<Row>[] = [
+      {key: 'name', header: 'Name', renderCell: item => item.name},
+    ];
+    const getRowKey = (item: Row) => item.id;
+    const renderExpanded = (item: Row) => <div>Detail for {item.name}</div>;
+    function Harness({lockB, prefix}: {lockB: boolean; prefix: string}) {
       const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
         () => new Set(),
+      );
+      const getIsItemExpandable = useCallback(
+        (item: Row) => !(lockB && item.id === 'b'),
+        [lockB],
+      );
+      const getRowLabel = useCallback(
+        (item: Row) => `${prefix} ${item.name}`,
+        [prefix],
       );
       const expansion = useTableRowExpansion<Row>({
         expandedKeys,
@@ -340,30 +342,28 @@ describe('useTableRowExpansion (detail panel)', () => {
             }
             return next;
           }),
-        getRowKey: item => item.id,
-        renderExpanded: item => (
-          <div>
-            Detail for {item.name}, {expandedKeys.size} open
-          </div>
-        ),
+        getRowKey,
+        renderExpanded,
+        getIsItemExpandable,
+        getRowLabel,
       });
       return (
         <Table data={rows} columns={cols} idKey="id" plugins={{expansion}} />
       );
     }
-    render(<Harness />);
-    const chevrons = screen.getAllByRole('button', {name: 'Expand row'});
-    cellRenders = 0;
-    fireEvent.click(chevrons[3]);
-    expect(screen.getByText('Detail for Row 3, 1 open')).toBeInTheDocument();
-    fireEvent.click(chevrons[5]);
-    // An open panel shows the caller's latest content.
-    expect(screen.getByText('Detail for Row 3, 2 open')).toBeInTheDocument();
-    expect(screen.getByText('Detail for Row 5, 2 open')).toBeInTheDocument();
-    expect(cellRenders).toBe(0);
+    const {rerender} = render(<Harness lockB={false} prefix="Order" />);
+    expect(screen.getByRole('button', {name: /Order Bo/})).toBeInTheDocument();
+    rerender(<Harness lockB={true} prefix="Invoice" />);
+    // The row the caller made non-expandable loses its chevron.
+    expect(screen.queryByRole('button', {name: /Bo/})).toBeNull();
+    // The other row's chevron takes the new name.
+    expect(
+      screen.getByRole('button', {name: /Invoice Ada/}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /Order Ada/})).toBeNull();
   });
 
-  it('marks a row that renders open in the server markup, and only that row', () => {
+  it('gives a row that renders open its divider hand-off in the server markup, and only that row', () => {
     type Row = {id: string; name: string};
     const rows: Row[] = [
       {id: 'a', name: 'Ada'},
@@ -388,23 +388,29 @@ describe('useTableRowExpansion (detail panel)', () => {
     container.innerHTML = html;
     const row = (key: string) =>
       container.querySelector(`tr[data-expansion-key="${key}"]`);
-    expect(row('a')).toHaveAttribute('data-expansion-panel-open');
+    const width = (key: string) =>
+      (row(key) as HTMLElement | null)?.style.getPropertyValue(
+        '--_table-open-row-divider-width',
+      );
+    expect(width('a')).toBe('0px');
     expect(row('a')?.nextElementSibling).toHaveAttribute(
       'data-expansion-panel',
     );
-    expect(row('b')).not.toHaveAttribute('data-expansion-panel-open');
+    expect(width('b')).toBe('');
   });
 
-  it('keeps the open mark on the row above an open panel across toggles', () => {
+  it("hands the row's divider to its panel and back across toggles", () => {
     render(<Harness />);
     const chevron = () =>
       screen.getAllByRole('button', {name: /expand|collapse/i})[0];
     const row = chevron().closest('tr') as HTMLTableRowElement;
-    expect(row).not.toHaveAttribute('data-expansion-panel-open');
+    const width = () =>
+      row.style.getPropertyValue('--_table-open-row-divider-width');
+    expect(width()).toBe('');
     fireEvent.click(chevron());
-    expect(row).toHaveAttribute('data-expansion-panel-open');
+    expect(width()).toBe('0px');
     fireEvent.click(chevron());
-    expect(row).not.toHaveAttribute('data-expansion-panel-open');
+    expect(width()).toBe('');
   });
 
   it('does not render the detail panel while collapsed', () => {
@@ -587,8 +593,16 @@ describe('useTableRowExpansion (detail panel)', () => {
       // row off from the detail it opened, and leaves the panel running flush
       // into the next row — the wrong way round on both counts.
       render(<Harness initialExpanded={new Set(['a'])} />);
+      // The open row sets its private divider width to 0, and its cells'
+      // divider reads it (jsdom does not resolve the var() itself).
+      const row = cellsOf('Ada')[0].parentElement as HTMLElement;
+      expect(
+        row.style.getPropertyValue('--_table-open-row-divider-width'),
+      ).toBe('0px');
       for (const cell of cellsOf('Ada')) {
-        expect(cell).toHaveStyle({borderBottomWidth: '0'});
+        expect(getComputedStyle(cell).borderBottomWidth).toMatch(
+          /var\(--_table-open-row-divider-width,/,
+        );
       }
       // The token width, unless the row hands down its own.
       expect(getComputedStyle(panelCell()).borderBottomWidth).toMatch(
@@ -598,6 +612,10 @@ describe('useTableRowExpansion (detail panel)', () => {
 
     it('leaves collapsed rows keeping their own divider', () => {
       render(<Harness initialExpanded={new Set(['a'])} />);
+      const row = cellsOf('Bo')[0].parentElement as HTMLElement;
+      expect(
+        row.style.getPropertyValue('--_table-open-row-divider-width'),
+      ).toBe('');
       for (const cell of cellsOf('Bo')) {
         expect(cell).not.toHaveStyle({borderBottomWidth: '0'});
       }
