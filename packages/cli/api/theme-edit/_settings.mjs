@@ -13919,6 +13919,60 @@ export function contrastPlace(p) {
 }
 
 /**
+ * How a kept contrast problem stands among the problems drawn now: whether
+ * it still covers one, and the ratio its place is drawn at when it does
+ * not (null where nothing at its place fails). A failure the editor reports
+ * across several variants at once names no one variant, or no place at
+ * all: one that names the same part and mode still says the place fails.
+ * @param {AcceptedContrast} a
+ * @param {ThemeProblem[]} now the problems drawn now, acceptances applied
+ * @returns {{inEffect: boolean, ratioNow: number | null}}
+ */
+export function keptNow(a, now) {
+  const seen = now
+    .filter(p => !p.note || p.accepted)
+    .map(p => {
+      const at = contrastPlace(p);
+      const loose = at
+        ? null
+        : /^(?:the base theme's )?text in ([\w-]+)\b[^]*? is ([\d.]+):1 in (light|dark)\b/.exec(
+            p.text,
+          );
+      return {
+        accepted: Boolean(p.accepted),
+        at,
+        loose: loose
+          ? {part: loose[1], ratio: Number(loose[2]), mode: loose[3]}
+          : null,
+      };
+    });
+  const here = seen.filter(
+    ({at}) =>
+      at != null &&
+      at.part === a.part &&
+      at.ground === a.ground &&
+      at.when === (a.when ?? '') &&
+      at.mode === a.mode,
+  );
+  const near = seen.filter(
+    ({at, loose}) =>
+      (at != null &&
+        at.part === a.part &&
+        at.ground === a.ground &&
+        at.when === '' &&
+        at.mode === a.mode) ||
+      (loose != null && loose.part === a.part && loose.mode === a.mode),
+  );
+  const open = (here.length ? here : near).filter(x => !x.accepted);
+  return {
+    inEffect: here.some(x => x.accepted),
+    ratioNow: open.length
+      ? Math.min(...open.map(x => Number(x.at?.ratio ?? x.loose?.ratio)))
+      : null,
+  };
+}
+
+/**
  * The acceptances a theme keeps, each read whole; a record missing a field
  * is not one.
  * @param {ThemeData} data
