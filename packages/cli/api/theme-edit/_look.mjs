@@ -1042,37 +1042,38 @@ function partImageProblems(look) {
   const out = [];
   for (const [part, blocks] of Object.entries(look.components ?? {})) {
     if (!blocks || typeof blocks !== 'object') continue;
-    const v = partValue(
-      look.components,
-      part,
-      ['backgroundImage', 'background'],
-      'light',
+    const setsFill = Object.values(blocks).some(
+      (/** @type {any} */ b) =>
+        b &&
+        typeof b === 'object' &&
+        [b, b['@light'], b['@dark']].some(
+          x => x && typeof x === 'object' && x.backgroundColor != null,
+        ),
     );
-    if (typeof v !== 'string' || !isPattern(v, look.res.light)) continue;
-    // One opaque gradient is measured; a see-through sheen over a fill the
-    // part sets is measured on that fill.
-    if (!/url\(/.test(v) && opaqueGradient(withTokens(v, look.res.light)))
-      continue;
-    // (A variable the theme's tokens do not answer leaves the image unread:
-    // it is said, never taken as a sheen over the fill.)
-    if (
-      !/url\(/.test(v) &&
-      !/var\(/.test(withTokens(v, look.res.light)) &&
-      Object.values(blocks).some(
-        (/** @type {any} */ b) =>
-          b &&
-          typeof b === 'object' &&
-          [b, b['@light'], b['@dark']].some(
-            x => x && typeof x === 'object' && x.backgroundColor != null,
-          ),
-      )
-    )
-      continue;
+    // Each mode decides on its own: a gradient can be opaque in one mode
+    // and see-through in the other.
+    const unread = look.modes.filter(m => {
+      const v = partValue(
+        look.components,
+        part,
+        ['backgroundImage', 'background'],
+        m,
+      );
+      if (typeof v !== 'string' || !isPattern(v, look.res[m])) return false;
+      if (/url\(/.test(v)) return true;
+      const read = withTokens(v, look.res[m], m);
+      // One opaque gradient is measured as the fill.
+      if (opaqueGradient(read)) return false;
+      // A see-through sheen over a fill the part sets is measured on that
+      // fill; a variable the theme's tokens do not answer leaves it unread.
+      return /var\(/.test(read) || !setsFill;
+    });
+    if (!unread.length) continue;
     out.push({
       kind: 'page-image',
-      mode: 'both',
+      mode: unread.length === look.modes.length ? 'both' : unread[0],
       part,
-      message: `${part} paints an image under its content; text on it is not measured: give text on it a plain fill, or check it by eye`,
+      message: `${part} paints an image under its content${unread.length === look.modes.length ? '' : ` in ${unread[0]}`}; text on it is not measured: give text on it a plain fill, or check it by eye`,
     });
   }
   return out;

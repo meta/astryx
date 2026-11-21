@@ -1316,6 +1316,23 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(
         placed.problems.some(p => p.part === 'card' && p.kind === 'page-image'),
       ).toBe(true);
+      // A gradient see-through only in dark is said for dark.
+      const darkSheer = await check(
+        themeFile('darksheer', READABLE, {
+          card: {
+            base: {
+              backgroundImage:
+                'linear-gradient(light-dark(#ffffff, #ffffffcc), light-dark(#ffffff, #ffffffcc))',
+            },
+          },
+        }),
+      );
+      expect(
+        darkSheer.problems.some(
+          p =>
+            p.part === 'card' && p.kind === 'page-image' && p.mode === 'dark',
+        ),
+      ).toBe(true);
       // A bar painted with an opaque gradient is measured at its stops.
       const gbar = await check(
         themeFile('gradbar', READABLE, {
