@@ -206,6 +206,39 @@ describe('a tint word', () => {
   );
 
   it(
+    'keeps a gray tint gray, and keeps the part’s own text readable on a tint',
+    async test => {
+      needsBases(test);
+      const lines = async (/** @type {string} */ q) =>
+        ((await themeEditHow(q, {cwd, theme: 'n'})).data.results ?? [])
+          .flatMap(r => r.commands ?? [])
+          .filter(c => / editor set /.test(c))
+          .map(c => c.replace(/^.* editor set \S+ /, ''));
+      // (A gray seed grows as a neutral family: no hue comes in.)
+      const gray = (await lines('cards tinted #9ca3af')).filter(c =>
+        / --on card --when variant:default --mode /.test(c),
+      );
+      expect(gray.length).toBe(2);
+      for (const c of gray) {
+        const [r, g, b] = (/#([0-9a-f]{6})/.exec(c)?.[1] ?? '')
+          .match(/../g)
+          ?.map(x => parseInt(x, 16)) ?? [0, 0, 0];
+        expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(24);
+      }
+      // (The primary button's own light label does not read on the pale
+      // tint in light mode: a readable text line comes with it.)
+      const primary = await lines('primary buttons tinted blue');
+      expect(primary).toContain(
+        "background-color '#bfd5ff' --on button --when variant:primary --mode light",
+      );
+      expect(primary).toContain(
+        "color '#000000' --on button --when variant:primary --mode light",
+      );
+    },
+    T,
+  );
+
+  it(
     'writes a color said with its own shade word as said',
     async test => {
       needsBases(test);

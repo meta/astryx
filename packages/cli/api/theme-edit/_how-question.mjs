@@ -24,6 +24,7 @@ import {
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
 import {generateTonalPalette} from '../theme/palette/generate/generator.mjs';
+import {CATEGORY_STOPS} from '../theme/palette/generate/derive-look.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
@@ -635,23 +636,25 @@ function tintedColors(c) {
   return out;
 }
 
-/** Where Core's card tints sit on a palette ramp: [light mode, dark mode]. */
-const TINT_RAMP_STOPS = /** @type {const} */ ([85, 25]);
-
 /**
- * A color's light tint in each mode, from the palette ramp seeded with it
- * (the ramp themes draw their families from), at Core's card-tint stops;
- * null when no ramp can be drawn from it.
+ * A color's light tint in each mode, from the palette generator's default
+ * ramp for it (a gray grows as a neutral family, so it stays gray), at the
+ * stops Core's card tints use; null when no ramp can be drawn from it.
  * @param {string} seed a hex color
  * @returns {{light: string, dark: string} | null}
  */
 function tintShades(seed) {
   try {
+    const gray = isGraySeed(seed);
     const p = generateTonalPalette({
-      families: [{id: 'tint', name: 'Tint', seed}],
+      families: [
+        {id: 'tint', name: 'Tint', seed, ...(gray ? {kind: 'neutral'} : {})},
+      ],
+      ...(gray ? {neutralProfile: 'custom'} : {}),
     }).palette.tint;
-    const light = /** @type {any} */ (p).light?.[TINT_RAMP_STOPS[0]];
-    const dark = /** @type {any} */ (p).dark?.[TINT_RAMP_STOPS[1]];
+    const [lightStop, darkStop] = CATEGORY_STOPS.background;
+    const light = /** @type {any} */ (p).light?.[lightStop];
+    const dark = /** @type {any} */ (p).dark?.[darkStop];
     return light && dark ? {light: String(light), dark: String(dark)} : null;
   } catch {
     return null;
@@ -31690,7 +31693,7 @@ export function draftAnswer(ctx, env, question) {
     }
   // ("cards tinted blue", "selected nav items tinted forest green"): a
   // color a tint word names is a light tint of it, drawn from the palette
-  // ramp at the stops Core's card tints use (pale in light mode, deep in
+  // generator's default ramp for it, at the stops Core's card tints use (pale in light mode, deep in
   // dark), on the parts named before the tint word ("cards tinted blue
   // with a navy header": the cards, never the header). A color said with
   // its own shade word ("a light blue tint") names its shade already and
@@ -31722,6 +31725,8 @@ export function draftAnswer(ctx, env, question) {
   }
   /** The tint fills written, by part, state and variant: the text check below measures text on them. @type {Map<string, {light: string, dark: string}>} */
   const tintFills = new Map();
+  /** The fill steps a tint wrote, one a mode. @type {WeakSet<Step>} */
+  const tintSteps = new WeakSet();
   const tintKey = (/** @type {Step} */ st) =>
     [st.on, st.state ?? '', st.when ?? ''].join('\0');
   /** The modes the theme draws. @type {Array<'light' | 'dark'>} */
@@ -31747,10 +31752,24 @@ export function draftAnswer(ctx, env, question) {
         )
           continue;
         const shades = tintShades(hex(v.slice(0, 3)));
-        if (!shades) continue;
-        const modes = st.mode ? [st.mode] : drawn;
-        o.splice(k, 1, ...modes.map(m => ({...st, value: shades[m], mode: m})));
+        // (A color already as pale as its tint, "a cream tint", is written
+        // as said: its tint would be darker than it.)
+        if (!shades || luminance(hex(v.slice(0, 3))) >= luminance(shades.light))
+          continue;
+        const modes = /** @type {Array<'light' | 'dark'>} */ (
+          st.mode ? [st.mode] : drawn
+        );
+        o.splice(
+          k,
+          1,
+          ...modes.map(m => {
+            const line = {...st, value: shades[m], mode: m};
+            tintSteps.add(line);
+            return line;
+          }),
+        );
         tintFills.set(tintKey(st), shades);
+        tintFills.set(tintKey({...st, when: undefined}), shades);
         const said = `a tint of ${st.value}`;
         if (!d.text.includes(said))
           d.text += ` (${said}: ${modes.map(m => `${shades[m]} in ${m} mode`).join(', ')}, from its palette ramp)`;
@@ -31772,7 +31791,9 @@ export function draftAnswer(ctx, env, question) {
           tintFills.get(tintKey({...st, when: undefined}));
         const ink = parseColor(String(st.value ?? ''));
         if (!shades || !ink || alphaOf(String(st.value)) < 1) continue;
-        const modes = st.mode ? [st.mode] : drawn;
+        const modes = /** @type {Array<'light' | 'dark'>} */ (
+          st.mode ? [st.mode] : drawn
+        );
         /** @type {Array<{mode: 'light' | 'dark', under: number[], ratio: number}>} */
         const measured = [];
         for (const m of modes) {
@@ -32450,6 +32471,9 @@ export function draftAnswer(ctx, env, question) {
       /^background(?:-color)?$/.test(x.thing) &&
       (fillIn(x.value, 'light') != null || fillIn(x.value, 'dark') != null);
     const first = d.options[0]?.[0];
+    // (A tint is a pair of fills, one a mode: each mode is measured on its
+    // own line.)
+    const tintPair = !!first && tintSteps.has(first);
     const fillSteps =
       first && isFill(first)
         ? d.options
@@ -32459,9 +32483,10 @@ export function draftAnswer(ctx, env, question) {
                 isFill(x) &&
                 x.on === first.on &&
                 x.thing === first.thing &&
-                x.value === first.value &&
                 x.state === first.state &&
-                x.mode === first.mode,
+                (tintPair
+                  ? tintSteps.has(x)
+                  : x.value === first.value && x.mode === first.mode),
             )
         : [];
     // (A choice between fills said together, "a #0069d6 fill and a #eeeeee
@@ -32521,17 +32546,19 @@ export function draftAnswer(ctx, env, question) {
       const named = fillSteps.filter(x => x.when).map(x => String(x.when));
       const variants =
         named.length === fillSteps.length
-          ? named
+          ? [...new Set(named)]
           : (C.variantValues(one(st.on))?.variant ?? []).map(
               v => `variant:${v}`,
             );
       const looks = variants.length ? variants : [''];
       const modes = /** @type {Array<'light' | 'dark'>} */ (
-        st.mode
-          ? [st.mode]
-          : modal
-            ? ['light', 'dark']
-            : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+        tintPair
+          ? [...new Set(fillSteps.map(x => x.mode))]
+          : st.mode
+            ? [st.mode]
+            : modal
+              ? ['light', 'dark']
+              : [env.data.mode === 'dark-only' ? 'dark' : 'light']
       );
       /** @type {Step[]} */
       const fixes = [];
@@ -32541,7 +32568,12 @@ export function draftAnswer(ctx, env, question) {
         for (const m of modes) {
           const ink = parseColor(String(current(tok, m) ?? ''));
           if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
-          const fill = fillIn(st.value, m);
+          const under = tintPair
+            ? (fillSteps.find(
+                x => x.mode === m && (x.when ?? '') === (look || ''),
+              ) ?? fillSteps.find(x => x.mode === m))
+            : st;
+          const fill = under ? fillIn(under.value, m) : null;
           if (!fill || ratio(ink, fill) >= 4.5) continue;
           const white = ratio([255, 255, 255], fill);
           const black = ratio([0, 0, 0], fill);
@@ -32568,7 +32600,7 @@ export function draftAnswer(ctx, env, question) {
                 on: st.on,
                 ...(look ? {when: look} : {}),
                 ...(st.state ? {state: st.state} : {}),
-                ...(modes.length > 1 || st.mode ? {mode: m} : {}),
+                ...(modes.length > 1 || st.mode || tintPair ? {mode: m} : {}),
               },
             ),
           );
@@ -32612,7 +32644,7 @@ export function draftAnswer(ctx, env, question) {
       }
       d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
       result.splice(di + 1, 0, {
-        text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
+        text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
         options: [fixes],
         ...(fixes.length > 1 ? {sequence: true} : {}),
       });
