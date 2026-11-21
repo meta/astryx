@@ -32573,11 +32573,36 @@ export function draftAnswer(ctx, env, question) {
             (x.mode ?? '') === (st.mode ?? ''),
         ),
       );
+      // (The panels follow the surface only where the theme sets no color
+      // of its own for them: a code background the theme sets, or one that
+      // is not the surface's now, stays, and text on it is left as it is.)
+      const panelsFollow = (/** @type {'light' | 'dark'} */ m) => {
+        const code = '--color-syntax-background';
+        const set = env.data.settings.some(
+          x =>
+            x.source === 'token' &&
+            x.thing === code &&
+            !x.on &&
+            !x.when &&
+            !x.state &&
+            (!x.mode || x.mode === m),
+        );
+        const now = parseColor(String(current(code, m) ?? ''));
+        const surface = parseColor(
+          String(current('--color-background-surface', m) ?? ''),
+        );
+        return (
+          !set &&
+          !!now &&
+          !!surface &&
+          now.slice(0, 3).every((v, i) => Math.abs(v - surface[i]) < 1)
+        );
+      };
       for (const m of modes)
         for (const tok of [
           '--color-text-primary',
           '--color-text-secondary',
-          ...(everyGround ? pageTextTokens() : []),
+          ...(everyGround && panelsFollow(m) ? pageTextTokens() : []),
         ]) {
           // (A text color the ask itself writes for this mode, in any of
           // its lines, is the asker's: "page #ffffff in dark mode, text

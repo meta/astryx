@@ -125,6 +125,14 @@ describe('a light neutral', () => {
     expect(silverAll).toContain(
       "set q0 --color-syntax-comment '#4e4e4e' --mode light",
     );
+    // (A code background the theme sets itself stays, so its title color
+    // is left as it is.)
+    await themeEditNew('q2', {cwd, like: 'neutral'});
+    await themeEditSet('q2', '--color-syntax-background', '#1e1e1e', {cwd});
+    const own = (await how('q2', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(own.join('\n')).not.toMatch(/--color-syntax-comment/);
     const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
     expect(slate).toContain("set q0 neutral '#64748b'");
     expect(slate.join('\n')).not.toMatch(/--color-background-/);
