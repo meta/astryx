@@ -262,8 +262,10 @@ anatomy-theming map.
   and the grouped description reference that `component:TextInput` records
   apply here.
 - **Stepper icon key.** The steppers resolve their icon through the
-  `numberInput:stepperDown` extension key rather than the component-slot model,
-  the known deviation `architecture:icon-resolution-and-component-slots` names;
+  `number-input-stepper` component slot, with `direction` state (`increment` /
+  `decrement`) and a `chevronDown` fallback, rather than the
+  `numberInput:stepperDown` extension key. The extension key remains supported
+  through INV10 until a compatibility decision changes it.
   it exits under that record's exit condition.
 
 ## Decision log

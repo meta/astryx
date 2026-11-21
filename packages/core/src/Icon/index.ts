@@ -70,6 +70,8 @@ export interface ComponentIconSlotMap {
   };
   /** A Table row's expansion toggle (`useTableRowExpansion`), by whether the row is expanded. */
   'table-row-expand': {readonly expanded: boolean};
+  /** A NumberInput stepper button, by the direction it steps. */
+  'number-input-stepper': {readonly direction: 'increment' | 'decrement'};
 }
 
 /** A slot name from the augmentable {@link ComponentIconSlotMap}. */

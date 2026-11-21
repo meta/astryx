@@ -29,6 +29,8 @@ import {ComponentIcon} from './ComponentIcon';
 import {
   getIcon,
   getIconRegistry,
+  registerIcons,
+  resetIcons,
   resolveComponentIcon,
   type ComponentIconFallback,
 } from './globalIconRegistry';
@@ -219,6 +221,88 @@ describe('component icon slot resolution', () => {
   });
 });
 
+describe('a slot whose fallback is its own namespaced key', () => {
+  const STEPPER = 'number-input-stepper';
+  const KEY = 'numberInput:stepperDown';
+  const FALLBACK_KEY = {icon: KEY, size: 'xsm'} as const;
+  let warn: {mock: {calls: unknown[][]}};
+  const warnings = () =>
+    warn.mock.calls
+      .map(([message]) => String(message))
+      .filter(message => message.includes('component icon slot now replaces'));
+
+  beforeEach(() => {
+    resetThemes();
+    resetIcons();
+    __resetDevWarnings();
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders the fallback key until a theme maps the slot', () => {
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'increment'},
+        FALLBACK_KEY,
+        null,
+      ),
+    ).toEqual(FALLBACK_KEY);
+  });
+
+  it('maps the slot before the key, so the slot wins', () => {
+    const theme = defineTheme({
+      name: 'stepper-slot-wins',
+      componentIcons: {[STEPPER]: 'arrowUp'},
+    });
+
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'increment'},
+        FALLBACK_KEY,
+        theme,
+      ).icon,
+    ).toBe('arrowUp');
+  });
+
+  it('keeps the key working and names the slot once', () => {
+    const theme = defineTheme({
+      name: 'stepper-legacy-key',
+      icons: {[KEY]: <svg data-testid="legacy-stepper" />},
+    });
+
+    for (let i = 0; i < 3; i++) {
+      expect(
+        resolveComponentIcon(
+          STEPPER,
+          {direction: 'decrement'},
+          FALLBACK_KEY,
+          theme,
+        ).icon,
+      ).toBe(KEY);
+    }
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toContain(STEPPER);
+  });
+
+  it('keeps the key working through a process-wide registration', () => {
+    registerIcons({[KEY]: <svg data-testid="global-stepper" />});
+
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'decrement'},
+        FALLBACK_KEY,
+        null,
+      ).icon,
+    ).toBe(KEY);
+  });
+});
+
 describe('defineTheme({componentIcons})', () => {
   beforeEach(() => {
     resetThemes();
@@ -371,6 +455,7 @@ describe('component icon slot types', () => {
       | 'timestamp-copy'
       | 'table-sort-indicator'
       | 'table-row-expand'
+      | 'number-input-stepper'
       | 'example-panel-dismiss'
       | 'example-nav-item-leading'
     >();
