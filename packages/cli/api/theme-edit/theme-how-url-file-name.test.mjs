@@ -89,6 +89,10 @@ it.each([
     "set pu background 'URL(/img/bg.webp) no-repeat' --on app-shell-header",
   ],
   [
+    'how rounded are cards? cards background-image: url(/locales/it/flag.png)',
+    "set pu background-image 'url(/locales/it/flag.png)' --on card",
+  ],
+  [
     'how rounded are cards? cards background-image: url(hero.jpg)',
     "set pu background-image 'url(hero.jpg)' --on card",
   ],
