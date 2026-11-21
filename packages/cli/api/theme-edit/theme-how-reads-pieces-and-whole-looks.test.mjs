@@ -418,7 +418,6 @@ describe('a look said, then taken away by a pronoun', () => {
         'the card border is ugly in dark, hide it',
         'the shadow on the cards in dark mode is too strong, remove it',
         'the border on the selected tab is ugly, hide it',
-        'the muted card border is ugly, hide it',
         'the bottom border on the cards is ugly, hide it',
         'the shadows on cards and buttons in dark mode are too strong, remove them',
         'the shadows are too strong on cards and buttons in dark mode, remove them',
@@ -429,6 +428,39 @@ describe('a look said, then taken away by a pronoun', () => {
       ]) {
         const lines = (first(await answer(q)) ?? []).join('\n');
         expect(lines, q).not.toMatch(/\bnone --on\b|transparent --on/);
+      }
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun on one variant', () => {
+  it(
+    'takes it away on that variant only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the muted card border is ugly, hide it',
+          /border none --on card --when variant:muted\b/,
+        ],
+        [
+          'the error badge border is ugly, hide it',
+          /border none --on badge --when variant:error\b/,
+        ],
+        [
+          'the secondary button background is ugly, hide it',
+          /background-color transparent --on button --when variant:secondary\b/,
+        ],
+        [
+          'the border on the ghost buttons is ugly, hide it',
+          /border none --on button --when variant:ghost\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(
+          /(?:none|transparent) --on (?:card|badge|button)$/m,
+        );
       }
     },
     T,

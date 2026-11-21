@@ -4683,20 +4683,32 @@ export function draftAnswer(ctx, env, question) {
       const own = String(said);
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
-        .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
-        .filter(x => x != null);
-      const longest = /** @type {RegExpExecArray[]} */ (found).sort(
-        (x, y) => y[0].length - x[0].length,
+        .parts.map(([re, p]) => ({
+          hit: re.exec(` ${own.toLowerCase()} `),
+          on: /** @type {any} */ (p).on,
+        }))
+        .filter(x => x.hit != null);
+      const best = found.sort(
+        (x, y) =>
+          /** @type {RegExpExecArray} */ (y.hit)[0].length -
+          /** @type {RegExpExecArray} */ (x.hit)[0].length,
       )[0];
+      const longest = /** @type {RegExpExecArray | undefined} */ (best?.hit);
       if (!longest) return m;
       const part = longest[0].trim();
       // (Every other word only judges the look: "the copy button border is
       // ugly", "the shadow on the cards is too strong". Any other word, a
       // side, a state, a variant, a mode or a second part, keeps the
       // earlier reading.)
-      const others = own
-        .toLowerCase()
-        .replace(longest[0].trim(), ' ')
+      // (A variant of the part said with the look, "the muted card border",
+      // takes it away on that variant only.)
+      const besidePart = own.toLowerCase().replace(longest[0].trim(), ' ');
+      const variant = Object.values(ctx.C.variantValues(best.on) ?? {})
+        .flat()
+        .map(v => String(v).toLowerCase())
+        .find(v => new RegExp(`\\b${v}\\b`).test(besidePart));
+      const others = besidePart
+        .replace(variant ? new RegExp(`\\b${variant}\\b`) : /$^/, ' ')
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
@@ -4709,7 +4721,8 @@ export function draftAnswer(ctx, env, question) {
         return m;
       // (A "!" or "?" before it ends the ask before, as a full stop does.)
       const stop = String(lead).replace(/[!?]/, '.');
-      return `${stop}no ${word} on ${part}`;
+      const which = variant ? `${variant} ` : '';
+      return `${stop}no ${word} on ${which}${part}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
