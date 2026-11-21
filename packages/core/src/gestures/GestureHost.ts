@@ -912,6 +912,17 @@ export class GestureHost {
   private readonly armedElements = new Map<Element, () => void>();
   private isArmedPress = false;
   /**
+   * Whether the page may hold a selection, so a mouse or pen press reads it
+   * only then: in Chromium every read of a Selection brings pending styles up
+   * to date. `unknown` until the first read after the host starts to listen,
+   * because a selection made before then fired its `selectionchange` before
+   * anyone listened. A `selectionchange` makes it `maybe`; a read that finds
+   * no range makes it `none`.
+   */
+  private selectionState: 'unknown' | 'maybe' | 'none' = 'unknown';
+  /** The one passive `selectionchange` subscription, while anything is attached. */
+  private stopWatchingSelection: (() => void) | null = null;
+  /**
    * Whether the installed listeners include the cancelable ones (the
    * document's touchend, contextmenu and the window's click): only while a
    * participant that can claim is attached (`spec:AST-094` FR20).
@@ -1755,6 +1766,7 @@ export class GestureHost {
    */
   private syncListeners(): void {
     this.syncLayoutWatch();
+    this.syncSelectionWatch();
     this.syncArmed();
     if (this.shouldListen()) {
       this.install();
@@ -1886,6 +1898,47 @@ export class GestureHost {
       this.isArmedPress = false;
       this.syncKeptPresses();
     }
+  }
+
+  /**
+   * One passive `selectionchange` subscription for the page while anything is
+   * attached, counted once whatever the number of elements (FR24). The
+   * listener reads nothing: it only marks that a selection may exist.
+   */
+  private syncSelectionWatch(): void {
+    const view = this.doc.defaultView;
+    const wanted = this.registry.size > 0 && view != null;
+    if (wanted && this.stopWatchingSelection == null && view != null) {
+      this.selectionState = 'unknown';
+      this.stopWatchingSelection = subscribeInput(
+        view,
+        'selectionchange',
+        this.onSelectionChange,
+      );
+    } else if (!wanted && this.stopWatchingSelection != null) {
+      this.stopWatchingSelection();
+      this.stopWatchingSelection = null;
+      this.selectionState = 'unknown';
+    }
+  }
+
+  private readonly onSelectionChange = (): void => {
+    this.selectionState = 'maybe';
+  };
+
+  /**
+   * The page's selection when a mouse or pen press begins, read only when one
+   * may exist (selectionState).
+   */
+  private pressSelection(): ReadonlyArray<AbstractRange> {
+    if (this.selectionState === 'none') {
+      return [];
+    }
+    const ranges = selectionRangesOf(this.doc.defaultView);
+    if (ranges.length === 0) {
+      this.selectionState = 'none';
+    }
+    return ranges;
   }
 
   /** A press on an armed element, a mouse's primary button, a pen or a finger: listen for this press. */
@@ -3845,7 +3898,7 @@ export class GestureHost {
     // Before the arena admits it: a press a group claims at its own
     // pointerdown keeps the selection the page has now.
     if (event.pointerType !== 'touch') {
-      this.pressSelections.set(id, selectionRangesOf(this.doc.defaultView));
+      this.pressSelections.set(id, this.pressSelection());
     }
     this.arena.began([
       {

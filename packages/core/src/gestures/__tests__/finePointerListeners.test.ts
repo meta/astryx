@@ -146,10 +146,50 @@ afterEach(() => {
 });
 
 describe('a fine primary pointer', () => {
+  it('keeps one passive selectionchange subscription for the page, however many elements, and drops it at the last detach (spec:AST-094 FR24)', () => {
+    const {one, two} = mount('<div id="one"></div><div id="two"></div>');
+    const detachOne = host.attach(one, new TapGestureRecognizer());
+    const detachTwo = host.attach(two, new TapGestureRecognizer());
+    expect(subscriptions.get('selectionchange')).toBe(1);
+    detachOne();
+    expect(subscriptions.get('selectionchange')).toBe(1);
+    detachTwo();
+    expect(subscriptions.get('selectionchange')).toBe(0);
+  });
+
+  it('reads the selection at a mouse press only when one may exist: the first press after attach, and the first after a selectionchange', () => {
+    const {box} = mount('<div id="box"></div>');
+    detachers.push(host.attach(box, new TapGestureRecognizer()));
+    window.getSelection()?.removeAllRanges();
+    const reads = vi.spyOn(window, 'getSelection');
+    const press = (time: number) => {
+      pointer('pointerdown', box, {
+        pointerType: 'mouse',
+        x: 5,
+        y: 5,
+        buttons: 1,
+        time,
+      });
+      pointer('pointerup', box, {pointerType: 'mouse', x: 5, y: 5, time: time + 1});
+    };
+    try {
+      press(0);
+      const afterFirst = reads.mock.calls.length;
+      expect(afterFirst).toBeGreaterThan(0);
+      press(100);
+      expect(reads.mock.calls.length).toBe(afterFirst);
+      document.dispatchEvent(new Event('selectionchange'));
+      press(200);
+      expect(reads.mock.calls.length).toBeGreaterThan(afterFirst);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   it('takes down the page listeners when the window blurs during a press', async () => {
     const {box} = mount('<div id="box"></div>');
     detachers.push(host.attach(box, new TapGestureRecognizer()));
-    expect(pageListeners()).toEqual([]);
+    expect(pageListeners()).toEqual(['selectionchange']);
     pointer('pointerdown', box, {
       pointerType: 'mouse',
       x: 5,
@@ -160,7 +200,7 @@ describe('a fine primary pointer', () => {
     expect(pageListeners()).toContain('pointermove');
     window.dispatchEvent(new Event('blur'));
     await Promise.resolve();
-    expect(pageListeners()).toEqual([]);
+    expect(pageListeners()).toEqual(['selectionchange']);
   });
 
   it("gives a kept press its blocking touchmove only during a press, as a phone's needs it only for a finger", async () => {
@@ -276,7 +316,7 @@ describe('a fine primary pointer', () => {
     try {
       document.dispatchEvent(new Event('visibilitychange'));
       await Promise.resolve();
-      expect(pageListeners()).toEqual([]);
+      expect(pageListeners()).toEqual(['selectionchange']);
     } finally {
       Reflect.deleteProperty(document, 'visibilityState');
     }

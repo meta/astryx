@@ -3,7 +3,8 @@
 /**
  * @file PressEmptySelection.interaction.browser.spec.ts
  * @input SegmentedControl's Default story, with 3,000 rows whose styles a
- *   capture-phase pointerdown listener changes, and no text selected
+ *   capture-phase pointerdown listener (registered before the page loads)
+ *   changes, and no text selected
  * @output Proves a mouse press on a segment reads no composed selection
  *   ranges, and brings no pending styles up to date inside the press:
  *   Chromium's trace shows no restyle of the rows in the pointerdown dispatch
@@ -29,6 +30,19 @@ test('a mouse press with no text selected restyles no unrelated rows inside the 
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'reads a Chromium trace');
+  // Registered before the page loads, as in the issue's reproduction, so it
+  // runs ahead of the gesture host's own listener in the same dispatch.
+  await page.addInitScript(() => {
+    window.addEventListener(
+      'pointerdown',
+      event => {
+        if ((event.target as Element).closest('[role="radio"]') != null) {
+          document.documentElement.classList.toggle('alternate');
+        }
+      },
+      {capture: true},
+    );
+  });
   await page.goto(
     `${storybook()}/iframe.html?id=core-segmentedcontrol--default&viewMode=story`,
   );
@@ -44,18 +58,18 @@ test('a mouse press with no text selected restyles no unrelated rows inside the 
     style.textContent =
       '.result { color: rgb(34, 51, 68) } html.alternate .result { color: rgb(221, 238, 255) }';
     document.body.append(style, rows);
-    // An unrelated style change waits when the press reaches the gesture host.
-    window.addEventListener(
-      'pointerdown',
-      event => {
-        if ((event.target as Element).closest('[role="radio"]') != null) {
-          document.documentElement.classList.toggle('alternate');
-        }
-      },
-      {capture: true},
-    );
     getSelection()?.removeAllRanges();
   });
+  // The first press after the host attaches reads the selection once (a
+  // selection made earlier fired no event it heard). Take it before the
+  // trace, on another segment.
+  await page.getByRole('radio', {name: 'Grid'}).click();
+  await page.evaluate(
+    async () =>
+      new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      }),
+  );
   const box = await segment.boundingBox();
   if (box == null) {
     throw new Error('no box for the List segment');
@@ -104,7 +118,7 @@ test('a mouse press with no text selected restyles no unrelated rows inside the 
   await expect(segment).toBeChecked();
 });
 
-test('a mouse press with no text selected reads no composed selection ranges', async ({
+test('a later mouse press with no text selected reads no composed selection ranges', async ({
   page,
   browserName,
 }) => {
@@ -132,6 +146,13 @@ test('a mouse press with no text selected reads no composed selection ranges', a
       };
     }
     getSelection()?.removeAllRanges();
+  });
+  // The first press after attach reads once; count the next one.
+  await page.getByRole('radio', {name: 'Grid'}).click();
+  await page.evaluate(() => {
+    (
+      window as unknown as {__composedReads: {count: number}}
+    ).__composedReads.count = 0;
   });
   await segment.click();
   await expect(segment).toBeChecked();
