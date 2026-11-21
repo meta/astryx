@@ -24469,6 +24469,24 @@ export function draftAnswer(ctx, env, question) {
           const gapRead = (C.partReads(one(String(on)), 'spacing') ?? []).find(
             r => r.props.some(x => /^(?:row-)?gap$/.test(x)),
           );
+          // ("a little more space between list items": a step up of the
+          // holder's own gap, as a padding step is, from what it has now.)
+          const gapNow =
+            nowIn(String(on), 'gap') ??
+            (gapRead ? current(gapRead.token) : null);
+          const more =
+            !exactFactor(c.text) &&
+            (c.dir === 'more' ||
+              new RegExp(`\\b(?:${densityWords('roomy', 'crowded')})\\b`).test(
+                c.text,
+              ));
+          const stepped =
+            more && gapNow ? scaledBox(String(gapNow), 1.25) : null;
+          if (stepped)
+            return {
+              text: `the room between ${between}s is ${on}'s gap: ${stepped} (now ${gapNow}; a step up: give a value, such as gap 8px --on ${on}, for an exact one), not ${between}'s padding`,
+              options: [[set('gap', stepped, f)]],
+            };
           return {
             text: `the room between ${between}s is ${on}'s gap${gapRead ? ` (${gapRead.token}, now ${current(gapRead.token)})` : ''}, not ${between}'s padding: give it a value, such as gap 8px --on ${on}`,
             options: [],

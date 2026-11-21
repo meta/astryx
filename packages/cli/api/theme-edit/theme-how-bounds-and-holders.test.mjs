@@ -98,11 +98,39 @@ describe('values and holders', () => {
     ]);
   }, 240_000);
 
-  it('the room between items is the gap of the part that holds them', async () => {
-    const rs = await how('q0', 'list items more spacing between them');
-    expect(writes(rs)).toEqual([]);
-    expect(texts(rs)).toMatch(/the room between list-items is list's gap/);
-  }, 240_000);
+  // "More" room between the items, with no amount, is a step up of the
+  // holder's own gap, never the items' padding.
+  it.each([
+    'list items more spacing between them',
+    'a little more space between list items',
+    'more space between list items',
+  ])(
+    "%s steps up the list's gap",
+    async question => {
+      const rs = await how('q0', question);
+      expect(writes(rs)).toEqual([
+        expect.stringMatching(/^set q0 gap \S+ --on list$/),
+      ]);
+      expect(texts(rs)).toMatch(
+        /the room between list-items is list's gap: \S+ \(now /,
+      );
+    },
+    240_000,
+  );
+  // No way, another way, or an exact amount said: still asked for a value.
+  it.each([
+    'space between list items',
+    'less space between list items',
+    'double the space between list items',
+  ])(
+    '%s names the gap for a value',
+    async question => {
+      const rs = await how('q0', question);
+      expect(writes(rs)).toEqual([]);
+      expect(texts(rs)).toMatch(/the room between list-items is list's gap/);
+    },
+    240_000,
+  );
 
   it('a visited link has no state set can name', async () => {
     const rs = await how('q0', 'links purple after visiting');
