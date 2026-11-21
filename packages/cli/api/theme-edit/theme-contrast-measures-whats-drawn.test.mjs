@@ -3,7 +3,8 @@
 /**
  * @file Contrast is measured on the color drawn under the text: a
  * see-through fill over the region it sits in (a top nav item in a
- * translucent top bar), never over the bare page.
+ * translucent top bar), never over the bare page; and a fill color and
+ * its on-color set inside a part are measured as that part draws them.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -71,6 +72,39 @@ describe('contrast measures what is drawn', () => {
       expect(
         [...fresh.notes, ...texts({data: fresh}).map(p => p.problem)].filter(
           (/** @type {string} */ t) => / on lightbox /.test(t),
+        ),
+      ).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'measures a fill and its on-color as the part they are set on draws them',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('wa', {cwd, like: 'neutral'});
+      const set = await themeEditSet('wa', '--color-accent', '#ffffff', {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      const [problem, ...rest] = texts(set).filter(p =>
+        /^inside app-shell-header, --color-on-accent /.test(p.problem),
+      );
+      expect(rest).toEqual([]);
+      expect(problem.problem).toMatch(/is 1\.00:1 in light/);
+      expect(problem.fix).toMatch(
+        / set wa --color-on-accent '#[0-9a-f]{6}' --on app-shell-header --mode light$/,
+      );
+      const color = /'(#[0-9a-f]{6})'/.exec(String(problem.fix))?.[1];
+      await themeEditSet('wa', '--color-on-accent', String(color), {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      expect(
+        texts(await themeEditShow('wa', {cwd})).filter(p =>
+          /^inside app-shell-header/.test(p.problem),
         ),
       ).toEqual([]);
     },
