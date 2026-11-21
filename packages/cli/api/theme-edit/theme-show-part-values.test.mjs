@@ -443,6 +443,35 @@ describe('show --on: what one part of a theme shows', () => {
     expect(own.value).toEqual({light: '#abcdef'});
   }, 120_000);
 
+  it('leaves a mode out of the text where the JSON leaves it out', async () => {
+    await themeEditNew('linky', {cwd, like: 'neutral'});
+    await themeEditSet('linky', 'outline-color', '#ff0000', {
+      cwd,
+      on: 'link',
+      mode: 'light',
+    });
+    await themeEditSet('linky', 'outline-color', '#00ff00', {
+      cwd,
+      on: 'link',
+      state: 'hover',
+      mode: 'light',
+    });
+    const r = /** @type {any} */ (
+      await themeEditShow('linky', {cwd, on: 'link'})
+    );
+    const hover = r.data.values.find(
+      (/** @type {any} */ v) =>
+        v.property === 'outline-color' && v.state === 'hover',
+    );
+    expect(hover).toBeDefined();
+    expect(hover.value).toEqual({light: '#00ff00'});
+    const text = await runCli(
+      ['experimental', 'theme', 'editor', 'show', 'linky', '--on', 'link'],
+      {cwd},
+    );
+    expect(text.stdout).not.toMatch(/no value/);
+  }, 120_000);
+
   it('reads a variant-scoped token block as the theme’s only where it shows', async () => {
     await themeEditNew('scoped', {cwd, like: 'neutral'});
     await themeEditSet('scoped', '--color-background-muted', '#ff0000', {

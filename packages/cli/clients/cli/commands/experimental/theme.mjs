@@ -746,7 +746,7 @@ function valueText(v) {
   if (typeof v === 'string') return v;
   // (A mode left out is not shown yet; a mode given as null has no value.)
   return /** @type {const} */ (['light', 'dark'])
-    .filter(m => m in v)
+    .filter(m => v[m] !== undefined)
     .map(m => `${m} ${v[m] ?? 'no value'}`)
     .join(', ');
 }

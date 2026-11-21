@@ -622,9 +622,20 @@ export async function themePartValues(cwd, name, part) {
     const pair = (a, b) =>
       JSON.stringify(a) === JSON.stringify(b)
         ? a
-        : m.mode === 'light'
-          ? {light: a, dark: b}
-          : {light: b, dark: a};
+        : // (A mode with nothing under it is left out: not shown yet.)
+          Object.fromEntries(
+            /** @type {[string, any][]} */ (
+              m.mode === 'light'
+                ? [
+                    ['light', a],
+                    ['dark', b],
+                  ]
+                : [
+                    ['light', b],
+                    ['dark', a],
+                  ]
+            ).filter(([, x]) => x !== undefined),
+          );
     let alone = false;
     let target = values.find(v => {
       const r = rawKey.get(v);
