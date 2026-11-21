@@ -12164,9 +12164,12 @@ export function draftAnswer(ctx, env, question) {
     // gives it to the clauses after it.
     // (Never to an ask that is the same in both modes, "and rounder": a
     // mode said of a color does not reach the corners.)
+    // (Nor from an undo, "undo the light mode accent change. make the cards
+    // blue": the mode is the undo's, never the next ask's.)
     if (
       !c.mode &&
       prev?.mode &&
+      !(prev.neg && /\b(?:revert|undo|take back)\b/.test(prev.text)) &&
       (!c.parts.length || (!prev.parts.length && !prev.aspects.length)) &&
       !(
         c.aspects.length &&

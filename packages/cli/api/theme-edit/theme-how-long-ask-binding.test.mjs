@@ -639,6 +639,14 @@ const ROWS = [
     },
   ],
   [
+    "an undo's mode is never the next ask's",
+    {
+      q: 'undo the light mode accent change. make the cards blue',
+      has: ["background-color '#2563eb' --on card --when variant:default"],
+      never: /--mode/,
+    },
+  ],
+  [
     'an undo of one mode leaves a change said for the other mode',
     {
       q: 'make the accent red in dark mode. undo the light mode accent change',
