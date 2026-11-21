@@ -278,6 +278,7 @@ describe('docs() for a name another command reads', () => {
     async () => {
       for (const [typed, command] of [
         ['widgets/Buttons', 'astryx component Button'],
+        ['Buttons', 'astryx component Button'],
         ['widgets/use-collapsible', 'astryx hook useCollapsible'],
       ]) {
         const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);

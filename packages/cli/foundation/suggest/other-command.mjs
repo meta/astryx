@@ -7,7 +7,8 @@
  * command (`astryx hook useHotkeys`). A name matches at one of six tiers,
  * best first: exact (the whole name, any case), folded (without spaces and
  * hyphens, a hook with or without `use`), last segment (of a path name, exact
- * or folded), near hook (a `use…` name a slip or two from a hook's name, or
+ * or folded; for a docs miss, also a component or hook that the typed name's
+ * last path segment names, as typed or with its words singular), near hook (a `use…` name a slip or two from a hook's name, or
  * one whose every word the hook's name carries), hook keyword (two or more words that are a keyword
  * one hook's doc declares), and word cover (every word of the name); word
  * cover gives no hint. The near hook tier gives one when a component or
@@ -109,7 +110,11 @@ export const MATCH_TIER = /** @type {const} */ ({
   exact: 0,
   /** The whole name without spaces and hyphens, and a hook without `use`. */
   folded: 1,
-  /** Only the last segment of a path name, as exact or folded. */
+  /**
+   * Only the last segment of a path name, as exact or folded; or, for a docs
+   * miss, a name the typed last path segment folds to, as typed or with its
+   * words singular ({@link tailForms}).
+   */
   segment: 2,
   /**
    * A hook a `use…` name nearly spells: one or two slips, or every typed
@@ -377,7 +382,7 @@ export async function findOtherCommand(
   const wanted = foldEntryName(typed);
   if (wanted === '') return null;
   // A name with a `/` can be only an integration template's full id or a
-  // docs route.
+  // docs route, or, through `tail`, name a component or hook by its last part.
   const isPath = typed.includes('/');
   /** @type {import('../integrations/integrations.mjs').LoadedIntegration[] | undefined} */
   let loaded = known;
