@@ -17,18 +17,44 @@
  * - /packages/core/src/i18n/index.ts (public export)
  */
 
-// The scripts CLDR writes right to left. Some engines (Firefox) have no
-// `Intl.Locale` text info, so a locale's likely script decides there, and the
+// The scripts ICU writes right to left. Some engines (Firefox) have no
+// `Intl.Locale` text info. There the locale's likely script decides, so the
 // server and the browser give the same direction.
 const RIGHT_TO_LEFT_SCRIPTS = new Set([
   'Adlm',
   'Arab',
+  'Armi',
+  'Avst',
+  'Chrs',
+  'Cprt',
+  'Elym',
+  'Gara',
+  'Hatr',
   'Hebr',
+  'Hung',
+  'Khar',
+  'Lydi',
   'Mand',
+  'Mani',
   'Mend',
+  'Merc',
+  'Mero',
+  'Narb',
+  'Nbat',
   'Nkoo',
+  'Orkh',
+  'Ougr',
+  'Palm',
+  'Phli',
+  'Phlp',
+  'Phnx',
+  'Prti',
   'Rohg',
   'Samr',
+  'Sarb',
+  'Sidt',
+  'Sogd',
+  'Sogo',
   'Syrc',
   'Thaa',
   'Yezi',
