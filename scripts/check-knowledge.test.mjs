@@ -7,6 +7,11 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from './lib/git-fixture.mjs';
+import {
   composeKnowledgeSchemas,
   collectConcernMatches,
   collectGlobalReviewMatches,
@@ -26,6 +31,8 @@ import {
   validatePathApplicability,
   validateReviewApplicability,
   validateSchemaEvolution,
+  approvalLineRewritesSince,
+  findApprovalLineRewrites,
 } from './check-knowledge.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -152,6 +159,24 @@ function componentRecord(overrides = {}) {
     .map(section => `## ${section}\n\nBody.`)
     .join('\n\n');
   return `---\n${frontmatter}\n---\n\n# Button component contract\n\n${sections}\n`;
+}
+
+function platformRecord(overrides = {}) {
+  return componentRecord({
+    id: 'component:swift/Button',
+    platform_of: 'component:Button',
+    verified_by: '[packages/native/apple/Tests/AstryxTests/ButtonTests.swift]',
+    ...overrides,
+  });
+}
+
+function writeSwiftTest(root) {
+  const swiftTest = path.join(
+    root,
+    'packages/native/apple/Tests/AstryxTests/ButtonTests.swift',
+  );
+  fs.mkdirSync(path.dirname(swiftTest), {recursive: true});
+  fs.writeFileSync(swiftTest, '');
 }
 
 function moduleRecord(overrides = {}) {
@@ -353,18 +378,21 @@ function withSystemClaims(record) {
   );
 }
 
-function commitFixture(root, message) {
-  execFileSync('git', ['init', '-q'], {cwd: root});
-  execFileSync('git', ['config', 'user.name', 'Fixture'], {cwd: root});
-  execFileSync('git', ['config', 'user.email', 'fixture@example.com'], {
-    cwd: root,
-  });
-  execFileSync('git', ['add', '.'], {cwd: root});
-  execFileSync('git', ['commit', '-q', '-m', message], {cwd: root});
-  return execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-  }).trim();
+/**
+ * Commits the fixture's working tree as it stands on `main`, after the
+ * commit there, or as the first commit of a new repository.
+ */
+function commitFixture(root, message, {create = false} = {}) {
+  const commit = {
+    ref: 'refs/heads/main',
+    name: 'commit',
+    message,
+    snapshot: true,
+    files: workingTreeFiles(root),
+  };
+  return create
+    ? createRepository(root, [commit]).commit
+    : importCommits(root, [{...commit, parent: 'refs/heads/main'}]).commit;
 }
 
 afterEach(() => {
@@ -674,6 +702,7 @@ describe('global review applicability', () => {
     const baseWithoutRouting = commitFixture(
       root,
       'base without global routing',
+      {create: true},
     );
     execFileSync(
       'git',
@@ -685,14 +714,7 @@ describe('global review applicability', () => {
       path.join(root, 'docs/specs/AST-900/spec.md'),
       withReviewApplicability(currentRecord, {'public-api': ['FR1']}),
     );
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'head adds global routing'], {
-      cwd: root,
-    });
-    const proposedHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const proposedHead = commitFixture(root, 'head adds global routing');
 
     expect(
       routeGlobalReviewBaselinesAtRevision(
@@ -722,14 +744,7 @@ describe('global review applicability', () => {
     ).toThrow(/review head must differ/);
 
     fs.writeFileSync(path.join(root, 'README.md'), '# Reviewed change\n');
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'later review head'], {
-      cwd: root,
-    });
-    const laterHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const laterHead = commitFixture(root, 'later review head');
     expect(
       routeGlobalReviewBaselinesAtRevision(root, proposedHead, laterHead, [
         'public-api',
@@ -834,6 +849,276 @@ describe('schema evolution', () => {
         new Map([['docs/schemas/knowledge/v1.json', 'changed']]),
       ).join('\n'),
     ).toMatch(/immutable.*append-only/s);
+  });
+});
+
+describe('approval line history', () => {
+  function record({approvedBy = 'owner-a', decisions = []} = {}) {
+    return {
+      path: 'docs/architecture/example.md',
+      content: [
+        '---',
+        'id: architecture:example',
+        'authority: current',
+        `approved_by: ${approvedBy}`,
+        '---',
+        '',
+        '## Deciding specs',
+        '',
+        ...decisions.flatMap(([id, decider]) => [
+          `### ${id} — A decision`,
+          '',
+          `**Decider:** ${decider}`,
+          '',
+          'The decision text.',
+          '',
+        ]),
+      ].join('\n'),
+    };
+  }
+  const base = record({
+    decisions: [['DEC-1', '`owner-a`, `2026-11-01`']],
+  });
+
+  it('reports a rewritten Decider and approved_by with the original decider', () => {
+    const head = record({
+      approvedBy: 'owner-b',
+      decisions: [['DEC-1', '`owner-b`, `2026-11-01`']],
+    });
+    expect(findApprovalLineRewrites([base], [head])).toEqual([
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'approved_by',
+        from: 'owner-a',
+        to: 'owner-b',
+        decider: 'owner-a',
+      },
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'DEC-1',
+        from: '`owner-a`, `2026-11-01`',
+        to: '`owner-b`, `2026-11-01`',
+        decider: 'owner-a',
+      },
+    ]);
+  });
+
+  it('reports a removed decision', () => {
+    expect(findApprovalLineRewrites([base], [record()])).toEqual([
+      expect.objectContaining({claim: 'DEC-1', to: null, decider: 'owner-a'}),
+    ]);
+  });
+
+  it('allows a new decision, an added approver, an amendment, and a filled placeholder', () => {
+    const pendingBase = record({
+      decisions: [
+        ['DEC-1', '`owner-a`, `2026-11-01`'],
+        ['DEC-2', '`owner-a`, `<pending>`'],
+      ],
+    });
+    const head = record({
+      approvedBy: '[owner-a, owner-b]',
+      decisions: [
+        ['DEC-2', '`owner-a`, `2026-11-08`'],
+        ['DEC-1', '`owner-a`, `2026-11-01`; amended `2026-11-08`'],
+        ['DEC-3', '`owner-b`, `2026-11-08`'],
+      ],
+    });
+    expect(findApprovalLineRewrites([pendingBase], [head])).toEqual([]);
+  });
+
+  it('reads a placeholder only in the decider and date fields', () => {
+    const decided =
+      '`owner-a`, `2026-11-01`; pending-search Enter, a quiet send';
+    const rewritten = findApprovalLineRewrites(
+      [record({decisions: [['DEC-1', decided]]})],
+      [
+        record({
+          decisions: [
+            [
+              'DEC-1',
+              '`owner-b`, `2026-11-01`; pending-search Enter, a quiet send',
+            ],
+          ],
+        }),
+      ],
+    );
+    expect(rewritten).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1',
+        from: decided,
+        decider: 'owner-a',
+      }),
+    ]);
+    // A placeholder date, with or without a note, is still a placeholder.
+    for (const placeholder of [
+      '`owner-a`, `<pending>`',
+      '`owner-a`, pending (awaiting the owner)',
+      'proposed by `owner-a`, `2026-09-27`; pending owner review',
+    ]) {
+      expect(
+        findApprovalLineRewrites(
+          [record({decisions: [['DEC-1', placeholder]]})],
+          [record({decisions: [['DEC-1', '`owner-a`, `2026-11-08`']]})],
+        ),
+        placeholder,
+      ).toEqual([]);
+    }
+  });
+
+  it('reads every decided-line shape the records use', () => {
+    const doc = lines => ({
+      path: 'docs/specs/AST-900/spec.md',
+      content: [
+        '---',
+        'id: spec:AST-900',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const shapes = [
+      // Reference and Decider on one line.
+      [
+        '### DEC-1 — One line',
+        '',
+        '**Reference:** `spec:AST-900/DEC-1` · **Decider:** `owner-a`, `2026-08-31`',
+      ],
+      // Several deciders.
+      [
+        '### DEC-2 — Two owners',
+        '',
+        '**Deciders:** `owner-a`, `owner-c`, `2026-09-03`',
+      ],
+      // A list-item decision with an indented Decider line.
+      [
+        '- **DEC-3 — A list item.**',
+        '',
+        '  **Decider:** `owner-a`, 2026-10-24',
+      ],
+      // An amendment heading.
+      [
+        '### Amendment — Narrow the name',
+        '',
+        '**Decider:** `owner-a`, `2026-09-12`',
+      ],
+      // A direction owner names who decided.
+      [
+        '### DEC-4 — Owner label',
+        '',
+        '**Direction owner:** `owner-a`, `2026-10-02`',
+      ],
+    ];
+    const expected = [
+      {claim: 'DEC-1', decider: 'owner-a'},
+      {claim: 'DEC-2', decider: 'owner-a, owner-c'},
+      {claim: 'DEC-3', decider: 'owner-a'},
+      {claim: 'Amendment — Narrow the name', decider: 'owner-a'},
+      {claim: 'DEC-4', decider: 'owner-a'},
+    ];
+    shapes.forEach((shape, i) => {
+      const rewritten = shape.map(line => line.replace('owner-a', 'owner-b'));
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(rewritten)]),
+        shape[0],
+      ).toEqual([expect.objectContaining(expected[i])]);
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(['## Notes'])]),
+        `${shape[0]} removed`,
+      ).toEqual([expect.objectContaining({...expected[i], to: null})]);
+      expect(findApprovalLineRewrites([doc(shape)], [doc(shape)])).toEqual([]);
+    });
+  });
+
+  it('reads each labelled decider of a decision, and no proposed one', () => {
+    const doc = lines => ({
+      path: 'packages/themes/example/example.spec.md',
+      content: [
+        '---',
+        'id: theme:example',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        '### DEC-1 — Two deciders',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const base = [
+      '**System-boundary decider:** `owner-a`, `2026-08-31`',
+      '**Final adoption decider:** `owner-c`, `2026-10-17`',
+      '**Proposed decider:** `owner-d`',
+    ];
+    const adoption = base.map(line => line.replace('owner-c', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(adoption)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (Final adoption decider)',
+        decider: 'owner-c',
+      }),
+    ]);
+    const boundary = base.map(line => line.replace('owner-a', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(boundary)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (System-boundary decider)',
+        decider: 'owner-a',
+      }),
+    ]);
+    const proposal = base.map(line => line.replace('owner-d', 'owner-e'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(proposal)])).toEqual([]);
+  });
+
+  it('warns for a platform component record too', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-lines-'));
+    try {
+      const file = 'docs/specs/components/TextInput/TextInput.swift.spec.md';
+      const git = (...args) =>
+        execFileSync('git', ['-C', dir, ...args], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: 't',
+            GIT_AUTHOR_EMAIL: 't@example.com',
+            GIT_COMMITTER_NAME: 't',
+            GIT_COMMITTER_EMAIL: 't@example.com',
+          },
+        });
+      const write = approvedBy => {
+        fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, file),
+          [
+            '---',
+            'id: component:TextInput/swift',
+            'authority: current',
+            `approved_by: ${approvedBy}`,
+            '---',
+            '',
+            '# TextInput (Swift)',
+            '',
+          ].join('\n'),
+        );
+      };
+      git('init', '-q');
+      write('owner-a');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      write('owner-b');
+      expect(approvalLineRewritesSince(dir, base, [file])).toEqual([
+        {
+          path: file,
+          claim: 'approved_by',
+          from: 'owner-a',
+          to: 'owner-b',
+          decider: 'owner-a',
+        },
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 
@@ -1697,8 +1982,11 @@ describe('knowledge validation', () => {
       componentRecord(),
     );
     const folder = path.join(root, 'docs/specs/components/Button');
-    // Platform records are not checked yet (no platform_of in the schema).
-    fs.writeFileSync(path.join(folder, 'Button.swift.spec.md'), '# Swift\n');
+    writeSwiftTest(root);
+    fs.writeFileSync(
+      path.join(folder, 'Button.swift.spec.md'),
+      platformRecord(),
+    );
     fs.writeFileSync(path.join(folder, 'Button.klingon.spec.md'), '# ?\n');
     fs.writeFileSync(
       path.join(root, 'docs/specs/components/Loose.spec.md'),
@@ -1709,6 +1997,182 @@ describe('knowledge validation', () => {
     expect(
       problems.filter(problem => problem.includes('must be <ComponentRoot>')),
     ).toHaveLength(2);
+  });
+
+  it('checks a platform record with the shared validator and against its core component', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    writeSwiftTest(root);
+    const swift = path.join(
+      root,
+      'docs/specs/components/Button/Button.swift.spec.md',
+    );
+    const swiftProblems = async overrides => {
+      fs.writeFileSync(swift, platformRecord(overrides));
+      return (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+      );
+    };
+
+    expect(await swiftProblems()).toEqual([]);
+    expect(
+      await swiftProblems({
+        id: 'component:Button',
+        platform_of: 'component:Card',
+        owners: '[]',
+        verified_by: '[packages/native/apple/Tests/Missing.swift]',
+      }),
+    ).toEqual([
+      'docs/specs/components/Button/Button.swift.spec.md: id must match "^component:swift/Button$".',
+      'docs/specs/components/Button/Button.swift.spec.md: owners must be a non-empty inline list.',
+      'docs/specs/components/Button/Button.swift.spec.md: duplicate id component:Button; first declared in docs/specs/components/Button/Button.spec.md.',
+      'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
+      'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
+    ]);
+    // It is placed like the core record it implements.
+    for (const [misplaced, message] of [
+      [
+        'docs/specs/components/Buton/Button.swift.spec.md',
+        'platform records must live at docs/specs/components/<ComponentRoot>/',
+      ],
+      [
+        'docs/specs/components/Button/Banana.swift.spec.md',
+        'platform record for Banana must match component root "Button"',
+      ],
+    ]) {
+      const misplacedPath = path.join(root, misplaced);
+      fs.mkdirSync(path.dirname(misplacedPath), {recursive: true});
+      const name = path.basename(misplaced, '.swift.spec.md');
+      fs.writeFileSync(
+        misplacedPath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+      const misplacedProblems = (await validateKnowledgeRoot(root)).filter(
+        problem => problem.startsWith(misplaced),
+      );
+      expect(misplacedProblems.join('\n')).toContain(message);
+      fs.rmSync(misplacedPath);
+    }
+    // Its applicability blocks are validated, since specs:for reads them.
+    fs.writeFileSync(
+      swift,
+      withReviewApplicability(platformRecord(), {'not-a-trigger': ['INV1']}) +
+        '\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": []}\n```\n',
+    );
+    const blockProblems = (await validateKnowledgeRoot(root)).filter(problem =>
+      problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+    );
+    expect(
+      blockProblems.some(problem => problem.includes('review-applicability')),
+    ).toBe(true);
+    expect(blockProblems).toContain(
+      'docs/specs/components/Button/Button.swift.spec.md: path-applicability:v1 requires a non-empty paths list.',
+    );
+    // The shared validator's current-record rules apply, verified_by included.
+    expect(
+      await swiftProblems({authority: 'current', verified_by: '[]'}),
+    ).toEqual(
+      expect.arrayContaining([
+        'docs/specs/components/Button/Button.swift.spec.md: current records require non-empty verified_by.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_by to name an authorized owner.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_at as YYYY-MM-DD.',
+      ]),
+    );
+    expect(
+      await swiftProblems({
+        authority: 'current',
+        approved_by: 'cixzhang',
+        approved_at: '2026-11-01',
+      }),
+    ).toEqual([]);
+  });
+
+  it('places a flat-package platform record by the same rules as its core record', async () => {
+    const root = fixtureRoot();
+    const source = path.join(root, 'packages/charts/src');
+    fs.writeFileSync(
+      path.join(source, 'index.ts'),
+      "export {Chart} from './Chart';\nexport {Ghost} from './Ghost';\n",
+    );
+    fs.writeFileSync(
+      path.join(source, 'Chart.tsx'),
+      'export function Chart() {}\n',
+    );
+    fs.writeFileSync(
+      path.join(source, 'Ghost.tsx'),
+      'export function Ghost() {}\n',
+    );
+    writeSwiftTest(root);
+    const swiftRecord = (folder, name) => {
+      const filePath = path.join(
+        root,
+        `docs/specs/components/${folder}/${name}.swift.spec.md`,
+      );
+      fs.mkdirSync(path.dirname(filePath), {recursive: true});
+      fs.writeFileSync(
+        filePath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+    };
+    swiftRecord('Chart', 'Chart');
+    swiftRecord('Chart', 'Ghost');
+
+    const problems = (await validateKnowledgeRoot(root)).join('\n');
+    expect(problems).not.toContain('Chart/Chart.swift.spec.md');
+    expect(problems).toContain(
+      'docs/specs/components/Chart/Ghost.swift.spec.md: platform record for Ghost must match component root "Chart"',
+    );
+  });
+
+  it('checks a package architecture record under packages/<package>/specs/', async () => {
+    const root = fixtureRoot();
+    const template = fs.readFileSync(
+      path.join(root, 'docs/templates/knowledge/architecture.md'),
+      'utf8',
+    );
+    const slots = path.join(root, 'packages/native/specs/swift/slots.spec.md');
+    const writeSlots = (id, kind = 'architecture') => {
+      fs.mkdirSync(path.dirname(slots), {recursive: true});
+      fs.writeFileSync(
+        slots,
+        template
+          .replace('id: architecture:<surface>', `id: ${id}`)
+          .replace('kind: architecture', `kind: ${kind}`),
+      );
+    };
+    const packageProblems = async () =>
+      (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('packages/native/specs/'),
+      );
+    // Guidance Markdown that is not a `<slug>.spec.md` is not a candidate.
+    fs.mkdirSync(path.join(root, 'packages/native/specs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'packages/native/specs/README.md'),
+      '# Native specs\n',
+    );
+
+    writeSlots('architecture:native-swift-slots');
+    expect(await packageProblems()).toEqual([]);
+
+    writeSlots('architecture:swift-slots');
+    expect(await packageProblems()).toEqual([
+      'packages/native/specs/swift/slots.spec.md: id must be architecture:native-swift-slots to match its path.',
+    ]);
+
+    writeSlots('architecture:native-swift-slots', 'bogus');
+    expect(await packageProblems()).toContain(
+      'packages/native/specs/swift/slots.spec.md: a record under packages/native/specs/ must be kind: architecture.',
+    );
   });
 
   it('rejects a nested component record instead of treating it as a module', async () => {
@@ -2609,9 +3073,24 @@ describe('INV25 record reachability', () => {
   });
 
   it('runs from the command line without deadlocking on its own import', () => {
+    // The reachability check imports scripts/specs-for-file.mjs, which imports
+    // this module back. A small tracked fixture runs that check in well under
+    // a second; the whole repository takes seconds even on an idle machine.
+    const root = fixtureRoot();
+    writeSystemSpec(
+      root,
+      'AST-900',
+      systemSpecRecord().replace(
+        '# Fixture system spec\n',
+        '# Fixture system spec\n\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": ["apps/site/**"]}\n```\n',
+      ),
+    );
+    fs.mkdirSync(path.join(root, 'apps/site'), {recursive: true});
+    fs.writeFileSync(path.join(root, 'apps/site/index.md'), '# Site\n');
+    gitFixture(root);
     const output = execFileSync(
       process.execPath,
-      [path.join(repoRoot, 'scripts/check-knowledge.mjs')],
+      [path.join(repoRoot, 'scripts/check-knowledge.mjs'), '--root', root],
       {cwd: repoRoot, encoding: 'utf8'},
     );
     expect(output).toContain('Knowledge templates and records are aligned.');

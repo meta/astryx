@@ -5,7 +5,7 @@
 /**
  * @file useDrawerDialogPresence.ts
  * @input Controlled open state, modal mode, dialog ref, and rendered-state setter
- * @output Coordinates native top-layer presence, exit timing, focus restoration, and unmount cleanup
+ * @output Coordinates native top-layer presence, the touch entrance's input hold, exit timing, focus restoration, and unmount cleanup, including focus return after removal while open
  * @position Drawer-internal hook; consumed only by Drawer.tsx
  *
  * The drawer has two independent notions of presence:
@@ -21,6 +21,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Drawer/Drawer.test.tsx
+ * - /packages/core/src/Drawer/__tests__/DrawerTouchEntrance.interaction.browser.spec.ts
  * - /.github/scripts/modal-close-visibility.js
  */
 
@@ -32,6 +33,10 @@ import {
   type SetStateAction,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
+import {notifyTopLayerEntry} from '../Layer/modalOutlet';
+import {runPopoverOperation} from '../Layer/popoverOperations';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
 
 /** Slack past the computed transition before the backstop gives up waiting. */
 const EXIT_BACKSTOP_BUFFER_MS = 50;
@@ -70,7 +75,13 @@ function showDrawerHost(dialog: HTMLDialogElement, isModal: boolean): void {
   if (isModal) {
     dialog.showModal();
   } else if (typeof dialog.showPopover === 'function') {
-    dialog.showPopover();
+    // The dialog's show focuses its first control. A tooltip on that control
+    // then asks to show. The browser refuses a show inside another show.
+    // Counting this show makes the tooltip wait until it ends.
+    runPopoverOperation(dialog.ownerDocument, () => dialog.showPopover());
+    // The drawer is now the newest top-layer entry: global hosts shown before
+    // it (the toast viewport) re-enter above it, as they do above a modal.
+    notifyTopLayerEntry();
   } else {
     // Reduced fallback for browsers below the Popover API support floor.
     dialog.show();
@@ -123,6 +134,8 @@ export function useDrawerDialogPresence({
   // Element focused when the drawer opened — restored on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
+  // Syncs the drawer's native host with `isOpen`. It shows or hides the
+  // top-layer host, keeps the opener, waits for the exit, and returns focus.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) {
@@ -139,7 +152,12 @@ export function useDrawerDialogPresence({
         // contract as Dialog).
         dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
       }
-      return;
+      // Under a coarse primary pointer, a tap or a drag during the slide-in
+      // reaches nothing. A non-modal drawer holds only its panel, so its page
+      // stays live. Keys and assistive technology stay live. The hold ends
+      // with the slide-in, or with this effect's cleanup on a close or
+      // unmount.
+      return holdEntranceInput(dialog, {isModal}) ?? undefined;
     }
 
     if (!isDrawerHostOpen(dialog, isModal)) {
@@ -177,14 +195,19 @@ export function useDrawerDialogPresence({
   // that cleanup would cut off every delayed slide-out.
   useEffect(() => {
     const dialog = dialogRef.current;
+    const returnFocusOnRemoval =
+      dialog == null ? null : prepareFocusReturnOnRemoval(dialog);
     return () => {
       if (dialog && isDrawerHostOpen(dialog, isModal)) {
         if (hideDrawerHost(dialog, isModal)) {
-          // No focus restore on this path — the drawer is being torn down, so
-          // the owed synthetic close fires immediately (still exactly once).
+          // The drawer is being torn down, so the owed synthetic close fires
+          // immediately (still exactly once).
           dispatchDialogClose(dialog);
         }
       }
+      // Removal already hid a popover host, so this runs outside the check
+      // above. The trigger is null outside an open cycle.
+      returnFocusOnRemoval?.(triggerElementRef.current);
     };
   }, [dialogRef, isModal]);
 }

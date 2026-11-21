@@ -4,22 +4,10 @@
 
 /**
  * @file useHotkeys.ts
- * @input Uses React useEffect, useRef
- * @output Exports useHotkeys hook and Hotkey interface for global keyboard shortcuts
- * @position Core hook; used by consumers for app-level keyboard shortcuts
- *
- * Registers a single window keydown listener per hook instance. Handlers
- * are kept in a ref so re-renders never re-subscribe (subscribe once on
- * mount, unsubscribe on unmount). SSR-safe — window is only touched
- * inside the effect.
- *
- * Skips events that are already handled (defaultPrevented) or during IME composition,
- * and events targeting typing surfaces (input, textarea, select, contenteditable)
- * unless a hotkey opts in via `allowInInputs`.
- *
- * Platform-aware: `mod` maps to metaKey (⌘) on Apple platforms and
- * ctrlKey elsewhere, through the same isApplePlatform util Kbd reads, so
- * displayed and handled shortcuts cannot disagree.
+ * @input React effects and refs
+ * @output useHotkeys hook and Hotkey interface for global keyboard shortcuts
+ * @position Core hook for app-level keyboard shortcuts. `mod` uses the same
+ *   isApplePlatform util as Kbd, so shown and handled shortcuts agree.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
@@ -35,11 +23,19 @@ import {isImeKeyEvent} from '../utils/ime';
  */
 export interface Hotkey {
   /**
-   * Key combo, e.g. 'mod+k', 'shift+/', 'c', 'escape'.
+   * Key combo, e.g. 'mod+k', '?', 'c', 'escape'.
    * 'mod' = ⌘ on macOS, Ctrl elsewhere.
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
-   * by a final key compared case-insensitively against event.key.
+   * by a final key compared case-insensitively against event.key. On Apple
+   * platforms (macOS, and iPadOS or iOS with a hardware keyboard), where
+   * Option changes the typed character, an 'alt' combo whose final key
+   * is a letter, digit, punctuation key or space also matches that key's US
+   * position (event.code), whatever the layout, when Option typed a dead key
+   * or a non-ASCII character. When Option types a plain ASCII character, the
+   * combo matches that character: on a German Mac Option+L types '@', so it
+   * fires 'alt+@', not 'alt+l'. On Apple platforms, name punctuation that shift changes
+   * with shift: 'alt+shift+/', not 'alt+?'.
    * Named keys: 'escape', 'enter', 'space', 'up', 'down', 'left', 'right'
    * (arrow names map to ArrowUp/ArrowDown/ArrowLeft/ArrowRight).
    * Use 'plus' for a literal '+' key.
@@ -73,6 +69,47 @@ const KEY_ALIASES: Record<string, string> = {
   return: 'enter',
   plus: '+',
 };
+
+/** `event.code` of the punctuation keys, by the character they type unshifted. */
+const PUNCTUATION_CODES: Record<string, string> = {
+  ',': 'Comma',
+  '.': 'Period',
+  '/': 'Slash',
+  ';': 'Semicolon',
+  "'": 'Quote',
+  '[': 'BracketLeft',
+  ']': 'BracketRight',
+  '\\': 'Backslash',
+  '-': 'Minus',
+  '=': 'Equal',
+  '`': 'Backquote',
+};
+
+/**
+ * The physical key (`event.code`) that types `key` on a US layout, for a
+ * letter, digit or punctuation key; null for any other key.
+ */
+function physicalKeyCode(key: string): string | null {
+  if (key === ' ') {
+    return 'Space';
+  }
+  if (/^[a-z]$/.test(key)) {
+    return `Key${key.toUpperCase()}`;
+  }
+  if (/^[0-9]$/.test(key)) {
+    return `Digit${key}`;
+  }
+  return PUNCTUATION_CODES[key] ?? null;
+}
+
+/**
+ * A browser may report an Option dead key (Option+E on macOS) with the IME
+ * key code 229 although it starts no composition there, so an alt combo may
+ * still match it. A dead key that composes text in a field is not this case.
+ */
+function isOptionDeadKey(event: KeyboardEvent): boolean {
+  return event.key === 'Dead' && event.altKey && event.isComposing !== true;
+}
 
 /**
  * Whether the event target is a typing surface where global shortcuts
@@ -131,7 +168,24 @@ function matchesCombo(
   }
 
   const expected = KEY_ALIASES[key] ?? key;
-  return event.key.toLowerCase() === expected;
+  if (event.key.toLowerCase() === expected) {
+    return true;
+  }
+  // On Apple platforms (macOS, and iPadOS or iOS with a hardware keyboard),
+  // Option changes the character a key types: Option+A types "å",
+  // Option+1 types "¡", and some keys are dead keys. Elsewhere Alt changes no
+  // character, and AltGr (Ctrl+Alt) types letters that must not fire
+  // shortcuts.
+  const isRewrittenByOption =
+    event.key === 'Dead' ||
+    (event.key.length === 1 && event.key.charCodeAt(0) > 0x7e);
+  return (
+    isApple &&
+    wantsAlt &&
+    isRewrittenByOption &&
+    event.code !== '' &&
+    event.code === physicalKeyCode(expected)
+  );
 }
 
 /**
@@ -169,11 +223,16 @@ export function useHotkeys(hotkeys: Hotkey[]): void {
     hotkeysRef.current = hotkeys;
   });
 
+  // Syncs a window keydown listener with this mount. The listener runs the
+  // first hotkey that matches.
   useEffect(() => {
     const isApple = isApplePlatform();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isImeKeyEvent(event)) {
+      if (
+        event.defaultPrevented ||
+        (isImeKeyEvent(event) && !isOptionDeadKey(event))
+      ) {
         return;
       }
       const isTyping = isTypingTarget(event.target);

@@ -6,56 +6,39 @@
  * @file useAutoMediaMode.ts
  * @input Ref to the element whose backdrop should be measured
  * @output 'dark' | 'light' | null (not yet measurable)
- * @position INTERNAL — powers `MediaTheme mode="auto"`. Not exported from the
- *   package: MediaTheme is the supported surface for this behavior.
- *   Sibling to useImageMode, which answers the same question for images.
- *
- * Picks the media context a surface wants by measuring what the browser
- * actually painted, rather than trusting a token's name.
- *
- * The bug it exists for: `--color-background-inverted` is not required to be
- * inverted. A theme can define it as a pale grey, and a hardcoded
- * `mode="dark"` then paints white text on it at 1.25:1. Because the surface
- * colour is a runtime value and the mode is a compile-time guess, no amount
- * of care in the component can catch that.
- *
- * The answer can also be `'off'`: when the surface's own ambient text already
- * reads on it, the surface is not effectively inverted and does not want a
- * media context. Verified in Chromium that this loses nothing on a surface
- * that is chromatic but legible — the dark-mode error toast renders
- * identically either way, because a dark page already resolves those tokens
- * to the values the media context would install.
- *
- * @example
- * ```
- * // Inside MediaTheme; see its `mode="auto"`.
- * const detected = useAutoMediaMode(ref, mode === 'auto');
- * ```
+ * @position Internal; powers `MediaTheme mode="auto"`. Not exported from the
+ *   package. Sibling to useImageMode, which does the same for images.
  */
+
+// The hook measures what the browser painted and does not trust a token's
+// name. `--color-background-inverted` need not be inverted: a theme can make
+// it pale grey, and a fixed `mode="dark"` then paints white text on it at
+// 1.25:1. The surface color is a runtime value, so only a measurement can
+// catch this.
+//
+// The answer can be `'off'` when the surface's own text already reads on it.
+// A dark page already resolves those tokens to the media context's values,
+// so a chromatic but legible surface loses nothing.
 
 import {useRef, useState} from 'react';
 import type {RefObject} from 'react';
 import type {RGBA} from '../utils/color';
 import {parseColor, formatColor} from '../utils/color';
-import {contrastRatio, compositeOver} from '../theme/contrast';
+import {compositeOver} from '../theme/contrast';
 import {useTheme} from '../theme/useTheme';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
-
-/** A surface luminance context, or `"off"` when no media context is wanted. */
-export type DetectedMediaMode = 'dark' | 'light' | 'off';
+import {
+  pickMediaMode,
+  type DetectedMediaMode,
+  type MediaSidePicker,
+} from './mediaSide';
 
 /**
- * Resolve token references to the colors they actually paint, by reading them
- * back off a hidden probe.
- *
- * A custom property cannot simply be read: `getPropertyValue` returns the
- * token's *specified* text, and Astryx tokens are `light-dark(a, b)` pairs
- * that resolve only once used in a real property. The probe assigns each
- * token to `color` and reads the computed value back, which the browser has
- * resolved against the host's own color-scheme and any overrides.
- *
- * `display: none` keeps the probe out of layout — computed color still
- * resolves — so this costs a style recalc and no reflow.
+ * Resolve token references to the colors they paint, through a hidden probe.
+ * `getPropertyValue` returns a token's specified text, and Astryx tokens are
+ * `light-dark(a, b)` pairs that resolve only in a real property. The probe
+ * sets each token as `color` and reads the computed value. `display: none`
+ * keeps the probe out of layout, so this costs a style recalc and no reflow.
  */
 function resolvePaintedColors(
   host: HTMLElement,
@@ -116,51 +99,6 @@ function resolveBackdrop(element: HTMLElement): RGBA | null {
 }
 
 /**
- * Contrast at which a surface's own ambient text counts as reading well
- * enough that no media context is wanted.
- *
- * WCAG's non-text / large-text line. It is deliberately low: this decides
- * whether a surface is *effectively inverted*, not whether its text meets a
- * standard. A pairing that clears 3:1 is one the theme is rendering
- * successfully, and swapping in a media context there changes accent,
- * overlays and borders for no legibility gain.
- */
-const AMBIENT_READS_AT = 3;
-
-/**
- * Which media context a surface wants: `'off'` when its ambient text already
- * reads on the surface, otherwise whichever on-color reads better. Pure — the
- * DOM read is the caller's. Ties between the two sides go to dark, matching
- * the convention that an inverted surface is usually the dark one.
- *
- * The `'off'` answer is the point of measuring at all. A surface that a theme
- * calls inverted but paints pale does not want an inverted context; its own
- * text is already correct for it, and forcing one is how white-on-pale-grey
- * happens.
- */
-export function pickMediaMode(
-  background: RGBA,
-  ambient: RGBA | null,
-  onDark: RGBA | null,
-  onLight: RGBA | null,
-): DetectedMediaMode | null {
-  if (onDark === null || onLight === null) {
-    return null;
-  }
-
-  if (
-    ambient !== null &&
-    contrastRatio(ambient, background) >= AMBIENT_READS_AT
-  ) {
-    return 'off';
-  }
-
-  return contrastRatio(onDark, background) >= contrastRatio(onLight, background)
-    ? 'dark'
-    : 'light';
-}
-
-/**
  * Detect the media context for the element's surroundings.
  *
  * Measures `ref`'s PARENT, never `ref` itself: MediaTheme sets its media
@@ -177,19 +115,42 @@ export function useAutoMediaMode(
   ref: RefObject<HTMLElement | null>,
   isEnabled: boolean,
 ): DetectedMediaMode | null {
+  return useMeasuredMediaMode(
+    () => ref.current?.parentElement ?? null,
+    isEnabled,
+    pickMediaMode,
+  );
+}
+
+/**
+ * Detect the media side for the surface `ref` paints itself, by `pick`.
+ * Returns null until a measurement succeeds, as useAutoMediaMode does.
+ */
+export function useSurfaceMediaMode(
+  ref: RefObject<HTMLElement | null>,
+  isEnabled: boolean,
+  pick: MediaSidePicker,
+): DetectedMediaMode | null {
+  return useMeasuredMediaMode(() => ref.current, isEnabled, pick);
+}
+
+function useMeasuredMediaMode(
+  surfaceOf: () => HTMLElement | null,
+  isEnabled: boolean,
+  pick: MediaSidePicker,
+): DetectedMediaMode | null {
   const [detected, setDetected] = useState<DetectedMediaMode | null>(null);
   // `tokens` is a stable reference unless the theme or color mode changes.
   const {tokens} = useTheme();
   const lastRef = useRef<{background: string; tokens: unknown} | null>(null);
 
-  // Deliberately no dependency array. A surface's color is a painted value:
-  // it changes when a prop on some ancestor changes, and no dependency this
-  // hook could name would catch that (an earlier revision took a `watch`
-  // array and silently went stale whenever a caller forgot an entry). So the
-  // measurement re-runs whenever anything re-renders, and skips its own
-  // expensive half when nothing moved — see the early return below.
+  // Syncs the media mode with the painted color behind the element.
+  // No dependency array. A surface color is a painted value, and it changes
+  // when a prop on some ancestor changes. No dependency that this hook can
+  // name catches that. So the measurement runs on each render, and it skips
+  // its expensive half when nothing moved (see the early return below).
   useIsomorphicLayoutEffect(() => {
-    const surface = ref.current?.parentElement ?? null;
+    const surface = surfaceOf();
     if (!isEnabled || surface === null) {
       return;
     }
@@ -199,10 +160,9 @@ export function useAutoMediaMode(
       return;
     }
 
-    // The backdrop walk above is a couple of getComputedStyle reads; the
-    // probe below appends a node and forces another style resolution. Skip
-    // it when neither the painted backdrop nor the theme has moved, which is
-    // the overwhelmingly common render.
+    // The probe adds a node and forces another style resolution. Skip it when
+    // neither the painted backdrop nor the theme moved, which is the usual
+    // case.
     const backgroundKey = formatColor(background);
     const last = lastRef.current;
     if (
@@ -219,7 +179,7 @@ export function useAutoMediaMode(
       '--color-on-dark',
       '--color-on-light',
     ]);
-    const next = pickMediaMode(background, ambient, onDark, onLight);
+    const next = pick(background, ambient, onDark, onLight);
     if (next === null) {
       return;
     }

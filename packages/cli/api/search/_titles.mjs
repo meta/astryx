@@ -51,14 +51,27 @@ export function headingWithPhrase(term, titles) {
  * @returns {string | null}
  */
 export function titleInQuery(term, titles) {
-  const query = phraseWords(term);
+  return heldTitle(phraseWords(term), titles)?.title ?? null;
+}
+
+/**
+ * The first title or heading of two words or more that the query words hold
+ * whole, in order and side by side, and the query words it covers, or null.
+ * A query word holds a title word in any plural form (samePhraseWord).
+ * @param {string[]} query - The query's words.
+ * @param {(string | null | undefined)[] | undefined} titles
+ * @param {(title: string) => string[]} [wordsOf] - How a title reads as
+ *   words, the same way the query words were read.
+ * @returns {{title: string, at: [number, number]} | null}
+ */
+export function heldTitle(query, titles, wordsOf = phraseWords) {
   if (!titles) return null;
   for (const title of titles) {
-    const words = phraseWords(String(title ?? ''));
+    const words = wordsOf(String(title ?? ''));
     if (words.length < 2 || words.length > query.length) continue;
     for (let i = 0; i + words.length <= query.length; i++) {
       if (words.every((word, j) => samePhraseWord(query[i + j], word)))
-        return title;
+        return {title: String(title), at: [i, i + words.length]};
     }
   }
   return null;

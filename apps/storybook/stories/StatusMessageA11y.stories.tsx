@@ -60,8 +60,12 @@ export default meta;
 
 export const ToastInfoAnnouncement = coreStory('toast-info-announcement');
 export const ToastErrorAnnouncement = coreStory('toast-error-announcement');
-export const ToastInfoCardMounted = coreStory('toast-info-card-mounted');
-export const ToastErrorCardMounted = coreStory('toast-error-card-mounted');
+export const ToastInfoAnnouncementTopLayer = coreStory(
+  'toast-info-announcement-top-layer',
+);
+export const ToastErrorAnnouncementTopLayer = coreStory(
+  'toast-error-announcement-top-layer',
+);
 export const FieldStatusErrorAttached = coreStory(
   'field-status-error-attached',
 );

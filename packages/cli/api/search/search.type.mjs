@@ -20,7 +20,8 @@
  * @property {number} score - How strongly the query matched this entry (higher is
  *   stronger). Search keeps the lexical ranker's order between score bands,
  *   including its domain priority, which can place a weaker non-doc match above
- *   a stronger doc; within a run of one score band and kind it orders matches
+ *   a stronger doc, except that a family's root can move directly before a
+ *   part of its own family; within a run of one score band and kind it orders matches
  *   by its static ordering weights, so a lower score can lead inside a band.
  *   Build's `blocks` use their own order.
  * @property {string} reason - Human-readable reason the candidate matched (e.g. `keyword "button"`).
@@ -33,6 +34,32 @@
  * @property {string} [parent] - Command that opens the level above a doc result — its topic's section list for a section, the docs-tree namespace it sits in for a tree node — so a reader can see the siblings and open another.
  * @property {string} [displayName] - Friendly display name — present for template and theme results.
  * @property {'page' | 'block'} [kind] - Template kind (`page` | `block`) — present for template results.
+ * @property {boolean} [isReady] - Whether the template is ready, as its doc's `isReady` says and `astryx template --list` reports it (`true` when the doc leaves it out) — present for template results.
+ * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [deprecated] - The replacement and modernization route — present for a deprecated component, from its doc's `deprecated`.
+ */
+
+/**
+ * One installed icon that answers a search that asks for an icon, as the icon
+ * finder (`astryx experimental icon <words>`) ranks it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconSearchEntry
+ * @property {'icon'} domain
+ * @property {string} name - `<set>/<id>`.
+ * @property {string} set - The icon set's name.
+ * @property {string} id - The icon's id in its set.
+ * @property {string} package - The npm package that ships the set.
+ * @property {number} score - The icon finder's score (higher is stronger).
+ * @property {string} reason - Why the icon matched (e.g. `word "delete"`).
+ * @property {string} import - The import line for the icon.
+ * @property {string} command - Follow-up command that reads the icon and its variants (`astryx experimental icon <set>/<id>`).
+ */
+
+/**
+ * The icons that answer a search that asks for an icon.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} SearchIconSection
+ * @property {number} matchCount - How many installed icons answer, before the cap.
+ * @property {IconSearchEntry[]} results - The best of them, at most 3 (fewer when `limit` is smaller).
  */
 
 /**
@@ -43,11 +70,37 @@
  * @property {string} data.query
  * @property {number} data.matchCount - How many candidates matched the query in total, before `limit` was applied. `results` is the bounded slice of that set, so `matchCount > results.length` means the answer was capped.
  * @property {SearchResultEntry[]} data.results
+ * @property {SearchIconSection} [data.icons] - Experimental: may change or be
+ *   removed in a patch release. Present only when an icon set
+ *   is installed, the search has no `type`, the query asks for an icon (one
+ *   word as typed is `icon` or `icons`, an installed set's name, or an icon
+ *   export name such as `SearchIcon`, and is not a component or hook name;
+ *   an `icon` or `icons` right after `with`, with only `a`, `an` or `the`
+ *   between, that no `of` or `for` follows names a feature of an answered
+ *   component or template, as in `card with an icon`, and asks for none, while
+ *   `card with an icon of a star` still asks), and an icon answers it. It never changes `results` or `matchCount`.
  * @property {{partial?: {skipped: SearchDomain[], reason: string}}} [meta] -
  *   `partial`, when an open search could not get the Core that components,
  *   hooks, and templates are read from (such as outside a project, offline,
  *   before the release's Core was downloaded): the domains it skipped and why.
  *   The results are the docs and themes.
+ */
+
+/**
+ * The candidates `search` ranks in a folder, as `exportSearchIndex()` returns them:
+ * plain JSON to store and rank later with `rankSearchIndex()`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} SearchIndex
+ * @property {string} version - The CLI version that made it. `rankSearchIndex()`
+ *   ranks only indexes made by its own version.
+ * @property {Record<string, unknown>[]} candidates - The gathered candidates,
+ *   each the entry search scores. Their fields are the ranker's input, not a
+ *   contract: they may change in any release, which is why `version` must match.
+ * @property {string} [coreSkipped] - Why Core could not be had where the index
+ *   was made, when it could not: its components, hooks and templates are then
+ *   missing, and `rankSearchIndex()` answers as `search` does without Core
+ *   (`meta.partial` for an open search; refused for a domain that reads Core).
+ * @property {string} [coreSkippedCode] - The error code that Core lookup gave.
  */
 
 /**

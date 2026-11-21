@@ -242,6 +242,45 @@ describe('DateRangeInput', () => {
     expect(trigger).toHaveAccessibleName(/Range:.*Mar.*1.*Mar.*7/);
   });
 
+  it('names the trigger through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        overrides={{
+          ja: {'@astryx.dateRangeInput.triggerLabel': '{value}（{label}）'},
+        }}>
+        <DateRangeInput
+          label="期間"
+          placeholder="日付を選択"
+          value={null}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('button', {name: '日付を選択（期間）'}),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the selected range through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {'@astryx.dateRangeInput.rangeValue': '{start} bis {end}'},
+        }}>
+        <DateRangeInput
+          label="Zeitraum"
+          value={{start: '2026-01-05', end: '2026-01-09'}}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByRole('button', {name: /^Zeitraum: .+ bis .+$/}),
+    ).toHaveTextContent(/ bis /);
+  });
+
   it('renders status icon for error status', () => {
     render(
       <DateRangeInput
@@ -954,13 +993,13 @@ describe('DateRangeInput statusVariant forwarding', () => {
         <DateRangeInput label="Range" value={null} onChange={() => {}} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Su',
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
+        'Sun',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
       ]);
     });
 
@@ -974,13 +1013,13 @@ describe('DateRangeInput statusVariant forwarding', () => {
         />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
 
@@ -994,13 +1033,13 @@ describe('DateRangeInput statusVariant forwarding', () => {
         />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
   });

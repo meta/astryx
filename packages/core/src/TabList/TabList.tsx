@@ -26,6 +26,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type AriaRole,
   type ReactNode,
 } from 'react';
@@ -54,11 +55,21 @@ import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {observeResize} from '../utils/sharedResizeObserver';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TabList/TabList.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 /**
  * Selector matching the focusable stops in the tab strip: every Tab
  * (`[data-tab-value]`) and every TabMenu trigger (`[data-tab-menu]`),
@@ -413,7 +424,7 @@ export function TabList({
   [EDGE_COMP_ATTR]: _edgeCompAttr,
   ...restProps
 }: TabListProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.tabList.label');
   const size = useSize(sizeProp, 'md');
   const hasScroll = overflow !== 'visible';
@@ -442,6 +453,7 @@ export function TabList({
   // the first enabled stop when none is tabbable.
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLElement>({
     itemSelector: TAB_STOP_SELECTOR,
+    boundarySelector: '.astryx-tab-list, [popover]',
     orientation: isTabList ? 'horizontal' : 'both',
     hasRovingTabIndex: true,
   });
@@ -629,26 +641,21 @@ export function TabList({
   // `role="tablist"` owns only tabs, so anything else in the strip is invalid
   // markup. Dev-only, and only under the asserted role — nothing else in the
   // component reads the rendered DOM.
-  const hasWarnedContentRef = useRef(false);
+  const [warn] = useState(createDevWarnings);
   useEffect(() => {
     const strip = stripRef.current;
-    if (
-      process.env.NODE_ENV === 'production' ||
-      !isTabList ||
-      !strip ||
-      hasWarnedContentRef.current
-    ) {
+    if (process.env.NODE_ENV === 'production' || !isTabList || !strip) {
       return;
     }
     const stranger = Array.from(strip.children).find(
       child => child.getAttribute('role') !== 'tab',
     );
     if (stranger) {
-      hasWarnedContentRef.current = true;
-      devWarn(
+      warn(
         'TabList',
         `role="tablist" owns only tabs, but the strip contains a <${stranger.tagName.toLowerCase()}> that is not one. ` +
           'Render menus and other controls outside the strip, or drop the role for the navigation pattern.',
+        'content',
       );
     }
     // No dependency list: the check is on rendered DOM, which can change

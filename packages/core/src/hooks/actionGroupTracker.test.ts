@@ -5,23 +5,30 @@
  * @input vitest (jsdom), createActionGroupTracker over actions laid out with
  *   stubbed rects
  * @output The tracker's contract, driven directly as a recognizer elsewhere
- *   would drive it: begin highlights the action under the point and reads
- *   layout only then; move follows the finger and cuts (not fades) the action
- *   it leaves; end fades and runs only the action under the finger, once;
- *   cancel and an inert press run nothing; disabled actions are skipped;
- *   several roots are one group; offsetBy shifts the cached rects; the
- *   highlight callback (with the target it replaces) and the opt-out of the
- *   paint; an owner's own target resolution (a row of segments, past its
- *   ends), the finger's raw moves, the begin target, remeasure, a cancelled
- *   click reported, and the browser's own click swallowed once
+ *   would drive it. Begin highlights the action under the point and reads
+ *   layout only then. Move follows the finger and cuts, not fades, the action
+ *   it leaves. End fades and runs only the action under the finger, once.
+ *   Cancel and an inert press run nothing. Disabled actions are skipped, and
+ *   several roots are one group. offsetBy shifts the cached rects. The cases
+ *   also cover the highlight callback, with the target it replaces, and the
+ *   opt-out of the paint. They cover an owner's own target resolution: a row
+ *   of segments, past its ends. They cover the finger's raw moves, the begin
+ *   target, remeasure and a reported cancelled click. The shared click guard
+ *   takes the browser's own click once. A one-axis group counts the finger on
+ *   its center line, and Escape cancels its press. A paint can be decided
+ *   action by action.
  * @position jsdom tests of packages/core/src/hooks/actionGroupTracker.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {__resetClickGuardForTest, isClickGuardArmed} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
   createActionGroupTracker,
+  measureActions,
+  onCenterLine,
   type ActionGroupTarget,
   type ActionGroupTrackerOptions,
 } from './actionGroupTracker';
@@ -67,6 +74,7 @@ beforeEach(() => {
 
 afterEach(() => {
   root.remove();
+  __resetClickGuardForTest();
   vi.useRealTimers();
 });
 
@@ -152,6 +160,17 @@ describe('createActionGroupTracker', () => {
     expect(second.onClick).not.toHaveBeenCalled();
   });
 
+  it('where several actions hold the point, the one the press landed on wins (a test renderer lays out nothing)', () => {
+    place(first.button, {left: 0, top: 0, width: 0, height: 0});
+    place(second.button, {left: 0, top: 0, width: 0, height: 0});
+    const group = tracker();
+    group.begin(0, 0, {landed: second.button.firstChild});
+    expect(group.highlighted).toBe(second.button);
+    group.end();
+    expect(second.onClick).toHaveBeenCalledTimes(1);
+    expect(first.onClick).not.toHaveBeenCalled();
+  });
+
   it('skips disabled actions', () => {
     second.button.disabled = true;
     const group = tracker();
@@ -224,6 +243,59 @@ describe('createActionGroupTracker', () => {
       second.button,
       null,
     ]);
+  });
+
+  it("times the release fade by the theme's exit duration, as the press controller does (spec:AST-094 FR5)", () => {
+    // A rule writes the token; browsers inherit it from the theme, jsdom
+    // only reads it where it is declared.
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(332);
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it("under Reduce Motion the release fade is no longer than design:reduced-motion DR2's bound", () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string): MediaQueryList =>
+        ({
+          matches: /prefers-reduced-motion:\s*reduce/.test(query),
+          media: query,
+          onchange: null,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(
+        Number.parseFloat(reducedMotionFadeConsts.duration) - 1,
+      );
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('dispose finishes a pending release fade', () => {
@@ -383,128 +455,192 @@ describe('createActionGroupTracker: options for other trackers', () => {
     expect(onActivated).toHaveBeenCalledTimes(2);
   });
 
-  it('swallows the browser\u2019s own click after the lift once, listening only until then', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const remove = vi.spyOn(window, 'removeEventListener');
-    try {
-      const group = tracker({swallowsNativeClick: true});
-      group.begin(50, 10);
-      add.mockClear();
-      group.end();
-      // The tracker's own click ran inside end, before the swallower.
-      expect(left.onClick).toHaveBeenCalledTimes(1);
-      // Listening now: what end added and did not take off again (the
-      // capture that reads its own click comes and goes inside the call).
-      const gone = new Set(remove.mock.calls.map(([, listener]) => listener));
-      const armed = add.mock.calls.filter(
-        ([, listener, capture]) => capture === true && !gone.has(listener),
-      );
-      expect(armed.map(([type]) => type).sort()).toEqual([
-        'click',
-        'keydown',
-        'pointerdown',
-      ]);
-      remove.mockClear();
-      // A script's click is not the browser's: it passes.
-      const onDocumentClick = vi.fn();
-      document.addEventListener('click', onDocumentClick);
-      left.button.click();
-      expect(onDocumentClick).toHaveBeenCalledTimes(1);
-      // The browser's click for the touch is taken once, and the swallower goes.
-      const swallow = armed.find(([type]) => type === 'click')?.[1] as (
-        event: unknown,
-      ) => void;
-      const trusted = {
-        isTrusted: true,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      swallow(trusted);
-      expect(trusted.preventDefault).toHaveBeenCalled();
-      expect(trusted.stopImmediatePropagation).toHaveBeenCalled();
-      const removed = remove.mock.calls
-        .filter(([, , capture]) => capture === true)
-        .map(([type]) => type)
-        .sort();
-      expect(removed).toEqual(['click', 'keydown', 'pointerdown']);
-      document.removeEventListener('click', onDocumentClick);
-    } finally {
-      add.mockRestore();
-      remove.mockRestore();
-    }
+  it('with swallowsNativeClick the lift clicks once, and the shared click guard takes the browser\u2019s own click', () => {
+    const group = tracker({swallowsNativeClick: true});
+    group.begin(50, 10);
+    group.end();
+    // The tracker's own click ran inside end and passed the guard.
+    expect(left.onClick).toHaveBeenCalledTimes(1);
+    expect(isClickGuardArmed(document)).toBe(true);
+    // The browser's click for the touch (a pointer's, detail 1) is taken once.
+    left.button.dispatchEvent(
+      new MouseEvent('click', {bubbles: true, cancelable: true, detail: 1}),
+    );
+    expect(left.onClick).toHaveBeenCalledTimes(1);
+    expect(isClickGuardArmed(document)).toBe(false);
   });
 
-  it('lets an activation with detail 0 (keyboard, assistive technology) through while it waits for the browser\u2019s click (spec:AST-094 FR21)', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const remove = vi.spyOn(window, 'removeEventListener');
-    try {
-      const group = tracker({swallowsNativeClick: true});
-      group.begin(50, 10);
-      add.mockClear();
-      group.end();
-      const gone = new Set(remove.mock.calls.map(([, listener]) => listener));
-      const swallow = add.mock.calls.find(
-        ([type, listener, capture]) =>
-          type === 'click' && capture === true && !gone.has(listener),
-      )?.[1] as (event: unknown) => void;
-      remove.mockClear();
-      // A screen reader's or a key's activation is not the touch's click: it
-      // passes, and the swallower keeps waiting for the touch's own.
-      const activation = {
-        isTrusted: true,
-        detail: 0,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      swallow(activation);
-      expect(activation.preventDefault).not.toHaveBeenCalled();
-      expect(activation.stopImmediatePropagation).not.toHaveBeenCalled();
-      expect(remove).not.toHaveBeenCalled();
-      // The touch's own click (detail 1) is still taken once.
-      const touchClick = {
-        isTrusted: true,
-        detail: 1,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      swallow(touchClick);
-      expect(touchClick.preventDefault).toHaveBeenCalled();
-      expect(touchClick.stopImmediatePropagation).toHaveBeenCalled();
-    } finally {
-      add.mockRestore();
-      remove.mockRestore();
-    }
+  it('lets an activation with detail 0 (keyboard, assistive technology) through while the guard waits for the browser\u2019s click (spec:AST-094 FR21)', () => {
+    const group = tracker({swallowsNativeClick: true});
+    group.begin(50, 10);
+    group.end();
+    left.button.dispatchEvent(
+      new MouseEvent('click', {bubbles: true, cancelable: true, detail: 0}),
+    );
+    expect(left.onClick).toHaveBeenCalledTimes(2);
+    expect(isClickGuardArmed(document)).toBe(true);
   });
 
-  it('a press or a key before the browser\u2019s click ends the swallowing; without the option nothing stays listening', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const remove = vi.spyOn(window, 'removeEventListener');
-    const listening = () => {
-      const gone = new Set(remove.mock.calls.map(([, listener]) => listener));
-      return add.mock.calls
-        .filter(([, listener]) => !gone.has(listener))
-        .map(([type]) => type)
-        .sort();
-    };
-    try {
-      const plain = tracker();
-      plain.begin(50, 10);
-      plain.end();
-      expect(listening()).toEqual([]);
-      const group = tracker({swallowsNativeClick: true});
-      group.begin(50, 10);
-      group.end();
-      expect(listening()).toEqual(['click', 'keydown', 'pointerdown']);
-      // The next press comes first (the browser gave no click): disarmed.
-      window.dispatchEvent(new PointerEvent('pointerdown'));
-      expect(listening()).toEqual([]);
-      group.begin(50, 10);
-      group.end();
-      window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
-      expect(listening()).toEqual([]);
-    } finally {
-      add.mockRestore();
-      remove.mockRestore();
-    }
+  it('the next press ends the guard; without the option nothing is armed, and an owner\u2019s onActivate gets the guard too', () => {
+    const plain = tracker();
+    plain.begin(50, 10);
+    plain.end();
+    expect(isClickGuardArmed(document)).toBe(false);
+    const group = tracker({swallowsNativeClick: true});
+    group.begin(50, 10);
+    group.end();
+    expect(isClickGuardArmed(document)).toBe(true);
+    // The next press comes first (the browser gave no click): disarmed.
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    expect(isClickGuardArmed(document)).toBe(false);
+    const onActivate = vi.fn();
+    const owned = tracker({swallowsNativeClick: true, onActivate});
+    owned.begin(50, 10);
+    owned.end();
+    expect(onActivate).toHaveBeenCalledWith(left.button);
+    expect(isClickGuardArmed(document)).toBe(true);
+  });
+});
+
+describe('createActionGroupTracker: a one-axis group (tracksAlong)', () => {
+  // A row of two segments in a 200 x 30 group: x 0-99 and 101-200.
+  let left: ReturnType<typeof action>;
+  let right: ReturnType<typeof action>;
+  beforeEach(() => {
+    left = action('Left', {left: 0, top: 0, width: 99, height: 30});
+    right = action('Right', {left: 101, top: 0, width: 99, height: 30});
+    root.replaceChildren(left.button, right.button);
+    place(root, {left: 0, top: 0, width: 200, height: 30});
+  });
+
+  const escape = () =>
+    window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+
+  it('counts the finger on the row: a drift off it keeps choosing along x, and the lift runs that action', () => {
+    const group = tracker({tracksAlong: 'x'});
+    group.begin(50, 15);
+    group.move(150, 15);
+    group.move(150, 400);
+    expect(group.highlighted).toBe(right.button);
+    group.move(50, -300);
+    expect(group.highlighted).toBe(left.button);
+    expect(group.end()).toBe(left.button);
+    expect(left.onClick).toHaveBeenCalledTimes(1);
+    expect(right.onClick).not.toHaveBeenCalled();
+  });
+
+  it('past the row\u2019s ends, the end action counts', () => {
+    const group = tracker({tracksAlong: 'x'});
+    group.begin(50, 15);
+    group.move(900, 15);
+    expect(group.highlighted).toBe(right.button);
+    group.move(-900, 80);
+    expect(group.highlighted).toBe(left.button);
+  });
+
+  it('without an axis, a drift off the group leaves no action, as before', () => {
+    const group = tracker();
+    group.begin(50, 15);
+    group.move(150, 400);
+    expect(group.highlighted).toBeNull();
+  });
+
+  it('Escape cancels the press: the paint is cut at once, nothing runs, and the owner hears it', () => {
+    const onCancel = vi.fn();
+    const onHighlightChange = vi.fn();
+    const group = tracker({tracksAlong: 'x', onCancel, onHighlightChange});
+    group.begin(50, 15);
+    expect(left.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    escape();
+    expect(group.isTracking).toBe(false);
+    expect(left.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onHighlightChange).toHaveBeenLastCalledWith(null, left.button);
+    expect(group.end()).toBeNull();
+    expect(left.onClick).not.toHaveBeenCalled();
+    // The listener ends with the press: a later Escape reaches nobody.
+    escape();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape that cancels a press is handled, so a dialog around the group stays open', () => {
+    const group = tracker({tracksAlong: 'x'});
+    const idle = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      cancelable: true,
+    });
+    window.dispatchEvent(idle);
+    expect(idle.defaultPrevented).toBe(false);
+    group.begin(50, 15);
+    const handled = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      cancelable: true,
+    });
+    window.dispatchEvent(handled);
+    expect(handled.defaultPrevented).toBe(true);
+    expect(group.isTracking).toBe(false);
+  });
+
+  it('Escape leaves a group without an axis alone, and a lifted press stops listening', () => {
+    const onCancel = vi.fn();
+    const plain = tracker({onCancel});
+    plain.begin(50, 15);
+    escape();
+    expect(plain.isTracking).toBe(true);
+    plain.end();
+    const row = tracker({tracksAlong: 'x', onCancel});
+    row.begin(50, 15);
+    row.end();
+    escape();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a paint function decides, action by action, which take the press paint', () => {
+    const group = tracker({paintsHighlight: item => item === right.button});
+    group.begin(50, 15);
+    expect(left.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    group.move(150, 15);
+    expect(right.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    group.end();
+    expect(right.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+});
+
+describe('onCenterLine', () => {
+  const band = {left: 10, top: 100, right: 210, bottom: 140};
+
+  it('reads a row on its center line, clamped to its ends', () => {
+    expect(onCenterLine(band, 'x', 50, 900)).toEqual([50, 120]);
+    expect(onCenterLine(band, 'x', -40, 0)).toEqual([10, 120]);
+    expect(onCenterLine(band, 'x', 400, 120)).toEqual([210, 120]);
+  });
+
+  it('reads a column on its center line across x', () => {
+    expect(onCenterLine(band, 'y', 900, 130)).toEqual([110, 130]);
+    expect(onCenterLine(band, 'y', 0, 0)).toEqual([110, 100]);
+  });
+});
+
+describe('measureActions', () => {
+  it('measures the enabled actions the filter keeps, in document order, and reads each box once', () => {
+    const group = document.createElement('div');
+    const kept = action('Kept', {left: 0, top: 0, width: 40, height: 20});
+    const off = action('Off', {left: 40, top: 0, width: 40, height: 20});
+    off.button.disabled = true;
+    const other = action('Other', {left: 80, top: 0, width: 40, height: 20});
+    const last = action('Last', {left: 120, top: 0, width: 40, height: 20});
+    group.append(kept.button, off.button, other.button, last.button);
+    const targets = measureActions(
+      [null, group],
+      '[data-action]',
+      element => element !== other.button,
+    );
+    expect(targets).toEqual([
+      {element: kept.button, left: 0, top: 0, right: 40, bottom: 20},
+      {element: last.button, left: 120, top: 0, right: 160, bottom: 20},
+    ]);
+    expect(
+      [kept, off, other, last].map(({rectSpy}) => rectSpy.mock.calls.length),
+    ).toEqual([1, 0, 0, 1]);
   });
 });

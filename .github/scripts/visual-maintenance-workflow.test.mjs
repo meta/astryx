@@ -89,9 +89,12 @@ function dependencies(job, result = 'success') {
 
 describe('CI baseline maintenance routing', () => {
   it('has explicit capture/release dispatch without a new workflow or test owner', () => {
+    // webkit-weekly runs only the WebKit proofs (ci-webkit-weekly.test.mjs).
     expect(workflow.on.workflow_dispatch.inputs.operation.options).toEqual([
       'capture',
       'release-check',
+      'interaction-full',
+      'webkit-weekly',
     ]);
     expect(visual.name).toBe('Stable visual regression');
     expect(visual['runs-on']).toContain(
@@ -103,7 +106,11 @@ describe('CI baseline maintenance routing', () => {
 
   it('does not run non-maintenance CI jobs for capture', () => {
     for (const [name, job] of Object.entries(workflow.jobs)) {
-      if (['maintenance-request', 'pr-visual'].includes(name)) continue;
+      // admission admits every run, a capture's included (ci-admission.test.mjs).
+      if (
+        ['maintenance-request', 'pr-visual', 'room', 'admission'].includes(name)
+      )
+        continue;
       expect(
         runs(job, {operation: 'capture', needs: dependencies(job)}),
         name,
@@ -154,7 +161,7 @@ describe('CI baseline maintenance routing', () => {
   it('isolates dispatch concurrency from PRs and does not cancel queued maintenance', () => {
     expect(workflow.concurrency.group).toContain('|| github.run_id');
     expect(workflow.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 });

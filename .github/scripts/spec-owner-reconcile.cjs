@@ -17,20 +17,47 @@ const {
   describeOwnerCommandProblem,
   newestGateRun,
   parseOwnerCommandIntent,
-  parseAuthority,
-  parseKind,
+  leadingAuthority,
+  recordApprovalGroups,
   parseOwnerFile,
   requiredApprovalGroups,
   resolveOwnerDecision,
 } = require('./spec-owner-decision.cjs');
 const {
   REVIEW_GATE_CONTEXT,
+  SPEC_MIRROR_PREFIX,
+  SPEC_RECONCILING_PREFIX,
+  SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
   composeReviewGate,
   readCodeGate,
   readSpecGate,
 } = require('./review-signal-decision.cjs');
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+// One run's GitHub API requests before it stops undecided. Reading a spec
+// change hundreds of files wide would otherwise spend the repository's shared
+// hourly budget that every workflow needs (spec:AST-030 FR15).
+const REQUEST_BUDGET = 300;
+
+class RequestBudgetExceeded extends Error {}
+
+/**
+ * Reconcile one pull request's spec gate. A run that reaches the request
+ * budget leaves the gate pending as too large to reconcile automatically; a
+ * maintainer's dispatch of the Review signal workflow is exempt and decides.
+ */
+async function reconcileSpecOwnerGate(options) {
+  const budget = {onExceeded: null};
+  try {
+    await reconcileWithinBudget({...options, budget});
+  } catch (error) {
+    if (!(error instanceof RequestBudgetExceeded) || !budget.onExceeded) {
+      throw error;
+    }
+    await budget.onExceeded();
+  }
+}
 
 function isCommandComment(eventName, payload) {
   if (eventName !== 'issue_comment') return true;
@@ -64,14 +91,171 @@ function isSettled(pr) {
   return Boolean(pr.merged_at) || pr.state === 'closed';
 }
 
-async function reconcileSpecOwnerGate({
+const SECTION_HEADING = /^#{1,6}\s+(.+?)\s*$/;
+const REQUIREMENT_ITEM = /^\s*[-*]\s+\*\*([A-Z]+-?\d+[a-z]?)\b/;
+const MAX_SECTIONS_SHOWN = 8;
+// Above this many line pairs, every differing line counts as changed.
+const MAX_DIFF_CELLS = 4_000_000;
+
+/** A text's lines; a final newline ends the last line and adds no line. */
+function textLines(text) {
+  if (text == null || text === '') return [];
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+/** Each line's section: the requirement item or heading it falls under. */
+function sectionOfEachLine(lines) {
+  let section = lines[0] === '---' ? 'front matter' : null;
+  return lines.map((line, index) => {
+    if (section === 'front matter' && index > 0 && line === '---') {
+      section = null;
+      return 'front matter';
+    }
+    if (section !== 'front matter') {
+      const item = line.match(REQUIREMENT_ITEM);
+      const heading = line.match(SECTION_HEADING);
+      if (item) section = item[1];
+      else if (heading) section = heading[1];
+    }
+    return section;
+  });
+}
+
+/** The removed and added line indexes, in document order. */
+function lineEdits(before, after) {
+  let start = 0;
+  while (
+    start < before.length &&
+    start < after.length &&
+    before[start] === after[start]
+  ) {
+    start += 1;
+  }
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (
+    endBefore > start &&
+    endAfter > start &&
+    before[endBefore - 1] === after[endAfter - 1]
+  ) {
+    endBefore -= 1;
+    endAfter -= 1;
+  }
+  const rows = endBefore - start;
+  const columns = endAfter - start;
+  const edits = [];
+  if ((rows + 1) * (columns + 1) > MAX_DIFF_CELLS) {
+    for (let i = start; i < endBefore; i++) edits.push({removed: i});
+    for (let j = start; j < endAfter; j++) edits.push({added: j});
+    return edits;
+  }
+  // Longest common subsequence lengths of each pair of suffixes.
+  const width = columns + 1;
+  const common = new Uint32Array((rows + 1) * width);
+  for (let i = rows - 1; i >= 0; i--) {
+    for (let j = columns - 1; j >= 0; j--) {
+      common[i * width + j] =
+        before[start + i] === after[start + j]
+          ? common[(i + 1) * width + j + 1] + 1
+          : Math.max(common[(i + 1) * width + j], common[i * width + j + 1]);
+    }
+  }
+  let i = 0;
+  let j = 0;
+  while (i < rows || j < columns) {
+    if (i < rows && j < columns && before[start + i] === after[start + j]) {
+      i += 1;
+      j += 1;
+    } else if (
+      j >= columns ||
+      (i < rows && common[(i + 1) * width + j] >= common[i * width + j + 1])
+    ) {
+      edits.push({removed: start + i});
+      i += 1;
+    } else {
+      edits.push({added: start + j});
+      j += 1;
+    }
+  }
+  return edits;
+}
+
+/**
+ * One line that says which records and sections changed between two
+ * versions of the spec paths: each record id, its changed sections, and the
+ * added and removed line counts. Each entry is `{path, before, after}`; a
+ * missing side is null.
+ */
+function summarizeSpecTextChange(changes) {
+  let added = 0;
+  let removed = 0;
+  const parts = [];
+  for (const {path: filePath, before, after} of changes) {
+    if (before === after) continue;
+    const isText = filePath.endsWith('.md');
+    const text = (isText ? (after ?? before) : null) ?? '';
+    const name = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? filePath;
+    if (!isText) {
+      parts.push(name);
+      continue;
+    }
+    const beforeLines = textLines(before);
+    const afterLines = textLines(after);
+    const beforeSections = sectionOfEachLine(beforeLines);
+    const afterSections = sectionOfEachLine(afterLines);
+    const sections = new Set();
+    for (const edit of lineEdits(beforeLines, afterLines)) {
+      if ('added' in edit) {
+        added += 1;
+        sections.add(afterSections[edit.added]);
+      } else {
+        removed += 1;
+        sections.add(beforeSections[edit.removed]);
+      }
+    }
+    const named = [...sections].filter(Boolean);
+    const shown = named.slice(0, MAX_SECTIONS_SHOWN).join(', ');
+    const more = named.length > MAX_SECTIONS_SHOWN ? ', …' : '';
+    parts.push(shown ? `${name} ${shown}${more}` : name);
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join('; ')} (+${added} −${removed} lines)`;
+}
+
+async function reconcileWithinBudget({
   github,
   context,
   core,
   workspace = process.env.GITHUB_WORKSPACE,
   env = process.env,
   now = () => new Date(),
+  budget,
+  // The job's request count (lib/rate-limit-backoff.cjs); no budget without it.
+  requestCounter,
+  requestBudget = REQUEST_BUDGET,
 }) {
+  // Read when the first budgeted call is made, never before the event checks.
+  const requestCount = () =>
+    (requestCounter ?? github.__rateLimitBackoff)?.requests ?? null;
+  // Checked before each file read and comparison, the calls that grow with
+  // the pull request. Reads start in parallel batches before the job's count
+  // sees them, so each checked call is also counted here as it starts.
+  let countAtFirstCheck = null;
+  let checkedCalls = 0;
+  function spendRequest() {
+    const observed = requestCount();
+    if (observed == null || context.eventName === 'workflow_dispatch') return;
+    countAtFirstCheck ??= observed;
+    const spent = Math.max(observed, countAtFirstCheck + checkedCalls);
+    if (spent >= requestBudget) {
+      throw new RequestBudgetExceeded(
+        `Stopped after ${spent} GitHub API requests (budget ${requestBudget}).`,
+      );
+    }
+    checkedCalls += 1;
+  }
   const {owner, repo} = context.repo;
   const repository = `${owner}/${repo}`;
   if (
@@ -288,6 +472,7 @@ async function reconcileSpecOwnerGate({
   }
 
   async function readText(fullName, ref, filePath) {
+    spendRequest();
     const [repoOwner, repoName] = fullName.split('/');
     try {
       const {data} = await github.rest.repos.getContent({
@@ -308,8 +493,34 @@ async function reconcileSpecOwnerGate({
     }
   }
 
+  /**
+   * Every file's blob at `ref`, from one tree read. Empty when GitHub cuts
+   * the tree short or the read fails, so each base text is then read.
+   */
+  async function readBaseBlobs(fullName, ref) {
+    const [repoOwner, repoName] = fullName.split('/');
+    try {
+      const {data} = await github.rest.git.getTree({
+        owner: repoOwner,
+        repo: repoName,
+        tree_sha: ref,
+        recursive: 'true',
+      });
+      if (data.truncated) return new Map();
+      return new Map(
+        (data.tree ?? [])
+          .filter(entry => entry.type === 'blob')
+          .map(entry => [entry.path, entry.sha]),
+      );
+    } catch (error) {
+      core.warning(`Could not read the base tree: ${error.message}`);
+      return new Map();
+    }
+  }
+
   /** A spec path's text at `ref`, or null when the path is absent there. */
   async function readSpecContent(fullName, ref, filePath) {
+    spendRequest();
     const [repoOwner, repoName] = fullName.split('/');
     try {
       const {data} = await github.rest.repos.getContent({
@@ -330,20 +541,25 @@ async function reconcileSpecOwnerGate({
     }
   }
 
-  /** Details notes: the newest approval of other content; a revocation. */
+  /**
+   * Details notes: the newest approval of other content; a revocation; the
+   * older commit an approving owner named, when no approval names the head.
+   */
   function ownerActNotes({
     reviews: ownerReviews,
     comments: allComments,
     owners: eligible,
+    approvers,
     approvesCurrentContent,
+    headSha,
   }) {
-    const stale = ownerReviews
-      .filter(
-        review =>
-          review.state === 'APPROVED' &&
-          !approvesCurrentContent(review.commit_id),
-      )
-      .map(review => review.submitted_at);
+    const approvals = ownerReviews
+      .filter(review => review.state === 'APPROVED')
+      .map(review => ({
+        owner: review.user?.login?.toLowerCase() ?? '',
+        sha: review.commit_id,
+        at: review.submitted_at,
+      }));
     // Comments arrive oldest first, so the last act per owner wins.
     const lastAct = new Map();
     for (const comment of allComments) {
@@ -351,8 +567,8 @@ async function reconcileSpecOwnerGate({
       const target =
         eligible.has(login) && parseOwnerCommandTarget(comment.body);
       if (!target) continue;
-      if (target.approved && !approvesCurrentContent(target.sha)) {
-        stale.push(comment.created_at);
+      if (target.approved) {
+        approvals.push({owner: login, sha: target.sha, at: comment.created_at});
       }
       lastAct.set(login, {owner: login, ...target, at: comment.created_at});
     }
@@ -360,9 +576,25 @@ async function reconcileSpecOwnerGate({
       [...lastAct.values()]
         .filter(act => !act.approved)
         .sort((x, y) => Date.parse(y.at) - Date.parse(x.at))[0] ?? null;
+    const newest = acts =>
+      acts
+        .filter(act => act.at)
+        .sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0))
+        .at(-1) ?? null;
+    const stale = newest(
+      approvals.filter(act => !approvesCurrentContent(act.sha)),
+    );
+    const carried = approvals.filter(
+      act => approvers.includes(act.owner) && approvesCurrentContent(act.sha),
+    );
+    const namesHead = carried.some(
+      act => act.sha?.toLowerCase() === headSha.toLowerCase(),
+    );
     return {
-      staleApprovalAt: stale.filter(Boolean).sort().at(-1) ?? null,
+      staleApprovalAt: stale?.at ?? null,
+      staleApprovalSha: stale?.sha ?? null,
       revokedBy,
+      carriedFrom: namesHead ? null : (newest(carried)?.sha ?? null),
     };
   }
 
@@ -375,39 +607,41 @@ async function reconcileSpecOwnerGate({
     records: changedRecords,
     currentContent,
     notes,
+    specChange,
     commandProblem,
   }) {
     if (typeof core.summary?.addRaw !== 'function') return;
+    // The same per-record rule the decision uses, so the two never disagree.
     const groupFor = record => {
-      const current =
-        parseAuthority(record.headContent, record.path) === 'current' ||
-        parseAuthority(record.baseContent, record.previousPath) === 'current';
-      if (!current) return 'none (draft)';
-      const kind = parseKind(
-        record.headContent ?? record.baseContent,
-        record.path,
-      );
-      return kind === 'design' || kind === 'theme'
-        ? 'design or eng owner'
-        : 'eng owner';
+      const groups = recordApprovalGroups(record);
+      if (groups.size === 0) return 'none (draft)';
+      return groups.has('spec') ? 'eng owner' : 'design or eng owner';
     };
+    const authorityOf = content => leadingAuthority(content) ?? 'no authority';
     const rows = changedRecords.map(record => {
       const text = record.headContent ?? record.baseContent ?? '';
       const id = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? record.path;
       const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? '';
       const before =
-        record.baseContent == null
-          ? 'new'
-          : (parseAuthority(record.baseContent, record.previousPath) ?? '?');
+        record.baseContent == null ? 'new' : authorityOf(record.baseContent);
       const after =
         record.headContent == null
           ? 'removed'
-          : (parseAuthority(record.headContent, record.path) ?? '?');
+          : authorityOf(record.headContent);
       const change = before === after ? after : `${before} → ${after}`;
       return `| \`${id}\` | ${title} | ${change} | ${groupFor(record)} |`;
     });
     // `<sha>` in the status text is literal, not markup.
-    const lines = [`### ${statusText.replace(/</g, '&lt;')}`, ''];
+    const statusLine = statusText.replace(/</g, '&lt;');
+    const lines =
+      isApproved && approvalRequired && notes.carriedFrom
+        ? [
+            `### Approval carried from ${notes.carriedFrom.slice(0, 7)}; no action needed.`,
+            '',
+            statusLine,
+            '',
+          ]
+        : [`### ${statusLine}`, ''];
     if (!isApproved && notes.revokedBy) {
       lines.push(
         `Approval revoked by @${notes.revokedBy.owner} at ${notes.revokedBy.at}.`,
@@ -418,6 +652,12 @@ async function reconcileSpecOwnerGate({
         `Spec changed after approval at ${notes.staleApprovalAt}; approve the current head again.`,
         '',
       );
+      if (specChange) {
+        lines.push(
+          `Spec text changed since ${notes.staleApprovalSha.slice(0, 7)}: ${specChange}.`,
+          '',
+        );
+      }
     }
     if (commandProblem) {
       lines.push(`Your owner command decided nothing: ${commandProblem}.`, '');
@@ -429,6 +669,8 @@ async function reconcileSpecOwnerGate({
         '```',
         `/approve-spec ${headSha}`,
         '```',
+        '',
+        'Owners: approve once, after the last spec-text change.',
         '',
       );
     }
@@ -452,8 +694,17 @@ async function reconcileSpecOwnerGate({
     }
   }
 
-  /** Compose the review gate; with no code half yet, review-signal does. */
-  async function publishReviewGate(headSha, spec) {
+  /**
+   * Compose the review gate; with no code half yet, review-signal does.
+   * `spec` is the spec half, or a function that reads it from the live
+   * statuses. With `onlyOverSuccess`, it writes only to take back a success;
+   * once it has written, it composes again like any other write.
+   */
+  async function publishReviewGate(
+    headSha,
+    spec,
+    {onlyOverSuccess = false} = {},
+  ) {
     // If another job writes between this read and write, compose again, so a
     // withdrawn code review is never overwritten with success.
     const written = new Set();
@@ -467,21 +718,25 @@ async function reconcileSpecOwnerGate({
       const basis = othersNewest(live);
       const code = readCodeGate(live.filter(status => !written.has(status.id)));
       if (!code) return;
+      const specHalf = typeof spec === 'function' ? spec(live) : spec;
       const gate = composeReviewGate({
         codeGated: code.gated,
         codeDescription: code.description,
-        spec,
+        spec: specHalf,
       });
       // The details link names the spec decision run: a newer one on yield,
       // whether the gate it restores waits or succeeds.
-      const targetUrl = gate.target_url ?? spec?.url ?? runUrl;
+      const targetUrl = gate.target_url ?? specHalf?.url ?? runUrl;
       const current = live.find(
         status => status.context === REVIEW_GATE_CONTEXT,
       );
       if (
-        current?.state === gate.state &&
-        current?.description === gate.description &&
-        current?.target_url === targetUrl
+        (onlyOverSuccess &&
+          written.size === 0 &&
+          current?.state !== 'success') ||
+        (current?.state === gate.state &&
+          current?.description === gate.description &&
+          current?.target_url === targetUrl)
       ) {
         return;
       }
@@ -537,30 +792,44 @@ async function reconcileSpecOwnerGate({
             classifyChanges([{filename: file.previous_filename}])
               .touchesKnowledgeRecords)),
     );
+    // A renamed record whose head blob is its old path's blob at the base has
+    // the same text at both, so its base text needs no read of its own.
+    const baseBlobs = knowledgeChanges.some(file => file.status === 'renamed')
+      ? await readBaseBlobs(after.base.repo.full_name, after.base.sha)
+      : new Map();
     const records = await Promise.all(
       knowledgeChanges.map(async file => {
         const previousPath = file.previous_filename || file.filename;
         const baseIsTextRecord = previousPath.endsWith('.md');
         const headIsTextRecord = file.filename.endsWith('.md');
+        const headContent =
+          !headIsTextRecord || file.status === 'removed'
+            ? null
+            : await readText(
+                after.head.repo.full_name,
+                after.head.sha,
+                file.filename,
+              );
+        const unchangedRename =
+          headContent != null &&
+          baseIsTextRecord &&
+          file.status === 'renamed' &&
+          file.sha != null &&
+          baseBlobs.get(previousPath) === file.sha;
         return {
           path: file.filename,
           previousPath,
           baseContent:
             !baseIsTextRecord || file.status === 'added'
               ? null
-              : await readText(
-                  after.base.repo.full_name,
-                  after.base.sha,
-                  previousPath,
-                ),
-          headContent:
-            !headIsTextRecord || file.status === 'removed'
-              ? null
-              : await readText(
-                  after.head.repo.full_name,
-                  after.head.sha,
-                  file.filename,
-                ),
+              : unchangedRename
+                ? headContent
+                : await readText(
+                    after.base.repo.full_name,
+                    after.base.sha,
+                    previousPath,
+                  ),
+          headContent,
         };
       }),
     );
@@ -675,14 +944,43 @@ async function reconcileSpecOwnerGate({
     sha: initialHead,
     context: GATE_STATUS_CONTEXT,
     state: 'pending',
-    description: `Reconciling exact head ${initialHead.slice(0, 7)}.`,
+    description: `${SPEC_RECONCILING_PREFIX}${initialHead.slice(0, 7)}.`,
   });
   // The spec half is unknown until this run decides it, so the review gate
   // waits meanwhile: a run that fails part-way (after a /revoke-spec, say)
   // leaves it pending, never an earlier success. Written before the yield
   // check, like the mirror, so a newer run's decision is restored over it.
-  await publishReviewGate(initialHead, readSpecGate([]));
+  // A gate that already waits keeps its text until this run decides, and an
+  // approval this head already has shows as carried while the run checks.
+  await publishReviewGate(
+    initialHead,
+    live => {
+      const spec = readSpecGate(live);
+      return spec.satisfied ? readSpecGate([]) : spec;
+    },
+    {onlyOverSuccess: true},
+  );
   if (await restoreNewerStatus(initialHead)) return;
+  // From here a run can reach the request budget. It then says so on both
+  // statuses, so an owner's command never reads as taken, and leaves the
+  // decision to a maintainer's dispatch.
+  budget.onExceeded = async () => {
+    core.warning(
+      `Stopped after ${requestCount()} GitHub API requests: this pull request is too large to reconcile automatically. Run the Review signal workflow with pr=${pullNumber} to decide it.`,
+    );
+    if (!(await isPublishable(initialHead))) return;
+    await createStatus({
+      sha: initialHead,
+      context: GATE_STATUS_CONTEXT,
+      state: 'pending',
+      description: `${SPEC_MIRROR_PREFIX}too large to reconcile automatically`,
+    });
+    if (await restoreNewerStatus(initialHead)) return;
+    await publishReviewGate(initialHead, {
+      satisfied: false,
+      text: SPEC_TOO_LARGE_TEXT,
+    });
+  };
 
   const commentAuthor = context.payload.comment?.user?.login?.toLowerCase();
   const snapshot = await fetchSnapshot();
@@ -825,9 +1123,12 @@ async function reconcileSpecOwnerGate({
     return blobs;
   }
   const headBlobs = specBlobs(snapshot.files);
+  // The paths whose text each compared commit read, to say what changed.
+  const comparedPaths = new Map();
   // An approved commit's spec paths join the head's, so dropping an approved
   // change no longer matches. A failed comparison matches nothing.
   async function specChangesAt(sha) {
+    spendRequest();
     const {data} = await github.rest.repos.compareCommitsWithBasehead({
       owner,
       repo,
@@ -854,17 +1155,49 @@ async function reconcileSpecOwnerGate({
         return headBlob === undefined || headBlob !== atSha.blobs.get(filePath);
       });
       if (unsettled.length === 0) return true;
+      comparedPaths.set(sha.toLowerCase(), unsettled);
       const [atHead, atShaContent] = await Promise.all([
         fingerprintAt(initialHead, unsettled),
         fingerprintAt(sha, unsettled),
       ]);
       return atHead.fingerprint === atShaContent.fingerprint;
     } catch (error) {
+      if (error instanceof RequestBudgetExceeded) throw error;
       core.warning(`Could not compare ${sha.slice(0, 7)}: ${error.message}`);
       return false;
     }
   }
   const currentContent = await fingerprintAt(initialHead, specPaths);
+  /**
+   * What changed since an approved commit. It uses only text the comparison
+   * already read, so it makes no request; with any text missing it says
+   * nothing.
+   */
+  async function describeSpecChange(sha) {
+    const paths = comparedPaths.get(sha.toLowerCase());
+    const cached = (ref, filePath) =>
+      textCache.get(`${ref.toLowerCase()}\0${filePath}`);
+    if (
+      !paths ||
+      paths.some(
+        filePath => !cached(sha, filePath) || !cached(initialHead, filePath),
+      )
+    ) {
+      return null;
+    }
+    try {
+      const changes = await Promise.all(
+        paths.map(async filePath => ({
+          path: filePath,
+          before: await cached(sha, filePath),
+          after: await cached(initialHead, filePath),
+        })),
+      );
+      return summarizeSpecTextChange(changes);
+    } catch {
+      return null;
+    }
+  }
   // Only commits an eligible owner named, by review or command, are read.
   const authorLogin = pr.user.login.toLowerCase();
   const ownerReviews = reviews.filter(review => {
@@ -930,6 +1263,14 @@ async function reconcileSpecOwnerGate({
       : ownerApprovalRequired
         ? approvedDescription(approvingOwners)
         : 'Draft-only knowledge change; owner approval is not required.';
+  const notes = ownerActNotes({
+    reviews: ownerReviews,
+    comments,
+    owners: allOwners,
+    approvers: approvingOwners,
+    approvesCurrentContent,
+    headSha: initialHead,
+  });
   await writeDetails({
     statusText,
     headSha: initialHead,
@@ -937,12 +1278,11 @@ async function reconcileSpecOwnerGate({
     approved,
     records,
     currentContent,
-    notes: ownerActNotes({
-      reviews: ownerReviews,
-      comments,
-      owners: allOwners,
-      approvesCurrentContent,
-    }),
+    notes,
+    specChange:
+      !approved && notes.staleApprovalSha
+        ? await describeSpecChange(notes.staleApprovalSha)
+        : null,
     commandProblem,
   });
 
@@ -977,4 +1317,8 @@ async function reconcileSpecOwnerGate({
   await setFinalStatus(initialHead, 'success', successDescription);
 }
 
-module.exports = {isCommandComment, reconcileSpecOwnerGate};
+module.exports = {
+  isCommandComment,
+  reconcileSpecOwnerGate,
+  summarizeSpecTextChange,
+};

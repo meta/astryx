@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toast/ (showcase blocks)
  */
 
-import {useCallback, useEffect, useRef} from 'react';
+import {use, useCallback, useEffect, useMemo, useRef} from 'react';
 import type {FocusEvent, ReactNode, RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
@@ -34,18 +34,36 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
+import {ThemeContext, useThemeDefinition} from '../theme/useTheme';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {resolveThemeTokens} from '../theme/tokens';
+import {invertedSideIn} from '../theme/invertedSurfaceSide';
+import {MediaDarkPage} from '../theme/MediaDarkPage';
 import {MediaTheme} from '../theme/MediaTheme';
+import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
+import {pickInvertedSide} from '../hooks/mediaSide';
 import type {
   ToastType,
   ToastDismissReason,
   ToastContentRenderFn,
 } from './types';
-import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Toast/Toast.generated';
+
+registerEnglishFallback(english);
 
 const SWIPE_INTERACTIVE_TARGET_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex],[contenteditable]:not([contenteditable="false"])`;
+
+const TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR =
+  'button, input, select, textarea, a[href], [role="button"], [role="link"], [tabindex], [contenteditable]:not([contenteditable="false"]), svg, [role="img"]';
 
 function isInteractiveTarget(
   target: EventTarget | null,
@@ -86,6 +104,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A card enters from its edge only when it first renders. A move between
+  // modal outlets renders it again, and it must not enter again.
+  entering: {
     '@starting-style': {
       opacity: 0,
       transform: `translateY(var(--_toast-slide-y, ${TOAST_EDGE_DRIFT}))`,
@@ -105,14 +127,34 @@ const styles = stylex.create({
   variantError: {
     backgroundColor: colorVars['--color-background-error-inverted'],
   },
+  // Restate the token as well as the color, so a caller's text follows the
+  // side too.
+  sideText: {
+    display: 'contents',
+  },
+  sideTextOnDark: {
+    '--color-text-primary': colorVars['--color-on-dark'],
+    color: colorVars['--color-on-dark'],
+  },
+  sideTextOnLight: {
+    '--color-text-primary': colorVars['--color-on-light'],
+    color: colorVars['--color-on-light'],
+  },
   content: {
     flex: 1,
     minWidth: 0,
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   exiting: {
     opacity: 0,
     transform: `translateY(var(--_toast-swipe-exit-y, var(--_toast-swipe-y, var(--_toast-slide-y, ${TOAST_EDGE_DRIFT})))) scale(var(--_toast-swipe-scale, 1))`,
+  },
+  // The close button draws in the card's text color, the color the card's
+  // body text inherits.
+  close: {
+    color: 'inherit',
   },
   endContent: {
     flexShrink: 0,
@@ -146,6 +188,20 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /** The viewport's modal-aware announcement channel. */
+  announce?: AnnounceFn;
+  /** Read the body after render when its text comes from a child component. */
+  isRenderedBodyAnnouncement?: boolean;
+  /**
+   * Changes when a uniqueID overwrite updates this card in place: the new
+   * toast's auto-hide timer starts over.
+   */
+  timerKey?: string;
+  /**
+   * True once the toast's row has started to open. The card then has no
+   * starting style, so a move between modal outlets starts no transition.
+   */
+  hasEntryStarted?: boolean;
 }
 
 /**
@@ -185,8 +241,15 @@ export function ToastSurface({
   onDismiss,
   renderContent,
   gestureDirection,
+  timerKey,
+  announce,
+  isRenderedBodyAnnouncement = false,
+  hasEntryStarted = false,
+  ...rest
 }: ToastSurfaceProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const isError = type === 'error';
+  const bodyRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Every condition that holds the auto-hide timer (pointer over the card,
   // focus inside it, a touch or pen gesture, the window blurred) is tracked on
@@ -218,34 +281,28 @@ export function ToastSurface({
     }, remainingRef.current);
   }, [isAutoHide]);
 
-  const pauseTimer = useCallback(
-    (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
-      const sources = pauseSourcesRef.current;
-      const wasRunning = sources.size === 0;
-      sources.add(source);
-      if (!wasRunning) {
-        return;
-      }
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      if (startTimeRef.current != null) {
-        const elapsed = Date.now() - startTimeRef.current;
-        remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
-      }
-    },
-    [isAutoHide],
-  );
+  // Pointer, focus and gesture holds are tracked whatever isAutoHide is: an
+  // overwrite can turn a toast that does not auto-hide into one that does
+  // while a hold is in place. The window hold leaves with its listeners.
+  const pauseTimer = useCallback((source: PauseSource) => {
+    const sources = pauseSourcesRef.current;
+    const wasRunning = sources.size === 0;
+    sources.add(source);
+    if (!wasRunning) {
+      return;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (startTimeRef.current != null) {
+      const elapsed = Date.now() - startTimeRef.current;
+      remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
+    }
+  }, []);
 
   const resumeTimer = useCallback(
     (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
       const sources = pauseSourcesRef.current;
       if (!sources.delete(source)) {
         return;
@@ -263,20 +320,31 @@ export function ToastSurface({
       }
       startTimer();
     },
-    [isAutoHide, startTimer],
+    [startTimer],
   );
 
   useEffect(() => {
     remainingRef.current = autoHideDuration;
+    // An update in place can remove the focused control, which fires no blur:
+    // a focus hold whose focus has left the card is stale.
+    const root = cardRootRef.current?.current;
+    if (
+      pauseSourcesRef.current.has('focus') &&
+      root != null &&
+      !root.contains(root.ownerDocument.activeElement)
+    ) {
+      pauseSourcesRef.current.delete('focus');
+    }
     startTimer();
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-    // startTimer's identity is stable per isAutoHide, so this runs on mount
-    // and on a genuine duration change — not on unrelated viewport renders.
-  }, [autoHideDuration, startTimer]);
+    // startTimer's identity is stable per isAutoHide, so this runs on mount,
+    // on a genuine duration change and on an overwrite (timerKey), not on
+    // unrelated viewport renders.
+  }, [autoHideDuration, startTimer, timerKey]);
 
   // Pause the auto-hide timer while the window is not focused, so a toast
   // doesn't silently expire while the user is in another window or tab.
@@ -284,13 +352,21 @@ export function ToastSurface({
     if (!isAutoHide) {
       return;
     }
+    const pauseSources = pauseSourcesRef.current;
     const pauseForWindow = () => pauseTimer('window');
     const resumeForWindow = () => resumeTimer('window');
     window.addEventListener('blur', pauseForWindow);
     window.addEventListener('focus', resumeForWindow);
+    // A toast raised while the window is already blurred gets no blur event,
+    // so it starts held, and the window's next focus resumes it.
+    if (!document.hasFocus()) {
+      pauseForWindow();
+    }
     return () => {
       window.removeEventListener('blur', pauseForWindow);
       window.removeEventListener('focus', resumeForWindow);
+      // With the listeners gone, no focus event would clear the window hold.
+      pauseSources.delete('window');
     };
   }, [isAutoHide, pauseTimer, resumeTimer]);
 
@@ -341,23 +417,108 @@ export function ToastSurface({
   });
   cardRootRef.current = rootRef;
 
+  // The viewport announces a plain-text body when it dispatches the toast.
+  // This reads a component body or a custom layout after commit. A body is
+  // read whole, links included. A custom layout leaves out its controls.
+  // Only the viewport passes `announce`. The card never holds a live role, so
+  // a Toast rendered on its own announces nothing; its caller owns that.
+  useAnnounceRenderedText(
+    renderContent != null ? rootRef : bodyRef,
+    announce != null && (renderContent != null || isRenderedBodyAnnouncement),
+    timerKey ?? '',
+    {
+      politeness: isError ? 'assertive' : 'polite',
+      announce,
+      exclude:
+        renderContent != null
+          ? TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR
+          : undefined,
+    },
+  );
+
   const handleDismiss = useCallback(() => {
     onDismiss('manual');
   }, [onDismiss]);
 
-  const isError = type === 'error';
-  // The surface is *usually* dark in light mode and light in dark mode, but a
-  // theme can define --color-background-inverted as anything — so the mode is
-  // measured, not assumed. This is only the pre-measurement fallback.
-  const {mode} = useTheme();
-  const fallbackMediaMode = isError || mode === 'light' ? 'dark' : 'light';
+  // Before the measurement, take the side from the theme's resolved surface by
+  // the measurement's rule. If the surface is translucent, or an on-color
+  // cannot be read, use the mode.
+  const {mode, tokens} = useTheme();
+  const surfaceToken = isError
+    ? '--color-background-error-inverted'
+    : '--color-background-inverted';
+  const fromTokens = invertedSideIn(tokens, surfaceToken);
+  // A system-mode page's scheme is the reader's, which the server does not
+  // know. The card takes its light-page side, and the side it takes on a
+  // dark page rides beside it; the theme writes that side's rules for a dark
+  // page, so the first paint is right in both.
+  const theme = useThemeDefinition();
+  // While a system-mode page renders on the server (or hydrates the server's
+  // markup), its scheme is the reader's and unknown; later renders know it.
+  const isHydrating = useIsHydrating();
+  const themeMode = use(ThemeContext)?.mode ?? 'system';
+  const isSchemeUnknown = themeMode === 'system' && isHydrating;
+  const sides = useMemo(
+    () =>
+      theme == null
+        ? null
+        : {
+            light: invertedSideIn(
+              resolveThemeTokens(theme, {mode: 'light'}),
+              surfaceToken,
+            ),
+            dark: invertedSideIn(
+              resolveThemeTokens(theme, {mode: 'dark'}),
+              surfaceToken,
+            ),
+          },
+    [theme, surfaceToken],
+  );
+  const pageSide = isSchemeUnknown ? sides?.light : fromTokens;
+  const fallbackMediaMode =
+    pageSide ?? (isError || mode === 'light' ? 'dark' : 'light');
+  const darkPageSide =
+    isSchemeUnknown && sides?.dark != null && sides.dark !== fallbackMediaMode
+      ? sides.dark
+      : null;
+  // Once painted, the card's text takes the side that reads best on it.
+  const measuredMediaMode = useSurfaceMediaMode(
+    rootRef,
+    true,
+    pickInvertedSide,
+  );
+  const mediaMode = measuredMediaMode ?? fallbackMediaMode;
+  // On a system-mode page the server does not know the reader's scheme.
+  // If the card's two sides differ, keep the ambient text until the client
+  // knows it. With no theme, Core's defaults give the two sides.
+  const textSides = useMemo(
+    () =>
+      sides ??
+      (isSchemeUnknown
+        ? {
+            light: invertedSideIn(
+              resolveThemeTokens(null, {mode: 'light'}),
+              surfaceToken,
+            ),
+            dark: invertedSideIn(
+              resolveThemeTokens(null, {mode: 'dark'}),
+              surfaceToken,
+            ),
+          }
+        : null),
+    [sides, isSchemeUnknown, surfaceToken],
+  );
+  const isSideUnknown =
+    measuredMediaMode == null &&
+    isSchemeUnknown &&
+    textSides != null &&
+    textSides.light !== textSides.dark;
+  const textSide = isSideUnknown ? 'off' : mediaMode;
 
   return (
     <div
+      {...pickDataAttributes(rest)}
       ref={rootRef}
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
-      aria-atomic="true"
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}
@@ -367,38 +528,52 @@ export function ToastSurface({
         themeProps('toast', {type}),
         stylex.props(
           styles.root,
+          !hasEntryStarted && styles.entering,
           isError ? styles.variantError : styles.variantDefault,
           isExiting && styles.exiting,
         ),
       )}>
-      <MediaTheme mode="auto" fallback={fallbackMediaMode}>
-        {renderContent ? (
-          renderContent({
-            body,
-            endContent,
-            type,
-            isAutoHide,
-            autoHideDuration,
-            dismiss: handleDismiss,
-          })
-        ) : (
-          <div {...stylex.props(styles.inner)}>
-            <div {...stylex.props(styles.content)}>{body}</div>
+      <MediaDarkPage side={measuredMediaMode == null ? darkPageSide : null}>
+        <MediaTheme mode={mediaMode}>
+          <div
+            {...stylex.props(
+              styles.sideText,
+              textSide === 'dark' && styles.sideTextOnDark,
+              textSide === 'light' && styles.sideTextOnLight,
+            )}>
+            {renderContent ? (
+              renderContent({
+                body,
+                endContent,
+                type,
+                isAutoHide,
+                autoHideDuration,
+                dismiss: handleDismiss,
+              })
+            ) : (
+              <div {...stylex.props(styles.inner)}>
+                <div ref={bodyRef} {...stylex.props(styles.content)}>
+                  {body}
+                </div>
 
-            <div {...stylex.props(styles.endContent)}>
-              {endContent}
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                label={t('@astryx.toast.dismiss')}
-                onClick={handleDismiss}
-                isIconOnly
-              />
-            </div>
+                <div {...stylex.props(styles.endContent)}>
+                  {endContent}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon icon="close" size="sm" color="inherit" />}
+                    className={themeProps('toast-close').className}
+                    xstyle={styles.close}
+                    label={t('@astryx.toast.dismiss')}
+                    onClick={handleDismiss}
+                    isIconOnly
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </MediaTheme>
+        </MediaTheme>
+      </MediaDarkPage>
     </div>
   );
 }

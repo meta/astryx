@@ -45,6 +45,32 @@ describe('PinchGestureRecognizer', () => {
     expect(pinch.scale).toBeCloseTo(2, 5);
   });
 
+  it('keeps its release velocity when a listener re-bases on every change', () => {
+    const h = createHarness();
+    const pinch = new PinchGestureRecognizer({name: 'pinch'});
+    pinch.addListener(r => {
+      if (r.state === 'changed') {
+        r.scale = 1;
+      }
+    });
+    let released = Number.NaN;
+    pinch.addListener(r => {
+      if (r.state === 'ended') {
+        released = r.velocity;
+      }
+    });
+    h.finger(1).down(100, 100, 0, {recognizers: [pinch]});
+    h.finger(2).down(200, 100, 0, {recognizers: [pinch]});
+    let t = 0;
+    for (let i = 0; i < 10; i++) {
+      t += 16;
+      h.finger(2).move(200 + t * 0.5, 100, t);
+    }
+    // Lift 8 ms after the last move: still spreading, so not 0.
+    h.finger(1).up(t + 8);
+    expect(released).toBeGreaterThan(1);
+  });
+
   it('lets the velocity settle when the span holds while the fingers move', () => {
     const h = createHarness();
     const pinch = new PinchGestureRecognizer({name: 'pinch'});

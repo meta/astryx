@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'checkDouble',
+  group: 'checks',
   description: 'Show that something was copied or read.',
   words: ['copied', 'read', 'seen', 'double check', 'check check'],
   builtIn: true,

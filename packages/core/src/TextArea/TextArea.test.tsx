@@ -2,7 +2,7 @@
 
 /**
  * @file TextArea.test.tsx
- * @input Uses vitest, @testing-library/react, TextArea component
+ * @input Uses vitest, @testing-library/react, react-dom/server, TextArea component
  * @output Unit tests for TextArea component behavior
  * @position Testing; validates TextArea.tsx implementation
  *
@@ -10,6 +10,7 @@
  */
 
 import {useState} from 'react';
+import {renderToString} from 'react-dom/server';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -281,6 +282,57 @@ describe('TextArea', () => {
     );
     // No SVG should be present
     expect(container.querySelector('svg')).not.toBeInTheDocument();
+  });
+
+  // One presence check decides the start icon's slot and its padding
+  // (architecture:react-component-runtime INV16): empty values render no
+  // slot, and 0 is content shown inside the slot, never a stray "0" beside it.
+  describe('start icon slot presence', () => {
+    const zeroTextParent = (container: HTMLElement) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.textContent === '0') {
+          return node.parentElement;
+        }
+      }
+      return null;
+    };
+
+    it.each([
+      ['null', null],
+      ['false', false],
+      ['an empty string', ''],
+    ])('renders no slot and reserves no padding for %s', (_label, value) => {
+      const {container} = render(
+        <TextArea
+          label="Description"
+          value=""
+          onChange={() => {}}
+          startIcon={value}
+        />,
+      );
+      expect(container.querySelector('[class*="startIcon"]')).toBeNull();
+      expect(screen.getByRole('textbox').className).not.toContain(
+        'textareaWithStartIcon',
+      );
+    });
+
+    it('shows 0 inside the slot, with its padding, not beside it', () => {
+      const {container} = render(
+        <TextArea
+          label="Description"
+          value=""
+          onChange={() => {}}
+          startIcon={0}
+        />,
+      );
+      const parent = zeroTextParent(container);
+      expect(parent).not.toBeNull();
+      expect(parent?.className).toContain('startIcon');
+      expect(screen.getByRole('textbox').className).toContain(
+        'textareaWithStartIcon',
+      );
+    });
   });
 
   describe('status prop', () => {
@@ -801,6 +853,109 @@ describe('TextArea', () => {
     });
   });
 
+  describe('htmlMaxLength prop', () => {
+    it('sets the native maxlength attribute', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('maxlength', '400');
+      // The prop name must not reach the DOM as an unknown attribute.
+      expect(textarea).not.toHaveAttribute('htmlmaxlength');
+    });
+
+    it('shows no character counter without maxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value="Hello"
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox')).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    it('keeps the counter on maxLength while the native limit comes from htmlMaxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value={'a'.repeat(150)}
+          onChange={() => {}}
+          maxLength={100}
+          htmlMaxLength={400}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('maxlength', '400');
+      expect(screen.getByText('150/100')).toBeInTheDocument();
+      expect(textarea).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('does not truncate a controlled value longer than htmlMaxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value={'a'.repeat(50)}
+          onChange={() => {}}
+          htmlMaxLength={10}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveValue('a'.repeat(50));
+      expect(textarea).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('renders no native maxlength when htmlMaxLength is omitted, including after the caller removes it', () => {
+      const {rerender} = render(
+        <TextArea label="Notes" value="" onChange={() => {}} />,
+      );
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+
+      rerender(
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute('maxlength', '400');
+
+      rerender(<TextArea label="Notes" value="" onChange={() => {}} />);
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+    });
+
+    it('is present in server-rendered markup', () => {
+      const html = renderToString(
+        <TextArea
+          label="Notes"
+          htmlName="notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      // React writes the attribute as `maxLength`. The HTML parser reads it as
+      // the native `maxlength`, so assert on the parsed element.
+      const host = document.createElement('div');
+      host.innerHTML = html;
+      expect(host.querySelector('textarea')).toHaveAttribute(
+        'maxlength',
+        '400',
+      );
+      expect(html).not.toMatch(/htmlmaxlength/i);
+    });
+  });
+
   describe('hasAutoFocus prop', () => {
     it('sets autofocus attribute when hasAutoFocus is true', () => {
       render(
@@ -968,6 +1123,57 @@ describe('TextArea', () => {
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
+    });
+  });
+
+  describe('touch keyboard traits', () => {
+    it('renders no trait attribute when none is set, leaving the browser default', () => {
+      render(<TextArea label="Notes" value="" onChange={() => {}} />);
+      const textarea = screen.getByRole('textbox');
+      for (const attribute of [
+        'enterkeyhint',
+        'inputmode',
+        'autocapitalize',
+        'autocorrect',
+      ]) {
+        expect(textarea).not.toHaveAttribute(attribute);
+      }
+    });
+
+    it('forwards every trait to the native textarea', () => {
+      render(
+        <TextArea
+          label="Message"
+          value=""
+          onChange={() => {}}
+          enterKeyHint="send"
+          inputMode="text"
+          autoCapitalize="sentences"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('enterkeyhint', 'send');
+      expect(textarea).toHaveAttribute('inputmode', 'text');
+      expect(textarea).toHaveAttribute('autocapitalize', 'sentences');
+      expect(textarea).toHaveAttribute('autocorrect', 'off');
+      expect(textarea).toHaveAttribute('spellcheck', 'false');
+    });
+
+    it('keeps Return a line break whatever enterKeyHint says', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <TextArea
+          label="Message"
+          value="a"
+          onChange={onChange}
+          enterKeyHint="send"
+        />,
+      );
+      await user.type(screen.getByRole('textbox'), '{Enter}');
+      expect(onChange).toHaveBeenLastCalledWith('a\n', expect.anything());
     });
   });
 
@@ -1313,5 +1519,67 @@ describe('TextArea caller aria-labelledby', () => {
     expect(screen.getByRole('textbox', {name: 'Notes'})).not.toHaveAttribute(
       'aria-labelledby',
     );
+  });
+});
+
+describe('TextArea error without a message', () => {
+  const messagelessWarnings = (warn: {mock: {calls: unknown[][]}}) =>
+    warn.mock.calls.filter(call =>
+      String(call[0]).includes('an error status has no message'),
+    );
+
+  it('describes the field by hidden translated fallback text and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {rerender} = render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    const field = screen.getByRole('textbox', {name: 'Email'});
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Invalid value');
+    rerender(
+      <TextArea
+        label="Email"
+        value="x"
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    expect(messagelessWarnings(warn)).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('uses the caller message and no fallback when a message is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error', message: 'Enter an email address'}}
+      />,
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Email'}),
+    ).toHaveAccessibleDescription('Enter an email address');
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('adds no fallback for a warning without a message', () => {
+    render(
+      <TextArea
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'warning'}}
+      />,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
   });
 });

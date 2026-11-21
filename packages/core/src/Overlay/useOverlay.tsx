@@ -28,6 +28,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useClickableContainer} from '../hooks/useClickableContainer';
+import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import {overlayScope, overlayContainerStyles} from './overlay.markers.stylex';
 import {OverlayScrim} from './OverlayScrim';
 import type {
@@ -45,16 +46,14 @@ function getIsTouchDevice(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
-  return window.matchMedia('(hover: none)').matches;
+  return matchesMediaQuery(window, '(hover: none)');
 }
 
 function subscribeToHoverChange(callback: () => void): () => void {
   if (typeof window === 'undefined') {
     return () => {};
   }
-  const mql = window.matchMedia('(hover: none)');
-  mql.addEventListener('change', callback);
-  return () => mql.removeEventListener('change', callback);
+  return watchMediaQuery(window, '(hover: none)', callback);
 }
 
 function getServerSnapshot(): boolean {
@@ -72,7 +71,7 @@ export interface UseOverlayOptions {
   /**
    * CSS-driven visibility trigger.
    * - `"always"` — always visible
-   * - `"hover"` — hover + focus (accessible default). Touch: strip = always visible, fill = tap-to-toggle.
+   * - `"hover"` — hover + focus (accessible default). Touch (`hover: none`): a tap on the container toggles it.
    * - `"focus"` — focus-within only
    * - `"hover-or-focus"` — alias for "hover"
    * @default "always"

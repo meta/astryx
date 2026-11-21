@@ -4,7 +4,8 @@
 
 /**
  * @file TextArea.tsx
- * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner
+ * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner,
+ *   textEntryTraits (the touch-keyboard trait props)
  * @output Exports TextArea component, TextAreaProps, TextAreaStatus, TextAreaStatusType
  * @position Core implementation; consumed by index.ts, tested by TextArea.test.tsx
  *
@@ -43,6 +44,8 @@ import {
   inputStatusFocusWithinStyles,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
@@ -61,11 +64,24 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {characterCount} from '../utils/characters';
-import {useTranslator} from '../i18n';
+import {
+  textEntryTraitAttributes,
+  type TextEntryTraitProps,
+} from '../Field/textEntryTraits';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TextArea/TextArea.generated';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {useDevWarning} from '../hooks/useDevWarning';
+
+registerEnglishFallback(english);
 const COUNTER_WARNING_THRESHOLD = 0.8;
 
 const styles = stylex.create({
@@ -201,10 +217,10 @@ export interface TextAreaStatus {
   message?: string;
 }
 
-export interface TextAreaProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue'
-> {
+export interface TextAreaProps
+  extends
+    Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>,
+    TextEntryTraitProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLTextAreaElement>;
   /**
@@ -340,6 +356,15 @@ export interface TextAreaProps extends Omit<
    */
   maxLength?: number;
   /**
+   * The native `maxlength` attribute of the textarea. The browser stops typing
+   * past this many UTF-16 code units. An emoji can take two or more code
+   * units. This limit is separate from `maxLength`, which counts
+   * user-perceived characters. Set either one, or both. TextArea adds no
+   * truncation or validation of its own. A longer `value` stays as the caller
+   * sets it.
+   */
+  htmlMaxLength?: number;
+  /**
    * Whether to automatically focus the textarea on mount.
    * @default false
    */
@@ -372,6 +397,9 @@ export interface TextAreaProps extends Omit<
   autoComplete?: React.TextareaHTMLAttributes<HTMLTextAreaElement>['autoComplete'];
 }
 
+const WARN_MESSAGELESS_ERROR =
+  'an error status has no message, so only colour and an icon show the error. Give status.message the text that says what is wrong.';
+
 /**
  * A multi-line text input component for collecting longer user input.
  *
@@ -401,8 +429,13 @@ export function TextArea({
   labelTooltip,
   startIcon,
   hasSpellCheck = true,
+  enterKeyHint,
+  inputMode,
+  autoCapitalize,
+  hasAutoCorrect,
   onPaste,
   maxLength,
+  htmlMaxLength,
   hasAutoFocus = false,
   size: sizeProp,
   htmlName,
@@ -427,7 +460,11 @@ export function TextArea({
     containerStyle,
   });
   const size = useSize(sizeProp, 'md');
-  const t = useTranslator();
+  // One presence check for the start icon's slot and its padding
+  // (`architecture:react-component-runtime` INV16), on the value the caller
+  // passed: an icon component counts as present, as any non-empty value does.
+  const hasStartIcon = isRenderable(startIcon as ReactNode);
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const announce = useAnnounce();
   const generatedID = useId();
@@ -437,6 +474,7 @@ export function TextArea({
   const statusMessageID = useId();
   const counterID = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useMobileKeyboard(textareaRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Tracks the counter "zone" last announced (under / near / over) so we only
   // announce on a zone change, not on every keystroke.
@@ -456,13 +494,7 @@ export function TextArea({
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -477,10 +509,17 @@ export function TextArea({
       statusVariant,
     });
 
+  // An error without a message gets hidden translated text in its place, so
+  // assistive technology hears the error (WCAG 2.2 3.3.1).
+  const hasMessagelessError = status?.type === 'error' && !status.message;
+  useDevWarning('TextArea', WARN_MESSAGELESS_ERROR, hasMessagelessError);
+
   const ariaDescribedBy =
     [
       description ? descriptionID : null,
-      statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
+      (statusVariant !== 'tooltip' && status?.message) || hasMessagelessError
+        ? statusMessageID
+        : null,
       // The tooltip variant renders no message box; describe the input by the
       // tooltip's content instead so the status is still announced.
       statusTooltipDescribedBy,
@@ -611,6 +650,7 @@ export function TextArea({
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             isDisabled && inputWrapperStyles.disabled,
             isDisabled && inputDisabledFocusStyles.ring,
@@ -622,7 +662,7 @@ export function TextArea({
           controlClassName,
           controlStyle,
         )}>
-        {startIcon && (
+        {hasStartIcon && (
           <span {...stylex.props(styles.startIcon)}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
@@ -639,6 +679,13 @@ export function TextArea({
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
+          maxLength={htmlMaxLength}
+          {...textEntryTraitAttributes({
+            enterKeyHint,
+            inputMode,
+            autoCapitalize,
+            hasAutoCorrect,
+          })}
           // A disabled textarea keeps its place in the tab order
           // (spec:AST-085): aria-disabled instead of the native attribute,
           // with readOnly + the handleChange guard keeping the value from
@@ -673,7 +720,7 @@ export function TextArea({
               styles.textarea,
               textareaSizeStyles[size],
               isDisabled && styles.textareaDisabled,
-              Boolean(startIcon) && styles.textareaWithStartIcon,
+              hasStartIcon && styles.textareaWithStartIcon,
               // Reserve trailing space only when the end slot actually renders
               // something (spinner or on-field status icon). The `detached`
               // status variant suppresses the on-field icon — its glyph lives
@@ -715,6 +762,11 @@ export function TextArea({
           </div>
         )}
       </div>
+      {hasMessagelessError && (
+        <VisuallyHidden id={statusMessageID}>
+          {t('@astryx.field.errorFallback')}
+        </VisuallyHidden>
+      )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </Field>

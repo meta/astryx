@@ -32,7 +32,7 @@ import {
 // TODO(#264): Lazy-load usePopover so the popover/layer bundle is not
 // eagerly imported when `menu` is not provided. See Text for an example
 // of lazy loading layer resources.
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {Link} from '../Link';
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
@@ -54,9 +54,17 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {
   NavHeadingCloseContext,
   NavHeadingDismissContext,
+  NavHeadingMenuHostContext,
 } from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavHeading.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -86,6 +94,10 @@ const styles = stylex.create({
   rootCollapsed: {
     justifyContent: 'center',
     paddingInline: 0,
+  },
+  // The plain collapsed heading keeps root's inline padding and only centres.
+  rootCollapsedCentered: {
+    justifyContent: 'center',
   },
   interactive: {
     cursor: {
@@ -393,13 +405,15 @@ export function SideNavHeading({
   ...props
 }: SideNavHeadingProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent(as);
   const {isCollapsed} = useSideNavCollapse();
   const rootRef = useRef<HTMLDivElement>(null);
   const collapsedItemRef = useRef<HTMLElement>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     dialogLabel: t('@astryx.sideNav.heading.dialogLabel'),
     // The popup exposes its own role="menu" semantics; a role="dialog"
     // aria-modal wrapper would announce "dialog, Navigation menu" around a
@@ -468,11 +482,13 @@ export function SideNavHeading({
     menu ? setTriggerEl : undefined,
   );
 
-  // In collapsed mode: hide if no icon, show icon-only if has icon
-  if (isCollapsed && !icon) {
+  // In collapsed mode: hide if no icon, show icon-only if has icon. Icon
+  // presence follows `isRenderable` (`architecture:react-component-runtime`
+  // INV16), so `0` is an icon like any other content.
+  if (isCollapsed && !isRenderable(icon)) {
     return null;
   }
-  if (isCollapsed && icon) {
+  if (isCollapsed) {
     const collapsedIcon = <span {...stylex.props(styles.icon)}>{icon}</span>;
 
     let collapsedElement: ReactNode;
@@ -534,7 +550,9 @@ export function SideNavHeading({
                 {...focusOutlineProps.focusVisible(styles.popoverHeading)}
                 // A close affordance, not the trigger: dismiss only.
                 onClick={closeMenu}>
-                {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+                {isRenderable(icon) && (
+                  <span {...stylex.props(styles.icon)}>{icon}</span>
+                )}
                 <span {...stylex.props(styles.textContainer)}>
                   {superheading && (
                     <span {...stylex.props(styles.superheading)}>
@@ -574,7 +592,9 @@ export function SideNavHeading({
                 onPointerDown={headingMenuPointerDown}
                 {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
-                  {menu}
+                  <NavHeadingMenuHostContext value>
+                    {menu}
+                  </NavHeadingMenuHostContext>
                 </NavHeadingCloseContext>
               </div>
             </div>,
@@ -589,7 +609,7 @@ export function SideNavHeading({
           data-testid={testId}
           {...mergeProps(
             themeProps('side-nav-heading'),
-            stylex.props(styles.root, styles.rootCollapsed, xstyle),
+            stylex.props(styles.root, styles.rootCollapsedCentered, xstyle),
             className,
             style,
           )}
@@ -666,7 +686,7 @@ export function SideNavHeading({
     />
   );
 
-  const headerEndContentElement = headerEndContent && (
+  const headerEndContentElement = isRenderable(headerEndContent) && (
     <span {...stylex.props(styles.headerEndContent)}>{headerEndContent}</span>
   );
 
@@ -678,7 +698,7 @@ export function SideNavHeading({
       {...focusOutlineProps.focusVisible(styles.popoverHeading)}
       // A close affordance, not the trigger: dismiss only.
       onClick={closeMenu}>
-      {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+      {isRenderable(icon) && <span {...stylex.props(styles.icon)}>{icon}</span>}
       {renderTextContent(
         <Icon
           icon="chevronDown"
@@ -712,7 +732,9 @@ export function SideNavHeading({
             styles.menuTrigger,
           )}
           {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-          {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+          {isRenderable(icon) && (
+            <span {...stylex.props(styles.icon)}>{icon}</span>
+          )}
           {renderTextContent()}
         </LinkComponent>
         {headerEndContentElement}
@@ -738,7 +760,9 @@ export function SideNavHeading({
           style,
         )}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-        {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+        {isRenderable(icon) && (
+          <span {...stylex.props(styles.icon)}>{icon}</span>
+        )}
         {renderTextContent()}
         {headerEndContentElement}
         {chevronElement}
@@ -760,12 +784,14 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+          {isRenderable(icon) && (
+            <span {...stylex.props(styles.icon)}>{icon}</span>
+          )}
           {renderTextContent(
             <button
               ref={setTriggerEl}
               type="button"
-              aria-label={t('@astryx.sideNav.heading.openMenu')}
+              aria-label={t('@astryx.sideNav.heading.openMenu', {heading})}
               onClick={e => {
                 e.stopPropagation();
                 triggerProps.onClick();
@@ -802,7 +828,9 @@ export function SideNavHeading({
               onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingDismissContext>
             </div>
           </div>,
@@ -832,7 +860,7 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon &&
+          {isRenderable(icon) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -848,7 +876,7 @@ export function SideNavHeading({
               <button
                 ref={setTriggerEl}
                 type="button"
-                aria-label={t('@astryx.sideNav.heading.openMenu')}
+                aria-label={t('@astryx.sideNav.heading.openMenu', {heading})}
                 onClick={e => {
                   e.stopPropagation();
                   triggerProps.onClick();
@@ -886,7 +914,9 @@ export function SideNavHeading({
               onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingDismissContext>
             </div>
           </div>,
@@ -913,7 +943,7 @@ export function SideNavHeading({
           style,
         )}
         {...props}>
-        {icon &&
+        {isRenderable(icon) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}
@@ -973,7 +1003,7 @@ export function SideNavHeading({
         style,
       )}
       {...props}>
-      {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+      {isRenderable(icon) && <span {...stylex.props(styles.icon)}>{icon}</span>}
       {renderTextContent()}
       {headerEndContentElement}
       {chevronElement}

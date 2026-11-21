@@ -18,10 +18,21 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
+import {Activity, Suspense, use} from 'react';
+import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {AppShell} from './AppShell';
+import {Card} from '../Card/Card';
+import {Section} from '../Section/Section';
+import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {
+  DEFAULT_LAYOUT_SLOTS,
+  LayoutSlotsContext,
+} from '../Layout/LayoutSlotsContext';
+import {Layout} from '../Layout/Layout';
+import {LayoutHeader} from '../Layout/LayoutHeader';
 import {InternationalizationProvider} from '../i18n';
 import {MobileNav} from '../MobileNav';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
@@ -45,14 +56,37 @@ beforeAll(() => {
 });
 
 // Mock ResizeObserver
+// Records what each observer watches, so a test can send the notification a
+// browser sends after it lays those elements out.
+const resizeObservers = new Set<MockResizeObserver>();
 class MockResizeObserver {
   callback: ResizeObserverCallback;
+  targets = new Set<Element>();
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    resizeObservers.add(this);
   }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe(target: Element) {
+    this.targets.add(target);
+  }
+  unobserve(target: Element) {
+    this.targets.delete(target);
+  }
+  disconnect() {
+    this.targets.clear();
+    resizeObservers.delete(this);
+  }
+}
+
+function notifyResizeObservers() {
+  for (const resizeObserver of [...resizeObservers]) {
+    const entries = [...resizeObserver.targets].map(
+      target => ({target}) as ResizeObserverEntry,
+    );
+    if (entries.length > 0) {
+      resizeObserver.callback(entries, resizeObserver);
+    }
+  }
 }
 
 vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -226,6 +260,64 @@ describe('AppShell', () => {
     expect(main).toHaveAttribute('tabindex', '-1');
     fireEvent.click(skipLink);
     expect(document.activeElement).toBe(main);
+  });
+
+  it('gives a second shell its own main id; the first keeps the fixed id', () => {
+    const view = render(
+      <div>
+        <AppShell key="first">
+          <div>First</div>
+        </AppShell>
+        <AppShell key="second">
+          <div>Second</div>
+        </AppShell>
+      </div>,
+    );
+    const [firstMain, secondMain] = screen.getAllByRole('main');
+    const [firstSkip, secondSkip] = screen.getAllByTestId('skip-to-content');
+    expect(firstMain).toHaveAttribute('id', 'astryx-app-shell-main');
+    expect(secondMain.id).not.toBe('astryx-app-shell-main');
+    expect(secondMain.id).not.toBe('');
+    expect(document.querySelectorAll(`[id="${secondMain.id}"]`)).toHaveLength(
+      1,
+    );
+    expect(firstSkip).toHaveAttribute('href', '#astryx-app-shell-main');
+    expect(secondSkip).toHaveAttribute('href', `#${secondMain.id}`);
+
+    fireEvent.click(secondSkip);
+    expect(document.activeElement).toBe(secondMain);
+
+    // When the first shell leaves, the remaining shell takes the fixed id.
+    view.rerender(
+      <div>
+        <AppShell key="second">
+          <div>Second</div>
+        </AppShell>
+      </div>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute(
+      'id',
+      'astryx-app-shell-main',
+    );
+  });
+
+  it('keeps the fixed id on the page shell when another shell is nested in its content', () => {
+    render(
+      <AppShell data-testid="outer">
+        <AppShell data-testid="inner">
+          <div>Nested</div>
+        </AppShell>
+      </AppShell>,
+    );
+    const outerMain = screen
+      .getByTestId('outer')
+      .querySelector<HTMLElement>(':scope [role="main"]');
+    const innerMain = screen
+      .getByTestId('inner')
+      .querySelector<HTMLElement>('[role="main"]');
+    expect(outerMain).toHaveAttribute('id', 'astryx-app-shell-main');
+    expect(innerMain?.id).not.toBe('astryx-app-shell-main');
+    expect(innerMain?.id).not.toBe('');
   });
 
   it('skip link text comes from the i18n catalog', () => {
@@ -492,6 +584,328 @@ describe('AppShell', () => {
         '.astryx-app-shell > .astryx-layout .astryx-layout-panel',
       ),
     ).not.toBeNull();
+  });
+
+  it.each(['Suspense', 'Activity'] as const)(
+    'keeps server-rendered content that has not hydrated when the client is below the breakpoint (%s boundary)',
+    async boundary => {
+      // The server renders the page. On the client its code arrives late, so
+      // the page suspends while the shell hydrates.
+      let isPageCodeLate = false;
+      let deliverPageCode = () => {};
+      const pageCode = new Promise<void>(resolve => {
+        deliverPageCode = resolve;
+      });
+      function Page() {
+        if (isPageCodeLate) {
+          use(pageCode);
+        }
+        return <p data-testid="page">Page</p>;
+      }
+      // An app's layout puts elements between the shell and the boundary.
+      // React skips a boundary that is the shell's own child.
+      const app = (
+        <AppShell sideNav={<TestSideNav />}>
+          <div>
+            {boundary === 'Suspense' ? (
+              <Suspense fallback={null}>
+                <Page />
+              </Suspense>
+            ) : (
+              <Activity mode="visible">
+                <Page />
+              </Activity>
+            )}
+          </div>
+        </AppShell>
+      );
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      host.innerHTML = renderToString(app);
+      const serverPage = host.querySelector('[data-testid="page"]');
+      expect(serverPage).not.toBeNull();
+      expect(host.querySelector('dialog')).toBeNull();
+
+      mockMql = createMockMatchMedia(true);
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+      isPageCodeLate = true;
+      let root: ReturnType<typeof hydrateRoot> | undefined;
+      try {
+        await act(async () => {
+          root = hydrateRoot(host, app);
+        });
+        expect(serverPage?.isConnected).toBe(true);
+
+        await act(async () => {
+          deliverPageCode();
+          await pageCode;
+        });
+
+        expect(host.querySelector('[data-testid="page"]')).toBe(serverPage);
+        // The shell is in its mobile layout: the drawer is mounted.
+        expect(host.querySelector('dialog')).not.toBeNull();
+      } finally {
+        act(() => root?.unmount());
+        host.remove();
+      }
+    },
+  );
+
+  // ===========================================================================
+  // First paint before the shell reads the window
+  // ===========================================================================
+
+  describe('first paint before the shell reads the window', () => {
+    const UNREAD_SIDE_NAV = 'unreadWidthPoint__sideNavStyles.';
+    const UNREAD_CORNER = 'unreadWidthPoint__cornerStyles.';
+
+    function serverHost(app: React.ReactElement): HTMLElement {
+      const host = document.createElement('div');
+      host.innerHTML = renderToString(app);
+      return host;
+    }
+
+    it('hides the inline side nav and the elevated corner below the breakpoint in the server HTML', () => {
+      const host = serverHost(
+        <AppShell
+          variant="elevated"
+          topNav={<TopNav heading="App" />}
+          sideNav={<TestSideNav />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      const panel = host.querySelector('.astryx-layout-panel');
+      expect(panel?.className).toContain(`${UNREAD_SIDE_NAV}md`);
+      expect(host.innerHTML).toContain(`${UNREAD_CORNER}md`);
+    });
+
+    it('uses the rule of the selected width point', () => {
+      const host = serverHost(
+        <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'lg'}}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(host.querySelector('.astryx-layout-panel')?.className).toContain(
+        `${UNREAD_SIDE_NAV}lg`,
+      );
+    });
+
+    it.each([
+      ['an SSR hint that renders the phone layout', {defaultIsMobile: true}],
+      ['breakpoint none', {breakpoint: 'none' as const}],
+    ])('adds no rule for %s', (_case, mobileNav) => {
+      const host = serverHost(
+        <AppShell sideNav={<TestSideNav />} mobileNav={mobileNav}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(host.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+    });
+
+    it('adds no rule for a theme that moves the width point', () => {
+      const theme = defineTheme({
+        name: 'unread-width-theme',
+        adaptations: {widthBreakpoints: {lg: 1100}},
+      });
+      const host = serverHost(
+        <Theme theme={theme}>
+          <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'lg'}}>
+            <div>Content</div>
+          </AppShell>
+        </Theme>,
+      );
+
+      expect(host.querySelector('.astryx-layout-panel')).not.toBeNull();
+      expect(host.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+    });
+
+    it('adds no rule on a render that reads the window first', () => {
+      const {container} = render(
+        <AppShell sideNav={<TestSideNav />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(container.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+    });
+
+    it.each([
+      ['below the breakpoint', true],
+      ['at or above the breakpoint', false],
+    ])(
+      'drops the rule once hydration reads the window %s',
+      async (_case, isBelow) => {
+        const app = (
+          <AppShell
+            variant="elevated"
+            topNav={<TopNav heading="App" />}
+            sideNav={<TestSideNav />}>
+            <div>Content</div>
+          </AppShell>
+        );
+        const host = document.createElement('div');
+        let root: ReturnType<typeof hydrateRoot> | undefined;
+        try {
+          document.body.appendChild(host);
+          host.innerHTML = renderToString(app);
+          expect(host.innerHTML).toContain(UNREAD_SIDE_NAV);
+
+          mockMql = createMockMatchMedia(isBelow);
+          vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+          await act(async () => {
+            root = hydrateRoot(host, app);
+          });
+
+          expect(host.innerHTML).not.toContain(UNREAD_SIDE_NAV);
+          expect(host.innerHTML).not.toContain(UNREAD_CORNER);
+          // Below the breakpoint the shell is in its mobile layout (the
+          // drawer is mounted); otherwise the side nav stays inline.
+          expect(host.querySelector('dialog') != null).toBe(isBelow);
+          expect(host.querySelector('.astryx-layout-panel') != null).toBe(
+            !isBelow,
+          );
+        } finally {
+          act(() => root?.unmount());
+          host.remove();
+        }
+      },
+    );
+
+    describe('top nav', () => {
+      const UNREAD_REGION = 'unreadWidthPoint__topNavRegionStyles.';
+
+      function topNavWithAllRegions() {
+        return (
+          <TopNav
+            heading={<TopNavHeading heading="App" />}
+            centerContent={<TopNavItem label="Docs" href="/docs" />}
+            endContent={<button type="button">Sign in</button>}>
+            <TopNavItem label="Home" href="/" />
+          </TopNav>
+        );
+      }
+
+      it("hides the full bar's start and center content below the breakpoint in the server HTML", () => {
+        const host = serverHost(
+          <AppShell topNav={topNavWithAllRegions()}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        const hidden = host.querySelectorAll(`[class*="${UNREAD_REGION}md"]`);
+        expect(hidden).toHaveLength(2);
+        expect(hidden[0].textContent).toBe('Home');
+        expect(hidden[1].textContent).toBe('Docs');
+        // The heading and the end content keep painting, as in the mobile bar.
+        expect(
+          host
+            .querySelector('.astryx-top-nav-heading')
+            ?.closest(`[class*="${UNREAD_REGION}"]`),
+        ).toBeNull();
+        expect(
+          host.querySelector('button')?.closest(`[class*="${UNREAD_REGION}"]`),
+        ).toBeNull();
+      });
+
+      it('uses the rule of the selected width point', () => {
+        const host = serverHost(
+          <AppShell
+            topNav={topNavWithAllRegions()}
+            mobileNav={{breakpoint: 'lg'}}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        expect(
+          host.querySelectorAll(`[class*="${UNREAD_REGION}lg"]`),
+        ).toHaveLength(2);
+      });
+
+      it.each([
+        ['mobileNav false, which keeps the full bar', false as const],
+        [
+          'a mobileNav node, which keeps the full bar',
+          <MobileNav key="n">Menu</MobileNav>,
+        ],
+        ['an SSR hint that renders the mobile bar', {defaultIsMobile: true}],
+        ['breakpoint none', {breakpoint: 'none' as const}],
+      ])('adds no rule for %s', (_case, mobileNav) => {
+        const host = serverHost(
+          <AppShell topNav={topNavWithAllRegions()} mobileNav={mobileNav}>
+            <div>Content</div>
+          </AppShell>,
+        );
+
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it('adds no rule for a theme that moves the width point', () => {
+        const theme = defineTheme({
+          name: 'unread-top-nav-width-theme',
+          adaptations: {widthBreakpoints: {md: 900}},
+        });
+        const host = serverHost(
+          <Theme theme={theme}>
+            <AppShell topNav={topNavWithAllRegions()}>
+              <div>Content</div>
+            </AppShell>
+          </Theme>,
+        );
+
+        expect(host.textContent).toContain('Home');
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it('adds no rule to a TopNav outside AppShell', () => {
+        const host = serverHost(topNavWithAllRegions());
+
+        expect(host.innerHTML).not.toContain(UNREAD_REGION);
+      });
+
+      it.each([
+        ['below the breakpoint', true],
+        ['at or above the breakpoint', false],
+      ])(
+        'drops the rule once hydration reads the window %s',
+        async (_case, isBelow) => {
+          const app = (
+            <AppShell topNav={topNavWithAllRegions()}>
+              <div>Content</div>
+            </AppShell>
+          );
+          const host = document.createElement('div');
+          let root: ReturnType<typeof hydrateRoot> | undefined;
+          try {
+            document.body.appendChild(host);
+            host.innerHTML = renderToString(app);
+            const serverNav = host.querySelector('nav.astryx-top-nav');
+            expect(host.innerHTML).toContain(UNREAD_REGION);
+
+            mockMql = createMockMatchMedia(isBelow);
+            vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+            await act(async () => {
+              root = hydrateRoot(host, app);
+            });
+
+            expect(host.innerHTML).not.toContain(UNREAD_REGION);
+            const nav = host.querySelector('nav.astryx-top-nav');
+            expect(nav?.getAttribute('data-mode')).toBe(
+              isBelow ? 'mobile-bar' : null,
+            );
+            // Above the breakpoint the full bar stays the server's element.
+            if (!isBelow) {
+              expect(nav).toBe(serverNav);
+            }
+          } finally {
+            act(() => root?.unmount());
+            host.remove();
+          }
+        },
+      );
+    });
   });
 
   // ===========================================================================
@@ -1158,6 +1572,9 @@ describe('AppShell main keyboard access', () => {
 
   beforeEach(() => {
     frames = [];
+    // Earlier suites leave their own observer in place; these tests send the
+    // browser's notification through the recording one.
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -1207,6 +1624,10 @@ describe('AppShell main keyboard access', () => {
   }
 
   function remeasure() {
+    // The browser lays main out and notifies before the window resizes.
+    act(() => {
+      notifyResizeObservers();
+    });
     act(() => {
       window.dispatchEvent(new Event('resize'));
     });
@@ -1325,12 +1746,16 @@ describe('AppShell main keyboard access', () => {
     remeasure();
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
 
-    // Back in fill, main is measured as it attaches, with no other signal.
+    // Back in fill, main is measured at the first resize notification, with
+    // no other signal.
     rerender(
       <AppShell topNav={<div>Nav</div>}>
         <p>Long content</p>
       </AppShell>,
     );
+    act(() => {
+      notifyResizeObservers();
+    });
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '0');
   });
 
@@ -1345,5 +1770,160 @@ describe('AppShell main keyboard access', () => {
     setMainGeometry(main, 1200);
     remeasure();
     expect(main).toHaveAttribute('tabindex', '-1');
+  });
+});
+
+describe('AppShell layout root (FR18)', () => {
+  // A custom property set to `initial` reads back as `initial`; an empty
+  // value would mean the root declares nothing.
+  const CLEARED_READBACK = ['initial'];
+
+  function shell(testId: string) {
+    return (
+      <AppShell
+        data-testid={testId}
+        contentPadding={6}
+        topNav={
+          <TopNav label="Main" heading={<TopNavHeading heading="App" />} />
+        }
+        sideNav={
+          <SideNav>
+            <SideNavSection title="Main" isHeaderHidden>
+              <SideNavItem label="Dashboard" href="#" isSelected />
+            </SideNavSection>
+          </SideNav>
+        }>
+        {/* A page Layout of the app's own: its header takes the divider
+            default of the nearest Layout that sets one. */}
+        <Layout
+          header={<LayoutHeader>Page header</LayoutHeader>}
+          content={<p>Page content</p>}
+        />
+      </AppShell>
+    );
+  }
+
+  /** The shell's markup without its generated ids, for comparing two renders. */
+  function markup(testId: string): string {
+    const root = screen.getByTestId(testId);
+    return root.outerHTML
+      .replaceAll(testId, 'shell')
+      .replace(/(id|for|aria-[a-z]+|href)="[^"]*"/g, '$1=""');
+  }
+
+  it('stops the container padding, Layout values and height cap of a padded host at its root', () => {
+    render(<Card padding={3}>{shell('shell')}</Card>);
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    for (const edge of [
+      'inline-start',
+      'inline-end',
+      'block-start',
+      'block-end',
+    ]) {
+      expect(
+        computed.getPropertyValue(`--container-padding-${edge}`),
+        edge,
+      ).toBe('0px');
+    }
+    for (const name of [
+      '--layout-padding-outer-x',
+      '--layout-padding-outer-y',
+      '--layout-padding-own-outer-x',
+      '--layout-padding-own-outer-y',
+      '--layout-padding-inner-x',
+      '--layout-padding-inner-y',
+      '--layout-content-width',
+      '--layout-alignment-width',
+      '--_layout-flush-block-start',
+      '--_layout-flush-block-end',
+      '--_section-padding-propagated',
+      '--container-max-height',
+    ]) {
+      expect(CLEARED_READBACK, name).toContain(computed.getPropertyValue(name));
+    }
+  });
+
+  it('renders the same shell inside a padded Card and inside a Layout as at the page root', () => {
+    const {unmount} = render(shell('shell'));
+    const atRoot = markup('shell');
+    unmount();
+
+    const inCard = render(<Card padding={3}>{shell('shell')}</Card>);
+    expect(markup('shell')).toBe(atRoot);
+    inCard.unmount();
+
+    render(
+      <Layout
+        padding={4}
+        defaultHasDividers
+        header={<LayoutHeader>Outer header</LayoutHeader>}
+        content={shell('shell')}
+      />,
+    );
+    expect(markup('shell')).toBe(atRoot);
+  });
+
+  it('stops an enclosing divider default for every child of the root, the mobile nav node too', () => {
+    render(
+      <Layout
+        defaultHasDividers
+        content={
+          <AppShell
+            data-testid="shell"
+            mobileNav={
+              <LayoutHeader data-testid="mobile-header">Menu</LayoutHeader>
+            }>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    expect(screen.getByTestId('mobile-header')).not.toHaveAttribute(
+      'data-divider',
+    );
+  });
+
+  it('resets the Layout area and slot contexts for every child of the root', () => {
+    let seen: unknown = 'unrendered';
+    function Probe() {
+      seen = {area: use(LayoutAreaContext), slots: use(LayoutSlotsContext)};
+      return null;
+    }
+    render(
+      <Layout
+        header={<p>Outer header</p>}
+        start={<p>Outer start</p>}
+        content={
+          <AppShell mobileNav={<Probe />}>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    // Inside the outer Layout's content area the probe would read area
+    // 'content' and the outer header and start slots; at the shell's root
+    // both are back to their defaults.
+    expect(seen).toEqual({area: null, slots: DEFAULT_LAYOUT_SLOTS});
+  });
+
+  it('keeps the caller style and a Section host out of each other', () => {
+    render(
+      <Section padding={6}>
+        <AppShell
+          data-testid="shell"
+          style={{['--container-padding-inline-start' as string]: '8px'}}>
+          <p>Page content</p>
+        </AppShell>
+      </Section>,
+    );
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    // The Section's propagated padding stops at the root...
+    expect(CLEARED_READBACK).toContain(
+      computed.getPropertyValue('--_section-padding-propagated'),
+    );
+    // ...and the caller's own style still applies after the reset (FR15).
+    expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
+      '8px',
+    );
   });
 });

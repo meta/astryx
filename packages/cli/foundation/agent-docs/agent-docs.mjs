@@ -31,7 +31,6 @@
 
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {findCoreDir, findInstalledPackage, CLI_ROOT} from '../fs/paths.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
@@ -44,12 +43,14 @@ import {renderCommandTokens} from '../doc-compiler/doc-syntax.mjs';
 import {isValidSemver, semverGte} from '../env/semver.mjs';
 import {discoverComponents} from '../discovery/component-discovery.mjs';
 import {Project} from '../config/project.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
 import {cliRootNamespaceNames} from '../doc-compiler/tree.mjs';
 import {humanLog} from '../response/json.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 import {
   AGENTS_MD,
   AGENT_DOC_PATHS,
+  holdsAstryxBlock,
   CLAUDE_MD,
   CLAUDE_DIR_MD,
   CURSOR_RULES,
@@ -67,6 +68,12 @@ import {
   WORKFLOW_STEPS,
   WORKFLOW_TITLE,
 } from './agent-doc-state.mjs';
+import {
+  agentDocsTargetDir,
+  assertAgentDocsTarget,
+  realDir,
+  REPOSITORY_MARKERS,
+} from './agent-docs-target.mjs';
 
 // The agent-doc locations, markers, and the setup-state predicates
 // (discoverAgentDocs, isAstryxInitialized, isAstryxPromptInReach) are the ONE
@@ -77,7 +84,35 @@ import {
 // keep their `from './agent-docs.mjs'` paths.
 export {discoverAgentDocs, isAstryxInitialized, isAstryxPromptInReach};
 
+// The folder the docs go to lives in ./agent-docs-target.mjs, with node
+// builtins and the CLI's paths module only. So the per-command setup nudge
+// loads it without this module's discovery and config. Re-exported here for
+// existing importers.
+export {
+  AgentDocsHomeError,
+  agentDocsTargetDir,
+  assertAgentDocsTarget,
+  resolveAgentDocsRoot,
+} from './agent-docs-target.mjs';
+
 const MAX_PROJECT_AGENT_DOC_LINES = 32;
+
+/**
+ * The block's last line: how an agent removes the block. `--remove-agents`
+ * clears the project root and the working folder (cli-surface INV31); a copy
+ * it leaves, such as a file named with `--agent-docs-path`, comes out by hand.
+ */
+export const REMOVE_LINE =
+  'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+
+/**
+ * How to share a page as one file, for a share ask only. Agents asked to share
+ * a page otherwise hand-build their own single HTML file, whose controls do
+ * not work.
+ */
+const SHARE_LINE =
+  'When asked to share a page as one file, run `astryx experimental export <page.tsx>`: the file opens anywhere and its controls work; `--reverse` gets the source back.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -321,186 +356,6 @@ function geminiImportsAgentsMd(targetDir) {
   );
 }
 
-/**
- * Thrown when agent docs would be written into the home folder, or into a
- * settings folder in it such as `~/.gemini` outside a project. Agents read the
- * files there (for example `~/.claude/CLAUDE.md` or `~/.gemini/GEMINI.md`) in
- * every project, so a project's version-pinned block never goes there. Removal
- * stays allowed.
- */
-export class AgentDocsHomeError extends Error {
-  /** @param {string} dir */
-  constructor(dir) {
-    super(
-      `Agent docs are not written into the home folder, or into a settings folder in it outside a project (${dir}): agents read the files there in every project. Run init inside a project folder.`,
-    );
-    this.name = 'AgentDocsHomeError';
-    /** The refused folder. */
-    this.dir = dir;
-  }
-}
-
-/**
- * `p` resolved, through symlinks when it exists.
- * @param {string} p
- * @returns {string}
- */
-function realDir(p) {
-  try {
-    return fs.realpathSync(path.resolve(p));
-  } catch {
-    return path.resolve(p);
-  }
-}
-
-/**
- * `dir` relative to the home folder, compared without symlinks (and without
- * case on Windows). null when there is no home folder.
- * @param {string} dir
- * @returns {string | null}
- */
-function relativeToHome(dir) {
-  let home;
-  try {
-    home = os.homedir();
-  } catch {
-    return null;
-  }
-  if (!home) return null;
-  /** @param {string} p */
-  const fold = p => (process.platform === 'win32' ? p.toLowerCase() : p);
-  return path.relative(fold(realDir(home)), fold(realDir(dir)));
-}
-
-/**
- * Whether `dir` is the home folder.
- * @param {string} dir
- * @returns {boolean}
- */
-function isHomeFolder(dir) {
-  return relativeToHome(dir) === '';
-}
-
-/**
- * Whether agent docs stay out of `dir`: the home folder, or a folder in a
- * settings folder of it (a folder of the home folder whose name starts with a
- * dot, such as `~/.gemini` or `~/.claude`) that belongs to no project there.
- * Agents read the files at the top of a settings folder in every project, so
- * the settings folder itself is never a project, even with a package.json. A
- * folder below it with a package.json at or above it is a project, such as an
- * agent worktree in `~/.codex/worktrees/<id>/<repo>`.
- * @param {string} dir
- * @returns {boolean}
- */
-function isHomeOrSettingsFolder(dir) {
-  const rel = relativeToHome(dir);
-  if (rel == null) return false;
-  if (rel === '') return true;
-  if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
-    return false;
-  }
-  const parts = rel.split(path.sep);
-  if (!parts[0].startsWith('.')) return false;
-  // Look for a package.json from `dir` up to, not including, the settings folder.
-  let current = realDir(dir);
-  for (let depth = parts.length; depth > 1; depth--) {
-    if (fs.existsSync(path.join(current, 'package.json'))) return false;
-    current = path.dirname(current);
-  }
-  return true;
-}
-
-/**
- * Throw {@link AgentDocsHomeError} when `targetDir` is the home folder, or a
- * settings folder in it outside a project.
- * @param {string} targetDir
- */
-export function assertAgentDocsTarget(targetDir) {
-  if (isHomeOrSettingsFolder(targetDir)) throw new AgentDocsHomeError(realDir(targetDir));
-}
-
-/** Folders that mark a repository root; the project search stops there. */
-const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
-
-/** Dependency fields where a project declares the Astryx packages it uses. */
-const DEPENDENCY_FIELDS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-];
-
-/**
- * The package.json in `dir`: its parsed content, `null` when it exists but
- * does not parse, or `undefined` when there is none.
- * @param {string} dir
- * @returns {Record<string, unknown> | null | undefined}
- */
-function readPackageJson(dir) {
-  const file = path.join(dir, 'package.json');
-  if (!fs.existsSync(file)) return undefined;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Whether a parsed package.json declares an `@astryxdesign` package.
- * @param {Record<string, unknown> | null} manifest
- * @returns {boolean}
- */
-function declaresAstryx(manifest) {
-  return DEPENDENCY_FIELDS.some(field => {
-    const deps = manifest?.[field];
-    return (
-      deps != null &&
-      typeof deps === 'object' &&
-      Object.keys(deps).some(name => name.startsWith('@astryxdesign/'))
-    );
-  });
-}
-
-/**
- * The folder a run started in `cwd` writes agent docs to: the nearest folder at
- * or above it whose package.json declares an `@astryxdesign` package, else the
- * nearest folder with any package.json. The search stops at a repository root
- * and never reaches the home folder, so a stray `~/package.json` cannot pull
- * the docs there.
- * @param {string} cwd
- * @returns {string | null} null when no folder it searches has a package.json;
- *   init then writes where it runs, as before.
- */
-export function resolveAgentDocsRoot(cwd) {
-  let dir = path.resolve(cwd);
-  /** @type {string | null} */
-  let nearest = null;
-  for (let i = 0; i < 50 && !isHomeFolder(dir); i++) {
-    const manifest = readPackageJson(dir);
-    if (manifest !== undefined) {
-      if (declaresAstryx(manifest)) return dir;
-      nearest ??= dir;
-    }
-    if (REPOSITORY_MARKERS.some(marker => fs.existsSync(path.join(dir, marker)))) break;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return nearest;
-}
-
-/**
- * The folder `init` run in `cwd` writes the agent docs to: the project root
- * {@link resolveAgentDocsRoot} finds, else `cwd` itself. The one definition
- * that init, its removal, and the per-command setup nudge all use.
- * @param {string} cwd
- * @returns {string}
- */
-export function agentDocsTargetDir(cwd) {
-  return resolveAgentDocsRoot(cwd) ?? cwd;
-}
 
 /**
  * Agent tool presets — maps tool names to their file search paths.
@@ -547,6 +402,9 @@ export function parseBlockVersion(content) {
  * @param {string} [installedVersion] Defaults to the installed core version.
  * @param {string} [expectedBlock] Fully rendered block for this project. When
  *   present, byte differences are stale even if the Core version is unchanged.
+ * @param {{paths?: string[]}} [options] `paths`: the files to read, relative to
+ *   `targetDir`, in place of the agent docs found there; a named file without
+ *   the block makes the status `stale` (or `missing` when none has one).
  * @returns {{
  *   installedVersion: string,
  *   status: 'missing' | 'stale' | 'current',
@@ -555,27 +413,39 @@ export function parseBlockVersion(content) {
  *   blockVersions: string[],
  * }}
  */
-export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
-  const version = installedVersion ?? getXdsVersion(findCoreDir(targetDir));
+export function inspectAgentDocs(
+  targetDir,
+  installedVersion,
+  expectedBlock,
+  {paths} = {},
+) {
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   /** @type {Array<{path: string, blockVersion: string|null, legacy: boolean, stale: boolean}>} */
   const files = [];
+  // Named files (init's --agent-docs-path) are the docs: one without the
+  // block keeps the set from being current.
+  let namedWithoutBlock = 0;
 
-  for (const rel of discoverAgentDocs(targetDir)) {
+  for (const rel of paths ?? discoverAgentDocs(targetDir)) {
     /** @type {string} */
     let content;
     try {
       content = fs.readFileSync(path.join(targetDir, rel), 'utf-8');
     } catch {
+      if (paths) namedWithoutBlock++;
       continue; // Unreadable — treat as absent.
     }
     const hasNew = content.includes(MARKER_START);
     const hasLegacy = content.includes(LEGACY_MARKER_START);
-    if (!hasNew && !hasLegacy) continue; // Not a block we manage.
+    if (!hasNew && !hasLegacy) {
+      if (paths) namedWithoutBlock++;
+      continue; // Not a block we manage.
+    }
     // An import of AGENTS.md names no version and never needs a refresh.
     if (isAgentsImportBlock(rel, content)) continue;
 
     const legacy = !hasNew && hasLegacy;
-    const blockVersion = parseBlockVersion(content);
+    const blockVersion = managedBlockVersion(content);
     let contentMatches = true;
     if (expectedBlock != null) {
       try {
@@ -604,7 +474,7 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
   /** @type {'missing' | 'stale' | 'current'} */
   let status;
   if (files.length === 0) status = 'missing';
-  else if (staleFiles.length > 0) status = 'stale';
+  else if (staleFiles.length > 0 || namedWithoutBlock > 0) status = 'stale';
   else status = 'current';
 
   return {installedVersion: version, status, files, staleFiles, blockVersions};
@@ -693,16 +563,17 @@ export function detectStylingSystem(targetDir) {
 const BUILT_CHECK_SINCE = '0.7.4';
 
 /**
- * Whether a project on this Core release can run `astryx doctor --built`. A
- * prerelease of the first release is below it: its canaries predate the
- * option.
+ * Whether `version` is release `since` or later. A prerelease of `since`
+ * itself is below it: its canaries predate the feature.
  * @param {string | null | undefined} version
+ * @param {string} since
+ * @returns {boolean}
  */
-function hasBuiltCheck(version) {
+function isReleaseSince(version, since) {
   if (typeof version !== 'string' || !isValidSemver(version)) return false;
   const [release, prerelease] = version.split('-', 2);
-  if (prerelease !== undefined && release === BUILT_CHECK_SINCE) return false;
-  return semverGte(release, BUILT_CHECK_SINCE);
+  if (prerelease !== undefined && release === since) return false;
+  return semverGte(release, since);
 }
 
 /**
@@ -716,17 +587,50 @@ function hasBuiltCheck(version) {
  * @returns {boolean}
  */
 export function projectHasBuiltCheck(dir) {
+  return installedCliHas(dir, BUILT_CHECK_SINCE);
+}
+
+/** The first release whose CLI has `experimental export`. */
+const EXPORT_SINCE = '0.7.17';
+
+/**
+ * Whether the project at `dir` can run `astryx experimental export`, read from
+ * the CLI it installs, as {@link projectHasBuiltCheck} reads `doctor --built`.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+export function projectHasExport(dir) {
+  return installedCliHas(dir, EXPORT_SINCE);
+}
+
+/**
+ * Whether the CLI the project at `dir` installs is release `since` or later.
+ * A canary of `since` itself is not: it may predate the feature.
+ *
+ * @param {string} dir
+ * @param {string} since
+ * @returns {boolean}
+ */
+function installedCliHas(dir, since) {
   const installed = findInstalledPackage(dir, '@astryxdesign/cli');
   if (!installed) return false;
   try {
     const {version} = JSON.parse(
       fs.readFileSync(path.join(installed, 'package.json'), 'utf8'),
     );
-    return hasBuiltCheck(version);
+    return isReleaseSince(version, since);
   } catch {
     return false;
   }
 }
+
+/**
+ * The agent-block line that sends an agent to the icon finder. Without it,
+ * agents copy icons from nearby code or a library instead of asking.
+ */
+export const ICON_FINDER_LINE =
+  'Need an icon? Run `astryx experimental icon <what it means>` and paste the import it prints, instead of copying one from a template or other code.';
 
 /**
  * Generate the agent cheat sheet from live CLI metadata.
@@ -751,8 +655,12 @@ export function projectHasBuiltCheck(dir) {
  * among them. An agent cannot ask for a topic it was never told about, and
  * `getting-started` is the one it should reach for first.
  *
+ * `iconFeatures` is the project's icon feature gate. Where it is on, the
+ * block tells the agent to ask the icon finder for an icon instead of copying
+ * one; where it is off, the block has no icon line.
+ *
  * @param {string | null} version the Core version
- * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean}} [options]
+ * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, skills?: ReadonlyArray<{package: string, name: string, description: string}>, builtCheck?: boolean, iconFeatures?: boolean, exportCheck?: boolean}} [options]
  * @returns {string}
  */
 export function generateCompressedIndex(
@@ -763,7 +671,10 @@ export function generateCompressedIndex(
     stylingSystem = 'css',
     topics,
     agentDocs = [],
+    skills = [],
     builtCheck = false,
+    iconFeatures = false,
+    exportCheck = false,
   } = {},
 ) {
   const run = invocation;
@@ -799,6 +710,7 @@ export function generateCompressedIndex(
   lines.push(
     `CLI: run every command as \`${run} <cmd>\` (shown below as \`astryx ...\`).`,
   );
+  if (iconFeatures) lines.push(ICON_FINDER_LINE);
   lines.push('');
 
   // Required setup — components ship precompiled CSS; without these imports
@@ -812,7 +724,7 @@ export function generateCompressedIndex(
   // template it names. build/template/component are covered here, so they are
   // intentionally omitted from the command reference below.
   lines.push(WORKFLOW_TITLE, ...WORKFLOW_STEPS);
-  lines.push('Changing an existing page? Keep it: skip step 2 and add blocks/components inside its sections.');
+  lines.push('Changing an existing page? Keep it: skip step 2 and add components inside its sections; read a block example when it helps.');
   // Only for a project whose recorded releases have `doctor --built`
   // (projectHasBuiltCheck): a newer copy may write this block in a project
   // whose install then brings an older CLI, which rejects the option. The computer-level
@@ -820,6 +732,9 @@ export function generateCompressedIndex(
   if (builtCheck) {
     lines.push("Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.");
   }
+  // Only for a project whose installed CLI has the command, as for the
+  // doctor line above.
+  if (exportCheck) lines.push(SHARE_LINE);
   lines.push('');
 
   // Rules — the top error-preventers.
@@ -837,7 +752,7 @@ export function generateCompressedIndex(
   } else {
     lines.push("- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.");
   }
-  lines.push('- Palettes and custom colors go through the theme, never :root overrides. Run `astryx theme add <slug>` to import; `theme eject <slug>` only forks source. See `astryx docs theme`.');
+  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props on one page: `editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
   // Self-check — post-generation pass. Validated via vibe tests (internal/vibe-tests/
   // prompt-purity-test): on complex multi-step UIs the rules above alone still leave raw
   // CSS in ~11-13% of runs; a re-read-and-fix pass cuts that ~4x at negligible token cost.
@@ -884,7 +799,7 @@ export function generateCompressedIndex(
     (count, contribution) => count + contribution.append.length,
     0,
   );
-  if (appendCount > 0) {
+  if (appendCount > 0 || skills.length > 0) {
     lines.push('');
     lines.push('INTEGRATIONS:');
     for (const contribution of agentDocs) {
@@ -892,10 +807,27 @@ export function generateCompressedIndex(
         lines.push(`- \`${contribution.package}\`: ${line}`);
       }
     }
+    // One line per integration skill; its whole text is in the skill places
+    // and `astryx docs skills/<name>`.
+    for (const each of skills) lines.push(skillPointerLine(each));
   }
+  // Last, so it follows any integration lines. Without it, an agent asked to
+  // take Astryx's text out deletes whole agent files or cuts one copy by hand
+  // and leaves the others.
+  lines.push(REMOVE_LINE);
   lines.push(MARKER_END);
 
   return lines.join('\n');
+}
+
+/**
+ * The block's line for one integration skill: who ships it, when to use it,
+ * and the command that reads it.
+ * @param {{package: string, name: string, description: string}} skill
+ * @returns {string}
+ */
+export function skillPointerLine({package: pkg, name, description}) {
+  return `- \`${pkg}\` skill \`${name}\`: ${description} Read it with \`astryx docs skills/${name}\`.`;
 }
 
 /**
@@ -905,15 +837,17 @@ export function generateCompressedIndex(
  * The returned bytes are reused for every target file.
  *
  * @param {string} targetDir
- * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @param {{installedVersion?: string, fresh?: boolean, skills?: ReadonlyArray<{package: string, name: string, description: string}>}} [options]
+ *   `skills`: the integration skills the block points to, as the docs tree
+ *   keeps them (api/docs `projectIntegrationSkills`); none without it
  * @returns {Promise<string>}
  */
 export async function renderAgentDocsBlock(
   targetDir,
-  {installedVersion, fresh = false} = {},
+  {installedVersion, fresh = false, skills = []} = {},
 ) {
   const coreDir = findCoreDir(targetDir);
-  const version = installedVersion ?? getXdsVersion(coreDir);
+  const version = installedVersion ?? agentDocsVersion(targetDir);
   const project = await Project.load(targetDir, {fresh});
   const failedIntegration = project.loadedIntegrations.find(
     integration => integration.__loadError != null,
@@ -969,12 +903,29 @@ export async function renderAgentDocsBlock(
 
   return generateCompressedIndex(version, {
     coreDir,
+    skills: skills.map(({package: pkg, name, description}) => ({
+      package: validateIntegrationLabel(pkg),
+      name,
+      description,
+    })),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     invocation: getCliInvocation(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
     topics,
     agentDocs,
+    iconFeatures: iconFeatureGate(project).on,
   });
+}
+
+/**
+ * The version an agent-docs block names when no caller gives one, as `init`
+ * writes it: the Core the folder reads, else this CLI's own.
+ * @param {string} targetDir
+ * @returns {string}
+ */
+export function agentDocsVersion(targetDir) {
+  return getXdsVersion(findCoreDir(targetDir));
 }
 
 /**
@@ -1059,6 +1010,7 @@ export function injectAgentsMd(targetDir, version) {
   const compressedIndex = generateCompressedIndex(version, {
     coreDir: findCoreDir(targetDir),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
   });
   injectXdsBlock(agentsPath, compressedIndex, {
@@ -1080,6 +1032,7 @@ export function injectClaudeMd(targetDir, version) {
   const compressedIndex = generateCompressedIndex(version, {
     coreDir: findCoreDir(targetDir),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
   });
   return injectXdsBlock(claudePath, compressedIndex);
@@ -1733,6 +1686,68 @@ function stripManagedBlock(filePath, compressedIndex) {
 }
 
 /**
+ * Each agent-doc file's text, or null when it does not exist. Init reads the
+ * files before and after it writes, so its receipt can say what changed.
+ * @param {string} dir
+ * @param {string[]} rels paths relative to `dir`
+ * @returns {Map<string, string | null>}
+ */
+export function readAgentDocTexts(dir, rels) {
+  return new Map(
+    rels.map(rel => {
+      try {
+        return [rel, fs.readFileSync(path.join(dir, rel), 'utf-8')];
+      } catch {
+        return [rel, null];
+      }
+    }),
+  );
+}
+
+/**
+ * The Astryx version the managed block in `content` names. Only the block is
+ * read, so a version that the project's own text mentions never counts. Null
+ * when there is no block, the block is malformed, or it has no version line.
+ * @param {string} content
+ * @returns {string | null}
+ */
+export function managedBlockVersion(content) {
+  try {
+    const block = findManagedBlock(content);
+    return block ? parseBlockVersion(content.slice(block.start, block.end)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a write did to one agent-doc file, from its text before and after.
+ * `removed`: its Astryx block is gone. `created`: the file did not exist.
+ * `unchanged`: the text is the same. `updated`: anything else. `from` and
+ * `to` are the versions the block names before and after.
+ * @param {string | null} before
+ * @param {string | null} after
+ * @returns {{change: 'created' | 'updated' | 'unchanged' | 'removed', from: string | null, to: string | null}}
+ */
+export function agentDocChange(before, after) {
+  const had = before != null && holdsAstryxBlock(before);
+  const has = after != null && holdsAstryxBlock(after);
+  const change =
+    had && !has
+      ? 'removed'
+      : before == null
+        ? 'created'
+        : before === after
+          ? 'unchanged'
+          : 'updated';
+  return {
+    change,
+    from: had ? managedBlockVersion(/** @type {string} */ (before)) : null,
+    to: has ? managedBlockVersion(/** @type {string} */ (after)) : null,
+  };
+}
+
+/**
  * Programmatic entry point for installing agent docs.
  * Used by the init command, upgrade command, and agent-docs command.
  *
@@ -1805,6 +1820,7 @@ export function installAgentDocs(
     generateCompressedIndex(version, {
       coreDir,
       builtCheck: projectHasBuiltCheck(targetDir),
+      exportCheck: projectHasExport(targetDir),
       zh,
       lang,
       invocation,

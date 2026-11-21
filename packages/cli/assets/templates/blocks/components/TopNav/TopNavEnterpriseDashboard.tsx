@@ -7,20 +7,22 @@ import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
-  CubeIcon,
+  PackageIcon,
   HomeIcon,
-  DocumentTextIcon,
-  BellIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+  NotificationIcon,
+} from '@astryxdesign/template-icons';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function TopNavEnterpriseDashboard() {
+  const showToast = useToast();
   return (
     <TopNav
       label="Main navigation"
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
           headingHref="#"
         />
       }
@@ -35,25 +37,29 @@ export default function TopNavEnterpriseDashboard() {
           <TopNavItem
             label="Reports"
             href="#"
-            icon={<Icon icon={DocumentTextIcon} size="sm" />}
+            icon={<Icon icon={DocumentIcon} size="sm" />}
           />
         </>
       }
       endContent={
         <>
           <Button
+            onClick={() => showToast({body: 'Demo: search would open here'})}
             label="Search"
             variant="ghost"
             icon={<Icon icon="search" color="inherit" />}
             isIconOnly
           />
           <Button
+            onClick={() =>
+              showToast({body: 'Demo: your notifications would open here'})
+            }
             label="Notifications"
             variant="ghost"
-            icon={<Icon icon={BellIcon} />}
+            icon={<Icon icon={NotificationIcon} />}
             isIconOnly
           />
-          <Button label="Upgrade" variant="primary" />
+          <Button href={'#'} label="Upgrade" variant="primary" />
         </>
       }
     />

@@ -499,6 +499,65 @@ describe('resolveSpecsForFile', () => {
     ).toEqual(['component:ChatComposerDrawer']);
   });
 
+  it("places a platform record over its language's code and brings in the core record", () => {
+    const root = fixtureRoot();
+    write(root, 'packages/core/src/Avatar/Avatar.tsx');
+    write(root, 'packages/native/apple/Sources/Astryx/Avatar/Avatar.swift');
+    write(
+      root,
+      'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+    );
+    write(root, 'packages/native/apple/Sources/Astryx/Button/Button.swift');
+    writeRecord(root, 'docs/specs/components/Avatar/Avatar.spec.md', {
+      kind: 'component',
+      id: 'component:Avatar',
+    });
+    writeRecord(root, 'docs/specs/components/Avatar/Avatar.swift.spec.md', {
+      kind: 'component',
+      id: 'component:swift/Avatar',
+      platform_of: 'component:Avatar',
+    });
+    writeRecord(
+      root,
+      'docs/specs/components/Avatar/AvatarStatusDot.swift.spec.md',
+      {
+        kind: 'component',
+        id: 'component:swift/AvatarStatusDot',
+        platform_of: 'component:AvatarStatusDot',
+      },
+    );
+    const index = loadKnowledgeIndex(root);
+    const lookup = file => ids(resolveSpecsForFile(index, file).records);
+
+    expect(
+      lookup('packages/native/apple/Sources/Astryx/Avatar/Avatar.swift'),
+    ).toEqual(['component:Avatar', 'component:swift/Avatar']);
+    expect(
+      lookup(
+        'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+      ),
+    ).toEqual([
+      'component:Avatar',
+      'component:swift/Avatar',
+      'component:swift/AvatarStatusDot',
+    ]);
+    expect(lookup('packages/core/src/Avatar/Avatar.tsx')).toEqual([
+      'component:Avatar',
+    ]);
+    expect(
+      lookup('packages/native/apple/Sources/Astryx/Button/Button.swift'),
+    ).toEqual([]);
+    expect(
+      lookup('docs/specs/components/Avatar/AvatarStatusDot.swift.spec.md'),
+    ).toEqual(['component:swift/AvatarStatusDot']);
+    expect(
+      findUnreachedRecords(index, [
+        'packages/core/src/Avatar/Avatar.tsx',
+        'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+      ]).map(record => record.id),
+    ).toEqual([]);
+  });
+
   it('names a member without its own consumer doc by its file stem', () => {
     const index = loadKnowledgeIndex(popoverFixture());
     expect(

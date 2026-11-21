@@ -11,8 +11,14 @@
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, screen, renderHook, fireEvent} from '@testing-library/react';
-import {createRef} from 'react';
+import {
+  act,
+  render,
+  screen,
+  renderHook,
+  fireEvent,
+} from '@testing-library/react';
+import {Activity, createRef} from 'react';
 import {Overlay} from './Overlay';
 import {useOverlay} from './useOverlay';
 
@@ -243,6 +249,76 @@ describe('Overlay', () => {
       );
       const root = container.firstElementChild as HTMLElement;
       expect(root.style.opacity).toBe('0.5');
+    });
+
+    it('takes the corner radius of its first child', () => {
+      const {container} = render(
+        <Overlay content={<span>c</span>}>
+          <div style={{borderRadius: '12px'}}>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+    });
+
+    it('sets no radius when its first child has none', () => {
+      const {container} = render(
+        <Overlay content={<span>c</span>}>
+          <div>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('');
+    });
+
+    it('gives a callback ref the root that took the radius', () => {
+      const ref = vi.fn();
+      const {container} = render(
+        <Overlay ref={ref} content={<span>c</span>}>
+          <div style={{borderRadius: '8px'}}>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(ref).toHaveBeenCalledWith(root);
+      expect(root.style.borderRadius).toBe('8px');
+    });
+
+    it('keeps a later radius when an inline callback ref re-renders', () => {
+      const overlay = (label: string) => (
+        <Overlay ref={element => void element} content={<span>{label}</span>}>
+          <div style={{borderRadius: '12px'}}>b</div>
+        </Overlay>
+      );
+      const {container, rerender} = render(overlay('first'));
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+
+      root.style.borderRadius = '40px';
+      rerender(overlay('second'));
+      expect(container.firstElementChild).toBe(root);
+      expect(root.style.borderRadius).toBe('40px');
+    });
+
+    it('reads the radius again when a hidden Activity shows it', async () => {
+      const overlay = (mode: 'visible' | 'hidden') => (
+        <Activity mode={mode}>
+          <Overlay content={<span>c</span>}>
+            <div data-testid="media" style={{borderRadius: '12px'}}>
+              b
+            </div>
+          </Overlay>
+        </Activity>
+      );
+      const {container, rerender} = render(overlay('visible'));
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+
+      rerender(overlay('hidden'));
+      await act(async () => Promise.resolve());
+      screen.getByTestId('media').style.borderRadius = '48px';
+      rerender(overlay('visible'));
+      expect(container.firstElementChild).toBe(root);
+      expect(root.style.borderRadius).toBe('48px');
     });
   });
 

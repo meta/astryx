@@ -4,7 +4,7 @@
 
 /**
  * @file Outline.tsx
- * @input Uses React, StyleX, Astryx link provider integration, Outline hooks/types, useListFocus
+ * @input Uses React, StyleX, Astryx link provider integration, Outline hooks/types
  * @output Exports Outline component and OutlineProps type
  * @position Core implementation; consumed by index.ts
  *
@@ -12,7 +12,7 @@
  * - Sliding indicator track (vertical divider + animated active bar)
  * - Density variant (default/compact)
  * - Scroll-spy active state when uncontrolled
- * - Roving-tabindex keyboard navigation (Arrow/Home/End, Enter/Space activate)
+ * - Each link in the normal Tab order (Enter/Space activate)
  * - onNavigateStart / onNavigateEnd callbacks around the smooth scroll
  * - Scroll scoping (offset, scrollContainerRef, hasScrollOnClick)
  *
@@ -35,8 +35,6 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useListFocus} from '../hooks/useListFocus';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useScrollSpy} from './useScrollSpy';
@@ -45,9 +43,20 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Outline/Outline.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 export type {OutlineItem} from './types';
 
 export interface OutlineProps extends BaseProps<HTMLElement> {
@@ -63,7 +72,10 @@ export interface OutlineProps extends BaseProps<HTMLElement> {
   /** Called when the active item changes from scroll-spy or click. */
   onActiveIdChange?: (id: string) => void;
 
-  /** Accessible label for the nav landmark. @default 'Table of contents' */
+  /**
+   * Accessible label for the nav landmark. A caller's aria-label wins over it.
+   * @default 'Table of contents'
+   */
   label?: string;
 
   /**
@@ -115,7 +127,8 @@ export interface OutlineProps extends BaseProps<HTMLElement> {
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
 
   /**
-   * Whether activating an item smooth-scrolls to it. Set to false to own the
+   * Whether activating an item scrolls to it: smoothly, or at once under
+   * reduced motion. Set to false to own the
    * scrolling yourself (virtualized content, a router) — the Outline still
    * updates the active item, the hash, and the navigate callbacks, but performs
    * no scroll and suppresses the anchor's default jump.
@@ -167,7 +180,13 @@ const styles = stylex.create({
     top: 'anchor(--outline-active top, 0px)',
     height: 'anchor-size(--outline-active height, 0px)',
     transitionProperty: 'top, height',
-    transitionDuration: durationVars['--duration-fast-min'],
+    // Under reduced motion the indicator does not travel on any pointer.
+    transitionDuration: {
+      default: durationVars['--duration-fast-min'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   activeAnchor: {
@@ -202,7 +221,14 @@ const styles = stylex.create({
     position: 'relative',
     textAlign: 'start',
     textDecoration: 'none',
-    transitionDuration: durationVars['--duration-fast'],
+    // Under reduced motion a hover or current color changes at once on any
+    // pointer.
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionProperty: 'background-color, color',
     transitionTimingFunction: easeVars['--ease-standard'],
     width: '100%',
@@ -298,10 +324,8 @@ function moveFocusTo(id: string) {
  * scroll root) plus the heading's own `scroll-margin-top`. It defaults to the
  * first item at the top and the last at the bottom.
  *
- * Keyboard: the list is a single tab stop (roving tabindex), seated on the
- * active heading. Arrow keys move between headings, Home/End jump to the ends,
- * and Enter/Space activate — so a long table of contents costs one Tab press,
- * not one per heading.
+ * Keyboard: each link is in the normal Tab order, and Enter/Space activate.
+ * There is no arrow, Home, or End movement between links.
  *
  * @example
  * ```
@@ -344,11 +368,19 @@ export function Outline({
   style,
   ref,
   'data-testid': testId,
+  'aria-label': ariaLabel,
   ...props
 }: OutlineProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'Outline',
+      'items',
+      "must be an array of headings, for example items={[{id: 'intro', label: 'Introduction', level: 1}]}.",
+    );
+  }
   const pressable = usePressFeedback();
-  const t = useTranslator();
-  const label = labelFromProps ?? t('@astryx.outline.label');
+  const t = useComponentTranslator();
+  const label = ariaLabel ?? labelFromProps ?? t('@astryx.outline.label');
   const rootRef = useRef<HTMLElement | null>(null);
   const LinkComponent = useLinkComponent();
   const {activeId: resolvedActiveId, scrollTo} = useScrollSpy({
@@ -361,49 +393,6 @@ export function Outline({
     hasScrollOnClick,
     onNavigateStart,
     onNavigateEnd,
-  });
-
-  // Roving tabindex over the links: the whole outline is one tab stop, and
-  // arrows move between headings. The hook owns `tabindex` on the items.
-  const {
-    listRef,
-    handleKeyDown: handleListKeyDown,
-    handleFocus,
-  } = useListFocus<HTMLUListElement>({
-    itemSelector: 'a[href]',
-    orientation: 'vertical',
-    hasRovingTabIndex: true,
-  });
-
-  // Seat the tab stop on the *active* heading. WAI-ARIA puts the single tab
-  // stop on the current item, so tabbing into a table of contents while
-  // reading section 7 lands on section 7 — not back at section 1, which is
-  // where useListFocus would otherwise leave it (it promotes the first item on
-  // mount and then keeps whichever item already holds the stop).
-  //
-  // Only while focus is outside the list: once the reader has arrowed to an
-  // item, the stop is theirs and scroll-spy must not yank it away. Sets
-  // `tabindex` only — it never steals focus. Registered after useListFocus so
-  // it runs after the hook's own layout effect and wins; on later commits the
-  // hook then finds this item already holding the stop and keeps it.
-  useIsomorphicLayoutEffect(() => {
-    const list = listRef.current;
-    if (list == null || list.contains(document.activeElement)) {
-      return;
-    }
-    const links = Array.from(list.querySelectorAll<HTMLElement>('a[href]'));
-    const active = links.find(
-      link => link.getAttribute('aria-current') === 'location',
-    );
-    if (active == null) {
-      return;
-    }
-    for (const link of links) {
-      const tabIndex = link === active ? '0' : '-1';
-      if (link.getAttribute('tabindex') !== tabIndex) {
-        link.setAttribute('tabindex', tabIndex);
-      }
-    }
   });
 
   /**
@@ -474,12 +463,7 @@ export function Outline({
         className,
         style,
       )}>
-      <ul
-        {...stylex.props(styles.list)}
-        ref={listRef}
-        role="list"
-        onKeyDown={handleListKeyDown}
-        onFocus={handleFocus}>
+      <ul {...stylex.props(styles.list)} role="list">
         {items.map(item => {
           const isActive = item.id === resolvedActiveId;
 

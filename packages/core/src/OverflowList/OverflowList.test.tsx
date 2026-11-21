@@ -18,7 +18,7 @@
 
 import {describe, it, expect, beforeAll, afterAll, vi} from 'vitest';
 import {render, screen, within, act, waitFor} from '@testing-library/react';
-import {useState} from 'react';
+import {useState, type ReactElement} from 'react';
 import {OverflowList} from './OverflowList';
 import type {OverflowItem} from './OverflowList';
 
@@ -87,6 +87,22 @@ afterAll(() => {
 });
 
 /** The visible (non-measurement) container, identified by its stable class. */
+/**
+ * Renders, then lets the measurement land: it runs one microtask after the
+ * commit. The returned `rerender` waits for it the same way.
+ */
+async function renderMeasured(ui: ReactElement) {
+  const result = render(ui);
+  await act(async () => {});
+  return {
+    ...result,
+    rerender: async (next: ReactElement) => {
+      result.rerender(next);
+      await act(async () => {});
+    },
+  };
+}
+
 function visibleContainer(): HTMLElement {
   return screen.getByTestId('ov');
 }
@@ -105,9 +121,12 @@ const indicator =
     </span>
   );
 
-/** Notify the shared observer that an element's size changed. */
-function triggerResize(target: Element): void {
-  act(() => {
+/**
+ * Notify the shared observer that an element's size changed. The list
+ * measures again in a microtask before paint, so this awaits it.
+ */
+async function triggerResize(target: Element): Promise<void> {
+  await act(async () => {
     for (const observer of resizeObservers) {
       observer.trigger(target);
     }
@@ -130,8 +149,8 @@ function labelsOf(spy: {mock: {calls: unknown[][]}}): string[] {
 
 describe('OverflowList', () => {
   describe('when all items fit', () => {
-    it('renders every item and no overflow indicator', () => {
-      render(
+    it('renders every item and no overflow indicator', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="1000"
@@ -158,8 +177,8 @@ describe('OverflowList', () => {
   });
 
   describe('when items overflow (collapseFrom="end", default)', () => {
-    it('hides trailing items and shows an indicator for them', () => {
-      render(
+    it('hides trailing items and shows an indicator for them', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="100"
@@ -185,8 +204,8 @@ describe('OverflowList', () => {
       expect(within(vis).getByText('more:1,2')).toBeInTheDocument();
     });
 
-    it('fits more items as the available width grows', () => {
-      render(
+    it('fits more items as the available width grows', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="110"
@@ -212,8 +231,8 @@ describe('OverflowList', () => {
       expect(within(vis).getByText('more:2')).toBeInTheDocument();
     });
 
-    it('places the indicator after the visible items', () => {
-      render(
+    it('places the indicator after the visible items', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="100"
@@ -236,8 +255,8 @@ describe('OverflowList', () => {
   });
 
   describe('when items overflow (collapseFrom="start")', () => {
-    it('hides leading items and renders the indicator first', () => {
-      render(
+    it('hides leading items and renders the indicator first', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           collapseFrom="start"
@@ -267,8 +286,8 @@ describe('OverflowList', () => {
   });
 
   describe('minVisibleItems', () => {
-    it('keeps at least the requested number of items visible', () => {
-      render(
+    it('keeps at least the requested number of items visible', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           minVisibleItems={2}
@@ -296,8 +315,8 @@ describe('OverflowList', () => {
   });
 
   describe('without an overflow renderer', () => {
-    it('drops overflowing items but renders no indicator', () => {
-      render(
+    it('drops overflowing items but renders no indicator', async () => {
+      await renderMeasured(
         <OverflowList gap={0} data-w="100" data-testid="ov">
           <button type="button" data-w="40">
             A
@@ -319,8 +338,8 @@ describe('OverflowList', () => {
   });
 
   describe('measurement container', () => {
-    it('renders a hidden, inert measurement copy of all children', () => {
-      render(
+    it('renders a hidden, inert measurement copy of all children', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="100"
@@ -346,8 +365,8 @@ describe('OverflowList', () => {
       expect(within(measure).getByText('C')).toBeInTheDocument();
     });
 
-    it('measures the indicator against all items (max width)', () => {
-      render(
+    it('measures the indicator against all items (max width)', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="100"
@@ -372,8 +391,8 @@ describe('OverflowList', () => {
   });
 
   describe('rendering contract', () => {
-    it('renders the stable astryx-overflow-list class on the visible container', () => {
-      render(
+    it('renders the stable astryx-overflow-list class on the visible container', async () => {
+      await renderMeasured(
         <OverflowList data-w="1000" data-testid="ov">
           <button type="button" data-w="10">
             A
@@ -383,9 +402,9 @@ describe('OverflowList', () => {
       expect(visibleContainer()).toHaveClass('astryx-overflow-list');
     });
 
-    it('forwards a ref to the visible container', () => {
+    it('forwards a ref to the visible container', async () => {
       const ref = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList ref={ref} data-w="1000" data-testid="ov">
           <button type="button" data-w="10">
             A
@@ -397,8 +416,8 @@ describe('OverflowList', () => {
       expect(el).toHaveClass('astryx-overflow-list');
     });
 
-    it('applies a different gap class as the gap prop changes', () => {
-      const {rerender} = render(
+    it('applies a different gap class as the gap prop changes', async () => {
+      const {rerender} = await renderMeasured(
         <OverflowList gap={0} data-w="1000" data-testid="ov">
           <button type="button" data-w="10">
             A
@@ -407,7 +426,7 @@ describe('OverflowList', () => {
       );
       const gap0 = visibleContainer().getAttribute('class');
 
-      rerender(
+      await rerender(
         <OverflowList gap={4} data-w="1000" data-testid="ov">
           <button type="button" data-w="10">
             A
@@ -418,8 +437,8 @@ describe('OverflowList', () => {
       expect(gap4).not.toEqual(gap0);
     });
 
-    it('renders nothing extra for an empty child list', () => {
-      render(
+    it('renders nothing extra for an empty child list', async () => {
+      await renderMeasured(
         <OverflowList
           data-w="1000"
           data-testid="ov"
@@ -432,8 +451,8 @@ describe('OverflowList', () => {
       expect(vis).toBeEmptyDOMElement();
     });
 
-    it('passes arbitrary DOM props through to the visible container', () => {
-      render(
+    it('passes arbitrary DOM props through to the visible container', async () => {
+      await renderMeasured(
         <OverflowList
           data-w="1000"
           data-testid="ov"
@@ -454,9 +473,73 @@ describe('OverflowList', () => {
     });
   });
 
+  describe('gap', () => {
+    /**
+     * The gap the browser renders on the measurement copy. A theme with a
+     * larger spacing scale renders gap step 2 as 12px.
+     */
+    function renderGapAs(px: string) {
+      const readStyle = window.getComputedStyle;
+      return vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((el, pseudo) =>
+          el.hasAttribute('inert')
+            ? ({columnGap: px} as CSSStyleDeclaration)
+            : readStyle(el, pseudo),
+        );
+    }
+
+    const threeItems = (gap: 0 | 2) => (
+      <OverflowList gap={gap} data-w="316" data-testid="ov">
+        <button type="button" data-w="100">
+          A
+        </button>
+        <button type="button" data-w="100">
+          B
+        </button>
+        <button type="button" data-w="100">
+          C
+        </button>
+      </OverflowList>
+    );
+
+    it('fits items with the gap the theme renders', async () => {
+      const spy = renderGapAs('12px');
+      try {
+        await renderMeasured(threeItems(2));
+        // 3 × 100 + 2 × 12 = 324 is wider than 316, so two items fit.
+        const vis = visibleContainer();
+        expect(within(vis).getByText('B')).toBeInTheDocument();
+        expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('fits again when the gap step changes', async () => {
+      const spy = renderGapAs('0px');
+      try {
+        const {rerender} = await renderMeasured(threeItems(0));
+        expect(within(visibleContainer()).getByText('C')).toBeInTheDocument();
+        spy.mockRestore();
+        const wider = renderGapAs('12px');
+        try {
+          await rerender(threeItems(2));
+          expect(
+            within(visibleContainer()).queryByText('C'),
+          ).not.toBeInTheDocument();
+        } finally {
+          wider.mockRestore();
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('maxVisibleItems (cap)', () => {
-    it('caps visible items even when they all fit', () => {
-      render(
+    it('caps visible items even when they all fit', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="1000"
@@ -484,9 +567,9 @@ describe('OverflowList', () => {
       expect(within(vis).getByText('more:2,3')).toBeInTheDocument();
     });
 
-    it('min wins over a smaller cap (D1)', () => {
+    it('min wins over a smaller cap (D1)', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="1000"
@@ -519,8 +602,8 @@ describe('OverflowList', () => {
   });
 
   describe('maxRows (multi-row)', () => {
-    it('applies a different container class when maxRows enables wrapping', () => {
-      const {rerender} = render(
+    it('applies a different container class when maxRows enables wrapping', async () => {
+      const {rerender} = await renderMeasured(
         <OverflowList gap={0} data-w="1000" data-testid="ov">
           <button type="button" data-w="40">
             A
@@ -529,7 +612,7 @@ describe('OverflowList', () => {
       );
       const singleLine = visibleContainer().getAttribute('class');
 
-      rerender(
+      await rerender(
         <OverflowList gap={0} data-w="1000" data-testid="ov" maxRows={2}>
           <button type="button" data-w="40">
             A
@@ -540,8 +623,8 @@ describe('OverflowList', () => {
       expect(multiRow).not.toEqual(singleLine);
     });
 
-    it('keeps single-line behavior with maxRows={1}', () => {
-      render(
+    it('keeps single-line behavior with maxRows={1}', async () => {
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="100"
@@ -566,9 +649,9 @@ describe('OverflowList', () => {
   });
 
   describe('onOverflowChange', () => {
-    it('stays silent when nothing overflows', () => {
+    it('stays silent when nothing overflows', async () => {
       const onOverflowChange = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="1000"
@@ -585,9 +668,9 @@ describe('OverflowList', () => {
       expect(onOverflowChange).not.toHaveBeenCalled();
     });
 
-    it('fires once on mount while overflowing, with the measured set', () => {
+    it('fires once on mount while overflowing, with the measured set', async () => {
       const onOverflowChange = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -608,9 +691,9 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([1, 2]);
     });
 
-    it('reports the collapsed items by original index', () => {
+    it('reports the collapsed items by original index', async () => {
       const onOverflowChange = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -630,7 +713,7 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([1, 2]);
     });
 
-    it('reports an empty set again once the container fits everything', () => {
+    it('reports an empty set again once the container fits everything', async () => {
       const onOverflowChange = vi.fn();
       const items = [
         <button type="button" data-w="40" key="a">
@@ -643,7 +726,7 @@ describe('OverflowList', () => {
           C
         </button>,
       ];
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -654,7 +737,7 @@ describe('OverflowList', () => {
       );
       expect(indicesOf(onOverflowChange)).toEqual([1, 2]);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="1000"
@@ -663,12 +746,12 @@ describe('OverflowList', () => {
           {items}
         </OverflowList>,
       );
-      triggerResize(visibleContainer());
+      await triggerResize(visibleContainer());
       expect(onOverflowChange).toHaveBeenCalledTimes(2);
       expect(indicesOf(onOverflowChange)).toEqual([]);
     });
 
-    it('does not re-fire when the collapsed set is unchanged', () => {
+    it('does not re-fire when the collapsed set is unchanged', async () => {
       const spy = vi.fn();
       const items = [
         <button type="button" data-w="40" key="a">
@@ -680,7 +763,7 @@ describe('OverflowList', () => {
       ];
       // A fresh inline callback each render — the guard is the collapsed set,
       // not the callback's identity.
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -692,7 +775,7 @@ describe('OverflowList', () => {
         </OverflowList>,
       );
       expect(spy).toHaveBeenCalledTimes(1);
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="60"
@@ -706,7 +789,7 @@ describe('OverflowList', () => {
       expect(spy).toHaveBeenCalledTimes(1);
     });
 
-    it('reports same-count membership and order changes', () => {
+    it('reports same-count membership and order changes', async () => {
       const onOverflowChange = vi.fn();
       const renderItems = (labels: string[]) =>
         labels.map(label => (
@@ -714,7 +797,7 @@ describe('OverflowList', () => {
             {label}
           </button>
         ));
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -725,7 +808,7 @@ describe('OverflowList', () => {
       );
       expect(labelsOf(onOverflowChange)).toEqual(['B', 'C']);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="60"
@@ -736,7 +819,7 @@ describe('OverflowList', () => {
       );
       expect(labelsOf(onOverflowChange)).toEqual(['C', 'B']);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="60"
@@ -768,7 +851,7 @@ describe('OverflowList', () => {
           </button>
         ),
       };
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="150"
@@ -781,7 +864,7 @@ describe('OverflowList', () => {
       );
       expect(indicesOf(onOverflowChange)).toEqual([0, 1, 2]);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="150"
@@ -800,7 +883,7 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([2]);
     });
 
-    it('re-measures same-count content changes with stable keys', () => {
+    it('re-measures same-count content changes with stable keys', async () => {
       const onOverflowChange = vi.fn();
       const renderItems = (
         items: {key: string; label: string; width: number}[],
@@ -810,7 +893,7 @@ describe('OverflowList', () => {
             {item.label}
           </button>
         ));
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="300"
@@ -826,7 +909,7 @@ describe('OverflowList', () => {
       );
       expect(onOverflowChange).not.toHaveBeenCalled();
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="300"
@@ -840,7 +923,7 @@ describe('OverflowList', () => {
           ])}
         </OverflowList>,
       );
-      triggerResize(measureContainer());
+      await triggerResize(measureContainer());
 
       expect(onOverflowChange).toHaveBeenCalledTimes(1);
       expect(indicesOf(onOverflowChange)).toEqual([2, 3]);
@@ -848,7 +931,7 @@ describe('OverflowList', () => {
       expect(visibleContainer()).not.toHaveTextContent('Wide');
     });
 
-    it('reports only the measured set when the number of children changes', () => {
+    it('reports only the measured set when the number of children changes', async () => {
       const onOverflowChange = vi.fn();
       const renderItems = (labels: string[], width: number) =>
         labels.map(label => (
@@ -856,7 +939,7 @@ describe('OverflowList', () => {
             {label}
           </button>
         ));
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="220"
@@ -867,7 +950,7 @@ describe('OverflowList', () => {
       );
       expect(indicesOf(onOverflowChange)).toEqual([2, 3, 4]);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="220"
@@ -879,7 +962,7 @@ describe('OverflowList', () => {
       expect(onOverflowChange).toHaveBeenCalledTimes(2);
       expect(indicesOf(onOverflowChange)).toEqual([]);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="220"
@@ -892,7 +975,7 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([2, 3, 4]);
     });
 
-    it('uses a replacement callback only for the next set change', () => {
+    it('uses a replacement callback only for the next set change', async () => {
       const first = vi.fn();
       const second = vi.fn();
       const items = [
@@ -903,7 +986,7 @@ describe('OverflowList', () => {
           B
         </button>,
       ];
-      const {rerender} = render(
+      const {rerender} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -914,7 +997,7 @@ describe('OverflowList', () => {
       );
       expect(first).toHaveBeenCalledTimes(1);
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="60"
@@ -925,7 +1008,7 @@ describe('OverflowList', () => {
       );
       expect(second).not.toHaveBeenCalled();
 
-      rerender(
+      await rerender(
         <OverflowList
           gap={0}
           data-w="1000"
@@ -934,13 +1017,13 @@ describe('OverflowList', () => {
           {items}
         </OverflowList>,
       );
-      triggerResize(visibleContainer());
+      await triggerResize(visibleContainer());
       expect(first).toHaveBeenCalledTimes(1);
       expect(second).toHaveBeenCalledTimes(1);
       expect(indicesOf(second)).toEqual([]);
     });
 
-    it('settles when the callback stores the collapsed set in state', () => {
+    it('settles when the callback stores the collapsed set in state', async () => {
       const onReport = vi.fn();
 
       function Harness() {
@@ -967,14 +1050,14 @@ describe('OverflowList', () => {
         );
       }
 
-      render(<Harness />);
+      await renderMeasured(<Harness />);
       expect(onReport).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('hidden-count')).toHaveTextContent('1');
     });
 
-    it('does not report after unmount', () => {
+    it('does not report after unmount', async () => {
       const onOverflowChange = vi.fn();
-      const {unmount} = render(
+      const {unmount} = await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -993,14 +1076,14 @@ describe('OverflowList', () => {
       expect(onOverflowChange).toHaveBeenCalledTimes(1);
 
       unmount();
-      triggerResize(container);
-      triggerResize(measure);
+      await triggerResize(container);
+      await triggerResize(measure);
       expect(onOverflowChange).toHaveBeenCalledTimes(1);
     });
 
-    it('reports the leading items with collapseFrom="start"', () => {
+    it('reports the leading items with collapseFrom="start"', async () => {
       const onOverflowChange = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -1021,9 +1104,9 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([0, 1]);
     });
 
-    it('adds no indicator of its own, so an outside anchor stands alone', () => {
+    it('adds no indicator of its own, so an outside anchor stands alone', async () => {
       const onOverflowChange = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="60"
@@ -1046,9 +1129,9 @@ describe('OverflowList', () => {
       expect(measureContainer().children).toHaveLength(3);
     });
 
-    it('reports alongside an overflowRenderer without disturbing it', () => {
+    it('reports alongside an overflowRenderer without disturbing it', async () => {
       const onOverflowChange = vi.fn();
-      render(
+      await renderMeasured(
         <OverflowList
           gap={0}
           data-w="100"

@@ -6,7 +6,8 @@
  * @file useOwnScrollGesture.ts
  * @input A scroll container ref and which axis it owns
  * @output Stops touch gestures on that container from reaching an ancestor
- * @position Internal behavior hook; consumed by Wheel.tsx and MonthScroller.tsx
+ * @position Internal behavior hook; consumed by Wheel.tsx, PickerWheel.tsx and
+ *   MonthScroller.tsx
  *
  * Lets a nested scroller keep the finger that lands on it.
  *
@@ -114,6 +115,16 @@ export type OwnScrollGestureOptions = {
    * so momentum and snapping are never second-guessed.
    */
   onSwipe?: (direction: 1 | -1) => void;
+  /**
+   * Also keep the pointer a touch lands with, for an `'all'` scroller that pans
+   * through the gesture system rather than natively. A sheet arms its pull-down
+   * on its body's `pointerdown`, and counts on a native pan to cancel a touch
+   * pointer. A pan of the gesture system never cancels it. Without this, the
+   * sheet follows the first 8 px of a downward drag before the scroller's own
+   * pan takes over. The gesture host and the shared modality tracker listen in
+   * the capture phase, before this.
+   */
+  isPointerKept?: boolean;
 };
 
 /**
@@ -130,13 +141,15 @@ export function useOwnScrollGesture(
   axis: OwnedAxis = 'all',
   options: OwnScrollGestureOptions = {},
 ): void {
-  const {isEnabled = true, onSwipe} = options;
+  const {isEnabled = true, onSwipe, isPointerKept = false} = options;
 
   // Read through a ref so a caller need not memoize the callback: re-running
   // this effect would tear the listeners off mid-gesture.
   const onSwipeRef = useRef(onSwipe);
   onSwipeRef.current = onSwipe;
 
+  // Syncs touch listeners on the element with `isEnabled`. They decide which
+  // gesture owns a horizontal scroll.
   useEffect(() => {
     const element = ref.current;
     if (element == null || !isEnabled) {
@@ -213,15 +226,24 @@ export function useOwnScrollGesture(
       claimed = null;
     };
 
+    const keepPointer = (event: PointerEvent) => event.stopPropagation();
+    const isKeepingPointer = axis === 'all' && isPointerKept;
+
     element.addEventListener('touchstart', onStart, {passive: true});
     element.addEventListener('touchmove', onMove, {passive: true});
     element.addEventListener('touchend', onEnd, {passive: true});
     element.addEventListener('touchcancel', onEnd, {passive: true});
+    if (isKeepingPointer) {
+      element.addEventListener('pointerdown', keepPointer);
+    }
     return () => {
       element.removeEventListener('touchstart', onStart);
       element.removeEventListener('touchmove', onMove);
       element.removeEventListener('touchend', onEnd);
       element.removeEventListener('touchcancel', onEnd);
+      if (isKeepingPointer) {
+        element.removeEventListener('pointerdown', keepPointer);
+      }
     };
-  }, [ref, axis, isEnabled]);
+  }, [ref, axis, isEnabled, isPointerKept]);
 }

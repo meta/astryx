@@ -27,7 +27,8 @@
  *   none), and a `<topic>.doc.<lang>.mjs` overlay against
  *   `ReferenceTranslationDoc`;
  * - themes root: `ThemeDoc`;
- * - iconSets root: `IconSetDoc`.
+ * - iconSets root: `IconSetDoc`, and a set's own definition (stamped
+ *   `type: 'icon-definition'`) `IconDefinitionDoc`.
  * Every finding is a warning, names the field, and says how to fix it.
  *
  * @input Doc files with the root each was found in, the package root, and the
@@ -45,6 +46,8 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
@@ -92,8 +95,16 @@ import {
  *   or not fully checked
  */
 
+const NOT_CHECKED = 'so docs were not checked against the authoring types.';
+
 /** The line both surfaces print when the compiler is missing. */
-export const DOC_TYPES_TYPESCRIPT_MISSING_REASON = `TypeScript is not installed in this project, so docs were not checked against the authoring types. ${TYPESCRIPT_FIX}`;
+export const DOC_TYPES_TYPESCRIPT_MISSING_REASON = `TypeScript is not installed in this project, ${NOT_CHECKED} ${TYPESCRIPT_FIX}`;
+
+/**
+ * The line in a folder outside any package, where no project install step
+ * applies.
+ */
+export const DOC_TYPES_TYPESCRIPT_MISSING_HERE = `TypeScript is not installed here, ${NOT_CHECKED}`;
 
 const AUTHORING = '@astryxdesign/cli/authoring';
 const AUTHORING_TYPES = path.resolve(
@@ -311,7 +322,13 @@ function expectedType(ts, root, exportName, node, core = false) {
     return {typeExpr: authoring('ThemeDoc'), typeName: 'ThemeDoc'};
   }
   if (root === 'icon-sets') {
-    return {typeExpr: authoring('IconSetDoc'), typeName: 'IconSetDoc'};
+    // A set's own definitions live in its folder too.
+    return shape?.stamp === 'icon-definition'
+      ? {
+          typeExpr: authoring('IconDefinitionDoc'),
+          typeName: 'IconDefinitionDoc',
+        }
+      : {typeExpr: authoring('IconSetDoc'), typeName: 'IconSetDoc'};
   }
   if (translation) {
     return {
@@ -912,12 +929,19 @@ function findingsFor(ts, diagnostic, astPath, where) {
 /**
  * Check each doc file's values against the published authoring types.
  * @param {DocFile[]} files
- * @param {{packageDir: string, resolveFrom: Array<string | null | undefined>, core?: boolean}} options
- *   `core`: the docs are Core's own, so templates are held to TemplateDoc
+ * @param {{packageDir: string, resolveFrom: Array<string | null | undefined>, core?: boolean, outsideAnyPackage?: boolean}} options
+ *   `core`: the docs are Core's own, so templates are held to TemplateDoc;
+ *   `outsideAnyPackage`: the check runs outside any package, where no project
+ *   install step applies
  * @returns {Promise<DocTypesReport>}
  */
 export async function checkDocTypes(files, options) {
-  const {packageDir, resolveFrom, core = false} = options;
+  const {
+    packageDir,
+    resolveFrom,
+    core = false,
+    outsideAnyPackage = false,
+  } = options;
   // With no doc files there is nothing to check, TypeScript or not.
   if (files.length === 0) {
     return {status: 'checked', docs: 0, findings: [], unchecked: []};
@@ -927,8 +951,12 @@ export async function checkDocTypes(files, options) {
     return {
       status: 'skipped',
       reason: compiler
-        ? unusableTypeScriptReason(compiler.version, 'docs were not checked')
-        : DOC_TYPES_TYPESCRIPT_MISSING_REASON,
+        ? unusableTypeScriptReason(compiler.version, 'docs were not checked', {
+            here: outsideAnyPackage,
+          })
+        : outsideAnyPackage
+          ? DOC_TYPES_TYPESCRIPT_MISSING_HERE
+          : DOC_TYPES_TYPESCRIPT_MISSING_REASON,
       docs: 0,
       findings: [],
       unchecked: [],
@@ -945,7 +973,7 @@ export async function checkDocTypes(files, options) {
   if (major < needMajor || (major === needMajor && minor < needMinor)) {
     return {
       status: 'skipped',
-      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked. ${TYPESCRIPT_FIX}`,
+      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked.${outsideAnyPackage ? '' : ` ${TYPESCRIPT_FIX}`}`,
       docs: 0,
       findings: [],
       unchecked: [],
@@ -1035,8 +1063,9 @@ export async function checkDocTypes(files, options) {
     paths: {[AUTHORING]: [AUTHORING_TYPES]},
   };
   const host = ts.createCompilerHost(options_);
-  const getSourceFile = host.getSourceFile.bind(host);
-  // Every other file is parsed once, so a later pass reuses it.
+  // Every other file is parsed once, so a later pass reuses it; and once per
+  // process for these options, so a later check does too.
+  const getSourceFile = keepSourceFiles(ts, host, options_);
   /** @type {Map<string, any>} */
   const parsed = new Map();
   host.getSourceFile = (
@@ -1204,11 +1233,11 @@ export async function checkDocTypes(files, options) {
   }
   findings.sort(
     (a, b) =>
-      a.doc.localeCompare(b.doc) ||
+      compareText(a.doc, b.doc) ||
       a.line - b.line ||
-      a.field.localeCompare(b.field),
+      compareText(a.field, b.field),
   );
-  unchecked.sort((a, b) => a.doc.localeCompare(b.doc));
+  unchecked.sort((a, b) => compareText(a.doc, b.doc));
   return {
     status: 'checked',
     typescript: version,

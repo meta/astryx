@@ -1,5 +1,126 @@
 # @xds/theme-neutral
 
+# 0.7.17
+
+#### New Features
+
+- Chat surfaces now default to the container radius: `--radius-chat` defaults to `var(--radius-container)` instead of `28px`, a theme that sets `--radius-container` but not `--radius-chat` declares the alias at its root, and a radius scale no longer sets `--radius-chat` (it set the page step), so chat follows the theme's container, also where the theme sets its container over the scale. This changes the corners of ChatComposer, its drawer and status bar, and ChatMessageBubble, and the buttons inside the composer take their normal corners. The send button stays circular inside a composer, as it is outside one: a theme whose composer corner made the send button a rounded square (controls taller than 32px, or a chat corner under 28px) now draws a circle, unless it sets the `chat-send-button` radius. Butter, Chocolate, Gothic, Matcha, Neutral and Stone set `--radius-chat: 28px`, and Butter keeps its 16px send-button corner, so they look the same; Y2K sets `--radius-chat: 0px` and stays square. A theme that extends one of them keeps that chat radius. To keep the 28px chat corners in another theme, add `--radius-chat: 28px` to its tokens. Set the token in the theme rather than on an ancestor such as `:root`: a theme scope that declares it now replaces an inherited value.
+- The neutral theme exports `colorModes`: `['light', 'dark']`.
+
+#### Fixes
+
+- ProgressBar and CircularProgress fills reach 3:1 against their track (WCAG 2.2 SC 1.4.11, non-text contrast). ProgressBar's status fills take the status text colors, and its neutral fill, like CircularProgress's, takes the secondary text color instead of the disabled one, which is the bar's track color in dark mode in Theme Neutral and Theme Stone and under 3:1 on the bar's track in every bundled theme in light mode. A disabled bar takes the same fill and dims its track and fill to half opacity, as a disabled Slider or Switch track does, and a disabled ring dims as a whole, center content included, so each reads quieter than a neutral one. A mark on any fill but accent takes the surface color; in Theme Butter and Theme Stone, a mark on a status fill takes that status's on-color. CircularProgress draws every variant on the muted background track, ProgressBar's base track, because some themes' status muted colors are the status color itself. In Theme Neutral, Theme Butter and Theme Stone a dark neutral or disabled fill takes a lighter neutral stop, Butter's and Stone's status fills take the theme's status colors, Stone's accent fill takes a blue stop that reaches 3:1, and the CLI's bundled theme templates match.
+- Each built-in theme ships its open-licensed fonts. `fonts.css` loads every face from a woff2 file in the package (licenses in `fonts/`), with `font-display: fallback` (served from the same machine or a fast connection, a face arrives before the text first draws, so there is no fallback flash; a face that takes more than about 3 s leaves that page in the fallback font), instead of a Google Fonts `@import` that held the page until the request answered (chocolate's Fraunces as its variable face, keeping its optical size), so an app or screenshot offline (a sandbox, CI) draws at once and shows the theme's real fonts.
+- Secondary text on coloured cards reads in dark mode: those cards step it to the nearest neutral stop that meets WCAG AA (4.5:1) on their fill, and under a hover.
+- Skeleton placeholders show on the light page: `--color-skeleton` takes a darker neutral stop, so the placeholder reads at its pulse peak against the page and every surface.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @kentonquatman
+- @nynexman4464
+
+---
+
+# 0.7.16
+
+#### Documentation
+
+- Fix the theme README usage examples to import `Theme` from `@astryxdesign/core/theme` instead of the removed `XDSTheme` alias, and refresh the bundled theme lists in the package index and contributor guide. ([#11016](https://github.com/meta/astryx/pull/11016))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @karlmoriaty
+
+---
+
+# 0.7.15
+
+---
+
+# 0.7.14
+
+---
+
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.12
+
+#### Fixes
+
+- Neutral: an unselected SegmentedControl label meets 4.5:1 in dark mode on AppShell's surface. The track is translucent, so it lightens the surface under the label: `#9e9e9e` on `#3c3c3c` measured 4.11:1. The label now takes `neutral.dark[80]` (6.46:1), the same lift Neutral already gives secondary text on its selected rows and pills. Light mode is unchanged, and the CLI's Neutral theme template matches. (#10881)
+- Theme packages publish the declarations of their `./theme.css` export. The export pointed `types` at `theme.css.d.ts`, which the package didn't ship, so TypeScript found no types for `import '@astryxdesign/theme-<name>/theme.css'`. The export is unchanged; the file is now published. (#10903)
+- Theme packages declare `"type": "module"`, so bundlers and Node read the `./built` entry as the ES module it is. Before, it was an ES module in a `.js` file in a package without a `type`, which tools that follow the package's `type` read as CommonJS. Every export subpath stays the same. The CommonJS build of the source entry is now `dist/source.cjs` behind the same `require` condition, with its own CommonJS declarations (`dist/source.d.cts`), so TypeScript types each condition in the format it loads. As before, `require('…/built')` loads an ES module, so it needs a Node version with `require(esm)` (22.12 or later). Deep imports that reach past `exports` into `dist/` change too: `dist/source.js` is now `dist/source.cjs`, and a `require` of `dist/<theme>.js` gets an ES module (`require(esm)`, Node 22.12 or later). (#10876)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.11
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+#### Fixes
+
+- Under the Neutral theme, a selected row, a calendar range and the other selected fills on Neutral's surfaces are visible again, and highlighted code lines are stronger. `--color-accent-muted` matched the surface in dark mode and barely differed from the hover tint in light mode; it is now `#d4d4d4` in light and `#474747` in dark. In dark mode a selected Item, TreeListItem or checked CheckboxListItem row, a numbered Citation and a FileInput dropzone lift their secondary text so it stays readable on the fill; a dropzone's hint is slightly lighter at rest too. Neutral's code comments, operators and punctuation are slightly less muted so they stay readable on a highlighted line. The CLI's Neutral theme template carries the same values.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.8
+
+---
+
+# 0.7.7
+
+---
+
+# 0.7.6
+
+#### Fixes
+
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @parinith-web
+
+---
+
 # 0.7.5
 
 #### New Features

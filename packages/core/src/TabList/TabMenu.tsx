@@ -31,7 +31,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {MENU_ITEM_SELECTOR} from '../DropdownMenu/menuItemRoles';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
@@ -77,6 +77,9 @@ export interface TabMenuProps extends Omit<
 const styles = stylex.create({
   trigger: {
     position: 'relative',
+    // The hover layer sits under the label and chevron, inside this stacking
+    // context. A strong overlay above them hides them.
+    isolation: 'isolate',
     // Keeps its label's width in a strip that scrolls, as a hugging tab does.
     flexShrink: 0,
     display: 'inline-flex',
@@ -144,6 +147,7 @@ const styles = stylex.create({
   },
   hoverBg: {
     position: 'absolute',
+    zIndex: -1,
     inset: 0,
     margin: 'auto',
     width: '100%',
@@ -234,17 +238,20 @@ const styles = stylex.create({
   },
 });
 
+// A minimum, not a fixed height: a tab grows with a larger text size, so its
+// label is never clipped.
 const sizeStyles = stylex.create({
-  sm: {height: sizeVars['--size-element-sm']},
-  md: {height: sizeVars['--size-element-md']},
-  lg: {height: sizeVars['--size-element-lg']},
+  sm: {minHeight: sizeVars['--size-element-sm']},
+  md: {minHeight: sizeVars['--size-element-md']},
+  lg: {minHeight: sizeVars['--size-element-lg']},
 });
 
-// Hover bg uses the standard element size (one step smaller than tab)
+// The hover background fills the tab (inset 0) and is never shorter than the
+// element size.
 const hoverSizeStyles = stylex.create({
-  sm: {height: sizeVars['--size-element-sm']},
-  md: {height: sizeVars['--size-element-md']},
-  lg: {height: sizeVars['--size-element-lg']},
+  sm: {minHeight: sizeVars['--size-element-sm']},
+  md: {minHeight: sizeVars['--size-element-md']},
+  lg: {minHeight: sizeVars['--size-element-lg']},
 });
 
 /**
@@ -277,7 +284,9 @@ export function TabMenu({
   const menuId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasLightDismiss: true,
     hasCloseButton: false,
     hasAutoFocus: false,

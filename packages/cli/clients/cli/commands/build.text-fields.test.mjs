@@ -8,7 +8,11 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
 
 // Run against the monorepo root so @astryxdesign/core is discoverable.
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -43,16 +47,31 @@ describe('build kit text fields mirror the JSON keys', () => {
     for (const field of fields) expect(keys).toContain(field);
   }, SLOW);
 
-  it('leads with the start, then the alternatives, blocks and components', async () => {
+  it("prints a deprecated component's `deprecated` field, as search does", async () => {
+    const idea = 'step by step wizard in a bottom sheet';
+    const json = await runCli(['build', idea, '--json', '--verbose'], REPO);
+    expect(json.status).toBe(0);
+    const {domain} = JSON.parse(json.stdout).data;
+    const deprecated = domain.find(entry => entry.deprecated);
+    expect(deprecated, 'the idea reaches a deprecated component').toBeDefined();
+    const line = `deprecated:  use ${deprecated.deprecated.replacement}: `;
+    for (const args of [['build', idea, '--verbose'], ['build', idea]]) {
+      const human = await runCli(args, REPO);
+      expect(human.status).toBe(0);
+      expect(human.stdout, args.join(' ')).toContain(line);
+    }
+  }, SLOW);
+
+  it('leads with the start, then the alternatives, block examples and components', async () => {
     const human = await runCli(['build', 'analytics dashboard'], REPO);
     expect(human.status).toBe(0);
     const headings = human.stdout
       .split('\n')
-      .filter(line => /^(TEMPLATE|OTHER TEMPLATES|BLOCKS|COMPONENTS)$/.test(line));
-    expect(headings).toEqual(['TEMPLATE', 'OTHER TEMPLATES', 'BLOCKS', 'COMPONENTS']);
+      .filter(line => /^(TEMPLATE|OTHER TEMPLATES|BLOCK EXAMPLES|COMPONENTS)$/.test(line));
+    expect(headings).toEqual(['TEMPLATE', 'OTHER TEMPLATES', 'BLOCK EXAMPLES', 'COMPONENTS']);
     // A builder changing a page they already have keeps it.
     expect(human.stdout).toContain(
-      'Changing a page you already have? Keep it, and use only the blocks and components.',
+      'Changing a page you already have? Keep it, and add components; read a block example when it helps.',
     );
   }, SLOW);
 

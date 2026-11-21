@@ -12,8 +12,10 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {unusableTypeScriptReason} from './project-typescript.mjs';
+import {iconDefinitionSource} from './icon-set-writer.mjs';
 import {
   checkDocTypes,
+  DOC_TYPES_TYPESCRIPT_MISSING_HERE,
   DOC_TYPES_TYPESCRIPT_MISSING_REASON,
 } from './doc-types.mjs';
 
@@ -123,6 +125,70 @@ describe('checkDocTypes', () => {
       findings: [],
       unchecked: [],
     });
+  });
+
+  it('names no install step outside any package, where nothing can install TypeScript', async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']], {
+      outsideAnyPackage: true,
+    });
+
+    expect(report.reason).toBe(DOC_TYPES_TYPESCRIPT_MISSING_HERE);
+    expect(report.status).toBe('skipped');
+  });
+
+  it('names an unusable TypeScript with no install step outside any package', async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+    const dir = path.join(pkg, 'node_modules', 'typescript');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'typescript', version: '7.0.0', main: 'index.js'}),
+    );
+    fs.writeFileSync(
+      path.join(dir, 'index.js'),
+      "module.exports = {version: '7.0.0'};\n",
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']], {
+      outsideAnyPackage: true,
+    });
+
+    expect(report.reason).toBe(
+      unusableTypeScriptReason('7.0.0', 'docs were not checked', {here: true}),
+    );
+    expect(report.reason).not.toContain('npm install');
+  });
+
+  it('names a TypeScript too old to check with no install step outside any package', async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+    const dir = path.join(pkg, 'node_modules', 'typescript');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'typescript', version: '4.8.4', main: 'index.js'}),
+    );
+    fs.writeFileSync(
+      path.join(dir, 'index.js'),
+      "module.exports = {version: '4.8.4', versionMajorMinor: '4.8', createProgram() {}};\n",
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']], {
+      outsideAnyPackage: true,
+    });
+
+    expect(report.reason).toContain('TypeScript 4.8.4 cannot check');
+    expect(report.reason).not.toContain('npm install');
   });
 
   it('names an installed TypeScript it cannot use, rather than asking to install one', async () => {
@@ -713,6 +779,33 @@ describe('checkDocTypes', () => {
     ]);
     expect(new Set(report.findings.map(f => f.type))).toEqual(
       new Set(['IconSetDoc']),
+    );
+  });
+
+  it("checks a set's own definition, as new-definition writes it, against IconDefinitionDoc", async () => {
+    withTypeScript();
+    write(
+      'icon-sets/brand/definitions/aiHelper.doc.mjs',
+      iconDefinitionSource({
+        name: 'aiHelper',
+        description: 'The AI helper.',
+        words: ['assistant', 'ai'],
+      }),
+    );
+    write(
+      'icon-sets/brand/definitions/broken.doc.mjs',
+      "export default {type: 'icon-definition', name: 'broken', description: 'D', words: 'one'};\n",
+    );
+    const report = await check([
+      ['icon-sets/brand/definitions/aiHelper.doc.mjs', 'icon-sets'],
+      ['icon-sets/brand/definitions/broken.doc.mjs', 'icon-sets'],
+    ]);
+    expect(report.docs).toBe(2);
+    expect(summary(report)).toEqual([
+      'icon-sets/brand/definitions/broken.doc.mjs default words wrong_type',
+    ]);
+    expect(new Set(report.findings.map(f => f.type))).toEqual(
+      new Set(['IconDefinitionDoc']),
     );
   });
 

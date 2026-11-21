@@ -15,7 +15,12 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -301,6 +306,8 @@ for (const item of cases) {
       await control.focus();
       await page.keyboard.press('ControlOrMeta+a');
       await page.keyboard.type('not a date');
+      // Unreadable text is revealed at commit, not while typing.
+      await page.keyboard.press('Enter');
     } else if (item.state === 'clear-hover') {
       await wrapper.getByRole('button', {name: 'Clear Event date'}).hover();
       await page.waitForTimeout(800);
@@ -401,6 +408,12 @@ for (const item of cases) {
                 .closest('.astryx-date-input')
                 ?.querySelector('[role="alert"]')
                 ?.textContent?.trim() ?? null,
+            describedText: (element.getAttribute('aria-describedby') ?? '')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map(id => document.getElementById(id)?.textContent?.trim() ?? '')
+              .join(' ')
+              .trim(),
           }));
     const toggleState =
       item.surface === 'popover'
@@ -470,7 +483,7 @@ for (const item of cases) {
         statePass &&
         semantics?.value === 'not a date' &&
         semantics.ariaInvalid === 'true' &&
-        (semantics.alertText ?? '').length > 0;
+        semantics.describedText.includes('Invalid date');
     } else if (item.state === 'open') {
       statePass =
         statePass &&

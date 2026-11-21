@@ -9,6 +9,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {setResultCoverage} from './coverage.mjs';
 import {SEARCH_DOMAINS} from './_query.mjs';
+import {fold} from './_query-words.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -22,7 +23,7 @@ import {SEARCH_DOMAINS} from './_query.mjs';
  * @param {string} reason
  * @param {number} matchedTerms - Query concepts this result answered.
  * @param {number} queryTerms - Query concepts there were to answer.
-  * @param {boolean} [outside] - The search runs outside a project, where a
+ * @param {boolean} [outside] - The search runs outside a project, where a
  *   theme cannot be added to an app, so its command forks the source instead
  *   (spec AST-081 FR3).
  */
@@ -49,6 +50,7 @@ export function toResult(
         ...base,
         import: c._import,
         command: c._command ?? `astryx component ${c.name}`,
+        ...(c._deprecated ? {deprecated: c._deprecated} : {}),
       };
       break;
     case 'hook':
@@ -76,6 +78,7 @@ export function toResult(
         displayName: c._displayName,
         kind: c._kind,
         command: `astryx template ${c._commandName ?? c.name} --type ${c._kind}`,
+        isReady: !c._notReady,
       };
       break;
     case 'theme':
@@ -135,15 +138,62 @@ export function checkSearchArgs(query, options) {
  * The components each search response was scored against, by response:
  * `build` reads them to tell a part of a page from a page without gathering
  * them again. Module-private, so they never enter search's JSON.
- * @type {WeakMap<object, {name: string, keywords: string[]}[]>}
+ * @type {WeakMap<object, {name: string, keywords: string[], category: string}[]>}
  */
 export const searchedComponentsOf = new WeakMap();
 
 /**
- * The components (name and keywords) a search response was scored against, or
+ * The results each search response leads with because the query names them
+ * (see rankLexical): the order of matches keeps them first in their run.
+ * Module-private, so they never enter search's JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const namedLeadsOf = new WeakMap();
+
+/**
+ * The family roots each search response puts ahead of their parts (see
+ * rankLexical): each part's result, mapped to its root's result. The order of
+ * matches places the root in its part's run, just ahead of the part.
+ * Module-private, so they never enter search's JSON.
+ * @type {WeakMap<object, Map<object, object>>}
+ */
+export const rootLeadsOf = new WeakMap();
+
+/**
+ * The family roots the order of matches moved directly before their parts,
+ * by ordered response: each part's result, mapped to its root's result. The
+ * fit pass keeps those pairs in place. Module-private, so they never enter
+ * search's JSON.
+ * @type {WeakMap<object, Map<object, object>>}
+ */
+export const movedRootsOf = new WeakMap();
+
+/**
+ * The parts, by lexical response, whose root leads them on hits weaker than
+ * keyword strength (STRONG_TOKEN_SCORE; see rankLexical): such a root leads
+ * its part
+ * only inside the part's run. Module-private, so they never enter search's
+ * JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const weakRootsOf = new WeakMap();
+
+/**
+ * The query words a match answered: the terms its reason lists, folded, or
+ * null when it answered the whole query (a name, keyword, or title hit).
+ * @param {string | undefined} reason
+ * @returns {Set<string> | null}
+ */
+export function answeredTerms(reason) {
+  const m = /^matches \d+\/\d+ terms: (.*)$/.exec(reason ?? '');
+  return m ? new Set(m[1].split(', ').map(fold)) : null;
+}
+
+/**
+ * The components (name, keywords and category) a search response was scored against, or
  * null when that search was narrowed away from components.
  * @param {object} response
- * @returns {{name: string, keywords: string[]}[] | null}
+ * @returns {{name: string, keywords: string[], category: string}[] | null}
  */
 export function searchedComponents(response) {
   return searchedComponentsOf.get(response) ?? null;

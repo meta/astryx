@@ -18,7 +18,16 @@ import {TreeList} from './TreeList';
 import type {TreeListItemData} from './TreeListTypes';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
-import {FOCUS_OUTLINE} from '../utils/focusOutline.stylex';
+import {FOCUS_OUTLINE, focusOutlineStyles} from '../utils/focusOutline.stylex';
+
+// The ring a plain row draws: only the focus variables its treeitem
+// publishes, with no focus-inside branch.
+const publishedRing = stylex.create({
+  ring: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
+});
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -412,6 +421,85 @@ describe('TreeList', () => {
   // Focus-visible outline scoping (regression: focusing a parent row must not
   // leak the ring onto descendant rows — see #4130)
   // ===========================================================================
+
+  it('draws the focus ring on a plain row that has keyboard focus', () => {
+    // A plain row has no action, but it is a tab stop in the roving focus.
+    render(
+      <TreeList
+        items={[
+          {id: 'first', label: 'First'},
+          {id: 'second', label: 'Second', isSelected: true},
+        ]}
+      />,
+    );
+    const second = screen.getByText('Second').closest('li')!;
+    const row = screen
+      .getByText('Second')
+      .closest<HTMLElement>('.astryx-tree-list-item')!;
+
+    fireEvent.keyDown(document.body, {key: 'Tab'});
+    screen.getByText('First').closest('li')!.focus();
+    fireEvent.keyDown(document.activeElement!, {key: 'ArrowDown'});
+    expect(second).toHaveFocus();
+
+    expect(
+      getComputedStyle(second).getPropertyValue('--_focus-outline').trim(),
+    ).toBe(FOCUS_OUTLINE);
+    // (Atomic classes only: a debug class names the file that made it.)
+    const ringClasses = stylex
+      .props(publishedRing.ring)
+      .className!.split(' ')
+      .filter(cls => !cls.includes('__'));
+    expect(ringClasses.length).toBeGreaterThan(0);
+    for (const cls of ringClasses) {
+      expect(row.className.split(' ')).toContain(cls);
+    }
+  });
+
+  it('does not ring a plain row when focus is on a control in its end content', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {
+            id: 'budget',
+            label: 'Budget',
+            endContent: <button type="button">Pin</button>,
+          },
+        ]}
+      />,
+    );
+    const item = screen.getByText('Budget').closest('li')!;
+    const row = screen
+      .getByText('Budget')
+      .closest<HTMLElement>('.astryx-tree-list-item')!;
+
+    await user.tab();
+    expect(item).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Pin'})).toHaveFocus();
+
+    // The treeitem no longer publishes focus, and the row has no ring keyed
+    // on focus inside it, so only the Pin button shows a ring.
+    expect(getComputedStyle(item).getPropertyValue('--_focus-outline')).toBe(
+      'none',
+    );
+    // The classes the focus-inside ring adds over the published one carry
+    // its `:has(:focus-visible)` branch; a plain row must not compose them.
+    const published = stylex
+      .props(publishedRing.ring)
+      .className!.split(' ')
+      .filter(cls => !cls.includes('__'));
+    const focusInside = stylex
+      .props(focusOutlineStyles.focusWithinOrPublished)
+      .className!.split(' ')
+      .filter(cls => !cls.includes('__') && !published.includes(cls));
+    expect(focusInside.length).toBeGreaterThan(0);
+    const rowClasses = row.className.split(' ');
+    for (const cls of focusInside) {
+      expect(rowClasses).not.toContain(cls);
+    }
+  });
 
   it('scopes the focus-visible outline to the focused row, not its descendants', () => {
     render(<TreeList items={deepItems} />);
@@ -1060,10 +1148,10 @@ describe('TreeList', () => {
       expect(getComputedStyle(treeRoot).isolation).toBe('isolate');
     });
 
-    it('lifts only rows that draw a focus ring above the guides', () => {
-      // A plain row (no onClick, href or children) draws no focus ring, so it
-      // stays under the guides: a focused selected plain row must not hide
-      // them with its fill (DD3). Rows that draw the ring take the lift.
+    it('lifts every row, plain ones included, since every row draws a focus ring', () => {
+      // A plain row (no onClick, href or children) is still a tab stop in the
+      // tree's roving focus, so it draws the ring and takes a lift keyed on its
+      // treeitem's own focus (DD3).
       render(
         <TreeList
           items={[
@@ -1081,7 +1169,7 @@ describe('TreeList', () => {
       );
       const rowOf = (label: string) =>
         screen.getByText(label).closest<HTMLElement>('.astryx-tree-list-item')!;
-      expect(rowOf('Plain').className).not.toContain('focusLift');
+      expect(rowOf('Plain').className).toContain('publishedFocusLift');
       expect(rowOf('Run').className).toContain('focusLift');
       expect(rowOf('Root').className).toContain('focusLift');
     });
@@ -1657,6 +1745,27 @@ describe('TreeList', () => {
     expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
   });
 
+  it('typeahead reaches a stroked label from a letter typed with AltGr (INV17)', async () => {
+    render(
+      <TreeList
+        items={[
+          {id: 'krakow', label: 'Kraków'},
+          {id: 'lublin', label: 'Lublin'},
+          {id: 'lodz', label: 'Łódź'},
+        ]}
+      />,
+    );
+    const krakow = screen.getByText('Kraków').closest('li')!;
+    krakow.focus();
+    fireEvent.keyDown(krakow, {
+      key: 'ł',
+      ctrlKey: true,
+      altKey: true,
+      modifierAltGraph: true,
+    });
+    expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
+  });
+
   it('typeahead puts the exact match first for a typed mark (INV17)', async () => {
     const user = userEvent.setup();
     render(
@@ -1826,5 +1935,137 @@ describe('TreeList empty slots', () => {
     );
     expect(screen.getAllByText('0')).toHaveLength(3);
     expect(screen.getByRole('tree')).toHaveAttribute('aria-labelledby');
+  });
+});
+
+describe('TreeList collapse focus (AR2)', () => {
+  function Example({isExpanded}: {isExpanded: boolean}) {
+    return (
+      <>
+        <TreeList
+          aria-label="Files"
+          items={[
+            {id: 'readme', label: 'README.md'},
+            {
+              id: 'src',
+              label: 'src',
+              isExpanded,
+              children: [{id: 'index', label: 'index.ts'}],
+            },
+          ]}
+        />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+  const row = (id: string) =>
+    document.querySelector<HTMLElement>(`[data-tree-id="${id}"]`);
+
+  it('moves focus inside a collapsing branch to its row', () => {
+    const {rerender} = render(<Example isExpanded />);
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+    row('index')?.focus();
+    expect(row('index')).toHaveFocus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('index')).toBeNull();
+    expect(row('src')).toHaveFocus();
+    // It holds the one Tab stop, which was on README.md.
+    expect(row('src')).toHaveAttribute('tabindex', '0');
+    expect(row('readme')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves focus in a nested group to the outermost row that collapsed, and to the inner row when only it collapses', () => {
+    const Nested = ({outer, inner}: {outer: boolean; inner: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {
+            id: 'src',
+            label: 'src',
+            isExpanded: outer,
+            children: [
+              {
+                id: 'lib',
+                label: 'lib',
+                isExpanded: inner,
+                children: [{id: 'util', label: 'util.ts'}],
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer={false} inner />);
+    expect(row('src')).toHaveFocus();
+    rerender(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer inner={false} />);
+    expect(row('lib')).toHaveFocus();
+  });
+
+  it('moves focus to a disabled collapsing row, which leaves the Tab stop where it is', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    row('index')?.focus();
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('hands the Tab stop to the first enabled row when a disabled row collapses away the child that held it', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    // The keyboard path: arrowing past the disabled row onto its child gives
+    // the child the stop.
+    row('readme')?.focus();
+    fireEvent.keyDown(row('readme') as HTMLElement, {key: 'ArrowDown'});
+    expect(row('index')).toHaveFocus();
+    expect(row('index')).toHaveAttribute('tabindex', '0');
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('moves no focus that is outside the collapsing branch', () => {
+    const {rerender} = render(<Example isExpanded />);
+    row('readme')?.focus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('readme')).toHaveFocus();
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(<Example isExpanded />);
+    rerender(<Example isExpanded={false} />);
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 });

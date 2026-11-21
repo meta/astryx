@@ -4,7 +4,8 @@
 
 /**
  * @file ProgressBar.tsx
- * @input Uses React, useId, stylex, color/spacing/radius/transition tokens
+ * @input Uses React, useId, stylex, tokens, ProgressBarTouch, resolveMotion
+ *   and the shared percentage formatter
  * @output Exports ProgressBar component, ProgressBarProps, ProgressBarVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -35,6 +36,13 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {ProgressBarVariantMap} from './index';
+import {useProgressBarTouch} from './ProgressBarTouch';
+import {formatMotionRoleValue} from '../motion/roles';
+import {resolveMotion} from '../motion/resolveMotion';
+import {useLocale} from '../i18n/useLocale';
+import {formatPercent} from '../NumberInput/numberParser';
+import {progressBar} from '../motion/uikit/progressBar';
+import {timing} from '../motion/uikit/timing';
 
 // Every mark is wrapped in a Tooltip (marks always carry a label), so load it
 // lazily: a ProgressBar with no marks never bundles the Tooltip chunk. While it
@@ -104,7 +112,7 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
   hasValueLabel?: boolean;
   /**
    * Custom formatter for the value label.
-   * @default (value, max) => `${Math.round((value / max) * 100)}%`
+   * @default the rounded percentage in the provider locale (`45%` in English)
    */
   formatValueLabel?: (value: number, max: number) => string;
   /**
@@ -116,7 +124,7 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
    * When true, renders an animated indeterminate progress indicator.
    * Use when the progress amount is unknown (e.g. loading, processing).
    * The `value` and `hasValueLabel` props are ignored in this mode.
-   * Respects `prefers-reduced-motion` by slowing the animation.
+   * Under reduced motion it pulses in place instead of sliding.
    * @default false
    */
   isIndeterminate?: boolean;
@@ -124,10 +132,11 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
    * Target marks drawn on the track at fixed points in the same `0..max`
    * scale as `value` — e.g. a goal line. Marks stay visible whether progress
    * is below or past them, and take their color from what they sit on: a mark
-   * inside the filled area uses the fill variant's on-color (on-accent,
-   * on-warning, on-error, …), while a mark still out on the bare track uses
-   * `--color-text-primary` (`--color-text-secondary` on a disabled bar, which
-   * dims everything it draws). Each mark's required `label` names it for
+   * inside the filled area uses the color that reads on the fill (on-accent
+   * on an accent fill, the surface color on the others), while a mark still
+   * out on the bare track uses
+   * `--color-text-primary` (`--color-text-secondary` on a disabled bar, whose
+   * track and fill dim). Each mark's required `label` names it for
    * assistive tech and is revealed via a `Tooltip` on hover/focus. Ignored when
    * `isIndeterminate` is true.
    */
@@ -166,6 +175,19 @@ const indeterminateSlideRtl = stylex.keyframes({
   },
   '100%': {
     transform: 'translateX(-250%)',
+  },
+});
+
+// Under reduced motion the indeterminate fill stops travelling and pulses in
+// place. It goes from full opacity down to the pulse's floor
+// (`--_progress-bar-pulse-floor`, the progress table's) and back. The
+// animation alternates direction each pass.
+const indeterminatePulse = stylex.keyframes({
+  from: {
+    opacity: 1,
+  },
+  to: {
+    opacity: 'var(--_progress-bar-pulse-floor)',
   },
 });
 
@@ -223,6 +245,19 @@ const styles = stylex.create({
     position: 'relative',
     width: '100%',
   },
+  // A disabled bar dims its track and fill as Slider and Switch dim a disabled
+  // track. Marks stay at full opacity because a mark can take focus, and its
+  // focus ring must keep its contrast. Forced colors replace the fill color,
+  // so a GrayText outline marks the disabled fill there.
+  trackDisabled: {
+    opacity: 0.5,
+  },
+  fillDisabled: {
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'GrayText',
+    },
+  },
   // The semantic rail holds only the fill and clips it to the rounded rail:
   // the determinate fill slides in from the inline-start side and the
   // indeterminate one overshoots both ends. Marks live outside the track (in
@@ -249,10 +284,25 @@ const styles = stylex.create({
   // no transform), as before: the track's clip would cut the CanvasText
   // outline's start cap off a slid fill, and that outline is what keeps the
   // fill's shape visible there (architecture:theme-tokens INV11).
+  //
+  // Under a finger (TOUCH_QUERY, on every touch device), the fill moves as
+  // UIProgressView's setProgress(_:animated: true) does. It moves linearly
+  // from wherever it is drawn. Its duration is the `progress.fillTrackMs` role
+  // times the share of the track the value moved (`--_progress-bar-move`).
+  // Its curve is the `progress.curves.fill` role (`--_progress-bar-curve`).
+  // The touch layer (ProgressBarTouch) writes both, and this rule scales the
+  // duration by the theme's tempo. Above zero, the fill never draws shorter
+  // than the touch minimum (`--_progress-bar-min`, 16px on the 8px track). At
+  // zero it paints nothing (`fillEmpty`). Under reduced motion it lands at
+  // once, as everywhere (below). A mouse or trackpad keeps the theme's timing.
   fill: {
     width: {
       default: '100%',
-      '@media (forced-colors: active)': 'var(--_progress-bar-fill, 0%)',
+      '@media (forced-colors: active)': {
+        default: 'var(--_progress-bar-fill, 0%)',
+        '@media (pointer: coarse)':
+          'calc(max(var(--_progress-bar-fill, 0%), var(--_progress-bar-min, 0px)) + var(--_progress-bar-flip, 0) * 0.01px)',
+      },
     },
     height: '100%',
     // Forced colors replace status fills with Canvas; this boundary keeps the
@@ -271,6 +321,19 @@ const styles = stylex.create({
         default: 'translateX(calc(100% - var(--_progress-bar-fill, 0%)))',
         '@media (forced-colors: active)': 'none',
       },
+      '@media (pointer: coarse)': {
+        // `--_progress-bar-flip` steps 0, 1, 2, 0… on every change. It moves
+        // the fill by that many hundredths of a pixel. So a change back to the
+        // value it just left is never the running transition's own start
+        // value. CSS shortens a transition that reverses to its start, which
+        // would halve a return mid-flight (10 → 90 → 10). It takes three
+        // values because two would repeat on that return.
+        default:
+          'translateX(calc(max(var(--_progress-bar-fill, 0%), var(--_progress-bar-min, 0px)) - 100% + var(--_progress-bar-flip, 0) * 0.01px))',
+        ':dir(rtl)':
+          'translateX(calc(min(calc(100% - var(--_progress-bar-fill, 0%)), calc(100% - var(--_progress-bar-min, 0px))) - var(--_progress-bar-flip, 0) * 0.01px))',
+      },
+      // After the touch key, so StyleX negates that key under forced colors.
       '@media (forced-colors: active)': 'none',
     },
     willChange: {
@@ -281,17 +344,36 @@ const styles = stylex.create({
       default: 'transform',
       '@media (forced-colors: active)': 'width',
     },
-    // Under reduced motion a new value lands at once, on every pointer: the
-    // fill never travels (design:reduced-motion DR1). The keys are the shared
-    // reduced-motion queries, a fine pointer's and a coarse pointer's, spelled
-    // as the record's other transitions spell them.
+    // Under reduced motion a new value lands at once, with a mouse as with a
+    // finger: the fill never travels. The keys are the shared reduced-motion
+    // queries, as the other transitions spell them. The coarse key comes after
+    // the touch key, so it wins there.
     transitionDuration: {
       default: durationVars['--duration-medium'],
+      // The touch layer's move (the `progress.fillTrackMs` role times the
+      // share moved), scaled by the theme's tempo.
+      '@media (pointer: coarse)': {
+        default:
+          'calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1))',
+        // Under forced colors the fill is sized by `width` instead. Touch
+        // motion never animates a layout property, so with a finger the new
+        // size lands at once there.
+        '@media (forced-colors: active)': '0s',
+      },
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
     },
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (pointer: coarse)': 'var(--_progress-bar-curve, linear)',
+    },
+  },
+  fillEmpty: {
+    opacity: {
+      default: null,
+      '@media (pointer: coarse)': 0,
+    },
   },
   indeterminateFill: {
     height: '100%',
@@ -304,17 +386,37 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
     outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
-    width: '40%',
+    // Under reduced motion, on every pointer, the fill spans the whole track
+    // as one solid bar, and only its opacity pulses. Each way takes the
+    // `progress.reducedMotionPulseMs` role on the `timing.curves.move` curve
+    // (`--_progress-bar-pulse`, `--_progress-bar-pulse-curve`, set inline from
+    // the progress table). A busy loop: tempo does not scale it.
+    width: {
+      default: '40%',
+      '@media (prefers-reduced-motion: reduce)': '100%',
+    },
     borderRadius: radiusVars['--radius-full'],
     animationName: {
       default: indeterminateSlide,
-      ':is([dir="rtl"] *)': indeterminateSlideRtl,
+      ':is([dir="rtl"] *)': {
+        default: indeterminateSlideRtl,
+        '@media (prefers-reduced-motion: reduce)': indeterminatePulse,
+      },
+      '@media (prefers-reduced-motion: reduce)': indeterminatePulse,
     },
     animationDuration: {
       default: '1.5s',
-      '@media (prefers-reduced-motion: reduce)': '3s',
+      '@media (prefers-reduced-motion: reduce)': 'var(--_progress-bar-pulse)',
     },
-    animationTimingFunction: 'ease-in-out',
+    animationTimingFunction: {
+      default: 'ease-in-out',
+      '@media (prefers-reduced-motion: reduce)':
+        'var(--_progress-bar-pulse-curve)',
+    },
+    animationDirection: {
+      default: null,
+      '@media (prefers-reduced-motion: reduce)': 'alternate',
+    },
     animationIterationCount: 'infinite',
   },
   // A mark is a vertical tick centered on the track via their shared positioning container.
@@ -350,53 +452,52 @@ const variantStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-accent'],
   },
+  // A status fill takes the status text role, which every theme sets to read
+  // on its surfaces. The bright status roles fall to about 1:1 on a light
+  // track in some themes; the text roles reach 3:1 on the track in every
+  // bundled theme and mode.
   success: {
-    backgroundColor: colorVars['--color-success'],
+    backgroundColor: colorVars['--color-text-success'],
   },
   warning: {
-    backgroundColor: colorVars['--color-warning'],
+    backgroundColor: colorVars['--color-text-warning'],
   },
   error: {
-    backgroundColor: colorVars['--color-error'],
+    backgroundColor: colorVars['--color-text-error'],
   },
+  // The secondary text role reaches 3:1 on the default track. A theme whose
+  // dark track sits closer to it maps a lighter stop. The disabled text role
+  // does not reach 3:1: it is the track's own color in some themes. A
+  // disabled bar takes the same fill and dims its track (`trackDisabled`).
   neutral: {
-    backgroundColor: colorVars['--color-text-disabled'],
+    backgroundColor: colorVars['--color-text-secondary'],
   },
   disabled: {
-    backgroundColor: colorVars['--color-text-disabled'],
+    backgroundColor: colorVars['--color-text-secondary'],
   },
 });
 
-// A mark sitting inside the filled area is drawn *on* the bar, so it takes the
-// on-color that pairs with the fill's own variant color — the same pairing
-// Badge uses for solid semantic backgrounds.
-//
-// `neutral` and `disabled` both fill with the muted `--color-text-disabled`
-// gray, which carries no semantic weight and has no dedicated on-token, so
-// they fall back to a plain foreground. They pick different ones: a `neutral`
-// bar is live, so its mark keeps the full-contrast `--color-text-primary` a
-// mark uses out on the track; a `disabled` bar is deliberately low-emphasis —
-// its own label and value text drop to muted colors — so its mark steps down
-// to `--color-text-secondary` rather than becoming the loudest thing on a
-// grayed-out component.
+// A mark on the accent fill takes `--color-on-accent`. Every other fill is a
+// text role, which a theme sets to read on its surface, so a mark on it takes
+// the surface color.
 const markOnFillStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-on-accent'],
   },
   success: {
-    backgroundColor: colorVars['--color-on-success'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   warning: {
-    backgroundColor: colorVars['--color-on-warning'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   error: {
-    backgroundColor: colorVars['--color-on-error'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   neutral: {
-    backgroundColor: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   disabled: {
-    backgroundColor: colorVars['--color-text-secondary'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
 });
 
@@ -417,22 +518,47 @@ const markOnTrackStyles = stylex.create({
   track: {
     backgroundColor: colorVars['--color-text-primary'],
   },
-  // A disabled bar dims everything it draws, so its track marks step down to
-  // the secondary foreground for the same reason the disabled on-fill mark
-  // does — matching the muted label and value text.
+  // A disabled bar reads quieter, so a mark on its track steps down to the
+  // secondary foreground.
   trackDisabled: {
     backgroundColor: colorVars['--color-text-secondary'],
   },
 });
 
+// The reduced-motion pulse's variables, from the progress table.
+type PulseStyle = CSSProperties &
+  Record<
+    | '--_progress-bar-pulse'
+    | '--_progress-bar-pulse-curve'
+    | '--_progress-bar-pulse-floor',
+    string
+  >;
+
 // `CSSProperties` has no index signature for custom properties, so the fill's
 // inline style — which publishes the filled share as the private
 // `--_progress-bar-fill` — needs this augmentation to typecheck.
-type FillStyle = CSSProperties & Record<'--_progress-bar-fill', string>;
+type FillStyle = CSSProperties &
+  Record<
+    | '--_progress-bar-fill'
+    | '--_progress-bar-move'
+    | '--_progress-bar-curve'
+    | '--_progress-bar-flip'
+    | '--_progress-bar-min',
+    string
+  >;
 
-function defaultFormatValueLabel(value: number, max: number): string {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return `${pct}%`;
+/**
+ * The reduced-motion pulse plays the `progress.reducedMotionPulseMs` role on
+ * the `timing.curves.move` curve, down to the progress table's floor.
+ */
+function pulseStyle(element: Element | null): PulseStyle {
+  const pulseMs = resolveMotion(element, progressBar, 'reducedMotionPulseMs');
+  const curve = resolveMotion(element, timing.curves.move);
+  return {
+    '--_progress-bar-pulse': `${pulseMs}ms`,
+    '--_progress-bar-pulse-curve': formatMotionRoleValue('curve', curve),
+    '--_progress-bar-pulse-floor': String(progressBar.reducedMotionPulseFloor),
+  };
 }
 
 /**
@@ -483,7 +609,7 @@ export function ProgressBar({
   label,
   isLabelHidden = false,
   hasValueLabel = false,
-  formatValueLabel = defaultFormatValueLabel,
+  formatValueLabel,
   variant = 'accent',
   isIndeterminate = false,
   isDisabled = false,
@@ -504,12 +630,24 @@ export function ProgressBar({
   const safeMax = Number.isFinite(max) ? max : 0;
   const clampedValue = Math.min(Math.max(0, safeValue), safeMax);
   const percentage = safeMax > 0 ? (clampedValue / safeMax) * 100 : 0;
-  const valueText = formatValueLabel(clampedValue, safeMax);
+  const locale = useLocale();
+  const valueText = formatValueLabel
+    ? formatValueLabel(clampedValue, safeMax)
+    : formatPercent(Math.round(percentage), locale);
 
   const showValueLabel = hasValueLabel && !isIndeterminate;
 
   const fillVariant = isDisabled ? 'disabled' : variant;
-  const fillStyle: FillStyle = {'--_progress-bar-fill': `${percentage}%`};
+  // Under a finger the fill moves as UIProgressView's does and draws at least
+  // 16px; what that needs from script is the touch layer's (ProgressBarTouch).
+  const touch = useProgressBarTouch(
+    percentage,
+    !isIndeterminate && (marks?.length ?? 0) > 0,
+  );
+  const fillStyle: FillStyle = {
+    '--_progress-bar-fill': `${percentage}%`,
+    ...touch.fillVars,
+  };
 
   // Marks make no sense without a determinate value, so they are only drawn
   // in determinate mode. Non-finite mark values are dropped; the rest are
@@ -532,7 +670,7 @@ export function ProgressBar({
               value: mark.value,
               label: mark.label,
               pct,
-              isOnFill: percentage > 0 && pct <= percentage,
+              isOnFill: percentage > 0 && pct <= touch.drawnPercentage,
             };
           })
       : [];
@@ -582,9 +720,10 @@ export function ProgressBar({
           aria-valuemax={isIndeterminate ? undefined : safeMax}
           aria-labelledby={labelId}
           aria-valuetext={isIndeterminate ? undefined : valueText}
+          ref={touch.trackRef}
           {...mergeProps(
             themeProps('progress-bar-track'),
-            stylex.props(styles.track),
+            stylex.props(styles.track, isDisabled && styles.trackDisabled),
           )}>
           {isIndeterminate ? (
             <div
@@ -593,14 +732,21 @@ export function ProgressBar({
                 stylex.props(
                   styles.indeterminateFill,
                   variantStyles[fillVariant],
+                  isDisabled && styles.fillDisabled,
                 ),
               )}
+              style={pulseStyle(null)}
             />
           ) : (
             <div
               {...mergeProps(
                 themeProps('progress-bar-fill', {variant: fillVariant}),
-                stylex.props(styles.fill, variantStyles[fillVariant]),
+                stylex.props(
+                  styles.fill,
+                  percentage === 0 && styles.fillEmpty,
+                  variantStyles[fillVariant],
+                  isDisabled && styles.fillDisabled,
+                ),
               )}
               style={fillStyle}
             />
@@ -611,7 +757,7 @@ export function ProgressBar({
         {resolvedMarks.map(mark => {
           // The tick element. It is both the Tooltip's anchor and the Suspense
           // fallback shown while the lazy Tooltip chunk loads, so the tick is
-          // always visible and the label attaches once ready. The list `key`
+          // always visible and the tooltip attaches once ready. The list `key`
           // lives on the mapped <Suspense>, not here.
           //
           // `placement` is reflected as `data-placement` (and a class) so a
@@ -620,6 +766,8 @@ export function ProgressBar({
           // for the same reason.
           const markEl = (
             <span
+              role="img"
+              aria-label={mark.label}
               tabIndex={0}
               {...mergeProps(
                 themeProps('progress-bar-mark', {

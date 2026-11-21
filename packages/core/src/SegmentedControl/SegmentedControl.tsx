@@ -4,7 +4,8 @@
 
 /**
  * @file SegmentedControl.tsx
- * @input Uses React, StyleX, SegmentedControlContext, useListFocus, useKeyboardHint
+ * @input Uses React, StyleX, SegmentedControlContext, useListFocus,
+ *   useKeyboardHint, useTouchPresentation, useSegmentedSelectionMotion
  * @output Exports SegmentedControl component and SegmentedControlProps type
  * @position Container wrapper; provides context to SegmentedControlItem children
  *
@@ -12,10 +13,11 @@
  * - /packages/core/src/SegmentedControl/SegmentedControl.doc.mjs
  * - /packages/core/src/SegmentedControl/index.ts
  * - /packages/core/src/SegmentedControl/SegmentedControl.test.tsx
+ * - /packages/core/src/SegmentedControl/useSegmentedSelectionMotion.ts
  * - /packages/cli/assets/templates/blocks/components/SegmentedControl/ (showcase blocks)
  */
 
-import React, {useMemo, useCallback, type ReactNode} from 'react';
+import React, {useMemo, useCallback, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
@@ -34,6 +36,9 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {useSegmentedSelectionMotion} from './useSegmentedSelectionMotion';
+
 export interface SegmentedControlProps extends Omit<
   BaseProps<HTMLDivElement>,
   'onChange'
@@ -65,7 +70,9 @@ export interface SegmentedControlProps extends Omit<
    */
   layout?: SegmentedControlLayout;
   /**
-   * Whether the entire control is disabled.
+   * Whether the entire control is disabled. The selected segment keeps the
+   * control's Tab stop, announced as disabled (`aria-disabled`), and nothing
+   * can be selected.
    * @default false
    */
   isDisabled?: boolean;
@@ -73,11 +80,11 @@ export interface SegmentedControlProps extends Omit<
    * Explains why the control is disabled. Applies to the whole-group disabled
    * state (`isDisabled`), not individual segments. When set together with
    * `isDisabled`, the control shows a tooltip with this text on hover and
-   * keyboard focus, and stays focusable (via `aria-disabled`) so the reason is
-   * discoverable by keyboard and assistive technology. Selection stays blocked.
+   * keyboard focus, and the reason describes each segment for assistive
+   * technology. Selection stays blocked.
    *
-   * Use this instead of wrapping a disabled control in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled control in `Tooltip`, so the
+   * reason is attached to the control itself.
    */
   disabledMessage?: string;
   /**
@@ -92,6 +99,11 @@ export interface SegmentedControlProps extends Omit<
 
 const styles = stylex.create({
   container: {
+    // The lens's containing block and stacking context. The lens sits at
+    // z-index -1 inside it: above the track's own background, below every
+    // segment.
+    position: 'relative',
+    isolation: 'isolate',
     display: 'inline-flex',
     alignItems: 'center',
     width: 'fit-content',
@@ -119,15 +131,145 @@ const styles = stylex.create({
     display: 'flex',
     width: '100%',
   },
+  // Disabled: dimmed, with pointer events left on so a press can focus the
+  // segment that holds the Tab stop and a reason tooltip can open on hover.
+  // Selection is blocked by the isDisabled guards (spec:AST-085 FR1, FR2).
   disabled: {
     opacity: 0.5,
-    pointerEvents: 'none',
   },
-  // Disabled *with* a disabledMessage: keep the dimmed look but leave pointer
-  // events on so the group can receive hover and surface the reason tooltip.
-  // Selection is still blocked by the isDisabled guards.
-  disabledWithMessage: {
-    opacity: 0.5,
+  // The lens uses the radiogroup's own pseudo-elements, so it adds no
+  // element. ::before carries the selected surface. Under Reduced Motion,
+  // ::after is the old surface that fades out in place. Both are hidden at
+  // rest. A negative z-index keeps them under every segment's content, inside
+  // the stacking context the container's isolation makes. Above the segments,
+  // a moving lens could paint over their titles. WebKit's overlap test can
+  // miss what a moving layer covers.
+  lens: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      zIndex: -1,
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: laid out on a segment's box measured from client rects (useSegmentedSelectionMotion), in both directions.
+      left: 'var(--_segmented-lens-left, 0px)',
+      top: 'var(--_segmented-lens-top, 0px)',
+      width: 'var(--_segmented-lens-width, 0px)',
+      height: 'var(--_segmented-lens-height, 0px)',
+      boxSizing: 'border-box',
+      // Scales around its center: the lens's position and size are separate.
+      transformOrigin: '50% 50%',
+      pointerEvents: 'none',
+      visibility: 'var(--_segmented-lens-visibility, hidden)',
+      willChange: 'var(--astryx-motion-will-change-before, auto)',
+      // It carries a copy of an already resolved surface, forced colors
+      // included (Highlight), so the UA must not remap it again.
+      forcedColorAdjust: 'none',
+      backgroundColor: 'var(--_segmented-lens-background-color, transparent)',
+      backgroundImage: 'var(--_segmented-lens-background-image, none)',
+      backgroundPosition: 'var(--_segmented-lens-background-position, 0% 0%)',
+      backgroundSize: 'var(--_segmented-lens-background-size, auto)',
+      backgroundRepeat: 'var(--_segmented-lens-background-repeat, repeat)',
+      backgroundOrigin: 'var(--_segmented-lens-background-origin, padding-box)',
+      backgroundClip: 'var(--_segmented-lens-background-clip, border-box)',
+      boxShadow: 'var(--_segmented-lens-box-shadow, none)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderTopLeftRadius: 'var(--_segmented-lens-border-top-left-radius, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderTopRightRadius:
+        'var(--_segmented-lens-border-top-right-radius, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderBottomRightRadius:
+        'var(--_segmented-lens-border-bottom-right-radius, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderBottomLeftRadius:
+        'var(--_segmented-lens-border-bottom-left-radius, 0px)',
+      borderTopWidth: 'var(--_segmented-lens-border-top-width, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderRightWidth: 'var(--_segmented-lens-border-right-width, 0px)',
+      borderBottomWidth: 'var(--_segmented-lens-border-bottom-width, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderLeftWidth: 'var(--_segmented-lens-border-left-width, 0px)',
+      borderTopStyle: 'var(--_segmented-lens-border-top-style, none)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderRightStyle: 'var(--_segmented-lens-border-right-style, none)',
+      borderBottomStyle: 'var(--_segmented-lens-border-bottom-style, none)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderLeftStyle: 'var(--_segmented-lens-border-left-style, none)',
+      borderTopColor: 'var(--_segmented-lens-border-top-color, currentcolor)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderRightColor:
+        'var(--_segmented-lens-border-right-color, currentcolor)',
+      borderBottomColor:
+        'var(--_segmented-lens-border-bottom-color, currentcolor)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderLeftColor: 'var(--_segmented-lens-border-left-color, currentcolor)',
+      backdropFilter: 'var(--_segmented-lens-backdrop-filter, none)',
+      WebkitBackdropFilter:
+        'var(--_segmented-lens-webkit-backdrop-filter, none)',
+    },
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      zIndex: -1,
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: laid out on a segment's box measured from client rects (useSegmentedSelectionMotion), in both directions.
+      left: 'var(--_segmented-after-left, 0px)',
+      top: 'var(--_segmented-after-top, 0px)',
+      width: 'var(--_segmented-after-width, 0px)',
+      height: 'var(--_segmented-after-height, 0px)',
+      boxSizing: 'border-box',
+      // Scales around its center: the lens's position and size are separate.
+      transformOrigin: '50% 50%',
+      pointerEvents: 'none',
+      visibility: 'var(--_segmented-after-visibility, hidden)',
+      willChange: 'var(--astryx-motion-will-change-after, auto)',
+      // It carries a copy of an already resolved surface, forced colors
+      // included (Highlight), so the UA must not remap it again.
+      forcedColorAdjust: 'none',
+      backgroundColor: 'var(--_segmented-after-background-color, transparent)',
+      backgroundImage: 'var(--_segmented-after-background-image, none)',
+      backgroundPosition: 'var(--_segmented-after-background-position, 0% 0%)',
+      backgroundSize: 'var(--_segmented-after-background-size, auto)',
+      backgroundRepeat: 'var(--_segmented-after-background-repeat, repeat)',
+      backgroundOrigin:
+        'var(--_segmented-after-background-origin, padding-box)',
+      backgroundClip: 'var(--_segmented-after-background-clip, border-box)',
+      boxShadow: 'var(--_segmented-after-box-shadow, none)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderTopLeftRadius:
+        'var(--_segmented-after-border-top-left-radius, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderTopRightRadius:
+        'var(--_segmented-after-border-top-right-radius, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderBottomRightRadius:
+        'var(--_segmented-after-border-bottom-right-radius, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderBottomLeftRadius:
+        'var(--_segmented-after-border-bottom-left-radius, 0px)',
+      borderTopWidth: 'var(--_segmented-after-border-top-width, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderRightWidth: 'var(--_segmented-after-border-right-width, 0px)',
+      borderBottomWidth: 'var(--_segmented-after-border-bottom-width, 0px)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderLeftWidth: 'var(--_segmented-after-border-left-width, 0px)',
+      borderTopStyle: 'var(--_segmented-after-border-top-style, none)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderRightStyle: 'var(--_segmented-after-border-right-style, none)',
+      borderBottomStyle: 'var(--_segmented-after-border-bottom-style, none)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderLeftStyle: 'var(--_segmented-after-border-left-style, none)',
+      borderTopColor: 'var(--_segmented-after-border-top-color, currentcolor)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderRightColor:
+        'var(--_segmented-after-border-right-color, currentcolor)',
+      borderBottomColor:
+        'var(--_segmented-after-border-bottom-color, currentcolor)',
+      // eslint-disable-next-line @astryx/no-physical-properties -- intentional: a copy of the segment's computed (physical) surface.
+      borderLeftColor:
+        'var(--_segmented-after-border-left-color, currentcolor)',
+      backdropFilter: 'var(--_segmented-after-backdrop-filter, none)',
+      WebkitBackdropFilter:
+        'var(--_segmented-after-webkit-backdrop-filter, none)',
+    },
   },
 });
 
@@ -179,12 +321,25 @@ export function SegmentedControl({
   ...rest
 }: SegmentedControlProps) {
   const size = useSize(sizeProp, 'md');
+  // A touch device (a coarse primary pointer) gets UIKit's motion: the
+  // selection slides on a spring. Under a mouse it slides on the theme's
+  // duration and easing.
+  const isTouchPresentation = useTouchPresentation().isTouch;
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  // Every pointer's press is tracked. A drag from the selected segment
+  // carries the lens, and the lift commits the segment nearest the pointer.
+  // A lift outside the control commits nothing.
+  const {selection, attachTrack} = useSegmentedSelectionMotion(
+    trackRef,
+    value,
+    isTouchPresentation,
+    !isDisabled,
+  );
 
-  // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
-  // controls swallow pointer events, so the tooltip listeners attach to the
-  // radiogroup container (and the container keeps pointer events on in this
-  // mode) while the radios stay perceivable via aria-disabled. Selection is
-  // blocked by the isDisabled guards in the click/focus handlers.
+  // Disabled-reason tooltip. Applies to the whole-group disabled state. The
+  // tooltip listeners attach to the radiogroup container, which keeps pointer
+  // events while disabled; the radios stay perceivable via aria-disabled.
+  // Selection is blocked by the isDisabled guards in the click/focus handlers.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -203,10 +358,10 @@ export function SegmentedControl({
     useInternalListFocus<HTMLDivElement>({
       itemSelector: '[role="radio"]:not([aria-disabled="true"])',
       hasRovingTabIndex: true,
-      // Disabled with a reason, the control keeps one Tab stop so the reason is
-      // reachable (FR2, FR7): the selected segment, else the first segment not
-      // disabled by its own isDisabled, else the first.
-      disabledTabStop: showsDisabledMessage ? orderDisabledTabStop : undefined,
+      // One Tab stop, placed by the control (FR2, FR7): the selected segment,
+      // enabled or not and in a disabled control too, else the first segment
+      // not disabled by its own isDisabled, else the first.
+      tabStopOrder: orderTabStop,
       wrap: true,
       orientation: 'horizontal',
     });
@@ -218,6 +373,7 @@ export function SegmentedControl({
 
   const handleContainerKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      selection.keyPressed();
       onKeyDownProp?.(e);
       if (e.defaultPrevented) {
         return;
@@ -225,7 +381,7 @@ export function SegmentedControl({
       hint.onKeyDown(e);
       handleKeyDown(e);
     },
-    [onKeyDownProp, hint, handleKeyDown],
+    [selection, onKeyDownProp, hint, handleKeyDown],
   );
 
   // Selection-follows-focus (APG radiogroup): useListFocus only *moves* focus,
@@ -255,6 +411,12 @@ export function SegmentedControl({
       if (!e.currentTarget.contains(e.relatedTarget)) {
         return;
       }
+      // A mouse or pen press moves focus at pointerdown. A finger moves it
+      // after the lift, before the tap's click. The press commits through
+      // that click, so this focus move selects nothing.
+      if (selection.isPressing()) {
+        return;
+      }
       const focused = (e.target as HTMLElement | null)?.closest<HTMLElement>(
         '[role="radio"][data-value]',
       );
@@ -266,7 +428,7 @@ export function SegmentedControl({
         onChange(nextValue);
       }
     },
-    [onFocusProp, hint, handleFocus, isDisabled, onChange, value],
+    [onFocusProp, hint, handleFocus, isDisabled, onChange, selection, value],
   );
 
   const contextValue = useMemo(
@@ -276,10 +438,10 @@ export function SegmentedControl({
       size,
       layout,
       isDisabled,
-      hasDisabledMessage: showsDisabledMessage,
       disabledReasonID: showsDisabledMessage
         ? disabledMessageTooltip.describedBy
         : undefined,
+      isTouchPresentation,
     }),
     [
       value,
@@ -289,13 +451,20 @@ export function SegmentedControl({
       isDisabled,
       showsDisabledMessage,
       disabledMessageTooltip.describedBy,
+      isTouchPresentation,
     ],
   );
 
   return (
     <SegmentedControlContext value={contextValue}>
       <div
-        ref={useMergedRefs(ref, listRef, disabledMessageTooltip.ref)}
+        ref={useMergedRefs(
+          ref,
+          listRef,
+          trackRef,
+          attachTrack,
+          disabledMessageTooltip.ref,
+        )}
         {...rest}
         role="radiogroup"
         aria-label={label}
@@ -314,10 +483,8 @@ export function SegmentedControl({
             styles.container,
             sizeStyles[size],
             layout === 'fill' && styles.fill,
-            isDisabled &&
-              (showsDisabledMessage
-                ? styles.disabledWithMessage
-                : styles.disabled),
+            (isTouchPresentation || !isDisabled) && styles.lens,
+            isDisabled && styles.disabled,
             xstyle,
           ),
           className,
@@ -335,11 +502,11 @@ export function SegmentedControl({
 SegmentedControl.displayName = 'SegmentedControl';
 
 /**
- * The segments of a control disabled with a reason, its Tab stop first: the
- * selected segment, else the first segment not disabled by its own
- * isDisabled, else the first (FR2, FR7).
+ * The control's segments, its Tab stop first: the selected segment, enabled
+ * or not, else the first segment not disabled by its own isDisabled, else the
+ * first (FR2, FR7).
  */
-function orderDisabledTabStop(list: HTMLElement): ReadonlyArray<HTMLElement> {
+function orderTabStop(list: HTMLElement): ReadonlyArray<HTMLElement> {
   const segments = Array.from(
     list.querySelectorAll<HTMLElement>('[role="radio"]'),
   );

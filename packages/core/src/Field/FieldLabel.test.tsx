@@ -13,12 +13,42 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TestIcon} from '../__tests__/TestIcon';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InternationalizationProvider} from '../i18n';
 import {FieldLabel} from './FieldLabel';
+import {Switch} from '../Switch/Switch';
 import {themeProps} from '../utils/themeProps';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 describe('FieldLabel', () => {
+  it('sets the label in the semibold weight', () => {
+    // A 500 weight resolves to the regular face in fonts with no 500 face.
+    render(<FieldLabel label="Email" inputID="email-input" />);
+    const label = screen.getByText('Email').closest('label');
+    expect(label).not.toBeNull();
+    expect(declaredValue(label as Element, 'font-weight')).toBe(
+      'var(--font-weight-semibold)',
+    );
+  });
+
+  it('draws the label in the primary text colour and its description in the secondary', () => {
+    render(
+      <FieldLabel
+        label="Email"
+        inputID="email-input"
+        description="We never share it"
+        isOptional
+      />,
+    );
+    const label = screen.getByText('Email').closest('label') as Element;
+    expect(declaredValue(label, 'color')).toBe('var(--color-text-primary)');
+    expect(declaredValue(screen.getByText('We never share it'), 'color')).toBe(
+      'var(--color-text-secondary)',
+    );
+    const marker = screen.getByText('Optional').closest('span') as Element;
+    expect(declaredValue(marker, 'color')).toBe('var(--color-text-secondary)');
+  });
+
   it('renders label text', () => {
     render(<FieldLabel label="Email" inputID="email-input" />);
     expect(screen.getByText('Email')).toBeInTheDocument();
@@ -105,17 +135,43 @@ describe('FieldLabel', () => {
     expect(container.firstElementChild).toBe(label);
   });
 
-  it('renders tooltip info icon when labelTooltip prop is provided', () => {
+  it('renders an info button named after the label, after the label element and outside it', () => {
     render(
-      <FieldLabel
-        label="Help"
-        inputID="help-input"
-        labelTooltip="This is helpful information"
-      />,
+      <>
+        <FieldLabel
+          label="Help"
+          inputID="help-input"
+          labelTooltip="This is helpful information"
+        />
+        <input id="help-input" type="text" />
+      </>,
     );
-    // Two SVGs: the info icon is wrapped in tooltip
-    const svgs = document.querySelectorAll('svg');
-    expect(svgs.length).toBeGreaterThan(0);
+    const button = screen.getByRole('button', {name: 'About Help'});
+    const label = screen.getByText('Help').closest('label');
+    // No button inside a label: a press on it would also activate the control.
+    expect(button.closest('label')).toBeNull();
+    expect(label?.nextElementSibling).toBe(button);
+    expect(button).toHaveAccessibleDescription('This is helpful information');
+    // The field's name stays the label alone.
+    expect(screen.getByRole('textbox')).toHaveAccessibleName('Help');
+  });
+
+  it('keeps a hidden label’s info button reachable by keyboard', () => {
+    render(
+      <>
+        <FieldLabel
+          label="Search"
+          inputID="search-input"
+          isLabelHidden
+          labelTooltip="Searches titles only"
+        />
+        <input id="search-input" type="text" />
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'About Search'})).toHaveProperty(
+      'tabIndex',
+      0,
+    );
   });
 
   it('does not render extra icon when labelTooltip is not provided', () => {
@@ -134,8 +190,9 @@ describe('FieldLabel', () => {
       />,
     );
     expect(screen.getByText(/Optional/)).toBeInTheDocument();
-    // Info icon should be present
-    expect(document.querySelector('svg')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'About Field'}),
+    ).toBeInTheDocument();
   });
 
   describe('labelTooltip under each pointer', () => {
@@ -176,12 +233,9 @@ describe('FieldLabel', () => {
       fireEvent.click(element);
     };
 
-    /** The info icon the help tooltip is attached to, inside the label. */
+    /** The info button after the label. */
     const infoIcon = (labelText: string) =>
-      screen
-        .getByText(labelText)
-        .closest('label')
-        ?.querySelector('[aria-describedby]') as HTMLElement;
+      screen.getByRole('button', {name: `About ${labelText}`});
 
     it('opens the help on a tap of its icon and leaves a checkbox alone', async () => {
       render(
@@ -228,7 +282,46 @@ describe('FieldLabel', () => {
       expect(screen.getByRole('checkbox')).not.toBeChecked();
     });
 
-    it('leaves a mouse click on its icon to the label, which toggles a checkbox', () => {
+    it('opens the help on Space on its button and leaves a checkbox alone', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <FieldLabel
+            label="Digest"
+            inputID="digest"
+            labelTooltip="One email a week"
+          />
+          <input type="checkbox" id="digest" />
+        </>,
+      );
+
+      infoIcon('Digest').focus();
+      await user.keyboard(' ');
+
+      await waitFor(() => {
+        expect(infoIcon('Digest')).toHaveAttribute('aria-expanded', 'true');
+      });
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('leaves a Switch alone when its label’s info button is clicked', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Switch
+          label="Auto-save"
+          labelTooltip="Saves each change"
+          value={false}
+          onChange={onChange}
+        />,
+      );
+
+      await user.click(infoIcon('Auto-save'));
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('opens the help on a mouse click of its button and leaves a checkbox alone', async () => {
       render(
         <>
           <FieldLabel
@@ -245,9 +338,13 @@ describe('FieldLabel', () => {
       fireEvent.pointerUp(icon, {pointerType: 'mouse'});
       fireEvent.click(icon);
 
-      // A mouse click anywhere on a native label, its info icon included,
-      // activates the label's control.
-      expect(screen.getByRole('checkbox')).toBeChecked();
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip', {hidden: true})).toHaveAttribute(
+          'popover-open',
+        );
+      });
+      // The button sits outside the label, so a click is for its help only.
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
     });
   });
 

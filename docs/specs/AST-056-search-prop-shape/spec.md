@@ -192,10 +192,9 @@ somebody made alone:
    query input _is_ the control. Both are locally right, which is exactly why
    no component will fix this on its own.
 
-Beyond core, `packages/lab` has already copied the drift and added a fifth
-name: `MobileTokenizer` takes `searchSource` + `emptySearchResultsText`,
-`TransferList` takes `hasSearch` + `searchPlaceholder` + `searchLabel`, and
-`ChatEmojiPicker` takes `searchLabel`. Lab is not a stable public promise, so
+Beyond core, `packages/lab` has copied the drift: `TransferList` takes
+`hasSearch` + `searchPlaceholder` + `searchLabel`, and `ChatEmojiPicker` takes
+`searchLabel`. Lab is not a stable public promise, so
 this record does not govern it; it is evidence that the pattern spreads by
 copying.
 

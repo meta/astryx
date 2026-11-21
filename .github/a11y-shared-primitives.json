@@ -1,0 +1,4 @@
+{
+  "$comment": "Shared primitives whose source change runs the audit specs of the components that use them (spec:AST-030 FR12). Layer joins when a Layer change breaks the release check or a dependent audit at release; other additions are a CI & Release and chief-of-staff call.",
+  "primitives": ["core/Button", "core/IconButton"]
+}

@@ -116,10 +116,13 @@ describe('hand-off to the project CLI', () => {
     installCore(root, '0.6.8');
     installStandInCli(root, '0.6.8', {bin: false});
     const offline = {npm_config_registry: 'http://127.0.0.1:9'};
-    const json = run(root, ['docs', '--json'], {env: offline});
+    // One machine, one cache: the second run reads the failed install the
+    // first one remembered and starts no npm install of its own.
+    const cache = tempDir('cache');
+    const json = run(root, ['docs', '--json'], {env: offline, cache});
     expect(json.status).toBe(0);
     expect(JSON.parse(json.stdout).meta.answeredBy.copy).toBe('fallback');
-    const text = run(root, ['--version'], {env: offline});
+    const text = run(root, ['--version'], {env: offline, cache});
     expect(text.status).toBe(0);
     expect(text.stdout.trim()).toBe(SELF_VERSION);
     expect(text.stderr).toMatch(
@@ -259,7 +262,7 @@ describe('update notices through the real bin (FR10)', () => {
     });
     const notice = [
       `A new release of Astryx is available: ${CLI_VERSION} → ${newest}`,
-      `To upgrade, run: npm install @astryxdesign/core@${newest} @astryxdesign/cli@${newest}, then npx astryx upgrade --from ${CLI_VERSION} --apply`,
+      `To upgrade, run: npm install -E @astryxdesign/core@${newest} @astryxdesign/cli@${newest}, then npx astryx upgrade --from ${CLI_VERSION} --apply`,
     ];
     for (const env of [{CI: 'true'}, {NO_UPDATE_NOTIFIER: '1'}]) {
       const off = run(root, ['--version'], {cache, home, env});

@@ -12,7 +12,7 @@ export const docs = {
       name: 'variant',
       type: "'neutral' | 'info' | 'success' | 'warning' | 'error' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'",
       description:
-        'Visual style variant. Semantic variants (neutral, info, success, warning, error) use solid backgrounds. Non-semantic color variants use tinted backgrounds with colored text for categorization and tagging.',
+        'Visual style variant; a status repeated on every item reads quieter as a StatusDot with Text (a `neutral` dot for done states such as Resolved), so keep a solid semantic Badge for the rare item that needs attention. Semantic variants (neutral, info, success, warning, error) use solid backgrounds. Non-semantic color variants use tinted backgrounds with colored text for categorization and tagging.',
       default: "'neutral'",
     },
     {
@@ -20,7 +20,7 @@ export const docs = {
       type: 'ReactNode',
       required: true,
       description:
-        'Badge text content. A badge is one line and at least as tall as that line of its label, so it grows with its text (a larger text size); a label wider than the space available is cut with an ellipsis rather than escaping its container; a string or number label is also set as the badge\'s title so the full text stays reachable on hover.',
+        'Badge text content. A badge is one line and at least as tall as that line of its label, so it grows with its text (a larger text size); it is as wide as its label, so it does not stretch to fill a grid cell or a stack; a label wider than the space available is cut with an ellipsis rather than escaping its container; a string or number label is also set as the badge\'s title so the full text stays reachable on hover.',
     },
     {
       name: 'icon',
@@ -49,6 +49,7 @@ export const docs = {
       {guidance: true, description: 'Use color variants (blue, purple, teal, etc.) for category tags that group or classify items: team names, content types, priority levels.'},
       {guidance: true, description: 'Keep labels to one or two words. If you need more detail, put it in surrounding text instead of the badge.'},
       {guidance: true, description: 'Add an icon when it helps identify the badge type quickly, but always include a text label alongside it.'},
+      {guidance: true, description: 'A string or number label keeps its character order under right-to-left, so `+3` and `@alice` read as written. When a rich label mixes directions, mark the direction on your own content, for example with `dir` or `<bdi>`.'},
       {guidance: false, description: 'Apply a "success" badge to every healthy/active/normal item. If all rows show green "Active" badges, none stand out; the badge adds noise, not information. Show only the states that need user attention (errors, warnings, pending actions).'},
       {guidance: false, description: 'Use badges for metadata. Durations ("6h window"), counts ("12 trigger types"), dates, and descriptions are not statuses or categories; use description text (Text with type="supporting") instead.'},
       {guidance: false, description: 'Use semantic status variants (success, warning, error, info) for categories or informational content. These are visually loud and should only indicate system state.'},
@@ -75,6 +76,7 @@ export const docsZh = {
       {guidance: true, description: 'Use color variants (blue, purple, teal, etc.) for category tags that group or classify items: team names, content types, priority levels.'},
       {guidance: true, description: 'Keep labels to one or two words. If you need more detail, put it in surrounding text instead of the badge.'},
       {guidance: true, description: 'Add an icon when it helps identify the badge type quickly, but always include a text label alongside it.'},
+      {guidance: true, description: 'A string or number label keeps its character order under right-to-left, so `+3` and `@alice` read as written. When a rich label mixes directions, mark the direction on your own content, for example with `dir` or `<bdi>`.'},
       {guidance: false, description: 'Apply a "success" badge to every healthy/active/normal item. If all rows show green "Active" badges, none stand out; the badge adds noise, not information. Show only the states that need user attention (errors, warnings, pending actions).'},
       {guidance: false, description: 'Use badges for metadata. Durations ("6h window"), counts ("12 trigger types"), dates, and descriptions are not statuses or categories; use description text (Text with type="supporting") instead.'},
       {guidance: false, description: 'Use semantic status variants (success, warning, error, info) for categories or informational content. These are visually loud and should only indicate system state.'},
@@ -91,7 +93,7 @@ export const docsZh = {
       name: 'variant',
       type:
         "'neutral' | 'info' | 'success' | 'warning' | 'error' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'",
-      description: '视觉样式变体。语义变体使用实色背景，非语义颜色变体使用浅色背景配彩色文字。',
+      description: '视觉样式变体；每一项都显示的状态用 StatusDot 加 Text 更安静（Resolved 等已完成状态用 `neutral` 圆点），实色语义 Badge 只留给少数需要注意的项。语义变体使用实色背景，非语义颜色变体使用浅色背景配彩色文字。',
       default: "'neutral'",
     },
     {name: 'label', type: 'ReactNode', required: true, description: '徽章文本内容。'},
@@ -121,6 +123,7 @@ export const docsDense = {
       {guidance: true, description: 'Use color variants (blue, purple, teal) for category tags that classify items: team names, content types, priority levels.'},
       {guidance: true, description: 'Keep labels to one or two words. If more detail is needed, put it in surrounding text instead of the badge.'},
       {guidance: true, description: 'Add an icon when it helps identify the badge type quickly, but always include a text label alongside it.'},
+      {guidance: true, description: 'A string or number label keeps its character order under right-to-left, so `+3` and `@alice` read as written. When a rich label mixes directions, mark the direction on your own content, for example with `dir` or `<bdi>`.'},
       {guidance: false, description: 'Apply "success" badges to every healthy/normal item. If most rows are green "Active", none stand out. Skip the badge for the default state; only highlight exceptions that need attention.'},
       {guidance: false, description: 'Use badges for metadata. Durations, counts, dates, descriptions → use Text with type="supporting" instead.'},
       {guidance: false, description: 'Use status variants for non-status info. "6h window", "12 types", category names are NOT statuses.'},
@@ -133,7 +136,7 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    variant: 'visual style variant',
+    variant: 'visual style variant; status repeated per item → StatusDot + Text (neutral dot for done states like Resolved); solid semantic Badge only for the rare item needing attention',
     label: 'badge text content; over-wide labels clip with an ellipsis, full text in title',
     icon: 'optional leading icon',
   },

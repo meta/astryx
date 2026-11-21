@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/SideNav/SideNav.test.tsx,
     apps/storybook/stories/SideNav.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -127,10 +128,11 @@ map is recorded.
 
 ## Verification map
 
-| Contract      | Verification                                  | Representative states               | Mutation or failure expectation             | Audit section                        |
-| ------------- | --------------------------------------------- | ----------------------------------- | ------------------------------------------- | ------------------------------------ |
-| FR1, FR2, FR4 | `SideNav.test.tsx` SideNavSection suite       | Title, subtitle, end content, props | A lost role, name, or forwarded prop fails. | `audit:SideNavSection/accessibility` |
-| FR3           | `SideNav.test.tsx` hidden section header test | Header hidden                       | A header removed from the tree fails.       | `audit:SideNavSection/accessibility` |
+| Contract      | Verification                                                                                               | Representative states                      | Mutation or failure expectation                                      | Audit section                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------ |
+| FR1, FR2, FR4 | `SideNav.test.tsx` SideNavSection suite                                                                    | Title, subtitle, end content, props        | A lost role, name, or forwarded prop fails.                          | `audit:SideNavSection/accessibility` |
+| FR3           | `SideNav.test.tsx` hidden section header test                                                              | Header hidden                              | A header removed from the tree fails.                                | `audit:SideNavSection/accessibility` |
+| RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `SideNav / Section / End content` | Section title and end content; LTR and RTL | A title that is not at the inline start of the end content fails D2. | `audit:SideNavSection/i18n-rtl`      |
 
 Read from source, with no focused test yet: the forwarded `ref`, the
 `side-nav-section` target, and the role and label winning over caller props

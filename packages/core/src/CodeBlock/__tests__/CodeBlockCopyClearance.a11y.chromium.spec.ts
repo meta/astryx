@@ -9,7 +9,12 @@
  *   stays readable (Code Body, Copy Button design relationships)
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -199,6 +204,29 @@ test('with a header, Copy sits in the header and the code keeps its full width',
   // Only the root's own border separates the viewport from the root's edges.
   expect(Math.abs(root.width - viewport.width)).toBeLessThanOrEqual(2);
   expect(await overlap(page, 'Code')).toBe(0);
+});
+
+test('a long title wraps before the header controls and never runs under Copy', async ({
+  page,
+}) => {
+  await mount(page, {
+    title: 'authentication-middleware.handler.test.ts',
+    width: '200px',
+  });
+  const reachesCopy = await page.evaluate(() => {
+    const title = document.querySelector('.astryx-code-block-title');
+    const copy = document.querySelector('[aria-label="Copy code"]');
+    if (!title || !copy) {
+      throw new Error('missing the title or Copy');
+    }
+    const button = copy.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    return Array.from(range.getClientRects()).some(
+      rect => rect.right > button.left + 0.5,
+    );
+  });
+  expect(reachesCopy).toBe(false);
 });
 
 async function centres(page: Page) {

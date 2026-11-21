@@ -62,15 +62,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                            |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Governing contract      | `design:bidirectionality` owns what correct RTL behavior means; component contracts own local semantics, exceptions, and verification. No product contract changes; this record owns evidence admission and freshness.                                                                                                                                                              |
-| System behavior         | Every component in the live roster is accounted for; available in-scope stories are rendered LTR and RTL. Results distinguish measured, verified N/A, coverage gap, and behavior failure. Lint and rendered audit prove different claims.                                                                                                                                           |
-| End-user impact         | People reading RTL interfaces are protected by evidence that actually observed mirroring, ordering, placement, geometry, and behavior, rather than by a green report that measured nothing.                                                                                                                                                                                         |
-| Builder impact          | A new or changed component must either be measured by an applicable check or carry an explicit gap; behavior failures have no allowlist. Verified-N/A and pre-existing-debt admission await owner decisions (OQ1, OQ2).                                                                                                                                                             |
-| Compatibility/readiness | INV12–INV16 specify D1 fixture metadata and stable selection, not shipped enforcement. Component-wide N/A admission, historical debt, and required-check rollout remain unresolved; D7 enforces each configured native target minimum.                                                                                                                                              |
-| Review checks           | Reject lint standing in for rendered evidence (INV1); an allowlist that relabels a behavior failure (INV3); all-N/A credited as RTL-ready (INV4); a component dropping from the roster because its story moved (INV5); a new dimension without a red/green mutation receipt (INV9); a D1 exclusion on directional controls/cues or missing review-facing disclosure (INV12, INV16). |
-| Governing rules         | No deciding system spec; `architecture:knowledge-contracts` evidence-freshness and human-decision rules apply.                                                                                                                                                                                                                                                                      |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Governing contract      | `design:bidirectionality` owns what correct RTL behavior means; component contracts own local semantics, exceptions, and verification. No product contract changes; this record owns evidence admission and freshness.                                                                                                                                                                                                             |
+| System behavior         | Every component in the live roster is accounted for; available in-scope stories are rendered LTR and RTL. Results distinguish measured, verified N/A, coverage gap, and behavior failure. Lint and rendered audit prove different claims.                                                                                                                                                                                          |
+| End-user impact         | People reading RTL interfaces are protected by evidence that actually observed mirroring, ordering, placement, geometry, and behavior, rather than by a green report that measured nothing.                                                                                                                                                                                                                                        |
+| Builder impact          | A new or changed component must either be measured by an applicable check or carry an explicit gap; behavior failures have no allowlist. A component with no direction-sensitive visual, layout or behavior may instead carry a reason-backed verified N/A that no audit dimension contradicts (OQ1); pre-existing-debt admission awaits an owner decision (OQ2).                                                                  |
+| Compatibility/readiness | INV12–INV16 specify D1 fixture metadata and stable selection, plus the D5 chart-plot declaration (`rtlAudit.D5`), not shipped enforcement. Historical debt and required-check rollout remain unresolved; D7 enforces each configured native target minimum.                                                                                                                                                                        |
+| Review checks           | Reject lint standing in for rendered evidence (INV1); an allowlist that relabels a behavior failure (INV3); all-N/A credited as RTL-ready (INV4); a component dropping from the roster because its story moved (INV5); a new dimension without a red/green mutation receipt (INV9); a D1 exclusion on directional controls/cues, or a D1 exclusion or D5 chart declaration missing review-facing disclosure (INV12, INV13, INV16). |
+| Governing rules         | No deciding system spec; `architecture:knowledge-contracts` evidence-freshness and human-decision rules apply.                                                                                                                                                                                                                                                                                                                     |
 
 This table is a review projection; the body below is authoritative.
 
@@ -89,14 +89,14 @@ The former describes one story's semantics; the latter requires evidence for the
 whole component.
 
 The global `testing` route supplies shared evidence and exclusion-review claims
-when an RTL test, evidence claim, or exemption is relevant to the change. It does
-not supply component behavior or visual intent: `design:bidirectionality` owns
-those relationships, and component/module contracts own local states and their
-verification maps. Matching this route neither requires every component to
-implement the audit runner nor imports workflow topology, unresolved N/A/debt
-admission, or gate-rollout decisions as universal component rules. Review applies
-only the routed claims within their stated evidence scope; draft routes remain
-non-authoritative.
+when an RTL test, evidence claim, or exemption is relevant to the change. It
+does not supply component behavior or visual intent: `design:bidirectionality`
+owns those relationships, and component/module contracts own local states and
+their verification maps. Matching this route neither requires every component to
+implement the audit runner nor imports workflow topology, unresolved debt
+admission, or gate-rollout decisions as universal component rules. Review
+applies only the routed claims within their stated evidence scope; draft routes
+remain non-authoritative.
 
 ## System model
 
@@ -120,8 +120,8 @@ Lint and rendered audit are complementary:
   declarations alone;
 - browser checks prove computed geometry, visibility, ordering, hit targets,
   scroll/drag behavior, and composed transforms;
-- verified-N/A evidence, if admitted, proves only that reviewed source and stories
-  currently expose no direction-sensitive relationship.
+- verified-N/A evidence, admitted under OQ1, proves only that reviewed source and
+  stories currently expose no direction-sensitive relationship.
 
 ## Boundaries and invariants
 
@@ -144,7 +144,8 @@ Lint and rendered audit are complementary:
   component of every package registered as a component package, not only Core
   and Lab. A component cannot disappear from review merely because it has no
   story or because its story title changed. Missing renderability is itself a
-  coverage gap when the component is in scope.
+  coverage gap when the component is in scope, unless a verified N/A admitted
+  under OQ1 carries it.
 - **INV6 — Automatic and curated coverage compose.** Generic checks cover broadly
   discoverable icon, decoration, and positional relationships. Component-specific
   selectors are used only for semantics generic discovery cannot infer, such as
@@ -184,7 +185,9 @@ Lint and rendered audit are complementary:
   human review and disclosure requirements in INV16 apply to explicit exclusions.
 - **INV13 — Story exclusions are typed, resolved, and fail closed.** The admitted
   story metadata is `rtlAudit.D1` with `applicable: false` and a nonempty `reason`
-  explaining INV12. The audit reads resolved Storybook parameters, including normal
+  explaining INV12, and `rtlAudit.D5` with `physical: 'chart'` and a nonempty
+  `within` plot selector, which declares a plot whose overlays stay physical
+  (`design:bidirectionality` DR5) without turning D5 off. The audit reads resolved Storybook parameters, including normal
   story-over-meta precedence. Missing rendered metadata, malformed parameters,
   unsupported dimension keys, and an exclusion without a rationale MUST produce
   an error rather than silently skip a check. An empty resolved `rtlAudit` object
@@ -210,7 +213,10 @@ Lint and rendered audit are complementary:
   A nonempty reason proves only valid metadata, not valid non-applicability.
   Review-facing audit output MUST list every declared D1 exclusion in the audited
   scope with its canonical component, story id, dimension, and rationale, including stories not
-  selected as the D1 representative. Reports MUST NOT call the absence of a D1
+  selected as the D1 representative. A `rtlAudit.D5` physical-region declaration
+  receives the same review and disclosure: adding or widening one is reviewed,
+  and the output lists every declaration with its component, story id, kind, and
+  plot selector. Reports MUST NOT call the absence of a D1
   measurement proof that directional behavior is correct. Automatic N/A because
   no directional icons were found requires no extra human approval; an unchanged
   exemption is not reapproved on every audit run. This rule does not admit
@@ -228,11 +234,11 @@ byte-bound closure, the implementation MUST bind that evidence to the canonical
 source, directly owned helpers/styles, and owned stories so relevant changes fail
 stale rather than silently retaining their old classification.
 
-Component-wide verified-N/A admission, a historical coverage-debt baseline, and
-required-check rollout remain outside the settled claims until an owner decides
-those boundaries. They do not prevent claim-scoped approval of the dimension-level
-fixture policy. No decision about those broader states is implied by a D1
-exclusion.
+OQ1 admits a reason-backed component-wide verified N/A. A historical
+coverage-debt baseline and required-check rollout remain outside the settled
+claims until an owner decides those boundaries. They do not prevent claim-scoped
+approval of the dimension-level fixture policy. No decision about those broader
+states is implied by a D1 exclusion.
 
 ### Audit dimensions
 
@@ -240,17 +246,17 @@ The audit's `D` identifiers name repository-specific checks, not an external
 internationalization standard. Automatic discovery covers D1, D5, and D6; curated
 story targets supply the other dimensions.
 
-| ID  | Observed relationship                                                                             |
-| --- | ------------------------------------------------------------------------------------------------- |
-| D1  | Directional icons mirror or swap once.                                                            |
-| D2  | Previous/next controls exchange horizontal order.                                                 |
-| D3  | Directional interaction or scroll behavior follows the active direction.                          |
-| D4  | An overlay or positioned affordance follows its logical side.                                     |
-| D5  | Positioned elements mirror relative to their parent.                                              |
-| D6  | Contextual directional decorations receive exactly one bidi treatment.                            |
-| D7  | Coarse-pointer native input dimensions, centers, and hit-testing meet the owning target contract. |
-| D8  | Logical inline padding resolves to mirrored physical edges.                                       |
-| D9  | Grouped corners follow the declared logical inline side.                                          |
+| ID  | Observed relationship                                                                                                                                                      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Directional icons mirror or swap once.                                                                                                                                     |
+| D2  | Previous/next controls exchange horizontal order.                                                                                                                          |
+| D3  | Directional interaction or scroll behavior follows the active direction.                                                                                                   |
+| D4  | An overlay or positioned affordance follows its logical side.                                                                                                              |
+| D5  | Positioned elements mirror relative to their parent; inside a story-declared chart plot (`rtlAudit.D5`) they keep their physical position (`design:bidirectionality` DR5). |
+| D6  | Contextual directional decorations receive exactly one bidi treatment.                                                                                                     |
+| D7  | Coarse-pointer native input dimensions, centers, and hit-testing meet the owning target contract.                                                                          |
+| D8  | Logical inline padding resolves to mirrored physical edges.                                                                                                                |
+| D9  | Grouped corners follow the declared logical inline side.                                                                                                                   |
 
 D7 retains both the native input box and the visible wrapper box. Its
 `minimumTargetSize` width and height come from the curated target's owning
@@ -271,8 +277,8 @@ component/composition contract; absent or invalid dimensions produce an error.
 - `apps/storybook/stories/SVGIconRegistry.stories.tsx` — reference glyph data;
   association with the SVGIcon owner and D1 metadata await the fixture-policy
   implementation.
-- `apps/storybook/rtl-audit/verified-not-applicable.json` — candidate verified-N/A
-  registry; its admission policy is unresolved (OQ1).
+- `apps/storybook/rtl-audit/verified-not-applicable.json` — verified-N/A registry;
+  OQ1 sets its admission rule.
 - Historical coverage-debt admission is unresolved. No additional debt-baseline
   file forms part of this contract; absent measurements remain visible gaps.
 - `.github/workflows/ci.yml` — affected-component PR audit, sharded per component
@@ -283,7 +289,8 @@ component/composition contract; absent or invalid dimensions produce an error.
   report completeness and exclusion visibility remain requirements, not authority
   to suppress findings.
 - `.github/workflows/ci.yml` release-check — the full-roster audit on main's tip
-  about hourly and before a release cut (`spec:AST-030` DEC-11).
+  every three hours and before each weekday release cut (`spec:AST-030`
+  DEC-19).
 - `internal/eslint-plugin-astryx/no-physical-properties.js` — source-provable
   physical/logical declaration constraints.
 - `design:bidirectionality` — human product intent, owned separately.
@@ -296,22 +303,24 @@ missing implementation contract.
 
 ## Deciding specs
 
-No current system spec settles verified-N/A or known-debt admission. The current
-knowledge architecture requires evidence freshness and explicit human decisions;
-this record narrows the remaining decision to the options below.
+No current system spec settles known-debt admission; OQ1 settles verified-N/A
+admission. The current knowledge architecture requires evidence freshness and
+explicit human decisions; this record narrows the remaining decisions to the
+options below.
 
 ## Verification
 
-| Invariant        | Evidence                                                                                              | Failure signal                                                                                                                                                                                                                                         |
-| ---------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| INV1, INV2, INV6 | focused audit fixtures plus real built Storybook mutations                                            | A source-only rule claims rendered correctness, or a relationship defect stays green                                                                                                                                                                   |
-| INV3             | automatic/curated failure tests and RTL scorecard tests                                               | A known bad RTL outcome is suppressed as expected or N/A                                                                                                                                                                                               |
-| INV4, INV5       | coverage fixtures with missing/no-applicable stories                                                  | A component disappears or all-N/A reports as RTL-ready                                                                                                                                                                                                 |
-| INV7             | PR workflow scope tests and release-check workflow tests                                              | A changed component is skipped or full-roster debt is mistaken for PR-only evidence                                                                                                                                                                    |
-| INV8             | automatic/curated applicability tests                                                                 | A newly applicable dimension leaves a verified-N/A declaration current                                                                                                                                                                                 |
-| INV9             | red/green mutation receipts for each new dimension                                                    | A new dimension has only passing self-confirming tests                                                                                                                                                                                                 |
-| INV10            | native width/height mutation fixtures plus D7 center/hit checks in LTR/RTL, sm/md                     | An undersized native target stays green despite conforming wrapper geometry                                                                                                                                                                            |
-| INV12–INV16      | candidate fixture-policy tests and built Storybook mutations; not enforced by the base implementation | reordering the generated story index changes D1; malformed/missing metadata silently skips; a fixture opt-out skips D5/D6 or closes a component gap; an exclusion on directional controls/cues survives semantic review or is omitted from the summary |
+| Invariant        | Evidence                                                                                                                         | Failure signal                                                                                                                                                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| INV1, INV2, INV6 | focused audit fixtures plus real built Storybook mutations                                                                       | A source-only rule claims rendered correctness, or a relationship defect stays green                                                                                                                                                                   |
+| INV3             | automatic/curated failure tests and RTL scorecard tests                                                                          | A known bad RTL outcome is suppressed as expected or N/A                                                                                                                                                                                               |
+| INV4, INV5       | coverage fixtures with missing/no-applicable stories                                                                             | A component disappears or all-N/A reports as RTL-ready                                                                                                                                                                                                 |
+| INV7             | PR workflow scope tests and release-check workflow tests                                                                         | A changed component is skipped or full-roster debt is mistaken for PR-only evidence                                                                                                                                                                    |
+| INV8             | automatic/curated applicability tests                                                                                            | A newly applicable dimension leaves a verified-N/A declaration current                                                                                                                                                                                 |
+| INV9             | red/green mutation receipts for each new dimension                                                                               | A new dimension has only passing self-confirming tests                                                                                                                                                                                                 |
+| INV10            | native width/height mutation fixtures plus D7 center/hit checks in LTR/RTL, sm/md                                                | An undersized native target stays green despite conforming wrapper geometry                                                                                                                                                                            |
+| INV12–INV16      | candidate fixture-policy tests and built Storybook mutations; not enforced by the base implementation                            | reordering the generated story index changes D1; malformed/missing metadata silently skips; a fixture opt-out skips D5/D6 or closes a component gap; an exclusion on directional controls/cues survives semantic review or is omitted from the summary |
+| D5 (DR5)         | positioned-pair grading and `rtlAudit.D5` validation tests, plus the declared Recharts theming stories in a real built Storybook | A mirrored chart tooltip passes, an undeclared overlay is graded as physical, or a malformed `rtlAudit.D5` declaration is accepted                                                                                                                     |
 
 ### Implementation state
 
@@ -326,14 +335,14 @@ human review of an added or changed exemption.
 
 ### Candidate evidence states
 
-| State                   | Minimum evidence                                                                                   | May clear a new/changed component? | Current decision state            |
-| ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------- |
-| Measured                | At least one applicable relationship or behavior check passes; every applicable check passes       | yes                                | settled by current audit behavior |
-| Verified N/A            | Today: human-reviewed reason; proposed: source/helper/story evidence with fail-closed invalidation | unresolved                         | owner decision required           |
-| Coverage gap            | No applicable measurement and no admitted current N/A evidence                                     | no                                 | settled                           |
-| Known pre-existing debt | Proposed removal-only baseline entry that remains visible and non-failing while unchanged          | unresolved                         | owner decision required           |
-| Behavior failure        | An applicable dimension fails                                                                      | no                                 | settled; no suppression           |
-| Stale evidence          | Today: an applicable dimension appears; proposed: recorded evidence bytes change                   | no                                 | partially implemented             |
+| State                   | Minimum evidence                                                                                                                                             | May clear a new/changed component? | Current decision state            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | --------------------------------- |
+| Measured                | At least one applicable relationship or behavior check passes; every applicable check passes                                                                 | yes                                | settled by current audit behavior |
+| Verified N/A            | A specific reason in `verified-not-applicable.json`, and no applicable dimension (D1, D5, D6 or curated) in the component's stories in the LTR and RTL audit | yes                                | settled by OQ1                    |
+| Coverage gap            | No applicable measurement and no admitted current N/A evidence                                                                                               | no                                 | settled                           |
+| Known pre-existing debt | Proposed removal-only baseline entry that remains visible and non-failing while unchanged                                                                    | unresolved                         | owner decision required           |
+| Behavior failure        | An applicable dimension fails                                                                                                                                | no                                 | settled; no suppression           |
+| Stale evidence          | Today: an applicable dimension appears; proposed: recorded evidence bytes change                                                                             | no                                 | partially implemented             |
 
 ### Current enforcement gaps
 
@@ -348,16 +357,14 @@ human review of an added or changed exemption.
 
 ## Open decisions
 
-### OQ1 — Is verified N/A an admitted closure state?
+### OQ1 — Is verified N/A an admitted closure state? (resolved)
 
-- **Option A:** Admit verified N/A when one declaration carries a specific reason.
-  Before this option can become current, add evidence over the canonical source,
-  directly owned helpers/styles and owned stories, plus fail-closed invalidation.
-  This recognizes truly direction-neutral components without manufacturing
-  meaningless browser tests.
-- **Option B:** Require every component to have executable rendered measurement.
-  This removes judgment-based N/A but forces artificial checks for components with
-  no directional relationship.
+A component-wide verified N/A is admitted when `verified-not-applicable.json`
+gives a specific reason the component has no direction-sensitive visual, layout
+or behavior and the LTR and RTL audit finds no applicable dimension (D1, D5, D6
+or curated) in its stories; a component with no story has none, so its reason
+alone carries it. Any applicable dimension makes the entry stale and fails the
+audit (INV8), and a verified N/A never counts as measured or RTL-ready (INV4).
 
 ### OQ2 — May pre-existing unexplained all-N/A enter removal-only known debt?
 

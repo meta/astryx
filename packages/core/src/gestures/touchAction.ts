@@ -4,9 +4,10 @@
  * @file touchAction.ts
  * @input The recognizers attached to one element
  * @output Exports deriveTouchAction (the element's `touch-action`),
- *   gestureHostStyle (the inline style a host sets for its recognizers),
- *   intersectTouchAction (what both a derived and a caller's value allow) and
- *   holdSelectionStyle (the selection and callout lock for one held press)
+ *   gestureHostStyle (the inline style a host sets for its recognizers) and
+ *   intersectTouchAction (what both a derived and a caller's value allow).
+ *   The selection and callout lock for one held press is the recognizer's
+ *   own `selectionLock` (gestures/selectionLock.ts), which the host calls
  * @position Browser negotiation of packages/core/src/gestures, pure so a
  *   server render can emit the same style the client would set
  *
@@ -30,8 +31,14 @@
  */
 
 import type {GestureRecognizer, NativeTouchBehavior} from './GestureRecognizer';
+import {internals} from './recognizerInternals';
 
-/** The intersection of what each touch recognizer leaves the browser. */
+/**
+ * The intersection of what each touch recognizer leaves the browser. A
+ * watcher (`claimsTouches: false`) never takes a touch, so it leaves the
+ * browser everything: its direction restricts no scroll (`spec:AST-094`
+ * FR20, DEC-7).
+ */
 export function combinedNativeBehavior(
   recognizers: ReadonlyArray<GestureRecognizer>,
 ): NativeTouchBehavior {
@@ -40,7 +47,7 @@ export function combinedNativeBehavior(
   let pinchZoom = true;
   let doubleTapZoom = true;
   for (const recognizer of recognizers) {
-    if (!recognizer.acceptsTouchInput) {
+    if (!internals(recognizer).acceptsTouchInput || !recognizer.claimsTouches) {
       continue;
     }
     const behavior = recognizer.nativeTouchBehavior;
@@ -169,23 +176,4 @@ export function intersectTouchAction(derived: string, caller: string): string {
     parts.push('pinch-zoom');
   }
   return parts.length === 0 ? 'none' : parts.join(' ');
-}
-
-/**
- * The lock a host applies for one press only, from touch-down to the lift or
- * a cancel, on an element whose hold does something (a long press): no iOS
- * callout and no text-selection start under the held finger, as a
- * long-pressed row in UIKit selects no text (spec:AST-094 FR41). Null where
- * the hold does nothing, so a long press there selects natively.
- */
-export function holdSelectionStyle(
-  recognizers: ReadonlyArray<GestureRecognizer>,
-): GestureHostStyle | null {
-  const holds = recognizers.some(
-    recognizer =>
-      recognizer.kind === 'longPress' && recognizer.acceptsTouchInput,
-  );
-  return holds
-    ? {WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'}
-    : null;
 }

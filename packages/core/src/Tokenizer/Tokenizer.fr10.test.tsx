@@ -24,5 +24,5 @@ describeFieldInputParts('Tokenizer', {
     />
   ),
   getControl: () => screen.getByRole('combobox'),
-  inGroup: false,
+  inGroup: true,
 });

@@ -15,6 +15,7 @@ import {describe, expect, it} from 'vitest';
 import {
   findReleaseCheck,
   requireReleaseCheck,
+  requireUnitRun,
 } from './release-check-receipt.mjs';
 
 const CUT = 'c'.repeat(40);
@@ -27,9 +28,14 @@ const run = (id, headSha, conclusion = 'success') => ({
   html_url: `https://github.com/o/r/actions/runs/${id}`,
 });
 const join = conclusion => ({name: 'release-check', conclusion});
+/** A Main run dispatched for `sha`, as the scheduler names it. */
+const unitRunFor = (id, headSha, conclusion = 'success') => ({
+  ...run(id, headSha, conclusion),
+  display_title: `Main validation of ${headSha}`,
+});
 
 /** `runs` are newest first; `jobs` maps a run id to its jobs. */
-function fake({runs = [], jobs = {}} = {}) {
+function fake({runs = [], units, jobs = {}} = {}) {
   const listed = [];
   return {
     listed,
@@ -40,7 +46,10 @@ function fake({runs = [], jobs = {}} = {}) {
             listed.push(params);
             return {
               data: {
-                workflow_runs: runs.filter(
+                workflow_runs: (params.workflow_id === 'deploy.yml'
+                  ? (units ?? runs)
+                  : runs
+                ).filter(
                   item =>
                     (!params.head_sha || item.head_sha === params.head_sha) &&
                     item.conclusion === params.status,
@@ -107,14 +116,25 @@ describe('the release-check receipt for a cut commit', () => {
     ).toBe(7);
   });
 
-  it("fails naming main's last checked commit when the cut commit has no passing release-check", async () => {
+  it("fails naming main's last commit with both receipts when the cut commit has no passing release-check", async () => {
+    const NEWER = 'e'.repeat(40);
     const {result, messages} = await require_({
-      runs: [run(9, CUT, 'failure'), run(8, OTHER)],
-      jobs: {9: [join('failure')], 8: [join('success')]},
+      // NEWER passed its release-check but its unit run failed.
+      runs: [run(10, NEWER), run(9, CUT, 'failure'), run(8, OTHER)],
+      units: [unitRunFor(21, NEWER, 'failure'), unitRunFor(20, OTHER)],
+      jobs: {
+        10: [join('success')],
+        9: [join('failure')],
+        8: [join('success')],
+        20: [
+          {name: 'test-ui (1/4)', conclusion: 'success'},
+          {name: 'test-node (1/4)', conclusion: 'success'},
+        ],
+      },
     });
     expect(result).toBeNull();
     expect(messages.failed).toEqual([
-      `No passing release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with a passing release-check, ${OTHER}, or wait for main's next check and cut from it.`,
+      `No passing release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with both a passing release-check and a passing full unit run, ${OTHER}, or wait for main's next checks and cut from them.`,
     ]);
   });
 
@@ -128,7 +148,7 @@ describe('the release-check receipt for a cut commit', () => {
       /^No passing release-check for the cut commit/,
     );
     expect(messages.failed[0]).toMatch(
-      /No main commit has a passing release-check/,
+      /No recent main commit has both a passing release-check and a passing full unit run/,
     );
   });
 
@@ -139,5 +159,100 @@ describe('the release-check receipt for a cut commit', () => {
     expect(messages.failed).toEqual([
       "The release marker's cut commit is not a full SHA: main",
     ]);
+  });
+});
+
+describe('the full unit run receipt for a cut commit (spec:AST-030 FR21)', () => {
+  const legs = conclusion => [
+    ...[1, 2, 3, 4].map(n => ({name: `test-ui (${n})`, conclusion})),
+    ...[1, 2, 3, 4].map(n => ({name: `test-node (${n})`, conclusion})),
+    {name: 'typecheck', conclusion: 'success'},
+  ];
+  async function unit(options, sha = CUT) {
+    const {github, listed} = fake(options);
+    const messages = {info: [], failed: []};
+    const core = {
+      info: message => messages.info.push(message),
+      setFailed: message => messages.failed.push(message),
+    };
+    const result = await requireUnitRun({
+      github,
+      core,
+      owner: 'o',
+      repo: 'r',
+      sha,
+    });
+    return {result, messages, listed};
+  }
+
+  it("accepts the cut commit's run where every unit leg passed", async () => {
+    const {result, messages, listed} = await unit({
+      runs: [unitRunFor(5, CUT)],
+      jobs: {5: legs('success')},
+    });
+    expect(result.id).toBe(5);
+    expect(messages.failed).toEqual([]);
+    expect(listed[0]).toEqual({
+      owner: 'o',
+      repo: 'r',
+      workflow_id: 'deploy.yml',
+      branch: 'main',
+      status: 'success',
+      head_sha: CUT,
+      per_page: 30,
+    });
+  });
+
+  it('does not take an unnamed run, which tests whatever was the tip when it started', async () => {
+    const {result} = await unit({
+      runs: [run(9, CUT)],
+      jobs: {9: legs('success')},
+    });
+    expect(result).toBeNull();
+  });
+
+  it('takes a validation that names the cut commit, and not one that names another', async () => {
+    const LATER = 'f'.repeat(40);
+    const named = (id, tested) => ({
+      ...run(id, LATER),
+      display_title: `Main validation of ${tested}`,
+    });
+    const {result} = await unit({
+      runs: [named(31, OTHER), named(30, CUT)],
+      jobs: {30: legs('success'), 31: legs('success')},
+    });
+    expect(result.id).toBe(30);
+    const none = await unit({
+      runs: [{...run(32, CUT), display_title: `Main validation of ${OTHER}`}],
+      jobs: {32: legs('success')},
+    });
+    expect(none.result).toBeNull();
+  });
+
+  it('does not take a push run, whose unit legs skipped, for a unit run', async () => {
+    const {result, messages} = await unit({
+      runs: [run(6, CUT)],
+      jobs: {6: legs('skipped')},
+    });
+    expect(result).toBeNull();
+    expect(messages.failed).toEqual([
+      `No passing full unit run for the cut commit ${CUT}. No recent main commit has both a passing release-check and a passing full unit run; wait for main's next checks and cut from them.`,
+    ]);
+  });
+
+  it('refuses a run with no unit legs at all', async () => {
+    const {result} = await unit({
+      runs: [run(7, CUT)],
+      jobs: {7: [{name: 'typecheck', conclusion: 'success'}]},
+    });
+    expect(result).toBeNull();
+  });
+
+  it("ignores another commit's passing run", async () => {
+    const {result} = await unit({
+      runs: [run(8, OTHER)],
+      jobs: {8: legs('success')},
+    });
+    expect(result).toBeNull();
   });
 });

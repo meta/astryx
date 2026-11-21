@@ -4,7 +4,8 @@
 
 /**
  * @file useTableSortable.tsx
- * @input React, types, Icon, theme tokens, i18n (useTranslator)
+ * @input React, types, Icon, the theme's `table-sort-indicator` icon slot,
+ *   theme tokens, i18n (useComponentTranslator)
  * @output Exports useTableSortable hook and sort-related types
  * @position Sortable plugin; consumed by Table via plugins prop
  *
@@ -18,14 +19,21 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
-import {useTranslator} from '../../../i18n';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
   TableColumn,
   TableContextAction,
 } from '../../types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/sortable/useTableSortable.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Sort Types
@@ -132,10 +140,22 @@ const sortStyles = stylex.create({
     },
     font: 'inherit',
     color: 'inherit',
-    width: '100%',
+    // At least the cell's content width, so the whole cell is the target. A
+    // longer label may grow into the header cell's end padding before it
+    // wraps or truncates.
+    width: 'max-content',
+    minWidth: '100%',
+    maxWidth: 'calc(100% + var(--_table-header-end-room, 0px))',
     height: '100%',
     textAlign: 'inherit',
     borderRadius: radiusVars['--radius-inner'],
+  },
+  // The label wraps or truncates before the sort indicator, so the indicator
+  // stays visible in a narrow column.
+  label: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   // The button is a full-width flex container, so the `textAlign` a column's
   // `align` puts on the <th> cannot position its contents. Mirror the column
@@ -147,22 +167,28 @@ const sortStyles = stylex.create({
   buttonAlignEnd: {
     justifyContent: 'flex-end',
   },
+  // The wrapper takes no block size, so a theme's larger glyph overflows it
+  // instead of growing the Sort control or the header row. When the slot
+  // hides the glyph, the empty wrapper collapses, so the button's gap does
+  // not offset an end-aligned label.
+  iconWrapper: {
+    display: {default: 'inline-flex', ':empty': 'none'},
+    alignItems: 'center',
+    blockSize: 0,
+    flexShrink: 0,
+  },
   iconWrapperUnsorted: {
-    display: 'inline-flex',
     opacity: {
       default: 0.35,
       ':is(th:hover *)': 1,
       ':focus-visible': 1,
     },
   },
-  iconWrapperActive: {
-    display: 'inline-flex',
-  },
   rank: {
     fontSize: 10,
     // eslint-disable-next-line @astryx/no-hardcoded-styles -- no token for lineHeight:1 (tight badge)
     lineHeight: '1',
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
 });
 
@@ -210,7 +236,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   children: ReactNode;
   configRef: React.RefObject<UseTableSortableConfig>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = configRef.current;
   const sortKey = resolveSortKey(column) ?? '';
   const entryIndex = config.sort.findIndex(e => e.sortKey === sortKey);
@@ -221,7 +247,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
     config.isMultiSortEnabled === true && config.sort.length > 1;
   const rank = isMultiSort && entryIndex >= 0 ? entryIndex + 1 : null;
 
-  const iconName =
+  const indicator =
     direction === 'ascending'
       ? 'arrowUp'
       : direction === 'descending'
@@ -290,16 +316,16 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         )}
         aria-describedby={rank != null ? priorityId : undefined}
         onClick={handleClick}>
-        <span>{children}</span>
+        <span {...stylex.props(sortStyles.label)}>{children}</span>
         <span
           {...stylex.props(
-            direction != null
-              ? sortStyles.iconWrapperActive
-              : sortStyles.iconWrapperUnsorted,
+            sortStyles.iconWrapper,
+            direction == null && sortStyles.iconWrapperUnsorted,
           )}>
-          <Icon
-            icon={iconName}
-            size="xsm"
+          <ComponentIcon
+            slot="table-sort-indicator"
+            state={{direction: direction ?? 'none'}}
+            fallback={{icon: indicator, size: 'xsm'}}
             color={direction != null ? 'accent' : 'secondary'}
           />
         </span>
@@ -351,7 +377,7 @@ export function useTableSortable<
   T extends Record<string, unknown>,
   TSortKey extends string = string,
 >(config: UseTableSortableConfig<TSortKey>): TablePlugin<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const configRef = useRef(config);
   configRef.current = config;
 

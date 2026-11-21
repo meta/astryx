@@ -4,9 +4,9 @@
  * @file typeaheadMatch.ts
  * @input Plain strings (an item label and the letters a person typed)
  * @output foldForTypeahead, nextTypeaheadBuffer, typeaheadPrefixMatch,
- *   findTypeaheadMatch
+ *   findTypeaheadMatch, isShortcutChord
  * @position Shared type-to-select matching for useTypeahead, useTreeFocus and
- *   MultiSelector (`architecture:internationalization` INV17)
+ *   MultiSelector
  *
  * Type-to-select is navigation, not sorting, so it folds the same way in every
  * locale: case, the combining marks canonical decomposition leaves
@@ -17,8 +17,9 @@
 
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
 
-// The six stroked or barred Latin letters INV17 folds, in both cases. Turkish
-// dotless ı joins them; dotted İ decomposes to I + U+0307 and needs no entry.
+// The six stroked or barred Latin letters that the fold removes, in both cases.
+// Turkish dotless ı joins them; dotted İ decomposes to I + U+0307 and needs no
+// entry.
 const STROKED: Readonly<Record<string, string>> = {
   đ: 'd',
   Đ: 'd',
@@ -47,8 +48,8 @@ export function foldForTypeahead(text: string): string {
       .normalize('NFD')
       .replace(COMBINING_MARKS, '')
       .replace(STROKED_CHARS, c => STROKED[c] ?? c)
-      // Recompose what INV17 keeps (a Japanese voiced mark, an Arabic hamza, a
-      // Hangul final consonant), so a one-letter prefix does not skip it.
+      // Recompose what the fold keeps (a Japanese voiced mark, an Arabic hamza,
+      // a Hangul final consonant), so a one-letter prefix does not skip it.
       .normalize('NFC')
       .toLowerCase()
   );
@@ -98,7 +99,7 @@ function hasMark(typed: string): boolean {
 }
 
 /**
- * Whether `label` starts with `typed` under INV17's fold. `exact` additionally
+ * Whether `label` starts with `typed` under the fold. `exact` additionally
  * requires the unfolded letters to match (Turkish case pairing).
  */
 export function typeaheadPrefixMatch(
@@ -138,4 +139,23 @@ export function findTypeaheadMatch(
     }
   }
   return -1;
+}
+
+/** The modifier state a key event reports, as the DOM and React both expose it. */
+interface ModifierKeyEvent {
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  getModifierState?(key: string): boolean;
+}
+
+/**
+ * Whether a key is a Control or Command shortcut, not a typed character.
+ * AltGr on Windows reports Control too, with the AltGraph modifier set; the
+ * key it gives is a letter the person typed, such as ł.
+ */
+export function isShortcutChord(e: ModifierKeyEvent): boolean {
+  if (e.metaKey) {
+    return true;
+  }
+  return e.ctrlKey && e.getModifierState?.('AltGraph') !== true;
 }

@@ -26,11 +26,11 @@ import {VStack} from '@astryxdesign/core/Layout';
  * View these with a coarse pointer: in Chromium, open DevTools, toggle the
  * device toolbar (a phone preset), and use the touch cursor; or open Storybook
  * on a phone. Under a finger the bare `:active` arm is dropped and the press
- * follows the clocks a native list uses: nothing paints for 150 ms; a held
- * press then paints the full pressed overlay on the next frame; travelling
- * 10 px, or a scroll claiming the gesture, cancels it with no fade and nothing
- * repaints until a new touch; a tap shorter than the delay paints at the lift;
- * the release fades over 200 ms. A mouse keeps `:active`.
+ * follows UIKit. A surface highlights in the frame the finger lands, or
+ * 150 ms later inside a scroller, where a flick paints nothing; travelling
+ * 10 px, or the browser taking the touch to scroll, cancels it with no fade;
+ * a tap shorter than the delay paints at the lift; the lift fades it out. A
+ * mouse keeps `:active` on a desktop.
  */
 const meta: Meta = {
   title: 'Core/Press feedback (touch)',
@@ -39,7 +39,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'The touch press model on every pressable surface. View with a coarse pointer (DevTools device toolbar, or a phone). Under a finger the bare `:active` arm is dropped and one document-level controller writes `data-astryx-press="on"` once a press is believed (150 ms, no travel, no scroll) and `data-astryx-press="fading"` for the 200 ms release; a scroll or 10 px of travel cancels with no fade, and nothing repaints until a new touch. A mouse keeps `:active`. Scroll the list stories with a finger: no row paints while the list moves.',
+          'The touch press model on every pressable surface. View with a coarse pointer (DevTools device toolbar, or a phone). Under a finger the bare `:active` arm is dropped and one document-level controller writes `data-astryx-press="on"` while a press is held and `data-astryx-press="fading"` for the release. A surface highlights in the frame the finger lands (150 ms later inside a scroller) and fades at the lift; 10 px of travel or a scroll claiming the touch cancels it with no fade. A mouse keeps `:active` on a desktop. Scroll the list stories with a finger: nothing paints while the list moves.',
       },
     },
   },
@@ -48,12 +48,12 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-const touchNote = (what: string) =>
-  `${what} Hold: paints after 150 ms. Tap: paints at the lift. Drag or scroll: never paints, and stays dark until the finger lifts and lands again.`;
+const controlNote = (what: string) =>
+  `${what} Touch: paints in the frame the finger lands. Lift: fades out. A scroll that takes the touch: the paint goes at once, with no fade and no click.`;
 
 export const Buttons: Story = {
   parameters: {
-    docs: {description: {story: touchNote('Buttons under a finger.')}},
+    docs: {description: {story: controlNote('Buttons under a finger.')}},
   },
   render: () => (
     <VStack gap={3}>
@@ -70,9 +70,8 @@ export const Rows: Story = {
   parameters: {
     docs: {
       description: {
-        story: touchNote(
-          'Item rows, a menu, and a clickable card. The list scrolls: flick it and no row paints; stop it with a finger and that touch is a brake, not a press.',
-        ),
+        story:
+          'Item rows, a menu, and a clickable card. The rows sit in a scroller, so a held row paints after 150 ms, a tap paints at the lift, and a drag or scroll never paints; the card, outside it, paints in the frame the finger lands. Flick the list and no row paints.',
       },
     },
   },
@@ -113,7 +112,7 @@ export const Controls: Story = {
   parameters: {
     docs: {
       description: {
-        story: touchNote(
+        story: controlNote(
           'The eight components that gained a pressed state, under a finger.',
         ),
       },
@@ -158,4 +157,31 @@ export const Controls: Story = {
       </VStack>
     );
   },
+};
+
+export const ButtonsInScroller: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Buttons in a scrolling list, under a finger: a held button paints 150 ms after the finger lands (UIScrollView.delaysContentTouches); a flick scrolls the list and paints nothing; a scroll that starts after the button painted takes the touch, and the paint goes at once with no fade and no click.',
+      },
+    },
+  },
+  render: () => (
+    <div
+      data-testid="button-scroller"
+      style={{height: 240, overflowY: 'auto', border: '1px solid transparent'}}>
+      <VStack gap={3}>
+        {Array.from({length: 16}, (_, index) => (
+          <Button
+            key={index}
+            label={`Action ${index + 1}`}
+            variant="secondary"
+            onClick={() => {}}
+          />
+        ))}
+      </VStack>
+    </div>
+  ),
 };

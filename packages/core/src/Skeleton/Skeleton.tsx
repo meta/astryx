@@ -179,7 +179,7 @@ export interface SkeletonProps extends BaseProps<HTMLDivElement> {
    * - 1: radius-1 token (4px)
    * - 2: radius-2 token (8px)
    * - 3: radius-3 token (12px, default)
-   * - 4: radius-4 token (16px)
+   * - 4: radius-container token (12px), the same as 3
    * - 'rounded': Fully rounded (for avatars, pills)
    * @default 3
    */

@@ -1,5 +1,114 @@
 # @xds/theme-matcha
 
+# 0.7.17
+
+#### New Features
+
+- Chat surfaces now default to the container radius: `--radius-chat` defaults to `var(--radius-container)` instead of `28px`, a theme that sets `--radius-container` but not `--radius-chat` declares the alias at its root, and a radius scale no longer sets `--radius-chat` (it set the page step), so chat follows the theme's container, also where the theme sets its container over the scale. This changes the corners of ChatComposer, its drawer and status bar, and ChatMessageBubble, and the buttons inside the composer take their normal corners. The send button stays circular inside a composer, as it is outside one: a theme whose composer corner made the send button a rounded square (controls taller than 32px, or a chat corner under 28px) now draws a circle, unless it sets the `chat-send-button` radius. Butter, Chocolate, Gothic, Matcha, Neutral and Stone set `--radius-chat: 28px`, and Butter keeps its 16px send-button corner, so they look the same; Y2K sets `--radius-chat: 0px` and stays square. A theme that extends one of them keeps that chat radius. To keep the 28px chat corners in another theme, add `--radius-chat: 28px` to its tokens. Set the token in the theme rather than on an ancestor such as `:root`: a theme scope that declares it now replaces an inherited value.
+- The matcha theme exports `colorModes`: `['light', 'dark']`.
+
+#### Fixes
+
+- Each built-in theme ships its open-licensed fonts. `fonts.css` loads every face from a woff2 file in the package (licenses in `fonts/`), with `font-display: fallback` (served from the same machine or a fast connection, a face arrives before the text first draws, so there is no fallback flash; a face that takes more than about 3 s leaves that page in the fallback font), instead of a Google Fonts `@import` that held the page until the request answered (chocolate's Fraunces as its variable face, keeping its optical size), so an app or screenshot offline (a sandbox, CI) draws at once and shows the theme's real fonts.
+- Text meets WCAG AA (4.5:1) where it fell short: secondary text on coloured and muted cards, including on the accent tint of a selected row or a numbered citation inside them, primary text on that tint inside a dark muted card, and in dark mode on popovers, menus and the muted fill; category text on tokens and badges, status text on its pale status fill, and comments, operators and properties in code. Each moves to the nearest stop of its own colour; no fill changes.
+- In dark mode, menus, popovers and muted fills take matcha's near-black neutral like its cards, instead of a saturated olive green.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @kentonquatman
+
+---
+
+# 0.7.16
+
+#### Documentation
+
+- Fix the theme README usage examples to import `Theme` from `@astryxdesign/core/theme` instead of the removed `XDSTheme` alias, and refresh the bundled theme lists in the package index and contributor guide. ([#11016](https://github.com/meta/astryx/pull/11016))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @karlmoriaty
+
+---
+
+# 0.7.15
+
+---
+
+# 0.7.14
+
+---
+
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.12
+
+#### Fixes
+
+- Theme packages publish the declarations of their `./theme.css` export. The export pointed `types` at `theme.css.d.ts`, which the package didn't ship, so TypeScript found no types for `import '@astryxdesign/theme-<name>/theme.css'`. The export is unchanged; the file is now published. (#10903)
+- Theme packages declare `"type": "module"`, so bundlers and Node read the `./built` entry as the ES module it is. Before, it was an ES module in a `.js` file in a package without a `type`, which tools that follow the package's `type` read as CommonJS. Every export subpath stays the same. The CommonJS build of the source entry is now `dist/source.cjs` behind the same `require` condition, with its own CommonJS declarations (`dist/source.d.cts`), so TypeScript types each condition in the format it loads. As before, `require('…/built')` loads an ES module, so it needs a Node version with `require(esm)` (22.12 or later). Deep imports that reach past `exports` into `dist/` change too: `dist/source.js` is now `dist/source.cjs`, and a `require` of `dist/<theme>.js` gets an ES module (`require(esm)`, Node 22.12 or later). (#10876)
+- Matcha: light-mode secondary text is slightly darker (Neutral Light 30), so it meets 4.5:1 on the body (5.11:1, was 3.83:1), the surface and the card. (#10932)
+  [fix] Y2K: light-mode secondary text is slightly darker (Neutral Light 35), so it meets 4.5:1 on the Periwinkle body (5.14:1, was 4.25:1). The CLI's Matcha and Y2K theme templates match.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.11
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+---
+
+# 0.7.8
+
+---
+
+# 0.7.7
+
+---
+
+# 0.7.6
+
+#### Fixes
+
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @parinith-web
+
+---
+
 # 0.7.5
 
 #### New Features

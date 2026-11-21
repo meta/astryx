@@ -580,7 +580,7 @@
     "description": "Screen-reader-only label on the vertical drag handle at the right edge of the SideNav that lets the user resize the sidebar's width."
   },
   "@astryx.sideNav.heading.openMenu": {
-    "defaultMessage": "Otevřít nabídku",
+    "defaultMessage": "{heading}, Otevřít nabídku",
     "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
   },
   "@astryx.tabList.label": {
@@ -648,7 +648,7 @@
     "description": "Label on the \"×\" button that removes every token/chip from a Tokenizer input. Imperative verb + determiner \"all\"; short."
   },
   "@astryx.topNav.heading.openMenu": {
-    "defaultMessage": "Otevřít nabídku",
+    "defaultMessage": "{hasHeading, select, true {{heading}, } other {}}Otevřít nabídku",
     "description": "Screen-reader-only label on the `⋯` overflow button in a TopNav section heading. Kept separate from `sideNav.heading.openMenu` so translations may diverge."
   },
   "@astryx.topNav.landmarkLabel": {

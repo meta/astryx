@@ -29,6 +29,7 @@
 
 import {$convertFromMarkdownString, type Transformer} from '@lexical/markdown';
 import {$isCodeNode} from '@lexical/code';
+import {$isLinkNode} from '@lexical/link';
 import {$isListItemNode, $isListNode} from '@lexical/list';
 import {
   $createParagraphNode,
@@ -48,11 +49,14 @@ import {
 import {isMarkedHardLineBreak} from './markdownHardLineBreak';
 import {normalizeListIndentation} from './markdownListIndentation';
 import {
+  $isImageSource,
   $restoreCharacterReferences,
   $restoreCodeSpans,
+  $restoreImages,
   protectBackslashEscapes,
   protectCharacterReferences,
   protectCodeSpans,
+  protectImages,
   protectLinkDestinationParentheses,
   protectRefusedLinks,
   $unwrapRefusedLinks,
@@ -396,10 +400,13 @@ export function importMarkdownKeepingSource(
           withoutCarriageReturns(importChunks[index]?.content ?? chunk.content),
           plugins,
         );
-        // Links core refuses go first, on the source as written, so one whose
-        // text holds code (`[`x`](javascript:y)`) shows whole as core shows
-        // it; code spans next, so a safe link's code still reads as code.
-        const refused = protectRefusedLinks(shielded.markdown);
+        // Images go first: RichText has no image node, so each comes back as
+        // its source, whole. Links core refuses go next, on the source as
+        // written, so one whose text holds code (`[`x`](javascript:y)`)
+        // shows whole as core shows it; code spans next, so a safe link's
+        // code still reads as code.
+        const images = protectImages(shielded.markdown);
+        const refused = protectRefusedLinks(images.markdown);
         const code = protectCodeSpans(refused.markdown);
         const escaped = protectBackslashEscapes(code.markdown);
         const destinations = protectLinkDestinationParentheses(
@@ -418,6 +425,7 @@ export function importMarkdownKeepingSource(
           ]),
         );
         $restoreCodeSpans(holder, code.spans);
+        $restoreImages(holder, images.images);
         $unwrapRefusedLinks(holder);
         $restoreExtensionSources(holder, shielded.standIns);
         $joinSoftLineBreaks(holder);
@@ -749,6 +757,11 @@ function markedView(
   if (placeholder != null && $isRichTextExtensionNode(node)) {
     return extensionTextView(node, placeholder);
   }
+  if (placeholder != null && $isTextNode(node)) {
+    const view = Object.create(node) as typeof node;
+    view.getTextContent = () => placeholder;
+    return view;
+  }
   if ($isTextNode(node)) {
     if (node.hasFormat('code') || $isCodeNode(node.getParent())) {
       return node;
@@ -759,6 +772,21 @@ function markedView(
     let text = node
       .getTextContent()
       .replace(INLINE_SYNTAX, match => token + match);
+    // A `!` right before a link would make the link an image.
+    if (text.endsWith('!') && $isLinkNode(node.getNextSibling())) {
+      text = text.slice(0, -1) + token + '!';
+    }
+    // A `(` right after an image that ends in `]` would become its
+    // destination.
+    const before = node.getPreviousSibling();
+    if (
+      text.startsWith('(') &&
+      before != null &&
+      $isImageSource(before) &&
+      before.getTextContent().endsWith(']')
+    ) {
+      text = token + text;
+    }
     const previous = node.getPreviousSibling();
     if (previous == null || $isLineBreakNode(previous)) {
       const ordered = ORDERED_LIST_START.exec(text);
@@ -798,6 +826,22 @@ function markedView(
   return node;
 }
 
+// A reference image's label at the end of its source: `[b]` in `![a][b]`.
+const IMAGE_LABEL_END = /\]\[(?:[^\\\]]|\\.)*\]$/;
+
+/**
+ * An image's source as an export writes it. A shortcut reference image
+ * (`![a]`) right before a link writes in its collapsed form (`![a][]`), so
+ * the link's text never reads as its label.
+ */
+function $imageSourceForExport(node: LexicalNode): string {
+  const source = node.getTextContent();
+  const isShortcut = source.endsWith(']') && !IMAGE_LABEL_END.test(source);
+  return isShortcut && $isLinkNode(node.getNextSibling())
+    ? `${source}[]`
+    : source;
+}
+
 /**
  * A placeholder for each inline plugin node among `nodes`, absent from
  * `text`, and the source each placeholder stands for.
@@ -813,13 +857,19 @@ function extensionPlaceholders(
   const sources = new Map<string, string>();
   const free = absentCharacters(text);
   for (const node of nodes) {
-    if ($isRichTextExtensionNode(node) && node.isInline()) {
+    const source =
+      $isRichTextExtensionNode(node) && node.isInline()
+        ? node.getSource()
+        : $isImageSource(node)
+          ? $imageSourceForExport(node)
+          : null;
+    if (source != null) {
       const placeholder = free.next().value;
       if (placeholder == null) {
         break;
       }
       placeholders.set(node.getKey(), placeholder);
-      sources.set(placeholder, node.getSource());
+      sources.set(placeholder, source);
     }
   }
   return {placeholders, sources};

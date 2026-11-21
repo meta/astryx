@@ -28,7 +28,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {derivedVarRegistry, getDerivedVars} from './derivedVarRegistry';
+import {
+  derivedVarRegistry,
+  getDerivedVars,
+  radiusCornerVars,
+} from './derivedVarRegistry';
 import {readdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -37,6 +41,7 @@ const SRC_DIR = join(__dirname, '..');
 type ComponentDocModule = {
   docs?: {
     theming?: {
+      targets?: {className: string}[];
       vars?: {name: string}[];
       derived?: DerivedDocEntry[];
     };
@@ -47,6 +52,7 @@ type DerivedDocEntry = {
   property: string;
   vars?: string[];
   expand?: string;
+  corners?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -85,17 +91,30 @@ const STRUCTURAL_VARS = new Set([
   // sticky-columns plugin: opaque backdrop (overridable) + the row overlay it
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
-  '--table-row-overlay',
   // The width a cell's row divider draws (0 on the last row), which a pinned
   // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
   // Private runtime plumbing, never authored by a theme.
   '--_table-row-divider-width',
+  // A header cell's inline inset, the room its content may grow into before
+  // its label truncates, and the last column's container edge inset that the
+  // room reads (Table/TableHeaderCell.tsx, Table/table.stylex.ts). Private
+  // runtime plumbing, never authored by a theme.
+  '--_table-header-inline',
+  '--_table-header-end-room',
+  '--_table-edge-inline-end',
   // A gliding row's divider, carried on the row for the glide
   // (Table/glidingDivider.ts). Private runtime plumbing.
   '--_table-row-glide-width',
   '--_table-row-glide-style',
   '--_table-row-glide-color',
   '--_table-row-glide-offset',
+  // The word-break a wrap cell takes for its table's layout (Table/BaseTable.tsx,
+  // Table/table.stylex.ts). Private runtime plumbing, never authored by a theme.
+  '--_table-cell-word-break',
+  // The white-space a header cell takes for its table's layout under wrap
+  // (Table/BaseTable.tsx, Table/table.stylex.ts). Private runtime plumbing,
+  // never authored by a theme.
+  '--_table-header-white-space',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
@@ -110,6 +129,38 @@ const STRUCTURAL_VARS = new Set([
   // every render and read by the fill's transform. Runtime state, never
   // authored by a theme.
   '--_progress-bar-fill',
+  // ProgressBar's touch layer (ProgressBarTouch) writes these inline on every
+  // render: the touch move's duration and curve, the three-step return offset
+  // and the touch minimum. The duration and curve are the progress table's
+  // motion roles, which no theme sets. Runtime state, never authored by a
+  // theme.
+  '--_progress-bar-move',
+  '--_progress-bar-curve',
+  '--_progress-bar-flip',
+  '--_progress-bar-min',
+  // The reduced-motion pulse's duration, curve and floor, written inline from
+  // the progress table on the indeterminate fill. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-pulse',
+  '--_progress-bar-pulse-curve',
+  '--_progress-bar-pulse-floor',
+  // The room a layer has above the software keyboard. The layer runtime
+  // writes it on each open layer from the keyboard's measured height
+  // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
+  // a theme.
+  '--_layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--_layer-keyboard-overflow',
+  // Also beside it: how far above the viewport's bottom a layer ends while the
+  // keyboard is up. Runtime geometry, never authored by a theme.
+  '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
+  '--_sheet-scrim-easing',
 ]);
 
 /**
@@ -160,7 +211,8 @@ interface ComponentInfo {
   dir: string;
   sourceVars: string[];
   docVars: string[];
-  docDerived: {property: string; vars?: string[]; expand?: string}[];
+  docDerived: DerivedDocEntry[];
+  docTargetKeys: string[];
 }
 
 function discoverComponents(): ComponentInfo[] {
@@ -202,10 +254,14 @@ function discoverComponents(): ComponentInfo[] {
 
     let docVars: string[] = [];
     let docDerived: DerivedDocEntry[] = [];
+    let docTargetKeys: string[] = [];
     try {
       const mod = require(docPath) as ComponentDocModule;
       docVars = (mod.docs?.theming?.vars || []).map(v => v.name);
       docDerived = mod.docs?.theming?.derived || [];
+      docTargetKeys = (mod.docs?.theming?.targets || []).map(t =>
+        t.className.replace(/^astryx-/, ''),
+      );
     } catch {
       /* skip */
     }
@@ -225,6 +281,7 @@ function discoverComponents(): ComponentInfo[] {
       sourceVars: [...allVars],
       docVars,
       docDerived,
+      docTargetKeys,
     });
   }
   return results;
@@ -234,13 +291,16 @@ function discoverComponents(): ComponentInfo[] {
 // Known mapping: doc dir → registry key
 // ---------------------------------------------------------------------------
 
-const DIR_TO_REGISTRY_KEY: Record<string, string> = {
+// A component whose doc's derived entries span two targets (a switch's
+// field and thumb) maps to each, in the doc's order.
+const DIR_TO_REGISTRY_KEY: Record<string, string | string[]> = {
   Avatar: 'avatar',
   Banner: 'banner',
   BottomSheet: 'bottom-sheet',
   Button: 'button',
   Card: 'card',
-  Chat: 'chat',
+  Chat: 'chat-composer',
+  CheckboxInput: 'checkbox-input',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -254,6 +314,8 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   ProgressBar: 'progress-bar-mark',
   Section: 'section',
   SegmentedControl: 'segmented-control',
+  Switch: ['switch-field', 'switch-thumb'],
+  Table: 'table-row',
   TextArea: 'text-area',
 };
 
@@ -265,6 +327,65 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
  * e.g. Carousel and Thumbnail set --_button-radius for their child Buttons,
  * but --_button-radius is documented in Button's doc.
  */
+/**
+ * Private system variables a component sets that are never a theming surface:
+ * no component documents them, and a theme never writes them. Each is named
+ * by the record that requires it.
+ */
+const PRIVATE_SYSTEM_VARS = new Set([
+  // InputClearButton's 24 px fine-pointer target (WCAG 2.2 SC 2.5.8): the
+  // button holds the media condition and the hole's direction, which its
+  // `::after` reads. They are not a theme surface.
+  '--_input-clear-target',
+  '--_input-clear-target-hole',
+  // Text and Heading FR3: a container that wraps with `overflow-wrap:
+  // anywhere` passes it to the Text inside it; Text reads it with a
+  // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
+  // keeps every such container setting it.
+  '--_astryx-text-overflow-wrap',
+  // List FR5 and the container-padding record's corner geometry: a bleeding
+  // List passes its first and last rows the container corner they take.
+  '--_list-corner-start-start',
+  '--_list-corner-start-end',
+  '--_list-corner-end-start',
+  '--_list-corner-end-end',
+  // Table FR19 and the container-padding record's block-edge geometry: a
+  // windowed Table includes the parent padding that it bleeds across.
+  '--_table-bleed-block-start',
+  '--_table-bleed-block-end',
+  // The container-padding record's corner geometry: a rounded Card or Dialog
+  // hands the radius of each of its corners to the shared corner publication
+  // beside container().
+  '--_container-corner-start-start',
+  '--_container-corner-start-end',
+  '--_container-corner-end-start',
+  '--_container-corner-end-end',
+  // A rounded host's radius, copied for the shared corner reading in
+  // Layout/containerCorners.stylex.ts. The host's own radius variables are
+  // the theme surface.
+  '--_container-host-radius',
+  '--_container-host-radius-top-left',
+  '--_container-host-radius-top-right',
+  '--_container-host-radius-bottom-right',
+  '--_container-host-radius-bottom-left',
+  '--_container-host-radius-start-start',
+  '--_container-host-radius-start-end',
+  '--_container-host-radius-end-start',
+  '--_container-host-radius-end-end',
+  // The container-padding record's block-edge bleed: a padding publisher
+  // gives its block padding only to a direct first or last Table.
+  '--_container-bleed-block-start',
+  '--_container-bleed-block-end',
+  // Badge FR5 and Button FR2: a primary or destructive Button passes its fill
+  // pair to a neutral Badge in its content, which paints the pair inverted.
+  '--_button-fill',
+  '--_button-on-fill',
+  // spec:AST-025 FR22: an adopter of the shared scroll-edge fade sets the
+  // clear band at the edge and the fade length on its viewport.
+  '--_scroll-fade-inset',
+  '--_scroll-fade-length',
+]);
+
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   Carousel: ['--_button-radius'],
   Thumbnail: ['--_button-radius'],
@@ -273,7 +394,11 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // owns and documents it (and sets it itself when it is the group root).
   AvatarGroup: ['--_avatar-group-overlap'],
   // BreadcrumbItem tunes the DropdownMenu it opens.
-  Breadcrumbs: ['--_dropdown-menu-radius', '--_dropdown-menu-padding'],
+  Breadcrumbs: [
+    '--_dropdown-menu-radius',
+    '--_dropdown-menu-padding',
+    ...radiusCornerVars('--_dropdown-menu-radius'),
+  ],
   // SelectableCard draws its selection ring through the Card shadow slot.
   SelectableCard: ['--_card-ring'],
   // Toolbar offsets the TabList indicator it hosts.
@@ -306,12 +431,21 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_avatar-group-overlap',
   '--_field-status-overlap',
   '--_codeblock-gutter-width',
+  // The page's direction, read with :dir(rtl) on the block root so the
+  // gutter mirrors; a theme has no direction to set.
+  '--_codeblock-direction',
   '--_tab-indicator-bottom',
   // Hit-area outset on a ::after overlay, and whether that overlay is
   // generated at all — `inset` and `content` on a pseudo-element are not
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
-  '--_input-clear-hit-inset',
+  '--_power-search-sheet-hit-inset',
+  // The border width a host draws where its touch hit layer reaches past,
+  // such as a divided ListItem's divider (0 on the last row).
+  // The ::after layer adds it to its offset, so the band starts past the
+  // border. It is the layer's geometry, not a property a theme author sets. A
+  // theme changes the divider through `--border-width`, which this follows.
+  '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
   // value a theme author sets; the overlay colours themselves are the shared
@@ -322,7 +456,17 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
-  '--_input-clear-hit-content',
+  // A checkbox row's press image, which an indicator that paints its own
+  // press inherits. The row writes it from the press paint above.
+  '--_indicator-press-image',
+  // Transparent while the controller paints a checkbox row's press, so that
+  // indicator skips its `:active` fill. The row's own press arms write it. A
+  // theme author never sets it.
+  '--_indicator-active-press',
+  // A CheckboxList row's own press paint, handed to its checkbox's box:
+  // written by the row's own press arms, never a value a theme author sets.
+  '--_checkbox-row-press-paint',
+  '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
   '--_toast-slide-y',
@@ -330,6 +474,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
+  // Set by each ChatMessage article from its own content and read as its
+  // avatar's top margin, so the avatar lines up with a name row. Content
+  // state, not a value a theme author sets.
+  '--_chat-avatar-offset',
   // Indentation and row-spacing metrics: --tree-list-indent is the authorable
   // step, --_tree-indent the per-row distance TreeListItem computes from it.
   // --tree-list-row-gap is applied as half a padding-block on each row wrapper,
@@ -384,10 +532,21 @@ describe('component CSS vars are documented and themeable', () => {
 
   for (const {dir, sourceVars, docVars, docDerived} of components) {
     const crossVars = new Set(CROSS_COMPONENT_VARS[dir] || []);
+    // The theme pipeline writes each corner variable of a `corners` entry, so
+    // the entry documents them.
+    const cornerVars = new Set(
+      docDerived
+        .filter(d => d.corners)
+        .flatMap(d => (d.vars || []).flatMap(radiusCornerVars)),
+    );
 
     it(`${dir}: all source vars are in doc file`, () => {
       const undocumented = sourceVars.filter(
-        v => !docVars.includes(v) && !crossVars.has(v),
+        v =>
+          !docVars.includes(v) &&
+          !crossVars.has(v) &&
+          !cornerVars.has(v) &&
+          !PRIVATE_SYSTEM_VARS.has(v),
       );
       expect(
         undocumented,
@@ -444,16 +603,25 @@ describe('component CSS vars are documented and themeable', () => {
 describe('derivedVarRegistry ↔ doc file consistency', () => {
   const components = discoverComponents();
 
-  for (const {dir, docDerived} of components) {
-    const key = DIR_TO_REGISTRY_KEY[dir];
-    if (!key || docDerived.length === 0) {
+  for (const {dir, docDerived, docTargetKeys} of components) {
+    const mapped = DIR_TO_REGISTRY_KEY[dir];
+    if (!mapped || docDerived.length === 0) {
       continue;
     }
+    const keys = [mapped].flat();
+    const key = keys.join(', ');
 
     it(`${dir} (${key}): registry matches doc derived`, () => {
-      const registryEntries = derivedVarRegistry[key];
-      expect(registryEntries).toBeDefined();
-      expect(registryEntries).toEqual(docDerived);
+      for (const k of keys) expect(derivedVarRegistry[k]).toBeDefined();
+      expect(keys.flatMap(k => derivedVarRegistry[k] ?? [])).toEqual(
+        docDerived,
+      );
+    });
+
+    // generateThemeRules looks the registry up by the theme's components key,
+    // so a key that is not one of the doc's targets never expands.
+    it(`${dir} (${key}): registry key is a documented theming target`, () => {
+      for (const k of keys) expect(docTargetKeys).toContain(k);
     });
   }
 
@@ -464,23 +632,24 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
       if (docDerived.length === 0) {
         continue;
       }
-      const key = DIR_TO_REGISTRY_KEY[dir];
-      if (!key) {
+      const mapped = DIR_TO_REGISTRY_KEY[dir];
+      if (!mapped) {
         missing.push(
           `${dir}: has theming.derived but no DIR_TO_REGISTRY_KEY mapping. ` +
             `Add the mapping and a derivedVarRegistry entry.`,
         );
-      } else if (!derivedVarRegistry[key]) {
-        missing.push(
-          `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
-        );
-      }
+      } else
+        for (const key of [mapped].flat())
+          if (!derivedVarRegistry[key])
+            missing.push(
+              `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
+            );
     }
     expect(missing).toEqual([]);
   });
 
   it('registry has no orphan entries', () => {
-    const validKeys = new Set(Object.values(DIR_TO_REGISTRY_KEY));
+    const validKeys = new Set(Object.values(DIR_TO_REGISTRY_KEY).flat());
     const orphans = Object.keys(derivedVarRegistry).filter(
       k => !validKeys.has(k),
     );

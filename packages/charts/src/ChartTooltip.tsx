@@ -97,10 +97,16 @@ const styles = stylex.create({
   // positioning and browser top-layer promotion.
   card: {
     backgroundColor: colorVars['--color-background-popover'],
-    border: `1px solid ${colorVars['--color-border']}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
     borderRadius: radiusVars['--radius-container'],
-    paddingBlock: spacingVars['--spacing-2'],
-    paddingInline: spacingVars['--spacing-3'],
+    // Longhands match the Layer host's padding reset, so the card padding
+    // still wins when each package ships its own prebuilt stylesheet.
+    paddingBlockStart: spacingVars['--spacing-2'],
+    paddingBlockEnd: spacingVars['--spacing-2'],
+    paddingInlineStart: spacingVars['--spacing-3'],
+    paddingInlineEnd: spacingVars['--spacing-3'],
     boxShadow: shadowVars['--shadow-med'],
     pointerEvents: 'none',
     whiteSpace: 'nowrap',

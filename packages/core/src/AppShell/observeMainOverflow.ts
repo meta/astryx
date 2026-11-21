@@ -4,20 +4,23 @@
 
 /**
  * @file observeMainOverflow.ts
- * @input AppShell's main region under `height="fill"`: its own scroll
- *   container, holding its content as direct children with no wrapper
+ * @input A scroll container that holds its content as direct children with
+ *   no wrapper: AppShell's main region under `height="fill"`, or a scrolling
+ *   LayoutContent, LayoutPanel or StackItem
  * @output observeMainOverflow(main, onChange): reports whether main's content
- *   overflows it on either axis, once at the start and on every change, and
- *   returns the function that stops observing
- * @position Internal to AppShell and never exported. AppShell makes main a
+ *   overflows it on either axis, once the browser first lays it out and on
+ *   every change, and returns the function that stops observing
+ * @position Internal and never exported. AppShell makes main a
  *   keyboard stop only while it overflows (`spec:AST-025` FR12,
- *   `component:AppShell` FR4 and PR1). Main has no inner content box, so its
- *   content grows inside it without resizing it: its direct children's sizes
- *   are watched instead.
+ *   `component:AppShell` FR4 and PR1). useScrollRegionProps names a
+ *   scrolling region only while it overflows. Main has no inner content
+ *   box, so its content grows inside it without resizing it: its direct
+ *   children's sizes are watched instead.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/AppShell/AppShell.tsx
  * - /packages/core/src/AppShell/observeMainOverflow.test.ts
+ * - /packages/core/src/hooks/useScrollRegionProps.ts
  */
 
 import {
@@ -25,7 +28,7 @@ import {
   measureLogicalScrollAxis,
 } from '../hooks/scrollGeometry';
 import {observeMutations} from '../utils/sharedMutationObserver';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 
 /**
  * Main's content: layout attributes, text and children, all the way down.
@@ -45,6 +48,11 @@ const CONTENT_MUTATIONS: MutationObserverInit = {
  * coalesce into one measurement per frame. A hidden, disconnected or
  * zero-size main is unknown rather than fitting: the last answer stands until
  * a later signal measures it.
+ *
+ * Main attaches in React's commit, where a read forces a style and layout
+ * pass before the browser's own. So the first measurement waits for the
+ * first resize notification, which comes after the browser lays main or a
+ * child out. Where no ResizeObserver exists, main is measured at once.
  */
 export function observeMainOverflow(
   main: HTMLElement,
@@ -53,6 +61,9 @@ export function observeMainOverflow(
   let isActive = true;
   let frame: number | null = null;
   let overflows: boolean | null = null;
+  // Before the first notification, a signal reads nothing: the layout that
+  // the notification follows includes the change.
+  let isLaidOut = false;
 
   const measure = () => {
     frame = null;
@@ -77,13 +88,26 @@ export function observeMainOverflow(
   };
 
   const scheduleMeasure = () => {
-    if (isActive && frame == null) {
+    if (isActive && isLaidOut && frame == null) {
       frame = window.requestAnimationFrame(measure);
     }
   };
 
+  // The first notification measures at once: the browser has just laid out,
+  // so the read forces no pass.
+  const onResize = () => {
+    if (isLaidOut) {
+      scheduleMeasure();
+      return;
+    }
+    isLaidOut = true;
+    measure();
+  };
+
   // Main keeps its size while its content grows; its children do not. Each
   // direct child's size is watched, following the children as they change.
+  // A child that another observer already watches sends no first
+  // notification; main's own registration covers that.
   const childObservers = new Map<Element, () => void>();
   const syncChildObservers = () => {
     const children = new Set(Array.from(main.children));
@@ -95,7 +119,12 @@ export function observeMainOverflow(
     }
     for (const child of children) {
       if (!childObservers.has(child)) {
-        childObservers.set(child, observeResize(child, scheduleMeasure));
+        const stop = observeResizeAfterLayout(child, entry => {
+          if (entry != null) {
+            onResize();
+          }
+        });
+        childObservers.set(child, stop ?? (() => {}));
       }
     }
   };
@@ -104,9 +133,11 @@ export function observeMainOverflow(
     scheduleMeasure();
   };
 
-  measure();
   syncChildObservers();
-  const stopObservingMain = observeResize(main, scheduleMeasure);
+  const stopObservingMain = observeResizeAfterLayout(main, onResize);
+  if (stopObservingMain == null) {
+    onResize();
+  }
   const stopObservingContent = observeMutations(
     main,
     CONTENT_MUTATIONS,
@@ -117,9 +148,11 @@ export function observeMainOverflow(
   main.addEventListener('load', scheduleMeasure, true);
   main.addEventListener('transitionend', scheduleMeasure);
   main.addEventListener('animationend', scheduleMeasure);
+  // A font that loads after layout changes the content's size, and the event
+  // reports it. Chromium updates style and layout when a script reads
+  // `fonts.ready`, so the observer does not read it.
   const fonts = document.fonts;
   fonts?.addEventListener?.('loadingdone', scheduleMeasure);
-  void fonts?.ready.then(scheduleMeasure);
 
   return () => {
     isActive = false;
@@ -127,7 +160,7 @@ export function observeMainOverflow(
       window.cancelAnimationFrame(frame);
       frame = null;
     }
-    stopObservingMain();
+    stopObservingMain?.();
     stopObservingContent();
     for (const stop of childObservers.values()) {
       stop();

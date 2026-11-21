@@ -15,7 +15,7 @@
  * so the wordmark cleanly disappears under an opaque nav rather than
  * looking sliced.
  *
- * Modeled on the same scroll-based toggle in apps/docsite/src/app/(site)/page.tsx,
+ * Modeled on the same scroll-based toggle in apps/docsite/src/app/(site)/HomePage.tsx,
  * but flattened to "always on" since the community page has no full-
  * viewport hero that needs the transparent nav treatment.
  */

@@ -19,6 +19,7 @@ import {detail as detailLeaf} from './detail/detail.mjs';
 import {params as paramsLeaf} from './detail/params/params.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 /**
  * @param {string} [name]
@@ -33,6 +34,18 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
  * @returns {Promise<{type: string, data: unknown}>}
  */
 export async function hook(name, options = {}) {
+  // Each hook's lookup walks the same source tree, so the call reads each
+  // directory once.
+  return withListingCache(() => hookRead(name, options));
+}
+
+/**
+ * {@link hook}, without the call's listing cache.
+ * @param {string} [name]
+ * @param {Parameters<typeof hook>[1]} [options]
+ * @returns {ReturnType<typeof hook>}
+ */
+async function hookRead(name, options = {}) {
   const {
     cwd = process.cwd(),
     list: listFlag = false,

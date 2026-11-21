@@ -135,7 +135,9 @@ review. It does not claim that one automated pass proves complete accessibility.
   rows act on nothing after a lift off the row), SelectableCard, or any
   control that selects rather than toggles; other controls join only by a
   later decision, and every other control that activates on a lift keeps
-  slide-off cancelling (DEC-5).
+  slide-off cancelling (DEC-5) unless DEC-6 covers it. SegmentedControl, a
+  one-axis control, tracks a press along its axis instead (DEC-6): returning
+  to the current choice, or Escape, takes the press back before the lift.
 
 ### Completeness and review
 
@@ -231,14 +233,14 @@ or CI gate. Those changes follow in implementation work governed by this record.
 
 ## Verification
 
-| Contract  | Verification                                                                  | Representative states                                                                                                                                                                                                 | Mutation or failure expectation                                                                                                                                                                                                        |
-| --------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR3   | Source and ownership review against WCAG 2.2, APG, and current Astryx records | component-owned A/AA criterion; page-owned criterion; one component with multiple parts                                                                                                                               | A draft WCAG 3.0 statement gates CI, an APG example is treated as universal WCAG, or one component is forced into one pattern                                                                                                          |
-| FR4–FR9   | Contract schema and runner self-tests                                         | required/advisory; unit/DOM/tree/axe/browser/manual/AT; toggle round trip; component-specific callback; a slide-off lift on Switch, Checkbox, CheckboxListItem, Radio, SegmentedControl, and DropdownMenuCheckboxItem | A check lacks a source or layer, passes from an unsupported harness, depends on private markup, or one-way behavior hides a reverse-path failure, a slide-off lift that completes a lift-activated control outside the exception fails |
-| FR10–FR12 | Completed checklist, positive/negative fixture suite, and independent review  | simple control; composite widget; overlay; page-owned criterion                                                                                                                                                       | A dimension disappears silently, a mutation still passes, or review finds an unrecorded contract-encodable requirement                                                                                                                 |
-| FR15      | Adoption review against the component's current role claims                   | a disclosure set adopting required parts only; a composite control adopting arrow keys; a named exception                                                                                                             | A required part is skipped without the owning record's reason, or arrow keys are added to independently focusable controls without a named exception                                                                                   |
-| FR13–FR14 | Pull-request template check plus id migration tests                           | new pattern; narrowed expectation; file-only refactor                                                                                                                                                                 | Reviewers cannot understand the test from the PR, or an id change orphans bindings and gaps                                                                                                                                            |
-| Platform  | Real-browser and AST-009 evidence-boundary checks                             | focus navigation; accessibility tree; forced colors; announcement timing                                                                                                                                              | jsdom or a tree snapshot is credited with pixels, browser behavior, or spoken output it cannot observe                                                                                                                                 |
+| Contract  | Verification                                                                  | Representative states                                                                                                                                                                                                             | Mutation or failure expectation                                                                                                                                                                                                        |
+| --------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR3   | Source and ownership review against WCAG 2.2, APG, and current Astryx records | component-owned A/AA criterion; page-owned criterion; one component with multiple parts                                                                                                                                           | A draft WCAG 3.0 statement gates CI, an APG example is treated as universal WCAG, or one component is forced into one pattern                                                                                                          |
+| FR4–FR9   | Contract schema and runner self-tests                                         | required/advisory; unit/DOM/tree/axe/browser/manual/AT; toggle round trip; component-specific callback; a slide-off lift on Switch, Checkbox, CheckboxListItem, Radio, and DropdownMenuCheckboxItem; a drift off SegmentedControl | A check lacks a source or layer, passes from an unsupported harness, depends on private markup, or one-way behavior hides a reverse-path failure, a slide-off lift that completes a lift-activated control outside the exception fails |
+| FR10–FR12 | Completed checklist, positive/negative fixture suite, and independent review  | simple control; composite widget; overlay; page-owned criterion                                                                                                                                                                   | A dimension disappears silently, a mutation still passes, or review finds an unrecorded contract-encodable requirement                                                                                                                 |
+| FR15      | Adoption review against the component's current role claims                   | a disclosure set adopting required parts only; a composite control adopting arrow keys; a named exception                                                                                                                         | A required part is skipped without the owning record's reason, or arrow keys are added to independently focusable controls without a named exception                                                                                   |
+| FR13–FR14 | Pull-request template check plus id migration tests                           | new pattern; narrowed expectation; file-only refactor                                                                                                                                                                             | Reviewers cannot understand the test from the PR, or an id change orphans bindings and gaps                                                                                                                                            |
+| Platform  | Real-browser and AST-009 evidence-boundary checks                             | focus navigation; accessibility tree; forced colors; announcement timing                                                                                                                                                          | jsdom or a tree snapshot is credited with pixels, browser behavior, or spoken output it cannot observe                                                                                                                                 |
 
 ### Completion criteria
 
@@ -321,6 +323,29 @@ decision; controls that select, such as Radio and SegmentedControl, keep
 slide-off cancelling because a second activation does not undo them.
 
 Rejected: slide-off cancelling for every control without exception.
+
+### DEC-6 — A one-axis control keeps choosing along its axis after a drift
+
+**Reference:** `spec:AST-020/DEC-6`
+**Decider:** `cixzhang`, `2026-11-09`; mouse and pen, `2026-11-10`
+
+Design review asked for it in these words:
+"I would actually like for it to be more forgoving though" and
+"like dragging the segmented control vertically off the control should still let me set the balue after i left".
+That is, a drag that leaves the control vertically still chooses a value at
+the lift. So a control whose options sit along one axis tracks a press along
+that axis.
+A drift off it never cancels, and the lift chooses the option under the
+pointer's position along the axis, clamped to the end options. It meets WCAG
+2.5.2 by abort and undo: returning to the current choice before the lift, or
+Escape, takes the press back, and choosing the original option undoes it. A
+browser cancel (`pointercancel`) also takes it back. The decision covers
+SegmentedControl only; other controls join by a later decision. It replaces
+DEC-5's SegmentedControl clause, and DEC-5 stands for the other controls it
+names. The rule holds for a mouse and a pen as for a finger.
+
+Rejected: a cancel zone a fixed distance off the control; slide-off cancelling
+for one-axis controls.
 
 ## Open questions
 

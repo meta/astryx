@@ -59,13 +59,19 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {TranslatorFn} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFormatter} from '../i18n/useListFormatter';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/FileInput/FileInput.generated';
+
+registerEnglishFallback(english);
 function formatFileSize(bytes: number, t: TranslatorFn): string {
   if (bytes < 1024) {
     return t('@astryx.fileInput.fileSize.bytes', {size: bytes});
@@ -194,7 +200,14 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-1'],
+    // The padding is what the row leaves after the prompt's line and the
+    // borders. A larger or wrapped prompt grows the row from there.
+    paddingBlock: {
+      default: `max(0px, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(0px, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      },
+    },
     paddingInline: spacingVars['--spacing-2'],
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
@@ -221,7 +234,7 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     outline: 'none',
   },
   compactDisabled: {
@@ -294,6 +307,9 @@ const styles = stylex.create({
     textAlign: 'start',
     flex: 1,
     minWidth: 0,
+    // A word wider than the field breaks inside itself, so the prompt wraps
+    // inside the border and loses no text at large sizes.
+    overflowWrap: 'break-word',
   },
 });
 
@@ -406,9 +422,10 @@ export interface FileInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    *
    * Dropzone mode does not support 'attached': its tall surface cannot carry an
-   * overlapping message. Use 'detached' or 'tooltip' there. From the next minor
-   * release, a dropzone resolves 'attached' to 'detached' and defaults to it.
-   * @default 'attached'
+   * overlapping message, so a dropzone defaults to 'detached'. An explicit
+   * 'attached' keeps its released rendering until the next minor release,
+   * which resolves it to 'detached'.
+   * @default 'attached' in input mode; 'detached' in dropzone mode
    */
   statusVariant?: FieldStatusPlacement;
   /**
@@ -467,7 +484,7 @@ export function FileInput({
   isRequired = false,
   isLoading = false,
   status: statusProp,
-  statusVariant = 'attached',
+  statusVariant: statusVariantProp,
   description,
   placeholder,
   mode = 'input',
@@ -489,7 +506,7 @@ export function FileInput({
     containerClassName,
     containerStyle,
   });
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const generatedID = useId();
   const id = idProp ?? generatedID;
   const descriptionID = useId();
@@ -546,6 +563,11 @@ export function FileInput({
     (validationError
       ? {type: 'error' as const, message: validationError}
       : undefined);
+
+  // A dropzone's tall surface cannot carry an attached message, so an unset
+  // placement is detached there.
+  const statusVariant =
+    statusVariantProp ?? (mode === 'dropzone' ? 'detached' : 'attached');
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -748,7 +770,14 @@ export function FileInput({
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isSelectionDisabled && mode === 'dropzone') {
+      if (isSelectionDisabled) {
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      } else if (mode === 'dropzone') {
         setIsDragOver(true);
       }
     },
@@ -759,7 +788,14 @@ export function FileInput({
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isSelectionDisabled && mode === 'dropzone') {
+      if (isSelectionDisabled) {
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      } else if (mode === 'dropzone') {
         setIsDragOver(true);
       }
     },

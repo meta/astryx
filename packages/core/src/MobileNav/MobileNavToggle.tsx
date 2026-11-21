@@ -10,7 +10,9 @@
  * @position Standalone toggle button; can be placed anywhere in the AppShell tree.
  *
  * Hamburger button that opens/closes the mobile nav drawer.
- * Reads from AppShell mobile context — renders nothing above the mobile breakpoint.
+ * Reads from AppShell mobile context — renders nothing above the mobile
+ * breakpoint, without that context, or when AppShell has no mobile
+ * navigation.
  * Can be placed anywhere in the component tree (TopNav, content area, custom toolbar, etc.).
  * Host attributes and DOM handlers reach the button; its `aria-expanded` and
  * `aria-controls` stay component-owned, and a caller `onClick` runs after the
@@ -22,8 +24,14 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import type {BaseProps} from '../BaseProps';
-import {useTranslator} from '../i18n';
 import {composeEventHandlers} from '../utils';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MobileNav/MobileNavToggle.generated';
+
+registerEnglishFallback(english);
 
 export interface MobileNavToggleProps extends Omit<
   BaseProps<HTMLButtonElement>,
@@ -49,8 +57,10 @@ export interface MobileNavToggleProps extends Omit<
  * Mobile nav toggle button. Reads from AppShell context to open/close
  * the mobile navigation drawer.
  *
- * Renders nothing when above the mobile breakpoint — safe to include
- * unconditionally in your layout.
+ * Renders nothing above the mobile breakpoint, without an AppShell mobile
+ * context (AppShell's, or an `AppShellMobileContext` you provide), or when
+ * AppShell has no mobile navigation — safe to include unconditionally in
+ * your layout.
  *
  * @example
  * ```
@@ -74,7 +84,7 @@ export function MobileNavToggle({
   onClick,
   ...rest
 }: MobileNavToggleProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.mobileNav.toggle.open');
   const {
     isMobile,

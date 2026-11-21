@@ -24,7 +24,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
@@ -37,9 +37,9 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot} from './TopNavContext';
+import {pickCloses, useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {isSafeUrl} from '../utils/safeUrl';
 import {themeProps} from '../utils/themeProps';
@@ -55,6 +55,12 @@ import {
   fontWeightVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {isRenderable} from '../utils/isRenderable';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 // =============================================================================
 // Styles
@@ -238,6 +244,7 @@ const drawerStyles = stylex.create({
   },
   itemDescription: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     fontWeight: fontWeightVars['--font-weight-normal'],
   },
@@ -275,6 +282,15 @@ export interface TopNavMenuItemData {
    * Callback when item is clicked.
    */
   onClick?: () => void;
+
+  /**
+   * Whether a keyboard, finger or pen pick on the item closes the menu and
+   * returns focus to the trigger (a mouse pick leaves it open). Set `false`
+   * for an action that reports its result on the item itself, as with
+   * DropdownMenuItem.
+   * @default true
+   */
+  hasCloseOnSelect?: boolean;
 }
 
 function getMenuItemKey(item: TopNavMenuItemData): string {
@@ -360,9 +376,18 @@ export function TopNavMenu({
   onMouseLeave: onMouseLeaveProp,
   ...rest
 }: TopNavMenuProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'TopNavMenu',
+      'items',
+      "must be an array of menu items, for example items={[{title: 'Docs', href: '/docs'}]}. TopNavMenu does not read children.",
+    );
+  }
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
   const LinkComponent = useLinkComponent();
   const [drawerExpanded, setDrawerExpanded] = useState(false);
   const menuId = useId();
@@ -370,7 +395,9 @@ export function TopNavMenu({
   const slot = useTopNavSlot();
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     // The popup's own role="menu" is the exposed semantics; a modal dialog
     // wrapper would announce an unnamed dialog around the menu and make the
     // trigger claim aria-haspopup="dialog" for menu content (see TabMenu).
@@ -518,35 +545,39 @@ export function TopNavMenu({
             drawerExpanded && drawerStyles.itemsExpanded,
           )}>
           <div {...stylex.props(drawerStyles.itemsInner)}>
-            {items.map(item => (
-              <LinkComponent
-                key={getMenuItemKey(item)}
-                href={item.href}
-                {...pressable}
-                onClick={(_e: React.MouseEvent) => {
-                  item.onClick?.();
-                  closeMobileNav();
-                }}
-                {...focusOutlineProps.focusVisible(
-                  navItemStyles.item,
-                  interactionOverlayStyles.backgroundColor,
-                  drawerStyles.item,
-                )}>
-                {item.icon && (
-                  <span {...stylex.props(drawerStyles.itemIcon)}>
-                    {item.icon}
-                  </span>
-                )}
-                <span {...stylex.props(drawerStyles.itemText)}>
-                  {item.title}
-                  {item.description && (
-                    <span {...stylex.props(drawerStyles.itemDescription)}>
-                      {item.description}
+            {items.map(item => {
+              const Element =
+                item.href == null && item.onClick ? 'button' : LinkComponent;
+              return (
+                <Element
+                  key={getMenuItemKey(item)}
+                  type={Element === 'button' ? 'button' : undefined}
+                  href={item.href}
+                  {...pressable}
+                  onClick={closeDrawerAfter((_e: React.MouseEvent) => {
+                    item.onClick?.();
+                  })}
+                  {...focusOutlineProps.focusVisible(
+                    navItemStyles.item,
+                    interactionOverlayStyles.backgroundColor,
+                    drawerStyles.item,
+                  )}>
+                  {isRenderable(item.icon) && (
+                    <span {...stylex.props(drawerStyles.itemIcon)}>
+                      {item.icon}
                     </span>
                   )}
-                </span>
-              </LinkComponent>
-            ))}
+                  <span {...stylex.props(drawerStyles.itemText)}>
+                    {item.title}
+                    {item.description && (
+                      <span {...stylex.props(drawerStyles.itemDescription)}>
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                </Element>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -628,7 +659,17 @@ export function TopNavMenu({
                 // A menu row is never a draggable link: a mouse press that
                 // slides to another item would start a drag instead.
                 draggable={item.href != null ? false : undefined}
-                onClick={item.onClick}
+                // A keyboard, finger or pen pick ends the menu; a mouse pick
+                // leaves it open.
+                onClick={event => {
+                  item.onClick?.();
+                  if (
+                    item.hasCloseOnSelect !== false &&
+                    pickCloses(event.currentTarget)
+                  ) {
+                    close();
+                  }
+                }}
                 {...focusOutlineProps.focusVisible(styles.menuItem)}>
                 <div {...stylex.props(styles.menuItemIcon)}>{item.icon}</div>
                 <div {...stylex.props(styles.menuItemContent)}>

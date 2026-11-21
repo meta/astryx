@@ -4,7 +4,7 @@
 
 /**
  * @file useTranslator.ts
- * @input InternationalizationContext (via use())
+ * @input InternationalizationContext from translatingContext (via use())
  * @output Exports useTranslator hook returning a stable translator function
  * @position Client-side hook for translating outside of render (event handlers,
  *   effects, non-component code) while still resolving against the current
@@ -14,13 +14,21 @@
  * to translate inside an event handler or effect, capture a translator during
  * render via useTranslator() and call it later.
  *
+ * This is the public hook: application code may translate any Astryx key, so
+ * loading it registers the whole English catalog. Core components use
+ * useComponentTranslator.ts and register only the English they name.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/index.ts
- * - /packages/core/src/i18n/t.client.ts
+ * - /packages/core/src/i18n/useComponentTranslator.ts
+ * - /packages/core/src/i18n/translatingContext.ts
  */
 
 import {use} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {InternationalizationContext} from './translatingContext';
+import {registerFullEnglishFallback} from './fullEnglishFallback';
+
+registerFullEnglishFallback();
 
 export type TranslatorFn = (
   key: string,

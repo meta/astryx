@@ -185,7 +185,7 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     const {rerender} = render(
       <RovingToolbar
         disabledLabels={ROVING_LABELS}
-        disabledTabStop={orderBy('B')}
+        tabStopOrder={orderBy('B')}
       />,
     );
     expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
@@ -196,11 +196,20 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     rerender(
       <RovingToolbar
         disabledLabels={ROVING_LABELS}
-        disabledTabStop={orderBy('A')}
+        tabStopOrder={orderBy('A')}
       />,
     );
     expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '0');
     expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('puts the stop where the callback says while items are enabled too, even on a disabled item', () => {
+    render(
+      <RovingToolbar disabledLabels={['B']} tabStopOrder={orderBy('B')} />,
+    );
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
     expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
   });
 

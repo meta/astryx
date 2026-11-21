@@ -15,10 +15,12 @@
  * - End area restores the ordinary text context for consumer `endContent`; built-in controls opt back into the status foreground
  * - Content area (themeProps 'banner-content'): card background for additional content (children)
  * - Status icon (themeProps 'banner-icon'): the target rides on the default
- *   <Icon> itself — the element that paints — so 'status:X' overrides reach
- *   the glyph (#4166); for a custom `icon` node it stays on the layout wrapper
- * - Description (themeProps 'banner-description'): the supporting line owns its
- *   own colour and type, and the space between it and the title
+ *   <Icon> itself, a direct header item, so 'status:X' overrides reach the
+ *   glyph and hiding it leaves no gap; a custom `icon` node gets a wrapper
+ *   that carries the target
+ * - Message (themeProps 'banner-message'): the title and description column
+ * - Title (themeProps 'banner-title') and description (themeProps
+ *   'banner-description'): each line owns its own colour and type
  * - The end area carries no target: it is a layout row (flex, wrap, edge
  *   compensation) rather than a painted surface, and a theme that wants the
  *   header to grow around its buttons sets `padding-block` on 'banner'
@@ -30,11 +32,10 @@
  *   default / controlled) lives on that one prop and is driven by the shared
  *   `useCollapsible` hook rather than local state.
  *
- * Status controls visual treatment only. The root carries no live-region role by
+ * Status controls visual treatment only. Banner carries no live-region role by
  * default: an async outcome is announced from its transition handler through
- * `useAnnounce`, while a caller that needs a persistent semantic mirror may
- * provide `role="status"` through BaseProps. `role="alert"` is explicit and
- * reserved for genuinely urgent content that should interrupt current speech.
+ * `useAnnounce`. A caller marks an urgent message with `role="alert"`, which
+ * lands on the message element (title and description), not on the frame.
  *
  * Title and description render as <div> (not <p>): they accept arbitrary
  * ReactNode content, and <p> cannot legally contain block-level children
@@ -74,8 +75,14 @@ import {composeEventHandlers, isRenderable, mergeProps} from '../utils';
 import type {Elevation} from '../utils/types';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {BannerStatusMap, BannerContainerMap} from './index';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Banner/Banner.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -286,6 +293,8 @@ const styles = stylex.create({
     // the flex item's min-content width and pushes the page into horizontal
     // scrolling at 320px, which is a WCAG 1.4.10 reflow failure.
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   description: {
     margin: 0,
@@ -295,6 +304,8 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   // Built-in status title, description, and icon inherit the header's on-muted
   // color. Built-in controls receive the same context on their Button element
@@ -305,6 +316,9 @@ const styles = stylex.create({
   iconWrapper: {
     display: 'flex',
     alignItems: 'center',
+    flexShrink: 0,
+  },
+  icon: {
     flexShrink: 0,
   },
   endArea: {
@@ -474,8 +488,10 @@ const elevationStyles = stylex.create({
  * up state management for basic dismiss behavior.
  *
  * Status controls visual meaning only. The component adds no live-region role;
- * announce async outcomes from their transition handler with `useAnnounce`, or
- * pass an explicit role when a persistent semantic mirror is appropriate.
+ * announce async outcomes from their transition handler with `useAnnounce`.
+ * Pass `role="alert"` only for an urgent message: Banner places it on the
+ * title and description, so controls and supporting content are not read as
+ * part of the alert.
  *
  * @example
  * ```
@@ -529,9 +545,10 @@ export function Banner({
   ref,
   onFocusCapture,
   onPointerDownCapture,
+  role,
   ...rest
 }: BannerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const [isDismissed, setIsDismissed] = useState(false);
   // The disclosure state machine is the shared one — Banner owns no collapse
   // state of its own. `collapsible={false}` disables it, and that is what
@@ -628,6 +645,19 @@ export function Banner({
   // hook's open state.
   const showContent = hasChildren && (!isCollapsible || isExpanded);
   const isCard = container === 'card';
+  // An urgent alert covers the authored message only, so controls, their
+  // tooltips and the content area stay out of what is announced.
+  const isUrgentAlert = role === 'alert';
+  // The alert's name and other ARIA states belong to the alert element.
+  const alertAriaProps: Record<string, unknown> = {};
+  const frameProps: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rest)) {
+    if (isUrgentAlert && key.startsWith('aria-')) {
+      alertAriaProps[key] = value;
+    } else {
+      frameProps[key] = value;
+    }
+  }
 
   return (
     <div
@@ -648,7 +678,8 @@ export function Banner({
         className,
         style,
       )}
-      {...rest}>
+      role={isUrgentAlert ? undefined : role}
+      {...frameProps}>
       {/* Header: colored status background — primary theme target ('banner') */}
       <div
         {...mergeProps(
@@ -663,46 +694,55 @@ export function Banner({
                 : styles.headerCardStandalone),
           ),
         )}>
-        {/* The 'banner-icon' target rides on the element that paints: the
-            default <Icon> below, or this wrapper when a custom `icon` node
-            is passed (core never injects props into consumer elements, so
-            overrides reach it via inheritance). The wrapper itself stays
-            layout-only. */}
+        {/* The default Icon is a direct flex item. A theme that hides
+            'banner-icon' also removes its column gap. A custom `icon` node
+            gets a wrapper, because core never adds props to consumer
+            elements; overrides reach the node through inheritance. */}
+        {isRenderable(icon) ? (
+          <div
+            {...mergeProps(
+              themeProps('banner-icon', {status}),
+              stylex.props(styles.iconWrapper),
+            )}
+            aria-hidden="true">
+            {icon}
+          </div>
+        ) : defaultIconName != null ? (
+          // The target is on the glyph itself, so a 'banner-icon' 'status:X'
+          // color override beats the Icon's own variant.
+          <Icon
+            icon={defaultIconName}
+            size="md"
+            color={iconColor}
+            xstyle={styles.icon}
+            {...themeProps('banner-icon', {status})}
+          />
+        ) : null}
         <div
-          {...(isRenderable(icon)
-            ? mergeProps(
-                themeProps('banner-icon', {status}),
-                stylex.props(styles.iconWrapper),
-              )
-            : stylex.props(styles.iconWrapper))}
-          aria-hidden="true">
-          {isRenderable(icon) ? (
-            icon
-          ) : defaultIconName != null ? (
-            // Applied to the status <Icon> itself rather than the wrapper, so
-            // the element that paints the glyph is the element a theme
-            // targets — a 'banner-icon' 'status:X' color override beats the
-            // Icon's own variant from @layer astryx-theme (#4166).
-            <Icon
-              icon={defaultIconName}
-              size="md"
-              color={iconColor}
-              {...themeProps('banner-icon', {status})}
-            />
-          ) : null}
-        </div>
-        <div
-          {...stylex.props(
-            styles.headerContent,
-            isRenderable(endContent) && styles.headerContentWithEndContent,
+          role={isUrgentAlert ? 'alert' : undefined}
+          {...alertAriaProps}
+          {...mergeProps(
+            themeProps('banner-message'),
+            stylex.props(
+              styles.headerContent,
+              isRenderable(endContent) && styles.headerContentWithEndContent,
+            ),
           )}>
           <div
-            {...stylex.props(
-              styles.title,
-              hasStatusStyle(status) && styles.statusForeground,
+            {...mergeProps(
+              themeProps('banner-title'),
+              stylex.props(
+                styles.title,
+                hasStatusStyle(status) && styles.statusForeground,
+              ),
             )}>
             {title}
           </div>
+          {/* A flex container renders no whitespace-only text, so in the
+              default layout this space only separates the title and the
+              description in the message's text. A theme that lays them out
+              on one line shows it as the gap between them. */}
+          {isRenderable(description) && ' '}
           {isRenderable(description) && (
             <div
               {...mergeProps(
@@ -768,9 +808,12 @@ export function Banner({
                 icon={<Icon icon="close" size="sm" color="inherit" />}
                 onClick={handleDismiss}
                 className={
-                  hasStatusStyle(status)
-                    ? stylex.props(statusControlStyles[status]).className
-                    : undefined
+                  mergeProps(
+                    themeProps('banner-close'),
+                    hasStatusStyle(status)
+                      ? stylex.props(statusControlStyles[status])
+                      : {},
+                  ).className
                 }
                 isIconOnly
               />

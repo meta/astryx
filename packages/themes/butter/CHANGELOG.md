@@ -1,5 +1,116 @@
 # @xds/theme-butter
 
+# 0.7.17
+
+#### New Features
+
+- Chat surfaces now default to the container radius: `--radius-chat` defaults to `var(--radius-container)` instead of `28px`, a theme that sets `--radius-container` but not `--radius-chat` declares the alias at its root, and a radius scale no longer sets `--radius-chat` (it set the page step), so chat follows the theme's container, also where the theme sets its container over the scale. This changes the corners of ChatComposer, its drawer and status bar, and ChatMessageBubble, and the buttons inside the composer take their normal corners. The send button stays circular inside a composer, as it is outside one: a theme whose composer corner made the send button a rounded square (controls taller than 32px, or a chat corner under 28px) now draws a circle, unless it sets the `chat-send-button` radius. Butter, Chocolate, Gothic, Matcha, Neutral and Stone set `--radius-chat: 28px`, and Butter keeps its 16px send-button corner, so they look the same; Y2K sets `--radius-chat: 0px` and stays square. A theme that extends one of them keeps that chat radius. To keep the 28px chat corners in another theme, add `--radius-chat: 28px` to its tokens. Set the token in the theme rather than on an ancestor such as `:root`: a theme scope that declares it now replaces an inherited value.
+- The butter theme exports `colorModes`: `['light', 'dark']`.
+
+#### Fixes
+
+- ProgressBar and CircularProgress fills reach 3:1 against their track (WCAG 2.2 SC 1.4.11, non-text contrast). ProgressBar's status fills take the status text colors, and its neutral fill, like CircularProgress's, takes the secondary text color instead of the disabled one, which is the bar's track color in dark mode in Theme Neutral and Theme Stone and under 3:1 on the bar's track in every bundled theme in light mode. A disabled bar takes the same fill and dims its track and fill to half opacity, as a disabled Slider or Switch track does, and a disabled ring dims as a whole, center content included, so each reads quieter than a neutral one. A mark on any fill but accent takes the surface color; in Theme Butter and Theme Stone, a mark on a status fill takes that status's on-color. CircularProgress draws every variant on the muted background track, ProgressBar's base track, because some themes' status muted colors are the status color itself. In Theme Neutral, Theme Butter and Theme Stone a dark neutral or disabled fill takes a lighter neutral stop, Butter's and Stone's status fills take the theme's status colors, Stone's accent fill takes a blue stop that reaches 3:1, and the CLI's bundled theme templates match.
+- Muted cards in dark mode draw the theme's own light text on their dark fill, and links on coloured cards take a deeper accent stop. Inside a coloured card, a nested card, a field, inline code, an open menu, a selected segment, an input group addon, a step number, a banner and a striped table row draw the theme's own text again, and a transparent card keeps the card's ink. Secondary text on a selected row, a dropzone or a numbered citation steps to the nearest stop that meets WCAG AA (4.5:1) on the accent tint over the page, a card and the muted fill; inside a coloured card, up to two coloured cards deep, it takes a dark stop like the rest of the card's ink.
+- Each built-in theme ships its open-licensed fonts. `fonts.css` loads every face from a woff2 file in the package (licenses in `fonts/`), with `font-display: fallback` (served from the same machine or a fast connection, a face arrives before the text first draws, so there is no fallback flash; a face that takes more than about 3 s leaves that page in the fallback font), instead of a Google Fonts `@import` that held the page until the request answered (chocolate's Fraunces as its variable face, keeping its optical size), so an app or screenshot offline (a sandbox, CI) draws at once and shows the theme's real fonts.
+- A plain table's rows keep the text colour around them in Butter, Y2K and Gothic; only a striped table's even rows take the stripe's text. Inside a coloured card in dark mode, every second row of a plain table read white on the pastel card, at 1.15:1 to 2.12:1. Those themes' striped-row rule now reads the row's `striped` state, in their packages and in the copies the CLI bundles.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @kentonquatman
+- @nynexman4464
+
+---
+
+# 0.7.16
+
+#### Documentation
+
+- Fix the theme README usage examples to import `Theme` from `@astryxdesign/core/theme` instead of the removed `XDSTheme` alias, and refresh the bundled theme lists in the package index and contributor guide. ([#11016](https://github.com/meta/astryx/pull/11016))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @karlmoriaty
+
+---
+
+# 0.7.15
+
+---
+
+# 0.7.14
+
+---
+
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.12
+
+#### Fixes
+
+- Butter's buttons take inline padding only and use `Button`'s own block padding. Their height is unchanged. (#10588)
+- Theme packages publish the declarations of their `./theme.css` export. The export pointed `types` at `theme.css.d.ts`, which the package didn't ship, so TypeScript found no types for `import '@astryxdesign/theme-<name>/theme.css'`. The export is unchanged; the file is now published. (#10903)
+- Theme packages declare `"type": "module"`, so bundlers and Node read the `./built` entry as the ES module it is. Before, it was an ES module in a `.js` file in a package without a `type`, which tools that follow the package's `type` read as CommonJS. Every export subpath stays the same. The CommonJS build of the source entry is now `dist/source.cjs` behind the same `require` condition, with its own CommonJS declarations (`dist/source.d.cts`), so TypeScript types each condition in the format it loads. As before, `require('…/built')` loads an ES module, so it needs a Node version with `require(esm)` (22.12 or later). Deep imports that reach past `exports` into `dist/` change too: `dist/source.js` is now `dist/source.cjs`, and a `require` of `dist/<theme>.js` gets an ES module (`require(esm)`, Node 22.12 or later). (#10876)
+- The Butter, Stone and Y2K themes set supporting text (`--text-supporting-size`) in rem instead of a fixed 12px, so it grows when a reader raises the browser's default font size, like the rest of the text. At the default size it is still 12px. The CLI's copies of these themes match. (#10320)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.11
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+---
+
+# 0.7.8
+
+---
+
+# 0.7.7
+
+---
+
+# 0.7.6
+
+#### Fixes
+
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @parinith-web
+
+---
+
 # 0.7.5
 
 #### New Features

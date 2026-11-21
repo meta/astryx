@@ -37,7 +37,13 @@ import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposerDrawer.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatComposerDrawerProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
@@ -96,6 +102,11 @@ export interface ChatComposerDrawerProps extends BaseProps<HTMLDivElement> {
   'data-testid'?: string;
 }
 
+// The composer's own corner: the copy of --radius-chat that ChatComposer sets
+// on its root, which a theme replaces through `chat-composer` borderRadius.
+// Outside a composer the drawer takes --radius-chat itself.
+const composerRadius = `var(--_chat-composer-radius, ${radiusVars['--radius-chat']})`;
+
 const styles = stylex.create({
   root: {
     position: 'relative',
@@ -105,11 +116,10 @@ const styles = stylex.create({
     overflow: 'hidden',
     paddingInline: spacingVars['--spacing-4'],
     paddingBlockStart: spacingVars['--spacing-3'],
-    // The drawer tucks behind the composer (negative marginBlockEnd) and its
-    // top corners align with the composer's outer radius. Tracks the chat
-    // radius to stay matched to the composer, decoupled from --radius-page. #2072
-    paddingBlockEnd: `calc(${spacingVars['--spacing-3']} + ${radiusVars['--radius-chat']})`,
-    marginBlockEnd: `calc(-1 * ${radiusVars['--radius-chat']})`,
+    // The drawer tucks behind the composer body by one corner radius, so its
+    // top corners and the tuck follow the composer's corner.
+    paddingBlockEnd: `calc(${spacingVars['--spacing-3']} + ${composerRadius})`,
+    marginBlockEnd: `calc(-1 * ${composerRadius})`,
     // Surface base with a muted tint layered on top, both in the element's
     // own background layer. The muted backgroundImage composites over the
     // surface backgroundColor and — by CSS rule — paints behind all in-flow
@@ -119,8 +129,8 @@ const styles = stylex.create({
     // opaque or translucent.
     backgroundColor: colorVars['--color-background-surface'],
     backgroundImage: `linear-gradient(${colorVars['--color-background-muted']}, ${colorVars['--color-background-muted']})`,
-    borderStartStartRadius: radiusVars['--radius-chat'],
-    borderStartEndRadius: radiusVars['--radius-chat'],
+    borderStartStartRadius: composerRadius,
+    borderStartEndRadius: composerRadius,
   },
 
   // Toggle row — both the collapsed summary and bar handle live in the same
@@ -253,7 +263,7 @@ export function ChatComposerDrawer({
   'data-testid': testId,
   ...htmlProps
 }: ChatComposerDrawerProps): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.chat.composerDrawer.label');
   const [internalCollapsed, setInternalCollapsed] =
     useState(defaultIsCollapsed);

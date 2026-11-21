@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {Icon} from '@astryxdesign/core/Icon';
+import {Icon, getIconRegistry, type IconName} from '@astryxdesign/core/Icon';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {
@@ -14,6 +14,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import {
   HeartIcon as HeartIconSolid,
@@ -37,10 +38,21 @@ const meta: Meta<typeof Icon> = {
         'tertiary',
         'disabled',
         'accent',
+        'info',
         'success',
         'error',
         'warning',
         'inherit',
+        'blue',
+        'red',
+        'green',
+        'gray',
+        'cyan',
+        'teal',
+        'yellow',
+        'orange',
+        'pink',
+        'purple',
       ],
       description: 'Color variant',
     },
@@ -175,6 +187,7 @@ export const AllColors: Story = {
       <Icon icon={CogIcon} color="tertiary" />
       <Icon icon={BellIcon} color="disabled" />
       <Icon icon={HeartIcon} color="accent" />
+      <Icon icon={InformationCircleIcon} color="info" />
       <Icon icon={CheckCircleIcon} color="success" />
       <Icon icon={XCircleIcon} color="error" />
       <Icon icon={ExclamationTriangleIcon} color="warning" />
@@ -253,7 +266,7 @@ export const InheritColor: Story = {
     <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
       <span
         style={{
-          color: 'blue',
+          color: 'var(--color-text-blue)',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
@@ -263,7 +276,7 @@ export const InheritColor: Story = {
       </span>
       <span
         style={{
-          color: 'green',
+          color: 'var(--color-text-green)',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
@@ -308,5 +321,33 @@ export const NonSemanticColors: Story = {
         </VStack>
       ))}
     </HStack>
+  ),
+};
+
+const builtInIconNames = Object.keys(getIconRegistry()) as IconName[];
+
+/**
+ * Semantic names resolve from the active theme's icon registry, or from the
+ * built-in artwork, and render inside Icon's sized wrapper. The first row shows
+ * one registry glyph at every size; the grid shows every built-in name.
+ */
+export const SemanticNames: Story = {
+  render: () => (
+    <VStack gap={6}>
+      <HStack gap={4} vAlign="center">
+        <Icon icon="check" size="xsm" />
+        <Icon icon="check" size="sm" />
+        <Icon icon="check" size="md" />
+        <Icon icon="check" size="lg" />
+      </HStack>
+      <HStack gap={4} wrap="wrap">
+        {builtInIconNames.map(name => (
+          <VStack key={name} gap={1} hAlign="center">
+            <Icon icon={name} color="secondary" />
+            <Text type="supporting">{name}</Text>
+          </VStack>
+        ))}
+      </HStack>
+    </VStack>
   ),
 };

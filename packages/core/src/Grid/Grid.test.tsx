@@ -9,10 +9,18 @@
  * SYNC: When Grid.tsx or GridSpan.tsx changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Grid} from './Grid';
 import {GridSpan} from './GridSpan';
+
+const spanStyles = stylex.create({
+  // Overrides a property GridSpan's own styles set, so the consumer value
+  // survives only when xstyle merges after them.
+  consumer: {minWidth: 10},
+});
 
 /**
  * The track template is applied via a StyleX dynamic style: the element
@@ -62,7 +70,24 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(250px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 250px), 1fr))',
+    );
+  });
+
+  it('lets an uncapped track shrink below minWidth in a narrow container', () => {
+    // A 360px floor on a 343px phone column must not push the page sideways:
+    // the track minimum resolves to the smaller of the floor and the container.
+    render(
+      <Grid columns={{minWidth: 360, repeat: 'fit'}} data-testid="grid">
+        <div>Item 1</div>
+        <div>Item 2</div>
+      </Grid>,
+    );
+    const grid = screen.getByTestId('grid');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fit, minmax(min(100%, 360px), 1fr))',
+    );
   });
 
   it('renders with columns object max (count capped, tracks still fill)', () => {
@@ -196,7 +221,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(200px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 200px), 1fr))',
+    );
     expect(grid.style.maxWidth).toBe('');
   });
 
@@ -353,7 +380,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(280px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+    );
   });
 
   it('renders with columns={{minWidth, repeat: "fit"}} using auto-fit', () => {
@@ -364,7 +393,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fit, minmax(280px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+    );
   });
 
   it('renders with columns={{minWidth, repeat: "fill"}} using auto-fill', () => {
@@ -375,7 +406,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(280px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+    );
   });
 
   it('renders with columns={{minWidth, max}} capping the count while filling', () => {
@@ -505,5 +538,94 @@ describe('GridSpan', () => {
       </Grid>,
     );
     expect(screen.getByTestId('child')).toBeInTheDocument();
+  });
+
+  it('carries the grid-span theme target on the element it renders', () => {
+    render(
+      <Grid columns={2}>
+        <GridSpan data-testid="span">Item</GridSpan>
+      </Grid>,
+    );
+    expect(screen.getByTestId('span')).toHaveClass('astryx-grid-span');
+  });
+
+  it('resolves ref to the rendered span element', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(
+      <Grid columns={2}>
+        <GridSpan ref={ref} data-testid="span">
+          Item
+        </GridSpan>
+      </Grid>,
+    );
+    expect(ref.current).toBeInstanceOf(HTMLDivElement);
+    expect(ref.current).toBe(screen.getByTestId('span'));
+  });
+
+  it('applies its spans after the caller style and keeps the rest of it', () => {
+    render(
+      <Grid columns={4}>
+        <GridSpan
+          columns={2}
+          rows={3}
+          data-testid="span"
+          style={{gridColumn: '1 / 2', gridRow: '1', opacity: 0.5}}>
+          Item
+        </GridSpan>
+      </Grid>,
+    );
+    const span = screen.getByTestId('span');
+    expect(span.style.gridColumn).toBe('span 2');
+    expect(span.style.gridRow).toBe('span 3');
+    expect(span.style.opacity).toBe('0.5');
+  });
+
+  it('leaves caller grid placement alone when no span is set', () => {
+    render(
+      <Grid columns={4}>
+        <GridSpan data-testid="span" style={{gridColumn: '2 / 4'}}>
+          Item
+        </GridSpan>
+      </Grid>,
+    );
+    expect(screen.getByTestId('span').style.gridColumn).toBe('2 / 4');
+  });
+
+  it('merges className and xstyle with its own target class', () => {
+    render(
+      <Grid columns={2}>
+        <GridSpan
+          data-testid="span"
+          className="consumer-span"
+          xstyle={spanStyles.consumer}>
+          Item
+        </GridSpan>
+      </Grid>,
+    );
+    const span = screen.getByTestId('span');
+    const consumerClasses = (stylex.props(spanStyles.consumer).className ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(consumerClasses.length).toBeGreaterThan(0);
+    expect(span).toHaveClass(
+      'astryx-grid-span',
+      'consumer-span',
+      ...consumerClasses,
+    );
+  });
+
+  it('adds no role, accessible name, or tab stop of its own', () => {
+    render(
+      <Grid columns={2}>
+        <GridSpan columns="full" data-testid="span">
+          <button type="button">Action</button>
+        </GridSpan>
+      </Grid>,
+    );
+    const span = screen.getByTestId('span');
+    expect(span).not.toHaveAttribute('role');
+    expect(span).not.toHaveAttribute('tabindex');
+    expect(span).not.toHaveAttribute('aria-label');
+    expect(screen.getByRole('button', {name: 'Action'})).toBeInTheDocument();
   });
 });

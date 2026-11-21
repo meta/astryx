@@ -46,6 +46,10 @@
       "contributions": [
         {
           "kind": "component",
+          "name": "AudioPlayer"
+        },
+        {
+          "kind": "component",
           "name": "ChartArea"
         },
         {
@@ -102,6 +106,14 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
+          "name": "CircleCheckIndicator"
+        },
+        {
+          "kind": "component",
           "name": "CircularProgress"
         },
         {
@@ -126,6 +138,10 @@
         },
         {
           "kind": "component",
+          "name": "DialogHeroHeader"
+        },
+        {
+          "kind": "component",
           "name": "DiffViewer"
         },
         {
@@ -134,7 +150,7 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
+          "name": "LineClamp"
         },
         {
           "kind": "component",
@@ -146,11 +162,55 @@
         },
         {
           "kind": "component",
-          "name": "MobilePowerSearch"
+          "name": "MediaCaptionsButton"
         },
         {
           "kind": "component",
-          "name": "MobileTokenizer"
+          "name": "MediaFullscreenButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlaybackRate"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayer"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayerElement"
+        },
+        {
+          "kind": "component",
+          "name": "MediaSeekButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaTime"
+        },
+        {
+          "kind": "component",
+          "name": "MediaTimeSlider"
+        },
+        {
+          "kind": "component",
+          "name": "MediaVolume"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
+          "name": "PageControl"
         },
         {
           "kind": "component",
@@ -166,11 +226,27 @@
         },
         {
           "kind": "component",
+          "name": "SelectableCardGroup"
+        },
+        {
+          "kind": "component",
           "name": "Stat"
         },
         {
           "kind": "component",
           "name": "SVGIcon"
+        },
+        {
+          "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarMoreList"
         },
         {
           "kind": "component",
@@ -203,6 +279,22 @@
         {
           "kind": "component",
           "name": "TransferList"
+        },
+        {
+          "kind": "component",
+          "name": "VideoPlayer"
+        },
+        {
+          "kind": "component",
+          "name": "WeightedSVGIcon"
+        },
+        {
+          "kind": "template",
+          "name": "AudioPlayerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "AudioPlayerVoiceMemo"
         },
         {
           "kind": "template",
@@ -238,6 +330,10 @@
         },
         {
           "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
+        },
+        {
+          "kind": "template",
           "name": "DiffViewerShowcase"
         },
         {
@@ -263,6 +359,22 @@
         {
           "kind": "template",
           "name": "ListInputShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "MediaPlayerInlineNote"
+        },
+        {
+          "kind": "template",
+          "name": "MediaPlayerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "VideoPlayerAutoplayLoop"
+        },
+        {
+          "kind": "template",
+          "name": "VideoPlayerShowcase"
         }
       ]
     },
@@ -274,6 +386,18 @@
         {
           "kind": "component",
           "name": "RichTextEditor"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
         },
         {
           "kind": "template",

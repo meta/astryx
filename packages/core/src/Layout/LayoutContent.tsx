@@ -4,7 +4,8 @@
 
 /**
  * @file LayoutContent.tsx
- * @input Uses React StyleX, LayoutSlotsContext
+ * @input Uses React StyleX, LayoutSlotsContext, LayoutContainerContext,
+ *   useScrollRegionProps
  * @output Exports LayoutContent component and LayoutContentProps
  * @position Scrollable main content area for Layout. Wraps the primary body content
  *   with automatic scroll containment and context-aware padding.
@@ -21,6 +22,9 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
+import {LayoutContainerContext} from './LayoutContainerContext';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useScrollRegionProps} from '../hooks/useScrollRegionProps';
 import {mergeProps} from '../utils/mergeProps';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
@@ -30,6 +34,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   content: {
@@ -49,18 +54,18 @@ const styles = stylex.create({
     // Publish container padding vars for bleed children (Table, Divider, etc.)
     '--container-padding-inline-start': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     '--container-padding-inline-end': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
-    '--container-padding-block-start': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-    '--container-padding-block-end': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
+    '--container-padding-block-start': `var(--_layout-flush-block-start, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-end': `var(--_layout-flush-block-end, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
   },
   // When no start panel: outer-x on left edge
   noStart: {
     paddingInlineStart: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
     '--container-padding-inline-start': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
-    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
   // When no end panel: outer-x on right edge
   noEnd: {
     paddingInlineEnd: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
   // When no header: outer-y on top
   noHeader: {
@@ -132,6 +137,8 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
   /**
    * Accessible label for the landmark.
    * Required when role is set and multiple landmarks of the same type exist.
+   * While the content scrolls, it also names the scrolling region, which
+   * otherwise takes a translated "Content".
    */
   label?: string;
 
@@ -151,13 +158,13 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     header={<LayoutHeader>Title</LayoutHeader>}
  *     content={<LayoutContent>Main body content</LayoutContent>}
  *   />
- * </LayoutContainer>
- * <LayoutContainer variant="card">
+ * </Card>
+ * <Card>
  *   <Layout
  *     content={
  *       <LayoutContent padding={0}>
@@ -165,8 +172,8 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
  *       </LayoutContent>
  *     }
  *   />
- * </LayoutContainer>
- * <LayoutContainer variant="card">
+ * </Card>
+ * <Card>
  *   <Layout
  *     content={
  *       <LayoutContent isScrollable={false}>
@@ -174,7 +181,7 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
  *       </LayoutContent>
  *     }
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutContent({
@@ -192,14 +199,17 @@ export function LayoutContent({
   const {hasHeader, hasFooter, hasStart, hasEnd} = use(LayoutSlotsContext);
 
   const isZeroPadding = padding === 0;
+  const region = useScrollRegionProps({isScrollable, role, label});
+  const container = use(LayoutContainerContext);
+  const mergedRef = useMergedRefs(ref, region.ref);
 
   return (
     <div
-      ref={ref}
-      role={role}
-      aria-label={label}
+      ref={mergedRef}
+      role={region.role}
+      aria-label={region['aria-label']}
       {...mergeProps(
-        themeProps('layout-content'),
+        themeProps('layout-content', {container}),
         stylex.props(
           styles.content,
           // Outer padding on container edges (unless content is full bleed)
@@ -229,6 +239,7 @@ export function LayoutContent({
             hasEnd &&
             !isZeroPadding &&
             styles.constrainedSingleEndPanel,
+          containerBlockBleedStyles.publish,
           xstyle,
         ),
         className,

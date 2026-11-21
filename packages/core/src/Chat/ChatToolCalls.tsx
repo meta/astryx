@@ -39,7 +39,18 @@ import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatToolCalls.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -101,6 +112,10 @@ const styles = stylex.create({
   root: {
     display: 'flex',
     flexDirection: 'column',
+    // A message column aligns its children to the start, so the root sizes
+    // to its content and a long target never shrinks. The cap lets each row
+    // shrink to the column, so its target truncates.
+    maxWidth: '100%',
     marginBlockStart: spacingVars['--spacing-2'],
   },
   groupHeader: {
@@ -363,7 +378,7 @@ const STATUS_STYLES: Record<
 };
 
 function getStatusAnnouncement(
-  t: ReturnType<typeof useTranslator>,
+  t: ReturnType<typeof useComponentTranslator>,
   status: ChatToolCallStatus,
   errorMessage?: string,
 ): string {
@@ -408,7 +423,7 @@ function CallRow({
   call: ChatToolCallItem;
   hasClippedFocusRing?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const status = call.status ?? 'complete';
   const hasDetail = call.resultDetail != null;
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -548,7 +563,7 @@ function CallRow({
  * ```
  */
 export function ChatToolCalls(props: ChatToolCallsProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     calls,
     label: customLabel,
@@ -561,6 +576,13 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
     ref,
     ...rest
   } = props;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(calls)) {
+    throw devPropError(
+      'ChatToolCalls',
+      'calls',
+      "must be an array of tool calls, for example calls={[{name: 'search', status: 'complete'}]}.",
+    );
+  }
 
   const autoDefault = defaultIsExpanded ?? false;
   const [internalExpanded, setInternalExpanded] = useState(autoDefault);

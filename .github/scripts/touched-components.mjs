@@ -7,7 +7,8 @@
  * @output `scope`: GitHub step outputs naming what each suite audits.
  *   `report`: touched-components.json, one row per touched component with a
  *   pass/fail/changed/not-run result for each suite, for the pull-request
- *   comment; a step summary; exit 1 when a suite failed.
+ *   comment; a step summary; exit 1 when visual or accessibility failed
+ *   (RTL findings are soft, as in pr-rtl).
  * @position Default pull-request check (spec:AST-030 FR12). It audits only the
  *   components a change touches and never widens to a full suite; full suites
  *   run behind their `ci:run-<suite>` labels and in the release check.
@@ -46,9 +47,18 @@ const FOUNDATION_PATTERNS = [
 ];
 
 /** The changed paths that are style-affecting foundations. */
+/** A Storybook story file. */
+export const STORY_FILE = /\.stories\.(?:[cm]?[jt]sx?|mdx)$/;
+
+// Tests, stories, docs and notes in a foundation folder style nothing.
+const NOT_A_STYLE =
+  /(?:^|\/)__tests__\/|\.(?:test|spec|stories|doc)\.[^/]+$|\.md$/;
+
 export function foundationChanges(files) {
-  return files.filter(file =>
-    FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
+  return files.filter(
+    file =>
+      !NOT_A_STYLE.test(file) &&
+      FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
   );
 }
 
@@ -434,9 +444,16 @@ export function buildTouchedReport({
   };
 }
 
+/**
+ * The suites whose failure fails the job. RTL findings are soft, as in
+ * pr-rtl (a failed check or a coverage gap reports, never blocks), so an RTL
+ * `fail` is recorded and shown but does not turn the job red.
+ */
+const BLOCKING_SUITES = ['visual', 'a11y'];
+
 export function hasFailure(report) {
   return report.components.some(component =>
-    SUITES.some(suite => component.results[suite] === 'fail'),
+    BLOCKING_SUITES.some(suite => component.results[suite] === 'fail'),
   );
 }
 
@@ -504,7 +521,7 @@ export function summaryMarkdown(report) {
       report.foundations?.length > 0
         ? `it changes shared styles (${report.foundations.join(', ')})`
         : `it touches ${report.componentCount} components (more than ${MAX_TOUCHED_COMPONENTS})`;
-    return `### Touched components\n\nWide change (${report.componentCount} components): the touched-components check did not run because ${reason}. Add \`ci:run-visual\`, \`ci:run-a11y\` or \`ci:run-rtl\` to run the full suite.\n`;
+    return `### Touched components\n\nWide change (${report.componentCount} components): the touched-components check did not run because ${reason}. Each label runs only its own full suite: \`ci:run-visual\` for Visual, \`ci:run-a11y\` for Accessibility, \`ci:run-rtl\` for RTL.\n`;
   }
   if (report.components.length === 0) {
     return '### Touched components\n\nNo component changed.\n';
@@ -522,7 +539,7 @@ export function summaryMarkdown(report) {
   if (report.broad) {
     lines.push(
       '',
-      'This change reaches shared code the analysis could not scope; only the touched components were audited. Add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to audit everything it reaches.',
+      'This change reaches shared code the analysis could not scope; only the touched components were audited. To audit everything it reaches, add `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.',
     );
   }
   return `${lines.join('\n')}\n`;
@@ -588,8 +605,16 @@ export function main(argv = process.argv.slice(2)) {
       wide_change: String(decision.wideChange),
       component_count: String(decision.componentCount),
       has_components: String(scope.touched.length > 0 && !decision.wideChange),
+      // A changed story no other audit covers is audited on its own (FR12),
+      // wide change or not.
+      changed_stories: String(files.some(file => STORY_FILE.test(file))),
       visual_components: scope.visualComponents.join(','),
       a11y_owners: scope.a11yOwners.join(','),
+      // The contract job runs the touched components' own specs, and those of
+      // the folders that render them, wide change or not, inside its own
+      // budget (spec:AST-030 FR12).
+      contract_owners: scope.touched.join(','),
+      contract_folders: scope.folders.join(','),
       rtl_packages: Object.keys(scope.rtlOwnersByPackage).join(','),
       rtl_owners: scope.touched.join(','),
     });
