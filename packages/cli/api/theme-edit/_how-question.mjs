@@ -12532,6 +12532,15 @@ export function draftAnswer(ctx, env, question) {
   fillAspect();
   const modal = env.data.mode === 'both';
   /**
+   * The mode a clause says in its own words: a mode carried in from the
+   * clause before limits nothing.
+   * @param {any} c
+   */
+  const saidMode = c =>
+    c?.mode && new RegExp(`\\b${c.mode}\\b`, 'i').test(c.text ?? '')
+      ? /** @type {string} */ (c.mode)
+      : null;
+  /**
    * The mode a page color is for: the mode said, else, on a theme with
    * both modes, a clearly light color's light mode and a clearly dark
    * color's dark mode, typed or named (the other mode keeps its own page,
@@ -19660,17 +19669,18 @@ export function draftAnswer(ctx, env, question) {
     const what = role ? role[1] : (c.aspects[0] ?? 'everything');
     // ("undo the light mode accent change": a setting of that mode only. A
     // setting saved for both modes has no light half to take back alone.)
-    const ofMode = c.mode ? matches.filter(st => st.mode === c.mode) : matches;
+    const mode = saidMode(c);
+    const ofMode = mode ? matches.filter(st => st.mode === mode) : matches;
     const bothModes = matches.filter(st => !st.mode);
-    if (c.mode && !ofMode.length && bothModes.length)
+    if (mode && !ofMode.length && bothModes.length)
       return {
-        text: `${env.slug} sets ${what}${on ? ` on ${on}` : ''} the same in both modes, so it cannot be taken back in ${c.mode} mode only; an undo that names no mode takes it back in both`,
+        text: `${env.slug} sets ${what}${on ? ` on ${on}` : ''} the same in both modes, so it cannot be taken back in ${mode} mode only; an undo that names no mode takes it back in both`,
         options: [],
         takesBack: `${what}${on ? ` on ${on}` : ''}`,
       };
     if (!ofMode.length)
       return {
-        text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}${c.mode ? ` in ${c.mode} mode` : ''}, so it already uses the base value`,
+        text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}${mode ? ` in ${mode} mode` : ''}, so it already uses the base value`,
         options: [],
         // (What the ask takes for granted, a setting to take back, that the
         // theme does not have.)
@@ -29494,7 +29504,7 @@ export function draftAnswer(ctx, env, question) {
     const colorSaid = /\bcolou?rs?\b/i.test(
       String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
     );
-    const undoMode = /** @type {any} */ (draftClause.get(unmet))?.mode;
+    const undoMode = saidMode(draftClause.get(unmet));
     /** @param {boolean} anyMode */
     const undoneIn = anyMode =>
       result.filter(d => {

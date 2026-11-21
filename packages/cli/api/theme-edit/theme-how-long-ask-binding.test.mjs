@@ -632,6 +632,13 @@ const ROWS = [
     },
   ],
   [
+    'an undo that names no mode is not held to a mode said before it',
+    {
+      q: 'make the accent red. make the card background darker in dark mode. reset the accent',
+      never: /^accent |--color-accent/,
+    },
+  ],
+  [
     'an undo of one mode leaves a change said for the other mode',
     {
       q: 'make the accent red in dark mode. undo the light mode accent change',
