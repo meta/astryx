@@ -537,6 +537,18 @@ describe('a resting background shorthand', () => {
     );
   }, 240_000);
 
+  it('keeps a resting background image of its own in every state', async ctx => {
+    if (needBases(ctx)) return;
+    for (const [name, image] of [
+      ['ig', 'linear-gradient(#111111, #333333)'],
+      ['is', 'image-set("a.png" 1x)'],
+    ]) {
+      await themeEditNew(name, {cwd, like: 'neutral'});
+      await themeEditSet(name, 'background', image, {cwd, on: 'button'});
+      expect(cssOf(name), image).not.toMatch(/revert-layer/);
+    }
+  }, 240_000);
+
   it('leaves a variant hover the theme sets itself under a whole-part background', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('v', {cwd, like: 'neutral'});

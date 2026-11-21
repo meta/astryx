@@ -7631,7 +7631,7 @@ export function compileTheme(ctx, data, base) {
     if (
       kebab(prop) === 'background' &&
       !s.state &&
-      !/gradient\(|url\(/i.test(String(v))
+      !/gradient\(|url\(|image-set\(/i.test(String(v))
     )
       withOverlayStates(s, target);
     if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
