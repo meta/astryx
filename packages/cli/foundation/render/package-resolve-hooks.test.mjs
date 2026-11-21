@@ -315,7 +315,7 @@ const resolutionsIn = (specifiers, hook) => {
   const code = [
     "const {registerHooks} = await import('node:module');",
     hook
-      ? `const {packageLookups, packageResolveHooks} = await import(${JSON.stringify(HOOKS)}); globalThis.lookups = packageLookups(); registerHooks(packageResolveHooks(globalThis.lookups));`
+      ? `const {packageLookups, packageResolveHooks} = await import(${JSON.stringify(HOOKS)}); globalThis.lookups = packageLookups(); globalThis.byPath = 0; const hooks = packageResolveHooks(globalThis.lookups); registerHooks({resolve(s, c, next) { const r = hooks.resolve(s, c, next); if (r.shortCircuit) globalThis.byPath++; return r; }});`
       : '',
     'const seen = [];',
     'registerHooks({resolve(s, c, next) { const r = next(s, c); seen.push([s, c.parentURL ?? null, r.url, r.format ?? null]); return r; }});',
@@ -323,7 +323,7 @@ const resolutionsIn = (specifiers, hook) => {
     '  try { const m = await import(s); seen.push([s, JSON.stringify(Object.entries(m).sort())]); }',
     '  catch (e) { seen.push([s, e.code, String(e.message).replace(/\\s+/g, " ")]); }',
     '}',
-    'console.log(JSON.stringify({seen, linked: [...(globalThis.lookups?.linked ?? [])].length, typed: globalThis.lookups?.types.size ?? 0}));',
+    'console.log(JSON.stringify({seen, linked: [...(globalThis.lookups?.linked ?? [])].length, byPath: globalThis.byPath ?? 0}));',
   ].join('\n');
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     cwd: dir,
@@ -346,7 +346,8 @@ describe.skipIf(!hasHooks)('a linked package through the hook', () => {
     expect(hooked.seen).toEqual(plain.seen);
     // The hook noted both linked packages and answered imports inside them.
     expect(hooked.linked).toBe(2);
-    expect(hooked.typed).toBeGreaterThan(0);
+    expect(hooked.byPath).toBeGreaterThanOrEqual(4);
+    expect(plain.byPath).toBe(0);
   }, 60_000);
 });
 

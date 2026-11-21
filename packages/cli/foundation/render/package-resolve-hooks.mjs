@@ -20,6 +20,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {packageOf} from './served-packages.mjs';
 
 const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 
@@ -43,16 +44,48 @@ export function installedPackageOf(file) {
 }
 
 /**
- * Lookups that one set of hooks keeps: each folder's package.json `type`
- * (null for a folder with none, undefined for one that cannot be read), each
- * folder's package.json `name` (null for a folder with none), and the
- * folders of the linked packages bare imports reached.
- * @typedef {{types: Map<string, string | null | undefined>, names: Map<string, unknown>, linked: Set<string>}} PackageLookups
+ * What a folder's package.json says: its `name` and its module `type`
+ * ('commonjs' when it names none); null for a folder with no package.json,
+ * undefined for one that cannot be read.
+ * @typedef {{name: unknown, type: string} | null | undefined} FolderManifest
+ */
+
+/**
+ * Lookups that one set of hooks keeps: each folder's package.json, read once,
+ * and the folders of the linked packages bare imports reached.
+ * @typedef {{manifests: Map<string, FolderManifest>, linked: Set<string>}} PackageLookups
  */
 
 /** @returns {PackageLookups} */
 export function packageLookups() {
-  return {types: new Map(), names: new Map(), linked: new Set()};
+  return {manifests: new Map(), linked: new Set()};
+}
+
+/**
+ * The package.json of folder `d`, read once for each folder.
+ * @param {string} d
+ * @param {PackageLookups} lookups
+ * @returns {FolderManifest}
+ */
+function manifestAt(d, lookups) {
+  if (!lookups.manifests.has(d)) {
+    /** @type {FolderManifest} */
+    let found = null;
+    const file = path.join(d, 'package.json');
+    if (fs.existsSync(file)) {
+      try {
+        const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+        found = {
+          name: manifest?.name,
+          type: typeof manifest?.type === 'string' ? manifest.type : 'commonjs',
+        };
+      } catch {
+        found = undefined;
+      }
+    }
+    lookups.manifests.set(d, found);
+  }
+  return lookups.manifests.get(d);
 }
 
 /**
@@ -82,20 +115,8 @@ export function linkedPackageOf(file, lookups) {
  */
 function nearestManifest(dir, lookups) {
   for (let d = dir; ; d = path.dirname(d)) {
-    if (!lookups.names.has(d)) {
-      const file = path.join(d, 'package.json');
-      let name = null;
-      if (fs.existsSync(file)) {
-        try {
-          name = JSON.parse(fs.readFileSync(file, 'utf8'))?.name;
-        } catch {
-          name = undefined;
-        }
-      }
-      lookups.names.set(d, name);
-    }
-    if (lookups.names.get(d) !== null)
-      return {dir: d, name: lookups.names.get(d)};
+    const manifest = manifestAt(d, lookups);
+    if (manifest !== null) return {dir: d, name: manifest?.name};
     if (path.dirname(d) === d) return null;
   }
 }
@@ -115,10 +136,12 @@ function noteLinkedPackage(specifier, url, lookups, skip) {
   if (typeof url !== 'string' || !url.startsWith('file:')) return;
   const file = fileURLToPath(url);
   if (file.includes(NODE_MODULES)) return;
-  const parts = specifier.split('/');
-  const name = parts.slice(0, specifier.startsWith('@') ? 2 : 1).join('/');
   const found = nearestManifest(path.dirname(file), lookups);
-  if (found && found.name === name && !skip(found.dir + path.sep))
+  if (
+    found &&
+    found.name === packageOf(specifier) &&
+    !skip(found.dir + path.sep)
+  )
     lookups.linked.add(found.dir);
 }
 
@@ -137,22 +160,8 @@ const isBare = specifier =>
  */
 function packageTypeAt(dir, root, lookups) {
   for (let d = dir; ; d = path.dirname(d)) {
-    let type = lookups.types.get(d);
-    if (!lookups.types.has(d)) {
-      type = null;
-      const file = path.join(d, 'package.json');
-      if (fs.existsSync(file)) {
-        try {
-          const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
-          type =
-            typeof manifest?.type === 'string' ? manifest.type : 'commonjs';
-        } catch {
-          type = undefined;
-        }
-      }
-      lookups.types.set(d, type);
-    }
-    if (type !== null) return type;
+    const manifest = manifestAt(d, lookups);
+    if (manifest !== null) return manifest?.type;
     if (d === root || path.dirname(d) === d) return null;
   }
 }
