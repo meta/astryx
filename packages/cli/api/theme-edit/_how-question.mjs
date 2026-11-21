@@ -24470,24 +24470,42 @@ export function draftAnswer(ctx, env, question) {
           const gapRead = (C.partReads(one(String(on)), 'spacing') ?? []).find(
             r => r.props.some(x => /^(?:row-)?gap$/.test(x)),
           );
-          // ("a little more space between list items": a step up of the
-          // holder's own gap, as a padding step is, from what it has now.)
+          // ("a little more space between list items": the holder's gap one
+          // stop up the theme's own spacing scale from what it has now, as a
+          // bounded step does; a gap of 0 takes the first stop.)
           const gapNow =
             nowIn(String(on), 'gap') ??
             (gapRead ? current(gapRead.token) : null);
+          // ("more crowded" is less room.)
           const more =
             !exactFactor(c.text) &&
+            !new RegExp(`\\b(?:${densityWords('crowded', 'dense')})\\b`).test(
+              c.text,
+            ) &&
             (c.dir === 'more' ||
               new RegExp(`\\b(?:${densityWords('roomy')})\\b`).test(c.text));
-          // (A zero gap has no step up: 25% of 0 is still 0.)
-          const stepped =
-            more && gapNow && !/^0(?:px|rem|em)?$/.test(String(gapNow).trim())
-              ? scaledBox(String(gapNow), 1.25)
-              : null;
-          if (stepped)
+          /** @param {unknown} v */
+          const inPx = v => {
+            const r = /^(\d*\.?\d+)(px|rem)?$/.exec(String(v ?? '').trim());
+            return r ? Number(r[1]) * (r[2] === 'rem' ? 16 : 1) : null;
+          };
+          const gapPx = more ? inPx(gapNow) : null;
+          const stop =
+            gapPx == null
+              ? null
+              : (Object.keys(TOKENS)
+                  .filter(t => /^--spacing-/.test(t))
+                  .map(t => ({token: t, px: inPx(resolvedValue(t))}))
+                  .filter(x => x.px != null && x.px > gapPx)
+                  .sort(
+                    (x, y) =>
+                      /** @type {number} */ (x.px) -
+                      /** @type {number} */ (y.px),
+                  )[0] ?? null);
+          if (stop)
             return {
-              text: `the room between ${between}s is ${on}'s gap: ${stepped} (now ${gapNow}; a step up: give a value, such as gap 8px --on ${on}, for an exact one), not ${between}'s padding`,
-              options: [[set('gap', stepped, f)]],
+              text: `the room between ${between}s is ${on}'s gap: ${stop.token} (${resolvedValue(stop.token)}), the next stop up the theme's spacing scale (now ${gapNow}), not ${between}'s padding; give a value, such as gap 8px --on ${on}, for an exact one`,
+              options: [[set('gap', `var(${stop.token})`, f)]],
             };
           return {
             text: `the room between ${between}s is ${on}'s gap${gapRead ? ` (${gapRead.token}, now ${current(gapRead.token)})` : ''}, not ${between}'s padding: give it a value, such as gap 8px --on ${on}`,

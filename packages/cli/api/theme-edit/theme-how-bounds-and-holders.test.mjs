@@ -109,21 +109,26 @@ describe('values and holders', () => {
     async question => {
       const rs = await how('q0', question);
       expect(writes(rs)).toEqual([
-        expect.stringMatching(/^set q0 gap \S+ --on list$/),
+        expect.stringMatching(
+          /^set q0 gap 'var\(--spacing-[\w-]+\)' --on list$/,
+        ),
       ]);
       expect(texts(rs)).toMatch(
-        /the room between list-items is list's gap: \S+ \(now /,
+        /the room between list-items is list's gap: --spacing-[\w-]+ \(\S+\), the next stop up/,
       );
     },
     240_000,
   );
-  // A gap of 0 has no step up: still asked for a value.
-  it('a zero gap is not stepped', async () => {
+  // A gap of 0 takes the scale's first stop.
+  it('a zero gap takes the first stop', async () => {
     const t = await fresh('g0');
     await follow([`set ${t} gap 0px --on list`]);
     const rs = await how(t, 'a little more space between list items');
-    expect(writes(rs)).toEqual([]);
-    expect(texts(rs)).toMatch(/the room between list-items is list's gap/);
+    expect(writes(rs)).toEqual([
+      expect.stringMatching(
+        new RegExp(`^set ${t} gap 'var\\(--spacing-[\\w-]+\\)' --on list$`),
+      ),
+    ]);
   }, 240_000);
   // No way, another way, or an exact amount said: still asked for a value.
   it.each([
