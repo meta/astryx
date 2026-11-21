@@ -37,8 +37,8 @@ when a column boundary is drawn, how far the drawn line runs, which pointer
 capabilities see it, and what else on the header may change while it is shown.
 
 It also owns one part of width resolution: every resizable column, including the
-last, keeps the width a person sets, and the width callbacks report every column's
-key (FR11). Other width resolution, per-column minimums, proportional-neighbor
+last, keeps the width a person sets, and `onColumnResizeEnd` reports the last
+column's key (FR11). Other width resolution, per-column minimums, proportional-neighbor
 behavior, the rest of the commit callback, and the module's configuration remain
 uncontracted; this record is their canonical owner when they are recorded.
 
@@ -46,10 +46,9 @@ Current width behavior is on record as the starting point for that later contrac
 and two parts of it are already known to be wrong: a drag snapshots every column to
 pixel widths, so proportional columns stop being proportional, and a trailing
 proportional column does not absorb the delta when the column before it is resized.
-Both are defects to correct there, not variations this record allows. FR11 agrees
-with both: a column a person has not resized keeps its flexible share
-(`component:Table` FR13), and only space no flexible column takes goes to the
-filler track (`component:Table` FR27).
+Both are defects to correct there, not variations this record allows. FR11 leaves
+both as they are: it changes only where leftover space goes and which keys
+`onColumnResizeEnd` reports.
 
 ## Compatibility and migration
 
@@ -58,7 +57,7 @@ filler track (`component:Table` FR27).
   device that has another input — a keyboard-driven tablet gains a tab stop it did
   not have. `yes` for public API, keyboard behavior on hover-capable pointers, and every width
   outcome except FR11's. `no` for the last column's width after a person resizes it
-  and for the width callbacks' keys (FR11), and for DOM shape when the filler track
+  and for the keys `onColumnResizeEnd` reports (FR11), and for DOM shape when the filler track
   renders (`component:Table` FR27).
 - Compatibility class: presentation-only change to one transient state, plus one
   accessibility correction that adds a control where keyboard resize was already
@@ -68,13 +67,14 @@ filler track (`component:Table` FR27).
   where it announced no maximum, so assistive technology fell back to a
   maximum of 100. A boundary's value is its column's rendered width (AR8),
   where it was the column's minimum until the first resize.
-- FR11 compatibility class: released behavior change (`architecture:public-component-api`
+- FR11 compatibility class: a correction of the last column's snap-back
+  (`spec:AST-017` FR5), shipped as `[fix]` (`architecture:public-component-api`
   INV9). A resized last column keeps its width instead of taking the remaining
-  width, the leftover shows as the filler track, and the width callbacks also
-  report the last column's key. A last column that nobody resized keeps its
-  flexible share as before.
-- Migration decision: none. No consumer edit and no codemod. A caller that read
-  the callbacks expecting the last column's key to be absent ignores the extra key.
+  width, the leftover shows as the filler track, and `onColumnResizeEnd` also
+  reports the last column's key.
+- Migration decision: none. No consumer edit and no codemod. A caller that stores
+  the widths `onColumnResizeEnd` reports receives one more key, the last
+  column's, and storing it keeps that column's width (DEC-8).
 
 This specification-only change carries no package Changeset. The implementation
 pull request owns runtime code, tests, and its Changeset.
@@ -90,7 +90,7 @@ pull request owns runtime code, tests, and its Changeset.
 - The vertical extent of the drawn indicator and the requirement that it never
   adds block scrolling to the Table scroll region.
 - FR11's part of width resolution: the last column keeps its resized width, and
-  the callbacks report every column's key.
+  `onColumnResizeEnd` reports its key.
 - Which pointer capabilities receive the affordance at all, and which receive its
   hover reveal.
 - The bound on what else header hover may change.
@@ -130,19 +130,19 @@ remain in `useTableColumnResize.doc.mjs`.
 
 ## Behavioral contract
 
-| ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                           | Basis                                               | Implementation/evidence state                                                    |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
-| FR1  | Each resizable column receives one boundary control at its trailing inline edge, with a pointer target wider than the drawn indicator so the line stays hairline while the grab area stays usable. A column that opts out of resizing, and a generated plugin column, receive none.                                                                                                                                 | Current source and docs                             | Verified current behavior; sizes are source-inspected.                           |
-| FR2  | The drawn indicator runs from the top of the header through the body rows so a drag reads against the rows it moves. It MUST end at or above the table's bottom edge and MUST NOT add block scrolling to the Table scroll region; that region scrolls on the block axis only when the Table's block size is bounded (`component:Table` FR26).                                                                       | Owner direction, 2026-09-10; `component:Table` FR26 | Current release overhangs the last row; correction pending.                      |
-| FR3  | With no hover-capable pointer in the header row, no visible focus on a boundary, and no drag in progress, every boundary is `hidden`.                                                                                                                                                                                                                                                                               | Current source and docs                             | Verified current behavior.                                                       |
-| FR4  | While a hover-capable pointer is anywhere inside a header row, every boundary in that row is `hinted` at border weight at the same time. The boundaries return to `hidden` when the pointer leaves the row.                                                                                                                                                                                                         | Owner direction, 2026-09-10 (DEC-1)                 | Owner-directed; implementation and focused coverage pending.                     |
-| FR5  | A boundary under the pointer, a boundary with a visible focus indicator, and the boundary being dragged are `emphasized` at accent weight, over any `hinted` state.                                                                                                                                                                                                                                                 | Current source plus DEC-1                           | Pointer and focus states verified; hint interaction pending.                     |
-| FR6  | Pointer capability gates the hover reveal, not the control. Where no pointer can hover, entering a header row reveals nothing and every boundary stays `hidden`. The boundary control itself, with its tab stop and accessible name and values, exists wherever any available input can operate it, so a coarse-primary device with a keyboard keeps keyboard resize.                                               | DEC-3 plus `architecture:interaction-modality`      | Coarse-primary suppression is current behavior and is the defect DEC-3 corrects. |
-| FR7  | Header hover changes only these indicators. It MUST NOT change header background, label, cursor, layout, column width, or any body-row treatment, and MUST NOT alter another header control's own states.                                                                                                                                                                                                           | Owner direction, 2026-09-10                         | Owner-directed; focused coverage pending.                                        |
-| FR8  | Resizing stays available without hover. A boundary remains in tab order with its accessible name and values, keyboard resize is unchanged, and the reveal adds discovery only — it is never a precondition for use. This holds on every device whose input can operate the control, including a coarse-primary device with a keyboard.                                                                              | Current source, WAI-ARIA splitter pattern, DEC-3    | Keyboard path verified on hover-capable pointers; coarse-primary parity pending. |
-| FR9  | A boundary with a visible focus indicator is `emphasized` alone. Focus MUST NOT raise the row-level hint, so focusing one boundary never draws its neighbors. Only a hover-capable pointer inside the header row does that.                                                                                                                                                                                         | Owner direction, 2026-09-21 (DEC-5)                 | Owner-directed; focused coverage pending.                                        |
-| FR10 | While the Table's scroll region is scrolling, header hover resolves no new disclosure: a boundary the pointer reaches only because content moved under it stays `hidden`, and boundaries already `hinted` when the scroll began settle back to `hidden`. Disclosure resumes when scrolling stops. A drag in progress and a visible focus indicator are unaffected.                                                  | Owner direction, 2026-09-21 (DEC-6)                 | Owner-directed; implementation and coverage pending.                             |
-| FR11 | Every resizable column, including the last, keeps the width a person sets, and the width callbacks report every column's key. A column a person has not resized keeps its flexible share (`component:Table` FR13); space no flexible column takes goes to the filler track (`component:Table` FR27), not into the last column. When the columns are wider than the table, the Scroll region scrolls inline (DEC-8). | DEC-8                                               | Specified; current release sets the last column to the remaining width.          |
+| ID   | Invariant                                                                                                                                                                                                                                                                                                                                                             | Basis                                               | Implementation/evidence state                                                             |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| FR1  | Each resizable column receives one boundary control at its trailing inline edge, with a pointer target wider than the drawn indicator so the line stays hairline while the grab area stays usable. A column that opts out of resizing, and a generated plugin column, receive none.                                                                                   | Current source and docs                             | Verified current behavior; sizes are source-inspected.                                    |
+| FR2  | The drawn indicator runs from the top of the header through the body rows so a drag reads against the rows it moves. It MUST end at or above the table's bottom edge and MUST NOT add block scrolling to the Table scroll region; that region scrolls on the block axis only when the Table's block size is bounded (`component:Table` FR26).                         | Owner direction, 2026-09-10; `component:Table` FR26 | Current release overhangs the last row; correction pending.                               |
+| FR3  | With no hover-capable pointer in the header row, no visible focus on a boundary, and no drag in progress, every boundary is `hidden`.                                                                                                                                                                                                                                 | Current source and docs                             | Verified current behavior.                                                                |
+| FR4  | While a hover-capable pointer is anywhere inside a header row, every boundary in that row is `hinted` at border weight at the same time. The boundaries return to `hidden` when the pointer leaves the row.                                                                                                                                                           | Owner direction, 2026-09-10 (DEC-1)                 | Owner-directed; implementation and focused coverage pending.                              |
+| FR5  | A boundary under the pointer, a boundary with a visible focus indicator, and the boundary being dragged are `emphasized` at accent weight, over any `hinted` state.                                                                                                                                                                                                   | Current source plus DEC-1                           | Pointer and focus states verified; hint interaction pending.                              |
+| FR6  | Pointer capability gates the hover reveal, not the control. Where no pointer can hover, entering a header row reveals nothing and every boundary stays `hidden`. The boundary control itself, with its tab stop and accessible name and values, exists wherever any available input can operate it, so a coarse-primary device with a keyboard keeps keyboard resize. | DEC-3 plus `architecture:interaction-modality`      | Coarse-primary suppression is current behavior and is the defect DEC-3 corrects.          |
+| FR7  | Header hover changes only these indicators. It MUST NOT change header background, label, cursor, layout, column width, or any body-row treatment, and MUST NOT alter another header control's own states.                                                                                                                                                             | Owner direction, 2026-09-10                         | Owner-directed; focused coverage pending.                                                 |
+| FR8  | Resizing stays available without hover. A boundary remains in tab order with its accessible name and values, keyboard resize is unchanged, and the reveal adds discovery only — it is never a precondition for use. This holds on every device whose input can operate the control, including a coarse-primary device with a keyboard.                                | Current source, WAI-ARIA splitter pattern, DEC-3    | Keyboard path verified on hover-capable pointers; coarse-primary parity pending.          |
+| FR9  | A boundary with a visible focus indicator is `emphasized` alone. Focus MUST NOT raise the row-level hint, so focusing one boundary never draws its neighbors. Only a hover-capable pointer inside the header row does that.                                                                                                                                           | Owner direction, 2026-09-21 (DEC-5)                 | Owner-directed; focused coverage pending.                                                 |
+| FR10 | While the Table's scroll region is scrolling, header hover resolves no new disclosure: a boundary the pointer reaches only because content moved under it stays `hidden`, and boundaries already `hinted` when the scroll began settle back to `hidden`. Disclosure resumes when scrolling stops. A drag in progress and a visible focus indicator are unaffected.    | Owner direction, 2026-09-21 (DEC-6)                 | Owner-directed; implementation and coverage pending.                                      |
+| FR11 | Every resizable column, including the last, keeps the width a person sets, and `onColumnResizeEnd` reports the last column's key as it reports the others'. Leftover space goes to the filler track (`component:Table` FR27), not into the last column. When the columns are wider than the table, the Scroll region scrolls inline (DEC-8).                          | DEC-8                                               | Specified; current release sets the last column to the remaining width and omits its key. |
 
 ### Transformation and precedence order
 
