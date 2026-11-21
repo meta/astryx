@@ -31,15 +31,15 @@ system_specs: [spec:AST-009]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children` (MetadataListItem entries), `columns`, `label` (`position`, `width`), `maxNumOfItems`, `orientation`, `title`, root `BaseProps`, `ref`. |
-| Behavior                | A description list of label and value pairs in one column, several columns, or a wrapping row, with an optional show more and show less toggle.    |
-| End-user impact         | People scan labelled facts in a predictable grid, and assistive technology reads each label with its value.                                        |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                       |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes.                                                                         |
-| Review checks           | Reject a list that is not a `dl`, a toggle without its expanded state or controlled list, an unlocalized toggle label, or overridable reflection.  |
-| Governing rules         | `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`; WCAG 2.2 SC 1.3.1 and 4.1.2.                              |
+| Area                    | Contract                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `children` (MetadataListItem entries), `columns`, `label` (`position`, `width`), `maxNumOfItems`, `orientation`, `title`, root `BaseProps`, `ref`.                                                |
+| Behavior                | A description list of label and value pairs in one column, several columns, or a wrapping row, with an optional show more and show less toggle.                                                   |
+| End-user impact         | People scan labelled facts in a predictable grid, and assistive technology reads each label with its value.                                                                                       |
+| Builder impact          | None; the record describes shipped behavior.                                                                                                                                                      |
+| Compatibility/readiness | Released behavior recorded as current, with one DOM change: `aria-label`, `aria-labelledby`, and `aria-describedby` render on the `dl` instead of the root `div` (FR5). No API or default change. |
+| Review checks           | Reject a list that is not a `dl`, a toggle without its expanded state or controlled list, an unlocalized toggle label, or overridable reflection.                                                 |
+| Governing rules         | `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`; WCAG 2.2 SC 1.3.1 and 4.1.2.                                                                             |
 
 This table is a review projection; the body below is authoritative.
 
@@ -55,8 +55,10 @@ Consumer syntax and examples belong in `MetadataList.doc.mjs`.
 
 - Released default preserved: `yes` — one column, vertical, labels at the
   start, no collapse.
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: one DOM change, with no public prop, default, target,
+  or styling output change: `aria-label`, `aria-labelledby`, and
+  `aria-describedby` render on the `dl` instead of the root `div`, so the list
+  itself carries the caller's name and description (FR5).
 - Controlled/uncontrolled behavior: the expanded state of the disclosure is
   uncontrolled.
 - Migration decision: none
