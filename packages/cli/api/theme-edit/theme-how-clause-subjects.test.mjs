@@ -486,6 +486,26 @@ const ROWS = [
     },
   ],
   [
+    'an example-led ask on its own line is an ask',
+    {
+      q: 'Header: navy\nFor example buttons red',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#dc2626' --on button",
+      ],
+    },
+  ],
+  [
+    'an example-led ask after a semicolon is an ask',
+    {
+      q: 'Header: navy; e.g. buttons red',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#dc2626' --on button",
+      ],
+    },
+  ],
+  [
     'an example never reaches across a line break',
     {
       q: 'Cards: white background, e.g. snow\nHeader: navy',

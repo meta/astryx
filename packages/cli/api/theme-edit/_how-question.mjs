@@ -3360,10 +3360,14 @@ function clausesOf(q, partWords, words = null) {
       const text = piece.replaceAll(JOINED, '').trim();
       if (!text) continue;
       // An example of the color just said ("navy, eg a dark blue") restates
-      // it: never a second color for the same part.
+      // it: never a second color for the same part. Only one joined by a
+      // comma that names no part; "For example buttons red" on its own
+      // line is an ask.
       const prev = pieces.at(-1)?.text ?? '';
       if (
-        /^(?:eg|ie|for example|such as)\b/i.test(text) &&
+        /^\s*,\s*$/.test(joint) &&
+        /^(?:eg|ie)\b/i.test(text) &&
+        !partWords.some(([re]) => re.test(` ${text} `)) &&
         colorsIn(text).length &&
         colorsIn(prev).length
       ) {
@@ -4569,14 +4573,14 @@ export function draftAnswer(ctx, env, question) {
   // reads the words. (An example of the part named before a colon,
   // "Header, eg the top bar: navy", restates that part: the list's
   // subject stays the one part.)
+  // (The words as asked, for the readers that hold the whole question and
+  // the notes that quote it; their case too, which carries tone: an
+  // emphatic "SO" in a lowercase line.)
+  const raw0 = String(question);
   question = dropAbbreviationDots(question).replace(
     /,\s*(?:eg|ie)\s+[^,:;.!?\n]*(?=:)/gi,
     '',
   );
-  // (The words as asked, for the readers that hold the whole question;
-  // their case too, which carries tone: an emphatic "SO" in a lowercase
-  // line.)
-  const raw0 = String(question);
   const asked0 = raw0.toLowerCase();
   /** Text with each file set aside put back as typed. @param {string} s */
   const withUrls = s =>
@@ -10678,7 +10682,9 @@ export function draftAnswer(ctx, env, question) {
       // repeats changes it. Where the ask's line breaks or marks end
       // sentences the splitter does not count, the sentence is the one
       // that holds the words a rewrite keeps.)
-      const sentences = asked0.split(/[;!?\n]|\.(?!\d)/).filter(x => x.trim());
+      const sentences = dropAbbreviationDots(asked0)
+        .split(/[;!?\n]|\.(?!\d)/)
+        .filter(x => x.trim());
       const breaksBefore = clauses
         .slice(0, clauses.indexOf(c) + 1)
         .filter(x => joinOf.get(x)?.sep === 'break').length;
@@ -32763,7 +32769,9 @@ export function draftAnswer(ctx, env, question) {
     // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
       .replace(/url\([^()]*\)/gi, ' ')
-      .split(/[,;\n]|\band\b|\bthen\b/i)
+      .split(
+        /[,;\n]|(?<!\b(?:e\.g|i\.e|etc|vs|cf))\.(?=\s|$)|\band\b|\bthen\b/i,
+      )
       .map(seg => seg.trim())
       .filter(Boolean);
     for (const words of typedSegments) {
