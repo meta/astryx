@@ -4,7 +4,8 @@
  * @file A setting that changes a part's resting look keeps the part's hover
  * and keyboard focus visible. A resting background shorthand also resets the
  * background image, where Core draws the hover and press answers: those
- * states get Core's image back. A resting
+ * states take the image back from Core's layer, under Core's own conditions,
+ * in the shorthand's own scope. A resting
  * outline (none, or the theme's own) gives the part's focus state Core's
  * focus outline back, for each variant that draws one. A state the theme
  * sets itself keeps what it set. Against real bundled base themes.
@@ -107,13 +108,81 @@ describe('a resting background shorthand', () => {
     expect(ruleOf(css, '.astryx-button[data-variant="ghost"]')).toMatch(
       /background: transparent;/,
     );
-    // The shorthand resets the background image where Core draws them.
+    // The shorthand resets the background image where Core draws them:
+    // each state takes it back from Core's layer.
     expect(css).toMatch(
-      /\.astryx-button\[data-variant="ghost"\]:hover[^{]*\{\s*background-image: linear-gradient\(var\(--color-overlay-hover\),var\(--color-overlay-hover\)\);/,
+      /\.astryx-button\[data-variant="ghost"\]:hover[^{]*\{\s*background-image: revert-layer;/,
     );
     expect(css).toMatch(
-      /\.astryx-button\[data-variant="ghost"\]:active[^{]*\{\s*background-image: linear-gradient\(var\(--color-overlay-pressed\),var\(--color-overlay-pressed\)\);/,
+      /\.astryx-button\[data-variant="ghost"\]:active[^{]*\{\s*background-image: revert-layer;/,
     );
+  }, 240_000);
+
+  // Core draws the press layer only on an enabled part, and the hover layer
+  // only on a screen that can hover. A value written here would hold
+  // everywhere the theme's rule matches: on a disabled part under a mouse
+  // press, and on a touch screen after a tap. Core's own value keeps both.
+  it("leaves a disabled button's press to Core", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('d', {cwd, like: 'neutral'});
+    await themeEditSet('d', 'background', 'transparent', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+    });
+    const css = cssOf('d');
+    expect(css).not.toMatch(
+      /\.astryx-button\[data-variant="ghost"\]:active[^{]*\{[^}]*overlay-pressed/,
+    );
+  }, 240_000);
+
+  it("leaves a touch screen's hover to Core", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('t', {cwd, like: 'neutral'});
+    await themeEditSet('t', 'background', 'transparent', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+    });
+    expect(cssOf('t')).not.toMatch(
+      /\.astryx-button\[data-variant="ghost"\]:hover[^{]*\{[^}]*overlay-hover/,
+    );
+  }, 240_000);
+
+  it('gives a combined scope its hover and press back', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('c', {cwd, like: 'neutral'});
+    await themeEditSet('c', 'background', 'transparent', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const css = cssOf('c');
+    for (const state of ['hover', 'active'])
+      expect(css).toMatch(
+        new RegExp(
+          `\\.astryx-button\\[data-size="sm"\\]\\[data-variant="ghost"\\]:${state}[^{]*\\{\\s*background-image: revert-layer;`,
+        ),
+      );
+  }, 240_000);
+
+  it('leaves a variant hover background set before a whole-part shorthand', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('w', {cwd, like: 'neutral'});
+    await themeEditSet('w', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+      state: 'hover',
+    });
+    await themeEditSet('w', 'background', 'transparent', {cwd, on: 'button'});
+    const css = cssOf('w');
+    const hover =
+      /\.astryx-button\[data-variant="ghost"\]:hover[^{]*\{([^}]*)\}/.exec(
+        css,
+      )?.[1];
+    expect(hover).toMatch(/background: #eeeeee;/);
+    expect(hover).not.toMatch(/background-image/);
   }, 240_000);
 
   it('leaves a hover background the theme sets itself', async ctx => {

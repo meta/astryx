@@ -7028,47 +7028,51 @@ export function compileTheme(ctx, data, base) {
    * A resting background shorthand on a part whose hover and press Core
    * draws as a background image (a layer over the fill): the shorthand
    * resets that image too, so the part would show nothing under the
-   * pointer. Each such state gets Core's image back, for each variant that
-   * draws its own, unless the theme sets that state's background itself.
+   * pointer. Each such state, in the shorthand's own scope, takes the image
+   * back from Core's layer (`revert-layer`), so Core's own conditions hold:
+   * its enabled guard, its hover-capable media and its touch press. A state
+   * background the theme sets for this scope, or for a wider one, keeps
+   * what it set; one set for a narrower scope wins by its selector.
    * @param {Setting} s @param {string} target
    */
   const withOverlayStates = (s, target) => {
     const at = ctx.C.MAP[target]?.at?.['background-image'] ?? {};
-    const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
+    /** The `key:value` pieces of a scope. @param {unknown} when */
+    const piecesOf = when =>
+      when == null ? [] : String(when).split('+').filter(Boolean);
+    const scope = piecesOf(s.when);
+    /** A census element the setting's scope reaches. @param {string} attrs */
+    const inScope = attrs => {
+      const held = new Map(
+        attrs
+          .split(',')
+          .map(a => /** @type {[string, string]} */ (a.split('='))),
+      );
+      return scope.every(p => {
+        const [key, value] = p.split(':');
+        return !held.has(key) || held.get(key) === value;
+      });
+    };
     for (const state of ['hover', 'active']) {
-      if (
-        data.settings.some(
-          y =>
-            y.source === 'property' &&
-            /^background(-image)?$/.test(kebab(y.thing)) &&
-            y.state === state &&
-            (y.when == null || y.when === s.when) &&
-            partsOf(ctx, y).includes(target),
-        )
-      )
-        continue;
-      /** @type {Map<string, string>} */
-      const byVariant = new Map();
-      for (const [k, val] of Object.entries(at)) {
+      const drawn = Object.entries(at).some(([k, val]) => {
         const [attrs, ...rest] = k.split(' ');
-        if (!new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' '))) continue;
-        if (/^\s*none\s*$/i.test(String(val))) continue;
-        const variant =
-          attrs
-            .split(',')
-            .map(a => a.split('='))
-            .find(([key]) => key === 'variant')?.[1] ?? '';
-        if (!byVariant.has(variant)) byVariant.set(variant, String(val));
-      }
-      for (const [variant, image] of byVariant) {
-        if (asked && variant && variant !== asked) continue;
-        const when = asked
-          ? s.when
-          : variant
-            ? `variant:${variant}`
-            : undefined;
-        block({...s, state, when}, target).backgroundImage = image;
-      }
+        return (
+          new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' ')) &&
+          !/^\s*none\s*$/i.test(String(val)) &&
+          inScope(attrs)
+        );
+      });
+      if (!drawn) continue;
+      const setByTheme = data.settings.some(
+        y =>
+          y.source === 'property' &&
+          /^background(-image)?$/.test(kebab(y.thing)) &&
+          y.state === state &&
+          piecesOf(y.when).every(p => scope.includes(p)) &&
+          partsOf(ctx, y).includes(target),
+      );
+      if (setByTheme) continue;
+      block({...s, state}, target).backgroundImage = 'revert-layer';
     }
   };
   /**
