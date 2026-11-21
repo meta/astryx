@@ -62,7 +62,7 @@ export const doc = {
       name: 'options.defaultVariant',
       type: 'string',
       description:
-        "With variants: the variant each icon's own export draws, written to the data file's default. In a library whose export names encode variants, it must be one of the library's variant words, and when absent it is the variant the icons' exports draw (with from and no icons yet, the library's usual default), which variants must list. Otherwise, when absent, an existing set keeps its default while variants declares it; a set without icons takes the first variant, and a set with icons and none declared needs it. Without from, a set with icons refuses a default other than the variant they draw; when its icons' export names name no variants, it refuses one other than its declared default with from too.",
+        "With variants: the variant each icon's own export draws, written to the data file's default. In a library whose export names carry look words, it must be one of the library's look words, and when absent it is the variant the icons' exports draw (with from and no icons yet, the library's usual default), which variants must list. Otherwise, when absent, an existing set keeps its default while variants declares it; a set without icons takes the first variant, and a set with icons and none declared needs it. Without from, a set with icons refuses a default other than the variant they draw; when its icons' export names carry no look words, it refuses one other than its declared default with from too.",
     },
     {
       name: 'options.displayName',
@@ -87,11 +87,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; the default variant is no variant word of a library whose export names encode variants; or the default variant would change on a set that has icons: without `from` (wrap the library again with `from` and `defaultVariant`), or with or without it when the export names of its icons name no variants (add it as a variant instead)',
+      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; the default variant is no look word of a library whose export names carry look words; or the default variant would change on a set that has icons: without `from` (wrap the library again with `from` and `defaultVariant`), or with or without it when the export names of its icons carry no look words (add it as a variant instead)',
     },
     {
       code: 'ERR_INVALID_OPTION',
-      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`; `variants` leave out the default variant: the variant the icons draw in a library whose export names encode variants, or the declared default of a set with icons whose export names name no variants; or such a set declares no default and `defaultVariant` names none',
+      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`; `variants` leave out the default variant: the variant the icons draw in a library whose export names carry look words, or the declared default of a set with icons whose export names carry no look words; or such a set declares no default and `defaultVariant` names none',
     },
     {
       code: 'ERR_FILE_EXISTS',
