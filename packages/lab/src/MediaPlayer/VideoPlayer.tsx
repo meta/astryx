@@ -25,6 +25,7 @@ import {
   durationVars,
   easeVars,
   radiusVars,
+  sizeVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {MediaPlayer, type MediaPlayerProps} from './MediaPlayer';
@@ -43,9 +44,15 @@ import {MediaPlayerElement} from './MediaPlayerElement';
 
 const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surface']} 80%, transparent)`;
 const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
-const BAR_INSET = spacingVars['--spacing-2'];
 const BAR_RADIUS = radiusVars['--radius-container'];
 const PLAYER_RADIUS = radiusVars['--radius-element'];
+/** A player this narrow, such as a small attachment tile, gets a compact bar. */
+const COMPACT_PLAYER = '@container (max-width: 360px)';
+/**
+ * The theme's track color can match the dark frosted bar. So the bar paints
+ * the empty part of its timeline with a tint of its own accent color.
+ */
+const FROSTED_TRACK = `color-mix(in srgb, ${colorVars['--color-accent']} 24%, transparent)`;
 
 const styles = stylex.create({
   root: {
@@ -99,13 +106,26 @@ const styles = stylex.create({
   },
   bar: {
     position: 'absolute',
-    insetInlineStart: BAR_INSET,
-    insetInlineEnd: BAR_INSET,
-    insetBlockEnd: BAR_INSET,
+    // The inset also sets how far the hidden bar drops. Thus the two stay
+    // equal in a compact player.
+    '--_media-bar-inset': {
+      default: spacingVars['--spacing-2'],
+      [COMPACT_PLAYER]: spacingVars['--spacing-1'],
+    },
+    insetInlineStart: 'var(--_media-bar-inset)',
+    insetInlineEnd: 'var(--_media-bar-inset)',
+    insetBlockEnd: 'var(--_media-bar-inset)',
+    '--_media-timeline-track': FROSTED_TRACK,
     display: 'flex',
     alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
-    padding: spacingVars['--spacing-1'],
+    gap: {
+      default: spacingVars['--spacing-2'],
+      [COMPACT_PLAYER]: spacingVars['--spacing-1'],
+    },
+    padding: {
+      default: spacingVars['--spacing-1'],
+      [COMPACT_PLAYER]: `calc(${spacingVars['--spacing-1']} / 2)`,
+    },
     borderRadius: BAR_RADIUS,
     color: colorVars['--color-text-primary'],
     opacity: 1,
@@ -121,7 +141,7 @@ const styles = stylex.create({
   // marker buttons, which set their own pointer events.
   barHidden: {
     opacity: 0,
-    translate: `0 ${spacingVars['--spacing-2']}`,
+    translate: '0 var(--_media-bar-inset)',
     pointerEvents: 'none',
     '--_media-controls-pointer-events': 'none',
   },
@@ -134,7 +154,7 @@ const styles = stylex.create({
       ':focus-within': 1,
     },
     translate: {
-      default: `0 ${spacingVars['--spacing-2']}`,
+      default: '0 var(--_media-bar-inset)',
       ':focus-within': '0 0',
     },
     pointerEvents: {
@@ -144,6 +164,15 @@ const styles = stylex.create({
     '--_media-controls-pointer-events': {
       default: 'none',
       ':focus-within': 'auto',
+    },
+  },
+  // Each button changes the size token on itself, not on the bar. Its
+  // tooltip is a sibling, and marker popovers open inside the timeline, so
+  // neither takes the small size.
+  compactControl: {
+    '--size-element-md': {
+      default: null,
+      [COMPACT_PLAYER]: sizeVars['--size-element-sm'],
     },
   },
   // A narrow player drops the volume control from the bar.
@@ -156,7 +185,7 @@ const styles = stylex.create({
   time: {
     display: {
       default: 'inline',
-      '@container (max-width: 360px)': 'none',
+      [COMPACT_PLAYER]: 'none',
     },
   },
 });
@@ -452,6 +481,8 @@ function VideoControlBar({
     'VideoPlayer',
     state => state.error == null && !state.hasStarted,
   );
+  // A class, because the parts' `xstyle` takes no custom property.
+  const compactControl = stylex.props(styles.compactControl).className;
   return (
     <MediaTheme mode="dark">
       <div
@@ -464,12 +495,12 @@ function VideoControlBar({
           !isControlsVisible && styles.barHidden,
           isBeforePlayback && styles.barBeforePlayback,
         )}>
-        <MediaPlayButton />
+        <MediaPlayButton className={compactControl} />
         <MediaTimeSlider chapters={chapters} markers={markers} />
         <MediaTime xstyle={styles.time} />
         <MediaVolume xstyle={styles.volume} />
-        <MediaCaptionsButton />
-        <MediaFullscreenButton />
+        <MediaCaptionsButton className={compactControl} />
+        <MediaFullscreenButton className={compactControl} />
       </div>
     </MediaTheme>
   );

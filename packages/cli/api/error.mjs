@@ -12,6 +12,19 @@
  */
 
 import {ERROR_CODES} from '../foundation/response/error-codes.mjs';
+import {
+  explainPackageManager,
+  installDependenciesCommand,
+} from '../foundation/env/package-manager.mjs';
+import {relativeWithin, samePath} from '../foundation/fs/path-compare.mjs';
+import {
+  CLI_ROOT,
+  findNodeModulesPackage,
+  realDir,
+} from '../foundation/fs/paths.mjs';
+import {installPlaceOf, isGlobalCopy} from '../foundation/release/choose.mjs';
+import {isInReleaseCache} from '../foundation/release/cache.mjs';
+import {brokenInstall} from '../foundation/integrations/missing-dependency.mjs';
 import * as path from 'node:path';
 
 export class AstryxError extends Error {
@@ -89,6 +102,82 @@ export function writeFailed(target, cwd, cause, unrestored = [], say = {}) {
     undefined,
     ERROR_CODES.ERR_WRITE_FAILED,
   );
+}
+
+/**
+ * The refusal for a failure that is a broken install: an installed package
+ * (one in a node_modules folder, such as a package the CLI uses) needs a
+ * package it declares, and that package is not installed. The command's own
+ * subject (a theme, a page) is not at fault, so the refusal names both
+ * packages and how to install them again. When the run uses a CLI copy of
+ * its own (global, a package runner's or the release cache's) and the app's
+ * install does not hold the package that needs the missing one, the package
+ * is that copy's: installing the copy again repairs it and the app's install
+ * does not, so the refusal names the copy (a release-cache copy is installed
+ * again once its folder is gone). Otherwise the refusal names the app's
+ * install command. A missing import in the app's own files is not a broken
+ * install: it stays the caller's failure.
+ *
+ * @param {unknown} cause the error the load threw
+ * @param {string} cwd project root, for its install and package manager
+ * @param {string} [outcome] what the command left as it was
+ * @param {string} [cliRoot] the running CLI package's folder
+ * @returns {AstryxError | null} null when the cause is not a broken install
+ */
+export function brokenInstallError(cause, cwd, outcome, cliRoot = CLI_ROOT) {
+  const found = brokenInstall(
+    cause instanceof Error ? cause.message : String(cause),
+  );
+  if (!found || !found.importer.split(/[\\/]/).includes('node_modules'))
+    return null;
+  const done = outcome ? ` ${outcome}` : '';
+  const what = `${found.requiredBy} needs ${found.name}, which is missing or incomplete`;
+  const cli = realDir(cliRoot);
+  const cached = isInReleaseCache(cli);
+  const place = installPlaceOf(cli);
+  if (
+    (cached || place.runner || isGlobalCopy(cli)) &&
+    !appLinks(cwd, found.requiredBy, found.importer)
+  )
+    return new AstryxError(
+      cached
+        ? `The CLI release this run uses is not fully installed: ${what}. Remove ${place.owner ?? cli} so the next run installs that release again, then run the command again.${done}`
+        : `The CLI copy this run uses (${cli}) is not fully installed: ${what}. The app's install does not hold ${found.requiredBy}, so install that copy of the CLI again, then run the command again.${done}`,
+      undefined,
+      ERROR_CODES.ERR_DEP_MISSING,
+    );
+  const install = installDependenciesCommand(cwd);
+  return new AstryxError(
+    `The app's packages are not fully installed: ${what} in node_modules. Run ${install} to install them again, then run the command again.${done}`,
+    [
+      {
+        name: install,
+        reason: `install the app's packages again: ${found.requiredBy} needs ${found.name}`,
+      },
+    ],
+    ERROR_CODES.ERR_DEP_MISSING,
+  );
+}
+
+/**
+ * Whether the app's own install holds the package `name` that `importer` is
+ * in: the importer is in the app's folder, or the app resolves `name` to
+ * that same folder, wherever its package manager keeps it.
+ * @param {string} cwd
+ * @param {string} name
+ * @param {string} importer
+ * @returns {boolean}
+ */
+function appLinks(cwd, name, importer) {
+  const app = explainPackageManager(cwd).dir ?? cwd;
+  const at = realDir(path.dirname(importer));
+  if (relativeWithin(realDir(app), at) !== null) return true;
+  // Found in node_modules only, never through NODE_PATH or Node's global
+  // folders, which can hold the CLI copy itself.
+  const folder = findNodeModulesPackage(app, name)?.packageDir;
+  if (!folder) return false;
+  const linked = realDir(folder);
+  return samePath(linked, at) || relativeWithin(linked, at) !== null;
 }
 
 /**

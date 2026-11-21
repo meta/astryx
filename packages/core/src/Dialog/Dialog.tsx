@@ -82,7 +82,7 @@ import {
 import type {SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {createDevWarnings} from '../utils/devWarning';
+import {createDevWarnings, devMissingCallback} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
@@ -90,13 +90,23 @@ import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
+  cancelLayerFocus,
   focusForLastInput,
-  prepareFocusReturnOnRemoval,
-  returnFocusForLastInput,
+  focusForLastInputTemporarily,
+  isLayerFocusStranded,
+  prepareFocusRepairOnRemoval,
+  restoreLayerFocus,
+  trackLayerFocus,
+  type LayerFocusRecord,
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
+import {isHTMLElement} from '../utils/nodeType';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
@@ -565,6 +575,16 @@ export function Dialog({
   ref,
   ...props
 }: DialogProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'Dialog',
+      'onOpenChange',
+      'is required to close the dialog, for example onOpenChange={setIsOpen}. Dialog has no onClose prop.',
+    );
+  }
   // A modal dialog open on the server renders closed until hydration, and
   // opens in the render after it, the first one that can call showModal(): a
   // <dialog> painted open with aria-modal before it is modal claims a state it
@@ -624,13 +644,27 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  // A composed header whose title renders after the dialog mounted asks the
-  // dialog to look for the title again.
-  const syncDefaultName = useCallback(() => {
-    if (dialogRef.current != null) {
-      attachDialog(dialogRef.current);
-    }
-  }, [attachDialog]);
+  // A header title that mounts or unmounts after the dialog mounted reports
+  // it, so the default name follows the title. A composed header with no
+  // report asks the dialog to look for the title again.
+  const syncDefaultName = useCallback(
+    (isTitleMounted?: boolean) => {
+      const node = dialogRef.current;
+      if (node == null || hasConsumerName) {
+        return;
+      }
+      if (isTitleMounted === undefined) {
+        attachDialog(node);
+      } else if (isTitleMounted) {
+        node.setAttribute('aria-labelledby', titleId);
+      } else if (node.getAttribute('aria-labelledby') === titleId) {
+        // Only the default name goes. A report from a header that rendered
+        // before a caller name arrived leaves that name.
+        node.removeAttribute('aria-labelledby');
+      }
+    },
+    [attachDialog, hasConsumerName, titleId],
+  );
 
   const dialogContextValue = useMemo(
     () => ({isInline, titleId, syncDefaultName}),
@@ -648,6 +682,7 @@ export function Dialog({
   // Capture the element that was focused when the dialog opened, for
   // directional animation origin and focus restoration on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
+  const focusRecordRef = useRef<LayerFocusRecord | null>(null);
 
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,
@@ -675,6 +710,19 @@ export function Dialog({
       const dialogDocument = dialogRef.current?.ownerDocument ?? document;
       const doc = dialogDocument.hasFocus() ? dialogDocument : document;
       triggerElementRef.current = doc.activeElement as HTMLElement | null;
+      if (focusRecordRef.current != null) {
+        cancelLayerFocus(focusRecordRef.current);
+      }
+      const opener = triggerElementRef.current;
+      focusRecordRef.current = trackLayerFocus({
+        getLayer: () => dialogRef.current,
+        opener: isHTMLElement(opener) ? opener : null,
+        doc,
+        isFocusMovedInOnOpen: true,
+        // The ring follows the last input in the opener's own document.
+        focus: element =>
+          focusForLastInputTemporarily(element, {preventScroll: true}),
+      });
     }
     wasOpenRef.current = isOpenNow;
   }, [isOpen, isInline]);
@@ -755,14 +803,20 @@ export function Dialog({
       // unmount.
       return holdEntranceInput(dialog) ?? undefined;
     } else {
+      // The page stays inert until `close()`, so focus can return only after
+      // it. Whether focus would be stranded is read first. The browser's own
+      // restore reaches only an opener that is still there, with a ring
+      // whatever the last input was; the shared return then picks the opener
+      // or its nearest stand-in, with the ring the last input calls for.
+      const record = focusRecordRef.current;
+      focusRecordRef.current = null;
+      const wasStranded = record != null && isLayerFocusStranded(record);
       if (dialog.open) {
         dialog.close();
       }
-      // Return focus to the element that opened the dialog, with the ring
-      // the last input in that element's own document calls for.
-      const trigger = triggerElementRef.current;
-      if (trigger) {
-        returnFocusForLastInput(trigger);
+      if (record != null) {
+        restoreLayerFocus(record, {wasStranded});
+        cancelLayerFocus(record);
       }
       triggerElementRef.current = null;
     }
@@ -776,8 +830,23 @@ export function Dialog({
     if (isInline || dialog == null) {
       return;
     }
-    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
-    return () => returnFocusOnRemoval(triggerElementRef.current);
+    const repairOnRemoval = prepareFocusRepairOnRemoval(dialog);
+    return () => {
+      const record = focusRecordRef.current;
+      if (record == null) {
+        return;
+      }
+      repairOnRemoval(() => {
+        restoreLayerFocus(record, {warnsWhenNothingQualifies: false});
+      });
+      // After the repair's own check: a dialog StrictMode only pretended to
+      // unmount is still in the document and keeps its record.
+      queueMicrotask(() => {
+        if (!dialog.isConnected) {
+          cancelLayerFocus(record);
+        }
+      });
+    };
   }, [isInline]);
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so
