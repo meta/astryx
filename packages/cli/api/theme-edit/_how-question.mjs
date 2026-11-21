@@ -2792,14 +2792,20 @@ const GOING_BACK =
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
 /**
- * "Clear" that leads a clause, before a determiner and a removable thing
- * later in that clause, with no word that asks for a reset (changes,
- * edits, overrides, settings, a color, what the person added).
+ * "Clear" that leads an ask, before a determiner and a removable thing
+ * later in that ask, with no word that asks for a reset (changes, edits,
+ * overrides, settings, tweaks and the like, a color, what someone added).
  */
-const CLEAR_TAKES_AWAY = new RegExp(
-  `(?<=(?:^|[.;!?,]|\\b(?:please|and|then))\\s*)clear(?=\\s+(?:all\\s+the|the|my|its|their|our|all|any|this|that|these|those)\\b(?![^,;.!?]*\\b(?:changes?|edits?|overrides?|settings?|colou?rs?|i\\s+(?:added|set|made|changed|gave))\\b)[^,;.!?]*\\b${REMOVABLE}\\b)`,
-  'gi',
-);
+const CLEAR_TAKES_AWAY = (() => {
+  // (One ask: up to a punctuation mark, or an "and" or "then" that starts
+  // another ask.)
+  const ask = String.raw`(?:(?!\b(?:and|then)\s+(?:make|set|give|reset|undo|revert|turn|add|use|change|put|remove|clear)\b)[^,;.!?])*?`;
+  const reset = String.raw`\b(?:changes?|edits?|overrides?|settings?|tweaks?|adjustments?|modifications?|customi[sz]ations?|colou?rs?|(?:i|we|you|they|someone)\s+(?:added|set|put|made|changed|gave)|(?:was|were)\s+(?:added|set|put|made))\b`;
+  return new RegExp(
+    String.raw`(?<=(?:^|[.;:!?,]|\b(?:please|and|then))\s*)clear(?=\s+(?:all\s+the|the|my|its|their|our|all|any|this|that|these|those)\b(?!${ask}${reset})${ask}\b${REMOVABLE}\b)`,
+    'gi',
+  );
+})();
 /**
  * A removal lead and a list of two or more removable items ("the card's
  * border and shadow", "border, shadow and background"), with the part the
