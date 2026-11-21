@@ -325,6 +325,11 @@ function fitWords(cmd, words) {
   const takesPath = declared.some(a => a.name?.() === 'path');
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i];
+    // After `--`, a word that looks like an option is a word.
+    if (word === '--') {
+      args.push(...words.slice(i + 1));
+      break;
+    }
     if (!word.startsWith('-')) {
       args.push(word);
       continue;
@@ -684,6 +689,14 @@ async function pointed(
   const topNames = top.map(c => c.name());
   /** @param {string[]} parts @param {string} reason */
   const run = (parts, reason) => ({words: [...before, ...parts], reason});
+  // A command's help keeps the program options the reader typed (`--json`),
+  // so it answers in the form they asked for.
+  /** @param {string[]} command @param {string[]} [given] */
+  const help = (command, given = rest) => [
+    ...command,
+    '--help',
+    ...fitWords(program, given),
+  ];
   // An option written after `--`, where it reads as a word
   // (`astryx -- --help`).
   if (
@@ -726,9 +739,7 @@ async function pointed(
         ),
       ];
     if (visible(named).length > 0)
-      return [
-        run([named.name(), '--help'], `the commands of ${named.name()}`),
-      ];
+      return [run(help([named.name()]), `the commands of ${named.name()}`)];
   }
   if (named && takesWords(named, rest)) {
     // A read word after the command only asks to read the name after it
@@ -804,9 +815,7 @@ async function pointed(
   const asRun = c => {
     const words = [...c.words, ...listing(c), ...rest];
     return run(
-      runParses(program, [...before, ...words])
-        ? words
-        : [...c.words, '--help'],
+      runParses(program, [...before, ...words]) ? words : help(c.words),
       `the command is ${c.words.join(' ')}`,
     );
   };
@@ -837,7 +846,7 @@ async function pointed(
       run(
         runParses(program, [...before, ...asked.words, ...carried])
           ? [...asked.words, ...carried]
-          : [...asked.words, '--help'],
+          : help(asked.words, carried),
         asked.reason,
       ),
     ];
@@ -910,8 +919,8 @@ export async function unknownCommandAnswer(
       ].join(' '),
       reason: r.reason,
     }));
-  // The help keeps the program options the reader typed (`--json`), as
-  // every run the answer names does.
+  // The help keeps the program options the reader typed (`--json`), so it
+  // answers in the form they asked for.
   const help = {
     name: [
       'astryx',

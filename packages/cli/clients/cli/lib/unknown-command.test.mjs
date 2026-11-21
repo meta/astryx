@@ -201,6 +201,17 @@ describe('the command the words point at', () => {
     ]);
     // An option the program does not take is left out.
     expect(await names(['frobnicate', '--bogus'])).toEqual(['astryx help']);
+    // After `--`, a word that looks like an option is a word, not an option.
+    expect(await names(['frobnicate', '--', '--json'])).toEqual([
+      'astryx help',
+    ]);
+  });
+
+  it("keeps the program options the reader typed in a command's help", async () => {
+    // A group with no list: its help.
+    expect(await names(['integrations', 'list', '--json'])).toEqual([
+      'astryx integration --help --json',
+    ]);
   });
 
   it('falls back to the names a typo of the word could be, else the help', async () => {
@@ -623,6 +634,18 @@ describe('the CLI', () => {
     } finally {
       fs.rmSync(tmp, {recursive: true, force: true});
     }
+  });
+
+  it('keeps the program options the reader typed in the help of a command that needs words', async () => {
+    // `theme eject` needs a slug, so `eject` is named by its help.
+    const after = JSON.parse((await runCli(['eject', '--json'])).stdout);
+    expect(
+      after.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+    ).toEqual(['astryx theme eject --help --json']);
+    const before = JSON.parse((await runCli(['--json', 'eject'])).stdout);
+    expect(
+      before.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+    ).toEqual(['astryx --json theme eject --help']);
   });
 
   it('names the help, not a command that writes files, when nothing fits', async () => {
