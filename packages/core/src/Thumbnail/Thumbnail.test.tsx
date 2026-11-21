@@ -39,6 +39,34 @@ describe('Thumbnail', () => {
     expect(img).toHaveAttribute('alt', 'Test photo');
   });
 
+  it('forwards image loading hints and intrinsic dimensions to the image', () => {
+    render(
+      <Thumbnail
+        src="/photo.jpg"
+        alt="Test photo"
+        loading="lazy"
+        decoding="async"
+        width={320}
+        height={240}
+        fetchPriority="low"
+        data-testid="thumb"
+      />,
+    );
+    const image = screen.getByRole('img');
+    expect(image).toHaveAttribute('loading', 'lazy');
+    expect(image).toHaveAttribute('decoding', 'async');
+    expect(image).toHaveAttribute('width', '320');
+    expect(image).toHaveAttribute('height', '240');
+    expect(image).toHaveAttribute('fetchpriority', 'low');
+
+    const root = screen.getByTestId('thumb');
+    expect(root).not.toHaveAttribute('loading');
+    expect(root).not.toHaveAttribute('decoding');
+    expect(root).not.toHaveAttribute('width');
+    expect(root).not.toHaveAttribute('height');
+    expect(root).not.toHaveAttribute('fetchpriority');
+  });
+
   it('renders placeholder when no src is provided', () => {
     render(<Thumbnail data-testid="thumb" />);
     const root = screen.getByTestId('thumb');
