@@ -50,6 +50,13 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'isDefaultOpen',
+      type: 'boolean',
+      description:
+        'Whether the popover starts open on mount, with the calendar and any presets showing. Useful for showcases and previews. A disabled or busy input stays closed.',
+      default: 'false',
+    },
+    {
       name: 'disabledMessage',
       type: 'string',
       description:

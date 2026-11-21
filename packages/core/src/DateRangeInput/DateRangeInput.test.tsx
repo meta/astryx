@@ -573,6 +573,34 @@ describe('DateRangeInput', () => {
       );
     });
 
+    it('starts open with isDefaultOpen, showing the applied preset', () => {
+      render(
+        <DateRangeInput
+          label="Range"
+          value={{start: '2026-03-01', end: '2026-03-07'}}
+          onChange={() => {}}
+          presets={presets}
+          isDefaultOpen
+        />,
+      );
+      expect(getButton(/^Range/)).toHaveAttribute('aria-expanded', 'true');
+      expect(getButton('Last 7 days')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('stays closed with isDefaultOpen when disabled', () => {
+      render(
+        <DateRangeInput
+          label="Range"
+          value={null}
+          onChange={() => {}}
+          presets={presets}
+          isDefaultOpen
+          isDisabled
+        />,
+      );
+      expect(getButton(/^Range/)).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('marks the applied preset with aria-current, not aria-selected', () => {
       render(
         <DateRangeInput

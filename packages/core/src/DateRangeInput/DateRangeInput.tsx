@@ -20,6 +20,7 @@
 import {
   useId,
   useCallback,
+  useEffect,
   useMemo,
   useOptimistic,
   useRef,
@@ -380,6 +381,13 @@ export interface DateRangeInputProps extends Omit<
   isDisabled?: boolean;
 
   /**
+   * Whether the popover starts open on mount, with the calendar and any
+   * presets showing. Useful for showcases and previews.
+   * @default false
+   */
+  isDefaultOpen?: boolean;
+
+  /**
    * Explains why the input is disabled. When set together with
    * `isDisabled`, the input shows a tooltip with this text on hover and
    * keyboard focus, and the trigger is described by it, so the reason is
@@ -575,6 +583,7 @@ export function DateRangeInput({
   isOptional = false,
   isRequired = false,
   isDisabled = false,
+  isDefaultOpen = false,
   disabledMessage,
   value,
   onChange,
@@ -732,6 +741,14 @@ export function DateRangeInput({
       }
     }
   }, [isEffectivelyDisabled, popover]);
+
+  // Opens on mount when isDefaultOpen is set and the input takes input.
+  useEffect(() => {
+    if (isDefaultOpen && !isEffectivelyDisabled) {
+      popover.show();
+    }
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
+  }, []);
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
