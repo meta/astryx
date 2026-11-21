@@ -2824,6 +2824,31 @@ function appCopyFiles(cwd, slug, fontsCss) {
 }
 
 /**
+ * Whether a built file of a theme's app copy (its entry, its built module
+ * and stylesheets, or a module of the theme folder) holds exactly what the
+ * editor writes there from the theme's build now. Never the descriptor or
+ * the font stylesheet, whose text the copy itself gives.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} name the file's name in the copy
+ */
+export function appCopyBuiltIsCurrent(cwd, slug, name) {
+  if (name.endsWith('.doc.mjs') || name === `${slug}.fonts.css`) return false;
+  const want = appCopyFiles(cwd, slug, [])?.[name];
+  if (want == null) return false;
+  try {
+    const lf = (/** @type {string} */ x) => x.replace(/\r\n/g, '\n');
+    return (
+      lf(
+        fs.readFileSync(path.join(cwd, 'src', 'themes', slug, name), 'utf8'),
+      ) === lf(want)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Why a theme's app copy is behind its build, or null when it is current:
  * something in its way (appCopyStale), a copy file missing, or a file
  * whose content is not what the editor would write now.
