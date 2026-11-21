@@ -23819,67 +23819,63 @@ export function draftAnswer(ctx, env, question) {
               /\bsurfaces?\s*:?\s*flat\b|\bflat\s+surfaces?\b/i.test(
                 question,
               ) && edgeParts.includes('containers');
-            const edged = everywhere
-              ? []
-              : [
-                  // (Only a panel that draws its box at rest: one that draws
-                  // it only when selected, a selectable card, keeps its
-                  // accent selection border.)
-                  ...(flatToo
-                    ? (FAMILIES.containers ?? []).filter(
-                        pt =>
-                          C.MAP[pt] &&
-                          !borderless.includes(pt) &&
-                          Object.keys(
-                            C.MAP[pt]?.at?.['border-width'] ?? {},
-                          ).some(sel => !/:|selected/.test(sel)),
-                      )
-                    : []),
-                  ...borderless.filter(pt =>
-                    edgeParts.some(f => (FAMILIES[f] ?? [f]).includes(pt)),
-                  ),
-                  ...edgeParts.filter(
+            const edged = [
+              // (Only a panel that draws its box at rest: one that draws
+              // it only when selected, a selectable card, keeps its
+              // accent selection border.)
+              ...(flatToo
+                ? (FAMILIES.containers ?? []).filter(
                     pt =>
-                      !FAMILIES[pt] &&
-                      !borderless.includes(pt) &&
                       C.MAP[pt] &&
-                      !(C.partReads(pt, 'border') ?? []).length,
-                  ),
-                ];
+                      !borderless.includes(pt) &&
+                      Object.keys(C.MAP[pt]?.at?.['border-width'] ?? {}).some(
+                        sel => !/:|selected/.test(sel),
+                      ),
+                  )
+                : []),
+              ...borderless.filter(pt =>
+                edgeParts.some(f => (FAMILIES[f] ?? [f]).includes(pt)),
+              ),
+              ...edgeParts.filter(
+                pt =>
+                  !FAMILIES[pt] &&
+                  !borderless.includes(pt) &&
+                  C.MAP[pt] &&
+                  !(C.partReads(pt, 'border') ?? []).length,
+              ),
+            ];
             // (A neutral look of a bordered panel that Core draws with no
             // border, a muted card, takes it too; a hue's look, or one with
             // no fill of its own, keeps its own.)
-            const neutralLooks = everywhere
-              ? []
-              : edgeParts
-                  .flatMap(f => FAMILIES[f] ?? [f])
-                  .filter(pt => C.MAP[pt] && !edged.includes(pt))
-                  .flatMap(pt =>
-                    (C.partReads(pt, 'background') ?? [])
-                      .filter((/** @type {{token: string}} */ r) =>
-                        /^--color-background-(?:muted|surface|card|popover)$/.test(
-                          r.token,
-                        ),
+            const neutralLooks = edgeParts
+              .flatMap(f => FAMILIES[f] ?? [f])
+              .filter(pt => C.MAP[pt] && !edged.includes(pt))
+              .flatMap(pt =>
+                (C.partReads(pt, 'background') ?? [])
+                  .filter((/** @type {{token: string}} */ r) =>
+                    /^--color-background-(?:muted|surface|card|popover)$/.test(
+                      r.token,
+                    ),
+                  )
+                  .flatMap((/** @type {{when: string[]}} */ r) =>
+                    r.when
+                      .filter(w => !/:|selected/.test(w))
+                      .map(w => /(?:^|\s)variant=([\w-]+)/.exec(w)?.[1])
+                      .filter(
+                        v =>
+                          v &&
+                          Object.entries(
+                            C.MAP[pt]?.at?.['border-width'] ?? {},
+                          ).some(
+                            ([sel, bw]) =>
+                              sel.split(',').includes(`variant=${v}`) &&
+                              !/selected/.test(sel) &&
+                              /^\s*0(?:px)?\s*$/.test(String(bw)),
+                          ),
                       )
-                      .flatMap((/** @type {{when: string[]}} */ r) =>
-                        r.when
-                          .filter(w => !/:|selected/.test(w))
-                          .map(w => /(?:^|\s)variant=([\w-]+)/.exec(w)?.[1])
-                          .filter(
-                            v =>
-                              v &&
-                              Object.entries(
-                                C.MAP[pt]?.at?.['border-width'] ?? {},
-                              ).some(
-                                ([sel, bw]) =>
-                                  sel.split(',').includes(`variant=${v}`) &&
-                                  !/selected/.test(sel) &&
-                                  /^\s*0(?:px)?\s*$/.test(String(bw)),
-                              ),
-                          )
-                          .map(v => ({on: pt, when: `variant:${v}`})),
-                      ),
-                  );
+                      .map(v => ({on: pt, when: `variant:${v}`})),
+                  ),
+              );
             /**
              * Whether a part (or one look of it) draws its selection in its
              * border color (a card under a selectable card): a border
@@ -23932,14 +23928,11 @@ export function draftAnswer(ctx, env, question) {
                   x => !selectsInBorder(x.on, x.when?.replace(/^variant:/, '')),
                 )
                 .flatMap(borderOn),
-              ...(everywhere
-                ? borderless.map(pt =>
-                    set('border', `${wide ?? bwNow0} solid ${color}`, {
-                      on: pt,
-                      ...modeOf(c),
-                    }),
-                  )
-                : edged.flatMap(pt => borderOn({on: pt}))),
+              // ("Everything" reaches what the shared tokens never do as
+              // well as what a plain border reaches.)
+              ...[
+                ...new Set([...(everywhere ? borderless : []), ...edged]),
+              ].flatMap(pt => borderOn({on: pt})),
               ...selectedOnly.map(pt =>
                 set('border', `${wide ?? bwNow0} solid ${color}`, {
                   on: pt,
@@ -27033,7 +27026,12 @@ export function draftAnswer(ctx, env, question) {
             String(current('--color-accent-muted', 'light') ?? ''),
           );
           const mutedMiss =
-            rgb && lightMuted && !barFill && ratio(rgb, lightMuted) < 4.5
+            rgb &&
+            lightMuted &&
+            !barFill &&
+            c.mode !== 'dark' &&
+            readable.includes('light') &&
+            ratio(rgb, lightMuted) < 4.5
               ? ratio(rgb, lightMuted).toFixed(2)
               : null;
           const oneMode =
@@ -27041,7 +27039,7 @@ export function draftAnswer(ctx, env, question) {
               ? readable[0]
               : null;
           return {
-            text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${mutedMiss ? `; on the muted accent fill (an applied preset or a selected row) it reads ${mutedMiss}:1 in light mode, under 4.5:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable` : ''}${twin ? `; on the dark page ${color} would read under 4.5:1, so the dark mode takes its twin as far off the dark page, ${twin}` : oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}`,
+            text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${twin ? `; on the dark page ${color} would read under 4.5:1, so the dark mode takes its twin as far off the dark page, ${twin}` : oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}${mutedMiss && oneMode !== 'dark' ? `; on the muted accent fill (an applied preset or a selected row) it reads ${mutedMiss}:1 in light mode, under 4.5:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable` : ''}`,
             options: [
               [
                 set(
@@ -31769,6 +31767,17 @@ export function draftAnswer(ctx, env, question) {
                 v,
                 `light-dark(${v}, var(${keep}))`,
               );
+              // (The token it keeps in dark, twinned by this answer, is
+              // already this color's dark twin: no light-only note.)
+              if (
+                o.some(
+                  x =>
+                    x.thing === keep &&
+                    !x.on &&
+                    /^light-dark\(/.test(String(x.value)),
+                )
+              )
+                continue;
             } else st.mode = 'light';
             notes.add(
               `(a light ${st.on ? 'border' : 'border color'}, in light mode only: on the dark page it would be a glaring edge, so the dark mode keeps its own; for the dark mode too, set a dark color with --mode dark, or say "in both modes")`,

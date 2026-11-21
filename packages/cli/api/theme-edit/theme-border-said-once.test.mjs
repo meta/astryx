@@ -135,6 +135,13 @@ describe('a whole-theme border said once', () => {
         /set br border '.*--on card$/.test(x),
       ),
     ).toBe(false);
+    // "On everything" reaches at least what a plain border does.
+    const all = await commands('1px #ccc borders on everything', 'br');
+    for (const part of ['table', 'button', 'popover'])
+      expect(
+        all.some(x => new RegExp(` --on ${part}$`).test(x)),
+        part,
+      ).toBe(true);
     // A role word leading the ask narrows it: overlays get no button border.
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
     expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);
@@ -179,5 +186,13 @@ describe('a whole-theme link color said once', () => {
     expect(data.results[0].text).toMatch(
       /on the muted accent fill .* in light mode/,
     );
+    // (One kept to dark mode is never named for the light fill, and a
+    // twinned border gets no light-only note.)
+    const darkOnly = (await themeEditHow('links #93c5fd', {cwd, theme: 'lk'}))
+      .data.results[0].text;
+    expect(darkOnly).not.toMatch(/muted accent fill/);
+    const border = (await themeEditHow('borders 1px #ccc', {cwd, theme: 'lk'}))
+      .data.results[0].text;
+    expect(border).not.toMatch(/in light mode only/);
   }, 240_000);
 });
