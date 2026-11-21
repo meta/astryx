@@ -175,6 +175,21 @@ const ROWS = [
     {q: 'cards: 0.5rem gap, padding: roomy', never: /^spacing roomy$/},
   ],
   [
+    'a two-word label line under a heading keeps the run on the part',
+    {
+      q: 'Card\nBackground color: white\nRadius: large',
+      never: /^corners large$/,
+    },
+  ],
+  [
+    'a hyphenated label line under a heading keeps the run on the part',
+    {q: 'Card\nBorder-radius: 8px\nPadding: roomy', never: /^spacing roomy$/},
+  ],
+  [
+    'a short sentence on its own line is not a heading',
+    {q: 'Soft cards.\nRadius: small.', has: ['corners small']},
+  ],
+  [
     'a label after an earlier part sentence still sets its dial',
     {q: 'soft shadows on cards. Radius: small.', has: ['corners small']},
   ],
