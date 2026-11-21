@@ -499,8 +499,14 @@ one removal merged ahead of the decision to allow it.
   and change a theme, and `experimental theme preview app <dir>` as the starter
   app that shows a theme when there is no app yet, phrased for theme work only
   and labeled experimental each time; these lines name no other experimental
-  surface, and this exception ends when the theme editor graduates or is
-  removed. Another named
+  surface. When `theme add` copies a shared theme that carries the theme
+  editor's saved state, the add MAY write that state's data files to the
+  editor's folder for the theme and read them with the editor's settings
+  checks, and the app copy it writes MAY carry the editor's own mark line,
+  which names the editor command that rewrites the copy, because the editor
+  finds its app copy by that mark; the add's printed output and JSON name no
+  experimental surface. This exception ends when the theme editor graduates
+  or is removed. Another named
   exception covers the command that writes a page as one HTML file: the
   answer to an unknown top-level word that asks for it (`export`, `render`,
   `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
