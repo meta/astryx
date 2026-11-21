@@ -31,12 +31,13 @@ const {
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
 /**
- * Secondary text on the accent tint (a selected row, a dropzone's hint, a
- * numbered citation): the nearest stop that reads on the tint over the page,
- * a card and the muted fill. Inside a coloured card, a selected row and a
- * numbered citation take a dark stop like the rest of the card's ink.
+ * Secondary text on the accent tint: a selected item, tree row, table row or
+ * command, a dropzone's hint and a numbered citation. On the page it is the
+ * nearest stop that reads on the tint at rest and under a hover, over the
+ * page, a card and the muted fill. Inside a coloured card it is a dark stop,
+ * like the rest of the card's ink.
  */
-const LIFTED_ON_PAGE = `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`;
+const LIFTED_ON_PAGE = `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`;
 const LIFTED_ON_COLOURED_CARD = `light-dark(${neutral.light[30]}, ${neutral.dark[35]})`;
 
 // The theme's own text and link colours, which a part that paints a fill
@@ -479,6 +480,24 @@ export const y2kTheme = defineTheme({
       },
     },
     'tree-list-item': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'table-row': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'command-palette-item': {
       selected: {
         '--color-text-secondary': LIFTED_ON_PAGE,
         [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},

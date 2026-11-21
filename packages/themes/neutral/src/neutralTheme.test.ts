@@ -446,7 +446,12 @@ describe('neutral selected fill', () => {
 
   it('scopes the lifted secondary text to selected rows, numbered citations and dropzones in the generated CSS', () => {
     const css = generateThemeCSS(neutralTheme).component;
-    for (const target of ['item', 'tree-list-item']) {
+    for (const target of [
+      'item',
+      'tree-list-item',
+      'table-row',
+      'command-palette-item',
+    ]) {
       expect(css).toMatch(
         new RegExp(
           `\\.astryx-${target}\\[data-selected="selected"\\][^{]*\\{[^}]*--color-text-secondary`,

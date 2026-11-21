@@ -322,6 +322,8 @@ export const OFFICIAL_NEUTRAL_LIFTED: ReadonlyArray<readonly [string, string]> =
   Object.freeze([
     ['item', 'selected'],
     ['tree-list-item', 'selected'],
+    ['table-row', 'selected'],
+    ['command-palette-item', 'selected'],
     ['file-input', 'mode:dropzone'],
     ['citation', 'variant:number'],
     ['segmented-control-item', 'base'],
@@ -437,7 +439,7 @@ function liftGround(part: string, block: string): string {
 export const LIFT_GROUNDS: Record<string, {what: string; parts: string}> = {
   '--color-accent-muted': {
     what: 'the accent tint',
-    parts: 'selected items and rows, a dropzone, numbered citations',
+    parts: 'selected items, rows and commands, a dropzone, numbered citations',
   },
   '--color-neutral': {
     what: 'the neutral track',

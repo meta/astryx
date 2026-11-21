@@ -2390,7 +2390,7 @@ export function mappingRows(dial) {
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves to the nearest shade, darker or lighter, that reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     word
       ? `--color-${word}-muted: light shade ${STATUS_MUTED[0]}, dark shade ${STATUS_MUTED[1][0]} at opacity ${STATUS_MUTED[1][1]} over the surface, never the fill's own shade`
-      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it, never the fill's own shade; secondary text on the parts that sit on it (selected items and rows, a dropzone, numbered citations) is lifted instead, to the gray nearest it that reads at ${TEXT}:1 on the tint and under a hover: the neutral color's shades, else grays grown from the base theme's own secondary text`,
+      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it, never the fill's own shade; secondary text on the parts that sit on it (${LIFT_GROUNDS['--color-accent-muted'].parts}) is lifted instead, to the gray nearest it that reads at ${TEXT}:1 on the tint and under a hover: the neutral color's shades, else grays grown from the base theme's own secondary text`,
   ];
   if (word)
     rows.push(

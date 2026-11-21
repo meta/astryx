@@ -290,6 +290,16 @@ export const neutralTheme = defineTheme({
         '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
     },
+    'table-row': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    'command-palette-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
     // A dropzone's hint sits on the same fill while a file is dragged over.
     // That state has no target, so the dropzone takes the lift at rest too.
     'file-input': {

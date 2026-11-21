@@ -27,6 +27,7 @@ applies_to:
 verified_by:
   [
     packages/core/src/theme/generateThemeRules.test.ts,
+    scripts/check-text-contrast-by-role.test.mjs,
     packages/core/src/theme/colorModeBlocks.test.ts,
     packages/cli/clients/cli/commands/build-theme.color-mode-blocks.test.mjs,
     packages/core/src/theme/__tests__/colorModeBlocks.a11y.chromium.spec.ts,
@@ -325,6 +326,14 @@ var(--text-body-leading)` for its own theme (`component:Theme` FR1), so text
   `--color-background-error-inverted`, and its attribute's owner is
   `privateAttributes/mediaDarkPage.ts`, which MediaTheme writes beside its
   own side when `theme/MediaDarkPage` gives it one.
+- **INV22 — A part on the accent tint takes the theme's tinted-state text.**
+  A selected item, tree row and command, a selected table row while the table
+  paints its selection wash, a numbered citation and a dropzone draw on the
+  accent tint (`--color-accent-muted`). A theme sets the secondary text there
+  in its rule for that state (`selected`, `variant:number`,
+  `mode:dropzone`); where an official theme sets it, it is a stop of the
+  theme's own palette. A theme that sets no tinted-state text keeps its own
+  secondary text there.
 
 This record does not own:
 
@@ -443,6 +452,7 @@ tiers.
 | INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
 | INV20            | `Theme.test.tsx` (the wrapper's body size and body leading) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                     | Text inside a Theme with no size or line height of its own                                                                                                                                                                                                                                        |
 | INV21            | `generateThemeRules.test.ts` ("a media surface that flips with the page") and `Toast.mediaFallback.test.tsx` (server markup under a system, a forced and a non-flipping theme)                                                                                                                                                                                                                                                                         | A system-mode page's first paint draws a flipping surface on the wrong side, or a theme whose surfaces keep their side gains dark-page rules                                                                                                                                                      |
+| INV22            | `scripts/check-text-contrast-by-role.test.mjs` (every part on the tint on the page and the surface, and every part but the dropzone in every card and inside nested cards, for every official theme; hovered where the theme sets that part's tinted-state text)                                                                                                                                                                                       | An official theme's part on the tint reads under 4.5:1 on a ground the guard builds (no striped rows; hovered only where the theme sets the text)                                                                                                                                                 |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |
@@ -457,6 +467,13 @@ its text and pale-fill content reach their roles as INV16 aliases rather than
 derived values. Inside adaptation rules, each rule's derived
 values combine the root with that rule alone, so rules that match together and
 each set a measured colour do not yet derive from their combination.
+
+On a striped table, a theme's stripe rule for the even rows outweighs its
+`table-row` `selected` rule, so a selected even row keeps the stripe's text on
+the tint. INV22 does not hold there in Butter and Y2K: dark Butter reads 3.50:1
+on the page and 1.75–1.80:1 in a blue or yellow card; dark Y2K reads 1.56–1.73:1
+in those cards; light Y2K reads 4.47:1 on the page. The contrast guard does not
+build a striped row.
 
 Declaration-boundary enforcement and the warnings-array collector in INV13–INV14
 are accepted but not yet shipped. Their verification obligations above describe

@@ -105,7 +105,8 @@ rendered light/dark evidence; shared color alone is not enough.
 Neutral's selected fill, `--color-accent-muted`, is `neutral.light[85]` /
 `neutral.dark[30]` (`#d4d4d4` / `#474747`). Text on it reads at 4.5:1 or more
 in both modes. In dark mode Neutral lifts `--color-text-secondary` to
-`neutral.dark[80]` on a selected `item` or `tree-list-item` (a checked
+`neutral.dark[80]` on a selected `item`, `tree-list-item`, `table-row` or
+`command-palette-item` (a checked
 CheckboxListItem row reflects `selected` on its `item` target), on a
 `citation` with `variant:number`, on a `file-input` with `mode:dropzone`,
 whose drag-over fill has no state target, and on every `segmented-control-item`,

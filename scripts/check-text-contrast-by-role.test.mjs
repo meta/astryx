@@ -14,9 +14,9 @@
  *   nested default card, a transparent card, a text field, inline code, an
  *   open menu, a selected segment, an input group addon, a step number, a
  *   banner and a striped table row (whose cell color the table root fixes);
- * - secondary text on a selected row, a dropzone and a numbered citation on
- *   the page, and on a selected row and a numbered citation inside every
- *   card;
+ * - secondary text on a selected item, tree row, table row and command, a
+ *   dropzone and a numbered citation on the page and a surface, and on those
+ *   parts (not the dropzone) inside every card and inside nested cards;
  * - selected-item and numbered-citation text on the accent tint, with the
  *   theme's own rules for those parts;
  * - status text on its pale status fill (a field status, a banner);
@@ -219,12 +219,29 @@ const CARD_ANCESTORS = [
     ['card', 'variant:pink'],
     ['popover', 'base'],
   ],
+  [['card', 'variant:blue']],
 ];
+
+/**
+ * The grounds to check a part on the tint on: at rest, and under a hover
+ * where the theme sets the part's tinted-state text itself.
+ */
+function withHover(theme, part, key, layers, hover) {
+  const own = rule(theme, part, key)['--color-text-secondary'];
+  return own
+    ? [
+        ['', layers],
+        [' hovered', [hover, ...layers]],
+      ]
+    : [['', layers]];
+}
 
 /** Parts drawn on the accent tint, with their own rule's key. */
 const ON_ACCENT_TINT = {
   'selected item': ['item', 'selected'],
   'selected tree item': ['tree-list-item', 'selected'],
+  'selected table row': ['table-row', 'selected'],
+  'selected command': ['command-palette-item', 'selected'],
   'numbered citation': ['citation', 'variant:number'],
   dropzone: ['file-input', 'mode:dropzone'],
 };
@@ -312,18 +329,26 @@ function rows() {
               ...rule(theme, part, key),
               ...insideCard(theme, part, key, variant),
             });
-            const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
-            for (const role of [
-              '--color-text-primary',
-              '--color-text-secondary',
-            ])
-              push({
-                ...base,
-                where: `${where} in ${inCard}`,
-                role,
-                text: at(tokens, role),
-                layers,
-              });
+            const tint = at(tokens, '--color-accent-muted');
+            const hover = at(tokens, '--color-overlay-hover');
+            for (const [state, layers] of withHover(
+              theme,
+              part,
+              key,
+              [tint, ...cardLayers],
+              hover,
+            ))
+              for (const role of [
+                '--color-text-primary',
+                '--color-text-secondary',
+              ])
+                push({
+                  ...base,
+                  where: `${where}${state} in ${inCard}`,
+                  role,
+                  text: at(tokens, role),
+                  layers,
+                });
           }
         }
         // The card inside a part with a fill of its own: the row still
@@ -338,18 +363,26 @@ function rows() {
               ...rule(theme, part, key),
               ...insideCard(theme, part, key, variant, ancestor),
             });
-            const layers = [at(tokens, '--color-accent-muted'), ...cardLayers];
-            for (const role of [
-              '--color-text-primary',
-              '--color-text-secondary',
-            ])
-              push({
-                ...base,
-                where: `${where} in a ${variant} card inside ${ancestor.map(a => a.join(' ')).join(' > ')}`,
-                role,
-                text: at(tokens, role),
-                layers,
-              });
+            const tint = at(tokens, '--color-accent-muted');
+            const hover = at(tokens, '--color-overlay-hover');
+            for (const [state, layers] of withHover(
+              theme,
+              part,
+              key,
+              [tint, ...cardLayers],
+              hover,
+            ))
+              for (const role of [
+                '--color-text-primary',
+                '--color-text-secondary',
+              ])
+                push({
+                  ...base,
+                  where: `${where}${state} in a ${variant} card inside ${ancestor.map(a => a.join(' ')).join(' > ')}`,
+                  role,
+                  text: at(tokens, role),
+                  layers,
+                });
           }
         }
       }
@@ -358,9 +391,23 @@ function rows() {
           ...rule(theme, part),
           ...rule(theme, part, key),
         });
-        const layers = [at(tokens, '--color-accent-muted'), body];
-        for (const role of ['--color-text-primary', '--color-text-secondary'])
-          push({...base, where, role, text: at(tokens, role), layers});
+        const tint = at(tokens, '--color-accent-muted');
+        const hover = at(tokens, '--color-overlay-hover');
+        const surface = at(page, '--color-background-surface');
+        for (const [state, layers] of [
+          ...withHover(theme, part, key, [tint, body], hover),
+          ...withHover(theme, part, key, [tint, surface, body], hover).map(
+            ([on, under]) => [`${on} on a surface`, under],
+          ),
+        ])
+          for (const role of ['--color-text-primary', '--color-text-secondary'])
+            push({
+              ...base,
+              where: `${where}${state}`,
+              role,
+              text: at(tokens, role),
+              layers,
+            });
       }
       // Status text on its pale status fill (a field status, a banner).
       for (const status of ['success', 'warning', 'error', 'info'])
