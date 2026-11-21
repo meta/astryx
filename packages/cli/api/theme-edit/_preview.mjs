@@ -1516,22 +1516,35 @@ const CONTROLLED = new Set([
 
 /**
  * A copy of an element tree in which every controlled part with a value and
- * no onChange gets one that does nothing, so a click on it never throws.
+ * no onChange gets one that does nothing, so a click on it never throws. A
+ * callback the part's doc requires (a toast's onDismiss) that the sample
+ * leaves out gets one that does nothing too, so the part never calls a
+ * missing function (a toast's timer).
  * @param {unknown} v
+ * @param {import('./_project.mjs').ThemeProject} [project]
  * @returns {unknown}
  */
-function withHandlers(v) {
-  if (Array.isArray(v)) return v.map(withHandlers);
+export function withHandlers(v, project) {
+  if (Array.isArray(v)) return v.map(x => withHandlers(x, project));
   if (isElement(v)) {
     const props = Object.fromEntries(
-      Object.entries(v.props ?? {}).map(([k, x]) => [k, withHandlers(x)]),
+      Object.entries(v.props ?? {}).map(([k, x]) => [
+        k,
+        withHandlers(x, project),
+      ]),
     );
     if (CONTROLLED.has(v.__element) && 'value' in props && !props.onChange)
       props.onChange = {__code: '() => {}'};
+    const docProps = project?.components[v.__element]?.props ?? {};
+    for (const [name, doc] of Object.entries(docProps))
+      if (/^on[A-Z]/.test(name) && doc?.required && !(name in props))
+        props[name] = {__code: '() => {}'};
     return {
       ...v,
       props,
-      ...(v.children === undefined ? {} : {children: withHandlers(v.children)}),
+      ...(v.children === undefined
+        ? {}
+        : {children: withHandlers(v.children, project)}),
     };
   }
   return v;
@@ -1669,7 +1682,10 @@ function componentsPage(project, {theme = null, C}) {
     )
     .map(it => ({
       ...it,
-      tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
+      tree: withHandlers(
+        withSources(project, withCoreNames(project, it.tree)),
+        project,
+      ),
     }))
     .filter(it => it.tree !== undefined);
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
@@ -1755,7 +1771,7 @@ function overviewPage(project, {theme = null, colors = false}) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
-      withHandlers(withCoreNames(project, x.tree))
+      withHandlers(withCoreNames(project, x.tree), project)
     ),
   })).filter(x => x.tree !== undefined);
   const body = sections
