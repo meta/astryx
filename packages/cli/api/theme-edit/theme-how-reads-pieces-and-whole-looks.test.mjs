@@ -417,7 +417,6 @@ describe('a look said, then taken away by a pronoun', () => {
         'the card border in dark mode is ugly, hide it',
         'the card border is ugly in dark, hide it',
         'the shadow on the cards in dark mode is too strong, remove it',
-        'the border on the selected tab is ugly, hide it',
         'the muted card border is ugly, hide it',
         'the bottom border on the cards is ugly, hide it',
         'the shadows on cards and buttons in dark mode are too strong, remove them',
@@ -429,6 +428,44 @@ describe('a look said, then taken away by a pronoun', () => {
       ]) {
         const lines = (first(await answer(q)) ?? []).join('\n');
         expect(lines, q).not.toMatch(/\bnone --on\b|transparent --on/);
+      }
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun in one state', () => {
+  it(
+    'takes it away in that state only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the border on the selected tab is ugly, hide it',
+          /border none --on tab --state selected\b/,
+        ],
+        [
+          'the border on clicked buttons is ugly, hide it',
+          /border none --on button --state active\b/,
+        ],
+        [
+          'the shadow on hovered cards is too strong, remove it',
+          /box-shadow none --on card --state hover\b/,
+        ],
+        [
+          'the disabled button background is ugly, hide it',
+          /background-color transparent --on button --state disabled\b/,
+        ],
+        // ("hover card" is a part, never a state.)
+        [
+          'the hover card shadow is too strong, remove it',
+          /box-shadow none --on hover-card$/m,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(
+          /(?:none|transparent) --on (?:tab|button|card)$/m,
+        );
       }
     },
     T,
