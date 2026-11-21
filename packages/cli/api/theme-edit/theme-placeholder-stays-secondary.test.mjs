@@ -101,6 +101,20 @@ describe('a text color that reaches a text input', () => {
     expect(top).not.toMatch(/--color-text-primary/);
   }, 240_000);
 
+  it("answers a text input's secondary text with its placeholder's token", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('ti', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow(
+      'the secondary text in the text input lighter',
+      {cwd, theme: 'ti'},
+    );
+    const top = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    )[0];
+    expect(top).toMatch(/--color-text-secondary/);
+    expect(top).not.toMatch(/--color-text-primary/);
+  }, 240_000);
+
   it('never answers secondary text on a part with none with the secondary token', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('tb', {cwd, like: 'neutral'});
