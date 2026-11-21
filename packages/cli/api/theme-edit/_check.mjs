@@ -4134,6 +4134,66 @@ export function coveredPaints(ctx, part, prop) {
 }
 
 /**
+ * A part name as typed, cleaned of what is no part of it: another case,
+ * a class name copied from the page (`.astryx-card`), a component
+ * (`<Card>`, `Card`), stray punctuation from a copied list, autocorrect
+ * dashes. `dashed` reads words with spaces as the dashed name (dialog
+ * header).
+ * @param {string} on
+ */
+function partNameForms(on) {
+  const lower = on
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/^[\s,;:.'"`]+|[\s,;:.'"`]+$/g, '')
+    .trim()
+    .replace(/^<\/?\s*|\s*\/?>$/g, '')
+    .replace(/^\./, '')
+    .replace(/^astryx-/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase();
+  return {lower, dashed: lower.trim().replace(/[\s_]+/g, '-')};
+}
+
+/**
+ * The part or group a plain plural names (cards, dialogs, tabs), or
+ * undefined.
+ * @param {any} ctx
+ * @param {string} lower
+ * @param {string} dashed
+ */
+function pluralOfPart(ctx, lower, dashed) {
+  const TARGET = ctx.project.target;
+  return [lower, dashed]
+    .flatMap(w => [
+      w.replace(/ies$/, 'y'),
+      w.replace(/(ch|sh|x|s)es$/, '$1'),
+      w.replace(/s$/, ''),
+    ])
+    .find(x => x !== lower && (TARGET.has(x) || groupsOf(ctx)[x]));
+}
+
+/**
+ * The one part or group a typed `--on` names by a form of its own name
+ * (another case, spaces for its dashes, its plural, its class or
+ * component name), or null: never a typo, a word read as a part, or a
+ * list. The set command saves the setting under it and says what it read.
+ * @param {any} ctx
+ * @param {string | undefined} on
+ * @returns {string | null}
+ */
+export function partNamedByForm(ctx, on) {
+  if (!on) return null;
+  const TARGET = ctx.project.target;
+  if (TARGET.has(on) || groupsOf(ctx)[on] || FONT_ROLES.includes(on))
+    return null;
+  const {lower, dashed} = partNameForms(on);
+  if (/,|\/|&|\band\b/.test(lower)) return null;
+  for (const x of [lower, dashed])
+    if (TARGET.has(x) || groupsOf(ctx)[x]) return x;
+  return pluralOfPart(ctx, lower, dashed) ?? null;
+}
+
+/**
  * Check one setting and give it back ready to store, or refuse. What it
  * accepts, the settings loader takes too: the loader's own check runs last,
  * so a saved setting never blocks the theme.
@@ -5378,18 +5438,7 @@ function checkOne(
       // part, as a working command with every flag kept.
       // Stray punctuation from a copied list ("text-input,") and the dashes
       // autocorrect types ("text\u2013input") are not part of the name.
-      const lower = s.on
-        .replace(/[\u2010-\u2015\u2212]/g, '-')
-        .replace(/^[\s,;:.'"`]+|[\s,;:.'"`]+$/g, '')
-        .trim()
-        .replace(/^<\/?\s*|\s*\/?>$/g, '')
-        .replace(/^\./, '')
-        .replace(/^astryx-/, '')
-        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-        .toLowerCase();
-      // A part named in words (dialog header, text inputs) is the dashed
-      // part, read before any group a single word of it names.
-      const dashed = lower.trim().replace(/[\s_]+/g, '-');
+      const {lower, dashed} = partNameForms(s.on);
       // A plain word how reads as a part or group (checkboxes: checks):
       // only the whole value as one word, never one word inside a longer
       // name (nmber-input is no word for inputs).
@@ -5420,13 +5469,7 @@ function checkOne(
         ];
       })();
       // A plain plural of a part (cards, dialogs, tabs) is that part.
-      const singular = [lower, dashed]
-        .flatMap(w => [
-          w.replace(/ies$/, 'y'),
-          w.replace(/(ch|sh|x|s)es$/, '$1'),
-          w.replace(/s$/, ''),
-        ])
-        .find(x => x !== lower && (TARGET.has(x) || groupsOf(ctx)[x]));
+      const singular = pluralOfPart(ctx, lower, dashed);
       // Several parts named in one --on (`button, text-input`, `button/
       // text-input`, `button and text-input`, or spaces): one command per
       // part named, each checked, never a group that one word of the list
@@ -7470,6 +7513,18 @@ function checkOne(
           'mode applies to the whole theme; drop --on.',
           {run: [`${P} set ${slug} mode ${quoteCommandArgument(v)}`]},
         );
+      // A bare mode that is the first half of exactly one value ("light"
+      // of light-only) is that value, saved as it, and said.
+      const halfOf = ['both', 'light-only', 'dark-only'].filter(m =>
+        m.startsWith(`${v.trim().toLowerCase()}-`),
+      );
+      if (halfOf.length === 1 && /^[a-z]+$/i.test(v.trim())) {
+        s.value = halfOf[0];
+        s.note = [`read mode \`${v.trim()}\` as \`${halfOf[0]}\``, s.note]
+          .filter(Boolean)
+          .join('; ');
+        return s;
+      }
       if (!['both', 'light-only', 'dark-only'].includes(v)) {
         const lower = v.toLowerCase().replace(/^mode\s*[=:]\s*/, '');
         const meant = modeDialValue(v);

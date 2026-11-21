@@ -234,7 +234,9 @@ describe('new', () => {
       expect(r.env.code).toBe('ERR_BASE_NOT_FOUND');
       expect(lines(r.env)[0]).toBe('new n1 --like neutral --accent bleu');
       const repaired = await follow(lines(r.env)[0]);
-      expect(lines(repaired.env)[0]).toBe('new n1 --like neutral --accent blue');
+      expect(lines(repaired.env)[0]).toBe(
+        'new n1 --like neutral --accent blue',
+      );
       expect((await follow(lines(repaired.env)[0])).status).toBe(0);
     },
     T,
@@ -325,8 +327,11 @@ describe('pasted lines', () => {
   it(
     'keep a printed scope in another case or with a mode typo',
     async () => {
+      // (A part in another case is read as the part: the line is made on it.)
       const card = await editor(['set', 't', 'background-color = red on Card']);
-      expect(lines(card.env)).toContain('set t background-color red --on card');
+      expect(card.status).toBe(0);
+      expect(saved('t')[0].on).toBe('card');
+      saveSettings('t', []);
       expect(
         (await editor(['set', 't', 'background-color = red on card :Hover']))
           .status,

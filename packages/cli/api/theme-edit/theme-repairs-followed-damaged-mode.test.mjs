@@ -232,10 +232,10 @@ describe('--on with stray punctuation', () => {
     '%s names text-input, never the inputs group',
     async on => {
       await fresh('h11');
-      const r = await refusal(() =>
-        themeEditSet('h11', 'padding', '8px', {cwd, on}),
+      const r = /** @type {any} */ (
+        await themeEditSet('h11', 'padding', '8px', {cwd, on})
       );
-      expect(r.run[0]).toBe('set h11 padding 8px --on text-input');
+      expect(r.data.setting.on).toBe('text-input');
     },
     T,
   );

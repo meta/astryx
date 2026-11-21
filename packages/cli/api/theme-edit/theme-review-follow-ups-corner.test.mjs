@@ -209,11 +209,12 @@ describe('bad saved settings', () => {
 });
 
 describe('names', () => {
-  it('another case of a part names it, with a command that runs', async () => {
-    const r = await refusal(() =>
-      themeEditSet('t', 'corners', 'pill', {cwd, on: 'Button'}),
+  it('another case of a part is read as the part, and said', async () => {
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'corners', 'pill', {cwd, on: 'Button'})
     );
-    expect(r.run[0]).toMatch(/--on button$/);
+    expect(r.data.setting.on).toBe('button');
+    expect(JSON.stringify(r.data.notes)).toContain('read `Button` as `button`');
   });
 });
 

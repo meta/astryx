@@ -2841,10 +2841,10 @@ describe('parts24', () => {
       ['dialogs', 'dialog'],
       ['tabs', 'tab'],
     ]) {
-      const r = await refusal(() =>
-        themeEditSet('p', 'opacity', '0.9', {cwd, on: plural}),
+      const r = /** @type {any} */ (
+        await themeEditSet('p', 'opacity', '0.9', {cwd, on: plural})
       );
-      expect(r.run[0], plural).toMatch(new RegExp(`--on ${part}$`));
+      expect(r.data.setting.on, plural).toBe(part);
     }
     const shadow = await refusal(() =>
       themeEditSet('p', 'shadow', 'none', {cwd, on: 'card'}),

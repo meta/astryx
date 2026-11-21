@@ -199,15 +199,17 @@ describe('listed twice value names', () => {
   });
   it('set reads a part named in words as that part, never the group one word names', async () => {
     await themeEditNew('pw', {cwd, like: 'neutral'});
-    const inputs = await refusal(() =>
-      themeEditSet('pw', 'padding-left', '12px', {cwd, on: 'text inputs'}),
+    const inputs = /** @type {any} */ (
+      await themeEditSet('pw', 'padding-left', '12px', {
+        cwd,
+        on: 'text inputs',
+      })
     );
-    expect(inputs.run[0]).toMatch(/ --on text-input\b/);
-    expect(inputs.run[0]).not.toMatch(/ --on inputs\b/);
-    const header = await refusal(() =>
-      themeEditSet('pw', 'padding', '8px', {cwd, on: 'dialog header'}),
+    expect(inputs.data.setting.on).toBe('text-input');
+    const header = /** @type {any} */ (
+      await themeEditSet('pw', 'padding', '8px', {cwd, on: 'dialog header'})
     );
-    expect(header.run[0]).toMatch(/ set pw padding 8px --on dialog-header$/);
+    expect(header.data.setting.on).toBe('dialog-header');
   }, 240_000);
 
   it('a variant typed in other letters or with = gets the corrected set command', async () => {
