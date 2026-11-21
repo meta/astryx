@@ -7,7 +7,9 @@
  *   AX1 and AX2 relative to the default body size)
  * @output Real-browser evidence that the three lanes never overlap or leave
  *   the screen, that the row wraps when they do not fit, and that the center
- *   sits at the toolbar's middle at the default text size
+ *   sits at the toolbar's middle at the default text size, and that a wrapped
+ *   row with a bottom divider paints its first frame with the indicator on
+ *   its tab
  * @position Browser proof of Toolbar FR2's wrap (AST-102 FR4)
  */
 
@@ -179,6 +181,56 @@ test('with a bottom divider a wrapped row keeps the indicator on its tab', async
       return Math.abs(indicatorBottom - tabBottom) <= 2;
     })
     .toBe(true);
+});
+
+test('with a bottom divider a wrapped row paints its first frame with the indicator on its tab', async ({
+  page,
+}) => {
+  await setDefaultFontSize(page, 16);
+  // A page observer created after the toolbar's runs after it in the same
+  // delivery, between layout and paint, so it reads what the first frame
+  // paints.
+  await page.addInitScript(() => {
+    const frameWindow = window as typeof window & {
+      firstFrame?: {indicatorBottom: number; tabBottom: number} | 'missing';
+    };
+    new MutationObserver((_, mutations) => {
+      const row = document.querySelector('[role="toolbar"]');
+      if (row == null) {
+        return;
+      }
+      mutations.disconnect();
+      const firstDelivery = new ResizeObserver(() => {
+        firstDelivery.disconnect();
+        const indicator = [
+          ...document.querySelectorAll<HTMLElement>('.astryx-tab-indicator'),
+        ].find(element => getComputedStyle(element).opacity !== '0');
+        const tab = indicator?.closest<HTMLElement>('.astryx-tab');
+        frameWindow.firstFrame =
+          indicator == null || tab == null
+            ? 'missing'
+            : {
+                indicatorBottom: indicator.getBoundingClientRect().bottom,
+                tabBottom: tab.getBoundingClientRect().bottom,
+              };
+      });
+      firstDelivery.observe(row);
+    }).observe(document, {childList: true, subtree: true});
+  });
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-toolbar--with-center-tab-navigation&viewMode=story`,
+  );
+  const firstFrame = await page
+    .waitForFunction(
+      () => (window as typeof window & {firstFrame?: unknown}).firstFrame,
+    )
+    .then(handle => handle.jsonValue());
+  expect(firstFrame).not.toBe('missing');
+  const {indicatorBottom, tabBottom} = firstFrame as {
+    indicatorBottom: number;
+    tabBottom: number;
+  };
+  expect(Math.abs(indicatorBottom - tabBottom)).toBeLessThanOrEqual(2);
 });
 
 test('with a bottom divider and an empty start lane the indicator sits on the rail', async ({
