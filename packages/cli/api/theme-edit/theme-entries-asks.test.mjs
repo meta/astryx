@@ -987,10 +987,12 @@ describe('refusal suggests checked checks', () => {
         expect(r.run.join('\n')).not.toMatch(/ set b --color-text-primary /);
         await runsAll(r.run);
       }
-      const ok = await refusal(() =>
-        themeEditSet('b', 'color', 'red', {cwd, on: 'text'}),
+      // A color is taken, into the text tokens on the text.
+      await themeEditSet('b', 'color', 'red', {cwd, on: 'text'});
+      expect(fs.readFileSync(path.join(cwd, 'themes/b/b.css'), 'utf8')).toMatch(
+        /--color-text-primary: red/,
       );
-      expect(bare(ok.run)[0]).toBe('set b --color-text-primary red --on text');
+      await themeEditUndo('b', {cwd});
     }, 240_000);
 
     it('N19: headings --on heading offers the dial and the asked weight or tracking', async () => {
@@ -1989,17 +1991,24 @@ describe('bare number length px', () => {
       expect(/** @type {any} */ (undo.data).now).toMatch(/buttons = caps/);
     }, 240_000);
 
-    it('5: an unknown state maps to the one meant, else names the part', async () => {
-      const pressed = await refusal(() =>
-        themeEditSet('b', 'background', 'red', {
+    it('5: an unknown state is written as the one meant, else names the part', async () => {
+      // (A button's pressed is its aria-pressed state now; "down" is still
+      // another word for active, the one it means: written as active.)
+      const pressed = /** @type {any} */ (
+        await themeEditSet('b', 'background', 'red', {
           cwd,
           on: 'button',
-          // (A button's pressed is its aria-pressed state now; "down" is
-          // still another word for active.)
           state: 'down',
-        }),
+        })
       );
-      expect(pressed.run[0]).toMatch(/--state active$/);
+      expect(pressed.data.setting.state).toBe('active');
+      expect(pressed.data.notes.join('\n')).toMatch(/read as --state active/);
+      await themeEditUndo('b', {
+        cwd,
+        thing: 'background',
+        on: 'button',
+        state: 'active',
+      });
       const open = await refusal(() =>
         themeEditSet('b', 'background', 'red', {
           cwd,

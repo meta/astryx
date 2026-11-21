@@ -10,5 +10,5 @@ export const doc = {
     'Citations embedded within a paragraph of text, showing how they flow inline with surrounding content.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Citation', 'Text'],
+  componentsUsed: ['Citation', 'Icon', 'Text'],
 };
