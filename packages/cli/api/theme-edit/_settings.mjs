@@ -182,6 +182,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note]
  * @property {string} [stateNote] - The state word a command wrote as another state, said in its result.
+ * @property {Setting[]} [sides] - A box shorthand's sides, each checked, which set writes in its place (never saved).
  */
 
 /**
