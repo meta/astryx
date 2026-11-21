@@ -123,8 +123,8 @@ describe('corners said with an edge the same ask gives the part', () => {
       console.warn(`skipped: ${unbuilt}`);
       test.skip();
     }
-    // A link shows no corners of its own, so each radius said of it is a
-    // whole border-radius: 12px, then 4px, both after the shadow.
+    // The whole 12px radius, then the top-left corner's 4px (written on
+    // that corner only), both after the shadow.
     const sets = await whole(
       'focused links: 12px corners, a 4px top left radius and a shadow',
     );
@@ -133,7 +133,7 @@ describe('corners said with an edge the same ask gives the part', () => {
       /^border-radius 12px --on link\b/.test(x),
     );
     const second = sets.findIndex(x =>
-      /^border-radius 4px --on link\b/.test(x),
+      /^border-start-start-radius 4px --on link\b/.test(x),
     );
     expect(shadow, sets.join('\n')).toBeGreaterThan(-1);
     expect(first, sets.join('\n')).toBeGreaterThan(shadow);
