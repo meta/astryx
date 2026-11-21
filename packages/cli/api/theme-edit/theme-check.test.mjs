@@ -626,7 +626,7 @@ describe('experimental theme check', () => {
       );
       expect(left.status).toBe(1);
       expect(left.stdout.trim().split('\n').at(-1)).toMatch(
-        /^next: in still\/stillTheme\.ts, give \S+.* a ':hover' fill that differs from its fill at rest$/,
+        /^next: in still\/stillTheme\.ts, set --color-overlay-hover to a tint that shows on [a-z]/,
       );
       const font = themeFile('fontless', {
         ...READABLE,
@@ -725,7 +725,7 @@ export const officialTheme = defineTheme({name: 'official', extends: neutralThem
       const d = (await themeEditCheck('src/matchaTheme.ts', {cwd: root})).data;
       const lost = d.problems.find(p => p.kind === 'font-unloaded');
       expect(lost?.message).toMatch(
-        /install @fontsource\/dm-sans installs it, and import '@fontsource\/dm-sans'; in src\/main\.tsx/,
+        /(npm install|pnpm add|yarn add|bun add) @fontsource\/dm-sans installs it, and import '@fontsource\/dm-sans'; in src\/main\.tsx/,
       );
       // Once the app loads it, it is not a problem.
       fs.writeFileSync(
@@ -925,6 +925,89 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(d.modes).toEqual(['dark']);
       expect(d.problems.some(p => p.kind === 'page')).toBe(true);
       expect(d.problems.some(p => p.kind === 'one-look')).toBe(false);
+    },
+    T,
+  );
+
+  it(
+    'finds text on a selected row, a part fill that keeps one mode, a fill a bar sets, faint chart colors and a light bar on a dark page',
+    async () => {
+      const d = await check(
+        themeFile(
+          'misses',
+          {...READABLE, '--color-data-categorical-blue': '#1b1b1b'},
+          {
+            'table-row': {
+              selected: {
+                backgroundColor: '#000080',
+                '--color-text-primary': '#ffffff',
+              },
+            },
+            button: {'variant:secondary': {backgroundColor: '#f3f5f7'}},
+            'layout-header': {base: {'--color-neutral': '#f3eef8'}},
+            'app-shell-header': {base: {backgroundColor: '#ffffff'}},
+          },
+        ),
+      );
+      const has = (/** @type {(p: any) => boolean} */ f) => d.problems.some(f);
+      // A badge in a selected row draws its own text on the navy fill.
+      expect(
+        has(p => p.part === 'table-row' && (p.parts ?? []).includes('badge')),
+      ).toBe(true);
+      // The secondary button's white fill stays white in dark.
+      expect(
+        has(
+          p =>
+            p.kind === 'part-text' && p.part === 'button' && p.mode === 'dark',
+        ),
+      ).toBe(true);
+      // A pale neutral the header sets for its buttons, under light text.
+      expect(
+        has(p => p.kind === 'bar-fill' && p.part === 'layout-header'),
+      ).toBe(true);
+      // A chart color as dark as the card in dark.
+      expect(has(p => p.kind === 'chart-ground' && p.mode === 'dark')).toBe(
+        true,
+      );
+      // A white header over the dark page.
+      expect(
+        has(p => p.kind === 'half-painted' && p.part === 'app-shell-header'),
+      ).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'declines a pin it cannot write once: a mode set by an expression, or an element that serves several themes',
+    async () => {
+      const root = app('shared');
+      const src = themeFile('shared', {
+        '--color-background-body': '#14161a',
+        '--color-text-primary': '#eceef2',
+        '--color-background-surface': '#1b1e23',
+        '--color-accent': '#7aa2ff',
+      });
+      fs.renameSync(
+        path.join(cwd, src),
+        path.join(root, 'src', 'sharedTheme.ts'),
+      );
+      fs.writeFileSync(
+        path.join(root, 'src', 'themes.ts'),
+        "import {sharedTheme} from './sharedTheme';\nexport const themes = {shared: sharedTheme} as const;\n",
+      );
+      const main = path.join(root, 'src', 'main.tsx');
+      fs.writeFileSync(
+        main,
+        "import '@astryxdesign/core/astryx.css';\nimport {Theme} from '@astryxdesign/core/theme';\nimport {themes} from './themes';\n\nexport const App = ({slug}: {slug: 'shared'}) => <Theme theme={themes[slug]}><main /></Theme>;\n",
+      );
+      const d = (
+        await themeEditCheck('src/sharedTheme.ts', {cwd: root, fix: true})
+      ).data;
+      // (The page paint reads each theme's own page color: it is written.)
+      expect(fs.readFileSync(main, 'utf8')).not.toMatch(/mode=/);
+      expect(d.notes.join('\n')).toMatch(
+        /serves every theme in src\/themes\.ts/,
+      );
     },
     T,
   );
