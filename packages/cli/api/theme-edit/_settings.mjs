@@ -7112,7 +7112,10 @@ export function compileTheme(ctx, data, base) {
           {...s, state, when: set.pairs.join('+') || undefined},
           target,
         );
-        rb.boxShadow = none ? core : coreNone ? v : `${v}, ${core}`;
+        // Core's ring goes first, over the theme's shadow: a shadow with
+        // inset layers of its own (a bevel) would cover a ring drawn under
+        // it, and the state would show nothing.
+        rb.boxShadow = none ? core : coreNone ? v : `${core}, ${v}`;
       }
     }
   };
