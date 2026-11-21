@@ -22,26 +22,29 @@ import {
   generateThemeCSS,
 } from './generateThemeRules';
 
-const SRC = join(__dirname, '..');
+// Core's components and Lab's: a Lab part can sit on a Core component.
+const SRCS = [join(__dirname, '..'), join(__dirname, '../../../lab/src')];
 
 async function docTargets(): Promise<{className: string; sitsOn?: string}[]> {
   const out: {className: string; sitsOn?: string}[] = [];
-  for (const dir of readdirSync(SRC, {withFileTypes: true})) {
-    if (!dir.isDirectory()) {
-      continue;
-    }
-    for (const file of readdirSync(join(SRC, dir.name))) {
-      if (!file.endsWith('.doc.mjs')) {
+  for (const SRC of SRCS) {
+    for (const dir of readdirSync(SRC, {withFileTypes: true})) {
+      if (!dir.isDirectory()) {
         continue;
       }
-      const mod = await import(pathToFileURL(join(SRC, dir.name, file)).href);
-      for (const value of Object.values(mod)) {
-        const docs = Array.isArray(value) ? value : [value];
-        for (const doc of docs) {
-          const targets = (doc as {theming?: {targets?: unknown}})?.theming
-            ?.targets;
-          if (Array.isArray(targets)) {
-            out.push(...(targets as typeof out));
+      for (const file of readdirSync(join(SRC, dir.name))) {
+        if (!file.endsWith('.doc.mjs')) {
+          continue;
+        }
+        const mod = await import(pathToFileURL(join(SRC, dir.name, file)).href);
+        for (const value of Object.values(mod)) {
+          const docs = Array.isArray(value) ? value : [value];
+          for (const doc of docs) {
+            const targets = (doc as {theming?: {targets?: unknown}})?.theming
+              ?.targets;
+            if (Array.isArray(targets)) {
+              out.push(...(targets as typeof out));
+            }
           }
         }
       }
@@ -270,6 +273,30 @@ describe('shared-element parts', () => {
     for (const cls of ['.astryx-timestamp', '.astryx-timer']) {
       expect(component.indexOf(cls)).toBeGreaterThan(-1);
       expect(component.lastIndexOf(cls)).toBeLessThan(partsAt);
+    }
+  });
+
+  it('puts a Lab part on a listed part in the parts sub-layer beside it', () => {
+    const theme = defineTheme({
+      name: 'shared-element-lab-parts',
+      tokens: {},
+      components: {
+        'list-item': {base: {backgroundColor: 'gray'}},
+        'transfer-list-item': {'side:selected': {backgroundColor: 'teal'}},
+        'toggle-button': {base: {borderColor: 'red'}},
+        'media-captions-button': {base: {borderColor: 'blue'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const partsAt = component.indexOf('@layer parts {');
+    expect(partsAt).toBeGreaterThan(-1);
+    for (const cls of [
+      '.astryx-list-item',
+      '.astryx-transfer-list-item',
+      '.astryx-toggle-button',
+      '.astryx-media-captions-button',
+    ]) {
+      expect(component.indexOf(cls), cls).toBeGreaterThan(partsAt);
     }
   });
 

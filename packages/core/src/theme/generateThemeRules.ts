@@ -1247,9 +1247,9 @@ interface ComponentRuleOptions {
 }
 
 /**
- * The two groups of a theme's component entries in the layered outputs: the
- * shared-element parts (`SHARED_ELEMENT_PARTS`), whose rules sit in the later `parts`
- * sub-layer, and every other entry, in `components`.
+ * The two groups of a theme's component entries in the layered outputs.
+ * `parts` holds the shared-element parts, whose rules sit in the later `parts`
+ * sub-layer. `regular` holds every other entry, in `components`.
  */
 type ComponentGroup = 'regular' | 'parts';
 
@@ -2382,7 +2382,8 @@ function indentRule(rule: string): string {
 /**
  * The astryx-theme content of a theme. With shared-element part rules, the
  * theme's rules sit in two sub-layers: the parts' rules in `parts`, every
- * other rule in `components`. Without them, the component CSS as it was.
+ * other rule in `components`. Without them, it returns the component CSS
+ * unchanged.
  */
 export function layeredThemeCSS(
   componentCss: string,

@@ -177,7 +177,7 @@ export const docs = {
       {className: 'astryx-media-volume-slider'},
       {className: 'astryx-media-time-slider'},
       {className: 'astryx-media-time', visualProps: ['display']},
-      {className: 'astryx-media-captions-button'},
+      {className: 'astryx-media-captions-button', sitsOn: 'toggle-button'},
       {className: 'astryx-media-fullscreen-button'},
       {className: 'astryx-media-playback-rate', visualProps: ['variant']},
       {className: 'astryx-media-playback-rate-button'},

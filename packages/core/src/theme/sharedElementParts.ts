@@ -3,8 +3,9 @@
 /**
  * @file sharedElementParts.ts
  * @input None
- * @output Exports SHARED_ELEMENT_PARTS: each theme target that sits on another
- *   component's element, mapped to that component's target
+ * @output Exports SHARED_ELEMENT_PARTS: each theme target whose entries win
+ *   over the component whose element it sits on (not `timestamp` or `timer`),
+ *   mapped to that component's target
  * @position Read by the theme compiler, which emits a shared-element part's rules
  *   in a later astryx-theme sub-layer than the rest, so a theme's entry for
  *   the part wins over its entries for the component it sits on. Each entry
@@ -41,6 +42,7 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'input-status-icon': 'icon',
   'list-item': 'item',
   'markdown-blockquote': 'blockquote',
+  'media-captions-button': 'toggle-button',
   'more-menu': 'dropdown-menu',
   'multi-selector-indicator-icon': 'icon',
   'multi-selector-popup': 'popover',
@@ -55,10 +57,11 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'timestamp-copy-button': 'button',
   'toast-close': 'button',
   'toggle-button': 'button',
+  'transfer-list-item': 'list-item',
   'typeahead-popup': 'popover',
 };
 
-/** Whether a theme target is a part on another component's element. */
+/** Whether a theme target's entries win over the component it sits on. */
 export function isSharedElementPart(target: string): boolean {
   return Object.hasOwn(SHARED_ELEMENT_PARTS, target);
 }
