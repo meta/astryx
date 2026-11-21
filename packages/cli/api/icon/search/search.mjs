@@ -19,6 +19,7 @@ import {
   iconSetKey,
   importLine,
   loadIconSets,
+  meaningWithFallbacks,
   missingIconLook,
   noIconSetNext,
 } from '../_adapter.mjs';
@@ -186,7 +187,10 @@ export function projectLooks(choice) {
  * names for its set when its icon has that look, and a match that a
  * definition names also has its meaning import. With no set installed, not
  * even a withdrawn one, the answer names the Astryx icon definitions that
- * match, built-in ones first, and how to get a set.
+ * match, built-in ones first, with the built-in that draws in place of a
+ * matching definition Core does not draw (unless a match ranked above it has
+ * none),
+ * and how to get a set.
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} query
@@ -289,7 +293,9 @@ function inLook(match, sets, looks) {
 /**
  * The answer when no icon set is installed: no icon matches, so it names
  * the Astryx icon definitions that do, built-in ones first (Core draws those
- * by name with no set), and how to get a set.
+ * by name with no set) with the built-in that draws in place of a matching
+ * definition Core does not draw, unless a match ranked above it has none,
+ * and how to get a set.
  * @param {string} query
  * @param {number} limit
  * @param {boolean} discoverListsPacks
@@ -297,11 +303,42 @@ function inLook(match, sets, looks) {
  */
 function noIconSet(query, limit, discoverListsPacks) {
   const docs = astryxIconDefinitions().definitions.map(each => each.doc);
+  const byName = new Map(docs.map(doc => [doc.name, doc]));
   const found = definitionMatches(query).map(match => match.doc);
-  const ordered = [
+  const matched = new Set(
+    found.filter(doc => doc.builtIn).map(doc => doc.name),
+  );
+  // With no set, Core draws only the built-in definitions, so a matching
+  // definition that Core does not draw lists the built-in that draws in its
+  // place (FR23's fallback). Only the ones that rank above every matching
+  // definition with no such built-in count: a match ranked above that Core
+  // cannot draw at all is what the ask names (`settings`), not a weaker
+  // match's fallback. A built-in the query matches too takes the better of
+  // its own place and theirs; one that only a fallback brings comes after
+  // the built-ins that match.
+  /** @param {(typeof docs)[number]} doc */
+  const drawnAs = doc =>
+    meaningWithFallbacks(doc.name)
+      .map(name => byName.get(name))
+      .find(each => each?.builtIn);
+  const end = found.findIndex(doc => !drawnAs(doc));
+  const counted = end < 0 ? found : found.slice(0, end);
+  const builtIns = [
+    ...counted.flatMap(doc => {
+      const drawn = drawnAs(doc);
+      return drawn && matched.has(drawn.name) ? [drawn] : [];
+    }),
     ...found.filter(doc => doc.builtIn),
-    ...found.filter(doc => !doc.builtIn),
   ];
+  const brought = counted.flatMap(doc => {
+    const drawn = doc.builtIn ? undefined : drawnAs(doc);
+    return drawn && !matched.has(drawn.name) ? [drawn] : [];
+  });
+  const ordered = [
+    ...builtIns,
+    ...brought,
+    ...found.filter(doc => !doc.builtIn),
+  ].filter((doc, i, list) => list.findIndex(o => o.name === doc.name) === i);
   return {
     type: 'icon.search',
     data: {

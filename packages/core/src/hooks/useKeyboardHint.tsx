@@ -27,7 +27,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Kbd} from '../Kbd';
-import {useLayer} from '../Layer/useLayer';
+import {noInvoker, useLayerInternal} from '../Layer/useLayer';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   registerEnglishFallback,
@@ -177,10 +177,11 @@ export function useKeyboardHint(
     layerAnchorRef.current(null);
   }, [clearDismissTimeout]);
 
-  const layer = useLayer({
+  const layer = useLayerInternal({
     mode: 'context',
     onShow: handleLayerShow,
     onHide: handleLayerHide,
+    getInvoker: noInvoker,
   });
   layerAnchorRef.current = layer.ref;
 

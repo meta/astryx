@@ -34,7 +34,7 @@ const COMPONENT_FILE = 'packages/core/src/Calendar/Calendar.tsx';
 const INFRA_FILE = 'packages/core/src/utils/plainDate.ts';
 const DATE_PARSER_INFRA_FILE = 'packages/core/src/utils/dateParser.ts';
 const COLLATOR_INFRA_FILE = 'packages/core/src/i18n/useCollator.ts';
-const LIST_FORMATTER_INFRA_FILE = 'packages/core/src/i18n/useListFormatter.ts';
+const LIST_FORMATTER_INFRA_FILE = 'packages/core/src/i18n/listFormat.ts';
 const RELATIVE_TIME_INFRA_FILE =
   'packages/core/src/Timestamp/formatRelativeTime.ts';
 const NUMBER_PARSER_INFRA_FILE =
