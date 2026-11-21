@@ -168,17 +168,19 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
       console.warn(`skipped: ${unbuilt}`);
       test.skip();
     }
+    // A link shows no corners of its own: the asked fill gives them an edge.
     await themeEditNew('h', {cwd, like: 'neutral'});
     const {data} = await themeEditHow(
-      'hovered checkboxes: a #0069d6 fill and 12px corners',
+      'links when disabled: a #0069d6 fill and 12px corners',
       {cwd, theme: 'h'},
     );
-    const whole = (data.results ?? []).find(r =>
-      /^all of it, in order/.test(r.text),
-    );
+    const whole =
+      (data.results ?? []).find(r => /^all of it, in order/.test(r.text)) ??
+      (data.results ?? [])[0];
     const sets = (whole?.commands ?? []).join('\n');
-    expect(sets).toMatch(/#0069d6/);
-    expect(sets).toMatch(/12px/);
+    expect(sets).toMatch(/#0069d6.*--on link/);
+    expect(sets).toMatch(/12px --on link/);
+    expect(sets.indexOf('#0069d6')).toBeLessThan(sets.indexOf('12px'));
   }, 240_000);
 
   it('names the pager for each page and keeps a removal off the row', async test => {
@@ -222,5 +224,38 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
     expect(data.parts).toEqual(['pagination']);
     const css = fs.readFileSync(themeFiles(cwd, 'f').css, 'utf8');
     expect(css).toMatch(/\.astryx-pagination\s*\{[^}]*border-radius: 8px/);
+  }, 240_000);
+
+  it('keeps a shadow on a bar the theme fills, and a side border on the bar', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('g', {cwd, like: 'neutral'});
+    await themeEditSet('g', 'background-color', '#f8f9fa', {
+      cwd,
+      on: 'pagination',
+    });
+    const shadow = await themeEditSet(
+      'g',
+      'box-shadow',
+      '0 1px 2px rgba(0, 0, 0, 0.05)',
+      {cwd, on: 'pagination'},
+    );
+    expect(shadow.data.parts).toEqual(['pagination']);
+    const side = await themeEditSet('g', 'border-top', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(side.data.parts).toEqual(['pagination']);
+    const {data} = await themeEditHow(
+      'a 1px #dddddd top border on pagination',
+      {
+        cwd,
+        theme: 'g',
+      },
+    );
+    const sets = (data.results ?? []).flatMap(r => r.commands).join('\n');
+    expect(sets).not.toMatch(/--on pagination-list\b/);
   }, 240_000);
 });

@@ -2397,7 +2397,8 @@ function afterAskedEdge(env, d, drafts) {
     .filter(x => x !== d && x.sequence)
     .flatMap(x => x.options[0] ?? [])
     .find(
-      (/** @type {any} */ x) => x.verb === 'set' && x.on === on && givesEdge(x),
+      (/** @type {any} */ x) =>
+        x.verb === 'set' && x.on === on && givesEdge(x, d.options[0][0].state),
     );
   if (!edge || d.options.some((/** @type {any[]} */ o) => env.check(o).ok))
     return;

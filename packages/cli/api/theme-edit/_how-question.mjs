@@ -12541,6 +12541,7 @@ export function draftAnswer(ctx, env, question) {
       o =>
         !o.state &&
         !o.neg &&
+        !sideOf(o.text) &&
         o.aspects.some(a => STRIP_ASPECTS.includes(a)) &&
         o.parts.some(q => q.on === frame || rowFrameOf(ctx, q.on) === frame),
     ) ||
@@ -12559,9 +12560,11 @@ export function draftAnswer(ctx, env, question) {
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
         const frame = rowFrameOf(ctx, p.on);
+        // (A side's border is a rule across the part, said of the part.)
         if (
           frame &&
-          (c.aspects.some(a => STRIP_ASPECTS.includes(a)) ||
+          ((!sideOf(c.text) &&
+            c.aspects.some(a => STRIP_ASPECTS.includes(a))) ||
             (c.aspects.includes('corners') && framedEdge(frame)))
         )
           return [{...p, on: frame}];
@@ -14675,7 +14678,7 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} text
    * @returns {'top' | 'bottom' | 'left' | 'right' | undefined}
    */
-  const sideOf = text => {
+  function sideOf(text) {
     let t = ` ${text.toLowerCase()} `;
     for (const [re] of lex.parts) {
       const m = re.exec(t);
@@ -14690,7 +14693,7 @@ export function draftAnswer(ctx, env, question) {
     return /** @type {'top' | 'bottom' | 'left' | 'right'} */ (
       m[1] ?? (m[2] ? 'bottom' : 'top')
     );
-  };
+  }
   /**
    * The side a clause says is drawn see-through: "a transparent bottom",
    * "a transparent bottom border", "the top edge transparent". A side word
@@ -29139,7 +29142,7 @@ export function draftAnswer(ctx, env, question) {
       if (!st.on || !cornerStep(st) || C.showsCorners(one(st.on))) continue;
       let edge = -1;
       for (let j = i + 1; j < all.length; j++)
-        if (all[j].on === st.on && !all[j].state && givesEdge(all[j])) edge = j;
+        if (all[j].on === st.on && givesEdge(all[j], st.state)) edge = j;
       if (edge < 0) continue;
       all.splice(i, 1);
       all.splice(edge, 0, st);

@@ -4590,22 +4590,32 @@ export function partsOf(ctx, s) {
 }
 
 /**
- * The row a border, border radius or shadow set on a part goes on instead
- * (a pager's control row, for one set on the pager): the part paints no
- * box of its own, and its controls sit side by side in a row that frames
- * them as one strip. On the part it would land on the whole bar, or show
- * nothing; on each control it would box each one apart. Null for every
- * other setting, the corners dial included: it rounds each control.
+ * The row a whole border, border radius or shadow set on a part goes on
+ * instead (a pager's control row, for one set on the pager): the part
+ * paints no box of its own, and its controls sit side by side in a row
+ * that frames them as one strip. On the part it would land on the whole
+ * bar, or show nothing; on each control it would box each one apart. Null
+ * for every other setting: a side's border, the corners dial (it rounds
+ * each control), and a radius or shadow on a part the theme fills.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'thing'>} s
  * @returns {string | null}
  */
 export function boxFrameOf(ctx, s) {
   if (!s.on || FAMILIES[s.on]) return null;
-  // (A radius on a part the theme fills rounds that part, as it always
-  // did: the fill is its box.)
+  const thing = kebab(String(s.thing ?? ''));
+  // Only the whole outline goes on the row: a side's border is a rule
+  // across the part, said of the part.
   if (
-    /radius$/.test(kebab(String(s.thing ?? ''))) &&
+    !/^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius)$/.test(
+      thing,
+    )
+  )
+    return null;
+  // (A radius or shadow on a part the theme fills stays on that part, as it
+  // always did: the fill is its box.)
+  if (
+    /(?:radius|shadow)$/.test(thing) &&
     (ctx.settingsNow ?? []).some(
       x =>
         x.on === s.on &&
@@ -4614,8 +4624,6 @@ export function boxFrameOf(ctx, s) {
         givesEdge(x),
     )
   )
-    return null;
-  if (!/^(?:box-shadow|border)(?:-|$)/.test(kebab(String(s.thing ?? ''))))
     return null;
   const own = ctx.C?.MAP?.[s.on]?.own ?? {};
   if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
@@ -4708,8 +4716,6 @@ export function rowFrameOf(ctx, part) {
 export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
-  const frame = rowFrameOf(ctx, part);
-  if (frame) return [frame];
   const inner = roundedPartsInside(ctx, part).filter(
     t => t !== part && drawsBorder(ctx, t),
   );
@@ -14313,9 +14319,9 @@ export function cornerParts(ctx, part) {
 /**
  * Whether a setting gives its part an edge that shows its corners: a fill,
  * border, shadow or outline that is not none, zero or transparent, at rest
- * or in the state the corners are for ("hovered checkboxes: a fill and
- * 12px corners"), or in any state when `state` is true (corners show
- * whenever that edge does).
+ * or in the state the corners are for ("disabled links: a fill and 12px
+ * corners"), or in any state when `state` is true (corners show whenever
+ * that edge does).
  * @param {{thing?: unknown, value?: unknown, state?: unknown}} x
  * @param {unknown} [state] the corners' own state, or true for any
  */
