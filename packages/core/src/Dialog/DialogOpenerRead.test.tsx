@@ -84,4 +84,32 @@ describe("Dialog reads its opener's box only for an entrance that uses it (archi
     stubReducedMotion(true);
     expect(openAndCountOpenerReads()).toBe(0);
   });
+
+  it('reads the preference at each open, so a change while closed applies to the next open', () => {
+    stubReducedMotion(true);
+    render(<Opener />);
+    const opener = screen.getByRole('button', {name: 'Open'});
+    const read = vi.spyOn(opener, 'getBoundingClientRect');
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(read).not.toHaveBeenCalled();
+
+    act(() => {
+      screen
+        .getByRole('dialog', {hidden: true})
+        .dispatchEvent(new Event('cancel', {cancelable: true}));
+    });
+    expect(screen.getByRole('dialog', {hidden: true})).not.toHaveAttribute(
+      'open',
+    );
+
+    stubReducedMotion(false);
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
 });
