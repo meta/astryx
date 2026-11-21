@@ -846,8 +846,8 @@ export function createResizableAs(
 
   /**
    * Nothing is written while the basis stands in, nor while a gesture runs.
-   * Before the region is first resized, only a restored size that the bounds
-   * or snap points changed is written, so storage keeps the size it shows.
+   * Before the first resize, only a restored size that the bounds or snaps
+   * changed is written. Storage then keeps the size the region shows.
    */
   function persist(): void {
     const key = opts.autoSaveId;
