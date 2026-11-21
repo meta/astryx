@@ -8297,14 +8297,9 @@ async function changeOnce(
   // popup drawn on that popover: their rules meet on that element, and the
   // build's order alone decides which shows. Named, with the line that
   // gives the other part this look too.)
-  // (A keep line's value, Core's look back, and the host of the part named
-  // itself, whose look that part keeps beside its own, meet nothing to
-  // name.)
-  if (
-    sub === 'set' &&
-    s.on &&
-    !/^(?:revert|revert-layer|initial)$/i.test(String(s.value).trim())
-  ) {
+  // (A part named on its own outranks its host's rule on that element, so
+  // the two meet nothing to name: a keep line names only its own part.)
+  if (sub === 'set' && s.on) {
     const MAPE = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
     const prop = kebab(String(s.thing));
     /** @type {Map<import('./_settings.mjs').Setting, Set<string>>} */

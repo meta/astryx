@@ -65,4 +65,22 @@ describe('a dialog shadow and a menu shadow', () => {
       /box-shadow on menus and box-shadow = 0 3px 7px [^\n]* on dialog meet on one element: popover/,
     );
   }, 240_000);
+
+  it("names them for a menu shadow set back to Core's look as well", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('k', {cwd, like: 'neutral'});
+    await themeEditSet('k', 'box-shadow', '0 3px 7px rgba(0, 0, 0, 0.3)', {
+      cwd,
+      on: 'dialog',
+    });
+    const r = /** @type {any} */ (
+      await themeEditSet('k', 'box-shadow', 'revert-layer', {
+        cwd,
+        on: 'menus',
+      })
+    );
+    expect(r.data.notes.join('\n')).toMatch(
+      /box-shadow on menus and box-shadow = 0 3px 7px [^\n]* on dialog meet on one element: popover/,
+    );
+  }, 240_000);
 });
