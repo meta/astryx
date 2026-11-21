@@ -72,5 +72,13 @@ describe('a padding on card', () => {
     expect(notes).not.toMatch(/padding initial --on clickable-card/);
     expect(notes).not.toMatch(/does not reach clickable-card/);
     expect(rulesOf('c', 'card')).toMatch(/24px/);
+    // (Running the keep line names no meeting with the card's own look.)
+    const k = /** @type {any} */ (
+      await themeEditSet('c', 'padding', 'var(--spacing-4)', {
+        cwd,
+        on: 'clickable-card',
+      })
+    );
+    expect(k.data.notes.join('\n')).not.toMatch(/meet on one element/);
   }, 240_000);
 });
