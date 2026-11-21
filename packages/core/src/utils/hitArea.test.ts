@@ -1018,6 +1018,107 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  describe('a neighbour that no tap can reach', () => {
+    /**
+     * Measures the switch with the link 8 px to its right, then sends a touch
+     * 6 px past the switch and 2 px from the link, and its click. Whether the
+     * click was swallowed.
+     */
+    function tapBesideLink(): boolean {
+      const control = byId('switch');
+      place(control, rect(100, 100, 24, 24));
+      place(byId('link'), rect(132, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+      control.dispatchEvent(press);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(click);
+      stop();
+      return click.defaultPrevented;
+    }
+
+    /** Moves the link into a new `<div>` that has `attributes`. */
+    function wrapLink(attributes: Record<string, string>): void {
+      const link = byId('link');
+      const wrapper = document.createElement('div');
+      for (const [name, value] of Object.entries(attributes)) {
+        wrapper.setAttribute(name, value);
+      }
+      link.replaceWith(wrapper);
+      wrapper.append(link);
+    }
+
+    it('still swallows a touch nearer a neighbour that takes taps', () => {
+      expect(tapBesideLink()).toBe(true);
+    });
+
+    it('lets a touch through beside a neighbour in an inert subtree', () => {
+      wrapLink({inert: ''});
+      expect(tapBesideLink()).toBe(false);
+    });
+
+    it('lets a touch through beside a disabled neighbour', () => {
+      byId('link').outerHTML = '<button id="link" disabled>Details</button>';
+      expect(tapBesideLink()).toBe(false);
+    });
+
+    it('lets a touch through beside a neighbour that takes no pointer events', () => {
+      wrapLink({style: 'pointer-events: none'});
+      expect(tapBesideLink()).toBe(false);
+    });
+
+    it('lets a touch through beside a neighbour that checkVisibility calls hidden', () => {
+      const checkVisibility = vi.fn(() => false);
+      Object.defineProperty(byId('link'), 'checkVisibility', {
+        configurable: true,
+        value: checkVisibility,
+      });
+      expect(tapBesideLink()).toBe(false);
+      expect(checkVisibility).toHaveBeenCalledWith({checkVisibilityCSS: true});
+    });
+
+    describe('where checkVisibility is missing, as in jsdom', () => {
+      it('lets a touch through beside a neighbour in a hidden subtree', () => {
+        expect(typeof byId('link').checkVisibility).toBe('undefined');
+        wrapLink({style: 'visibility: hidden'});
+        expect(tapBesideLink()).toBe(false);
+      });
+
+      it('lets a touch through beside a neighbour whose ancestor skips its contents', () => {
+        wrapLink({style: 'content-visibility: hidden'});
+        expect(tapBesideLink()).toBe(false);
+      });
+    });
+
+    it('still swallows a touch nearer a neighbour drawn at opacity 0, which still takes taps', () => {
+      wrapLink({style: 'opacity: 0'});
+      expect(tapBesideLink()).toBe(true);
+    });
+
+    it('still stops the hit area halfway to a neighbour that no tap can reach, reading no style in the pass', () => {
+      wrapLink({inert: ''});
+      const control = byId('switch');
+      layOut(control, 24, 24);
+      place(control, rect(100, 100, 24, 24));
+      place(byId('link'), rect(132, 100, 60, 24));
+      const getComputedStyle = vi.spyOn(window, 'getComputedStyle');
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+      expect(getComputedStyle).not.toHaveBeenCalled();
+      stop();
+    });
+  });
+
   describe('when an animation moves boxes between the touch and its click', () => {
     /** One running animation of `target`, from keyframes jsdom cannot run. */
     const running = (target: Element, frames: Keyframe[]) => ({

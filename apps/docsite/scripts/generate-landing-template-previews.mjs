@@ -75,6 +75,13 @@ const templatesDir = path.resolve(
 // high-density screen. It must be a width the image optimizer allows.
 export const PREVIEW_IMAGE_WIDTH = 640;
 
+/**
+ * How a preview whose markup the site takes is rendered: the site's own
+ * StyleX styles style it, so it keeps StyleX's class names instead of the
+ * short aliases whose rules only the file's own stylesheet holds.
+ */
+export const PREVIEW_MARKUP_RENDER = {keepClassNames: true};
+
 // The page fills the frame and never scrolls, as a live template preview
 // fills its tile: without this, a template taller than the frame shows a
 // scrollbar where scrollbars are always visible. The card cannot run script
@@ -97,7 +104,7 @@ const SOURCE_BLOCK =
  * The page's script, which the render puts after the embedded source. It
  * holds no closing script tag of its own: the render escapes that.
  */
-const PAGE_SCRIPT = /<script>[\s\S]*?<\/script>/u;
+const PAGE_SCRIPT = /<script(?: type="module")?>[\s\S]*?<\/script>/u;
 
 /**
  * The page that the renderer renders for a tile: the template inside the
@@ -280,7 +287,7 @@ async function main() {
   /** @type {Record<string, string>} */
   const previews = {};
   const renderPage = async (id, pageDir) => {
-    await render('page.tsx', {cwd: pageDir, out: 'page.html'});
+    await render('page.tsx', {cwd: pageDir, out: 'page.html', ...PREVIEW_MARKUP_RENDER});
     previews[id] = previewMarkup(
       fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
     );

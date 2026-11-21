@@ -54,10 +54,6 @@ import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
-// Aliased: a bare `File` would shadow the DOM type the image picker reads.
-// The angle mark for the Rotation field. Not `Angle`: that landed in
-// lucide after the version this repo pins, and a template has to build
-// against the icon set the consumer actually gets.
 import {
   PhotoEffectIcon,
   AlignBottomIcon,

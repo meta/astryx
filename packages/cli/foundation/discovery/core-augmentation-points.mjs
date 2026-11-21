@@ -2,16 +2,18 @@
 
 /**
  * @file The interfaces a Core declares for themes to widen by declaration
- *   merging (`interface ButtonVariantMap`), the prop axes they widen, and the
- *   keys a project adds to them.
+ *   merging (`interface ButtonVariantMap`), the prop axes they widen, the
+ *   keys a project adds to them, and the kinds of value a Core prop takes.
  * @input  a Core package root; a theme target token or a component name and
  *   a prop name; a project folder and a page
  * @output whether a Core subpath declares an interface; the interface a
  *   theme's styling key on a target's prop enrolls in; every interface whose
- *   keys a component prop's type takes; the keys a project adds to each
+ *   keys a component prop's type takes; the keys a project adds to each; the
+ *   kinds of value (string, number, object…) a prop's declared type takes
  * @position Read by theme build (api/theme/build/build.mjs), which augments
  *   these interfaces, and by render (api/render/_adapter.mjs), which takes a
- *   widened prop's added keys as values the prop has.
+ *   widened prop's added keys as values the prop has and warns for a value
+ *   of a kind the prop does not take.
  */
 
 import * as fs from 'node:fs';
@@ -786,19 +788,418 @@ function keyInterfaces(coreRoot, type, file, depth) {
  */
 function typeWideningInterfaces(coreRoot, pascalName, prop) {
   if (!coreRoot) return null;
+  return keyInterfacesOfAll(
+    coreRoot,
+    declaredPropTypes(coreRoot, pascalName, prop),
+    0,
+  );
+}
+
+/**
+ * Every declared type of `<pascalName prop>` in Core's source: the prop on
+ * `<pascalName>Props`, found from the component's subpath, else from Core's
+ * root module. Null when Core's source is absent or the props type leads
+ * where this reader does not follow.
+ * @param {string | null} coreRoot
+ * @param {string} pascalName
+ * @param {string} prop
+ * @returns {{type: any, file: string}[] | null}
+ */
+function declaredPropTypes(coreRoot, pascalName, prop) {
+  if (!coreRoot) return null;
   const from = path.join(coreRoot, 'src', 'index.ts');
   for (const specifier of [`${CORE_PACKAGE}/${pascalName}`, CORE_PACKAGE]) {
     const entry = coreModuleFile(coreRoot, from, specifier);
     if (!entry) continue;
     const declarations = declarationsOf(coreRoot, entry, `${pascalName}Props`);
     if (!declarations || declarations.length === 0) continue;
-    return keyInterfacesOfAll(
-      coreRoot,
-      propertyOfDeclarations(coreRoot, declarations, prop, 0),
-      0,
-    );
+    return propertyOfDeclarations(coreRoot, declarations, prop, 0);
   }
   return null;
+}
+
+/**
+ * @typedef {'string' | 'number' | 'boolean' | 'object' | 'array' | 'Date' | 'function'} ValueKind
+ * @typedef {{kinds: Set<ValueKind>, fields?: string[] | null, numbers: Set<number>, anyNumber: boolean}} PropKinds
+ */
+
+/**
+ * The kinds of value the declared type of `<pascalName prop>` takes, read
+ * from Core's source by the same reader as {@link propWideningInterfaces}: a
+ * string (a literal, a template, `keyof` a map), a number, a boolean, an
+ * object (with the field names of the first object shape it names), an
+ * array, a `Date` or a function. `null` and `undefined` add no kind. Null
+ * when any part of the type leads where this reader does not follow (a React
+ * type, a generic parameter, an enum): such a prop's kinds are not certain.
+ * @param {string | null} coreRoot the Core package root
+ * @param {string} pascalName
+ * @param {string} prop
+ * @returns {PropKinds | null}
+ */
+export function propValueKinds(coreRoot, pascalName, prop) {
+  const found = declaredPropTypes(coreRoot, pascalName, prop);
+  if (!found || found.length === 0 || !coreRoot) return null;
+  /** @type {PropKinds} */
+  const out = {kinds: new Set(), numbers: new Set(), anyNumber: false};
+  for (const {type, file} of found) {
+    if (!kindsOf(coreRoot, type, file, out, 0)) return null;
+  }
+  out.fields = out.fields?.length ? out.fields : null;
+  return out.kinds.size > 0 ? out : null;
+}
+
+/**
+ * The first written kind a prop's declared kinds do not take, or null when
+ * the prop takes every one. An array, a `Date` or a function passes where
+ * the type takes an object, since an object shape this reader names may
+ * still accept one.
+ * @param {ValueKind[]} written
+ * @param {PropKinds} declared
+ * @returns {ValueKind | null}
+ */
+export function unacceptedKind(written, declared) {
+  const objectLike = /** @type {ValueKind[]} */ (['array', 'Date', 'function']);
+  return (
+    written.find(
+      kind =>
+        !declared.kinds.has(kind) &&
+        !(objectLike.includes(kind) && declared.kinds.has('object')),
+    ) ?? null
+  );
+}
+
+/** Utility types that keep their argument's keys. */
+const KEY_KEEPING_TYPES = new Set([
+  'Partial',
+  'Required',
+  'Readonly',
+  'NonNullable',
+]);
+
+/** Global types a prop's type may name, by the kind of value they take. */
+const GLOBAL_KINDS = /** @type {Record<string, ValueKind>} */ ({
+  Date: 'Date',
+  Array: 'array',
+  ReadonlyArray: 'array',
+  Record: 'object',
+  Function: 'function',
+});
+
+/**
+ * Add the kinds a type node takes to `out`; false when it leads where this
+ * reader does not follow.
+ * @param {string} coreRoot
+ * @param {any} type
+ * @param {string} file
+ * @param {PropKinds} out
+ * @param {number} depth
+ * @returns {boolean}
+ */
+function kindsOf(coreRoot, type, file, out, depth) {
+  if (!type || depth > 24) return false;
+  switch (type.type) {
+    case 'TSStringKeyword':
+    case 'TSTemplateLiteralType':
+      out.kinds.add('string');
+      return true;
+    case 'TSNumberKeyword':
+      out.kinds.add('number');
+      out.anyNumber = true;
+      return true;
+    case 'TSBooleanKeyword':
+      out.kinds.add('boolean');
+      return true;
+    case 'TSUndefinedKeyword':
+    case 'TSNullKeyword':
+    case 'TSVoidKeyword':
+    case 'TSNeverKeyword':
+      return true;
+    case 'TSLiteralType': {
+      const literal = type.literal;
+      const kind =
+        literal.type === 'StringLiteral' || literal.type === 'TemplateLiteral'
+          ? 'string'
+          : literal.type === 'NumericLiteral' ||
+              literal.type === 'UnaryExpression'
+            ? 'number'
+            : literal.type === 'BooleanLiteral'
+              ? 'boolean'
+              : null;
+      if (!kind) return false;
+      out.kinds.add(kind);
+      if (kind === 'number') {
+        const n =
+          literal.type === 'UnaryExpression'
+            ? -literal.argument.value
+            : literal.value;
+        if (typeof n === 'number') out.numbers.add(n);
+        else out.anyNumber = true;
+      }
+      return true;
+    }
+    case 'TSTypeLiteral':
+      return addObject(out, type.members);
+    case 'TSFunctionType':
+    case 'TSConstructorType':
+      out.kinds.add('function');
+      return true;
+    case 'TSArrayType':
+    case 'TSTupleType':
+      out.kinds.add('array');
+      return true;
+    case 'TSParenthesizedType':
+    case 'TSOptionalType':
+      return kindsOf(coreRoot, type.typeAnnotation, file, out, depth + 1);
+    case 'TSTypeOperator':
+      if (type.operator === 'keyof')
+        return keyKinds(coreRoot, type.typeAnnotation, file, out);
+      return (
+        type.operator === 'readonly' &&
+        kindsOf(coreRoot, type.typeAnnotation, file, out, depth + 1)
+      );
+    case 'TSUnionType':
+      return type.types.every((/** @type {any} */ part) =>
+        kindsOf(coreRoot, part, file, out, depth + 1),
+      );
+    case 'TSIntersectionType':
+      return intersectionKinds(coreRoot, type.types, file, out, depth);
+    case 'TSIndexedAccessType': {
+      const index = type.indexType;
+      if (
+        index.type !== 'TSLiteralType' ||
+        typeof index.literal?.value !== 'string'
+      )
+        return false;
+      const found = propertyOfType(
+        coreRoot,
+        type.objectType,
+        file,
+        index.literal.value,
+        depth + 1,
+      );
+      if (!found || found.length === 0) return false;
+      return found.every(f =>
+        kindsOf(coreRoot, f.type, f.file, out, depth + 1),
+      );
+    }
+    case 'TSTypeReference': {
+      if (type.typeName.type !== 'Identifier') return false;
+      const name = type.typeName.name;
+      if (PASS_THROUGH_TYPES.has(name)) {
+        /** @type {PropKinds} */
+        const inner = {kinds: new Set(), numbers: new Set(), anyNumber: false};
+        if (
+          !kindsOf(
+            coreRoot,
+            type.typeParameters?.params?.[0],
+            file,
+            inner,
+            depth + 1,
+          )
+        )
+          return false;
+        for (const kind of inner.kinds) out.kinds.add(kind);
+        for (const n of inner.numbers) out.numbers.add(n);
+        out.anyNumber ||= inner.anyNumber;
+        // `Omit`, `Pick`, `Exclude` and `Extract` change which keys or members
+        // remain, so the first argument's field names are not the prop's.
+        if (inner.fields !== undefined)
+          addShape(out, KEY_KEEPING_TYPES.has(name) ? inner.fields : null);
+        return true;
+      }
+      const declarations = declarationsOf(coreRoot, file, name);
+      if (
+        declarations &&
+        declarations.length > 0 &&
+        declarations.every(d => d.node.type === 'TSInterfaceDeclaration')
+      ) {
+        // Every declaration of a merged interface is one shape.
+        out.kinds.add('object');
+        addShape(out, interfaceFields(coreRoot, declarations, depth + 1));
+        return true;
+      }
+      if (declarations && declarations.length > 0) {
+        return declarations.every(({node, file: at}) => {
+          if (node.type === 'TSTypeAliasDeclaration')
+            return kindsOf(coreRoot, node.typeAnnotation, at, out, depth + 1);
+          if (node.type === 'TSInterfaceDeclaration') {
+            out.kinds.add('object');
+            addShape(
+              out,
+              interfaceFields(coreRoot, [{node, file: at}], depth + 1),
+            );
+            return true;
+          }
+          return false;
+        });
+      }
+      if (declarations && Object.hasOwn(GLOBAL_KINDS, name)) {
+        out.kinds.add(GLOBAL_KINDS[name]);
+        return true;
+      }
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
+/**
+ * Add the kinds of the keys of an interface (`keyof ButtonVariantMap`): a
+ * string for a named key, a number for a numeric one. False for the keys of
+ * anything else (`keyof typeof styles` can hold numbers).
+ * @param {string} coreRoot
+ * @param {any} target the type `keyof` applies to
+ * @param {string} file
+ * @param {PropKinds} out
+ * @returns {boolean}
+ */
+function keyKinds(coreRoot, target, file, out) {
+  if (
+    target.type !== 'TSTypeReference' ||
+    target.typeName.type !== 'Identifier'
+  )
+    return false;
+  const declarations = declarationsOf(coreRoot, file, target.typeName.name);
+  if (!declarations || declarations.length === 0) return false;
+  if (!declarations.every(d => d.node.type === 'TSInterfaceDeclaration'))
+    return false;
+  for (const {node} of declarations) {
+    for (const member of node.body.body) {
+      if (member.type !== 'TSPropertySignature' || member.computed)
+        return false;
+      if (member.key.type === 'NumericLiteral') {
+        out.kinds.add('number');
+        out.numbers.add(member.key.value);
+      } else out.kinds.add('string');
+    }
+  }
+  return true;
+}
+
+/**
+ * The kinds of an intersection: those every part takes (`keyof Map & string`
+ * is a string). False when a part cannot be followed.
+ * @param {string} coreRoot
+ * @param {any[]} parts
+ * @param {string} file
+ * @param {PropKinds} out
+ * @param {number} depth
+ * @returns {boolean}
+ */
+function intersectionKinds(coreRoot, parts, file, out, depth) {
+  /** @type {ValueKind[] | null} */
+  let common = null;
+  /** @type {(string[] | null)[]} */
+  const shapes = [];
+  for (const part of parts) {
+    // `string & {}` keeps a string open to completion: `{}` adds no kind.
+    if (part.type === 'TSTypeLiteral' && part.members.length === 0) continue;
+    /** @type {PropKinds} */
+    const each = {kinds: new Set(), numbers: new Set(), anyNumber: false};
+    if (!kindsOf(coreRoot, part, file, each, depth + 1)) return false;
+    common =
+      common === null
+        ? [...each.kinds]
+        : common.filter(kind => each.kinds.has(kind));
+    if (each.fields !== undefined) shapes.push(each.fields);
+  }
+  for (const kind of common ?? []) out.kinds.add(kind);
+  // One object part names its fields; several make a shape this reader does
+  // not merge.
+  if (shapes.length > 0) addShape(out, shapes.length === 1 ? shapes[0] : null);
+  // The numbers an intersection keeps are not worked out: it takes any.
+  if (common?.includes('number')) out.anyNumber = true;
+  return true;
+}
+
+/**
+ * The names of the fields an object type's members declare. A member typed
+ * `never`, or one whose key is not a plain name (Core's brand keys are
+ * module paths), is a marker no page writes.
+ * @param {any[]} members
+ * @returns {string[]}
+ */
+function plainFields(members) {
+  return members.flatMap(m => {
+    if (m.type !== 'TSPropertySignature' || m.computed) return [];
+    if (m.typeAnnotation?.typeAnnotation?.type === 'TSNeverKeyword') return [];
+    const name = nameOf(m.key);
+    return /^[A-Za-z_$][\w$]*$/.test(name) ? [name] : [];
+  });
+}
+
+/**
+ * Record one object shape's fields in `out`. The message names fields only
+ * when every shape the type allows has the same ones: two different shapes,
+ * or a shape whose fields are not all known (null), leave none.
+ * @param {PropKinds} out
+ * @param {string[] | null} fields
+ */
+function addShape(out, fields) {
+  if (out.fields === undefined) out.fields = fields;
+  else if (
+    out.fields !== null &&
+    (fields === null || out.fields.join() !== fields.join())
+  )
+    out.fields = null;
+}
+
+/**
+ * Every field an interface takes: its own, from each of its declarations,
+ * and those of the interfaces it extends. Null when a base is generic or
+ * cannot be found.
+ * @param {string} coreRoot
+ * @param {{node: any, file: string}[]} declarations
+ * @param {number} depth
+ * @returns {string[] | null}
+ */
+function interfaceFields(coreRoot, declarations, depth) {
+  if (depth > 16) return null;
+  const fields = [];
+  for (const {node, file} of declarations) {
+    fields.push(...plainFields(node.body.body));
+    for (const base of node.extends ?? []) {
+      if (
+        base.expression?.type !== 'Identifier' ||
+        base.typeParameters ||
+        base.typeArguments
+      )
+        return null;
+      const found = declarationsOf(coreRoot, file, base.expression.name);
+      if (!found || found.length === 0) return null;
+      if (found.every(d => d.node.type === 'TSInterfaceDeclaration')) {
+        const inherited = interfaceFields(coreRoot, found, depth + 1);
+        if (!inherited) return null;
+        fields.push(...inherited);
+      } else if (
+        found.length === 1 &&
+        found[0].node.type === 'TSTypeAliasDeclaration' &&
+        found[0].node.typeAnnotation.type === 'TSTypeLiteral'
+      ) {
+        fields.push(...plainFields(found[0].node.typeAnnotation.members));
+      } else return null;
+    }
+  }
+  return [...new Set(fields)];
+}
+
+/**
+ * Add an object type literal to `out`. A shape with only call signatures is
+ * a function.
+ * @param {PropKinds} out
+ * @param {any[]} members
+ * @returns {boolean}
+ */
+function addObject(out, members) {
+  const callable =
+    members.length > 0 &&
+    members.every(
+      (/** @type {any} */ m) => m.type === 'TSCallSignatureDeclaration',
+    );
+  out.kinds.add(callable ? 'function' : 'object');
+  if (!callable) addShape(out, plainFields(members));
+  return true;
 }
 
 const CORE_PACKAGE = '@astryxdesign/core';

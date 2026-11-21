@@ -180,7 +180,10 @@ describe('wrong writes that are no longer accepted', () => {
       needsBases(test);
       expect(
         (await answer('make labels on accent buttons white')).first,
-      ).toEqual(["set n color '#ffffff' --on button --when variant:primary"]);
+      ).toEqual([
+        // (Written as said, as main writes it.)
+        "set n color '#ffffff' --on button --when variant:primary",
+      ]);
     },
     T,
   );
