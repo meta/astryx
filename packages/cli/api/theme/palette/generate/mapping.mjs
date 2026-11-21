@@ -1167,6 +1167,17 @@ export const round2 =
    */
   n => Math.round(n * 100) / 100;
 /**
+ * The text set exactly that sits on the accent tint and is not lifted there
+ * (secondary text is, see `lift`): links and accent text on a selected
+ * preset or row.
+ */
+const TINT_READERS = ['--color-text-accent'];
+/** The stops the accent tint may take, by mode: it stays a tint. */
+const ACCENT_TINT_WINDOW = /** @type {const} */ ({
+  light: [75, 95],
+  dark: [10, 40],
+});
+/**
  * The token mapping of a generated palette: each color token's stop in
  * light and dark, as the official Neutral theme maps its families, with the
  * contrast checks behind each choice.
@@ -1603,6 +1614,30 @@ export function mapPalette(candidate, dials, fills, context) {
           (Math.sign(b - a) === usual ? 1 : -1),
       );
       const away = order.filter(x => x !== fill[m]?.stop);
+      // Accent text set exactly that sits on the accent tint (a selected
+      // preset's) keeps reading: the tint takes the nearest stop, still a
+      // tint, under which it reads.
+      const readers = word
+        ? []
+        : TINT_READERS.map(k => exactOf(k, m)).filter(
+            /**
+             * @returns {v is string}
+             */
+            v => Boolean(v && parseColor(v) && alphaOf(v) >= 1),
+          );
+      if (readers.length) {
+        const [lo, hi] = ACCENT_TINT_WINDOW[m];
+        const reads = away
+          .filter(x => x >= lo && x <= hi)
+          .find(x =>
+            over(names.muted, ref(f.id, m, x, alpha), surfaces(m, f.id)).every(
+              ([, bg]) => readers.every(c => contrast(c, bg) >= TEXT),
+            ),
+          );
+        if (reads != null) {
+          return ref(f.id, m, reads, alpha);
+        }
+      }
       return ref(f.id, m, away[0] ?? order[0], alpha);
     });
     put(names.muted, f.id, muted);
