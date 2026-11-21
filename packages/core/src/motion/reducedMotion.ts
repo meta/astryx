@@ -1,14 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file reducedMotion.ts
- * @input The Reduced Motion preference, a theme's reducedMotion: 'always' mark
- *   and context, the primary pointer, the motion tables
- * @output reducesMotion and useReducesMotion (whether motion is reduced, for
- *   code that holds an element and for a hook that holds none),
- *   reducedMotionFade (the fade the animator would play, for motion it
+ * @input The Reduced Motion preference or a theme's reducedMotion: 'always'
+ *   mark (reducesMotion), the primary pointer, the motion tables
+ * @output reducedMotionFade (the fade the animator would play, for motion it
  *   does not drive), playReducedMotionDip, and the queries a transition spells
  * @position The one Reduced Motion policy (design:reduced-motion) for code
  *   beside the animator: a raw Web Animations fade, a CSS transition
@@ -49,14 +45,9 @@
  * - /packages/core/src/motion/animator.ts (its Reduced Motion path)
  */
 
-import {use} from 'react';
-import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
-import {useMediaQuery} from '../hooks/useMediaQuery';
+import {defaultIsCoarsePointer} from './animator';
 import {resolveMotion} from './resolveMotion';
-import {
-  ThemeReducesMotionContext,
-  themeReducesMotion,
-} from '../privateAttributes/reducedMotion.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
@@ -77,27 +68,6 @@ export const REDUCED_MOTION_INSTANT_QUERY =
 export interface ReducedMotionFade {
   readonly duration: number;
   readonly easing: string;
-}
-
-/**
- * Whether motion is reduced for `element`: the person's Reduce Motion setting,
- * or a theme's `reducedMotion: 'always'` mark on the element or an ancestor,
- * `<html>` included for the root theme.
- */
-export function reducesMotion(element?: Element | null): boolean {
-  return defaultPrefersReducedMotion() || themeReducesMotion(element);
-}
-
-/**
- * The hook form of `reducesMotion`, for a hook that holds no element: the
- * person's Reduce Motion setting, followed live, or a theme above the caller
- * with `reducedMotion: 'always'`.
- */
-export function useReducesMotion(): boolean {
-  const prefersReducedMotion = useMediaQuery(
-    '(prefers-reduced-motion: reduce)',
-  );
-  return prefersReducedMotion || use(ThemeReducesMotionContext);
 }
 
 /**

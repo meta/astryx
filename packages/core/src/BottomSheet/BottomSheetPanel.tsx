@@ -81,7 +81,7 @@ import {
   useSheetGestures,
   type SheetDragExit,
 } from './useSheetGestures';
-import {useReducesMotion} from '../motion/reducedMotion';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',

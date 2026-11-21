@@ -15,7 +15,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {useReducesMotion} from '../motion/reducedMotion';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {useTheme} from '../theme/useTheme';
 
 /**

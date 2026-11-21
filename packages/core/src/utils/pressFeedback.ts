@@ -67,7 +67,7 @@ import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
 import {isPrimaryClick} from './primaryClick';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component

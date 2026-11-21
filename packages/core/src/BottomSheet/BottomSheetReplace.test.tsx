@@ -29,6 +29,26 @@ import {
 } from './bottomSheetStack';
 import {isScrollLockActive} from '../hooks/rootScrollStyles';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+import type * as ThemeMotion from '../theme/themeMotion';
+
+// No public theme can set reducedMotion yet, so a theme whose motion has
+// tempo 0.76 resolves to 'always' through this mock.
+vi.mock('../theme/themeMotion', async importOriginal => {
+  const actual = await importOriginal<typeof ThemeMotion>();
+  return {
+    ...actual,
+    resolveMotionKnobs: (config?: {tempo?: number}) => {
+      const resolved = actual.resolveMotionKnobs(config);
+      return config?.tempo === 0.76
+        ? {...resolved, reducedMotion: 'always' as const}
+        : resolved;
+    },
+  };
+});
+
+const stillTheme = defineTheme({name: 'SheetStill', motion: {tempo: 0.76}});
 
 let nativeLog: {
   call: 'showModal' | 'show' | 'close' | 'showPopover' | 'hidePopover';
@@ -1049,6 +1069,44 @@ describe('BottomSheet replace: reduced motion (design:reduced-motion)', () => {
     endMotion(two, 'opacity');
     expect(two).not.toHaveAttribute('open');
     expect(openDialogs()).toEqual([]);
+  });
+
+  it("under a theme's reducedMotion: 'always', with the setting off, a coarse pointer's exit ends on its opacity fade", () => {
+    stubMedia(['(pointer: coarse)']);
+    render(
+      <Theme theme={stillTheme}>
+        <Flow />
+      </Theme>,
+    );
+    openFlow();
+    const one = getDialog('One');
+    fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
+    const two = getDialog('Two');
+    endMotion(two, 'transform');
+    expect(one).toHaveAttribute('open');
+    endMotion(one, 'opacity');
+    expect(one).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByRole('button', {name: 'Finish'}));
+    endMotion(two, 'transform');
+    expect(two).toHaveAttribute('open');
+    endMotion(two, 'opacity');
+    expect(two).not.toHaveAttribute('open');
+  });
+
+  it("under a theme's reducedMotion: 'always', with the setting off, the replaced sheet does not move down to a shorter entering sheet", () => {
+    stubMedia([]);
+    render(
+      <Theme theme={stillTheme}>
+        <Flow />
+      </Theme>,
+    );
+    openFlow();
+    const one = getDialog('One');
+    const two = getDialog('Two');
+    layoutSheet(one, 444, 400);
+    layoutSheet(two, 604, 240);
+    fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
+    expect(getPanel(one).style.transform).toBe('');
   });
 
   it('the replaced sheet does not move down to a shorter entering sheet (DR1), and the handoff still ends after its fade', () => {

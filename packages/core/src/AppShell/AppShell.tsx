@@ -104,7 +104,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
-import {useReducesMotion} from '../motion/reducedMotion';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 const HasActivity = typeof React.Activity !== 'undefined';

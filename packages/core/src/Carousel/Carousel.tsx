@@ -75,7 +75,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Carousel/Carousel.generated';
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 /**

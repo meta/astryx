@@ -59,7 +59,7 @@ import {
 } from './keyboardTarget';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /** How a target keeps a focused field above the on-screen keyboard. */
 export interface MobileKeyboardOptions {

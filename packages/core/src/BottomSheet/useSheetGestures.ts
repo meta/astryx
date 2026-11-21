@@ -77,7 +77,7 @@ import {
   resolveSettleOffset,
   scrimOpacityForOffset,
 } from './snapOffsets';
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * The stops a sheet of a given height rests at: offsets from fully-open in px,
