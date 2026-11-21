@@ -137,3 +137,20 @@ it('a saved sized gradient made darker for one mode is answered for that mode', 
     ),
   ).toBe(true);
 }, 240_000);
+
+it('a sized gradient with its mode said at the end is written whole, in that mode', async () => {
+  expect(
+    await commands(
+      'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+    ),
+  ).toContain(
+    "set pg background 'linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+}, 240_000);
+
+it('a slash between two asks after a gradient still splits them', async () => {
+  const lines = await commands(
+    'header background linear-gradient(#ffffff, #eeeeee) / cards red',
+  );
+  expect(lines.some(l => /--on card\b/.test(l))).toBe(true);
+}, 240_000);
