@@ -44,7 +44,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Astryx owns the meanings; libraries own the drawings. Astryx ships one icon definition per meaning, like `close`, `delete` or `search`: a camelCase name, one sentence that says the job the icon does, and a few words people use for it (`astryx docs cli/experimental/icon-definitions`). A definition names no library and no drawing, so any library can draw it its own way.',
+          text: 'Astryx owns the meanings; libraries own the drawings. Astryx ships one icon meaning per job, like `close`, `delete` or `search`: a camelCase name, one sentence that says the job the icon does, and a few words people use for it (`astryx docs cli/experimental/icon-definitions`). A definition names no library and no drawing, so any library can draw it its own way.',
         },
         {
           type: 'prose',
@@ -60,7 +60,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Related meanings belong to a `group`, such as `notifications` for `notification`, `notificationActive` and `notificationOff`. A match in `astryx experimental icon` lists the other meanings of its group as `relatives`, so an agent that asked for the bell sees that "mute" has a meaning of its own; a group never changes which icon comes first. A meaning can also declare `replaces`, naming an older meaning it takes the place of: the old name keeps answering, in an icon set\'s `map`, in a template\'s `icons` and in the search, and `integration check` names each `map` key to rename. A meaning your icon set adds may join an Astryx group or start its own, and may replace another of your own meanings, never an Astryx one.',
+          text: 'Related meanings belong to a `group`, such as `notifications` for `notification`, `notificationActive` and `notificationOff`. In the JSON of `astryx experimental icon`, every match lists the other meanings of its group as `relatives`; the text answer names them only under the first match, at most four. So an agent that asked for the bell sees that "mute" has a meaning of its own; a group never changes which icon comes first. A meaning can also declare `replaces`, naming an older meaning it takes the place of: the old name keeps answering, in an icon set\'s `map`, in a template\'s `icons` and in the search, and `integration check` names each `map` key to rename. A meaning your icon set adds may join an Astryx group or start its own, and may replace another of your own meanings, never an Astryx one.',
         },
         {
           type: 'prose',
