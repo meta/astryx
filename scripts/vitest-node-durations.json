@@ -1006,6 +1006,7 @@
     "packages/cli/api/theme-edit/theme-set-says-drawn-size-and-kept-page.test.mjs": 3.3,
     "packages/cli/api/theme-edit/theme-set-takes-text-a-part-reads.test.mjs": 10.6,
     "packages/cli/api/theme-edit/theme-sheet-cells-b.test.mjs": 2,
+    "packages/cli/api/theme-edit/theme-sheet-cells-fit.test.mjs": 0.5,
     "packages/cli/api/theme-edit/theme-sheet-cells.test.mjs": 6.6,
     "packages/cli/api/theme-edit/theme-sheet-modes.test.mjs": 15.8,
     "packages/cli/api/theme-edit/theme-sheet-overlay-open-light.test.mjs": 49.8,
