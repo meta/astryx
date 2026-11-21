@@ -436,7 +436,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   than one folder of it, is not copied and is
   named, and the theme is still added; nor is it
   copied into a folder that already holds editor state the add did not
-  write, which is left in place and named. With that state copied, the app
+  write, which is left in place and named; when that state is this bundle's own (the same
+  settings) and the bundle's state passes those checks, the copy still takes
+  the editor's descriptor, so the editor keeps updating it. With that state copied, the app
   copy's descriptor keeps the shared theme's display name and description,
   with the editor's mark and `maintained: false`, so the editor's next builds
   keep the copy current. The JSON names these files `workingFiles`. The receipt lists the files copied, and

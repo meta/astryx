@@ -2221,8 +2221,26 @@ export async function addSharedThemeToApp(source, options) {
       // With the editor's state beside it, the copy stays the editor's: its
       // descriptor keeps the shared theme's display name and description,
       // with the editor's mark and maintained: false, so the editor's next
-      // builds update it.
-      if (editorFiles.length) {
+      // builds update it. That holds for state already there too, when it
+      // is this bundle's own (the same settings, as working files a remove
+      // kept are) and the bundle's state passes every check a copy would.
+      const settingsName = `${name}.settings.json`;
+      const sameText = (/** @type {string} */ a, /** @type {string} */ b) => {
+        try {
+          return fs.readFileSync(a, 'utf-8') === fs.readFileSync(b, 'utf-8');
+        } catch {
+          return false;
+        }
+      };
+      const stateThere =
+        !editorFiles.length &&
+        staged.editor?.dir != null &&
+        !editorRefusal &&
+        sameText(
+          path.join(editorDir, settingsName),
+          path.join(staged.editor.dir, settingsName),
+        );
+      if (editorFiles.length || stateThere) {
         const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
         if (doc) {
           fs.writeFileSync(
