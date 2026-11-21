@@ -95,8 +95,9 @@ describe('icon words', () => {
       const mod = await load(path.join(ROOT, `packages/core/src/${name}/${name}.doc.mjs`));
       for (const doc of [mod.docs, mod.docsDense]) {
         const first = String(doc.usage.description);
-        expect(first, name).toMatch(/your icon library/);
+        expect(first, name).toMatch(/SVG component/);
         expect(first, name).toMatch(/TrashIcon/);
+        if (name === 'Icon') expect(first, name).toMatch(/your icon library/);
       }
     }
   });

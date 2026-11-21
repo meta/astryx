@@ -156,7 +156,7 @@ export const docs = {
   },
   usage: {
     description:
-      "Draws an icon: a built-in meaning by name (`icon=\"close\"`, `\"check\"`, `\"search\"`; the full list: `astryx component Icon --props`), drawn by the active theme's icons, or any SVG component you pass. For any other icon, such as a trash can, import its drawing from your icon library and pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'`, then `<Icon icon={TrashIcon} />`.",
+      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning by name (`icon=\"close\"`; the full list: `astryx component Icon --props`), which the active theme's icons draw, or any SVG component from your icon library, such as a trash can: `<Icon icon={TrashIcon} />`.",
     anatomy,
     bestPractices: [
       {
@@ -308,7 +308,7 @@ export const docsZh = {
   },
   usage: {
     description:
-      "Draws an icon: a built-in meaning by name (`icon=\"close\"`, `\"check\"`, `\"search\"`; the full list: `astryx component Icon --props`), drawn by the active theme's icons, or any SVG component you pass. For any other icon, such as a trash can, import its drawing from your icon library and pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'`, then `<Icon icon={TrashIcon} />`.",
+      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning by name (`icon=\"close\"`; the full list: `astryx component Icon --props`), which the active theme's icons draw, or any SVG component from your icon library, such as a trash can: `<Icon icon={TrashIcon} />`.",
     bestPractices: [
       {
         guidance: true,
@@ -362,10 +362,10 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    "Draws a built-in meaning by name (theme icons) or any SVG component. Other icons (e.g. trash): import from your icon library, pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'` → `<Icon icon={TrashIcon} />`.",
+    "Renders icons w/ Astryx design system colors + sizes. A built-in meaning by name (theme icons) or any SVG component from your icon library: `<Icon icon={TrashIcon} />`.",
   usage: {
     description:
-      "Draws an icon: a built-in meaning by name (`icon=\"close\"`, `\"check\"`, `\"search\"`; the full list: `astryx component Icon --props`), drawn by the active theme's icons, or any SVG component you pass. For any other icon, such as a trash can, import its drawing from your icon library and pass the component: `import {TrashIcon} from '@heroicons/react/24/outline'`, then `<Icon icon={TrashIcon} />`.",
+      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning by name (`icon=\"close\"`; the full list: `astryx component Icon --props`), which the active theme's icons draw, or any SVG component from your icon library, such as a trash can: `<Icon icon={TrashIcon} />`.",
     anatomy,
     bestPractices: [
       {
