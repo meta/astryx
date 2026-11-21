@@ -4628,34 +4628,50 @@ function clauseBefore(text, at) {
 export function pxLengthsSaid(text) {
   const LEAD = String.raw`(?:line[- ]?height|leading)`;
   const TEXT = String.raw`(?:(?:body|base|main)\s+)?(?:text|font|type)`;
-  const lengths = [...text.matchAll(/\b(\d+(?:\.\d+)?)\s?px\b/gi)].map(m => {
+  const raw = [...text.matchAll(/\b(\d+(?:\.\d+)?)\s?px\b/gi)].map(m => {
     const before = text.slice(0, m.index);
     const after = text.slice((m.index ?? 0) + m[0].length);
-    const labelsNext = new RegExp(
-      String.raw`^\s*(?:of\s+)?(?:${LEAD}|${TEXT}(?:[- ]size)?)\s*:?\s*\d`,
-      'i',
-    ).test(after);
     return {
       px: Number(m[1]),
       leadAfter: new RegExp(String.raw`^\s*(?:of\s+)?${LEAD}\b`, 'i').test(
         after,
       ),
-      textAfter:
-        !labelsNext && new RegExp(String.raw`^\s+${TEXT}\b`, 'i').test(after),
+      textAfter: new RegExp(String.raw`^\s+${TEXT}\b`, 'i').test(after),
+      // (The label after it is followed by a length.)
+      labelThenLength: new RegExp(
+        String.raw`^\s*(?:of\s+)?(?:${LEAD}|${TEXT}(?:[- ]size)?)\s*:?\s*\d`,
+        'i',
+      ).test(after),
       leadBefore: new RegExp(
         String.raw`\b${LEAD}\s*(?:of\s+)?:?\s*$`,
         'i',
       ).test(before),
       textBefore: /\b(?:text|font)(?:[- ]size)?\s*:?\s*$/i.test(before),
-      labelsNext,
     };
   });
+  // A label between two lengths names the later one only when the later
+  // one has no label after it: "13px line height 18px" is an 18px line
+  // height, "13px text 18px leading" a 13px text size.
+  const lengths = raw.map((l, k) => {
+    const next = raw[k + 1];
+    const labelsNext =
+      l.labelThenLength && !(next && (next.leadAfter || next.textAfter));
+    return {...l, labelsNext, textAfter: l.textAfter && !labelsNext};
+  });
+  // (A bare length before a line-height label that names the next one,
+  // "13px line height 18px", is the text size.)
   const sized = lengths.find(
     l =>
       l.textAfter ||
+      (l.labelsNext && l.leadAfter && !l.leadBefore) ||
       (l.textBefore && !(l.leadAfter && !l.labelsNext) && !l.leadBefore),
   );
-  const lead = lengths.find(l => l !== sized && (l.leadAfter || l.leadBefore));
+  const lead = lengths.find(
+    l =>
+      l !== sized &&
+      !(l.labelsNext && l.leadAfter) &&
+      (l.leadAfter || l.leadBefore),
+  );
   return {lead: lead?.px ?? null, text: sized?.px ?? null};
 }
 

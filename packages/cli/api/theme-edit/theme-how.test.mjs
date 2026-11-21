@@ -3398,6 +3398,9 @@ const QUESTIONS_J = [
   ['font size 13px line height 18px', {top: /--text-body-leading 1\.385$/}],
   ['line height 18px font size 13px', {top: /--text-body-leading 1\.385$/}],
   ['18px leading 13px text', {top: /--text-body-leading 1\.385$/}],
+  ['13px line height 18px', {top: /--text-body-leading 1\.385$/}],
+  ['13px text 18px leading', {top: /--text-body-leading 1\.385$/}],
+  ['13px font 18px line height', {top: /--text-body-leading 1\.385$/}],
   ['18px line height 13px font', {top: /--text-body-leading 1\.385$/}],
   [
     'heading font size 24px, body 14px text, 20px leading',
