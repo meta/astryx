@@ -429,9 +429,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   so the theme editor opens it. The add reads them as data and runs and
   copies no shared code; the editor builds the theme's source,
   `<name>.theme.ts`, when it opens the theme. A settings file the editor's
-  own checks refuse, or a palette made with a recipe no Astryx CLI makes
-  (a newer Astryx recipe is copied, as DEC-11 opens it), or more than one
-  folder of it, is not copied and is
+  own checks refuse, a palette made with a recipe this CLI does not make
+  (whose palette module is code), a theme source with edits of its own
+  (code too, which the editor's next build would otherwise drop), or more
+  than one folder of it, is not copied and is
   named, and the theme is still added; nor is it
   copied into a folder that already holds editor state the add did not
   write, which is left in place and named. With that state copied, the app

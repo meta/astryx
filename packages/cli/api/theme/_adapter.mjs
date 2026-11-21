@@ -15,7 +15,7 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {stageSharedTheme} from './_shared-source.mjs';
-import {appCopyDescriptor, descriptorWords} from '../theme-edit/_marks.mjs';
+import {appCopyDescriptor} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {newerRecipe} from './palette/generate/newer-recipe.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
@@ -1889,7 +1889,7 @@ async function sharedEditorProblem(dir, slug) {
   // themes its settings reader checks against: the editor's settings module
   // builds on this adapter.)
   await import('../theme-edit/_adapter.mjs');
-  const {settingsJson, settingsProblem} =
+  const {settingsJson, settingsProblem, themeSource} =
     await import('../theme-edit/_settings.mjs');
   const data = settingsJson(fs.readFileSync(file, 'utf-8'));
   if (data === undefined) return `its ${slug}.settings.json is not JSON`;
@@ -1906,15 +1906,21 @@ async function sharedEditorProblem(dir, slug) {
       return 'its palette.config.json is not JSON';
     }
     const recipe = palette?.recipe;
-    // (A newer Astryx recipe is copied: this CLI's editor opens it, keeping
-    // the palette as saved.)
-    if (
-      recipe != null &&
-      !PALETTE_RECIPES.includes(recipe) &&
-      !newerRecipe(recipe)
-    )
-      return `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
+    // (A recipe this CLI does not make keeps its palette in its palette
+    // module, which is code: theme add copies no code.)
+    if (recipe != null && !PALETTE_RECIPES.includes(recipe))
+      return newerRecipe(recipe)
+        ? `it was made with the palette recipe ${String(recipe)}, which a newer CLI makes and keeps in its palette module; theme add copies no code, so the theme's own build is added`
+        : `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
   }
+  // (The theme's source with the sharer's own edits is code, which theme add
+  // does not copy; without it the editor's next build would drop them.)
+  const source = path.join(dir, `${slug}.theme.ts`);
+  if (
+    fs.existsSync(source) &&
+    fs.readFileSync(source, 'utf-8') !== themeSource(slug)
+  )
+    return `its ${slug}.theme.ts has edits of its own, which are code that theme add does not copy; the theme's own build is added`;
   return null;
 }
 
@@ -2165,13 +2171,12 @@ export async function addSharedThemeToApp(source, options) {
       if (editorFiles.length) {
         const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
         if (doc) {
-          const at = path.join(target, doc);
           fs.writeFileSync(
-            at,
-            appCopyDescriptor(
-              name,
-              descriptorWords(fs.readFileSync(at, 'utf8')),
-            ),
+            path.join(target, doc),
+            appCopyDescriptor(name, {
+              displayName: theme.displayName,
+              description: theme.description,
+            }),
           );
         }
       }

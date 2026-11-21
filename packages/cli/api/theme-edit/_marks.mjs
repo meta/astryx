@@ -37,35 +37,6 @@ export const appCopyHead = (slug, open, close) =>
   `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
 
 /**
- * The display name and description a theme descriptor's text gives, each
- * only when written as one string literal.
- * @param {string} text
- * @returns {{displayName?: string, description?: string}}
- */
-export function descriptorWords(text) {
-  /** @param {string} key */
-  const pick = key => {
-    const m = new RegExp(
-      `\\b${key}:\\s*(?:"((?:[^"\\\\\\n]|\\\\.)*)"|'((?:[^'\\\\\\n]|\\\\.)*)')`,
-    ).exec(text);
-    if (!m) return undefined;
-    try {
-      return m[1] !== undefined
-        ? JSON.parse(`"${m[1]}"`)
-        : JSON.parse(`"${m[2].replace(/\\'/g, "'").replace(/"/g, '\\"')}"`);
-    } catch {
-      return undefined;
-    }
-  };
-  const displayName = pick('displayName');
-  const description = pick('description');
-  return {
-    ...(typeof displayName === 'string' ? {displayName} : {}),
-    ...(typeof description === 'string' ? {description} : {}),
-  };
-}
-
-/**
  * An app copy's descriptor, as the editor writes it: one text for the editor
  * and for `theme add` of a shared theme with its editor state. A display
  * name and description already given (a shared theme's own) are kept.

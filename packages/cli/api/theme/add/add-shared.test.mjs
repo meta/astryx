@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import {gzipSync} from 'node:zlib';
 import {themeAdd} from './add.mjs';
 import {themeRemove} from '../remove/remove.mjs';
+import {themeSource} from '../../theme-edit/_settings.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 import {recordDeclaredSettings} from '../../../foundation/env/cli-command.mjs';
@@ -612,7 +613,7 @@ describe('theme add with a shared theme', () => {
       tgz({
         ...themeEntries('bundle/app-copy/', 'sunset'),
         'bundle/editor-theme/sunset.settings.json': SETTINGS('sunset'),
-        'bundle/editor-theme/sunset.theme.ts': 'export {};\n',
+        'bundle/editor-theme/sunset.theme.ts': themeSource('sunset'),
         'bundle/editor-theme/tokens/sunset.palette.ts': 'export {};\n',
       }),
     );
@@ -670,7 +671,7 @@ describe('theme add with a shared theme', () => {
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
   });
 
-  it('copies editor state made with a newer Astryx palette recipe, which this editor opens', async () => {
+  it('adds the theme but not editor state whose theme source has edits of its own, and says why', async () => {
     writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
     fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
     fs.writeFileSync(
@@ -678,14 +679,16 @@ describe('theme add with a shared theme', () => {
       SETTINGS('ocean'),
     );
     fs.writeFileSync(
-      path.join(shared, 'b', 'editor', 'palette.config.json'),
-      JSON.stringify({recipe: 'astryx-oklch-v99'}),
+      path.join(shared, 'b', 'editor', 'ocean.theme.ts'),
+      `${themeSource('ocean')}// my own change\n`,
     );
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(result.data.copy?.workingFiles?.notCopied).toBeUndefined();
-    expect(result.data.copy?.workingFiles?.files).toContain(
-      'palette.config.json',
+    expect(result.data.default).toBe('ocean');
+    expect(result.data.copy?.workingFiles?.files).toEqual([]);
+    expect(result.data.copy?.workingFiles?.notCopied).toMatch(
+      /ocean\.theme\.ts has edits of its own, which are code that theme add does not copy/,
     );
+    expect(fs.existsSync(path.join(app, 'themes/ocean'))).toBe(false);
   });
 
   it.each([
@@ -695,6 +698,12 @@ describe('theme add with a shared theme', () => {
       JSON.stringify({name: 'ocean', settings: 'all of them'}),
       null,
       /is not settings this CLI reads/,
+    ],
+    [
+      'made with a newer palette recipe, whose palette module is code',
+      null,
+      JSON.stringify({recipe: 'astryx-oklch-v99'}),
+      /palette recipe astryx-oklch-v99, which a newer CLI makes and keeps in its palette module; theme add copies no code/,
     ],
     [
       'made with a palette recipe no Astryx CLI makes',

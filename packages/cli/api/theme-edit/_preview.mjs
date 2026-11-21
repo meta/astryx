@@ -2614,12 +2614,8 @@ function chromeBinary() {
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {
-  APP_COPY_MARK,
-  appCopyDescriptor,
-  appCopyHead,
-  descriptorWords,
-} from './_marks.mjs';
+import {APP_COPY_MARK, appCopyDescriptor, appCopyHead} from './_marks.mjs';
+import {readThemeDescriptorValue} from '../../foundation/discovery/theme-discovery.mjs';
 import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
 /**
@@ -2732,6 +2728,31 @@ export function themeLocalModules(cwd, slug) {
 }
 
 /**
+ * The display name and description an app copy's descriptor gives now, read
+ * without running it as discovery reads it; none when it does not read.
+ * @param {string} doc
+ * @returns {{displayName?: string, description?: string}}
+ */
+function copyWords(doc) {
+  if (!fs.existsSync(doc)) return {};
+  try {
+    const value = /** @type {any} */ (
+      readThemeDescriptorValue(doc, path.basename(doc))
+    );
+    return {
+      ...(typeof value?.displayName === 'string'
+        ? {displayName: value.displayName}
+        : {}),
+      ...(typeof value?.description === 'string'
+        ? {description: value.description}
+        : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
  * The files of a theme's app copy as the editor would write them now, by
  * name; null with no build to copy. Font stylesheets as given, or null for
  * the copy's own.
@@ -2777,10 +2798,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
   // theme added with its editor state keeps its own.)
   const doc = path.join(dir, `${name}.doc.mjs`);
   const files = {
-    [`${name}.doc.mjs`]: appCopyDescriptor(
-      slug,
-      fs.existsSync(doc) ? descriptorWords(fs.readFileSync(doc, 'utf8')) : {},
-    ),
+    [`${name}.doc.mjs`]: appCopyDescriptor(slug, copyWords(doc)),
     [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
     // The theme folder's own modules the build imports, as they are, under
