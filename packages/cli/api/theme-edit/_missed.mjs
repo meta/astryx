@@ -790,10 +790,12 @@ export function missedSteps(ctx, data, res, base) {
         });
     }
   }
-  // A pill part (a switch, an avatar, a badge) stays round under rounded
-  // corners by design, as nearly every look wants: it is missed only when
-  // the theme's corners go square (its element corners at 0), where a
-  // round pill keeps the base's look beside the theme's square one.
+  // A pill part (a switch, an avatar) stays round under rounded corners by
+  // design, as nearly every look wants: it is missed only when the theme's
+  // corners go square (its element corners at 0), where a round pill keeps
+  // the base's look beside the theme's square one. A badge is a small box:
+  // it is missed when the element corners change, as a button's corners
+  // follow them.
   const squareCorners = modes.every(
     m => Number.parseFloat(String(res[m]?.['--radius-element'] ?? '')) === 0,
   );
@@ -806,12 +808,39 @@ export function missedSteps(ctx, data, res, base) {
       /^(?:square|0px)$/.test(cornersPlain(String(x.value)) ?? ''),
   );
   // (Only a pill that is a styling choice: a circle keeps its shape.)
-  if (corners && squareCorners)
+  // (The corners dial gives a badge the element corners itself below pill,
+  // and leaves it a pill at pill; square element corners under it are the
+  // square case above. A badge the base theme rounds itself keeps its
+  // shape.)
+  // (A pill badge is listed only when the element corners are less than a
+  // pill in some mode: at pill corners it matches the buttons.)
+  const elementCorners =
+    changed('--radius-element') &&
+    modes.some(m => {
+      const v = Number.parseFloat(String(res[m]?.['--radius-element'] ?? ''));
+      return Number.isFinite(v) && v < 1000;
+    });
+  const cornersBelowPill = data.settings.some(
+    x =>
+      x.source === 'dial' &&
+      x.thing === 'corners' &&
+      !x.on &&
+      cornersPlain(String(x.value)) !== 'pill',
+  );
+  const baseRoundsBadge = Object.values(
+    /** @type {any} */ (base)?.components?.badge ?? {},
+  ).some(r => r && typeof r === 'object' && 'borderRadius' in r);
+  if (corners)
     for (const p of pillShapes(C).pills.filter(
       x =>
         has(x) &&
         !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/) &&
-        !squaresPills,
+        (x === 'badge'
+          ? // (A corners dial below pill already gives it the element
+            // corners, square ones included.)
+            (squareCorners && !squaresPills && !cornersBelowPill) ||
+            (elementCorners && !cornersBelowPill && !baseRoundsBadge)
+          : squareCorners && !squaresPills),
     ))
       found.push({
         kind: 4,
