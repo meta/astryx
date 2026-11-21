@@ -16,7 +16,11 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, useMemo, type ReactNode} from 'react';
+import {
+  AppShellDrawerFocusContext,
+  type AppShellDrawerFocus,
+} from '../AppShell/appShellDrawerFocus';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -31,6 +35,7 @@ import {Divider} from '../Divider/Divider';
 import {MobileNav} from '../MobileNav/MobileNav';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {ActivityWrapper} from '../AppShell/appShellActivity';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -38,6 +43,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TopNav/TopNav.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {markTopNavType} from './topNavDrawerItems';
 
 registerEnglishFallback(english);
 
@@ -161,6 +167,10 @@ const styles = stylex.create({
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
   },
+  // The items of a hidden top nav stay mounted in the drawer, keeping state.
+  drawerItemsHidden: {
+    display: 'none',
+  },
   drawerDivider: {
     marginBlock: spacingVars['--spacing-2'],
   },
@@ -244,7 +254,8 @@ export function TopNav({
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
   const unreadRegionStyle = useTopNavUnreadRegionStyle() ?? undefined;
-  const mobileContent = useTopNavMobileContent();
+  const mobile = useTopNavMobileContent();
+  const mobileContent = mobile?.content;
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
   // The layout flags use the same test as the slots they gate.
@@ -252,8 +263,26 @@ export function TopNav({
   const hasStartContent = isRenderable(resolvedStartContent);
   const hasMobileContent = isRenderable(mobileContent);
   const hasCollapsibleContent = hasStartContent || hasCenterContent;
-  // Show mobile toggle when there's ANY drawer content — own items OR SideNav via context
-  const hasMobileDrawerContent = hasCollapsibleContent || hasMobileContent;
+  const isOwnContentHidden = mobile?.isOwnContentHidden === true;
+  // Show the mobile toggle only for drawer content still visible: its own
+  // items, or the SideNav passed in through context, unless hidden.
+  const hasMobileDrawerContent =
+    (hasCollapsibleContent && !isOwnContentHidden) ||
+    (hasMobileContent && mobile?.isContentHidden !== true);
+  // A drawer with nothing visible closes, and its menu button is gone, so
+  // focus goes to main.
+  const drawerFocus = use(AppShellDrawerFocusContext);
+  const ownDrawerFocus = useMemo<AppShellDrawerFocus | null>(
+    () =>
+      drawerFocus == null
+        ? null
+        : {
+            main: drawerFocus.main,
+            isDrawerEmpty: () =>
+              !hasMobileDrawerContent || drawerFocus.isDrawerEmpty(),
+          },
+    [drawerFocus, hasMobileDrawerContent],
+  );
 
   // =========================================================================
   // Mobile bar mode — heading + endContent + toggle, hide nav items.
@@ -303,22 +332,36 @@ export function TopNav({
     }
 
     return (
-      <MobileNav header={heading}>
-        {hasCollapsibleContent && (
-          <div {...stylex.props(styles.drawerItems)}>
-            {resolvedStartContent}
-            {centerContent}
-          </div>
-        )}
-        {hasCollapsibleContent && hasMobileContent && (
-          <Divider xstyle={styles.drawerDivider} />
-        )}
-        {hasMobileContent && (
-          <div {...stylex.props(styles.drawerExtraContent)}>
-            {mobileContent}
-          </div>
-        )}
-      </MobileNav>
+      <AppShellDrawerFocusContext value={ownDrawerFocus}>
+        <MobileNav
+          header={isOwnContentHidden ? undefined : heading}
+          isOpen={hasMobileDrawerContent ? undefined : false}>
+          {hasCollapsibleContent && (
+            <div
+              {...stylex.props(
+                styles.drawerItems,
+                isOwnContentHidden && styles.drawerItemsHidden,
+              )}
+              inert={isOwnContentHidden || undefined}>
+              <ActivityWrapper mode={isOwnContentHidden ? 'hidden' : 'visible'}>
+                {resolvedStartContent}
+                {centerContent}
+              </ActivityWrapper>
+            </div>
+          )}
+          {hasCollapsibleContent &&
+            hasMobileContent &&
+            !isOwnContentHidden &&
+            mobile?.isContentHidden !== true && (
+              <Divider xstyle={styles.drawerDivider} />
+            )}
+          {hasMobileContent && (
+            <div {...stylex.props(styles.drawerExtraContent)}>
+              {mobileContent}
+            </div>
+          )}
+        </MobileNav>
+      </AppShellDrawerFocusContext>
     );
   }
 
@@ -377,3 +420,4 @@ export function TopNav({
 }
 
 TopNav.displayName = 'TopNav';
+markTopNavType(TopNav);
