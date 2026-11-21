@@ -15,13 +15,13 @@ import * as path from 'node:path';
 import {
   addCommand,
   callSources,
-  OFFICIAL_LIST_FILE,
   officialDeclarations,
   officialList,
   savedCatalog,
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
+import {readOfficialList} from '../../foundation/discovery/official-list.mjs';
 import {
   _resetHostedRun,
   activateHostedRun,
@@ -437,9 +437,9 @@ const find = (packages, name) => packages.find(p => p.package === name);
 
 const NEUTRAL = '@astryxdesign/theme-neutral';
 
-/** The canary-only package names in the committed list. */
+/** The canary-only package names in the CLI's own list. */
 function canaryOnlyNames() {
-  return JSON.parse(fs.readFileSync(OFFICIAL_LIST_FILE, 'utf8'))
+  return readOfficialList()
     .packages.filter((/** @type {{canaryOnly?: boolean}} */ p) => p.canaryOnly)
     .map((/** @type {{package: string}} */ p) => p.package);
 }

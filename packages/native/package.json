@@ -80,7 +80,7 @@
     "typecheck:types": "tsc --project tsconfig.types.json"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.17"
+    "@astryxdesign/core": "0.7.18"
   },
   "devDependencies": {
     "@astryxdesign/core": "workspace:*"

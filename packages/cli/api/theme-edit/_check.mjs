@@ -131,6 +131,9 @@ import {
   colorPropTokens,
   innerPropTokens,
   columnLineTokens,
+  mainTextSizeToken,
+  namesToken,
+  heldSizeTokenFor,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -155,6 +158,10 @@ import {
   dialValueFits,
   groupsOf,
   onlyFits,
+  growsWithContent,
+  notGrowingWhens,
+  sharedControlHeight,
+  controlHeightValue,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -888,6 +895,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
   const WHOLE_ONLY = [
     'surfaces',
     'buttons',
+    'badges',
     'base',
     'mode',
     'vibrancy',
@@ -1010,6 +1018,8 @@ export function storedProblems(ctx, slug, data, skip = '') {
           mode: s.mode,
           only: s.only,
         },
+        false,
+        {saved: true},
       );
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -2394,6 +2404,53 @@ function isShadow(value) {
 }
 
 /**
+ * The tokens a control height written as a size token reads on its way
+ * back to that token, ending with it; null when it never reads it. A
+ * custom property's var() resolves on the element that sets it, so only
+ * the tokens set where this one is written are followed: on the controls
+ * group, and on the one control for its own height (where its own tokens
+ * win).
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{token: string, own: boolean, setting: import('./_settings.mjs').Setting}} asToken
+ * @param {string} value
+ * @returns {string[] | null}
+ */
+function heightTokenLoop(data, asToken, value) {
+  const scopes = asToken.own ? ['controls', asToken.setting.on] : ['controls'];
+  /** @type {Map<string, string>} */
+  const held = new Map();
+  for (const on of scopes)
+    for (const x of data.settings)
+      if (
+        x.source === 'token' &&
+        x.on === on &&
+        !x.when &&
+        !x.state &&
+        (x.mode ?? null) === (asToken.setting.mode ?? null)
+      )
+        held.set(x.thing, String(x.value));
+  held.set(asToken.token, value);
+  /** @param {string} v */
+  const refs = v =>
+    [
+      ...v.matchAll(new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})`, 'gi')),
+    ].map(m => m[1]);
+  const seen = new Set();
+  /** @param {string} v @param {string[]} path @returns {string[] | null} */
+  const walk = (v, path) => {
+    for (const t of refs(v)) {
+      if (t === asToken.token) return [...path, t];
+      if (seen.has(t) || !held.has(t)) continue;
+      seen.add(t);
+      const found = walk(/** @type {string} */ (held.get(t)), [...path, t]);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk(value, []);
+}
+
+/**
  * Refuse a value that would read the token itself, through other tokens.
  * A token set on a part (`--on`) overrides only inside that part: there
  * it reads the part's own settings first and the whole theme's after, and
@@ -2733,6 +2790,15 @@ const DIAL_WORDS = wordTable(
       outline: 'outlined',
       plain: 'flat',
       minimal: 'flat',
+    },
+    badges: {
+      tint: 'soft',
+      tinted: 'soft',
+      subtle: 'soft',
+      outlined: 'outline',
+      bordered: 'outline',
+      filled: 'solid',
+      fill: 'solid',
     },
     buttons: {
       uppercase: 'caps',
@@ -4258,11 +4324,13 @@ export function coveredPaints(ctx, part, prop) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
- * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope] `reads`: the custom
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>, saved?: boolean}} [scope] `reads`: the custom
  *   properties the theme itself sets where the value is read, which a var()
  *   in it reads as it reads a design token; `element`: the custom properties
  *   set on the element the value is set on, when that is not the theme's
- *   root (a surface's own tokens), the only ones that can loop back to it
+ *   root (a surface's own tokens), the only ones that can loop back to it;
+ *   `saved`: the setting is read from the settings file, not typed in, so a
+ *   rule about what a new `set` writes does not refuse it
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -4379,7 +4447,7 @@ function keepTypedScope(e, ctx, slug, data, flags) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset]
- * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope]
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>, saved?: boolean}} [scope]
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkTyped(
@@ -4390,7 +4458,7 @@ function checkTyped(
   value,
   flags,
   unset = false,
-  {reads, element} = {},
+  {reads, element, saved = false} = {},
 ) {
   // Any other dial's value pasted with its property name (`font-size:
   // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
@@ -5039,6 +5107,7 @@ function checkTyped(
     unset,
     reads,
     element,
+    saved,
   );
   // A var() with a fallback always gives a value; a name one slip from a
   // design token is noted as a likely typo, and the setting stands.
@@ -5157,6 +5226,7 @@ function fallbackVarTypo(v, TOKENS) {
  * @param {Record<string, unknown>} [element] the custom properties set on
  *   the element the value is set on, when that is not the theme's root (a
  *   surface's own tokens): only these can loop back to it
+ * @param {boolean} [saved] read from the settings file, not typed in
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkSettingAsTyped(
@@ -5169,6 +5239,7 @@ function checkSettingAsTyped(
   unset = false,
   reads = undefined,
   element = undefined,
+  saved = false,
 ) {
   const s = checkOne(
     ctx,
@@ -5180,6 +5251,7 @@ function checkSettingAsTyped(
     unset,
     reads,
     element,
+    saved,
   );
   const why = unset ? null : valueProblem(s);
   if (why)
@@ -5210,6 +5282,7 @@ function checkSettingAsTyped(
  * @param {boolean} unset
  * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
  * @param {Record<string, unknown>} [element] the custom properties set on the element the value is set on, when that is not the theme's root
+ * @param {boolean} [saved] read from the settings file, not typed in
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkOne(
@@ -5222,6 +5295,7 @@ function checkOne(
   unset,
   reads,
   element = undefined,
+  saved = false,
 ) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
@@ -5462,12 +5536,59 @@ function checkOne(
       );
     // (One predicate with the settings reader: a member of a group that
     // spreads.)
-    if (!onlyFits(s)) {
+    if (!onlyFits(s, ctx)) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
     }
   }
+  // A control that grows with its content takes its top and bottom padding
+  // from its size's height, so controls keep one height at each size: a
+  // padding of those sides alone changes nothing on it.
+  if (
+    s.on &&
+    /^padding-(top|bottom|block(-start|-end)?)$/.test(kebab(String(thing)))
+  ) {
+    const reached = partsOf(ctx, /** @type {any} */ (s));
+    if (
+      reached.length &&
+      reached.every(
+        t =>
+          growsWithContent(ctx, t, s.when) &&
+          !notGrowingWhens(ctx, t, s.when).length,
+      )
+    )
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `${s.on} keeps Core's top and bottom padding, so a theme's padding never makes it taller than the other controls at its size; ${thing} changes nothing on it. Set its height instead: ${P} set ${slug} height <length> --on ${s.on} (every control's height at that size; add --only for ${s.on} alone).`,
+        {run: [`${HOW} height`]},
+      );
+  }
+  // A control's height is a size every control shares, which Core reads
+  // inside its own sums: a word (auto) cannot be one. Only a height set
+  // writes as a size token is refused (one predicate with set): a variant
+  // that is not a size keeps a plain height. (A saved word height was built
+  // as a plain height, and still is.)
+  const asToken =
+    !unset && !saved
+      ? sharedControlHeight(ctx, {...s, source: 'property'})
+      : null;
+  if (asToken && !controlHeightValue(String(value)))
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${value} is not a size, and a height on ${s.on} ${asToken.own ? `is written as its own size token (${asToken.token})` : 'is the size every control takes (buttons, inputs, selectors, input groups)'}: give a length, as in ${P} set ${slug} height <length> --on ${s.on}${asToken.own ? ' --only' : ''}.`,
+      {run: [`${HOW} height`]},
+    );
+  // (The height is written as that size's token: a value that reads the
+  // token, itself or through the tokens set on the controls, would read
+  // itself.)
+  const loop = asToken ? heightTokenLoop(data, asToken, String(value)) : null;
+  if (asToken && loop)
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${value} reads ${loop.length > 1 ? `${loop.slice(0, -1).join(', which reads ')}, which reads ` : ''}${asToken.token}, which is the token this height is written as, so it would read itself: give a length, as in ${P} set ${slug} height <length> --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${asToken.own ? ' --only' : ''}.`,
+      {run: [`${HOW} height`]},
+    );
   // A font role in other letters (Body, CODE) is that role.
   if (
     thing === 'font' &&
@@ -5485,7 +5606,7 @@ function checkOne(
     );
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
   if (s.on && !isRole && !groupsOf(ctx)[s.on]) {
-    const t = TARGET.get(s.on);
+    let t = TARGET.get(s.on);
     if (!t) {
       // Another case of a part or group, its class name copied from the
       // page (`.astryx-card`), or its component (`<Card>`, `Card`): that
@@ -5672,18 +5793,39 @@ function checkOne(
           : Object.keys(record?.innerSets ?? {}).length > 0)
       ) {
         const toks = innerPropTokens(ctx.C, holder, kebab(thing));
-        refuse(
-          E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
-          {
-            didYouMean: [holder],
-            run: toks.length
-              ? toks.map(tok =>
-                  setLine(slug, tok, v, {...s, on: holder}, unset),
-                )
-              : [setLine(slug, thing, v, {...s, on: holder}, unset)],
-          },
-        );
+        // (A text size said of the main piece's name, "top-nav-heading-title"
+        // or "-heading", where the holder's main text can be told: set on, or
+        // undone from, the holder, as said of it. Another piece's name,
+        // "-subtitle", is refused: which line it is cannot be told apart.)
+        const main =
+          !s.state &&
+          kebab(thing) === 'font-size' &&
+          /^(?:title|heading)$/.test(rest)
+            ? mainTextSizeToken(ctx.C, holder, TOKENS)
+            : null;
+        if (main && (unset || !namesToken(v, main))) {
+          const said = `"${s.on}" is drawn inside ${holder}: ${unset ? 'undone from' : 'set on'} ${holder}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+          s.on = holder;
+          // (As --only reads on the holder named directly.)
+          if (s.only && !onlyFits(s)) {
+            s.only = undefined;
+            if (!unset)
+              s.note = `${s.note}; ${holder} is styled on its own already, so --only changes nothing: it is saved without it`;
+          }
+        } else
+          refuse(
+            E.ERR_THEME_UNKNOWN_PART,
+            `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
+            {
+              didYouMean: [holder],
+              run: toks.length
+                ? toks.map(tok =>
+                    setLine(slug, tok, v, {...s, on: holder}, unset),
+                  )
+                : [setLine(slug, thing, v, {...s, on: holder}, unset)],
+            },
+          );
       }
       // A plural or another case names the part it means; a typo of one
       // part leads with the same command on that part.
@@ -5692,20 +5834,24 @@ function checkOne(
         ...Object.keys(groupsOf(ctx)),
       ]);
       const typo = near.filter(n => typoOf(lower, n));
-      refuse(
-        E.ERR_THEME_UNKNOWN_PART,
-        `"${s.on}" is not a part you can style.`,
-        {
-          didYouMean: near,
-          run: [
-            ...(typo.length === 1
-              ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
-              : []),
-            `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
-            `${HOW} ${quoteCommandArgument(s.on)}`,
-          ],
-        },
-      );
+      // (A title piece moved onto its holder above is a part now.)
+      const moved = TARGET.get(s.on);
+      if (moved) t = moved;
+      else
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part you can style.`,
+          {
+            didYouMean: near,
+            run: [
+              ...(typo.length === 1
+                ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
+                : []),
+              `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
+              `${HOW} ${quoteCommandArgument(s.on)}`,
+            ],
+          },
+        );
     }
     if (s.when) {
       const variants = C.variantValues(s.on);
@@ -6261,7 +6407,7 @@ function checkOne(
     );
   if (DIALS[thing]) {
     s.source = 'dial';
-    if (['surfaces', 'buttons', 'type'].includes(thing)) {
+    if (['surfaces', 'buttons', 'badges', 'type'].includes(thing)) {
       if (s.on)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -6324,7 +6470,11 @@ function checkOne(
                             CORNERS.find(
                               ([n]) => lower.replace(/s$/, '') === n,
                             )?.[0] ?? lower,
-                            thing === 'buttons' ? {on: 'button'} : {},
+                            thing === 'buttons'
+                              ? {on: 'button'}
+                              : thing === 'badges'
+                                ? {on: 'badge'}
+                                : {},
                           ),
                         ]
                       : [
@@ -7793,6 +7943,15 @@ function checkOne(
       multipliedTokens(ctx.project).has(thing),
       data.settings.some(x => x.thing === thing),
     );
+    // A control's size token takes what a control's height takes (one
+    // predicate with `set height --on <control>`): no percentage. Only a
+    // typed value is refused; a saved one still opens.
+    if (!saved && /^--size-element-/.test(thing) && !controlHeightValue(v))
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${v} is not a size a control can take: ${thing} is a control's height, which Core reads inside its own sums, so it takes a length and no percentage, as in ${setLine(slug, thing, '40px', s)}.`,
+        {run: [`${HOW} ${thing}`]},
+      );
     checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s, element);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
@@ -7817,6 +7976,24 @@ function checkOne(
                 ),
           ]),
       );
+      // (A text size token said for one part that reads no size token,
+      // whose held parts read one, a tab list's tabs: the value goes into
+      // that token on the part; the build reads it the same way.)
+      if (results.length === 1 && results[0][1] && !results[0][1].soft) {
+        const held = heldSizeTokenFor(
+          C,
+          s,
+          results[0][0],
+          thing,
+          v,
+          results[0][1],
+        );
+        if (held) {
+          results[0][1] = null;
+          const said = `${results[0][0]} never reads ${thing}: its text reads ${held}, so the value goes into ${held} on ${results[0][0]}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+        }
+      }
       const recorded = results.filter(([, r]) => !r?.soft);
       const hard = recorded.filter(([, r]) => r);
       const spread = Boolean(
@@ -8284,15 +8461,27 @@ function checkOne(
       const column = (/** @type {string} */ t, /** @type {string[]} */ toks) =>
         toks.length > 1 &&
         columnLineTokens(ctx.C, t, prop).join() === toks.join();
+      // (A text size whose pieces each read a text size token, said of one
+      // part, a top nav heading's title and supporting line: the main
+      // text's, the largest.)
+      const main = (/** @type {string} */ t) => {
+        if (prop !== 'font-size' || partsOf(ctx, s).length !== 1) return null;
+        const m = mainTextSizeToken(ctx.C, t, TOKENS);
+        return m && !namesToken(v, m) ? m : null;
+      };
       const oneEach =
         prop !== 'color' &&
-        inner.every(([t, toks]) => toks.length === 1 || column(t, toks));
+        inner.every(
+          ([t, toks]) => toks.length === 1 || column(t, toks) || main(t),
+        );
       if (inner.length && inner.length === partsOf(ctx, s).length && oneEach) {
         const said = inner
           .map(([part, toks]) =>
             toks.length === 1
               ? `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks[0]}, so the value goes into ${toks[0]} on ${part}`
-              : `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`,
+              : column(part, toks)
+                ? `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`
+                : `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into ${main(part)} on ${part}, the size of its main text`,
           )
           .join('; ');
         s.note = s.note ? `${s.note}; ${said}` : said;
