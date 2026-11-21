@@ -5,6 +5,8 @@
 import {Citation} from '@astryxdesign/core/Citation';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {Icon} from '@astryxdesign/core/Icon';
+import {CodeIcon} from '@astryxdesign/template-icons';
 
 export default function CitationShowcase() {
   return (
@@ -23,7 +25,7 @@ export default function CitationShowcase() {
             source={{
               title: 'GitHub',
               url: 'https://github.com',
-              icon: 'https://github.githubassets.com/favicons/favicon.svg',
+              icon: <Icon icon={CodeIcon} size="xsm" />,
             }}
             number={2}
             variant="label"

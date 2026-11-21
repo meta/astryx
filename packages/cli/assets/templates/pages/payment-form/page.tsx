@@ -32,10 +32,14 @@ import {Section} from '@astryxdesign/core/Section';
 import {Center} from '@astryxdesign/core/Center';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Icon} from '@astryxdesign/core/Icon';
-import {ShieldCheckIcon} from '@heroicons/react/24/outline';
-import {LockClosedIcon} from '@heroicons/react/24/outline';
-import {CheckCircleIcon} from '@heroicons/react/24/outline';
-import {TruckIcon} from '@heroicons/react/24/outline';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
+import {ShieldIcon} from '@astryxdesign/template-icons';
+import {LockIcon} from '@astryxdesign/template-icons';
+import {SuccessIcon} from '@astryxdesign/template-icons';
+import {ShippingIcon} from '@astryxdesign/template-icons';
+import {CreditCardIcon} from '@astryxdesign/template-icons';
+import {MobileIcon} from '@astryxdesign/template-icons';
+import {WalletIcon} from '@astryxdesign/template-icons';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -160,46 +164,36 @@ const fmt = (n: number) => `$${n.toFixed(2)}`;
 // :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
 
 const fullWidth: CSSProperties = {width: '100%'};
+// An order line's name and badge start from no width and grow into the row,
+// so the price stays beside them while they fit, even wrapped onto two lines,
+// and moves under them only when the badge itself does not fit. They never
+// need more than the row (maxWidth): a badge wider than it ellipsizes.
+const itemName: CSSProperties = {flexBasis: 0, flexGrow: 1};
+// A price moved under its line keeps to the end, under the other prices.
+const itemPrice: CSSProperties = {marginInlineStart: 'auto'};
 // Form column flex-basis so the two checkout columns share width evenly.
-const formColBasis: CSSProperties = {flexBasis: 0};
+// The min widths let the two columns wrap on a narrow first paint, before
+// script picks the stacked layout; on desktop both columns are wider.
+const formColBasis: CSSProperties = {
+  flexBasis: 0,
+  minWidth: 'min(100%, 320px)',
+};
 // Space the Order Summary content below its collapsible trigger title.
 const summaryContent: CSSProperties = {paddingBlockStart: 'var(--spacing-2)'};
 // Order-summary column: sticky beside the form on desktop.
 const summarySticky: CSSProperties = {
   flexBasis: 0,
+  minWidth: 'min(100%, 300px)',
   position: 'sticky',
   top: 'var(--spacing-4)',
   alignSelf: 'flex-start',
 };
 // On mobile the summary moves above the form.
 const summaryMobileOrder: CSSProperties = {order: -1};
-// Express-checkout brand buttons (fixed brand colors).
-const paypalButton: CSSProperties = {
-  backgroundColor: '#FFC439',
-  borderColor: '#FFC439',
-};
-// Official Google Pay dark button: black background with the unaltered
-// dark-variant mark (white "Google Pay" text + full-color G), per the
-// Google Pay brand guidelines.
-const gpayButton: CSSProperties = {
-  backgroundColor: '#000',
-  borderColor: '#000',
-};
-// Brand logos inside the express-checkout buttons.
-const brandLogo: CSSProperties = {height: 'var(--spacing-5)', width: 'auto'};
-// Accepted card-network marks (Visa/Mastercard/Amex), shared style.
-const cardLogo: CSSProperties = {
-  height: 'var(--spacing-7)',
-  width: 'auto',
-  borderRadius: 'var(--radius-element)',
-  borderWidth: 'var(--border-width)',
-  borderStyle: 'solid',
-  borderColor: 'var(--color-border)',
-  backgroundColor: 'var(--color-background-surface)',
-};
 
 export default function PaymentFormPage() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -269,7 +263,7 @@ export default function PaymentFormPage() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <Center axis="horizontal">
             <Section
               variant="transparent"
@@ -293,6 +287,7 @@ export default function PaymentFormPage() {
 
                 <Stack
                   direction={isMobile ? 'vertical' : 'horizontal'}
+                  wrap={isMobile ? 'nowrap' : 'wrap'}
                   gap={8}
                   vAlign="start">
                   <StackItem
@@ -499,12 +494,12 @@ export default function PaymentFormPage() {
 
                         {/* Express checkout */}
                         <VStack gap={3}>
-                          <Grid columns={2} gap={3}>
-                            {/* PayPal */}
+                          <Grid columns={{minWidth: 140, max: 2}} gap={3}>
                             <Button
                               label="PayPal"
-                              variant="primary"
+                              variant="secondary"
                               size="lg"
+                              icon={<Icon icon={WalletIcon} />}
                               onClick={() =>
                                 // Demo only: replace this toast with the call that starts PayPal.
                                 showToast({
@@ -512,18 +507,12 @@ export default function PaymentFormPage() {
                                   uniqueID: 'paypal',
                                 })
                               }
-                              style={paypalButton}>
-                              <img
-                                src="https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-100px.png"
-                                alt="PayPal"
-                                style={brandLogo}
-                              />
-                            </Button>
-                            {/* Google Pay */}
+                            />
                             <Button
                               label="Google Pay"
-                              variant="primary"
+                              variant="secondary"
                               size="lg"
+                              icon={<Icon icon={MobileIcon} />}
                               onClick={() =>
                                 // Demo only: replace this toast with the call that starts Google Pay.
                                 showToast({
@@ -531,13 +520,7 @@ export default function PaymentFormPage() {
                                   uniqueID: 'google-pay',
                                 })
                               }
-                              style={gpayButton}>
-                              <img
-                                src="https://pay.google.com/about/static_kcs/images/logos/google-pay-logo.svg"
-                                alt="Google Pay"
-                                style={brandLogo}
-                              />
-                            </Button>
+                            />
                           </Grid>
                         </VStack>
 
@@ -556,23 +539,12 @@ export default function PaymentFormPage() {
 
                         {/* Credit card fields */}
                         <VStack gap={3}>
-                          {/* Card type icons */}
-                          <HStack gap={1.5} vAlign="center">
-                            <img
-                              src="https://raw.githubusercontent.com/aaronfagan/svg-credit-card-payment-icons/main/flat/visa.svg"
-                              alt="Visa"
-                              style={cardLogo}
-                            />
-                            <img
-                              src="https://raw.githubusercontent.com/aaronfagan/svg-credit-card-payment-icons/main/flat/mastercard.svg"
-                              alt="Mastercard"
-                              style={cardLogo}
-                            />
-                            <img
-                              src="https://raw.githubusercontent.com/aaronfagan/svg-credit-card-payment-icons/main/flat/amex.svg"
-                              alt="Amex"
-                              style={cardLogo}
-                            />
+                          {/* Accepted card networks */}
+                          <HStack gap={1.5} vAlign="center" wrap="wrap">
+                            <Icon icon={CreditCardIcon} color="secondary" />
+                            <Badge label="Visa" />
+                            <Badge label="Mastercard" />
+                            <Badge label="Amex" />
                           </HStack>
                           <TextInput
                             size="lg"
@@ -731,18 +703,20 @@ export default function PaymentFormPage() {
                               controlStyle={fullWidth}
                             />
                           </StackItem>
-                          <Button
-                            label="Apply"
-                            variant="secondary"
-                            size="lg"
-                            onClick={() =>
-                              // Demo only: replace this toast with the call that applies the promo code.
-                              showToast({
-                                body: 'Demo: the promo code would be applied here',
-                                uniqueID: 'apply-promo',
-                              })
-                            }
-                          />
+                          <StackItem>
+                            <Button
+                              label="Apply"
+                              variant="secondary"
+                              size="lg"
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that applies the promo code.
+                                showToast({
+                                  body: 'Demo: the promo code would be applied here',
+                                  uniqueID: 'apply-promo',
+                                })
+                              }
+                            />
+                          </StackItem>
                         </HStack>
                       </VStack>
 
@@ -792,7 +766,7 @@ export default function PaymentFormPage() {
                         <HStack gap={5} hAlign="center" wrap="wrap">
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={ShieldCheckIcon}
+                              icon={ShieldIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -801,18 +775,14 @@ export default function PaymentFormPage() {
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={LockClosedIcon}
-                              size="sm"
-                              color="secondary"
-                            />
+                            <Icon icon={LockIcon} size="sm" color="secondary" />
                             <Text type="supporting" color="secondary">
                               SSL Encrypted
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={CheckCircleIcon}
+                              icon={SuccessIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -895,8 +865,14 @@ export default function PaymentFormPage() {
                                       <HStack
                                         gap={2}
                                         hAlign="between"
-                                        vAlign="start">
-                                        <HStack gap={2} vAlign="center">
+                                        vAlign="start"
+                                        wrap="wrap">
+                                        <HStack
+                                          gap={2}
+                                          vAlign="center"
+                                          wrap="wrap"
+                                          maxWidth="100%"
+                                          style={itemName}>
                                           <Text type="body" weight="medium">
                                             {item.name}
                                           </Text>
@@ -907,7 +883,10 @@ export default function PaymentFormPage() {
                                             />
                                           )}
                                         </HStack>
-                                        <Text type="body" weight="bold">
+                                        <Text
+                                          type="body"
+                                          weight="bold"
+                                          style={itemPrice}>
                                           {fmt(item.price)}
                                         </Text>
                                       </HStack>
@@ -931,7 +910,24 @@ export default function PaymentFormPage() {
                                           max={10}
                                           isIntegerOnly
                                         />
-                                        <Link href="#" type="supporting">
+                                        <Link
+                                          type="supporting"
+                                          onClick={() =>
+                                            confirm.show({
+                                              title: `Remove ${item.name} from your cart?`,
+                                              description:
+                                                "This demo won't change your cart.",
+                                              actionLabel: 'Remove',
+                                              onAction: () => {
+                                                confirm.hide();
+                                                // Demo only: replace this toast with the call that performs the action.
+                                                showToast({
+                                                  body: `Demo: ${item.name} would be removed from your cart here`,
+                                                  uniqueID: 'remove-item',
+                                                });
+                                              },
+                                            })
+                                          }>
                                           Remove
                                         </Link>
                                         <Link
@@ -952,6 +948,7 @@ export default function PaymentFormPage() {
                                 <Divider />
                               </VStack>
                             ))}
+                            {confirm.element}
 
                             {/* Order total subsection */}
                             <VStack gap={3}>
@@ -1001,7 +998,7 @@ export default function PaymentFormPage() {
                               </HStack>
                               <Banner
                                 status="info"
-                                icon={<Icon icon={TruckIcon} size="sm" />}
+                                icon={<Icon icon={ShippingIcon} size="sm" />}
                                 title="Free shipping on orders over $300"
                               />
                             </VStack>

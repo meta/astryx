@@ -156,6 +156,11 @@ export const docs = {
         description:
           'Use OverflowList for a vertical stack; horizontal multi-row wrap is supported via maxRows, but items still flow left-to-right, not top-to-bottom.',
       },
+      {
+        guidance: false,
+        description:
+          'Render a count-only indicator when people need the collapsed items: make the indicator a control, such as a dropdown menu, so keyboard and screen reader users can reach them.',
+      },
     ],
   },
 };
@@ -260,6 +265,11 @@ export const docsZh = {
         description:
           'Use OverflowList for a vertical stack; horizontal multi-row wrap is supported via maxRows, but items still flow left-to-right, not top-to-bottom.',
       },
+      {
+        guidance: false,
+        description:
+          'Render a count-only indicator when people need the collapsed items: make the indicator a control, such as a dropdown menu, so keyboard and screen reader users can reach them.',
+      },
     ],
   },
 };
@@ -297,6 +307,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Use OverflowList for a vertical stack; horizontal multi-row wrap is supported via maxRows, but items still flow left-to-right, not top-to-bottom.',
+      },
+      {
+        guidance: false,
+        description:
+          'Render a count-only indicator when people need the collapsed items: make the indicator a control, such as a dropdown menu, so keyboard and screen reader users can reach them.',
       },
     ],
   },

@@ -43,18 +43,19 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowLeftIcon,
   LinkIcon,
-  DocumentTextIcon,
-  PencilIcon,
-  TrashIcon,
-  PhotoIcon,
+  DocumentIcon,
+  EditIcon,
+  DeleteIcon,
+  ImageIcon,
   ViewColumnsIcon,
-  BellIcon,
+  NotificationIcon,
   ShareIcon,
   EyeIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 const styles = stylex.create({
   // A vertical rule has no intrinsic height and the breadcrumb row centers its
@@ -250,21 +251,21 @@ const ATTACHMENTS: Attachment[] = [
 
 const ATTACHMENT_ICONS = {
   link: LinkIcon,
-  image: PhotoIcon,
-  file: DocumentTextIcon,
+  image: ImageIcon,
+  file: DocumentIcon,
 };
 
-// Identical for every row, so it is built once rather than per render.
+// The parts of every row's Delete that do not depend on the row.
 const ATTACHMENT_DELETE: DropdownMenuOption = {
   label: 'Delete',
-  icon: TrashIcon,
+  icon: DeleteIcon,
   variant: 'destructive',
 };
 
 const HEADER_ACTIONS = [
   {label: 'Watch', icon: EyeIcon},
   {label: 'Share', icon: ShareIcon},
-  {label: 'Notify', icon: BellIcon},
+  {label: 'Notify', icon: NotificationIcon},
 ];
 
 const WATCHERS = [
@@ -374,6 +375,7 @@ function PageHeader({
   onToggleDetails: () => void;
   isNarrow: boolean;
 }) {
+  const showToast = useToast();
   return (
     <LayoutHeader padding={6} hasDivider>
       <VStack gap={4}>
@@ -411,6 +413,13 @@ function PageHeader({
                   label={action.label}
                   variant="secondary"
                   icon={<Icon icon={action.icon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: `Demo: ${action.label} would happen here`,
+                      uniqueID: `header-${action.label}`,
+                    })
+                  }
                 />
               ))}
               <Button
@@ -494,10 +503,26 @@ function DescriptionSection() {
           <Heading level={4} accessibilityLevel={3}>
             Success criteria
           </Heading>
+          {/* A node label wraps on a narrow screen; a string label
+              truncates to one line. */}
           <List listStyle="disc" density="compact">
-            <ListItem label="Day-seven activation rises from 42 to 55 percent for new workspaces in the variant." />
-            <ListItem label="Median time to first completed action drops below eight minutes." />
-            <ListItem label="No regression in day-thirty retention." />
+            <ListItem
+              label={
+                <>
+                  Day-seven activation rises from 42 to 55 percent for new
+                  workspaces in the variant.
+                </>
+              }
+            />
+            <ListItem
+              label={
+                <>
+                  Median time to first completed action drops below eight
+                  minutes.
+                </>
+              }
+            />
+            <ListItem label={<>No regression in day-thirty retention.</>} />
           </List>
         </VStack>
       </VStack>
@@ -515,6 +540,10 @@ function SubtasksSection({
 }) {
   const doneCount = subtasks.filter(task => task.isDone).length;
   const showToast = useToast();
+  // On a phone the due date and assignee move under the title, so the title
+  // gets the row's width. Mobile first, so a page that runs no script gets
+  // the phone layout.
+  const isPhone = useMediaQuery('(max-width: 640px)', true);
 
   return (
     <Section padding={SECTION_PADDING}>
@@ -548,25 +577,32 @@ function SubtasksSection({
           </StackItem>
         </HStack>
         <List>
-          {subtasks.map(task => (
-            <CheckboxListItem
-              key={task.id}
-              label={task.title}
-              isChecked={task.isDone}
-              onCheck={isDone => onSetDone(task.id, isDone)}
-              endContent={
-                <HStack gap={2} vAlign="center">
-                  <Timestamp
-                    value={task.due}
-                    format="date"
-                    type="supporting"
-                    color="secondary"
-                  />
-                  <Avatar name={task.assignee} size="sm" />
-                </HStack>
-              }
-            />
-          ))}
+          {subtasks.map(task => {
+            const dueAndAssignee = (
+              <HStack gap={2} vAlign="center">
+                <Timestamp
+                  value={task.due}
+                  format="date"
+                  type="supporting"
+                  color="secondary"
+                />
+                <Avatar name={task.assignee} size="sm" />
+              </HStack>
+            );
+            return (
+              <CheckboxListItem
+                key={task.id}
+                // A node label wraps; a string label is cut to one line, which
+                // leaves a phone showing a few words of each task.
+                label={<>{task.title}</>}
+                isChecked={task.isDone}
+                onCheck={isDone => onSetDone(task.id, isDone)}
+                align={isPhone ? 'first-line' : undefined}
+                description={isPhone ? dueAndAssignee : undefined}
+                endContent={isPhone ? undefined : dueAndAssignee}
+              />
+            );
+          })}
         </List>
       </VStack>
     </Section>
@@ -576,12 +612,24 @@ function SubtasksSection({
 // ─── Attachments ────────────────────────────────────────────────────────────
 function AttachmentsSection() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
         <SectionHeader
           title="Attachments"
-          action={<Button label="Add attachment" />}
+          action={
+            <Button
+              label="Add attachment"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: a file picker would open here',
+                  uniqueID: 'add-attachment',
+                })
+              }
+            />
+          }
         />
         <VStack gap={1}>
           {ATTACHMENTS.map(attachment => (
@@ -617,7 +665,7 @@ function AttachmentsSection() {
                   items={[
                     {
                       label: 'Edit',
-                      icon: PencilIcon,
+                      icon: EditIcon,
                       onClick: () =>
                         // Demo only: replace this toast with the call that edits the attachment.
                         showToast({
@@ -625,13 +673,30 @@ function AttachmentsSection() {
                           uniqueID: `edit-${attachment.id}`,
                         }),
                     },
-                    ATTACHMENT_DELETE,
+                    {
+                      ...ATTACHMENT_DELETE,
+                      onClick: () =>
+                        confirm.show({
+                          title: `Delete ${attachment.title}?`,
+                          description: "This demo won't delete anything.",
+                          actionLabel: 'Delete',
+                          onAction: () => {
+                            confirm.hide();
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: `Demo: ${attachment.title} would be deleted here`,
+                              uniqueID: `delete-${attachment.id}`,
+                            });
+                          },
+                        }),
+                    },
                   ]}
                 />
               </HStack>
             </ClickableCard>
           ))}
         </VStack>
+        {confirm.element}
       </VStack>
     </Section>
   );

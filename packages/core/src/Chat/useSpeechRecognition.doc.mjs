@@ -83,7 +83,8 @@ export const docs = {
     {
       name: 'isSupported',
       type: 'boolean',
-      description: 'Whether this browser provides speech recognition.',
+      description:
+        'Whether this browser provides speech recognition. It is false on the server and in the render that hydrates server markup, and turns true in the next render when the browser supports it.',
     },
     {
       name: 'isListening',

@@ -7,12 +7,13 @@
  * @output `loadedCodeStamps(from, roots)`: the stamps of every file in the
  *   require graph from `roots` and of every package folder Node's lookup
  *   took on the way, and whether each last changed before this process
- *   started.
+ *   started; `codeDigest(file)`: a code file's content, as a hash.
  * @position For a kept answer a library works out: its stamps name every
  *   file of the library's code, wherever it is installed, so a reinstall
  *   that changes any of them works the answer out again.
  */
 
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -41,9 +42,17 @@ import {fileStamp, resolvedNow, withoutRecording} from './read-record.mjs';
  * @param {Array<[string, string]>} [also] more loaded files, each with the
  *   file that required it, that the require graph does not show (one read
  *   through a `require` made with `createRequire`)
+ * @param {{fromLookups?: boolean}} [options] - `fromLookups: false` leaves out
+ *   the folders `from`'s own lookups of `roots` took, for an answer whose key
+ *   already names the files `roots` resolve to from the caller's code
  * @returns {{stamps: [string, string][], unchangedSinceStart: boolean}}
  */
-export function loadedCodeStamps(from, roots, also = []) {
+export function loadedCodeStamps(
+  from,
+  roots,
+  also = [],
+  {fromLookups = true} = {},
+) {
   const {cache} = createRequire(import.meta.url);
   /** @type {Set<string>} */
   const files = new Set();
@@ -60,7 +69,7 @@ export function loadedCodeStamps(from, roots, also = []) {
   };
   for (const root of roots) {
     if (!cache[root]) continue;
-    required.push([from, root]);
+    if (fromLookups) required.push([from, root]);
     visit(cache[root]);
   }
   for (const [by, file] of also) {
@@ -97,6 +106,34 @@ export function loadedCodeStamps(from, roots, also = []) {
       filesBefore && linksBefore && stamps.every(([, stamp]) => stamp !== '-');
     return {stamps, unchangedSinceStart};
   });
+}
+
+/** @type {Map<string, string | null>} */
+const digests = new Map();
+
+/**
+ * A code file's content as a SHA-256 hash, read once per process, or null
+ * when the file cannot be read: for an answer kept across CLI builds, whose
+ * key must follow the code that works it out by content (a build's files
+ * are otherwise covered by its build id).
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function codeDigest(file) {
+  if (!digests.has(file))
+    digests.set(
+      file,
+      withoutRecording(() => {
+        try {
+          return createHash('sha256')
+            .update(fs.readFileSync(file))
+            .digest('hex');
+        } catch {
+          return null;
+        }
+      }),
+    );
+  return digests.get(file) ?? null;
 }
 
 /**

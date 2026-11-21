@@ -9,7 +9,8 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
-import {PlusIcon} from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
+import {AddIcon} from '@astryxdesign/template-icons';
 
 const card: CSSProperties = {
   width: '100%',
@@ -19,6 +20,7 @@ const card: CSSProperties = {
 };
 
 export default function ToolbarWithTabs() {
+  const showToast = useToast();
   const [tab, setTab] = useState('overview');
   return (
     <Card style={card}>
@@ -33,7 +35,14 @@ export default function ToolbarWithTabs() {
           </TabList>
         }
         endContent={
-          <Button label="New item" icon={<Icon icon={PlusIcon} />} isIconOnly />
+          <Button
+            label="New item"
+            icon={<Icon icon={AddIcon} />}
+            isIconOnly
+            onClick={() =>
+              showToast({body: 'Demo: a new item would be created here'})
+            }
+          />
         }
       />
       <Section />

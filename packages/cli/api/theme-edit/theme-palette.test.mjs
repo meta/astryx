@@ -80,7 +80,15 @@ describe('color dials through the palette generator', () => {
   it('writes a palette config in the generator shape, then the palette and receipt', async () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const config = JSON.parse(read('palette.config.json'));
-    expect(config).toEqual({
+    // The category and chart hues the editor grows for the look follow the
+    // theme's own colors (theme-category-colors-follow-the-look.test.mjs).
+    const grown = config.families.slice(1);
+    expect(grown.map((/** @type {any} */ f) => Object.keys(f))).toEqual(
+      grown.map(() => ['id', 'name', 'seed']),
+    );
+    expect({...config, families: config.families.slice(0, 1)}).toEqual({
+      // A new palette is made with the newest recipe.
+      recipe: 'astryx-oklch-v2',
       modeStrategy: 'light-and-dark',
       families: [
         {
@@ -122,7 +130,8 @@ describe('color dials through the palette generator', () => {
     const used = [
       ...source.matchAll(/palette\.accent\.(light|dark)\[(\d+)\]/g),
     ].map(m => `${m[1]}:${m[2]}`);
-    for (const m of refs.matchAll(/(light|dark): \{([^}]*)\}/g))
+    const accentRefs = /accent: \{([\s\S]*?)\n {2}\}/.exec(refs)?.[1] ?? '';
+    for (const m of accentRefs.matchAll(/(light|dark): \{([^}]*)\}/g))
       for (const [, stop, color] of m[2].matchAll(/(\d+): '(#[0-9a-f]{6})'/g)) {
         expect(used).toContain(`${m[1]}:${stop}`);
         expect(
@@ -227,13 +236,18 @@ describe('color dials through the palette generator', () => {
     await themeEditSet('p', 'accent', '#0d9488', {cwd});
     const next = JSON.parse(read('palette.config.json'));
     expect(next.stops).toEqual(config.stops);
-    expect(next.families.map((/** @type {any} */ f) => f.id)).toEqual([
-      'accent',
-      'brand-pink',
-    ]);
+    expect(
+      next.families
+        .map((/** @type {any} */ f) => f.id)
+        .filter(
+          (/** @type {string} */ id) => id === 'accent' || id === 'brand-pink',
+        ),
+    ).toEqual(['accent', 'brand-pink']);
     expect(next.families[0].seed).toBe('#0d9488');
     expect(read('tokens/p.palette.ts')).toContain('"brand-pink"');
-    next.families.pop();
+    next.families = next.families.filter(
+      (/** @type {any} */ f) => f.id !== 'brand-pink',
+    );
     delete next.stops;
     fs.writeFileSync(file('palette.config.json'), JSON.stringify(next));
   });
@@ -1265,6 +1279,23 @@ describe('color settings, refused well', () => {
     expect(show.data.settings.some(s => s.thing === 'vibrancy')).toBe(false);
   });
 
+  it('names a hand edit made between two shows in one process', async () => {
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    expect(
+      (await themeEditShow('p', {cwd})).data.colorNotes.join(' '),
+    ).not.toContain('was edited by hand');
+    const before = read('tokens/p.palette.ts');
+    fs.writeFileSync(
+      file('tokens/p.palette.ts'),
+      before.replace('#7c3aed', '#7c3aee'),
+    );
+    expect(
+      (await themeEditShow('p', {cwd})).data.colorNotes.join(' '),
+    ).toContain('p.palette.ts was edited by hand');
+    fs.writeFileSync(file('tokens/p.palette.ts'), before);
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
   it('names the value a color replaced, and saves the value trimmed', async () => {
     await themeEditSet('p', 'accent', '#dc2626', {cwd});
     const r = await themeEditSet('p', 'accent', ' #16a34a\n', {cwd});
@@ -1524,14 +1555,14 @@ describe('lifted text and see-through colors', () => {
       /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)"/,
     );
     await themeEditSet('p', 'neutral', '#64748b', {cwd});
-    // An exact secondary text for light only replaces the lift in light,
-    // and keeps it in dark.
-    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+    // An exact secondary text for light only, one that reads on the tint,
+    // replaces the lift in light, and keeps it in dark.
+    await themeEditSet('p', '--color-text-secondary', '#333333', {
       cwd,
       mode: 'light',
     });
     expect(read('p.settings.ts')).toMatch(
-      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#5a5a5a, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
+      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#333333, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
     );
     // On the part, it covers numbered citations too.
     await themeEditSet('p', '--color-text-secondary', '#123456', {
@@ -1687,12 +1718,12 @@ describe('colors and type, final checks', () => {
   });
 
   it('gives an exact secondary text to the lifted parts with no color dial', async () => {
-    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+    await themeEditSet('p', '--color-text-secondary', '#333333', {
       cwd,
       mode: 'light',
     });
     expect(read('p.settings.ts')).toMatch(
-      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#5a5a5a, [^"]+\)"/,
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#333333, [^"]+\)"/,
     );
     await themeEditUndo('p', {
       cwd,
@@ -1728,7 +1759,7 @@ describe('colors and type, final checks', () => {
   });
 });
 
-describe('chaos round 4', () => {
+describe('cases', () => {
   it('refuses a font the loader would refuse, so a saved font never blocks the theme', async () => {
     for (const v of ['serif !important', 'Foo /* x */']) {
       const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
@@ -2664,7 +2695,7 @@ describe('colors17', () => {
   });
 });
 
-describe('hunt22', () => {
+describe('cases', () => {
   it('reads undo values in either quote style and spacing, names the headings half set, and tells a new theme from a lost history', async () => {
     await themeEditNew('h22', {cwd, mode: 'dark-only'});
     const fresh = await refusal(() =>
@@ -2730,8 +2761,11 @@ describe('colors19', () => {
         new RegExp(`--font-size-base ${want.replace('.', '\\.')}$`),
       );
     }
+    // A size in the pixels text-size takes, with px, is that size.
+    expect(
+      (await themeEditSet('p', 'text-size', '20 px', {cwd})).data.setting.value,
+    ).toBe('20');
     for (const [value, want] of [
-      ['20 px', '20'],
       ['125%', '20'],
       ['40', '32'],
       ['3px', '10'],
@@ -3475,11 +3509,10 @@ describe('parts36', () => {
           .code,
         `${prop} ${on}`,
       ).toBe('ERR_THEME_BAD_VALUE');
-    const group = await refusal(() =>
-      themeEditSet('p', 'padding', '0', {cwd, on: 'menus'}),
-    );
-    expect(group.code).toBe('ERR_THEME_BAD_VALUE');
-    expect(group.run[0]).toMatch(/padding 0px --on menus$/);
+    // A bare 0 is the length 0px there.
+    const group = await themeEditSet('p', 'padding', '0', {cwd, on: 'menus'});
+    expect(JSON.stringify(group)).toMatch(/0 is saved as 0px/);
+    await themeEditUndo('p', {cwd});
     for (const value of [
       'var(--spacing-2)',
       'calc(var(--spacing-2) + 2px)',
@@ -3501,9 +3534,15 @@ describe('parts36', () => {
         on: 'segmented-control',
       }),
     );
-    expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on segmented-control$/,
-    );
+    // (Each side keeps the variable typed for it.)
+    expect(keeps.run).toEqual([
+      expect.stringMatching(
+        /padding-block 'var\(--spacing-2\)' --on segmented-control$/,
+      ),
+      expect.stringMatching(
+        /padding-inline 'var\(--spacing-3\)' --on segmented-control$/,
+      ),
+    ]);
   });
 
   it('takes a state padding on a card through the padding model', async () => {
@@ -3565,7 +3604,7 @@ describe('parts37', () => {
     }
   });
 
-  it('refuses at the next set a hand edit that set would refuse', async () => {
+  it('names at the next set a hand edit that set takes with no effect', async () => {
     await themeEditNew('h37', {cwd});
     const file = path.join(cwd, 'themes', 'h37', 'h37.settings.json');
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -3576,11 +3615,12 @@ describe('parts37', () => {
       on: 'chat-composer',
     });
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
-    const r = await refusal(() =>
-      themeEditSet('h37', 'corners', 'pill', {cwd}),
-    );
-    expect(r.message).toContain('4px 8px');
-    expect(r.run.join(' ')).toMatch(/undo h37 padding --on chat-composer/);
+    // One set takes with no effect there opens the theme (as an earlier
+    // editor may have saved it): the next set names it, with its undo.
+    const r = await themeEditSet('h37', 'corners', 'pill', {cwd});
+    const said = r.data.notes.join(' ');
+    expect(said).toContain('4px 8px');
+    expect(said).toMatch(/undo h37 padding --on chat-composer/);
     fs.rmSync(path.join(cwd, 'themes', 'h37'), {recursive: true, force: true});
   });
 

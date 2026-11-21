@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'copy',
+  group: 'clipboard',
   description: 'Copy to the clipboard.',
   words: ['duplicate', 'clipboard', 'document duplicate'],
   builtIn: true,

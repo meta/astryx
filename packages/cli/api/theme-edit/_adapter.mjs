@@ -47,6 +47,7 @@ import {
   baseInstalled,
   installLine,
   packageInstalled,
+  refusePlugAndPlay,
   themeCacheRoot,
 } from './_project.mjs';
 import * as preview from './_preview-app.mjs';
@@ -71,7 +72,8 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {LIKE, P} from './_tables.mjs';
+import {LIKE, P, knowBuiltInThemes} from './_tables.mjs';
+import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 
 /** The preview command, as a person runs it. */
 const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
@@ -147,6 +149,10 @@ export async function themeEditHow(subject, options = {}) {
     ...(words ? {words} : {}),
   });
 }
+
+// The built-in themes come from the installed packages: found here, in the
+// adapter, and handed to the editor's tables.
+knowBuiltInThemes(discoverBundledThemes().map(t => t.slug));
 
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];
@@ -301,6 +307,9 @@ async function withLock(root, name, fn, bestEffort = false, again = null) {
   // A preview command, which holds the preview lock, suggests the list of
   // previews (what the other command may be changing).
   again ??= name === 'preview' ? 'experimental theme preview list' : null;
+  // A Plug'n'Play app has no node_modules to keep the lock in, and the editor
+  // refuses it: refuse before any lock folder, read-only commands included.
+  if (!isOutsideProject(root)) refusePlugAndPlay(root);
   /** @type {string | null} */
   let dir;
   try {
@@ -973,7 +982,7 @@ export function editorThemeRefusal(err, cwd) {
 /** The shared typo rule, for a typed subcommand. */
 export {booleanWord, typoNear, typoOf} from './_normal.mjs';
 // How a setting is named in a result: one wording for the API and the CLI.
-export {describe, namesSetting} from './_settings.mjs';
+export {describe, namesSetting, needsPart} from './_settings.mjs';
 
 /**
  * The editor themes of the app the folder `cwd` is in, by name; none when

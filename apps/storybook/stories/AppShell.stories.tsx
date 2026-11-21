@@ -24,6 +24,7 @@ import {
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {StackItem} from '@astryxdesign/core/Stack';
 import * as stylex from '@stylexjs/stylex';
 import {
   HomeIcon,
@@ -64,6 +65,9 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 32,
+  },
+  barSearch: {
+    width: 240,
   },
 });
 
@@ -395,6 +399,44 @@ export const LongTextHeadingOnMobile: Story = {
           label="Main navigation"
           heading="Northwind Internal Usage Analytics"
           endContent={<ProductHeaderControls />}
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * A search field and three end controls on a phone. The field asks for 240px
+ * but may narrow. The heading yields first, then the field narrows, so the end
+ * controls and the menu toggle keep their size and stay inside the bar.
+ */
+export const SearchInEndContentOnMobile: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading="Northwind"
+          endContent={
+            <>
+              <StackItem size="fill" xstyle={styles.barSearch}>
+                <TextInput
+                  label="Search"
+                  isLabelHidden
+                  size="sm"
+                  width="100%"
+                  placeholder="Search files and commands"
+                  value=""
+                  onChange={() => {}}
+                />
+              </StackItem>
+              <ProductHeaderControls />
+            </>
+          }
         />
       }
       sideNav={<SideNavWithoutHeader />}>

@@ -30,16 +30,17 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   CalendarIcon,
   FlagIcon,
   FunnelIcon,
-  HandThumbUpIcon,
+  ThumbsUpIcon,
   HeartIcon,
-  PencilSquareIcon,
+  ComposeIcon,
   ArrowLeftIcon,
   ViewColumnsIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 import type {CSSProperties} from 'react';
@@ -170,7 +171,10 @@ function PageHeader({
   const showToast = useToast();
   const restock = () =>
     // Demo only: replace this toast with the call that performs the action.
-    showToast({body: 'Restock requested for order #1001', uniqueID: 'restock'});
+    showToast({
+      body: 'Demo: a restock would be requested for order #1001 here',
+      uniqueID: 'restock',
+    });
   return (
     <LayoutHeader hasDivider padding={4} paddingBlockEnd={0}>
       <VStack gap={3}>
@@ -236,7 +240,17 @@ function PageHeader({
           {!isNarrow && (
             <HStack gap={2}>
               <Button label="Restock" variant="secondary" onClick={restock} />
-              <Button label="Edit" variant="secondary" />
+              <Button
+                label="Edit"
+                variant="secondary"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the order editor would open here',
+                    uniqueID: 'edit',
+                  })
+                }
+              />
             </HStack>
           )}
         </HStack>
@@ -253,7 +267,17 @@ function PageHeader({
             </StackItem>
             <StackItem size="fill">
               <VStack hAlign="stretch">
-                <Button label="Edit" variant="secondary" />
+                <Button
+                  label="Edit"
+                  variant="secondary"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the order editor would open here',
+                      uniqueID: 'edit',
+                    })
+                  }
+                />
               </VStack>
             </StackItem>
           </HStack>
@@ -314,7 +338,7 @@ function ItemsCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: `Fulfillment started for ${PRODUCTS.length} items`,
+                  body: `Demo: fulfillment would start for ${PRODUCTS.length} items here`,
                   uniqueID: 'fulfill',
                 })
               }
@@ -325,7 +349,7 @@ function ItemsCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Shipping label created for order #1001',
+                  body: 'Demo: a shipping label would be created for order #1001 here',
                   uniqueID: 'label',
                 })
               }
@@ -347,7 +371,13 @@ function ItemsCard() {
                   ))}
                 </VStack>
               }
-              onClick={() => {}}
+              onClick={() =>
+                // Demo only: replace this toast with the link to the product.
+                showToast({
+                  body: `Demo: ${product.name} would open here`,
+                  uniqueID: `product-${i}`,
+                })
+              }
               startContent={
                 <Thumbnail
                   src={product.image}
@@ -376,6 +406,7 @@ function ItemsCard() {
 // ─── Invoice Card ───────────────────────────────────────────────────────────
 function InvoiceCard() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Section>
       <VStack gap={4}>
@@ -391,10 +422,18 @@ function InvoiceCard() {
               label="Refund"
               variant="ghost"
               onClick={() =>
-                // Demo only: replace this toast with the call that performs the action.
-                showToast({
-                  body: 'Refund started for order #1001',
-                  uniqueID: 'refund',
+                confirm.show({
+                  title: 'Refund this order?',
+                  description: "This demo won't refund anything.",
+                  actionLabel: 'Refund',
+                  onAction: () => {
+                    confirm.hide();
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the refund would be issued here',
+                      uniqueID: 'refund',
+                    });
+                  },
                 })
               }
             />
@@ -404,7 +443,7 @@ function InvoiceCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Invoice sent to janedoe@email.com',
+                  body: 'Demo: the invoice would be sent to janedoe@email.com here',
                   uniqueID: 'invoice',
                 })
               }
@@ -426,7 +465,7 @@ function InvoiceCard() {
               <StackItem size="fill">
                 <Text type="body">New customer code: NEW15</Text>
               </StackItem>
-              <Text type="body">– {fmt(DISCOUNT)}</Text>
+              <Text type="body">−&nbsp;{fmt(DISCOUNT)}</Text>
             </HStack>
           </MetadataListItem>
           <MetadataListItem label="Shipping">
@@ -467,6 +506,7 @@ function InvoiceCard() {
             </HStack>
           </MetadataListItem>
         </MetadataList>
+        {confirm.element}
       </VStack>
     </Section>
   );
@@ -474,6 +514,7 @@ function InvoiceCard() {
 
 // ─── Timeline ───────────────────────────────────────────────────────────────
 function TimelineSection() {
+  const showToast = useToast();
   return (
     <Section>
       <VStack gap={4}>
@@ -486,6 +527,13 @@ function TimelineSection() {
             variant="ghost"
             icon={<Icon icon={FunnelIcon} />}
             isIconOnly
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: timeline filters would open here',
+                uniqueID: 'timeline-filters',
+              })
+            }
           />
         </HStack>
 
@@ -507,7 +555,7 @@ function TimelineSection() {
                             {item.changes.map((change, j) => (
                               <HStack key={j} gap={2} vAlign="center">
                                 <Icon
-                                  icon={PencilSquareIcon}
+                                  icon={ComposeIcon}
                                   size="sm"
                                   color="secondary"
                                 />
@@ -523,7 +571,7 @@ function TimelineSection() {
                     <HStack gap={3} vAlign="center">
                       <HStack gap={1} vAlign="center">
                         <Icon
-                          icon={HandThumbUpIcon}
+                          icon={ThumbsUpIcon}
                           size="xsm"
                           color="secondary"
                         />
@@ -558,10 +606,17 @@ function TimelineSection() {
 // ─── Right Panel ────────────────────────────────────────────────────────────
 // Renders as a fixed-width side panel on desktop, and as a plain stacked section
 // on mobile (so it flows below the content instead of squishing beside it).
-function PanelContent() {
+// Under the narrow layout's "Order details" heading its sections sit a level
+// deeper.
+function PanelContent({sectionLevel = 2}: {sectionLevel?: 2 | 3}) {
   return (
     <VStack gap={4}>
-      <Collapsible trigger={<Heading level={4}>Notes</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={sectionLevel}>
+            Notes
+          </Heading>
+        }>
         <Text type="body">
           Customer is a repeat buyer — 3rd order this quarter. Prefers snow and
           oat glazes. Requested gift wrapping for the mug set. Ships to a
@@ -571,7 +626,12 @@ function PanelContent() {
           </Link>
         </Text>
       </Collapsible>
-      <Collapsible trigger={<Heading level={4}>Customer</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={sectionLevel}>
+            Customer
+          </Heading>
+        }>
         <MetadataList>
           <MetadataListItem label="Name">Jane Doe</MetadataListItem>
           <MetadataListItem label="Address">
@@ -584,7 +644,12 @@ function PanelContent() {
           </MetadataListItem>
         </MetadataList>
       </Collapsible>
-      <Collapsible trigger={<Heading level={4}>Fraud Analysis</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={sectionLevel}>
+            Fraud Analysis
+          </Heading>
+        }>
         <VStack gap={1}>
           <ProgressBar
             label="Risk level"
@@ -647,7 +712,7 @@ export default function DetailPage2Template() {
             {isNarrow && (
               <VStack gap={4}>
                 <Heading level={2}>Order details</Heading>
-                <PanelContent />
+                <PanelContent sectionLevel={3} />
               </VStack>
             )}
           </VStack>
