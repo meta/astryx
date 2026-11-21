@@ -198,7 +198,7 @@ export const doc = {
       value: 'icon.search',
       stability: 'experimental',
       description:
-        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when a meaning names the icon: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
+        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when the set's `map` names the icon for a meaning: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
     },
     {
       value: 'icon.detail',
@@ -234,7 +234,7 @@ export const doc = {
       value: 'icon.add',
       stability: 'experimental',
       description:
-        "One icon added to the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the meaning mapped to it, the meaning file written when it added the set's own, the files written, and whether anything changed.",
+        "One icon added to the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the meaning mapped to it, the definition file written when it added the set's own meaning, the files written, and whether anything changed.",
     },
     {
       value: 'icon.definitions',

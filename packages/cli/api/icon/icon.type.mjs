@@ -73,7 +73,7 @@
  * @typedef {object} IconSearchDefinition
  * @property {string} name - The meaning's name.
  * @property {boolean} builtIn - Core draws it by name with no icon set.
- * @property {string} description - What the meaning means.
+ * @property {string} description - What it means.
  * @property {string} [group] - Present when the meaning names one: the family of related meanings it belongs to.
  * @property {IconDefinitionRelative[]} [relatives] - Present when its group has other members: those meanings, so a reader picks the one that fits.
  */
@@ -117,7 +117,7 @@
  * @property {boolean} project - Whether this is the project's icon set.
  * @property {'main' | 'backup' | null} role - The set's place in the project's list: its main set, a backup, or not listed.
  * @property {number | null} rank - The set's position in the list, the main set at 1; null when it is not listed.
- * @property {string | null} [look] - Present when the project names a variant: the variant this set's icons draw, the variant when the set declares it, else its default variant; null when the list leaves the set out or it declares no variants.
+ * @property {string | null} [look] - Present when the project names a variant: the variant this set's icons draw, the project's variant when the set declares it, else the set's default variant; null when the list leaves the set out or it declares no variants.
  */
 
 /**
@@ -171,7 +171,7 @@
  * @property {string | null} data.previousVariant - The `experimental.iconVariant` value it replaced.
  * @property {boolean} data.changed - Whether anything was written.
  * @property {string[]} data.unlisted - Installed sets the list leaves out, as `<package>/<set>`. Doctor fails a project that installs more than one set and leaves one out.
- * @property {Array<{set: string, variant: string | null}>} [data.looks] - Present when a variant is named: each set in the list, main set first, as `<package>/<set>`, with the variant its icons draw: the variant, or the set's default variant when it declares no variant of that name (null when it declares no variants).
+ * @property {Array<{set: string, variant: string | null}>} [data.looks] - Present when a variant is named: each set in the list, main set first, as `<package>/<set>`, with the variant its icons draw: the project's variant, or the set's default variant when it declares no variant of that name (null when it declares no variants).
  * @property {{module: string, export: string}} [data.themeMap] - Present when a variant is named and the main set has a theme map for that variant: the export a theme sets as `icons` to draw the built-in icons in it (`themeIconsFilled`), and the module it is imported from.
  * @property {string} [data.next] - Present when `unlisted` is not empty: the command that adds them as backups.
  * @property {string} [data.warning] - Present when the project's
@@ -360,7 +360,7 @@
  * @property {string[] | string} [exclude] - With `from`: export names that are not icons; a string is split on commas.
  * @property {string} [adapter] - `./<path>#<export>`: a function in the package that turns one library export that is not a component into one. It is written to the data file's `adapter`; with `from`, every data export of the library becomes an icon through it. On a set that already has icons, only with `from`.
  * @property {string[] | string} [variants] - The variants the set supplies, such as `outline,solid`; a string is split on commas.
- * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the variant the icons' exports draw in a library whose names encode variants; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode variants.
+ * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the variant the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
  * @property {string} [displayName] - The descriptor's display name; the set name in title case when absent.
  * @property {string} [description] - The descriptor's one-line description; `<Display name> icons.` when absent.
  */
