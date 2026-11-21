@@ -199,7 +199,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, settingsNow?: Setting[], sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -4585,7 +4585,49 @@ export function partsOf(ctx, s) {
         .filter(m => drawnAlike(ctx, s, m))
         .filter(takesWhen),
     );
-  return [s.on];
+  const frame = boxFrameOf(ctx, s);
+  return frame ? [frame] : [s.on];
+}
+
+/**
+ * The row a whole border, border radius or shadow set on a part goes on
+ * instead (a pager's control row, for one set on the pager): the part
+ * paints no box of its own, and its controls sit side by side in a row
+ * that frames them as one strip. On the part it would land on the whole
+ * bar, or show nothing; on each control it would box each one apart. Null
+ * for every other setting: a side's border, the corners dial (it rounds
+ * each control), and any of them on a part the theme fills.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'>} s
+ * @returns {string | null}
+ */
+export function boxFrameOf(ctx, s) {
+  if (!s.on || FAMILIES[s.on]) return null;
+  const thing = kebab(String(s.thing ?? ''));
+  // Only the whole outline goes on the row: a side's border is a rule
+  // across the part, said of the part.
+  if (
+    !/^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius)$/.test(
+      thing,
+    )
+  )
+    return null;
+  // (On a part the theme fills, the fill is its box: its border, radius
+  // and shadow stay on it, as they always did.)
+  if (
+    (ctx.settingsNow ?? []).some(
+      x =>
+        x.on === s.on &&
+        x.source === 'property' &&
+        /^background/.test(String(x.thing)) &&
+        givesEdge(x),
+    )
+  )
+    return null;
+  const own = ctx.C?.MAP?.[s.on]?.own ?? {};
+  if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
+    return null;
+  return rowFrameOf(ctx, s.on);
 }
 
 /**
@@ -4621,6 +4663,58 @@ function drawnAlike(ctx, s, member) {
 }
 
 /**
+ * Whether a part is the row that frames another part's controls as one
+ * strip (a pager's control row).
+ * @param {Ctx} ctx
+ * @param {string} part
+ */
+export function isRowFrame(ctx, part) {
+  return [...ctx.project.target.keys()].some(
+    k => k !== part && rowFrameOf(ctx, k) === part,
+  );
+}
+
+/**
+ * The part of a component that holds its controls side by side and frames
+ * them as one strip (a pager's control row around its page cells), when a
+ * part draws no edge of its own and its edges are those controls': a part
+ * of the same component inside it that draws every one of them again and
+ * again (a slider's track and thumb, drawn once each, sit in no such row)
+ * and draws no border itself. Null when there is none (a date and time field's two
+ * boxes sit in no such row). A border or corners asked of the part belong
+ * on this row: on each control they would box each one apart.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function rowFrameOf(ctx, part) {
+  const componentOf = (/** @type {string} */ t) =>
+    ctx.project.target.get(t)?.component;
+  const component = componentOf(part);
+  if (!component) return null;
+  const edges = roundedPartsInside(ctx, part);
+  const own = edges.filter(t => t !== part && componentOf(t) === component);
+  if (!own.length) return null;
+  const contains = (/** @type {string} */ t) =>
+    /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []);
+  return (
+    contains(part)
+      .filter(
+        t =>
+          !edges.includes(t) &&
+          componentOf(t) === component &&
+          !Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k =>
+            /^border(?!.*radius)/.test(k),
+          ) &&
+          own.every(e =>
+            /** @type {string[]} */ (ctx.C.MAP[t]?.repeats ?? []).includes(e),
+          ),
+      )
+      .sort((a, b) => contains(a).length - contains(b).length)[0] ?? null
+  );
+}
+
+/**
  * The parts that draw a part's border: the part itself, or, when it draws
  * none of its own and its edges are the borders of parts inside it (a date
  * and time field's date and time boxes), those parts. Only pieces that draw
@@ -4633,7 +4727,7 @@ function drawnAlike(ctx, s, member) {
 export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
-  const inner = cornerParts(ctx, part).filter(
+  const inner = roundedPartsInside(ctx, part).filter(
     t => t !== part && drawsBorder(ctx, t),
   );
   return inner.length ? inner : [part];
@@ -5717,6 +5811,7 @@ export function roleReach(ctx, data, base) {
  * @returns {any}
  */
 export function compileTheme(ctx, data, base) {
+  ctx.settingsNow = data.settings;
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
   // A setting the editor no longer accepts never reaches the build; a
@@ -14228,13 +14323,54 @@ export const DIAL_RADII = [
 export function cornerParts(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [part];
-  const inner = (rec.contains ?? []).filter(
+  const inner = roundedPartsInside(ctx, part);
+  return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a setting or step rounds corners: the corners dial or a border
+ * radius.
+ * @param {unknown} thing
+ */
+export function roundsCorners(thing) {
+  return thing === 'corners' || /^border(?:-\w+)*-radius$/.test(String(thing));
+}
+
+/**
+ * Whether a setting gives its part an edge that shows its corners: a fill,
+ * border, shadow or outline that is not none, zero or transparent, at rest
+ * or in the state the corners are for ("disabled links: a fill and 12px
+ * corners"), or in any state when `state` is true (corners show whenever
+ * that edge does).
+ * @param {{thing?: unknown, value?: unknown, state?: unknown}} x
+ * @param {unknown} [state] the corners' own state, or true for any
+ */
+export function givesEdge(x, state) {
+  return (
+    (!x.state || state === true || x.state === state) &&
+    /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
+      kebab(String(x.thing ?? '')),
+    ) &&
+    !/^(?:none|hidden|0(?:px)?|transparent)$/.test(String(x.value ?? '').trim())
+  );
+}
+
+/**
+ * The parts of a part's own inside it that round their own corners (a
+ * date and time field's two boxes, a pager's cells).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+function roundedPartsInside(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec || rec.own?.['border-radius']) return [];
+  return (rec.contains ?? []).filter(
     (/** @type {string} */ t) =>
       ctx.C.MAP[t]?.own?.['border-radius'] &&
       t.startsWith(`${part}-`) &&
       ctx.project.target.has(t),
   );
-  return inner.length ? inner : [part];
 }
 
 /** The table boxes CSS draws no padding on: rows, row groups and columns. */
