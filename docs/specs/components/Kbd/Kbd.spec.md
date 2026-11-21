@@ -30,11 +30,11 @@ system_specs: [spec:AST-102]
 
 | Area                    | Contract                                                                                                                                                                                            |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | None changes. Kbd takes a `keys` string and base props.                                                                                                                                             |
+| Public contract         | Kbd takes a `keys` string and base props. Each key badge carries the `kbd-key` target.                                                                                                              |
 | Behavior                | Kbd splits `keys` on `+`, draws one hidden key badge per key with platform-aware glyphs, and names the whole shortcut once with spoken key names.                                                   |
 | End-user impact         | Sighted people see familiar key glyphs; screen-reader users hear the shortcut as words. Those words are English in every locale.                                                                    |
-| Builder impact          | None.                                                                                                                                                                                               |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The `kbd` target sits on the non-painting shortcut group; listed under Current-state impact.                                              |
+| Builder impact          | A theme styles each key badge through `kbd-key`.                                                                                                                                                    |
+| Compatibility/readiness | The `kbd-key` target is a class on each badge and sets no style. The `kbd` target stays on the non-painting shortcut group.                                                                         |
 | Review checks           | Reject a badge that is exposed to assistive technology, a caller `role` or `aria-label` that replaces the computed one, duplicate React keys for repeated keys, or `mod` that ignores the platform. |
 | Governing rules         | `architecture:component-theming-surface`; `architecture:internationalization` INV1, INV1a; `architecture:public-component-api` INV5; `spec:AST-102` FR4.                                            |
 
@@ -44,14 +44,14 @@ This table is a review projection; the body below is authoritative.
 
 Kbd presents a keyboard shortcut as one or more painted key badges. It owns
 parsing the shortcut string, the platform-aware glyph for each key, the
-shortcut's accessible name, and the `kbd` target. Consumer usage lives in
+shortcut's accessible name, and the `kbd` and `kbd-key` targets. Consumer usage lives in
 `Kbd.doc.mjs`.
 
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change
+- Compatibility class: additive; each key badge carries the `kbd-key` class
+  (FR2, DEC-1). No prop, default, export, or style change
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -61,15 +61,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- The shortcut group, its current `kbd` target, and the painted key badges it
-  renders from the supplied shortcut string.
+- The shortcut group, its `kbd` target, and the painted key badges it renders
+  from the supplied shortcut string, each with the `kbd-key` target.
 - Key parsing, aliases, platform-aware glyphs, and the spoken name.
 
 **Does not own / non-goals**
 
 - The action associated with the shortcut or how the shortcut is discovered —
   owned by the product callsite.
-- Whether an individual key badge should gain a public target — open (OQ1).
 - Listening for or handling the shortcut — not provided; Kbd is display only.
 - Caller DOM props, `ref`, `className`, `style`, and `xstyle` on the group —
   shipped and documented, uncontracted here beyond FR4's role and label
@@ -86,7 +85,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Basis                                                                     |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | FR1 | The current render contains one shortcut group and one painted key badge for every parsed key segment. `keys` splits on `+`; each segment is trimmed and lowercased, `esc` reads as `escape` and `return` as `enter`, and a repeated key gets its own badge. Each badge is at least the `--spacing-5` size and MUST grow with a set text size so its glyph never clips (`spec:AST-102` FR4).                                                                                                                                                                                                                                                                    | Current source, docs, and tests; `spec:AST-102` FR4                       |
-| FR2 | The shortcut group carries the current `kbd` target; individual key badges currently carry no public target (OQ1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Current source, docs, and tests                                           |
+| FR2 | The shortcut group carries the `kbd` target; each key badge carries the `kbd-key` target.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Current source and tests                                                  |
 | FR3 | Each badge shows a glyph: `mod` is ⌘ on Apple platforms and the catalog's short Control text ("Ctrl" in English) elsewhere and before hydration; `ctrl`, `alt`, and `shift` follow the same rule, ⌃ ⌥ ⇧ on Apple platforms and the catalog's short text ("Ctrl", "Alt", "Shift" in English) elsewhere and before hydration; `meta` shows ⌘ on Apple platforms and the catalog's short Windows-key text ("Win" in English) elsewhere and before hydration; spoken names are unchanged; `escape` shows the catalog's short Escape text ("Esc"); `enter`, `backspace`, `tab`, and the arrows show their symbols; `plus` shows "+"; any other key shows uppercased. | `architecture:internationalization` INV1a; current source and tests       |
 | FR4 | The group has `role="img"` and an `aria-label` built from each key's spoken name, taken from the Astryx catalog (`mod` is "Command" on Apple platforms and "Control" elsewhere and before hydration; an unknown key is spoken uppercased), joined pairwise through the catalog's shortcut message (" + " in English, for example "Command + K"); every badge is `aria-hidden`. A caller's `role` and `aria-label` never replace the computed ones; other caller ARIA props, such as `aria-labelledby` and `aria-hidden`, still reach the group.                                                                                                                 | `architecture:internationalization` INV1, INV1a; current source and tests |
 
@@ -135,17 +134,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 ```json
 {
   "Shortcut": {"target": "kbd"},
-  "Key badge": {
-    "none": {
-      "reason": "unsettled: No current public target reaches this part"
-    }
-  }
+  "Key badge": {"target": "kbd-key"}
 }
 ```
 
-The `none` disposition records current reachability while target exposure remains
-unsettled. It does not decide that key badges should remain without a public
-target.
+Each key badge carries `kbd-key`; the shortcut group keeps `kbd` (DEC-1).
 
 ## Family and system relationships
 
@@ -160,7 +153,7 @@ target.
 | Contract            | Verification                                                                                                                                                              | Representative states                                                     | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                       | Audit section             |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | FR1                 | `Kbd.test.tsx` single-key, multi-key, whitespace, alias, and repeated-key cases                                                                                           | Single and multiple keys; spaced and mixed-case input; repeated aliases   | A missing or extra badge, an untrimmed or wrongly cased key, or a lost alias fails. `KbdAudit.a11y.chromium.spec.ts` larger-text cases measure each badge growing past `--spacing-5` with a set text size.                                                                                                                                            | `audit:Kbd/anatomy`       |
-| FR2                 | `Kbd.test.tsx` theme-class case                                                                                                                                           | Root target and child badges                                              | A missing root `kbd` target fails. Evidence gap: no test asserts that badges carry no target.                                                                                                                                                                                                                                                         | `audit:Kbd/theming`       |
+| FR2                 | `Kbd.test.tsx` theme-class case                                                                                                                                           | Root target and the `kbd-key` badges                                      | A missing root `kbd` target, or a badge without `kbd-key`, fails.                                                                                                                                                                                                                                                                                     | `audit:Kbd/theming`       |
 | FR3, FR4            | `Kbd.test.tsx` glyph, platform, accessible-name, override, and localization cases ("localizes visible key text and the spoken shortcut combination")                      | Mac and non-Mac; special and unknown keys                                 | A wrong glyph for `mod`, `ctrl`, `alt`, `shift`, `enter`, `escape`, `plus`, or an unknown key, an exposed badge, a caller `role` or `aria-label` that replaces the computed one, or text that skips the catalog fails. Evidence gap: no test asserts the `backspace`, `tab`, or arrow glyphs, or the "Ctrl" text and "Control" name before hydration. | `audit:Kbd/accessibility` |
 | FR3 modifiers       | `Kbd.test.tsx` modifier cases: Apple symbols, Windows and Linux catalog text, server render on a Mac, localized short text; real-browser render with a Windows user agent | Apple (`MacIntel`); non-Apple (`Win32`, `Linux x86_64`); before hydration | `ctrl`, `alt`, or `shift` showing a symbol off Apple platforms or before hydration, `meta` showing anything but the catalog's Windows-key text off Apple platforms or before hydration, a spoken name that changes, or modifier text that skips the catalog fails.                                                                                    | `audit:Kbd/accessibility` |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                             | Canonical anatomy and targets                                             | Missing, extra, prefixed, stale, or alias-backed mappings fail repository validation.                                                                                                                                                                                                                                                                 | `audit:Kbd/theming`       |
@@ -168,16 +161,17 @@ target.
 
 ## Current-state impact
 
-- **Target on a non-painting group (FR2).** The `kbd` target sits on the shortcut group, which paints nothing of its own, against `architecture:component-theming-surface` INV4; the key badges paint. It stays as shipped under `architecture:public-component-api` INV21a until OQ1 is decided.
+- **Target on a non-painting group (FR2).** The `kbd` target sits on the shortcut group, which paints nothing of its own, against `architecture:component-theming-surface` INV4; the key badges paint and carry `kbd-key`. The group target stays as shipped under `architecture:public-component-api` INV21a.
 
 ## Decision log
 
-No component-local decision.
+- **DEC-1 — Each key badge carries `kbd-key`.** The
+  badges are what a shortcut paints, so a theme reaches them by their own
+  target. The target is a class only; the default look does not change.
 
 ## Open questions
 
-- **OQ1 — Should each Key badge gain a stable public theming target?**
-  (`human-api`) The current lack of reachability does not decide the answer.
+None.
 
 ## Content boundary
 

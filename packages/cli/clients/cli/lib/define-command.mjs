@@ -27,6 +27,7 @@
 import {recordCommandResult} from '../../../foundation/debug/index.mjs';
 import {routeSegment} from '../../../foundation/discovery/docs-section-key.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {isOutsideAnyPackage} from '../../../foundation/env/project-scope.mjs';
 import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
 import {pointerClause} from '../../../foundation/discovery/command-pointers.mjs';
 import {text} from '../formatters/index.mjs';
@@ -96,6 +97,70 @@ export const COMMAND_DOCS = Symbol.for('astryx.command.docs');
  */
 export function commandDocsOf(cmd) {
   return /** @type {any} */ (cmd)?.[COMMAND_DOCS];
+}
+
+/** A group's answer for one of its subcommands called bare. */
+const BARE_SUBCOMMAND = Symbol.for('astryx.command.bareSubcommand');
+
+/**
+ * What a group answers when one of its subcommands is called bare and fails:
+ * `result` when the group answered in its place, else one `suggestion` to add
+ * to the subcommand's error.
+ * @typedef {(subcommand: import('commander').Command) => Promise<
+ *   | {result: import('../../../foundation/debug/command-result.mjs').CommandResult}
+ *   | {suggestion: {name: string, reason: string}}
+ * >} BareSubcommandAnswer
+ */
+
+/**
+ * Whether `cmd` was called bare: no arguments, and no options except the
+ * program's own global options. A parent group's options count too, since
+ * Commander gives the group an option it declares that is written after the
+ * subcommand's name.
+ * @param {import('commander').Command} cmd
+ * @returns {boolean}
+ */
+function calledBare(cmd) {
+  if (cmd.args.length > 0) return false;
+  for (let node = cmd; node.parent; node = node.parent) {
+    const given = node.options.some(option => {
+      const source = node.getOptionValueSource(option.attributeName());
+      return source === 'cli' || source === 'env';
+    });
+    if (given) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether `group` answers for its subcommands called bare.
+ * @param {import('commander').Command | null | undefined} group
+ * @returns {boolean}
+ */
+export function answersBareSubcommands(group) {
+  return typeof (/** @type {any} */ (group)?.[BARE_SUBCOMMAND]) === 'function';
+}
+
+/**
+ * The parent group's answer for `cmd` when `cmd` was called bare; null when
+ * it was not, when its group gives no answer, or when `cmd` refuses to run
+ * outside a project (`outsideProject: 'refuse'`) and the run is outside any
+ * project or package: that refusal is its answer.
+ * Called only where the subcommand fails, so the answer can only replace an
+ * error.
+ * @param {import('commander').Command} cmd
+ * @returns {Promise<Awaited<ReturnType<BareSubcommandAnswer>> | null>}
+ */
+export async function answerBareSubcommand(cmd) {
+  if (!answersBareSubcommands(cmd.parent) || !calledBare(cmd)) return null;
+  if (
+    commandDocsOf(cmd)?.doc.outsideProject === 'refuse' &&
+    isOutsideAnyPackage(process.cwd())
+  )
+    return null;
+  /** @type {BareSubcommandAnswer} */
+  const answer = /** @type {any} */ (cmd.parent)[BARE_SUBCOMMAND];
+  return answer(cmd);
 }
 
 /**
@@ -195,11 +260,18 @@ function servedParts(holder, description, served) {
  *   action?: (...args: any[]) => import('../../../foundation/debug/command-result.mjs').CommandResult
  *     | Promise<import('../../../foundation/debug/command-result.mjs').CommandResult>,
  *   hidden?: boolean,
+ *   bareSubcommand?: BareSubcommandAnswer,
  * }} [impl] `hidden` keeps the command out of help and the manifest (a
  *   package-script hook, not a command for people or agents).
+ *   `bareSubcommand` is a group's answer for a subcommand called bare that
+ *   fails (see {@link answerBareSubcommand}).
  * @returns {import('commander').Command} the created command.
  */
-export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
+export function defineCommand(
+  parent,
+  doc,
+  {fn, action, hidden, bareSubcommand} = {},
+) {
   // The command token is the last path segment ("theme build" -> "build"),
   // since subcommands are added to their group command, not the program.
   const token = doc.name.split(' ').pop() ?? doc.name;
@@ -218,6 +290,12 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
     value: {doc, fn},
     configurable: true,
   });
+  if (bareSubcommand) {
+    Object.defineProperty(cmd, BARE_SUBCOMMAND, {
+      value: bareSubcommand,
+      configurable: true,
+    });
+  }
   // Help shows doc tokens as commands, the way `astryx docs` does.
   /** @type {Array<string | HelpPointer>} */
   const parts = [
@@ -260,6 +338,16 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   for (const o of doc.options ?? []) {
     const desc = o.description ?? (o.param ? paramDesc(o.param) : '');
     const option = cmd.createOption(o.flag, renderTokens(desc));
+    if (o.pointers?.length) {
+      describeOption(option, [
+        renderTokens(desc),
+        ...o.pointers.map(part =>
+          typeof part === 'string'
+            ? renderTokens(part)
+            : {commands: part.commands, text: renderTokens(part.text)},
+        ),
+      ]);
+    }
     if (o.default != null) option.default(o.default);
     cmd.addOption(option);
   }
@@ -341,9 +429,9 @@ export function addDocHelp(cmd, doc) {
     const examples = (doc.examples ?? [])
       .filter(({cli}) => exampleShown(cmd, cli))
       .flatMap(({label, cli}) => [
-      ...(label ? [`  # ${label}`] : []),
-      `  ${formatCliCommand(cli)}`,
-    ]);
+        ...(label ? [`  # ${label}`] : []),
+        `  ${formatCliCommand(cli)}`,
+      ]);
     const more = `More: ${formatCliCommand(`docs cli/commands/${routeSegment(doc.name)}`)}`;
     const blocks =
       examples.length > 0

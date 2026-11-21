@@ -55,8 +55,13 @@ const how = async (theme, ask) => {
 };
 
 /** @param {Array<{commands: string[]}>} rs */
+// (The readable-text line set's own check adds beside a fill is measured
+// on its own: these asks read the rest.)
 const writes = rs =>
-  rs.flatMap(r => r.commands).filter(c => /^(set|undo) /.test(c));
+  rs
+    .filter(r => !/^readable text on that fill/.test(r.text))
+    .flatMap(r => r.commands)
+    .filter(c => /^(set|undo) /.test(c));
 
 /** Run each line as offered. @param {string[]} lines */
 const follow = async lines => {
@@ -80,16 +85,19 @@ describe('a text part like a filled part', () => {
     const head = writes(
       await how(t, 'make the headings the color of the danger buttons'),
     );
-    expect(head).toEqual([
+    // (Every heading element takes a heading's color, run together first.)
+    expect(head.slice(0, 4)).toEqual([
       `set ${t} color 'var(--color-error-muted)' --on heading`,
+      `set ${t} color 'var(--color-error-muted)' --on alert-dialog-title`,
+      `set ${t} color 'var(--color-error-muted)' --on empty-state-title`,
+      `set ${t} color 'var(--color-error-muted)' --on markdown-heading`,
     ]);
     await follow(head);
     const link = writes(
       await how(t, 'make the links the same color as the danger buttons'),
     );
-    expect(link).toEqual([
-      `set ${t} --color-text-accent 'var(--color-error-muted)'`,
-    ]);
+    // (The links alone: their color prop's token, on links.)
+    expect(link).toEqual([`set ${t} color 'var(--color-error-muted)' --on link`]);
     await follow(link);
     const div = writes(
       await how(t, "make the dividers the color of the error inputs' border"),

@@ -99,7 +99,8 @@ describe('N5: a path alias the project’s tsconfig maps', () => {
       `{\n  // the app's aliases\n  "compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["./lib/*"]},},\n}\n`,
     );
     write('lib/c.ts', `export const accent = '#123456';\n`);
-    for (const spec of ['@app/c', 'lib/c']) {
+    // `lib/c.js` names lib/c.ts, as TypeScript reads it.
+    for (const spec of ['@app/c', 'lib/c', 'lib/c.js']) {
       write(
         'p/p.ts',
         `import {accent} from '${spec}';\nexport default {name: 'p', tokens: {'--color-accent': accent}};\n`,

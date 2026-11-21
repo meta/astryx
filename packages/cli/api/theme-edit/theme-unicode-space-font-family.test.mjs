@@ -78,16 +78,9 @@ describe('N49: a dial value pasted with its property name', () => {
 });
 
 describe('N49: text-size pasted with its property name', () => {
-  it('suggests the size given, never 16', async () => {
-    let err;
-    try {
-      await themeEditSet('b', 'text-size', 'font-size: 18px;', {cwd});
-    } catch (e) {
-      err = /** @type {any} */ (e);
-    }
-    expect(
-      err.suggestions.map((/** @type {any} */ x) => x.name).join('\n'),
-    ).toMatch(/ set b text-size 18$/m);
+  it('is the size given, never 16', async () => {
+    const r = await themeEditSet('b', 'text-size', 'font-size: 18px;', {cwd});
+    expect(r.data.setting.value).toBe('18');
   });
 });
 

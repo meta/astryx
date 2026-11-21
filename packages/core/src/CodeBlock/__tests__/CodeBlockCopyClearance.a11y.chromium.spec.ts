@@ -206,6 +206,29 @@ test('with a header, Copy sits in the header and the code keeps its full width',
   expect(await overlap(page, 'Code')).toBe(0);
 });
 
+test('a long title wraps before the header controls and never runs under Copy', async ({
+  page,
+}) => {
+  await mount(page, {
+    title: 'authentication-middleware.handler.test.ts',
+    width: '200px',
+  });
+  const reachesCopy = await page.evaluate(() => {
+    const title = document.querySelector('.astryx-code-block-title');
+    const copy = document.querySelector('[aria-label="Copy code"]');
+    if (!title || !copy) {
+      throw new Error('missing the title or Copy');
+    }
+    const button = copy.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    return Array.from(range.getClientRects()).some(
+      rect => rect.right > button.left + 0.5,
+    );
+  });
+  expect(reachesCopy).toBe(false);
+});
+
 async function centres(page: Page) {
   return page.evaluate(() => {
     const find = (selector: string) => {

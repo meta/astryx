@@ -278,6 +278,14 @@ export function capitalize(str: string): string {
 }
 
 /**
+ * Whether a value is a Date with no time (`new Date('not a date')`). Table
+ * treats it as a missing value: an empty cell, and sorted with null.
+ */
+export function isInvalidDate(value: unknown): boolean {
+  return value instanceof Date && Number.isNaN(value.getTime());
+}
+
+/**
  * Default cell renderer — converts the value at `item[key]` to a string.
  */
 export function defaultCellRenderer<T extends Record<string, unknown>>(
@@ -285,7 +293,7 @@ export function defaultCellRenderer<T extends Record<string, unknown>>(
   key: string,
 ): ReactNode {
   const value = item[key];
-  if (value == null) {
+  if (value == null || isInvalidDate(value)) {
     return '';
   }
   if (value instanceof Date) {

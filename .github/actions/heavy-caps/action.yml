@@ -10,8 +10,10 @@
 # - The shared agent login counts each branch prefix as an author, with that
 #   login also held to its five oldest pull requests and forty runs a day.
 # - An engineering owner (.github/ENGOWNERS, read from the base commit), a
-#   re-run (the pre-merge restart) and a bot are exempt; a lookup that fails
-#   runs the suite.
+#   re-run someone starts (merge-guard's pre-merge restart) and a bot are
+#   exempt; a lookup that fails runs the suite. The review-pass run, which
+#   ci-review-pass.yml starts with the workflow token, is held like a first
+#   run.
 # - So is a pull request labelled `release-critical` (spec:AST-030 DEC-30),
 #   the label last applied by someone with write access, as the `ci:run-*`
 #   labels count (run-labels.cjs); a lookup that fails does not count it. A
@@ -34,7 +36,10 @@ runs:
         script: |
           const pr = context.payload.pull_request;
           if (context.eventName !== 'pull_request' || pr == null) return;
-          if (Number(process.env.GITHUB_RUN_ATTEMPT ?? '1') !== 1) return;
+          const attempt = Number(process.env.GITHUB_RUN_ATTEMPT ?? '1');
+          // A re-run the workflow token starts is the review-pass run.
+          const reviewPass = attempt > 1 && process.env.GITHUB_TRIGGERING_ACTOR === 'github-actions[bot]';
+          if (attempt !== 1 && !reviewPass) return;
           const login = pr.user.login;
           if (login.endsWith('[bot]')) return;
 
@@ -77,10 +82,10 @@ runs:
               const nodes = await openPullRequests();
               const older = list => list.filter(p => p.number < pr.number).length;
               if (older(nodes.filter(p => mine(p.headRefName))) >= OLDEST) {
-                return `Queued behind your ${OLDEST} oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.`;
+                return `Queued behind your ${OLDEST} oldest PRs: runs at a review-pass run once it is among them, or at the pre-merge re-run.`;
               }
               if (shared && older(nodes) >= 5) {
-                return "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.";
+                return "Queued behind the shared login's 5 oldest PRs: runs at a review-pass run once it is among them, or at the pre-merge re-run.";
               }
             },
             // A heavy run is a run on one of those pull requests whose heavy job
@@ -115,7 +120,7 @@ runs:
                 }
               }
               if (laneHeavy >= DAILY || (shared && loginHeavy >= 40)) {
-                return 'Daily heavy-run cap reached, runs tomorrow or at pre-merge.';
+                return 'Daily heavy-run cap reached: runs at a review-pass run after the cap resets, or at the pre-merge re-run.';
               }
             },
           ];

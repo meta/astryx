@@ -21,7 +21,7 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode',
       description:
-        'Icon element rendered inside the button. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
+        'Icon element rendered inside the button: `<Icon icon="close" />` for a built-in meaning, or `<Icon icon={TrashIcon} />` for any SVG component from your icon library. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
       required: true,
       slotElements: [{__element: 'Icon', props: {icon: 'check'}}],
     },
@@ -242,7 +242,7 @@ export const docsDense = {
   },
   propDescriptions: {
     label: 'accessible label; used as aria-label, not rendered as visible text',
-    icon: 'icon element rendered inside button; unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
+    icon: 'icon element rendered inside button (`<Icon icon="close" />`, or `<Icon icon={TrashIcon} />` for any SVG from your icon library); unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
     variant: 'visual style variant',
     size: 'size variant',
     elevation:

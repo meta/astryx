@@ -121,7 +121,8 @@ const styles = stylex.create({
   },
   // contentWidth demo containers
   cwContainer: {
-    border: '2px dashed',
+    borderWidth: '2px',
+    borderStyle: 'dashed',
     borderColor: colorVars['--color-border'],
     borderRadius: radiusVars['--radius-container'],
     overflow: 'hidden',

@@ -6,12 +6,13 @@ import {ChatSendButton} from '@astryxdesign/core/Chat';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   CheckIcon,
-  PaperAirplaneIcon,
+  SendIcon,
   SparklesIcon,
-} from '@heroicons/react/24/solid';
-import {XCircleIcon} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons/24/solid';
+import {ErrorIcon} from '@astryxdesign/template-icons';
 
 export default function ChatSendButtonCustomIcon() {
   return (
@@ -23,7 +24,9 @@ export default function ChatSendButtonCustomIcon() {
         <ChatSendButton
           isDisabled={false}
           onSend={() => {}}
-          sendIcon={<Icon icon={PaperAirplaneIcon} size="sm" />}
+          sendIcon={
+            <Icon icon={SendIcon} size="sm" xstyle={rtlStyles.mirror} />
+          }
         />
         <ChatSendButton
           isDisabled={false}
@@ -38,7 +41,7 @@ export default function ChatSendButtonCustomIcon() {
         <ChatSendButton
           isStopShown
           onStop={() => {}}
-          stopIcon={<Icon icon={XCircleIcon} size="sm" />}
+          stopIcon={<Icon icon={ErrorIcon} size="sm" />}
         />
       </Stack>
     </Stack>

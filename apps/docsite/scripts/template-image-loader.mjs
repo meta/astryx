@@ -16,6 +16,7 @@ import {join} from 'node:path';
 import {mapFixtureRefs} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   OPTIMIZED_IMAGE_QUALITY,
+  isOptimizedFormat,
   optimizedImageUrl,
 } from '../src/lib/optimizedImageUrl.mjs';
 
@@ -24,9 +25,6 @@ import {
 // (`images.deviceSizes`); the optimizer answers 400 for any other.
 export const TEMPLATE_IMAGE_WIDTH = 1920;
 export const TEMPLATE_IMAGE_QUALITY = OPTIMIZED_IMAGE_QUALITY;
-
-// The formats the optimizer converts. It refuses a vector image.
-const OPTIMIZED_FORMAT = /\.(?:png|jpe?g)$/iu;
 
 /**
  * The optimizer URL for a template image: the same picture in the format the
@@ -65,7 +63,7 @@ export function optimizeTemplateImages(
     }
     // A query or a fragment does not select another file.
     const path = reference.split(/[?#]/u)[0];
-    return OPTIMIZED_FORMAT.test(path) && isServed(path)
+    return isOptimizedFormat(path) && isServed(path)
       ? templateImageUrl(path, width)
       : null;
   }).source;

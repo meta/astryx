@@ -63,6 +63,15 @@ const CHECK_FIELDS = /** @type {const} */ ([
   'fix',
 ]);
 
+/**
+ * A check as text prints it: its brief, when it has one, in place of its
+ * message.
+ * @param {import('../../../api/doctor/doctor.mjs').DoctorCheck} check
+ */
+function briefInPlace({brief, ...check}) {
+  return brief == null ? check : {...check, message: brief};
+}
+
 /** @param {string} status */
 function statusToken(status) {
   return STATUS[/** @type {keyof typeof STATUS} */ (status)] ?? status;
@@ -87,11 +96,15 @@ function printHuman(report) {
 
   // One check per line, status first so the counted value stays a column.
   // The legend names each field by its JSON key, so text and --json map one
-  // to one.
+  // to one. A check's brief takes its message's place; --json keeps both.
   const summaryFields = /** @type {const} */ (['pass', 'warn', 'fail', 'info']);
+  const briefed = report.checks.some(check => check.brief != null);
+  const legend = CHECK_FIELDS.map(field =>
+    field === 'message' && briefed ? 'message (or brief)' : field,
+  );
   emit(
-    section('astryx doctor', `Each check: ${CHECK_FIELDS.join(', ')}`),
-    records(report.checks, {
+    section('astryx doctor', `Each check: ${legend.join(', ')}`),
+    records(report.checks.map(briefInPlace), {
       fields: [...CHECK_FIELDS],
       layout: 'inline',
       format: {status: statusToken, fix: fix => `fix: ${fix}`},

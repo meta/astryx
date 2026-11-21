@@ -4,12 +4,12 @@
 export const doc = {
   type: 'block',
   exampleFor: 'InternationalizationProvider',
-  name: 'Override one Astryx string',
+  name: 'Change one Astryx string across your app',
   displayName: 'Internationalization Provider — Overrides',
   registry: {slug: 'overrides'},
   description:
-    'Override a small number of Astryx strings without providing a full locale catalog.',
+    'Reword an Astryx string for every component under the provider, without a full locale catalog. One component rewords its own string through its prop, such as Selector placeholder.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['InternationalizationProvider', 'Selector'],
+  componentsUsed: ['InternationalizationProvider', 'Selector', 'VStack'],
 };

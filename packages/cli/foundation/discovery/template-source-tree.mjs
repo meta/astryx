@@ -8,7 +8,8 @@
  * @input Template source text
  * @output Its parsed tree, node visits, names, and module scope
  * @position packages/cli/foundation/discovery — read by template-icons, by
- *   the demo-content replacement in template-adapter, and by template-needs
+ *   the demo-content replacement in template-adapter, by template-needs, and
+ *   by doctor's button-actions scan
  */
 
 import * as path from 'node:path';
@@ -32,14 +33,16 @@ export const TEMPLATE_COMPONENTS_FILE = path.join(
  * Parse template source as TSX. Babel loads on first use, so a command that
  * only lists templates never pays for it.
  * @param {string} source
- * @param {{errorRecovery?: boolean}} [options] `errorRecovery`: keep parsing
- *   past a recoverable error, for a reader that only needs part of the tree
+ * @param {{errorRecovery?: boolean, jsx?: boolean}} [options] `errorRecovery`:
+ *   keep parsing past a recoverable error, for a reader that only needs part
+ *   of the tree; `jsx: false` reads plain TypeScript (a `.ts` file), where
+ *   `<T>value` is a type assertion and not an element
  * @returns {any} The file node.
  */
-export function parseTemplateSource(source, {errorRecovery = false} = {}) {
+export function parseTemplateSource(source, {errorRecovery = false, jsx = true} = {}) {
   return babelParser().parse(source, {
     sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
+    plugins: jsx ? ['jsx', 'typescript'] : ['typescript'],
     errorRecovery,
   });
 }
