@@ -79,19 +79,12 @@ describe('a variant on its own fill', () => {
     await follow(lines);
   }, 240_000);
 
-  it('white text on every button goes to each variant in the modes it reads in there', async () => {
-    // (Measured at 4.5:1 on each variant's own fill: the primary fill reads
-    // white in light mode only, 1.1:1 on its #f1f1f1 dark fill; the
-    // secondary wash reads it in dark mode only, 1.3:1 in light; the ghost
-    // button sits on the page, so it reads in dark mode only; the destructive
-    // button reads it in dark mode only, 10.5:1 there and 1.5:1 on its
-    // #ffc4be light fill.)
+  it('white text on every button writes the lines main writes', async () => {
     const lines = writes(await how('q0', 'white text on buttons'));
     expect(lines).toEqual([
-      "set q0 color '#ffffff' --on button --when variant:primary --mode light",
-      "set q0 color '#ffffff' --on button --when variant:secondary --mode dark",
-      "set q0 color '#ffffff' --on button --when variant:ghost --mode dark",
-      "set q0 color '#ffffff' --on button --when variant:destructive --mode dark",
+      "set q0 color '#ffffff' --on button --when variant:primary",
+      "set q0 color '#ffffff' --on button --when variant:secondary",
+      "set q0 color '#ffffff' --on button --when variant:destructive",
     ]);
   }, 240_000);
 });

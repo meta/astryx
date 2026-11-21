@@ -31251,24 +31251,44 @@ export function draftAnswer(ctx, env, question) {
           o.splice(i, 1, ...namedVariants.values());
           continue;
         }
-        // ("badges with a subtle colored background and dark text": a fill
-        // said for the part, in a clause that names it or says the text,
-        // that the answer writes nowhere gives the text no ground to be
-        // measured on, so the text is not split by variant; the per-mode
-        // pass below keeps it to the mode it reads in. A fill said for
-        // another part, "cards with a light gray background", is that
-        // part's.)
-        if (
-          clauses.some(
-            c =>
-              (c === draftClause.get(d) || c.parts.some(p => p.on === st.on)) &&
-              /\b(?:background|fill)\b/.test(c.text),
-          ) &&
-          !result
-            .flatMap(r => r.options.flat())
-            .some(x => x.on === st.on && /^background/.test(x.thing))
-        )
+        // (A text color asked alone, "buttons with red text", with no fill or
+        // gradient on the part, no variant named and no mode of its own:
+        // the variants it barely shows on keep their own text, as main
+        // reads it.)
+        const textAlone =
+          !st.mode &&
+          !o.some(
+            x =>
+              x !== st &&
+              x.on === st.on &&
+              (/^background/.test(x.thing) || x.when),
+          );
+        if (textAlone) {
+          if (!variants.includes('primary')) continue;
+          const mode = /** @type {'light' | 'dark'} */ (st.mode ?? 'light');
+          const lost = variants.filter(v => {
+            const r = fills.find(x =>
+              x.when.some(w => w.trim() === `variant=${v}`),
+            );
+            const f = parseColor(
+              String(
+                current(r?.token ?? '--color-background-body', mode) ?? '',
+              ),
+            );
+            return !!f && ratio(ink, f) < 3;
+          });
+          if (!lost.length || lost.length === variants.length) continue;
+          o.splice(
+            i,
+            1,
+            ...variants
+              .filter(v => !lost.includes(v))
+              .map(v => ({...st, when: `variant:${v}`})),
+          );
+          if (!/keep their own text|keeps its own text/.test(d.text))
+            d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own text' : 'keeps its own text'}: ${st.value} would barely show on ${lost.length > 1 ? 'their' : 'its'} fill; give ${lost.length > 1 ? 'them' : 'it'} a fill too to change ${lost.length > 1 ? 'them' : 'it'})`;
           continue;
+        }
         // (Each mode the theme draws: a text color that reads on a
         // variant's fill in one mode only is that mode's; text needs 4.5:1.)
         const modes = /** @type {Array<'light' | 'dark'>} */ (
@@ -31323,44 +31343,6 @@ export function draftAnswer(ctx, env, question) {
             (ok.get(v)?.length ?? 0) > 0 &&
             (ok.get(v)?.length ?? 0) < modes.length,
         );
-        // (A text color asked alone, "buttons with red text", with no fill or
-        // gradient on the part, no variant named and no mode of its own,
-        // that reads at 4.5:1 on no variant in any mode: the variants it
-        // barely shows on, under 3:1 in its own mode, keep their own text,
-        // and the others take it.)
-        const textAlone =
-          !st.mode &&
-          !o.some(
-            x =>
-              x !== st &&
-              x.on === st.on &&
-              (/^background/.test(x.thing) || x.when),
-          );
-        if (textAlone && lost.length === variants.length) {
-          if (!variants.includes('primary')) continue;
-          const barely = variants.filter(v => {
-            const r = fills.find(x =>
-              x.when.some(w => w.trim() === `variant=${v}`),
-            );
-            const f = parseColor(
-              String(
-                current(r?.token ?? '--color-background-body', 'light') ?? '',
-              ),
-            );
-            return !!f && ratio(ink, f) < 3;
-          });
-          if (!barely.length || barely.length === variants.length) continue;
-          o.splice(
-            i,
-            1,
-            ...variants
-              .filter(v => !barely.includes(v))
-              .map(v => ({...st, when: `variant:${v}`})),
-          );
-          if (!/keep their own text|keeps its own text/.test(d.text))
-            d.text += ` (${barely.join(', ')} ${barely.length > 1 ? 'keep their own text' : 'keeps its own text'}: ${st.value} would barely show on ${barely.length > 1 ? 'their' : 'its'} fill; give ${barely.length > 1 ? 'them' : 'it'} a fill too to change ${barely.length > 1 ? 'them' : 'it'})`;
-          continue;
-        }
         if (
           (!lost.length && !partial.length) ||
           lost.length === variants.length
