@@ -435,6 +435,36 @@ describe('a look said, then taken away by a pronoun', () => {
   );
 });
 
+describe('a look taken away by a pronoun with no part of its own', () => {
+  it(
+    "is never the earlier ask's part: nothing is written for it and the answer asks for the part",
+    async () => {
+      for (const [q, keep] of [
+        [
+          'make the buttons blue and the border is ugly, hide it',
+          /background-color '#2563eb' --on button\b/,
+        ],
+        [
+          'make the cards rounder but the shadow is too strong, remove it',
+          /corners more --on card\b/,
+        ],
+      ]) {
+        const data = await answer(String(q));
+        const lines = (first(data) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (keep));
+        expect(lines, String(q)).not.toMatch(/\b(?:border|box-shadow)\b/);
+        expect(
+          (data.results ?? []).some((/** @type {any} */ r) =>
+            /names no part of its own/.test(r.text),
+          ),
+          String(q),
+        ).toBe(true);
+      }
+    },
+    T,
+  );
+});
+
 describe('a nav said as a bar', () => {
   it(
     'is the top nav beside a side nav; a side nav bar is the side nav',
