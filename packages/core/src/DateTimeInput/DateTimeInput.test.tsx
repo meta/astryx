@@ -11,6 +11,7 @@
 
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {createRoot} from 'react-dom/client';
 import {
   act,
   render,
@@ -2626,49 +2627,68 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'true');
     });
 
-    it('drops the watchers of a press that never became a click when the field unmounts', () => {
-      // A press installs one-shot `document` click listeners that end its
-      // deferral, from the input and from the wrapper, and a press that ends
-      // without a click leaves them in place. They belong to this field, so
-      // unmounting takes them along: otherwise the next click anywhere runs this
-      // field's reset for a field that is gone. The deferred show is not one of
-      // them — the input's own click installs it and delivers it in the same
-      // dispatch, measured at three installed and three fired. The Layer gesture
-      // counter also watches `click` on the document, in the capture phase and
-      // for the life of the page, so only the bubble phase is this field's
-      // business. The count comes from running the listener the document really
-      // holds, so this fails when a watcher survives, not when the spy misfires.
-      const add = document.addEventListener.bind(document);
-      const remove = document.removeEventListener.bind(document);
-      const isCapture = (options?: boolean | AddEventListenerOptions) =>
-        typeof options === 'object'
-          ? Boolean(options.capture)
-          : Boolean(options);
-      let watchers = 0;
-      let fired = 0;
-      const wrapped = new Map<unknown, EventListener>();
-      const added = vi
-        .spyOn(document, 'addEventListener')
-        .mockImplementation((type, listener, options) => {
-          if (type !== 'click' || isCapture(options)) {
-            return add(type, listener, options);
-          }
-          watchers += 1;
-          const counting: EventListener = (event, ...rest) => {
-            fired += 1;
-            if (typeof listener === 'function') {
-              listener(event, ...rest);
-            }
-          };
-          wrapped.set(listener, counting);
-          return add(type, counting, options);
+    it('opens on the first pointer click when React owns the document root', async () => {
+      const isolatedDocument =
+        document.implementation.createHTMLDocument('DateTimeInput');
+      const element = (
+        <html lang="en">
+          <head />
+          <body>
+            <DateTimeInput
+              label="Meeting"
+              value={'2026-03-15T09:00' as ISODateTimeString}
+              timeOptionInterval={60}
+              onChange={() => {}}
+            />
+          </body>
+        </html>
+      );
+      let root: ReturnType<typeof createRoot> | undefined;
+      try {
+        await act(async () => {
+          root = createRoot(isolatedDocument);
+          root.render(element);
         });
-      const removed = vi
-        .spyOn(document, 'removeEventListener')
-        .mockImplementation((type, listener, options) =>
-          remove(type, wrapped.get(listener) ?? listener, options),
+        const timeInput = isolatedDocument.querySelector<HTMLInputElement>(
+          '[aria-label="Meeting time"]',
         );
+        expect(timeInput).not.toBeNull();
+        if (timeInput == null) {
+          return;
+        }
+        await act(async () => {
+          timeInput.dispatchEvent(
+            new MouseEvent('pointerdown', {bubbles: true}),
+          );
+          timeInput.dispatchEvent(new MouseEvent('pointerup', {bubbles: true}));
+          timeInput.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        });
 
+        await waitFor(() => {
+          expect(timeInput.getAttribute('aria-expanded')).toBe('true');
+        });
+      } finally {
+        act(() => root?.unmount());
+      }
+    });
+
+    it('cancels a deferred show when the field unmounts before its frame', () => {
+      // The show waits one frame after a press's click. A field that unmounts
+      // in that frame must not open a list for a field that is gone.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      const request = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation(callback => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        });
+      const cancel = vi
+        .spyOn(window, 'cancelAnimationFrame')
+        .mockImplementation(id => {
+          frames.delete(id);
+        });
       try {
         const {unmount} = render(
           <DateTimeInput
@@ -2678,18 +2698,46 @@ describe('DateTimeInput', () => {
             onChange={() => {}}
           />,
         );
-        fireEvent.pointerDown(screen.getByLabelText('Meeting time'));
-        expect(watchers).toBeGreaterThan(0);
-        expect(fired).toBe(0);
+        const timeInput = screen.getByLabelText('Meeting time');
+        // Two clicks inside one frame: the second replaces the first's show.
+        fireEvent.pointerDown(timeInput);
+        fireEvent.click(timeInput);
+        fireEvent.pointerDown(timeInput);
+        fireEvent.click(timeInput);
+        expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+        expect(frames.size).toBeGreaterThan(0);
 
         unmount();
-        fireEvent.click(document.body);
-        expect(fired).toBe(0);
+        // Every frame the field asked for is cancelled, so none runs.
+        expect(frames.size).toBe(0);
+        for (const callback of frames.values()) {
+          callback(performance.now());
+        }
+        expect(document.querySelector('[role="listbox"]')).toBeNull();
       } finally {
-        wrapped.clear();
-        added.mockRestore();
-        removed.mockRestore();
+        request.mockRestore();
+        cancel.mockRestore();
       }
+    });
+
+    it('opens on a later press after a press that never became a click', async () => {
+      // A press that ends without a click leaves the press flag set. The next
+      // press's click still opens the list, one frame later.
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T09:00' as ISODateTimeString}
+          timeOptionInterval={60}
+          onChange={() => {}}
+        />,
+      );
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.pointerDown(timeInput);
+      fireEvent.pointerDown(timeInput);
+      fireEvent.click(timeInput);
+      await waitFor(() => {
+        expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      });
     });
 
     it('activates the first option when the field has a date but no time', () => {
