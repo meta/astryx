@@ -234,8 +234,29 @@ test('before playback, the bar stays drawn while a marker popover opened from th
   await expect(marker).toHaveAttribute('aria-expanded', 'true');
   const content = page.locator('[data-media-marker-content]').first();
   await expect(content).toBeVisible();
-  // Focus moves into the popover, which sits outside the bar's DOM.
+  // Focus moves into the popover, which the browser draws in its top layer.
   await content.locator('button, input, textarea, [tabindex]').first().focus();
+  await page.waitForTimeout(400);
+  await expect(page.locator(BAR)).toHaveCSS('opacity', '1');
+});
+
+test("before playback, the bar stays drawn when a click on a second marker opens its thread over the first one's", async ({
+  page,
+}) => {
+  await open(page, 'comment-markers');
+  await page.locator('#storybook-root video').evaluate(video => {
+    Object.defineProperty(video, 'duration', {configurable: true, value: 60});
+    video.dispatchEvent(new Event('durationchange'));
+  });
+  const markers = page.locator('#storybook-root [data-media-marker]');
+  await expect(markers.nth(1)).toBeAttached();
+  await page.keyboard.press('Tab');
+  await markers.nth(0).focus();
+  await page.keyboard.press('Enter');
+  await expect(markers.nth(0)).toHaveAttribute('aria-expanded', 'true');
+  await markers.nth(1).click();
+  await expect(markers.nth(1)).toHaveAttribute('aria-expanded', 'true');
+  await expect(markers.nth(0)).toHaveAttribute('aria-expanded', 'false');
   await page.waitForTimeout(400);
   await expect(page.locator(BAR)).toHaveCSS('opacity', '1');
 });

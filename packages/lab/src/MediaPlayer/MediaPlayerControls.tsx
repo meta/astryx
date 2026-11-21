@@ -17,6 +17,7 @@ import {
   useCallback,
   useMemo,
   useRef,
+  useId,
   useState,
   type KeyboardEvent,
   type PointerEvent,
@@ -857,8 +858,14 @@ export function MediaTimeSlider({
   style,
   ...rest
 }: MediaTimeSliderProps) {
-  const {store, scrubTime, setScrubTime, holdControls, wakeControls} =
-    useMediaPlayerContext('MediaTimeSlider');
+  const {
+    store,
+    scrubTime,
+    setScrubTime,
+    holdControls,
+    holdLayer,
+    wakeControls,
+  } = useMediaPlayerContext('MediaTimeSlider');
   const duration = useMediaSelector('MediaTimeSlider', state => state.duration);
   const bufferedEnd = useMediaSelector(
     'MediaTimeSlider',
@@ -1155,7 +1162,9 @@ export function MediaTimeSlider({
                 marker={marker}
                 x={toX(marker.time)}
                 onPress={() => store.actions.seek(marker.time)}
-                onOpenChange={isOpen => holdControls('menu', isOpen)}
+                onOpenChange={isOpen =>
+                  holdLayer(`marker-${marker.time}-${marker.label}`, isOpen)
+                }
               />
             ))}
         </div>
@@ -1459,7 +1468,8 @@ function RateMenu({
   rates: readonly number[];
   size?: MediaControlSize;
 }) {
-  const {store, holdControls} = useMediaPlayerContext('MediaPlaybackRate');
+  const {store, holdLayer} = useMediaPlayerContext('MediaPlaybackRate');
+  const owner = useId();
   const rate = useMediaSelector(
     'MediaPlaybackRate',
     state => state.playbackRate,
@@ -1476,7 +1486,7 @@ function RateMenu({
         xstyle: styles.rateLabel,
         ...themeProps('media-playback-rate-button'),
       }}
-      onOpenChange={isOpen => holdControls('menu', isOpen)}>
+      onOpenChange={isOpen => holdLayer(owner, isOpen)}>
       <DropdownMenuRadioGroup
         label={text.tooltip}
         value={String(rate)}

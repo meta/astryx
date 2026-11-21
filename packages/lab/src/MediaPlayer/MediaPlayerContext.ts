@@ -41,6 +41,12 @@ export interface MediaPlayerContextValue {
   /** Keeps the controls visible until the same hold is released. */
   holdControls: (hold: MediaControlsHold, isHeld: boolean) => void;
   /**
+   * Reports a menu or marker popover the player opened, by its owner, as
+   * open or closed. While any is open the controls stay, and before playback
+   * the bar stays drawn.
+   */
+  holdLayer: (owner: string, isOpen: boolean) => void;
+  /**
    * Shows hidden controls or hides visible ones, for a tap on the media.
    * Controls a tap shows stay until the next tap.
    */

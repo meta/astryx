@@ -494,7 +494,8 @@ function VideoControlBar({
           styles.bar,
           !isControlsVisible && styles.barHidden,
           // A menu or marker popover the bar opened keeps the bar drawn, as
-          // keyboard focus inside it does, though the layer sits outside it.
+          // keyboard focus inside the bar does: `:focus-within` stops at the
+          // layer, which the browser draws in its top layer.
           isBeforePlayback && !isLayerOpen && styles.barBeforePlayback,
         )}>
         <MediaPlayButton className={compactControl} />
