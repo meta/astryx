@@ -1119,6 +1119,27 @@ describe('DropdownMenuSubMenu accessibility (WCAG 2.2 / APG)', () => {
 });
 
 describe('DropdownMenuSubMenu theming slots', () => {
+  it('puts the popup target on the flyout, which paints its own box', async () => {
+    const user = userEvent.setup();
+    render(<MoveMenu />);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const rootMenu = screen.getByRole('menu', {name: 'Actions', hidden: true});
+    await waitFor(() => expect(rootMenu).toHaveFocus());
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    trigger.focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+    const flyout = screen.getByRole('menu', {name: /Move to/, hidden: true});
+    // The flyout is the box itself: the menu and popup targets share it.
+    expect(flyout).toHaveClass('astryx-dropdown-menu');
+    expect(flyout).toHaveClass('astryx-dropdown-menu-popup');
+  });
+
   it('exposes a themeable slot on the submenu indicator icon', async () => {
     const user = userEvent.setup();
     render(<MoveMenu />);
@@ -2220,6 +2241,13 @@ describe('DropdownMenuSubMenu header and footer', () => {
     screen.getByRole('textbox', {name: 'Filter labels', ...h});
   const create = () => screen.getByRole('button', {name: 'Create label', ...h});
   const labelsMenu = () => screen.getByRole('menu', {name: /Labels/, ...h});
+
+  it('puts the popup target on the flyout frame, which paints the box', async () => {
+    const {dialog} = await openLabels();
+    expect(dialog).toHaveClass('astryx-dropdown-menu-popup');
+    expect(dialog).toHaveClass('astryx-dropdown-menu');
+    expect(labelsMenu()).not.toHaveClass('astryx-dropdown-menu-popup');
+  });
 
   it('holds the header, the rows and the footer in a dialog named by the row, outside every menu', async () => {
     const {rootMenu, row, dialog} = await openLabels();

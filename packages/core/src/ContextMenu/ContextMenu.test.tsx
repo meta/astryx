@@ -997,6 +997,34 @@ describe('ContextMenu compound mode', () => {
     }
   });
 
+  it('keeps its own box on context-menu, while a sub-menu flyout takes dropdown-menu-popup', async () => {
+    render(
+      <ContextMenu
+        menuContent={
+          <>
+            <DropdownMenuItem label="Rename" onClick={() => {}} />
+            <DropdownMenuSubMenu label="Move to">
+              <DropdownMenuItem label="Folder A" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </>
+        }>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    openMenu();
+    const box = document.querySelector('.astryx-context-menu');
+    expect(box).not.toBeNull();
+    expect(box).not.toHaveClass('astryx-dropdown-menu-popup');
+    const row = screen.getByRole('menuitem', {name: /Move to/, hidden: true});
+    fireEvent.click(row, {detail: 1});
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'));
+    const flyout = screen.getByRole('menu', {name: /Move to/, hidden: true});
+    expect(flyout).toHaveClass('astryx-dropdown-menu-popup');
+    expect(box?.querySelectorAll('.astryx-dropdown-menu-popup')).toHaveLength(
+      1,
+    );
+  });
+
   it('renders menuContent as menu items', () => {
     render(
       <ContextMenu
