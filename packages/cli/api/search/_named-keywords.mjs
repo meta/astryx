@@ -1,19 +1,25 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Search's keyword rule for keywords that name another entry. A
- * component or hook doc's declared keyword that is exactly another entry's
- * whole name (NumberInput declaring `spinner` while a Spinner component
- * exists) points the reader at that other entry; it is not a promise that this
- * entry answers the word. Search does not count such a keyword as a match,
- * unless the entry's own description uses the word too, or the other entry is
- * its own family member or its hook/component pair (useHoverCard and
- * HoverCard). Names are read as the ranker reads them: joined (`joined`,
- * _words.mjs) and either plural (`pluralOf`, _query.mjs).
+ * @file Search's reading of keywords and query words that name another
+ * entry. It holds two rules. (1) A component or hook doc's declared keyword
+ * that is exactly another entry's whole name (NumberInput declaring `spinner`
+ * while a Spinner component exists) points the reader at that other entry; it
+ * is not a promise that this entry answers the word. Search does not count
+ * such a keyword as a match, unless the entry's own description uses the word
+ * too, or the other entry is its own family member or its hook/component pair
+ * (useHoverCard and HoverCard). Names are read as the ranker reads them:
+ * joined (`joined`, _words.mjs) and either plural (`pluralOf`, _query.mjs).
+ * (2) The view marks the catalog `ownEvidence`: another entry's name is that
+ * entry's evidence. The components a block uses (its doc's `componentsUsed`,
+ * gathered as `_uses`) still match as its keywords, but never answer a query
+ * word for the block alone (_score.mjs); and a title inside the query keeps
+ * its tier only when no word it leaves unanswered names a component or hook
+ * (_lexical.mjs). Both are read while scoring, so the view copies no block.
  * @input the gathered catalog, and the catalogs whose components and hooks
  *   name entries (every component and hook, whatever `type` a search asks for)
- * @output the same catalog with those keywords left out of its component and
- *   hook entries
+ * @output the same catalog as search reads it: those keywords left out of its
+ *   component and hook entries, marked `ownEvidence`
  * @position api/search; three places apply it: search() (search.mjs),
  *   rankSearchIndex() (search-index.mjs), and searchCore() (search.mjs) when
  *   it is passed `ownKeywords`, as search's own comparisons do. searchCore
@@ -134,6 +140,45 @@ export function withoutOtherNames(all, named = all) {
 }
 
 /**
+ * The catalog's docs, each doc that opens a level (a docs-tree namespace such
+ * as `layout`) holding the docs beneath it (`_summarizes`: the pages under its
+ * route and their sections). Such a page sums up the docs below it: a word its
+ * text shares with one of them is that doc's evidence, which the reader opens
+ * at its own grain, so the page does not answer it through that text
+ * (`scoreCandidate`, _candidate-score.mjs). Its name, title, description and
+ * declared keywords stay its own. Entries with nothing beneath them are
+ * returned as they are.
+ * @param {import('./_lexical.mjs').Candidate[]} all
+ * @returns {import('./_lexical.mjs').Candidate[]}
+ */
+function withSummarized(all) {
+  /** @type {Map<string, import('./_lexical.mjs').Candidate[]>} */
+  const below = new Map();
+  for (const c of all) {
+    const topic = c.domain === 'doc' ? /** @type {any} */ (c)._topic : null;
+    if (typeof topic !== 'string') continue;
+    for (let at = topic.indexOf('/'); at > 0; at = topic.indexOf('/', at + 1)) {
+      const route = topic.slice(0, at);
+      const list = below.get(route);
+      if (list) list.push(c);
+      else below.set(route, [c]);
+    }
+  }
+  if (below.size === 0) return all;
+  return all.map(c => {
+    const topic = c.domain === 'doc' ? /** @type {any} */ (c)._topic : null;
+    const docs = typeof topic === 'string' ? below.get(topic) : undefined;
+    if (!docs) return c;
+    const view = Object.create(
+      Object.getPrototypeOf(c),
+      Object.getOwnPropertyDescriptors(c),
+    );
+    Object.defineProperty(view, '_summarizes', {value: docs});
+    return view;
+  });
+}
+
+/**
  * Each gathered catalog's search views, one per set of naming catalogs.
  * @type {WeakMap<object, {others: object[], view: object}[]>}
  */
@@ -141,14 +186,15 @@ const views = new WeakMap();
 
 /**
  * The gathered catalog as search reads it: its entries with
- * {@link withoutOtherNames} applied. Names come from the catalog and from
+ * {@link withoutOtherNames} applied, and each doc that opens a level read at
+ * its own grain ({@link withSummarized}). Names come from the catalog and from
  * `others`, further gathered catalogs (a search for one `type` passes the
  * other of components and hooks, so `type` never changes which keywords
  * count). A reused gather, with the same others, gets the same view back.
  * @template {{all: import('./_lexical.mjs').Candidate[], components: import('./_lexical.mjs').Candidate[]}} T
  * @param {T} catalog
  * @param {{all: import('./_lexical.mjs').Candidate[]}[]} [others]
- * @returns {T}
+ * @returns {T & {ownEvidence: true}}
  */
 export function searchView(catalog, others = []) {
   const seen = views.get(catalog) ?? [];
@@ -157,16 +203,21 @@ export function searchView(catalog, others = []) {
       v.others.length === others.length &&
       v.others.every((o, i) => o === others[i]),
   );
-  if (hit) return /** @type {T} */ (hit.view);
-  const all = withoutOtherNames(
-    catalog.all,
-    others.length === 0
-      ? catalog.all
-      : [catalog.all, ...others.map(o => o.all)].flat(),
+  if (hit) return /** @type {T & {ownEvidence: true}} */ (hit.view);
+  const all = withSummarized(
+    withoutOtherNames(
+      catalog.all,
+      others.length === 0
+        ? catalog.all
+        : [catalog.all, ...others.map(o => o.all)].flat(),
+    ),
   );
   const swap = new Map(catalog.all.map((c, i) => [c, all[i]]));
   const view = {
     ...catalog,
+    // Search's reading: another entry's name is that entry's evidence
+    // (_lexical.mjs, _score.mjs).
+    ownEvidence: /** @type {const} */ (true),
     all,
     components: catalog.components.map(c => swap.get(c) ?? c),
   };

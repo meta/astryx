@@ -20,7 +20,10 @@ export type DiscoverKind =
   | 'codemod'
   | 'agent-doc'
   /**
-   * An icon set, read only in a project that sets `experimental.iconSet`.
+   * An icon set. Discover lists a set a project could add in every project;
+   * an installed set, `--type icon-set`, and a set's `definitions` are read
+   * only where icon features are on: in a project that installs an icon-set
+   * package or sets `experimental.iconSet`.
    * @experimental May change or be removed in a patch release.
    */
   | 'icon-set';
@@ -41,6 +44,11 @@ export interface DiscoverContribution {
    * @experimental May change or be removed in a patch release.
    */
   iconCount?: number;
+  /**
+   * For an icon set: its license, as its descriptor names it.
+   * @experimental May change or be removed in a patch release.
+   */
+  license?: string;
   /**
    * For an icon set: the icon definitions its `map` covers.
    * @experimental May change or be removed in a patch release.

@@ -60,6 +60,13 @@ export const doc = {
       example: "['dark mode', 'color scheme']",
     },
     {
+      name: 'skill',
+      type: '{name: string, description: string}',
+      description:
+        'Makes this doc an agent skill as well. `astryx init` and `astryx upgrade --apply` write it beside the project skill in each saved skills place, the agent-docs block names it, and `astryx docs skills` lists it. `name` is lowercase letters, digits, and single hyphens, at most 64 characters, not `astryx` or `astryx-project`, and unique across the project; `description` says when an agent uses it, on one line of at most 1024 characters. A skill that breaks a rule is left out with a note, and the doc still loads.',
+      example: "{name: 'acme-entities', description: 'Use when building screens that show Acme entities.'}",
+    },
+    {
       name: 'replaces',
       type: 'string',
       description:
@@ -119,6 +126,12 @@ export const doc = {
       type: 'string',
       description:
         "Token category for foundational docs that map to a token section (e.g. 'color'). `astryx docs --json` returns it as authored; no tokens page links to the doc through it.",
+    },
+    {
+      name: 'searchable',
+      type: 'true',
+      description:
+        "Set beside `stability: 'experimental'` on one of the CLI's own guides that `astryx search` returns while it is experimental, as one entry for the whole guide. Search reads it on no other doc, and an integration's guide that sets it stays out of search. Omit it everywhere else.",
     },
   ],
   examples: [

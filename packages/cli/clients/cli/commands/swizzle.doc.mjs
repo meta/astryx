@@ -31,7 +31,14 @@ export const doc = {
     'copies; --package @astryxdesign/core copies the original. --list lists Core ' +
     'components, including one an integration replaces.',
   fn: 'swizzle',
-  args: [{name: 'component', param: 'component', required: false}],
+  args: [
+    {
+      name: 'component',
+      param: 'component',
+      required: false,
+      names: 'component',
+    },
+  ],
   options: [
     {
       flag: '--output <dir>',

@@ -35,10 +35,33 @@ import {
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
+import {CACHE_LIMIT_BYTES} from '../foundation/fs/cache-eviction.mjs';
 
 usePackedCli();
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
+  it.skipIf(!hasModuleHooks)(
+    'leaves its folder within the limit when the command that kept it fails',
+    () => {
+      const tmp = keptTmp('failed-command-trim');
+      const dir = path.join(tmp, CACHE_NAME);
+      // An entry made long ago that alone holds more than the limit (a
+      // sparse file, so it takes no space).
+      const left = path.join(dir, 'gather-left-over-limit.json');
+      fs.writeFileSync(left, '');
+      fs.truncateSync(left, CACHE_LIMIT_BYTES + 1024 * 1024);
+      const old = new Date(Date.now() - 3600_000);
+      fs.utimesSync(left, old, old);
+      // A lookup that finds nothing keeps its name index, then fails
+      // through process.exit.
+      const failed = run(['component', 'NoSuchWidgetAnywhere'], {tmp});
+      expect(failed.status).toBe(1);
+      expect(fs.readdirSync(dir).length).toBeGreaterThan(1);
+      expect(fs.existsSync(left)).toBe(false);
+    },
+    120_000,
+  );
+
   it.skipIf(!hasModuleHooks)(
     'is not used after an integration is installed or removed',
     async () => {
@@ -238,6 +261,93 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    'lets a warm theme build of an unchanged theme load no css-tree',
+    () => {
+      const tmp = keptTmp('theme-no-css-tree');
+      // A project with an integration, so theme build keeps its gathers, and
+      // its own copy of the CLI, which reads the Core installed beside it.
+      const {dir} = makeProject();
+      const cli = path.join(dir, 'node_modules', '@astryxdesign', 'cli');
+      fs.cpSync(packed, cli, {recursive: true, verbatimSymlinks: true});
+      fs.mkdirSync(path.join(dir, 'theme'));
+      // A longhand its own shorthand resets: the settings check reports it.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'probe.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const probeTheme = defineTheme({name: 'probe', components: {button: {base: {paddingTop: '4px', padding: '8px'}}}});\n`,
+      );
+      // Each run's CommonJS modules, css-tree's among them, as it exits.
+      const log = path.join(dir, 'loaded.jsonl');
+      const preload = path.join(dir, 'record-loaded.cjs');
+      fs.writeFileSync(
+        preload,
+        `process.on('exit', () => require('node:fs').appendFileSync(process.env.LOADED_LOG, JSON.stringify({argv: process.argv.slice(2), files: Object.keys(require.cache)}) + '\\n'));\n`,
+      );
+      const env = {NODE_OPTIONS: `--require ${preload}`, LOADED_LOG: log};
+      const ask = ['theme', 'build', 'theme/probe.ts'];
+      /** The css-tree files the last theme build loaded. */
+      const cssTreeLoaded = () =>
+        fs
+          .readFileSync(log, 'utf8')
+          .trim()
+          .split('\n')
+          .map(line => JSON.parse(line))
+          .filter(entry => entry.argv.includes('build'))
+          .at(-1)
+          .files.filter((/** @type {string} */ file) =>
+            file.includes(`${path.sep}css-tree${path.sep}`),
+          );
+      try {
+        const first = run(ask, {tmp, cwd: dir, cli, env});
+        expect(first.status, first.stderr).toBe(0);
+        expect(JSON.parse(first.stdout).data.settingIssues).toHaveLength(1);
+        expect(cssTreeLoaded().length).toBeGreaterThan(0);
+        const warm = run(ask, {tmp, cwd: dir, cli, env});
+        expect(warm).toEqual(first);
+        expect(cssTreeLoaded()).toEqual([]);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "reads back what a template's source names components from, and loads no parser",
+    () => {
+      const tmp = keptTmp('template-syntax');
+      // Each run's CommonJS modules, @babel/parser's among them, as it exits.
+      const log = path.join(work, 'template-syntax-loaded.jsonl');
+      fs.rmSync(log, {force: true});
+      const preload = path.join(work, 'template-syntax-loaded.cjs');
+      fs.writeFileSync(
+        preload,
+        `process.on('exit', () => require('node:fs').appendFileSync(process.env.LOADED_LOG, JSON.stringify(Object.keys(require.cache)) + '\\n'));\n`,
+      );
+      const env = {NODE_OPTIONS: `--require ${preload}`, LOADED_LOG: log};
+      const ask = ['template', 'dashboard'];
+      /** The @babel/parser code the last run loaded; its package.json names its release. */
+      const parserLoaded = () =>
+        JSON.parse(
+          fs.readFileSync(log, 'utf8').trim().split('\n').at(-1),
+        ).filter(
+          (/** @type {string} */ file) =>
+            file.includes(path.join('@babel', 'parser') + path.sep) &&
+            /\.c?js$/.test(file),
+        );
+      const first = run(ask, {tmp, env});
+      expect(first.status, first.stderr).toBe(0);
+      expect(
+        JSON.parse(first.stdout).data.componentsToRead.length,
+      ).toBeGreaterThan(0);
+      expect(parserLoaded().length).toBeGreaterThan(0);
+      const warm = run(ask, {tmp, env});
+      expect(warm).toEqual(first);
+      expect(parserLoaded()).toEqual([]);
     },
     180_000,
   );

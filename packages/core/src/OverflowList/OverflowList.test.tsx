@@ -473,6 +473,70 @@ describe('OverflowList', () => {
     });
   });
 
+  describe('gap', () => {
+    /**
+     * The gap the browser renders on the measurement copy. A theme with a
+     * larger spacing scale renders gap step 2 as 12px.
+     */
+    function renderGapAs(px: string) {
+      const readStyle = window.getComputedStyle;
+      return vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((el, pseudo) =>
+          el.hasAttribute('inert')
+            ? ({columnGap: px} as CSSStyleDeclaration)
+            : readStyle(el, pseudo),
+        );
+    }
+
+    const threeItems = (gap: 0 | 2) => (
+      <OverflowList gap={gap} data-w="316" data-testid="ov">
+        <button type="button" data-w="100">
+          A
+        </button>
+        <button type="button" data-w="100">
+          B
+        </button>
+        <button type="button" data-w="100">
+          C
+        </button>
+      </OverflowList>
+    );
+
+    it('fits items with the gap the theme renders', async () => {
+      const spy = renderGapAs('12px');
+      try {
+        await renderMeasured(threeItems(2));
+        // 3 × 100 + 2 × 12 = 324 is wider than 316, so two items fit.
+        const vis = visibleContainer();
+        expect(within(vis).getByText('B')).toBeInTheDocument();
+        expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('fits again when the gap step changes', async () => {
+      const spy = renderGapAs('0px');
+      try {
+        const {rerender} = await renderMeasured(threeItems(0));
+        expect(within(visibleContainer()).getByText('C')).toBeInTheDocument();
+        spy.mockRestore();
+        const wider = renderGapAs('12px');
+        try {
+          await rerender(threeItems(2));
+          expect(
+            within(visibleContainer()).queryByText('C'),
+          ).not.toBeInTheDocument();
+        } finally {
+          wider.mockRestore();
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('maxVisibleItems (cap)', () => {
     it('caps visible items even when they all fit', async () => {
       await renderMeasured(

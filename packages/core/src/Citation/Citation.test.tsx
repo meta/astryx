@@ -359,3 +359,33 @@ describe('Citation', () => {
     expect(el).toHaveAttribute('aria-label', 'Citation 2: GitHub');
   });
 });
+
+describe('Citation line alignment', () => {
+  it('centres a label chip on its line, with and without an icon', () => {
+    const {container} = render(
+      <p>
+        <Citation source={{title: 'Plain'}} number={1} />
+        <Citation
+          source={{title: 'With icon', icon: <span aria-hidden>*</span>}}
+          number={2}
+        />
+      </p>,
+    );
+    const chips = container.querySelectorAll('.astryx-citation');
+    expect(chips).toHaveLength(2);
+    for (const chip of Array.from(chips)) {
+      expect(getComputedStyle(chip).verticalAlign).toBe('middle');
+    }
+  });
+
+  it('keeps a number citation a superscript', () => {
+    const {container} = render(
+      <p>
+        <Citation source={{title: 'Number'}} number={3} variant="number" />
+      </p>,
+    );
+    const chip = container.querySelector('.astryx-citation');
+    expect(chip).not.toBeNull();
+    expect(getComputedStyle(chip as Element).verticalAlign).toBe('super');
+  });
+});

@@ -4,7 +4,8 @@
  * @file Sitemap tests for the docsite.
  *
  * Validates that the dynamic sitemap covers the static pages plus every
- * generated dynamic route (components, doc topics, templates, blog posts),
+ * generated dynamic route (components, doc topics, templates, blog posts,
+ * changelog pages),
  * uses absolute URLs, and stays free of duplicates.
  *
  * Run: pnpm -F @astryxdesign/docsite test
@@ -18,6 +19,12 @@ vi.mock('next/cache', () => ({cacheLife: () => {}}));
 
 import sitemap, {getSitemapPages} from '../app/sitemap';
 import {SITE_URL} from '../lib/siteConfig';
+import {changelogEntries} from '../lib/changelogData';
+import {
+  changelogPageList,
+  changelogPagePath,
+  defaultChangelogSlug,
+} from '../lib/changelogPages';
 import {flattenComponentSidebarEntries} from '../components/componentSidebarData';
 import {docTopics} from '../generated/docsRegistry';
 import {packages} from '../generated/packageRegistry';
@@ -49,6 +56,24 @@ describe('docsite sitemap', () => {
     expect(
       pages.find(page => new URL(page.url).pathname === '/changelog')?.title,
     ).toBe("What's New");
+  });
+
+  it('includes every changelog page once, with /changelog for the default package', () => {
+    const changelogUrls = urls.filter(
+      u => new URL(u).pathname.split('/')[1] === 'changelog',
+    );
+    const defaultSlug = defaultChangelogSlug(changelogEntries);
+    expect(changelogUrls.sort()).toEqual(
+      changelogPageList(changelogEntries)
+        .map(({slug, page}) =>
+          new URL(
+            changelogPagePath(slug, page, defaultSlug),
+            SITE_URL,
+          ).toString(),
+        )
+        .sort(),
+    );
+    expect(changelogUrls.length).toBeGreaterThan(1);
   });
 
   it('includes every component detail page', () => {

@@ -25,6 +25,7 @@ import * as path from 'node:path';
 import {logger} from '../../logger.mjs';
 import {themeBuild} from './build.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 vi.setConfig({testTimeout: 120_000});
 
@@ -163,5 +164,86 @@ describe('a theme module that throws from a microtask while it loads', () => {
     );
     expect(r.stdout + r.stderr).not.toContain('process.exit(1)');
     expect(r.stderr).not.toMatch(/^\s+at /m);
+  });
+});
+
+describe('a theme with no Core of its own that imports a stylesheet or an asset, on a Node without module hooks', () => {
+  it.skipIf(hasModuleHooks)(
+    'is refused, naming the file and the Node that loads it',
+    () => {
+      // No Core in the theme's folder: the CLI loads it through its own Core,
+      // which reads each import as a script.
+      const bare = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-build-f42-bare-')),
+      );
+      try {
+        fs.writeFileSync(
+          path.join(bare, 'package.json'),
+          '{"type":"module"}\n',
+        );
+        fs.mkdirSync(path.join(bare, 'p'));
+        fs.writeFileSync(
+          path.join(bare, 'p/brand.css'),
+          '.x { color: red; }\n',
+        );
+        fs.writeFileSync(path.join(bare, 'p/logo.svg'), '<svg/>\n');
+        for (const [file, line] of [
+          ['brand.css', "import './brand.css';"],
+          ['logo.svg', "import logo from './logo.svg';\nvoid logo;"],
+        ]) {
+          fs.writeFileSync(path.join(bare, 'p/p.ts'), `${line}\n${THEME}`);
+          const r = spawnSync(
+            process.execPath,
+            [BIN, 'theme', 'build', 'p/p.ts', '--json'],
+            {cwd: bare, encoding: 'utf8', timeout: 60_000},
+          );
+          expect(r.status, file).toBe(1);
+          const out = JSON.parse(r.stdout);
+          expect(out.code, file).toBe('ERR_THEME_LOAD');
+          expect(out.error, file).toContain(
+            `it imports p/${file}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later, or 23.5 or later`,
+          );
+          expect(fs.existsSync(path.join(bare, 'p/p.css')), file).toBe(false);
+        }
+      } finally {
+        fs.rmSync(bare, {recursive: true, force: true});
+      }
+    },
+  );
+});
+
+describe('a theme module with no Core of its own that throws from a microtask while it loads', () => {
+  it('is a refused load too, never a built theme', () => {
+    // No Core in the theme's folder: the CLI loads it through its own Core,
+    // and the load settles in the same microtask checkpoint as the throw.
+    const bare = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-build-f42-bare-')),
+    );
+    try {
+      fs.writeFileSync(path.join(bare, 'package.json'), '{"type":"module"}\n');
+      fs.mkdirSync(path.join(bare, 'p'));
+      fs.writeFileSync(
+        path.join(bare, 'p/p.ts'),
+        `queueMicrotask(() => { throw new Error('micro-throw'); });\n${THEME}`,
+      );
+      const r = spawnSync(
+        process.execPath,
+        [BIN, 'theme', 'build', 'p/p.ts', '--json'],
+        {
+          cwd: bare,
+          encoding: 'utf8',
+          timeout: 60_000,
+        },
+      );
+      expect(r.status, r.stderr).toBe(1);
+      const out = JSON.parse(r.stdout);
+      expect(out.code).toBe('ERR_THEME_LOAD');
+      expect(out.error).toContain(
+        'Failed to load theme from p/p.ts: micro-throw',
+      );
+      expect(fs.existsSync(path.join(bare, 'p/p.css'))).toBe(false);
+    } finally {
+      fs.rmSync(bare, {recursive: true, force: true});
+    }
   });
 });

@@ -40,22 +40,38 @@
  * ```
  */
 
-import React, {use, useId, useInsertionEffect, useMemo, useState} from 'react';
+import React, {
+  use,
+  useEffect,
+  useId,
+  useInsertionEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
-import {colorVars, typographyVars} from './tokens.stylex';
-import {generateThemeCSS, type DefinedTheme} from './defineTheme';
+import {colorVars, typeScaleVars, typographyVars} from './tokens.stylex';
+import {isDefinedTheme, type DefinedTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {ThemeContext} from './useTheme';
+import {
+  SystemSchemeContext,
+  ThemeContext,
+  ThemeSourceContext,
+  createThemeSource,
+  ThemeModeContext,
+  useRootScheme,
+} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
 } from '../privateAttributes/reducedMotion.stylex';
+import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';
 
 /**
@@ -64,7 +80,10 @@ import {createSharedContext} from '../utils/sharedContext';
 interface ThemeProps {
   /** Theme from defineTheme() */
   theme: DefinedTheme;
-  /** Color mode - 'system' follows OS preference */
+  /**
+   * Color mode. `system` takes the page's light or dark scheme: the reader's
+   * preference, unless the page or its host sets the root's scheme.
+   */
   mode?: ThemeMode;
   /** Children to render */
   children: React.ReactNode;
@@ -78,6 +97,10 @@ const wrapperStyles = stylex.create({
     display: 'contents',
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
+    // Text that only inherits its size and line height takes this theme's
+    // body size and body leading, a nested theme's own included.
+    fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
   },
   light: {
     colorScheme: 'light',
@@ -190,14 +213,14 @@ function rewriteThemeStyles(
  * Built themes (from `astryx theme build`) skip injection — their CSS
  * is in a separate file imported by the consumer.
  */
-function useThemeStyleInjection(theme: DefinedTheme): void {
+function useThemeStyleInjection(theme: DefinedTheme | null): void {
   const id = useId();
   const [instance] = useState(() => ({}));
 
   // Syncs the document's stylesheets with the runtime theme CSS.
   useInsertionEffect(() => {
     // Built themes have their CSS in a separate file — skip injection
-    if (theme.__built) {
+    if (theme == null || theme.__built) {
       return;
     }
 
@@ -270,14 +293,19 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  * Hook to sync theme attributes to document.documentElement for the root provider.
  * Skipped for nested Theme instances.
  *
- * Syncs two attributes:
+ * Syncs three attributes:
  * - `data-theme` (light/dark) — reset.css maps this to color-scheme, controlling
  *   browser chrome (scrollbars, native form controls, date pickers).
  * - `data-astryx-theme` (theme name) — enables @scope'd theme CSS to reach elements
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
+ * - the scheme the root Theme draws in, when its mode forces one or the page
+ *   draws in one (`privateAttributes/scheme.ts`), so a theme's color-mode
+ *   blocks under a system root follow the page; with neither, none is named
+ *   and the reader's preference decides.
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
- * - 'system' → removes data-theme (reset.css defaults to color-scheme: light dark)
+ * - 'system' → removes data-theme (reset.css defaults the root to
+ *   color-scheme: light dark)
  *
  * A theme that reduces motion for everyone also marks `<html>` with
  * `data-astryx-reduced-motion` and its custom property, so layers portaled
@@ -286,8 +314,9 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
 function useRootThemeSync(
   isNested: boolean,
   mode: ThemeMode,
-  themeName: string,
+  themeName: string | null,
   reducesMotion: boolean,
+  scheme: 'light' | 'dark' | null,
 ): void {
   // Syncs the theme attributes on the root `<html>` element.
   useIsomorphicLayoutEffect(() => {
@@ -306,7 +335,12 @@ function useRootThemeSync(
     }
 
     // Sync theme name so @scope rules reach portals/fallback viewports.
-    document.documentElement.setAttribute(dataAttr('theme'), themeName);
+    if (themeName == null) {
+      document.documentElement.removeAttribute(dataAttr('theme'));
+    } else {
+      document.documentElement.setAttribute(dataAttr('theme'), themeName);
+    }
+    setRootScheme(document.documentElement, scheme);
     setRootReducedMotionMark(document.documentElement, reducesMotion);
     if (reducesMotion) {
       document.documentElement.style.setProperty(REDUCED_MOTION_PROPERTY, '1');
@@ -317,10 +351,11 @@ function useRootThemeSync(
     return () => {
       document.documentElement.removeAttribute('data-theme');
       document.documentElement.removeAttribute(dataAttr('theme'));
+      setRootScheme(document.documentElement, null);
       setRootReducedMotionMark(document.documentElement, false);
       document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
     };
-  }, [isNested, mode, themeName, reducesMotion]);
+  }, [isNested, mode, themeName, reducesMotion, scheme]);
 }
 
 /**
@@ -335,6 +370,34 @@ function useRootTextSizeSync(isNested: boolean): void {
     }
     return syncReaderTextSize(document);
   }, [isNested]);
+}
+
+// =============================================================================
+// A value that is not a theme
+// =============================================================================
+
+const MODE_NAMES: ReadonlySet<string> = new Set(['light', 'dark', 'system']);
+
+/** Warns once for each kind of value that is not a defined theme. */
+function warnNotATheme(value: unknown): void {
+  const got =
+    typeof value === 'string'
+      ? `the string "${value}"`
+      : value === null
+        ? 'null'
+        : typeof value === 'object'
+          ? 'an object that defineTheme() did not make'
+          : `a value of type ${typeof value}`;
+  const fix =
+    typeof value === 'string' && MODE_NAMES.has(value)
+      ? `To set the color mode, use mode="${value}".`
+      : 'Pass a theme from defineTheme() or a theme package.';
+  warnOnce(
+    `theme-not-a-theme:${typeof value === 'string' ? value : value === null ? 'null' : typeof value}`,
+    'Theme',
+    `\`theme\` takes a theme from defineTheme(), but got ${got}. ${fix} ` +
+      'Until then, this Theme applies no theme of its own.',
+  );
 }
 
 // =============================================================================
@@ -360,44 +423,102 @@ export function Theme({
   children,
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
+  const parent = use(ThemeContext);
+  const parentModeValue = use(ThemeModeContext);
+  const parentMode = parentModeValue?.mode;
+  const parentForces = parentMode === 'light' || parentMode === 'dark';
+  const aroundScheme = use(SystemSchemeContext);
+  const systemScheme = parentForces ? 'preference' : aroundScheme;
 
-  registerTheme(theme);
+  // A value that is not a defined theme applies no theme of its own. The
+  // subtree keeps the theme around it, or Core's default tokens at the root,
+  // and still takes this Theme's mode. The server and the browser make the
+  // same choice, so the markup matches.
+  const ownTheme = isDefinedTheme(theme) ? theme : null;
+  const applied = ownTheme ?? parent?.theme ?? null;
+  // Reports a value that is not a defined theme.
+  useEffect(() => {
+    if (ownTheme == null) {
+      warnNotATheme(theme);
+    }
+  }, [ownTheme, theme]);
 
-  useThemeStyleInjection(theme);
+  if (ownTheme != null) {
+    registerTheme(ownTheme);
+  }
+
+  useThemeStyleInjection(ownTheme);
   // resolveMotionKnobs resolves no public theme to 'always', so no theme
   // marks its root.
   const reducesMotion =
-    resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
-  useRootThemeSync(isNested, mode, theme.name, reducesMotion);
+    resolveMotionKnobs(applied?.__axes?.motion).reducedMotion === 'always';
+  const forcesScheme = mode === 'light' || mode === 'dark';
+  const pageScheme = useRootScheme(!isNested && !forcesScheme);
+  useRootThemeSync(
+    isNested,
+    mode,
+    applied?.name ?? null,
+    reducesMotion,
+    forcesScheme ? mode : pageScheme,
+  );
   useRootTextSizeSync(isNested);
 
-  // Get color-scheme style
+  // A system Theme takes the scheme around it. That is the page root's, or a
+  // system Theme's above it. reset.css makes the root follow the reader's
+  // preference, and a host can set its own; with neither, the page is light. Under a Theme
+  // that forces light or dark, a system Theme declares `light dark`. Then it
+  // follows the reader's preference again.
   const colorSchemeStyle =
     mode === 'dark'
       ? wrapperStyles.dark
       : mode === 'light'
         ? wrapperStyles.light
-        : wrapperStyles.system;
+        : parentForces
+          ? wrapperStyles.system
+          : null;
 
   // Memoize the context value to prevent unnecessary re-renders
-  const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);
+  const ctxValue = useMemo(
+    () => (applied == null ? null : {theme: applied, mode}),
+    [applied, mode],
+  );
+  // No theme applies up to the page's root Theme: `<html>` names none.
+  const themeless =
+    applied == null && (parentModeValue?.themeless ?? !isNested);
+  const modeValue = useMemo(() => ({mode, themeless}), [mode, themeless]);
+  const [source] = useState(() => createThemeSource(ctxValue));
+  // Syncs this Theme's value to subscribers in other React roots (the
+  // fallback toast viewport).
+  useIsomorphicLayoutEffect(() => {
+    source.set(ctxValue);
+  }, [source, ctxValue]);
 
+  const wrapper = (
+    <ThemeNestingContext value={true}>
+      <div
+        {...stylex.props(
+          wrapperStyles.base,
+          colorSchemeStyle,
+          reducesMotion && wrapperStyles.reducedMotion,
+        )}
+        data-astryx-theme={applied?.name}
+        {...reducedMotionMarkProps(reducesMotion)}
+        data-theme={mode === 'system' ? undefined : mode}>
+        {children}
+      </div>
+    </ThemeNestingContext>
+  );
+
+  // With no theme to provide, ThemeContext is null, and descendants read the
+  // mode from ThemeModeContext.
   return (
-    <ThemeContext value={ctxValue}>
-      <ThemeNestingContext value={true}>
-        <div
-          {...stylex.props(
-            wrapperStyles.base,
-            colorSchemeStyle,
-            reducesMotion && wrapperStyles.reducedMotion,
-          )}
-          data-astryx-theme={theme.name}
-          {...reducedMotionMarkProps(reducesMotion)}
-          data-theme={mode === 'system' ? undefined : mode}>
-          {children}
-        </div>
-      </ThemeNestingContext>
-    </ThemeContext>
+    <SystemSchemeContext value={systemScheme}>
+      <ThemeModeContext value={modeValue}>
+        <ThemeContext value={ctxValue}>
+          <ThemeSourceContext value={source}>{wrapper}</ThemeSourceContext>
+        </ThemeContext>
+      </ThemeModeContext>
+    </SystemSchemeContext>
   );
 }
 

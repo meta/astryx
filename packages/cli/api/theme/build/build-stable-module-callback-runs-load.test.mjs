@@ -27,6 +27,7 @@ import * as path from 'node:path';
 import {logger} from '../../logger.mjs';
 import {themeBuild, themeBuildFamily} from './build.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 vi.setConfig({testTimeout: 120_000});
 
@@ -151,52 +152,61 @@ describe("#2: a theme module's callback that throws after its load", () => {
 });
 
 describe('#4: a source importing the stylesheet its own build writes', () => {
-  it('a family root importing the family stylesheet builds from a clean checkout', async () => {
-    write(
-      'fam/ocean.ts',
-      `import {defineTheme} from '@astryxdesign/core/theme';\nimport './k.css';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
-    );
-    write(
-      'fam/ocean-calm.ts',
-      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm'});\n`,
-    );
-    const check = await captured(() =>
-      themeBuildFamily(
-        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
-        {familyKey: 'k', check: true},
-        {cwd: dir},
-      ),
-    );
-    expect(check.err).toBeUndefined();
-    expect(check.result.data.upToDate).toBe(false);
-    const built = await captured(() =>
-      themeBuildFamily(
-        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
-        {familyKey: 'k'},
-        {cwd: dir},
-      ),
-    );
-    expect(built.err).toBeUndefined();
-    expect(exists('fam/k.css')).toBe(true);
-  });
+  it.skipIf(!hasModuleHooks)(
+    'a family root importing the family stylesheet builds from a clean checkout',
+    async () => {
+      write(
+        'fam/ocean.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport './k.css';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+      );
+      write(
+        'fam/ocean-calm.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm'});\n`,
+      );
+      const check = await captured(() =>
+        themeBuildFamily(
+          ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+          {familyKey: 'k', check: true},
+          {cwd: dir},
+        ),
+      );
+      expect(check.err).toBeUndefined();
+      expect(check.result.data.upToDate).toBe(false);
+      const built = await captured(() =>
+        themeBuildFamily(
+          ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+          {familyKey: 'k'},
+          {cwd: dir},
+        ),
+      );
+      expect(built.err).toBeUndefined();
+      expect(exists('fam/k.css')).toBe(true);
+    },
+  );
 
-  it('an import of its own stylesheet with a query (?inline) builds from a clean checkout', async () => {
-    write('p/p.ts', `import './p.css?inline';\n${THEME}`);
-    const built = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
-    expect(built.err).toBeUndefined();
-    expect(exists('p/p.css')).toBe(true);
-  });
+  it.skipIf(!hasModuleHooks)(
+    'an import of its own stylesheet with a query (?inline) builds from a clean checkout',
+    async () => {
+      write('p/p.ts', `import './p.css?inline';\n${THEME}`);
+      const built = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
+      expect(built.err).toBeUndefined();
+      expect(exists('p/p.css')).toBe(true);
+    },
+  );
 });
 
 describe('#8: a project in a folder with # in its name', () => {
-  it('builds a theme importing a stylesheet that is there', async () => {
-    expect(dir).toContain('#');
-    write('p/s.css', '.x { color: red; }\n');
-    write('p/p.ts', `import './s.css';\n${THEME}`);
-    const built = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
-    expect(built.err).toBeUndefined();
-    expect(exists('p/p.css')).toBe(true);
-  });
+  it.skipIf(!hasModuleHooks)(
+    'builds a theme importing a stylesheet that is there',
+    async () => {
+      expect(dir).toContain('#');
+      write('p/s.css', '.x { color: red; }\n');
+      write('p/p.ts', `import './s.css';\n${THEME}`);
+      const built = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
+      expect(built.err).toBeUndefined();
+      expect(exists('p/p.css')).toBe(true);
+    },
+  );
 });
 
 describe('#9: --out naming a declaration file', () => {

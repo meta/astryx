@@ -39,7 +39,7 @@ export const docs = {
   },
   usage: {
     description:
-      'Wraps a subtree with a specific Astryx theme. For static production themes, use `astryx theme build` and import the generated CSS plus built theme object for first-paint and SSR performance. Use runtime `defineTheme()` when themes are dynamic or for prototyping.\n\n`defineTheme` accepts a `tokens` object whose keys are CSS custom property names (always prefixed with `--`). Common token names include `--color-accent`, `--color-background-surface`, `--color-background-body`, `--color-text-primary`, `--color-text-secondary`, `--radius-container`, `--spacing-1` through `--spacing-6`. Values can be a string (same for light/dark) or a `[light, dark]` tuple.\n\nExample:\n```ts\nimport {defineTheme} from \'@astryxdesign/core/theme\';\nconst myTheme = defineTheme({\n  name: \'ocean\',\n  tokens: {\n    \'--color-accent\': [\'#0077B6\', \'#48CAE4\'],\n    \'--color-background-surface\': [\'#F0F8FF\', \'#0A1628\'],\n    \'--color-text-primary\': [\'#0A1317\', \'#FFFFFF\'],\n    \'--radius-container\': \'16px\',\n  },\n});\n```',
+      "Wraps a subtree with a specific Astryx theme. For static production themes, use `astryx theme build` and import the generated CSS plus built theme object for first-paint and SSR performance. Use runtime `defineTheme()` when themes are dynamic or for prototyping.\n\n`defineTheme` accepts a `tokens` object whose keys are CSS custom property names (always prefixed with `--`). Common token names include `--color-accent`, `--color-background-surface`, `--color-background-body`, `--color-text-primary`, `--color-text-secondary`, `--radius-container`, `--spacing-1` through `--spacing-6`. Values can be a string (same for light/dark) or a `[light, dark]` tuple.\n\nExample:\n```ts\nimport {defineTheme} from '@astryxdesign/core/theme';\nconst myTheme = defineTheme({\n  name: 'ocean',\n  tokens: {\n    '--color-accent': ['#0077B6', '#48CAE4'],\n    '--color-background-surface': ['#F0F8FF', '#0A1628'],\n    '--color-text-primary': ['#0A1317', '#FFFFFF'],\n    '--radius-container': '16px',\n  },\n});\n```",
     bestPractices: [
       {
         guidance: true,
@@ -69,13 +69,13 @@ export const docs = {
       type: 'DefinedTheme',
       required: true,
       description:
-        "Theme object to apply. Prefer built theme objects for static production themes; use runtime `defineTheme()` for dynamic themes. Its `motion` can set `tempo` (0.75–1.5) and `character` (`'crisp' | 'standard' | 'expressive'`).",
+        "Theme object to apply. Prefer built theme objects for static production themes; use runtime `defineTheme()` for dynamic themes. Its `motion` can set `tempo` (0.75–1.5) and `character` (`'crisp' | 'standard' | 'expressive'`). A color mode goes in `mode`: `theme=\"light\"` applies no theme.",
     },
     {
       name: 'mode',
       type: "'light' | 'dark' | 'system'",
       default: "'system'",
-      description: 'Color mode. System follows OS preference.',
+      description: 'Color mode. System takes the page\u2019s light or dark scheme: reset.css makes it the reader\u2019s preference, and the page or its host can set the root\u2019s scheme itself.',
     },
     {
       name: 'children',
@@ -117,6 +117,6 @@ export const docsDense = {
   propDescriptions: {
     theme:
       'theme object to apply. Prefer built theme objects for static production themes; use runtime `defineTheme()` for dynamic themes.',
-    mode: 'color mode. System follows OS preference. defaults to "system"',
+    mode: 'color mode. System takes the page\u2019s scheme (reset.css makes it the reader\u2019s preference; the page or host can set the root\u2019s). defaults to "system"',
   },
 };

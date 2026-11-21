@@ -134,24 +134,29 @@ const boxSizeStyles = stylex.create({
   },
 });
 
+// The marks keep their share of the box, so a theme that sizes the box
+// (`checkbox-indicator` width and height) gets a mark that fits it. A
+// percentage reads the box's content box, so the border is added back first:
+// at the shipped 20px and 24px boxes the marks stay exactly 12px and 14px,
+// whatever `--border-width` a theme sets.
 const checkmarkSizeStyles = stylex.create({
   sm: {
-    width: 12,
-    height: 12,
+    width: `calc((100% + 2 * ${borderVars['--border-width']}) * 12 / 20)`,
+    height: `calc((100% + 2 * ${borderVars['--border-width']}) * 12 / 20)`,
   },
   md: {
-    width: 14,
-    height: 14,
+    width: `calc((100% + 2 * ${borderVars['--border-width']}) * 14 / 24)`,
+    height: `calc((100% + 2 * ${borderVars['--border-width']}) * 14 / 24)`,
   },
 });
 
 const indeterminateSizeStyles = stylex.create({
   sm: {
-    width: 10,
+    width: `calc((100% + 2 * ${borderVars['--border-width']}) / 2)`,
     height: 2,
   },
   md: {
-    width: 12,
+    width: `calc((100% + 2 * ${borderVars['--border-width']}) / 2)`,
     height: 2,
   },
 });

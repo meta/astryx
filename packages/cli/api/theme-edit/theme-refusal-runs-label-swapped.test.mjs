@@ -221,7 +221,7 @@ describe('a plain part fill that covers its variants', () => {
 
 describe('new', () => {
   it(
-    '--base offers the --like line as new checks it, every other flag repaired',
+    '--base, the global base option, offers the --like line, whose run repairs the rest',
     async () => {
       const r = await editor([
         'new',
@@ -231,8 +231,11 @@ describe('new', () => {
         '--accent',
         'bleu',
       ]);
-      expect(lines(r.env)[0]).toBe('new n1 --like neutral --accent blue');
-      expect((await follow(lines(r.env)[0])).status).toBe(0);
+      expect(r.env.code).toBe('ERR_BASE_NOT_FOUND');
+      expect(lines(r.env)[0]).toBe('new n1 --like neutral --accent bleu');
+      const repaired = await follow(lines(r.env)[0]);
+      expect(lines(repaired.env)[0]).toBe('new n1 --like neutral --accent blue');
+      expect((await follow(lines(repaired.env)[0])).status).toBe(0);
     },
     T,
   );
@@ -359,9 +362,9 @@ describe('pasted lines', () => {
   );
 });
 
-describe('dropping --only', () => {
+describe('--only on a part styled on its own already', () => {
   it(
-    'keeps every other scope flag',
+    'is taken with every other scope flag',
     async () => {
       const r = await editor([
         'set',
@@ -376,9 +379,15 @@ describe('dropping --only', () => {
         'dark',
         '--only',
       ]);
-      expect(lines(r.env)[0]).toBe(
-        'set t background-color red --on card --when variant:muted --mode dark',
-      );
+      // --only on a part styled on its own already is taken, and every
+      // other scope flag with it.
+      expect(r.env.error).toBeUndefined();
+      expect(r.env.data.setting).toMatchObject({
+        on: 'card',
+        when: 'variant:muted',
+        mode: 'dark',
+      });
+      expect(r.env.data.setting.only).toBeUndefined();
     },
     T,
   );

@@ -233,41 +233,53 @@ describeHiddenProduction('hidden production ShadCN discovery', () => {
   });
 
   it('exercises the real MCP tools without exposing registry promotion', async () => {
+    // The endpoint runs the CLI's own commands: like the site search, it may
+    // name ShadCN only inside the CLI's own docs (the migration guide).
     const search = mcpPayload(
       await callMcpTool('search', {
-        query: 'shadcn registry install',
-        limit: 50,
+        query: ['shadcn', 'registry', 'install'],
+        limit: '50',
       }),
-    );
-    expect(Array.isArray(search)).toBe(true);
-    for (const result of search as Array<Record<string, unknown>>) {
+    ) as {data: {results: Array<Record<string, unknown>>}};
+    expectNoRegistryDiscovery(search, 'MCP search');
+    for (const result of search.data.results) {
       if (/shadcn/i.test(JSON.stringify(result))) {
-        expect(result).toMatchObject({type: 'doc', topic: 'migration'});
-        expectNoRegistryDiscovery(result, 'allowed MCP migration result');
+        expect(result).toMatchObject({
+          domain: 'doc',
+          package: '@astryxdesign/cli',
+        });
       } else {
         expectNoShadcnPromotion(result, 'real MCP search result');
       }
     }
 
-    for (const name of ['Button', 'settings']) {
-      const result = mcpPayload(await callMcpTool('get', {name}));
-      expectNoShadcnPromotion(result, `real MCP get(${name}) response`);
-    }
+    const button = mcpPayload(
+      await callMcpTool('component', {names: ['Button']}),
+    );
+    expectNoShadcnPromotion(button, 'real MCP component(Button) response');
+    const settings = mcpPayload(
+      await callMcpTool('template', {name: 'settings'}),
+    );
+    expectNoShadcnPromotion(settings, 'real MCP template(settings) response');
 
-    const migration = mcpPayload(await callMcpTool('get', {name: 'migration'}));
+    const migration = mcpPayload(
+      await callMcpTool('docs', {topic: 'migration'}),
+    );
     expect(JSON.stringify(migration)).toMatch(/shadcn/i);
     expectNoRegistryDiscovery(migration, 'allowed MCP migration guide');
+  }, 120_000);
 
+  it('keeps the component, template and doc registries free of promotion', () => {
     expectNoShadcnPromotion(
       {components, blocks, templates},
-      'complete MCP component and template registries',
+      'complete component and template registries',
     );
     const migrationTopic = docTopics.find(topic => topic.topic === 'migration');
     expect(migrationTopic).toBeDefined();
     expectNoRegistryDiscovery(migrationTopic, 'allowed migration topic');
     expectNoShadcnPromotion(
       docTopics.filter(topic => topic.topic !== 'migration'),
-      'all other MCP doc topics',
+      'all other doc topics',
     );
   });
 

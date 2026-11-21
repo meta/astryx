@@ -25,6 +25,9 @@ const SUITE_LABELS = Object.freeze({
   visual: 'ci:run-visual',
   a11y: 'ci:run-a11y',
   rtl: 'ci:run-rtl',
+  // The swizzle proof runs on main; a change to the swizzle tooling opts in
+  // (spec:AST-110/DEC-3).
+  swizzle: 'ci:run-swizzle',
 });
 
 /** Display names for the pull-request comment's not-run sentence. */
@@ -32,6 +35,7 @@ const SUITE_NAMES = Object.freeze({
   visual: 'Visual',
   a11y: 'Accessibility',
   rtl: 'RTL',
+  swizzle: 'Swizzle proof',
 });
 
 /**
