@@ -4638,105 +4638,6 @@ export function draftAnswer(ctx, env, question) {
         (m, lead, run) => (cued(run) ? `${lead}font ${run}` : m),
       );
   }
-  // (A look said, then taken away by a pronoun: "the copy button border is
-  // ugly, hide it", "the shadow on the cards is too strong, remove it". The
-  // pronoun is that look, never the part: only the look goes, and the
-  // asks before it stay as said.)
-  question = String(question).replace(
-    /(^|[,;.]\s*)([^,;.]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)[^,;.]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b\s*[.!]?$/i,
-    (m, lead, said) => {
-      // ("it" is the nearest look said before it: "the button shadow is too
-      // strong and the card border is ugly, hide it" is the card border.)
-      const looks = [
-        ...said.matchAll(
-          // (A look word that names another aspect, "border radius", is
-          // never the look taken away.)
-          /\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)/gi,
-        ),
-      ];
-      const last = looks[looks.length - 1];
-      const look = last[1];
-      const at = /** @type {number} */ (last.index);
-      const word = look.toLowerCase().replace(/s$/, '');
-      // (An ask joined before it by "and", "make the buttons blue and the
-      // card border is ugly", stays as said: only the words after the last
-      // "and" are this look's.)
-      const join = /\b(?:and|but|then)\s+/gi;
-      let cut = -1;
-      let cutLen = 0;
-      let joinWord = '';
-      for (const j of said.slice(0, at).matchAll(join)) {
-        cut = /** @type {number} */ (j.index);
-        cutLen = j[0].length;
-        joinWord = j[0].trim().toLowerCase();
-      }
-      const kept = cut >= 0 ? said.slice(0, cut + cutLen) : '';
-      const before = said.slice(cut >= 0 ? cut + cutLen : 0, at).trim();
-      // (The part said first: "the border on the cards in the dialog" is
-      // the cards'.)
-      /** @param {string} w @param {boolean} [nearEnd] */
-      const partIn = (w, nearEnd = false) =>
-        partLexicon(ctx)
-          .parts.map(([re]) => re.exec(` ${w.toLowerCase()} `))
-          .filter(x => x != null)
-          .sort((a, b) => {
-            const x = /** @type {RegExpExecArray} */ (a);
-            const y = /** @type {RegExpExecArray} */ (b);
-            // (Before the look, the part nearest it, "the dialog's card
-            // border"; after on/of, the part said first, "the border on
-            // the cards in the dialog".)
-            return nearEnd
-              ? y.index + y[0].length - (x.index + x[0].length) ||
-                  y[0].length - x[0].length
-              : x.index - y.index || y[0].length - x[0].length;
-          })[0]?.[0]
-          ?.trim();
-      // (The part is the one named before the look, "the copy button
-      // border"; else the one after on, of, in or around, "I hate the
-      // border on cards"; else the one said earlier in the clause, "the
-      // shadow on the cards is too strong and the border is ugly".)
-      const onPart = /^\s*(?:on|of|in|around)\s+(.+)$/i.exec(
-        said.slice(at + look.length),
-      )?.[1];
-      const part =
-        (before && partIn(before, true)) ||
-        (onPart && partIn(onPart)) ||
-        // (A part said before "but", "the cards look fine but the border
-        // is ugly", is not this look's.)
-        (kept && joinWord === 'and' && partIn(kept));
-      const rest = said.slice(at + look.length);
-      // ("the shadows on cards and buttons are too strong, remove them":
-      // parts listed after on, before the verb, each lose the look.)
-      const listed =
-        /^\s*(?:on|of|in|around)\s+(.+?)\s+(?:is|are|looks?|seems?|feels?|was|were)\b/i.exec(
-          rest,
-        );
-      const items =
-        !(before && partIn(before, true)) &&
-        listed &&
-        /\band\b|,/.test(listed[1])
-          ? listed[1]
-              .split(/\s*(?:,|\band\b)\s*/)
-              .filter(Boolean)
-              .map(w => partIn(w))
-          : null;
-      const many =
-        items && items.length > 1 && items.every(Boolean)
-          ? /** @type {string[]} */ (items)
-          : null;
-      // (An ask joined after the look, "the shadow on the cards is too
-      // strong and the headings should be bold", stays its own clause.)
-      const after = many && listed ? rest.slice(listed[0].length) : rest;
-      const next = /\b(?:and|but|then)\s+(?=\S)/i.exec(after);
-      const tail = next ? after.slice(next.index + next[0].length).trim() : '';
-      const taken = many
-        ? many.map(on => `no ${word} on ${on}`).join(', ')
-        : part
-          ? `no ${word} on ${part}`
-          : '';
-      return taken ? `${lead}${kept}${taken}${tail ? `, ${tail}` : ''}` : m;
-    },
-  );
   question = String(question)
     .replace(/\b([a-z]+)[- ]?(mode|theme)\b/gi, (m, w, k) => {
       const mode = modeNear(w);
@@ -29216,9 +29117,36 @@ export function draftAnswer(ctx, env, question) {
     const colorSaid = /\bcolou?rs?\b/i.test(
       String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
     );
+    const undone = result.filter(d => {
+      const c = /** @type {any} */ (draftClause.get(d));
+      if (d === unmet || d.unmet || !d.options.length || !c) return false;
+      if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
+      // (Of the part the undo names; with no part, of the whole theme.)
+      const onPart = part
+        ? c.parts?.some(
+            (/** @type {{on: string}} */ p) =>
+              p.on === part || (FAMILIES[part] ?? []).includes(p.on),
+          )
+        : !c.parts?.length;
+      return (
+        onPart &&
+        (what === 'everything' ||
+          c.aspects?.includes(what) ||
+          (colorSaid &&
+            ['text', 'background'].some(a => c.aspects?.includes(a))) ||
+          d.options
+            .flat()
+            .some(
+              (/** @type {Step} */ st) =>
+                st.thing === what || String(st.thing).includes(what),
+            ))
+      );
+    });
+    // An undo that names more than one change ("Undo the card change and
+    // the heading change"), or a look that more than one earlier change
+    // could be ("the heading size change" after a size and a bold), is not
+    // read for sure: nothing is taken back, and the answer says so.
     const uc = /** @type {any} */ (draftClause.get(unmet));
-    // ("Undo the card change and the heading change": the clause after the
-    // undo that only names another change is part of the undo.)
     const next = clauses[undoAt + 1];
     const alsoNamed =
       next &&
@@ -29227,170 +29155,57 @@ export function draftAnswer(ctx, env, question) {
       /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
         String(next.text ?? ''),
       );
-    // (The clause after it, when it is part of the undo, is its own
-    // phrase: a comma keeps the two apart.)
-    const said =
-      `${String(uc?.text ?? '')}${alsoNamed ? `, ${String(next.text)}` : ''}`.toLowerCase();
     const lookOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
         /** @type {any} */ (draftClause.get(d))?.aspects ?? []
       );
-    const partsOf = (/** @type {any} */ d) =>
-      /** @type {string[]} */ (
-        /** @type {any} */ (draftClause.get(d)?.parts ?? []).map(
-          (/** @type {{on: string}} */ p) => p.on,
-        )
-      );
-    const before = result.filter(d => {
-      const c = /** @type {any} */ (draftClause.get(d));
-      return (
-        d !== unmet &&
-        !d.unmet &&
-        d.options.length &&
-        c &&
-        (undoAt < 0 || clauses.indexOf(c) < undoAt)
-      );
-    });
-    // (Each part the undo names: its own, and an earlier change's part said
-    // by its whole name in it, "the heading change"; never a part that only
-    // shares a word with it.)
-    /** Where a part's name is said in the undo, or null. @param {string} on */
-    const spanOf = on => {
-      const m = new RegExp(`\\b${on.split('-').join('[\\s-]+')}s?\\b`).exec(
-        said,
-      );
-      return m ? [m.index, m.index + m[0].length] : null;
-    };
-    const candidates = [
-      ...new Set([
-        ...(part ? [part] : []),
-        ...(uc?.parts ?? []).map((/** @type {{on: string}} */ p) => p.on),
-        ...before.flatMap(partsOf).filter(on => spanOf(on)),
-      ]),
-    ];
-    // ("Undo the button group change": the longest name said wins; the
-    // buttons inside that name are not named.)
-    const named = candidates.filter(on => {
-      const at = spanOf(on);
-      return !(
-        at &&
-        candidates.some(other => {
-          const o = other === on ? null : spanOf(other);
-          return (
-            o && o[0] <= at[0] && o[1] >= at[1] && o[1] - o[0] > at[1] - at[0]
-          );
-        })
-      );
-    });
-    // (Each look the undo names: "the heading size change" is the size;
-    // a part's size is its text size or its room, "bigger buttons".)
-    const LOOK_WORDS = /** @type {Array<[RegExp, string[]]>} */ ([
-      [/\b(?:tracking|letter[- ]spacing)\b/, ['tracking']],
-      [/\b(?:leading|line[- ]heights?)\b/, ['leading']],
-      [/\bsizes?\b/, ['fontsize', 'size', 'spacing']],
-      [/\b(?:weights?|bold(?:ness)?)\b/, ['weight']],
-      [/\b(?:corners?|radius|roundness)\b/, ['corners']],
-      [/\bshadows?\b/, ['shadow']],
-      [/\bborders?\b/, ['border']],
-      [/\b(?:spacing|padding|density)\b/, ['spacing']],
-      [/\b(?:fonts?|typefaces?)\b/, ['family']],
-    ]);
-    const lookWords = LOOK_WORDS.filter(([re]) => re.test(said)).flatMap(
-      ([, a]) => a,
-    );
-    // ("Make the text bigger. Undo the text change.", "the body text
-    // change": the text with no look named is every look of the text.)
-    const textSaid = what === 'text' && !colorSaid && !lookWords.length;
+    // (A look word the undo says that no aspect was read for, "the
+    // heading size change", still narrows it.)
     const looksSaid = [
-      ...new Set([
-        ...(uc?.aspects ?? []).filter(
-          (/** @type {string} */ a) => !(textSaid && a === 'text'),
-        ),
-        ...(what === 'everything' || textSaid ? [] : [what]),
-        ...lookWords,
-        ...(colorSaid ? ['text', 'background'] : []),
-        ...(textSaid
-          ? ['fontsize', 'weight', 'family', 'leading', 'tracking', 'text']
-          : []),
-      ]),
+      ...(uc?.aspects ?? []),
+      ...(what === 'everything' ? [] : [what]),
+      ...(colorSaid ? ['text', 'background'] : []),
+      ...(/\b(?:sizes?|weights?|bold|colou?rs?|spacing|padding|corners?|radius|shadows?|borders?|fonts?|leading|line[- ]height)\b/i.test(
+        String(uc?.text ?? ''),
+      )
+        ? ['said']
+        : []),
     ];
-    // (Each "… change" said names its look for its own part: "the card
-    // color change and the heading change" takes back the card's color and
-    // the heading's change, whatever look it had.)
-    /** @type {Array<[number, number]>} */
-    const phrases = [];
-    {
-      let from = 0;
-      for (const m of said.matchAll(/\band\b|,/g)) {
-        phrases.push([from, /** @type {number} */ (m.index)]);
-        from = /** @type {number} */ (m.index) + m[0].length;
-      }
-      phrases.push([from, said.length]);
-    }
-    /**
-     * The looks the phrase naming a part says, when the undo names its
-     * changes one phrase each; null when it is one phrase.
-     * @param {string} n
-     * @returns {string[] | null}
-     */
-    const phraseLooks = n => {
-      const at = spanOf(n);
-      const seg =
-        phrases.length > 1 && at
-          ? phrases.find(([a, b]) => at[0] >= a && at[0] < b)
-          : null;
-      if (!seg) return null;
-      const text = said.slice(seg[0], seg[1]);
-      return [
-        ...LOOK_WORDS.filter(([re]) => re.test(text)).flatMap(([, a]) => a),
-        ...(/\bcolou?rs?\b/.test(text) ? ['text', 'background'] : []),
-      ];
-    };
-    /** @param {string} n @param {string} on */
-    const isPart = (n, on) => on === n || (FAMILIES[n] ?? []).includes(on);
-    const undone = before.filter(d => {
-      // (Of the parts the undo names; with no part, of the whole theme.)
-      const hits = named.filter(n => partsOf(d).some(on => isPart(n, on)));
-      const onPart = named.length ? hits.length > 0 : !partsOf(d).length;
-      const own = hits.map(phraseLooks);
-      if (onPart && own.length && own.every(l => l != null))
-        return own.some(
-          l =>
-            !(/** @type {string[]} */ (l).length) ||
-            /** @type {string[]} */ (l).some(a => lookOf(d).includes(a)),
-        );
-      return (
-        onPart &&
-        (!looksSaid.length ||
-          looksSaid.some(a => lookOf(d).includes(a)) ||
-          d.options
-            .flat()
-            .some(
-              (/** @type {Step} */ st) =>
-                st.thing === what ||
-                (RESET_THINGS[what] ?? []).some((/** @type {string} */ t) =>
-                  t.endsWith('*')
-                    ? String(st.thing).startsWith(t.slice(0, -1))
-                    : st.thing === t,
-                ),
-            ))
-      );
-    });
-    // ("Make the cards rounder. Undo the corner change.": an undo with no
-    // part, of a look an earlier change made on a part, does not say for
-    // sure which change it means: nothing is taken back, and it says so.)
-    if (
+    const looks = new Set(undone.flatMap(lookOf));
+    const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    // ("Make the cards rounder. Undo the corner change.": an earlier change
+    // the undo could mean, though it does not name it for sure.)
+    const loose =
       !undone.length &&
-      !named.length &&
-      looksSaid.length &&
-      before.some(d => looksSaid.some(a => lookOf(d).includes(a)))
-    ) {
-      unmet.text = `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`;
+      looksSaid.some(a => a !== 'said') &&
+      result.some(d => {
+        const c = /** @type {any} */ (draftClause.get(d));
+        return (
+          d !== unmet &&
+          !d.unmet &&
+          d.options.length &&
+          c &&
+          (undoAt < 0 || clauses.indexOf(c) < undoAt) &&
+          looksSaid.some(a => lookOf(d).includes(a))
+        );
+      });
+    if (!undone.length && !several && !loose) continue;
+    const unsure =
+      several ||
+      loose ||
+      (looksSaid.length > 0 &&
+        looks.size > 1 &&
+        undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
+    if (unsure) {
+      unmet.text = several
+        ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
+        : loose
+          ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
+          : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
       if (uc) answeredByUndo.add(uc);
+      if (alsoNamed) answeredByUndo.add(next);
       continue;
     }
-    if (!undone.length) continue;
-    if (alsoNamed) answeredByUndo.add(next);
     // (A whole answer that holds every line, "all of it, in order", loses
     // each line taken back once; a later clause that says the change again
     // keeps it.)
@@ -29416,15 +29231,12 @@ export function draftAnswer(ctx, env, question) {
     );
     // (A color taken back leaves no line of it anywhere: the fill, its text
     // and the readable text the fill brought.)
-    if (colorSaid && named.length) {
+    if (colorSaid && part) {
       const COLOR_THINGS =
         /^(?:color|background|background-color|--color-(?:text|background)-[a-z0-9-]+)$/;
       const onIt = (/** @type {Step} */ st) =>
-        named.some(
-          n =>
-            isPart(n, String(st.on)) &&
-            (phraseLooks(n)?.includes('text') ?? true),
-        ) && COLOR_THINGS.test(String(st.thing));
+        (st.on === part || (FAMILIES[part] ?? []).includes(String(st.on))) &&
+        COLOR_THINGS.test(String(st.thing));
       for (const d of result)
         if (d.options.length)
           d.options = d.options
@@ -29447,17 +29259,8 @@ export function draftAnswer(ctx, env, question) {
       const c = draftClause.get(/** @type {any} */ (d));
       if (c) answeredByUndo.add(c);
     }
-    // (Only the parts a change was taken back on are named as taken back;
-    // a part the undo names with no change said earlier, "the card change"
-    // when no card change was asked, is said to have nothing to take back.)
-    const takenOn = named.filter(n =>
-      undone.some(d => partsOf(d).some(on => isPart(n, on))),
-    );
-    const nothingOn = named.filter(
-      n => !before.some(d => partsOf(d).some(on => isPart(n, on))),
-    );
     result.push({
-      text: `the ${takenOn.length ? `${takenOn.join(' and ')} ` : ''}change${takenOn.length > 1 ? 's' : ''} said earlier in this ask ${takenOn.length > 1 ? 'are' : 'is'} taken back by its undo, so ${takenOn.length > 1 ? 'they are' : 'it is'} not written${nothingOn.length ? `; no ${nothingOn.join(' or ')} change was said earlier, so there is nothing to take back there` : ''}`,
+      text: `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
       options: [],
     });
   }

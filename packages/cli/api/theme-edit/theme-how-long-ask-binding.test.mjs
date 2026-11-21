@@ -67,7 +67,7 @@ const answer = async q => {
 };
 
 /**
- * @typedef {{q: string, has?: string[], never?: RegExp, says?: RegExp, saysNot?: RegExp, noWide?: boolean}} Row
+ * @typedef {{q: string, has?: string[], never?: RegExp, says?: RegExp, noWide?: boolean}} Row
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
@@ -300,31 +300,19 @@ const ROWS = [
     },
   ],
   [
-    // (Replaces the take-nothing-back reading: each change the undo names
-    // was said earlier in the ask, so each is taken back.)
-    'an undo that names two changes takes back both',
+    'an undo that names two changes takes nothing back and says so',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the card change and the heading change.',
-      never: /--on card|^headings |--on heading/,
-      says: /card and heading changes said earlier/,
+      has: ['corners more --on card', 'headings bold'],
+      says: /names more than one change, so none is taken back and each stays written/,
     },
   ],
   [
-    'an undo that names two parts at once takes back both',
-    {
-      q: 'Cards rounder. Headings bigger. Undo the card and heading changes. A blue accent.',
-      has: ["accent '#2563eb'"],
-      never: /--on card|--text-heading-\d-size|^headings /,
-    },
-  ],
-  // (Replaces the base's "none is taken back" row: an undo that names
-  // several changes takes back each one said earlier.)
-  [
-    'an undo that names two changes takes back the one said earlier',
+    'an undo that names two changes, only one said earlier, takes nothing back and says so',
     {
       q: 'Make the headings bold. Undo the card change and the heading change.',
-      never: /^headings |--on heading/,
-      says: /the heading change said earlier in this ask is taken back[\s\S]*no card change was said earlier/,
+      has: ['headings bold'],
+      says: /names more than one change, so none is taken back and each stays written/,
     },
   ],
   [
@@ -336,86 +324,11 @@ const ROWS = [
     },
   ],
   [
-    // (Replaces the take-nothing-back reading: the size named is one of
-    // the two changes, and only it is taken back.)
-    'an undo that names a look takes back only that look',
+    'an undo whose look more than one earlier change could be takes nothing back',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
       has: ['headings bold'],
-      never: /--text-heading-\d-size/,
-    },
-  ],
-  [
-    'an undo reads each change it names for its own part: a color for the card, every look for the heading',
-    {
-      q: 'Make the cards blue. Make the headings bold. Undo the card color change and the heading change.',
-      never: /^headings |--on heading|--on card/,
-      says: /the card and heading changes said earlier in this ask are taken back/,
-    },
-  ],
-  [
-    'an undo of a size names nothing as missing for a part whose change was another look',
-    {
-      q: 'Make the cards rounder. Make the headings bigger. Undo the card size change and the heading size change.',
-      has: ['corners more --on card'],
-      saysNot: /no card change was said earlier/,
-    },
-  ],
-  [
-    'an undo of a longer part name never takes back the shorter part said earlier',
-    {
-      q: 'Make the buttons blue. Make the button group rounder. Undo the button group change.',
-      has: ["background-color '#2563eb' --on button"],
-    },
-  ],
-  [
-    'an undo of the code block header keeps the code blocks change',
-    {
-      q: 'Make the code blocks rounder. Make the code block header bold. Undo the code block header change.',
-      has: ['corners more --on code-block'],
-    },
-  ],
-  [
-    'an undo names a part by its whole name, never a part that shares a word',
-    {
-      q: 'Make the code block header darker. Make the code block copy button blue. Undo the code block header change.',
-      has: ["background-color '#2563eb' --on code-block-copy-button"],
-    },
-  ],
-  [
-    "an undo of a part's color never takes back its size",
-    {
-      q: 'Make the headings bigger. Make the headings blue. Undo the heading color change.',
-      has: ['--text-heading-1-size 1.725rem'],
-    },
-  ],
-  [
-    "an undo of a part's size takes back its room when that was its size",
-    {
-      q: 'Make the buttons bigger. Undo the button size change.',
-      never: /--on button|sets nothing/,
-    },
-  ],
-  [
-    "an undo of a card's size keeps its color",
-    {
-      q: 'Make the cards bigger. Make the cards blue. Undo the card size change.',
-      has: ["background-color '#2563eb' --on card --when variant:default"],
-      never: /spacing more --on card/,
-    },
-  ],
-  [
-    'an undo of the text takes back the text size said earlier',
-    {
-      q: 'Make the text bigger. Undo the text change.',
-      never: /^text-size |sets nothing/,
-    },
-  ],
-  [
-    'an undo of the body text takes back the text size said earlier',
-    {
-      q: 'Make the body text bigger. Undo the body text change.',
-      never: /^text-size |--text-body-size|sets nothing/,
+      says: /more than one earlier change[\s\S]*one at a time/,
     },
   ],
   [
@@ -711,7 +624,6 @@ describe('long asks bind each clause to its own part', () => {
       if (row.never)
         for (const line of r.lines) expect(line, row.q).not.toMatch(row.never);
       if (row.says) expect(r.text, row.q).toMatch(row.says);
-      if (row.saysNot) expect(r.text, row.q).not.toMatch(row.saysNot);
       if (row.noWide)
         for (const line of r.lines) expect(line, row.q).toMatch(/ --on /);
     },
