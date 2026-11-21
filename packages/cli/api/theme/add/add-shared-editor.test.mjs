@@ -13,7 +13,11 @@ import {afterAll, beforeAll, expect, it, vi} from 'vitest';
 import {themeAdd} from './add.mjs';
 import {themeRemove} from '../remove/remove.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
-import {themeEditNew, themeEditSet} from '../../theme-edit/theme-edit.mjs';
+import {
+  themeEditNew,
+  themeEditSet,
+  themeEditShow,
+} from '../../theme-edit/theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -98,8 +102,9 @@ it('an editor set after the add updates the app copy the add wrote', async () =>
   ).not.toBe(before);
 }, 300_000);
 
-it('a remove after an editor build keeps the copy whole, and a re-add names the files to clear first', async () => {
-  // (The previous test's editor build rewrote the receiver's copy.)
+it('a remove after an editor change keeps the copy whole, and a re-add names the files to clear first', async () => {
+  // (The previous test's editor change rewrote the receiver's settings and
+  // copy: the re-add would undo it, so it stops.)
   const removed = await themeRemove('sunset', {cwd: receiver});
   expect(removed.data.undo?.kept).toEqual(
     expect.arrayContaining(['sunset.css']),
@@ -111,6 +116,60 @@ it('a remove after an editor build keeps the copy whole, and a re-add names the 
   await expect(themeAdd(bundle, {cwd: receiver})).rejects.toThrow(
     /sunset\.css.*changed since.*delete/s,
   );
+}, 300_000);
+
+it('a re-add replaces the copy files the editor rebuilt from unchanged working files, and stops at a hand change', async () => {
+  const app = makeLinkedFixture(
+    'astryx-theme-add-editor-rebuilt-',
+    FIXTURE_PACKAGES,
+  );
+  writeFixtureBaseTheme(app, 'neutral');
+  // (A shared copy whose stylesheet differs from what this editor builds.)
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-rebuilt-'));
+  fs.cpSync(bundle, shared, {recursive: true});
+  const sharedCss = path.join(shared, 'app-copy/sunset.css');
+  fs.appendFileSync(sharedCss, '/* shared */\n');
+  await themeAdd(shared, {cwd: app});
+  const css = path.join(app, 'src/themes/sunset/sunset.css');
+  // (The editor builds again, settings unchanged: the copy is its build.)
+  await themeEditShow('sunset', {cwd: app});
+  expect(fs.readFileSync(css, 'utf8')).not.toMatch(/shared/);
+  await themeRemove('sunset', {cwd: app});
+  const again = await themeAdd(shared, {cwd: app});
+  expect(again.data.default).toBe('sunset');
+  expect(fs.readFileSync(css, 'utf8')).toBe(fs.readFileSync(sharedCss, 'utf8'));
+  // (A hand change to a built file is never replaced.)
+  await themeEditShow('sunset', {cwd: app});
+  fs.appendFileSync(css, '/* mine */\n');
+  await themeRemove('sunset', {cwd: app});
+  await expect(themeAdd(shared, {cwd: app})).rejects.toThrow(/sunset\.css/);
+  fs.rmSync(css);
+  await themeAdd(shared, {cwd: app});
+  // (Nor are built files from an edited theme source.)
+  const source = path.join(app, 'themes/sunset/sunset.theme.ts');
+  const own = fs.readFileSync(source, 'utf8');
+  fs.writeFileSync(source, `${own}// mine\n`);
+  await themeEditShow('sunset', {cwd: app});
+  await themeRemove('sunset', {cwd: app});
+  await expect(themeAdd(shared, {cwd: app})).rejects.toThrow(/changed since/);
+  fs.writeFileSync(source, own);
+  fs.rmSync(css);
+  await themeAdd(shared, {cwd: app});
+  // (A hand change to the copy's descriptor is never replaced.)
+  await themeEditShow('sunset', {cwd: app});
+  const doc = path.join(app, 'src/themes/sunset/sunsetTheme.doc.mjs');
+  fs.writeFileSync(
+    doc,
+    fs
+      .readFileSync(doc, 'utf8')
+      .replace(/displayName: [^,]+,/, "displayName: 'Mine',"),
+  );
+  await themeRemove('sunset', {cwd: app});
+  await expect(themeAdd(shared, {cwd: app})).rejects.toThrow(
+    /sunsetTheme\.doc\.mjs/,
+  );
+  removeLinkedFixture(app);
+  fs.rmSync(shared, {recursive: true, force: true});
 }, 300_000);
 
 it('the stable add names no experimental command when it keeps editor state', async () => {
