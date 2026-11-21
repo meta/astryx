@@ -318,6 +318,7 @@ const itemsByFile = new Map();
  */
 function cachedComponentItems(project, group) {
   itemsKey ??= codeFingerprint(import.meta.url);
+  if (!project.cacheDir) return componentItems(project, group);
   const file = path.join(project.cacheDir, 'items.json');
   let kept = itemsByFile.get(file);
   if (!kept) {
