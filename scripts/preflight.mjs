@@ -565,9 +565,10 @@ let defaultExports;
  * Why a failed typecheck is skipped, or null: every TypeScript error is a
  * missing build output, or an implicit-any error (TS7006, TS7031) in a file
  * that also has a missing build output. A missing build output is an
- * unresolved import that a workspace package's `exports` declares, or a
- * relative path into a `dist` folder. An undeclared subpath, an unknown
- * package, a third-party module, an implicit-any error in any other file, and
+ * unresolved import that a workspace package's `exports` declares and whose
+ * types file is absent (workspaceExports), or a relative path into a `dist`
+ * folder. An undeclared subpath, an unknown package, an entry whose file
+ * exists, a third-party module, an implicit-any error in any other file, and
  * any other error are real.
  * @param {string} text the typecheck's output
  * @param {{declares?: (specifier: string) => boolean}} [options]

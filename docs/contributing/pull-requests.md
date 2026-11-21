@@ -167,12 +167,12 @@ import, and the guards, and it ends with "run `pnpm preflight` before you flip"
 rather than "ready to flip". When every typecheck error is a missing workspace
 build, the typecheck reports SKIP ("workspace builds missing; run `pnpm build`
 first"), and the run ends "not checked" rather than a pass. A missing build is
-an unresolved import that a workspace package's `exports` declares (such as
-`@astryxdesign/core/utils` or `@astryxdesign/<package>/built`) or a relative
-`dist` path; an implicit-any error (TS7006, TS7031) in a file with such an
+an unresolved import that a workspace package's `exports` declares and whose
+types file is absent (such as `@astryxdesign/core/utils` or
+`@astryxdesign/<package>/built` before a build), or a relative `dist` path; an implicit-any error (TS7006, TS7031) in a file with such an
 import counts with it. Any other TypeScript error fails the typecheck: an
-undeclared subpath, an implicit-any error in another file, or any other error
-code. A skipped typecheck checked nothing: run `pnpm build`, then run
+undeclared subpath, an entry whose file exists, an implicit-any error in another
+file, or any other error code. A skipped typecheck checked nothing: run `pnpm build`, then run
 preflight again.
 
 Preflight is not a required step. It reproduces the pre-review checklist and
