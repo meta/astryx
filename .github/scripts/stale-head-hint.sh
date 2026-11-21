@@ -4,8 +4,10 @@
 # Explains a failed interaction leg on a head older than the base branch: it
 # names each base-branch commit since the merge base that changed a spec the
 # leg ran, the harness's sources or the interaction config, which the head
-# does not have. The base is the branch's tip now, not the run's merge
-# commit, so a re-run also sees a fix that landed after the run started.
+# does not have. The leg runs at the pull request's head, not at the run's
+# merge commit, so each warning names that head. The base is the branch's tip
+# now, not the run's merge commit, so a re-run also sees a fix that landed
+# after the run started.
 # Prints workflow warnings, or one line saying there is nothing newer.
 #
 # usage: stale-head-hint.sh <base-ref> <the leg's planned spec list>
@@ -37,12 +39,13 @@ if ! awk '/^commit /{c=1;next} c&&NF{f=1} END{exit !f}' <<< "$newer"; then
   echo "$base_ref has no newer change to this leg's specs or the harness."
   exit 0
 fi
-awk -v base="$base_ref" '
+head=$(git rev-parse --short=8 HEAD)
+awk -v base="$base_ref" -v head="$head" '
   # A workflow command reads "%" as an escape, so the subject is escaped once
   # for the commit, not again for each file it changed.
   /^commit / { sha = $2; $1 = ""; $2 = ""; subject = substr($0, 3); gsub(/%/, "%25", subject); next }
   NF && shown < 5 {
-    printf "::warning title=Update your branch before debugging::%s changed on %s in %s (%s), which this head does not have. Update the branch onto %s and re-run: a test whose file changed on %s gets an update, not a retry.\n", $0, base, sha, subject, base, base
+    printf "::warning title=Update your branch before debugging::%s changed on %s in %s (%s). This leg runs at the PR head (%s), which does not have it. Update the branch onto %s and re-run: a test whose file changed on %s gets an update, not a retry.\n", $0, base, sha, subject, head, base, base
     shown++
   }
 ' <<< "$newer"
