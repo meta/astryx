@@ -12742,13 +12742,20 @@ function scopedFillPairProblems(ctx, data, res) {
       (/** @type {string} */ c) => readsItself(c, pair.on),
     );
     // (An on-color the theme sets on this part through a group, on a part
-    // around it or a reader inside it (by the parts a group names), or for
-    // one variant or state of the whole theme or of those parts, is drawn
-    // there as set: this part's scope alone does not say what its readers
-    // draw. One set for the whole theme, or on parts elsewhere, is what the
-    // scope reads.)
+    // around it, on a reader inside it or a part holding one (by the parts
+    // a group names), or for one variant or state of those parts, is drawn
+    // there as set, in the modes it is set for: this part's scope alone
+    // does not say what its readers draw there. One set for the whole
+    // theme, or on parts elsewhere, is what the scope reads.)
     const around = (/** @type {string} */ t) =>
       (map[t]?.contains ?? []).includes(x.on);
+    // (A part inside this one that holds a reader, the top nav in the top
+    // bar, sets the color its readers draw as much as the reader does.)
+    const holdsReader = (/** @type {string} */ t) =>
+      (map[x.on]?.contains ?? []).includes(t) &&
+      (map[t]?.contains ?? []).some((/** @type {string} */ c) =>
+        readers.includes(c),
+      );
     const touches = (/** @type {Setting} */ y) =>
       y.on == null
         ? Boolean(y.when || y.state)
@@ -12756,19 +12763,17 @@ function scopedFillPairProblems(ctx, data, res) {
             t =>
               around(t) ||
               readers.includes(t) ||
+              holdsReader(t) ||
               (t === x.on && (y.on !== x.on || y.when || y.state)),
           );
-    if (
-      readsItself(x.on, pair.on) ||
-      !readers.length ||
-      data.settings.some(
-        y => y.source === 'token' && y.thing === pair.on && touches(y),
-      )
-    )
-      continue;
+    if (readsItself(x.on, pair.on) || !readers.length) continue;
+    const drawnElsewhere = data.settings.filter(
+      y => y.source === 'token' && y.thing === pair.on && touches(y),
+    );
     for (const m0 of modes) {
       const m = /** @type {'light' | 'dark'} */ (m0);
       if (x.mode && x.mode !== m) continue;
+      if (drawnElsewhere.some(y => !y.mode || y.mode === m)) continue;
       const key = `scoped-fill|${x.on}|${pair.fill}|${m}`;
       if (done.has(key)) continue;
       done.add(key);
