@@ -24,12 +24,15 @@ import {
   MIX_SPACES,
   NAMED,
   SYSTEM,
+  alphaOf,
   hex,
   mixColor,
   mixSide,
+  namedColorHex,
+  parseColor,
   readColor,
 } from '../../foundation/color/css-color.mjs';
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {contrastRatio, ratioDown} from '../theme/palette/generate/color.mjs';
 
 export {splitTop};
 export {
@@ -46,6 +49,158 @@ export {
   oklabOf,
   parseColor,
 } from '../../foundation/color/css-color.mjs';
+
+/**
+ * The box color shorthands, which take one color per side, and how many
+ * sides each names (`border-color: top right bottom left`).
+ * @type {Record<string, number>}
+ */
+const COLOR_SIDE_COUNT = {
+  'border-color': 4,
+  'border-block-color': 2,
+  'border-inline-color': 2,
+};
+
+/**
+ * The sides each count of colors names, as CSS gives them out.
+ * @type {Record<number, string[][]>}
+ */
+const SIDE_NAMES = {
+  4: [['top'], ['right'], ['bottom'], ['left']],
+  3: [['top'], ['right', 'left'], ['bottom']],
+  2: [
+    ['top', 'bottom'],
+    ['right', 'left'],
+  ],
+};
+
+/**
+ * A box color shorthand's colors as typed, one per side (`#ddd #ddd
+ * transparent`), each with the sides it colors; null for a property that
+ * takes one color, or for one value. `tooMany` is set when the value has
+ * more than the property takes.
+ * @param {string} prop the property, as CSS names it
+ * @param {string} value
+ * @returns {{colors: Array<{color: string, sides: string[]}>, max: number, tooMany: boolean} | null}
+ */
+export function colorSides(prop, value) {
+  const max = COLOR_SIDE_COUNT[prop];
+  if (!max) return null;
+  const parts = splitTop(String(value).trim(), ' ')
+    .map(x => x.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+  const logical = max === 2 && prop !== 'border-color';
+  /** @type {string[][]} */
+  const names = logical
+    ? [['start'], ['end']]
+    : (SIDE_NAMES[parts.length] ?? []);
+  return {
+    colors: parts.map((color, i) => ({color, sides: names[i] ?? []})),
+    max,
+    tooMany: parts.length > max,
+  };
+}
+
+/**
+ * The opacity a slash after a color gives it, as Tailwind writes it
+ * (`black/5` is black at 5%; `white/[.08]` and `white/[8%]` at 8%), read at
+ * `at` (the slash), with how many characters it takes; null when no
+ * opacity is written there. Only the share of the color is read: 0 to 100,
+ * or 0 to 1 in brackets.
+ * @param {string} text
+ * @param {number} at
+ * @returns {{alpha: number, length: number} | null}
+ */
+export function opacitySuffixAt(text, at) {
+  const m =
+    /^\/(?:(\d{1,3}(?:\.\d+)?)|\[\s*(\d*\.?\d+)\s*(%?)\s*\])(?![\w.%\]])/.exec(
+      text.slice(at),
+    );
+  if (!m) return null;
+  const n = m[1] != null ? Number(m[1]) / 100 : Number(m[2]) / (m[3] ? 100 : 1);
+  if (!Number.isFinite(n) || n < 0 || n > 1) return null;
+  return {alpha: n, length: m[0].length};
+}
+
+/**
+ * A color at a share of its opacity, as CSS writes it: `rgb(r g b / a)`,
+ * its own alpha included (a half-clear color at 50% is a quarter); null
+ * for what is not a fixed color.
+ * @param {string} color
+ * @param {number} alpha 0 to 1
+ * @returns {string | null}
+ */
+export function colorAtOpacity(color, alpha) {
+  const rgb = parseColor(color);
+  if (!rgb) return null;
+  const a = Math.round(alphaOf(color) * alpha * 1000) / 1000;
+  return `rgb(${rgb.map(c => Math.round(c)).join(' ')} / ${a})`;
+}
+
+/**
+ * Tailwind's color/opacity shorthand written in a value (`0 0 0 1px
+ * black/5`, `#000/10`, `white/[.08]`): each color written out (a hex or a
+ * CSS color name) with an opacity after its slash. `color` is what CSS
+ * writes for it; null for a color word this reader cannot read as one
+ * (Tailwind's own stops, `blue-500/20`), which the caller names.
+ * @param {string} value
+ * @returns {Array<{index: number, typed: string, color: string | null}>}
+ */
+export function colorOpacitiesIn(value) {
+  const text = String(value ?? '');
+  /** @type {Array<{index: number, typed: string, color: string | null}>} */
+  const out = [];
+  // (A url() holds a path, `url(/img/white/24.png)`, never a color; so
+  // does a quoted string, an image-set() path or a bare quoted path,
+  // `"/img/red/50/a.png"`.)
+  const urls = [
+    ...text.matchAll(/\burl\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\)|"[^"]*"|'[^']*'/gi),
+  ].map(u => [u.index ?? 0, (u.index ?? 0) + u[0].length]);
+  for (const m of text.matchAll(
+    /(?<![\w#.])(#[0-9a-f]{3,8}|[a-z]+(?:-\d{2,3})?)(?=\/)/gi,
+  )) {
+    if (urls.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b))
+      continue;
+    const at = (m.index ?? 0) + m[0].length;
+    const op = opacitySuffixAt(text, at);
+    if (!op) continue;
+    const word = m[1].toLowerCase();
+    const stop = /-\d{2,3}$/.test(word);
+    const base = word.startsWith('#')
+      ? parseColor(word)
+        ? m[1]
+        : null
+      : namedColorHex(word);
+    if (!base && !stop) continue;
+    out.push({
+      index: m.index ?? 0,
+      typed: text.slice(m.index ?? 0, at + op.length),
+      color: base ? colorAtOpacity(base, op.alpha) : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * A value with each color/opacity shorthand in it written as CSS writes it
+ * (`0 0 0 1px black/5` is `0 0 0 1px rgb(0 0 0 / 0.05)`), and the ones this
+ * reader cannot read (Tailwind's own stops); null when the value has none.
+ * @param {string} value
+ * @returns {{css: string, found: ReturnType<typeof colorOpacitiesIn>, unread: ReturnType<typeof colorOpacitiesIn>} | null}
+ */
+export function colorOpacitiesAsCss(value) {
+  const found = colorOpacitiesIn(value);
+  if (!found.length) return null;
+  const css = found.reduceRight(
+    (v, x) =>
+      x.color == null
+        ? v
+        : v.slice(0, x.index) + x.color + v.slice(x.index + x.typed.length),
+    String(value),
+  );
+  return {css, found, unread: found.filter(x => x.color == null)};
+}
 
 /** @typedef {[number, number, number]} Rgb */
 
@@ -161,13 +316,23 @@ export function colorProblem(value) {
 }
 
 /**
+ * A contrast ratio as a result says it: cut down to two decimals, never
+ * rounded up, so a ratio just under what a check needs (4.497) never reads
+ * as meeting it ("4.5:1, needs 4.5:1").
+ * @param {number} r
+ * @returns {string}
+ */
+export function ratioWords(r) {
+  return ratioDown(r).toFixed(2);
+}
+
+/**
  * The WCAG contrast ratio of two colors.
  * @param {number[]} a
  * @param {number[]} b
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
 
 /**

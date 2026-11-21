@@ -55,7 +55,9 @@ import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports, importUses} from './value-uses.mjs';
-import {coreComponentOf} from '../discovery/core-elements.mjs';
+import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs';
+import {corePropUsesOf} from '../discovery/core-props.mjs';
+import {writtenValue} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -99,7 +101,7 @@ const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'
  */
 const PAGE_CLASS_PREFIX = 'p';
 
-/** StyleX rules collected from every local module the page loads. */
+/** StyleX rules collected from every local module the page loads, and from each package file that holds StyleX source. */
 /** @type {unknown[]} */
 const stylexRules = [];
 /** CSS text of local stylesheets the page imports, in load order. */
@@ -183,11 +185,20 @@ const texts = [];
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
 /**
- * Each string a page's own file gives a Core component's prop
- * (`<Button variant="danger">`), for the unknown-prop-value warning.
- * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ * What a page's own file certainly gives a Core component's prop
+ * (`<Button variant="danger">`, each branch of
+ * `variant={busy ? 'ghost' : 'danger'}`, `status="error"`), for the
+ * unknown-prop-value warning.
+ * @type {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]}
  */
 const propValues = [];
+/**
+ * Each prop a page's own file gives a Core component by name, for the
+ * unknown-prop warning; a file that compiles its JSX with another runtime
+ * gives none.
+ * @type {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]}
+ */
+const propNames = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -622,6 +633,49 @@ async function drawCharts(markup, Page) {
 }
 
 /**
+ * The markup of a part's open layers. A layer opened from inside another
+ * (its opener, the control naming it in aria-controls, sits in that layer:
+ * a submenu's flyout) is drawn once, beside the layer it opens from, in a
+ * row with it, as a browser places it; never again inside that layer, where
+ * the document holds it too.
+ * @param {any[]} open the open layers, in the order they opened
+ * @returns {string}
+ */
+function nestedLayers(open) {
+  /** @param {any} layer */
+  const parentOf = layer => {
+    const ids = new Set(
+      [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean),
+    );
+    return (
+      open.find(
+        other =>
+          other !== layer &&
+          !layer.contains(other) &&
+          [...other.querySelectorAll('[aria-controls]')].some(c =>
+            ids.has(c.getAttribute('aria-controls')),
+          ),
+      ) ?? null
+    );
+  };
+  const parents = new Map(open.map(layer => [layer, parentOf(layer)]));
+  /** @param {any} layer @returns {string} */
+  const draw = layer => {
+    const kids = open.filter(o => parents.get(o) === layer);
+    if (!kids.length) return layer.outerHTML;
+    const own = layer.cloneNode(true);
+    for (const inner of own.querySelectorAll('[data-astryx-layer-root]'))
+      inner.remove();
+    return `<div data-astryx-layer-nest="">${own.outerHTML}${kids.map(draw).join('')}</div>`;
+  };
+  return open
+    .filter(layer => !parents.get(layer))
+    .map(draw)
+    .join('');
+}
+
+
+/**
  * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
  * as nothing when nothing opens), or `mounted`, as the browser shows the part
  * once it runs, nothing opened.
@@ -725,10 +779,12 @@ async function drawLayers(markup, server) {
           );
           if (open.length) {
             // The part as drawn, then each overlay open now, after it; never a
-            // closed one, nor the markers that place them.
+            // closed one, nor the markers that place them. A layer opened from
+            // inside another (a submenu's flyout) is drawn beside the layer it
+            // opens from, as a browser places it.
             const part = host.cloneNode(true);
             for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
-            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + nestedLayers(open);
           }
         }
       } catch {
@@ -798,7 +854,11 @@ async function drawOpenLayers(elements, React) {
       flushSync(() => root.render(createElement(Alone, null, element)));
       // (A part that opens nothing on a press and holds a layer, a context
       // menu's area, is right-clicked, as one drawn in its own place is.)
-      layers.push(...(await openLayerMarkup(host, flushSync)));
+      // A layer opened from inside another is drawn beside it (nestedLayers).
+      const box = g.document.createElement('div');
+      box.innerHTML = (await openLayerMarkup(host, flushSync)).join('');
+      const drawn = nestedLayers([...box.children]);
+      if (drawn) layers.push(drawn);
     } catch {
       // A part that cannot be drawn there adds no overlays.
     }
@@ -1126,8 +1186,11 @@ function carriedName(p, t) {
  * recorded it already.
  * @param {string} filename
  * @param {boolean} [browser]
+ * @param {boolean} [reactJsx] whether the module compiles its JSX with
+ *   React's runtime, so its Core props are recorded for the unknown-prop
+ *   warning
  */
-function pagePlugin(filename, browser = false) {
+function pagePlugin(filename, browser = false, reactJsx = true) {
   const dir = path.dirname(filename);
   /**
    * Record an https image address the page builds in code (a template with
@@ -1319,16 +1382,17 @@ function pagePlugin(filename, browser = false) {
         if (browser) return;
         const component = coreComponentOf(p.node.name, p.scope);
         if (!component) return;
-        for (const attr of p.node.attributes) {
+        const attrs = p.node.attributes;
+        // A spread after an attribute can replace its value.
+        const lastSpread = attrs.findLastIndex((/** @type {any} */ a) => a.type === 'JSXSpreadAttribute');
+        for (const attr of attrs.slice(lastSpread + 1)) {
           if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
-          const value =
-            attr.value?.type === 'StringLiteral'
-              ? attr.value.value
-              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
-                ? attr.value.expression.value
-                : null;
-          if (value === null) continue;
-          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+          const written = writtenValue(attr, p.scope);
+          if (written) propValues.push({component, prop: attr.name.name, ...written, file: filename, line: attr.loc?.start.line ?? 0});
+        }
+        if (reactJsx) {
+          const element = {line: p.node.loc?.start.line ?? 0, column: (p.node.loc?.start.column ?? 0) + 1};
+          for (const use of corePropUsesOf(p)) propNames.push({...use, file: filename, element});
         }
       },
       JSXText(/** @type {any} */ p) {
@@ -1613,6 +1677,106 @@ function servedThemeFiles(source, filename) {
   return Object.keys(files).length > 0 ? files : null;
 }
 
+/**
+ * The StyleX compiler and its options for one file: the page's class-name
+ * prefix, and the theme files a module outside a project imports.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {[unknown, object]}
+ */
+function stylexPluginFor(source, filename) {
+  const themeFiles = servedThemeFiles(source, filename);
+  return [
+    stylexPlugin,
+    {
+      dev: false,
+      runtimeInjection: false,
+      treeshakeCompensation: true,
+      classNamePrefix: PAGE_CLASS_PREFIX,
+      unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+      ...(themeFiles ? {aliases: themeFiles} : {}),
+    },
+  ];
+}
+
+/**
+ * A StyleX call that the compiler replaces at build time. Compiled StyleX
+ * keeps only runtime calls such as `props`, so a package file without one of
+ * these calls ships compiled styles.
+ */
+const STYLEX_BUILD_CALL = /\b(?:create|keyframes|defineVars|defineConsts|createTheme|firstThatWorks|positionTry|defineMarker|defaultMarker|viewTransitionClass)\s*\(/g;
+
+/** @param {string} code how many StyleX build-time calls the code holds */
+const buildCalls = code => code.match(STYLEX_BUILD_CALL)?.length ?? 0;
+
+/** Each package file checked for StyleX source: its compiled code, or null when it stays as it ships. @type {Map<string, string | null>} */
+const packageStylex = new Map();
+/** Each package file that holds StyleX source, for the page's script. @type {Set<string>} */
+const stylexSourceFiles = new Set();
+
+/**
+ * A package file (installed, or a workspace package linked in) that ships
+ * StyleX source, compiled with StyleX only, as an app's build compiles it:
+ * with the page's class-name prefix, its rules joining the page's. Null for
+ * every other file, which stays byte for byte as it ships. Each file is
+ * compiled once, for the server and the browser both.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {string | null}
+ */
+function compilePackageStylex(source, filename) {
+  const known = packageStylex.get(filename);
+  if (known !== undefined) return known;
+  /** @type {string | null} */
+  let code = null;
+  if (source.includes('@stylexjs/stylex') && buildCalls(source) > 0) {
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'unambiguous',
+      parserOpts: {
+        plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+          ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+        ),
+      },
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [stylexPluginFor(source, filename)],
+    });
+    const rules = /** @type {any} */ (result?.metadata)?.stylex;
+    // A marker (`defineMarker`, `defaultMarker`) compiles to a class name with
+    // no rule, so a file whose compile replaced a build-time call counts too.
+    // Compiled StyleX keeps its count: only comments and other names match.
+    const hasRules = Array.isArray(rules) && rules.length > 0;
+    if (result?.code && (hasRules || buildCalls(result.code) < buildCalls(source))) {
+      if (hasRules) stylexRules.push(...rules);
+      code = result.code;
+      stylexSourceFiles.add(filename);
+    }
+  }
+  packageStylex.set(filename, code);
+  return code;
+}
+
+/**
+ * The package files in a built script that no render checked yet, checked
+ * for StyleX source now: files only the browser loads, such as a package a
+ * click imports or a module of one that only a lazily loaded module imports.
+ * @param {string[]} files
+ * @returns {boolean} whether one of them holds StyleX source
+ */
+function checkScriptFiles(files) {
+  let found = false;
+  for (const file of files) {
+    if (packageStylex.has(file) || isLocal(file) || !/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(file)) continue;
+    if (!fs.existsSync(file)) continue;
+    if (compilePackageStylex(fs.readFileSync(file, 'utf8'), file) !== null) found = true;
+  }
+  return found;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -1630,9 +1794,10 @@ const jiti = createJiti(entry, {
  * One of the page's own files, or a file outside them and outside
  * `node_modules` that a path alias may reach, compiled as the server
  * compiles it: the page's files with its plugins and StyleX, the other with
- * its path aliases. The code stays an ES module with its JSX and types. For
- * the browser (`browser`), the page's files keep their real charts and
- * record nothing. Null for any other file.
+ * its path aliases. A package file that ships StyleX source compiles with
+ * StyleX ({@link compilePackageStylex}). The code stays an ES module with its
+ * JSX and types. For the browser (`browser`), the page's files keep their
+ * real charts and record nothing. Null for any other file.
  * @param {string} source
  * @param {string} filename
  * @param {boolean} [browser]
@@ -1643,7 +1808,6 @@ function compilePageModule(source, filename, browser = false) {
     if (!localFiles.includes(filename)) localFiles.push(filename);
     moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
-    const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
     const result = transformSync(source, {
       filename,
       babelrc: false,
@@ -1654,29 +1818,18 @@ function compilePageModule(source, filename, browser = false) {
       compact: false,
       plugins: [
         aliasPlugin(),
-        pagePlugin(filename, browser),
-        ...(source.includes('stylex')
-          ? [
-              [
-                stylexPlugin,
-                {
-                  dev: false,
-                  runtimeInjection: false,
-                  treeshakeCompensation: true,
-                  classNamePrefix: PAGE_CLASS_PREFIX,
-                  unstable_moduleResolution: {type: 'commonJS', rootDir: root},
-                  ...(themeFiles ? {aliases: themeFiles} : {}),
-                },
-              ],
-            ]
-          : []),
+        pagePlugin(filename, browser, !OTHER_JSX_RUNTIME.test(source)),
+        ...(source.includes('stylex') ? [stylexPluginFor(source, filename)] : []),
       ],
     });
     const rules = /** @type {any} */ (result?.metadata)?.stylex;
     if (Array.isArray(rules)) stylexRules.push(...rules);
     return result?.code ?? source;
   }
-  if (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) return null;
+  const packageCode = compilePackageStylex(source, filename);
+  if (packageCode !== null) source = packageCode;
+  if (PATHS.length > 0 && !filename.includes(NODE_MODULES)) {
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const result = transformSync(source, {
       filename,
@@ -1697,7 +1850,7 @@ function compilePageModule(source, filename, browser = false) {
     });
     return result?.code ?? source;
   }
-  return null;
+  return packageCode;
 }
 
 /**
@@ -1961,6 +2114,21 @@ function classify(e) {
 function browserSource(file) {
   const filename = path.normalize(file);
   const compiled = compilePageModule(fs.readFileSync(filename, 'utf8'), filename, true);
+  if (compiled === null) return null;
+  const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
+  return {contents: compiled, loader};
+}
+
+/**
+ * A package file that holds StyleX source, for esbuild (client-bundle.mjs):
+ * compiled with StyleX, else null, and esbuild loads it as it ships.
+ * @param {string} file
+ * @returns {{contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null}
+ */
+function browserPackageSource(file) {
+  const filename = path.normalize(file);
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) return null;
+  const compiled = compilePackageStylex(fs.readFileSync(filename, 'utf8'), filename);
   if (compiled === null) return null;
   const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
   return {contents: compiled, loader};
@@ -2355,16 +2523,18 @@ try {
   // The page's script is built first: it compiles every module the page
   // can load, a lazily imported one included, and their styles join the
   // stylesheet below.
-  /** @type {{code: string, modules: number, astryx: boolean, module: boolean} | null} */
+  /** @type {{code: string, modules: number, astryx: boolean, module: boolean, files: string[]} | null} */
   let script = null;
   if (workerData.buildScript) {
     reach("building the page's script");
     try {
       const loaded = await import(pathToFileURL(workerData.esbuild).href);
-      script = await bundleForBrowser({
+      const build = () => bundleForBrowser({
         esbuild: loaded.default ?? loaded,
         entry,
         source: browserSource,
+        stylexFiles: [...stylexSourceFiles],
+        packageSource: browserPackageSource,
         // The files compilePageModule compiles: the page's own, and, when
         // the project has path aliases, every module outside node_modules.
         isPageFile: file => {
@@ -2380,6 +2550,11 @@ try {
         describe: describeFile,
         oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
       });
+      script = await build();
+      // A package file only the browser loads can hold StyleX source too: the
+      // script is built once more with it compiled. Compiling only removes
+      // StyleX calls, so the second build holds no file the first did not.
+      if (checkScriptFiles(script.files)) script = await build();
     } catch (e) {
       if (e instanceof BundleError && e.compile !== undefined) {
         classify(e.compile);
@@ -2474,6 +2649,7 @@ try {
     remoteNamedOnly: [...namedOnlyLiterals].filter(url => !placedLiterals.has(url)),
     builtRemote,
     propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
+    propNames,
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,

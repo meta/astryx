@@ -6,7 +6,7 @@
  * @output Seed range, spacer structure, column positions, pinned runs and fallback tests
  * @position Colocated Table column virtualization runtime coverage
  */
-import {useEffect, useState} from 'react';
+import {Profiler, useEffect, useState} from 'react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -727,6 +727,50 @@ describe('column range changes', () => {
     expect([...new Set(built)].sort()).toEqual([...entering].sort());
     expect(built).toHaveLength(entering.length * ROW_COUNT);
   });
+
+  it('does not render the column window for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let renders = 0;
+    // The header row's transform runs once each time the column window
+    // renders the table.
+    const recorder: TablePlugin<Item> = {
+      transformHeaderRow: props => {
+        renders++;
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    renders = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(renders).toBe(0);
+  });
+
+  it('commits nothing for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let commits = 0;
+    const {container} = render(
+      <Profiler id="table" onRender={() => commits++}>
+        <Fixture />
+      </Profiler>,
+    );
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    commits = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(commits).toBe(0);
+    // A scroll that brings a column in still commits.
+    await viewport.scrollTo(900);
+    expect(mountedKeys(container)).not.toEqual(before);
+    expect(commits).toBeGreaterThan(0);
+  });
 });
 
 describe('pinning a mounted column', () => {
@@ -856,6 +900,18 @@ describe('first-visible-column anchor', () => {
     expect(viewport.writes).toEqual([]);
     expect(viewport.getLeft()).toBe(3050);
     expect(mountedKeys(container)).toContain('c30');
+  });
+
+  it('writes no scroll when the last column is unpinned near the end of the run', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = render(<Fixture endKeys={['c39']} />);
+    await settle();
+    // c34 is first visible, half shown, within one column of the run's end.
+    await viewport.scrollTo(3450);
+    rerender(<Fixture />);
+    await viewport.landWrites();
+    expect(viewport.writes).toEqual([]);
+    expect(viewport.getLeft()).toBe(3450);
   });
 
   it('keeps the first visible column when an earlier column is pinned', async () => {
