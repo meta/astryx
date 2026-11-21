@@ -13,8 +13,9 @@
  *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
  *   description, FieldStatus and the status tooltip use withTextDirection.
  *   MultiSelector's labels trigger puts each label in isolatedText. Text,
- *   Button, SegmentedControl and TableHeaderCell put textDirectionProps and
- *   truncatedTextStyles on the element that cuts its label.
+ *   Heading, Button, SegmentedControl and TableHeaderCell put
+ *   textDirectionProps and truncatedTextStyles on the element that cuts its
+ *   label.
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
