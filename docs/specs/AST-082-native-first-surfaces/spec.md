@@ -149,6 +149,10 @@ depends only on runtimes it can maintain.
     components. A platform contract may accept a wider form for the same slot,
     such as a React node on the web; the slot keeps one meaning, and the core
     form is what every native platform accepts.
+  - A React ref is not portable. A core contract states the need in neutral
+    words, such as "the element the popover anchors to", and each platform's
+    contract maps it: on React, a `…Ref` prop
+    (`architecture:public-component-api` INV29).
 - **FR5 — Platform props are platform-scoped types.** `@astryxdesign/core`
   exposes the core contracts and the web contracts; its default types are the web
   contracts, unchanged for web callers. `@astryxdesign/native` exposes the native
