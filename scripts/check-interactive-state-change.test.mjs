@@ -135,8 +135,24 @@ function measurements() {
                   ['', fill],
                   [' with the mouse', hovered],
                 ];
+          // A mouse press is hovered, so it must also move beyond the hover.
+          const hoverValue =
+            rule['--color-overlay-hover'] ??
+            paints[`--_button-${variant}-hover`];
+          const hoverRaw = half(hoverValue, mode);
+          const hoverPaint = hoverRaw.startsWith('var(')
+            ? at(hoverRaw.slice(4, -1))
+            : parseConcreteColor(hoverRaw);
           for (const [how, under] of unders) {
             const over = composite(paint, under);
+            if (state === 'pressed' && how && hoverPaint !== null) {
+              rows.push({
+                where: `${where} pressed against hovered`,
+                ratio: contrastRatio(label, over),
+                step: colorStep(over, composite(hoverPaint, under)),
+                need: VISIBLE_STEP,
+              });
+            }
             rows.push({
               where: `${where} ${state}${how}`,
               ratio: contrastRatio(label, over),

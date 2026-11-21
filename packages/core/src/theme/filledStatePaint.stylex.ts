@@ -13,10 +13,10 @@
 import * as stylex from '@stylexjs/stylex';
 
 export const filledStatePaintVars = stylex.defineVars({
-  '--_button-primary-hover': 'light-dark(#00000017, #00000014)',
-  '--_button-primary-pressed': 'light-dark(#00000029, #00000026)',
-  '--_button-secondary-hover': 'light-dark(#0A13170D, #00000026)',
-  '--_button-secondary-pressed': 'light-dark(#0A131717, #0000004A)',
-  '--_button-destructive-hover': 'light-dark(#00000017, #FFFFFF12)',
-  '--_button-destructive-pressed': 'light-dark(#0000002B, #FFFFFF24)',
+  '--_button-primary-hover': 'light-dark(#0000001F, #0000001C)',
+  '--_button-primary-pressed': 'light-dark(#0000003D, #00000038)',
+  '--_button-secondary-hover': 'light-dark(#0A13170F, #00000036)',
+  '--_button-secondary-pressed': 'light-dark(#0A13171F, #0000006B)',
+  '--_button-destructive-hover': 'light-dark(#0000001F, #FFFFFF1A)',
+  '--_button-destructive-pressed': 'light-dark(#0000003D, #FFFFFF33)',
 });
