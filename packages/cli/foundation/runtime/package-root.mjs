@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {relativeWithin, samePath} from '../fs/path-compare.mjs';
 
 /**
@@ -165,6 +166,53 @@ export function resolvedPackages() {
     version,
     source: source ?? sourceOf(dir),
   }));
+}
+
+/**
+ * The packages that the root holding the copy that started the hosted run
+ * declares in its `package.json`: what its host installed there, such as an
+ * icon library its pages import. Outside a project that root serves the run
+ * (INV30). Empty with no hosted run.
+ * @returns {string[]}
+ */
+export function servingRootPackages() {
+  if (!active?.startingRoot) return [];
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(active.startingRoot, 'package.json'), 'utf8'),
+    );
+    return Object.keys({...pkg?.dependencies, ...pkg?.optionalDependencies});
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * `name` as installed in `root`'s own `node_modules`, never in a folder above:
+ * how a package set holds a package (INV30). Null when it is not there.
+ * @param {string} name
+ * @param {string} root
+ * @returns {string | null} the package's folder
+ */
+export function ownPackageDir(name, root) {
+  const dir = path.join(root, 'node_modules', ...name.split('/'));
+  return fs.existsSync(path.join(dir, 'package.json')) ? dir : null;
+}
+
+/**
+ * The packages besides Astryx, React and StyleX that a page outside a project
+ * takes from the package set: each integration the host approves that the
+ * root serving the run holds (INV30 leaves out an approved name it does not),
+ * and the other packages that root declares ({@link servingRootPackages}),
+ * such as the icon library templates import. Empty with no hosted run.
+ * @returns {string[]}
+ */
+export function hostedPagePackages() {
+  const root = active?.startingRoot;
+  const approved = root
+    ? (active?.integrations ?? []).filter(name => ownPackageDir(name, root))
+    : [];
+  return [...approved, ...servingRootPackages()];
 }
 
 /** Forget the hosted run. Tests only. */

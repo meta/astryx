@@ -26,7 +26,8 @@ from the monorepo and writes typed TypeScript registries to `src/generated/`.
 
 | Registry                      | Source                                             | What it contains                                              |
 | ----------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `packageRegistry.ts`          | `packages/*/package.json`                          | Name, version, description, README for each published package |
+| `packageRegistry.ts`          | `packages/*/package.json`                          | Name, version, description for each published package         |
+| `packageText.json`            | Each package's `README.md` and `CHANGELOG.md`      | README and changelog text of each package, for server modules |
 | `componentRegistry.ts`        | Core + CLI-configured integration `.doc.mjs` files | Props, usage docs, hooks, groups, per package                 |
 | `componentPreviewRegistry.ts` | Components from those same packages                | Runtime exports for the shared Properties preview             |
 | `blockRegistry.ts`            | CLI + integration template blocks                  | Showcase and example blocks with metadata                     |

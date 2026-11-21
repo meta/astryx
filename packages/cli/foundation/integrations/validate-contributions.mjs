@@ -21,6 +21,7 @@
  * @position packages/cli/foundation/integrations — shared contribution validators
  */
 
+import {discoverIntegrationSkills} from '../discovery/integration-skills.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
@@ -115,9 +116,14 @@ function sourceTree(file) {
 
 /** Stable issue code for an invalid optional agent-doc contribution. */
 export const INVALID_AGENT_DOCS = 'invalid_agent_docs';
+/** A doc's `skill` that breaks a skill rule: left out where apps write skills. */
+export const INVALID_SKILL = 'invalid_skill';
 
 /** Stable issue code for a `cliCommand` that was ignored as invalid. */
 export const INVALID_CLI_COMMAND = 'invalid_cli_command';
+
+/** Stable issue code for an `installGuidance` that was ignored as invalid. */
+export const INVALID_INSTALL_GUIDANCE = 'invalid_install_guidance';
 
 /** Stable issue code for a package whose provider ID is already claimed. */
 export const DUPLICATE_PROVIDER = 'duplicate_provider';
@@ -158,16 +164,34 @@ export function isListedIssue(issue) {
   return LISTED.has(issue);
 }
 
+/** Issues `issueNote` made: information, never counted as an issue. */
+const NOTED = new WeakMap();
+
+/**
+ * Information about a package that is not a problem with it: validate prints
+ * it as a note, and nothing counts it, so the everyday-command nudge and
+ * project doctor never report it. A manifest key the running CLI does not
+ * know is one: it is usually a key from a newer CLI, which version skew makes
+ * normal. `next` marks a note `integration check --strict --next` fails on.
+ * @param {string} code
+ * @param {string} message
+ * @param {{next?: boolean}} [options]
+ * @returns {Issue}
+ */
+function issueNote(code, message, {next = false} = {}) {
+  const issue = issueWarning(code, message);
+  NOTED.set(issue, {next});
+  return issue;
+}
+
 /**
  * Report the manifest keys this CLI does not know.
  *
- * A WARNING, deliberately: an integration is published once and installed
- * against many CLI versions, so a key introduced by a later CLI arrives here
- * routinely and means only that this CLI cannot act on it. It used to be fatal
- * — `.strict()` rejected the manifest, and a manifest that fails to parse
- * contributes nothing at all, so one added field took the package's
- * components, templates and codemods down with it on every older consumer
- * (#5119). The fix is upgrading the CLI, which is what the message says.
+ * A note, never an issue: an integration is published once and installed
+ * against many CLI versions, so a key from a later CLI arrives here routinely
+ * and means only that this CLI cannot act on it. The rest of the manifest
+ * still loads. A key one edit from a known key is almost always a typo, so
+ * that note is `next`.
  *
  * @param {LoadedIntegration} integration
  * @param {Issue[]} issues
@@ -192,16 +216,17 @@ function checkUnknownKeys(integration, issues) {
       ? `Fix: remove "${key}" from ${manifestName(integration)}; it already sets "${known}".`
       : `Fix: rename "${key}" to "${known}" in ${manifestName(integration)}.`;
     issues.push(
-      issueWarning(
+      issueNote(
         'unknown_manifest_key',
         `This CLI does not know the manifest key "${key}", so it is ignored. Did you mean \`${known}\`? ${fix} If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.`,
+        {next: editDistance(key, /** @type {string} */ (known)) <= 1},
       ),
     );
   }
   const rest = keys.filter(key => !typos.some(each => each.key === key));
   if (rest.length === 0) return;
   issues.push(
-    issueWarning(
+    issueNote(
       'unknown_manifest_key',
       `This CLI does not know the manifest ${rest.length === 1 ? 'key' : 'keys'} ` +
         `${rest.map(key => `"${key}"`).join(', ')}, so ${rest.length === 1 ? 'it is' : 'they are'} ` +
@@ -2176,16 +2201,24 @@ export async function validateLoadedIntegration(loaded) {
 
 /**
  * Every contribution check, split: `issues` as validateLoadedIntegration
- * returns them, and `listed`, the layout findings validate lists in its
- * `layout` report without counting them.
+ * returns them; `listed`, the layout findings validate lists in its `layout`
+ * report without counting them; and `notes`, information validate prints
+ * as notes, never counted.
  * @param {LoadedIntegration} loaded
- * @returns {Promise<{issues: Issue[], listed: Issue[]}>}
+ * @returns {Promise<{issues: Issue[], listed: Issue[], notes: Array<{code: string, message: string, next?: boolean}>}>}
  */
 export async function validateLoadedIntegrationListed(loaded) {
   const all = await allLoadedIntegrationIssues(loaded);
   return {
-    issues: all.filter(issue => !LISTED.has(issue)),
+    issues: all.filter(issue => !LISTED.has(issue) && !NOTED.has(issue)),
     listed: all.filter(issue => LISTED.has(issue)),
+    notes: all
+      .filter(issue => NOTED.has(issue))
+      .map(issue => ({
+        code: issue.code,
+        message: issue.message,
+        ...(NOTED.get(issue).next ? {next: true} : {}),
+      })),
   };
 }
 
@@ -2230,6 +2263,14 @@ async function allLoadedIntegrationIssues(loaded) {
       ),
     );
   }
+  if (loaded.__installGuidanceError) {
+    issues.push(
+      issueWarning(
+        INVALID_INSTALL_GUIDANCE,
+        `${loaded.__installGuidanceError}. The guidance is ignored; printed install steps use the package manager's command.`,
+      ),
+    );
+  }
   checkRoots(
     {
       components: loaded.components,
@@ -2244,6 +2285,16 @@ async function allLoadedIntegrationIssues(loaded) {
     loaded.__packageDir,
   );
   await runContributionChecks(loaded, issues);
+  // A skill a doc declares that breaks a skill rule is left out where apps
+  // write skills; the author sees why here, before publishing.
+  const {problems: skillProblems} = await discoverIntegrationSkills([loaded]);
+  for (const problem of skillProblems) {
+    // A doc or folder that cannot be read is the docs checks' to report.
+    if (problem.unread) continue;
+    // A note now: a new way to fail `integration check --strict` joins only
+    // in a minor release, so it is marked for the next one.
+    issues.push(issueNote(INVALID_SKILL, problem.message, {next: true}));
+  }
   return issues;
 }
 

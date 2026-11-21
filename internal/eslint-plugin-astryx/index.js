@@ -14,6 +14,7 @@
  * - no-truthy-jsx-guard: Flags a truthiness guard on a ReactNode value in front of JSX (a 0 slot renders a stray "0" or is dropped; use isRenderable). Reads types, so it is not in the presets
  * - no-raw-intl-locale: Forbids raw Intl formatting/comparison outside the approved i18n infrastructure boundary, navigator.language(s) as a locale source, and date-helper calls without provider locale
  * - no-unguarded-ime-keydown: Flags an onKeyDown on an editable surface that branches on command keys without an IME composition guard (isImeKeyEvent/isComposing)
+ * - no-shorthand-longhand-merge: Flags a StyleX shorthand after one of its own longhands in one stylex.props() call or xstyle array (Storybook's application-order and the published property-specificity resolve that merge differently)
  * - no-physical-properties: Flags physical left/right CSS properties and unsafe logical-centering transform pairs
  * - prefer-center-inline: Nudges correct hand-rolled fixed centering toward rtlStyles.centerInline()
  * - no-classname-clobber: Flags two className sources on one JSX element — a literal className/style beside {...stylex.props()}, or two spreads that each carry a className (the later one silently wins)
@@ -26,6 +27,7 @@
  * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
  * - no-prevent-default-in-passive-react-handler: Flags preventDefault() on the event in a React onWheel/onTouchStart/onTouchMove handler (React attaches those listeners as passive, so the call is ignored)
  * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)
+ * - press-through-recipes: Flags press trackers, pressed state, press attributes and :active arms outside the three press recipes (a momentary control, a row-wide target, a cell or menu row)
  * - no-comment-provenance: Flags record and claim ids, pull request and issue references, date stamps, and quoted MUST/SHALL text in source comments (the record links the code; `pnpm specs:for <path>` finds it)
  * - no-raw-color: Flags a raw colour value (hex, rgb(), hsl(), oklch(), …) anywhere in component source, including inside light-dark()/color-mix(), behind a const, in a template literal, or as a var() fallback — the shapes no-hardcoded-styles cannot see
  *
@@ -50,6 +52,7 @@ import noCommentProvenanceRule from './no-comment-provenance.js';
 import noRawIntlLocaleRule from './no-raw-intl-locale.js';
 import noUnguardedImeKeydownRule from './no-unguarded-ime-keydown.js';
 import noBorderShorthandRule from './no-border-shorthand.js';
+import noShorthandLonghandMergeRule from './no-shorthand-longhand-merge.js';
 import noPhysicalPropertiesRule from './no-physical-properties.js';
 import preferCenterInlineRule from './prefer-center-inline.js';
 import focusOutlineKeyboardOnlyRule from './focus-outline-keyboard-only.js';
@@ -71,6 +74,7 @@ import requireTableSectionRule from './require-table-section.js';
 import noLightDarkOutsideThemeRule from './no-light-dark-outside-theme.js';
 import noRawColorRule from './no-raw-color.js';
 import noRawPrivateAttributeRule from './no-raw-private-attribute.js';
+import pressThroughRecipesRule from './press-through-recipes.js';
 import noPreventDefaultInPassiveReactHandlerRule from './no-prevent-default-in-passive-react-handler.js';
 
 // =============================================================================
@@ -357,6 +361,7 @@ const plugin = {
     'no-raw-intl-locale': noRawIntlLocaleRule,
     'no-unguarded-ime-keydown': noUnguardedImeKeydownRule,
     'no-border-shorthand': noBorderShorthandRule,
+    'no-shorthand-longhand-merge': noShorthandLonghandMergeRule,
     'no-physical-properties': noPhysicalPropertiesRule,
     'prefer-center-inline': preferCenterInlineRule,
     'focus-outline-keyboard-only': focusOutlineKeyboardOnlyRule,
@@ -378,6 +383,7 @@ const plugin = {
     'no-light-dark-outside-theme': noLightDarkOutsideThemeRule,
     'no-raw-color': noRawColorRule,
     'no-raw-private-attribute': noRawPrivateAttributeRule,
+    'press-through-recipes': pressThroughRecipesRule,
     'no-prevent-default-in-passive-react-handler':
       noPreventDefaultInPassiveReactHandlerRule,
     'no-comment-provenance': noCommentProvenanceRule,
@@ -424,6 +430,7 @@ plugin.configs.strict = {
     // prevent regressions (see issue #4892).
     '@astryx/no-unguarded-ime-keydown': 'error',
     '@astryx/no-border-shorthand': 'error',
+    '@astryx/no-shorthand-longhand-merge': 'error',
     // RTL physical→logical migration complete; errors to prevent regressions.
     '@astryx/no-physical-properties': 'error',
     // Correct hand-rolled fixed centering still duplicates shared geometry.
@@ -501,6 +508,7 @@ plugin.configs.recommended = {
     // (see strict config above and issue #4892).
     '@astryx/no-unguarded-ime-keydown': 'error',
     '@astryx/no-border-shorthand': 'warn',
+    '@astryx/no-shorthand-longhand-merge': 'warn',
     // RTL physical→logical migration complete; errors to prevent regressions.
     '@astryx/no-physical-properties': 'error',
     // Correct hand-rolled fixed centering still duplicates shared geometry.

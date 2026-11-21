@@ -9,19 +9,38 @@
  */
 
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {userCacheDir} from '../foundation/env/user-dirs.mjs';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {
   globalCli,
   placeCli,
   recyclePlacedCopies,
+  runFolder,
+  seedPackedRelease,
 } from '../test-utils/global-local-fixtures.mjs';
+import {
+  cachedRelease,
+  releasesDir,
+  releaseTree,
+} from '../foundation/release/cache.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
+import {hasModuleHooks} from '../test-utils/packed-gather-cache-fixture.mjs';
+
+/**
+ * The registry every CLI run here installs from: a local port that refuses at
+ * once (as global-local.shared.mjs's OFFLINE). An installed copy
+ * (`packPublishedCli`) is a global copy, and a run of it without `CI` starts
+ * its background Core step; the step must install from here, never from npm,
+ * so no published release lands in a test's cache.
+ */
+const OFFLINE_REGISTRY = 'http://127.0.0.1:9/';
 
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
@@ -38,7 +57,9 @@ let project;
 let core;
 
 beforeAll(() => {
-  work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-search-catalog-'));
+  work = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'packed-search-catalog-'),
+  );
   // Every file the package publishes, as an install holds them.
   packed = placeCli(path.join(work, 'cli'), VERSION, {coreStep: true}).dir;
   // A placed copy shares its templates folder with every other copy: this
@@ -65,7 +86,9 @@ beforeAll(() => {
 
 afterAll(() => {
   recyclePlacedCopies();
-  if (work) fs.rmSync(work, {recursive: true, force: true});
+  // The node project's global teardown removes the run's folder, with this
+  // file's placed and installed copies inside it, outside the hook's time.
+  if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
 });
 
 /**
@@ -75,7 +98,13 @@ afterAll(() => {
  * @param {Record<string, string>} [extraEnv]
  */
 function run(cliRoot, args, extraEnv = {}, cwd = project) {
-  const env = {...process.env, NO_COLOR: '1', COLUMNS: '100', ...extraEnv};
+  const env = {
+    ...process.env,
+    NO_COLOR: '1',
+    COLUMNS: '100',
+    npm_config_registry: OFFLINE_REGISTRY,
+    ...extraEnv,
+  };
   for (const key of Object.keys(env)) {
     if (key.startsWith('VITEST')) delete env[key];
   }
@@ -201,6 +230,34 @@ function withEdit(file, from, to, check) {
   }
 }
 
+/**
+ * This version's release in a cache folder, verified, holding the CLI and
+ * the Core files Core publishes, as an install for the computer leaves it:
+ * the Core a folder without one reads.
+ * @param {string} cacheDir the `astryx` cache folder
+ */
+function seedReleaseWithCore(cacheDir) {
+  const {dir} = seedPackedRelease(cacheDir, VERSION);
+  const releaseCore = path.join(dir, 'node_modules', '@astryxdesign', 'core');
+  fs.rmSync(releaseCore, {recursive: true, force: true});
+  fs.mkdirSync(releaseCore, {recursive: true});
+  copyPublishedCore(releaseCore);
+  fs.symlinkSync(
+    path.resolve(CLI_ROOT, '..', 'core', 'node_modules'),
+    path.join(releaseCore, 'node_modules'),
+    'dir',
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(dir, 'release.json'), 'utf8'),
+  );
+  for (const rel of Object.keys(record.files))
+    record.files[rel] = createHash('sha256')
+      .update(fs.readFileSync(path.join(dir, rel)))
+      .digest('hex');
+  record.tree = releaseTree(dir);
+  fs.writeFileSync(path.join(dir, 'release.json'), JSON.stringify(record));
+}
+
 const BUILD_IDEA =
   'an analytics dashboard with revenue charts and a table of recent orders';
 
@@ -299,23 +356,97 @@ describe('the stored search catalog', () => {
     }
   }, 300_000);
 
-  it('keeps a reference to the store, not a copy, and reads it back byte for byte', () => {
-    // Only a copy installed in a node_modules folder keeps gathers.
-    const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
-    const cache = fs.mkdtempSync(path.join(work, 'cache-'));
-    const env = {XDG_CACHE_HOME: cache};
-    const ask = ['search', 'button', '--json'];
-    const first = run(installed, ask, env);
-    expect(first.status, first.stderr).toBe(0);
-    const kept = path.join(cache, 'astryx', 'catalogs');
-    const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
-    expect(entries).toHaveLength(1);
-    const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
-    // No candidate is copied into the kept entry.
-    expect(entry).not.toContain('"domain":"component"');
-    expect(run(installed, ask, env)).toEqual(first);
-    expect(first).toEqual(run(CLI_ROOT, ask));
-  }, 120_000);
+  it.skipIf(!hasModuleHooks)(
+    'keeps a reference to the store, not a copy, and reads it back byte for byte',
+    () => {
+      // Only a copy installed in a node_modules folder keeps gathers.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      // macOS keeps the user cache under HOME and ignores XDG_CACHE_HOME, so
+      // the run gets a home of its own too.
+      const home = fs.mkdtempSync(path.join(work, 'home-'));
+      const env = {XDG_CACHE_HOME: cache, HOME: home};
+      const ask = ['search', 'button', '--json'];
+      const first = run(installed, ask, env);
+      expect(first.status, first.stderr).toBe(0);
+      const kept = path.join(userCacheDir({home, env}), 'catalogs');
+      const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
+      expect(entries).toHaveLength(1);
+      const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
+      // No candidate is copied into the kept entry.
+      expect(entry).not.toContain('"domain":"component"');
+      expect(run(installed, ask, env)).toEqual(first);
+      expect(first).toEqual(run(CLI_ROOT, ask));
+    },
+    120_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    'keeps the guides out of a package without Astryx on every search, kept gather included',
+    () => {
+      // The shareable-page guides answer in an Astryx project and outside
+      // any package, never in a package without Astryx (spec:AST-017 FR27):
+      // a kept gather reads back the catalog that package saw.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'g-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      const home = fs.mkdtempSync(path.join(work, 'home-'));
+      const env = {XDG_CACHE_HOME: cache, HOME: home};
+      // The release's Core, so the package's search reads Core and its
+      // gather is kept.
+      seedReleaseWithCore(userCacheDir({home, env}));
+      const plain = fs.mkdtempSync(path.join(work, 'plain-'));
+      fs.writeFileSync(
+        path.join(plain, 'package.json'),
+        JSON.stringify({name: 'plain', private: true}),
+      );
+      const ask = ['search', 'single', 'file', '--json'];
+      /** @param {{stdout: string}} answer */
+      const guides = answer =>
+        JSON.parse(answer.stdout).data.results.filter(
+          (/** @type {{command: string}} */ r) =>
+            /experimental\/(share-a-page|export-pages)/u.test(r.command),
+        );
+      const first = run(installed, ask, env, plain);
+      expect(first.status, first.stderr).toBe(0);
+      expect(JSON.parse(first.stdout).meta?.partial).toBeUndefined();
+      expect(guides(first)).toEqual([]);
+      expect(run(installed, ask, env, plain)).toEqual(first);
+      // The project, which installs Core, gets them from the same kept cache.
+      const inProject = run(installed, ask, env);
+      expect(guides(inProject).length).toBeGreaterThan(0);
+      expect(run(installed, ask, env)).toEqual(inProject);
+    },
+    120_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    "starts the global copy's background Core step from the offline registry, never npm, with CI unset",
+    async () => {
+      // An installed copy is a global copy: outside CI it starts the step.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'o-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      const home = fs.mkdtempSync(path.join(work, 'home-'));
+      const env = {XDG_CACHE_HOME: cache, HOME: home, CI: ''};
+      expect(run(installed, ['--version'], env).status).toBe(0);
+      const cacheDir = userCacheDir({home, env});
+      const failed = path.join(
+        releasesDir(cacheDir),
+        `.failed-${VERSION}.json`,
+      );
+      // The step runs detached after the command ends: wait for its outcome.
+      const deadline = Date.now() + 90_000;
+      while (
+        Date.now() < deadline &&
+        !fs.existsSync(failed) &&
+        !cachedRelease(VERSION, cacheDir)
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      expect(cachedRelease(VERSION, cacheDir)).toBeFalsy();
+      expect(fs.existsSync(failed)).toBe(true);
+    },
+    120_000,
+  );
 
   it('is not used where the project adds to a catalog', () => {
     const config = path.join(project, 'astryx.config.mjs');

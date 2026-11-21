@@ -508,6 +508,7 @@ const styles = stylex.create({
   textValue: {
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
@@ -1677,7 +1678,10 @@ export function Slider({ref, ...props}: SliderProps) {
     valueDisplay === 'text' ? (
       <span {...stylex.props(styles.textValue)}>
         {isRange
-          ? `${displayValue(values[0])} – ${displayValue(values[1])}`
+          ? t('@astryx.slider.rangeValue', {
+              start: displayValue(values[0]),
+              end: displayValue(values[1]),
+            })
           : displayValue(values[0])}
       </span>
     ) : null;
@@ -1916,7 +1920,9 @@ export function Slider({ref, ...props}: SliderProps) {
         {textDisplay}
       </div>
       {conveysRequired && (
-        <VisuallyHidden id={requiredID}>Required</VisuallyHidden>
+        <VisuallyHidden id={requiredID}>
+          {t('@astryx.slider.required')}
+        </VisuallyHidden>
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

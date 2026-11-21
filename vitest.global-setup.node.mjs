@@ -6,9 +6,11 @@
  * @output Holds this run's lease and builds Core. It rebuilds a Core build
  *   older than its sources once no earlier run is still running. It
  *   regenerates the Sandbox template registry and route wrappers, builds the
- *   theme editor's cache for the CLI's own Core, packs the CLI, and points
- *   the per-user folder at a folder of this run, once, before any test
- *   worker forks.
+ *   theme editor's cache for the CLI's own Core, gives the folder the run
+ *   builds each bundled theme once in, packs the CLI, points the per-user
+ *   folder at a folder of this run and names the repository's package
+ *   manager as the run's launcher, once, before any test worker forks. Its teardown fails the run when a test wrote into the
+ *   checkout.
  * @position Referenced by vitest.config.ts's `node` project. The build-theme
  *   suites need a compiled Core; the Sandbox route contract imports generated
  *   template metadata and scans ignored wrappers that do not exist in a fresh
@@ -30,7 +32,12 @@ import {
   ensureCoreBuiltForRun,
   registerTestRun,
 } from './packages/cli/clients/cli/commands/ensure-core-built.mjs';
+import {
+  checkoutState,
+  writtenSince,
+} from './packages/cli/test-utils/checkout-writes.mjs';
 import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
+import {repositoryUserAgent} from './packages/cli/test-utils/test-launcher.mjs';
 import {
   sweepTrash,
   trashFolder,
@@ -52,6 +59,7 @@ export default async function setup(project) {
   // This run holds a lease for its whole length, so a later run's setup does
   // not rebuild Core under it. The returned teardown ends it, and so does the
   // process's exit: a run stopped with Ctrl-C calls no teardown.
+  const root = fileURLToPath(new URL('.', import.meta.url));
   const endRun = registerTestRun();
   process.once('exit', endRun);
   try {
@@ -86,6 +94,10 @@ export default async function setup(project) {
       process.env.npm_config_cache ??= path.join(os.homedir(), '.npm');
       process.env.HOME = userHome;
     }
+    // Tests read the package manager that started them from its user agent.
+    // The run names the repository's own, so a run started with `node` or
+    // `npx vitest` prints the same commands as one started with pnpm.
+    process.env.npm_config_user_agent = repositoryUserAgent(root);
     // Every theme editor fixture that links the CLI's own Core reads the
     // same part data and component docs, which take a render of every
     // component to build. They are built once here, and each fixture starts
@@ -112,6 +124,16 @@ export default async function setup(project) {
     } catch {
       // Each fixture builds its own.
     }
+    // A checkout with no theme dist builds a bundled theme for the fixtures
+    // that install one: once for the run, in this folder, by the first
+    // worker that needs it (test-utils/real-base-themes.mjs).
+    // What the checkout holds before any test runs: the teardown fails the
+    // run when a test wrote into it (checkout-writes.mjs).
+    const checkoutBefore = checkoutState(root);
+    const baseThemes = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-test-base-themes-'),
+    );
+    project.provide('astryxBaseThemesDir', baseThemes);
     // `npm pack` costs about 5 s of CPU. Packing once here keeps that out of
     // every suite that places CLI copies, and out of their timed tests. A watch
     // session packs again before a rerun of this project's tests, so they see
@@ -138,6 +160,16 @@ export default async function setup(project) {
       trashFolder(packDir);
       trashFolder(userHome);
       trashFolder(themeCache);
+      trashFolder(baseThemes);
+      const written = writtenSince(checkoutBefore, checkoutState(root));
+      if (written.length) {
+        endRun();
+        // Vitest reports an error a teardown throws, and still exits 0.
+        process.once('exit', () => (process.exitCode = 1));
+        throw new Error(
+          `tests wrote into the checkout (every fixture belongs in a temp folder): ${written.slice(0, 10).join('; ')}`,
+        );
+      }
       endRun();
     };
   } catch (error) {

@@ -45,7 +45,7 @@ describe('search() declared return type', () => {
     const fn = checker.getTypeOfSymbolAtLocation(exportOf(SEARCH, 'search'), source);
     const response = checker.getAwaitedType(fn.getCallSignatures()[0].getReturnType());
     const data = prop(response, 'data');
-    expect(names(data)).toEqual(['matchCount', 'query', 'results']);
+    expect(names(data)).toEqual(['icons', 'matchCount', 'query', 'results']);
     const entry = checker.getIndexTypeOfType(prop(data, 'results'), ts.IndexKind.Number);
     const canonical = checker.getDeclaredTypeOfSymbol(exportOf(TYPES, 'SearchResultEntry'));
     expect(names(canonical)).toContain('command');

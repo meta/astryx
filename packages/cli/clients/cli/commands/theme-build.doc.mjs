@@ -59,7 +59,7 @@ export const doc = {
       flag: '--icons-specifier <specifier>',
       param: 'options.iconsSpecifier',
       description:
-        "Override the icon-registry import in the generated JS module, for example ./icons.mjs (default: the specifier in the theme source's own import). With --family it applies to every member's icon import",
+        "Override the icon-registry import in the generated JS module, for example ./icons.mjs; the build then does not compile the registry (default: a TypeScript or JSX registry's compiled copy in <name>.modules/, or a plain JavaScript registry's own path). With --family it applies to every member's icon import",
     },
     {
       flag: '-w, --watch',

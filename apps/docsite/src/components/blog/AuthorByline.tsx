@@ -3,7 +3,7 @@
 /**
  * @file AuthorByline.tsx
  * Blog byline: author avatars + names, plus publish/updated date and reading
- * time.
+ * time. A GitHub avatar loads at the size the byline shows it.
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -15,6 +15,7 @@ import {Link} from '@astryxdesign/core/Link';
 import {HStack} from '@astryxdesign/core/Layout';
 import {Divider} from '@astryxdesign/core/Divider';
 import {resolveAuthor} from '../../content/blog/authors';
+import {githubAvatarUrl} from '../../lib/githubAvatarUrl';
 
 export function formatDate(iso: string): string {
   // Parse as UTC to avoid off-by-one from local timezones.
@@ -29,6 +30,10 @@ export function formatDate(iso: string): string {
     timeZone: 'UTC',
   });
 }
+
+// The side of an avatar in CSS pixels, for each Avatar size the byline uses.
+// The Avatar module is client code, so the server cannot call its size scale.
+const AVATAR_PIXELS = {xsm: 20, md: 36} as const;
 
 const styles = stylex.create({
   divider: {
@@ -70,7 +75,11 @@ export function AuthorByline({
         <>
           <AvatarGroup size={avatarSize}>
             {resolved.map(author => (
-              <Avatar key={author.key} src={author.avatar} name={author.name} />
+              <Avatar
+                key={author.key}
+                src={githubAvatarUrl(author.avatar, AVATAR_PIXELS[avatarSize])}
+                name={author.name}
+              />
             ))}
           </AvatarGroup>
           <Text type={textType} color="secondary">

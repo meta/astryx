@@ -116,6 +116,9 @@ const SECONDARY_COMPLEX_SELECTOR = {
     SECONDARY_BUTTON[':hover'],
 } as const;
 
+/** The color modes stone draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const stoneTheme = defineTheme({
   name: 'stone',
 
@@ -302,6 +305,8 @@ export const stoneTheme = defineTheme({
     '--radius-element': '0.5rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // Shadows
@@ -372,35 +377,52 @@ export const stoneTheme = defineTheme({
       },
     },
 
-    // Progress fills use the same family as their matching status surface;
-    // the darker stop in dark mode keeps the channel visible on dark tracks.
+    // Status fills take the theme's status roles, and the accent fill uses the
+    // blue family; each reaches 3:1 on the skeleton track in both modes.
     'progress-bar-fill': {
       'variant:accent': {
-        backgroundColor: lightDark(blue.light[90], blue.dark[70]),
+        backgroundColor: lightDark(blue.light[40], blue.dark[80]),
       },
       'variant:success': {
-        backgroundColor: lightDark(green.light[90], green.dark[70]),
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: lightDark(yellow.light[90], yellow.dark[70]),
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: lightDark(red.light[90], red.dark[70]),
+        backgroundColor: 'var(--color-error)',
+      },
+      // The secondary text color (stop 70) reads under 3:1 on the dark track,
+      // so a neutral or disabled fill takes stop 80 there.
+      'variant:neutral': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+      'variant:disabled': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
       },
     },
 
+    // A mark on a fill is light ink on the dark light-mode fills (stops 30 and
+    // 40) and dark ink on the pale dark-mode fills. A status fill is the
+    // status color, so its mark takes that status's on-color.
     'progress-bar-mark': {
       'placement:fill+variant:accent': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: lightDark(neutral.light[100], 'var(--color-on-light)'),
       },
       'placement:fill+variant:success': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: 'var(--color-on-success)',
       },
       'placement:fill+variant:warning': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: 'var(--color-on-warning)',
       },
       'placement:fill+variant:error': {
-        backgroundColor: 'var(--color-on-light)',
+        backgroundColor: 'var(--color-on-error)',
       },
     },
 
@@ -449,9 +471,78 @@ export const stoneTheme = defineTheme({
     typeahead: INPUT_STATUS_VARS,
     tokenizer: INPUT_STATUS_VARS,
 
+    // Secondary text on a muted or coloured card steps to the nearest
+    // neutral stop that reads at 4.5:1 on that fill, and on the accent tint
+    // of a selected row or a numbered citation over it.
     card: {
       base: {
         padding: 'var(--spacing-3)',
+      },
+      'variant:muted': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[80],
+        ),
+      },
+      'variant:blue': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:cyan': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:gray': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:green': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:orange': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[90],
+        ),
+      },
+      'variant:pink': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[90],
+        ),
+      },
+      'variant:purple': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:red': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[90],
+        ),
+      },
+      'variant:teal': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:yellow': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
       },
     },
 

@@ -5,7 +5,7 @@
 import {Token} from '@astryxdesign/core/Token';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
-import {TagIcon} from '@heroicons/react/24/outline';
+import {TagIcon} from '@astryxdesign/template-icons';
 
 export default function TokenShowcase() {
   return (

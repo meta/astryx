@@ -102,13 +102,9 @@ first.
 - **FR3 — One layer and one layer order in every package stylesheet.** Every rule
   in every package stylesheet, and in Core's `reset.css`, MUST sit inside its one
   Astryx layer: `astryx-base` for package stylesheets and `reset` for
-  `reset.css`. Core's stylesheet, prebuilt and source-built alike, also carries
-  exactly one `@layer reset` block, before its `astryx-base` block, that holds
-  only `:where(html:not([data-theme])) { color-scheme: light dark; }`, the rule `reset.css` has for a root with no forced mode: the page root follows the
-  reader's light or dark preference without `reset.css`, and a `system` Theme
-  takes the root's scheme (`component:Theme` FR2). None of these files emits an
-  unlayered rule or another layer. Each begins with the same order registration
-  that theme output carries under `spec:AST-066` FR7:
+  `reset.css`. None of these files emits an unlayered rule or another layer. Each
+  begins with the same order registration that theme output carries under
+  `spec:AST-066` FR7:
 
   ```css
   @layer reset, astryx-base, astryx-theme;
@@ -164,8 +160,7 @@ first.
 - **FR7 — A source build produces what the prebuilt stylesheet holds.** A source
   build of a package MUST produce, for the modules it compiles, the same rules
   with the same selectors in the same order as that package's prebuilt stylesheet,
-  every one inside one `@layer astryx-base` with no nested layer; a source build
-  of Core also emits Core's FR3 root block. Each package
+  every one inside one `@layer astryx-base` with no nested layer. Each package
   block a source build emits begins with the FR3 order registration, so the order
   holds whichever Astryx file or chunk loads first and never depends on a line
   the product writes. Compiling every module of a package
@@ -207,9 +202,8 @@ first.
     stylesheet of a package it compiles from source, and it fails rather than
     take a rule from that stylesheet.
   - **Ordering.** Every Astryx rule sits inside
-    `@layer reset, astryx-base, astryx-theme`: Core's `reset.css` and Core's
-    FR3 root block in `reset`, each package's compiled block in `astryx-base`,
-    and the theme in
+    `@layer reset, astryx-base, astryx-theme`: Core's `reset.css` in `reset`,
+    each package's compiled block in `astryx-base`, and the theme in
     `astryx-theme`. Each compiled block begins with the FR3 order registration
     (FR7). Product CSS, including the product's own StyleX output other than
     a marked swizzled copy's (FR7), stays unlayered and wins over every Astryx
@@ -249,8 +243,8 @@ first.
 
 ## Current-state impact
 
-- Core, Lab, Rich Text, and Charts export one stylesheet each with every rule
-  inside `@layer astryx-base`, besides Core's FR3 root block in `reset`. Non-Core stylesheets omit the Core variable
+- Core, Lab, Rich Text, and Charts already export one stylesheet each with every
+  rule inside `@layer astryx-base`. Non-Core stylesheets omit the Core variable
   groups `astryx.css` declares. Core's prebuilt stylesheet carries the canonical
   data-token group; Lab relies on that stylesheet and adds no copy, under
   `spec:AST-066` FR3.

@@ -3794,6 +3794,7 @@ export class GestureHost {
   // --- Pointer events --------------------------------------------------------
 
   private readonly onPointerDown = (event: PointerEvent): void => {
+    this.endMissedMouseLift(event);
     this.endWheel(eventTime(event, this.timing));
     // A new press: whatever click is still owed to the last one is not this.
     disarmClickGuard(this.doc);
@@ -3886,6 +3887,9 @@ export class GestureHost {
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
+    if (this.endMissedMouseLift(event)) {
+      return;
+    }
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       const id = this.fingerPointers.get(event.pointerId);
       if (id != null) {
@@ -3923,6 +3927,36 @@ export class GestureHost {
       return;
     }
   };
+
+  /**
+   * In Chromium, a sandboxed frame can miss the `pointerup` of a button
+   * released outside the window. The next mouse event shows the button up,
+   * or a new press. The contact then ends at its last place. No click comes
+   * to this document, so no click guard is armed.
+   */
+  private endMissedMouseLift(event: PointerEvent): boolean {
+    if (event.pointerType !== 'mouse') {
+      return false;
+    }
+    const isNewPress = event.type === 'pointerdown';
+    if (!isNewPress && (event.buttons & 1) !== 0) {
+      return false;
+    }
+    const id = this.pointerIds.get(event.pointerId);
+    const touch = id == null ? undefined : this.arena.getTouch(id);
+    if (id == null || touch == null) {
+      return false;
+    }
+    this.releaseArmedPress();
+    this.pointerIds.delete(event.pointerId);
+    this.pointerKinds.delete(event.pointerId);
+    this.unlockSelection(id);
+    this.retargeted.delete(id);
+    this.arena.ended([
+      {id, x: touch.x, y: touch.y, time: eventTime(event, this.timing)},
+    ]);
+    return true;
+  }
 
   private readonly onPointerUp = (event: PointerEvent): void => {
     this.releaseArmedPress();

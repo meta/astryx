@@ -7,6 +7,7 @@
  * follow the vibrancy and the seed's own chroma.
  */
 
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
@@ -84,6 +85,24 @@ describe('palette recipes', () => {
       );
   });
 
+  it('v2 fades a gray family toward white as a gray scale does; v1 keeps it', () => {
+    /** @param {string} recipe */
+    const gray = recipe =>
+      generatePaletteSet({
+        recipe,
+        families: [{id: 'neutral', seed: '#64748b', kind: 'neutral'}],
+        neutralProfile: 'custom',
+      }).families[0].light.colors;
+    const v1 = gray(PALETTE_RECIPE);
+    const v2 = gray(PALETTE_RECIPE_V2);
+    // A slate's page shade keeps about a sixth of its color, not half.
+    expect(hexToOklch(v2[95]).C).toBeLessThan(0.01);
+    expect(hexToOklch(v1[95]).C).toBeGreaterThan(0.015);
+    // Its darker shades keep their color.
+    expect(v2[50]).toBe(v1[50]);
+    expect(v2[30]).toBe(v1[30]);
+  });
+
   it('v2 draws the stops it does not share exactly as v1, for a dusty and a vivid seed', () => {
     // A stop whose gamut holds the most vivid seed at the default vibrancy
     // is not shared: orange's stops from 50 up, green's from 40 up.
@@ -151,6 +170,92 @@ describe('palette recipes', () => {
       ramp('#f59e0b', 50, recipe).families[0].light.colors[35];
     expect(amber(PALETTE_RECIPE_V2)).toBe(amber(PALETTE_RECIPE));
     expect(hexToOklch(amber(PALETTE_RECIPE_V2)).C).toBeGreaterThan(0.09);
+  });
+
+  it('v1 and v2 draw byte for byte what they first shipped with, across seeds, vibrancies and kinds', () => {
+    // Digests of every family's ramps over this grid, as the release that
+    // first shipped v2 drew them: a recipe never changes once released.
+    const SHIPPED = {
+      'astryx-oklch-v1':
+        'd645a0206c23f9960d286f016e69f3c0f97158ac0173c43c57d5b8b7f5c00c07',
+      'astryx-oklch-v2':
+        '9efea037c72aa3a2b41307f2ab707c72446aee42241b4b47ae840982505c9697',
+    };
+    const seeds = [
+      '#5f7891',
+      '#2563eb',
+      '#66662e',
+      '#c2603d',
+      '#16a34a',
+      '#777777',
+      '#d62830',
+      '#ffce2f',
+      '#7c3aed',
+      '#0d9488',
+    ];
+    for (const [recipe, want] of Object.entries(SHIPPED)) {
+      const h = createHash('sha256');
+      for (const seed of seeds)
+        for (const vibrancy of [0, 50, 100])
+          for (const kind of [undefined, 'neutral'])
+            h.update(
+              JSON.stringify(
+                generatePaletteSet({
+                  recipe,
+                  vibrancy,
+                  families: [
+                    {id: 'f', seed, ...(kind ? {kind} : {})},
+                    {id: 'g', seed: '#0074e2'},
+                  ],
+                }).families,
+              ),
+            );
+      expect(h.digest('hex'), recipe).toBe(want);
+    }
+  });
+
+  it('v2 draws exactly what it first shipped with', () => {
+    // The ramps v2 drew when it first shipped: a recipe never changes once
+    // released, so a palette that names it keeps its colors.
+    const SHIPPED = {
+      '#66662e@50': {
+        light: '#979637,#b2b14c,#bfbf61,#cccd76,#d9da8c,#e7e8a5,#f4f5c0',
+        dark: '#343300,#3f3e00,#4b4a00',
+      },
+      '#2563eb@50': {
+        light: '#528aff,#85abf3,#a2b9e6,#b6c7e7,#c8d5ed,#dae3f3,#edf1f9',
+        dark: '#072872,#0e3384,#173f96',
+      },
+      '#c2603d@30': {
+        light: '#d07454,#ea9172,#eda58c,#debfb4,#e2d0ca,#ece0db,#f5efed',
+        dark: '#531d07,#63260f,#723018',
+      },
+      '#16a34a@80': {
+        light: '#20ac51,#5ac574,#74d188,#8ddc9c,#a5e7b1,#bcf3c5,#d4feda',
+        dark: '#003c14,#00491b,#005621',
+      },
+      '#777777@50': {
+        light: '#919191,#ababab,#b9b9b9,#c6c6c6,#d4d4d4,#e2e2e2,#f1f1f1',
+        dark: '#303030,#3b3b3b,#474747',
+      },
+    };
+    for (const [key, want] of Object.entries(SHIPPED)) {
+      const [seed, vibrancy] = key.split('@');
+      const f = generatePaletteSet({
+        recipe: PALETTE_RECIPE_V2,
+        vibrancy: Number(vibrancy),
+        families: [
+          {id: 'f', seed, ...(seed === '#777777' ? {kind: 'neutral'} : {})},
+        ],
+      }).families[0];
+      expect(
+        [60, 70, 75, 80, 85, 90, 95].map(s => f.light.colors[s]).join(','),
+        key,
+      ).toBe(want.light);
+      expect([20, 25, 30].map(s => f.dark.colors[s]).join(','), key).toBe(
+        want.dark,
+      );
+    }
   });
 
   it('refuses a recipe it does not know, naming the ones it does', () => {

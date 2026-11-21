@@ -14,11 +14,11 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {HStack} from '@astryxdesign/core/Layout';
 import {
-  ClipboardDocumentIcon,
-  ArrowPathIcon,
-  HandThumbUpIcon,
-  HandThumbDownIcon,
-} from '@heroicons/react/24/outline';
+  ClipboardIcon,
+  RefreshIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useClipboard} from '@astryxdesign/core/hooks';
 
@@ -56,7 +56,7 @@ export default function ChatMessageMetadataFooter() {
                     label="Copy"
                     variant="ghost"
                     size="sm"
-                    icon={<Icon icon={ClipboardDocumentIcon} size="sm" />}
+                    icon={<Icon icon={ClipboardIcon} size="sm" />}
                     isIconOnly
                     onClick={() =>
                       void copy(MESSAGE).then(copied =>
@@ -68,7 +68,7 @@ export default function ChatMessageMetadataFooter() {
                     label="Retry"
                     variant="ghost"
                     size="sm"
-                    icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                    icon={<Icon icon={RefreshIcon} size="sm" />}
                     isIconOnly
                     onClick={() =>
                       showToast({
@@ -80,7 +80,7 @@ export default function ChatMessageMetadataFooter() {
                     label="Good response"
                     variant="ghost"
                     size="sm"
-                    icon={<Icon icon={HandThumbUpIcon} size="sm" />}
+                    icon={<Icon icon={ThumbsUpIcon} size="sm" />}
                     isIconOnly
                     onClick={() =>
                       showToast({
@@ -92,7 +92,7 @@ export default function ChatMessageMetadataFooter() {
                     label="Bad response"
                     variant="ghost"
                     size="sm"
-                    icon={<Icon icon={HandThumbDownIcon} size="sm" />}
+                    icon={<Icon icon={ThumbsDownIcon} size="sm" />}
                     isIconOnly
                     onClick={() =>
                       showToast({
