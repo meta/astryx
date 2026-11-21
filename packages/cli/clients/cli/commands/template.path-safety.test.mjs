@@ -648,22 +648,39 @@ describe('template path safety', () => {
   );
 
   it.skipIf(process.platform === 'win32')(
-    'takes /tmp as a temp folder on a POSIX system, unless it holds the home folder',
+    'takes /tmp as a temp folder on a POSIX system when it does not hold the home folder',
     async () => {
       const cwd = path.join(tmpDir, 'project');
       fs.mkdirSync(cwd, {recursive: true});
       const scratch = fs.mkdtempSync('/tmp/astryx-scratch-');
+      // A test run's home folder sits in /tmp; this case needs one outside it.
+      const before = process.env.HOME;
+      process.env.HOME = '/astryx-home-outside-tmp';
       try {
         const target = path.join(scratch, 'dash');
-        if (tempFolderOf(target) === null) {
-          await expect(
-            templateApi('blank', {targetPath: target, cwd}),
-          ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
-          return;
-        }
         const written = await templateApi('blank', {targetPath: target, cwd});
         expect(written.data.outputDir).toBe(target);
       } finally {
+        process.env.HOME = before;
+        fs.rmSync(scratch, {recursive: true, force: true});
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'refuses /tmp as a temp folder when it holds the home folder',
+    async () => {
+      const cwd = path.join(tmpDir, 'project');
+      fs.mkdirSync(cwd, {recursive: true});
+      const scratch = fs.mkdtempSync('/tmp/astryx-scratch-');
+      const before = process.env.HOME;
+      process.env.HOME = path.join(scratch, 'home');
+      try {
+        await expect(
+          templateApi('blank', {targetPath: path.join(scratch, 'dash'), cwd}),
+        ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+      } finally {
+        process.env.HOME = before;
         fs.rmSync(scratch, {recursive: true, force: true});
       }
     },
