@@ -25,6 +25,14 @@ import {
 import {luminance} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
+  BAR_PARTS,
+  TEXT_LOOKS,
+  addRunLooks,
+  barLinksAreNavItems,
+  colorInOtherDraft,
+  weightIn,
+} from './_text-looks.mjs';
+import {
   DESIGN,
   DENSITY,
   DIALS,
@@ -1710,25 +1718,6 @@ function inkAtRatio(ink, grounds, target) {
     if (out && under.every(g => ratio(out, g) >= target)) return moved;
   }
   return null;
-}
-
-/**
- * A font weight written in a clause: a number from 100 to 900, or a weight
- * word ("semibold").
- * @param {{text: string}} c
- */
-function weightIn(c) {
-  const n = /\b([1-9]00)\b(?!\s*(px|ms|%))/.exec(c.text)?.[1];
-  if (n) return n;
-  // "weight 450": any weight from 1 to 1000 written beside the word.
-  const typed =
-    /\bweight\s*:?\s*(\d{1,4})\b(?!\s*(?:px|ms|%|rem|em))/.exec(c.text)?.[1] ??
-    /\b(\d{1,4})\s+(?:font\s+)?weight\b/.exec(c.text)?.[1];
-  if (typed && Number(typed) >= 1 && Number(typed) <= 1000) return typed;
-  const w = /\b(semi-?bold|medium|regular|normal)\b/.exec(c.text)?.[1];
-  return w
-    ? HEADING_WEIGHTS[w === 'normal' ? 'regular' : w.replace('-', '')]
-    : null;
 }
 
 /** Scale a CSS length. @param {string} v @param {number} f */
@@ -3988,7 +3977,15 @@ function clausesOf(q, partWords, words = null) {
           )) ||
         (new RegExp(String.raw`^${PRODUCT_WORDS}$`).test(m[0].trim()) &&
           /^\s*:/.test(afterPart) &&
-          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)))
+          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)) &&
+          // (Never after an article alone as written, "the page: a
+          // gradient": that is the page itself. The written clause is read,
+          // since part words before it, "the notifications page:", are
+          // already taken out of the rest.)
+          !new RegExp(
+            String.raw`(?:^|[,.;:!?])\s*(?:the|a|an|my|our|your|this|that)\s+${m[0].trim()}\s*:`,
+            'i',
+          ).test(text))
       ) {
         rest = rest.replace(re, ' ');
         continue;
@@ -4944,8 +4941,10 @@ const STRIPE_NAMES = new WeakMap();
  * turns them on: the prop whose description names the `parity` a row's
  * stripe is, whose description leads with the stripes' plain names
  * ("Stripes alternate rows (every other row, zebra striping): …"). A name
- * matches by its words no other prop of that component uses, or, when all its
- * words are common ("every other row"), as the whole phrase.
+ * matches by its words no other prop of that component uses, in any form
+ * ("alternating"), or, when all its words are common ("every other row"), as
+ * the whole phrase, which may name the component before its last word
+ * ("every other table row").
  * @param {{components?: Record<string, any>}} project
  * @returns {(text: string) => boolean}
  */
@@ -4959,7 +4958,20 @@ function stripeNamesOf(project) {
       .match(/[a-z][a-z-]*/g) ?? [];
   /** @type {RegExp[]} */
   const names = [];
-  for (const info of Object.values(project.components ?? {})) {
+  /**
+   * A word's own forms: "alternate" → alternate, alternates, alternated,
+   * alternating, alternately; "stripes" → stripe, stripes, striped,
+   * striping. Never another word that starts the same ("strip",
+   * "alternative").
+   * @param {string} w
+   */
+  const forms = w => {
+    const base = w.replace(/s$/, '');
+    return base.endsWith('e')
+      ? `${base.slice(0, -1)}(?:e|es|ed|ing|ely)`
+      : `${base}s?`;
+  };
+  for (const [component, info] of Object.entries(project.components ?? {})) {
     const props = Object.values(info?.props ?? {});
     const flag = props.find(pr =>
       /`parity`/.test(String(pr?.description ?? '')),
@@ -4975,11 +4987,13 @@ function stripeNamesOf(project) {
       .filter(Boolean)) {
       const words = wordsOf(phrase);
       const own = words.filter(w => !others.has(w));
+      const named = `(?:${wordsOf(component).join('\\s+')}\\s+)?`;
+      const bare = words.map(w => w.replace(/s$/, ''));
       names.push(
         own.length
-          ? new RegExp(`\\b(?:${own.join('|')})\\b`)
+          ? new RegExp(`\\b(?:${own.map(forms).join('|')})\\b`)
           : new RegExp(
-              `\\b${words.map(w => w.replace(/s$/, '')).join('s?\\s+')}s?\\b`,
+              `\\b${bare.slice(0, -1).join('s?\\s+')}s?\\s+${named}${bare.at(-1)}s?\\b`,
             ),
       );
     }
@@ -5599,15 +5613,12 @@ export function draftAnswer(ctx, env, question) {
           ? `${what}${hex}`
           : m,
     )
-    // ("less contrast", "a softer dark mode", "big type", "thin borders",
-    // "lots of white space": the readers' own words for them.)
+    // ("less contrast", "big type", "thin borders", "lots of white space":
+    // the readers' own words for them. A mood word for the dark mode, "a
+    // gentle dark mode", names no color, so it writes no page color.)
     .replace(
       /\b(?:less|lower|softer|gentler|reduced)\s+contrast\b/gi,
       'softer text',
-    )
-    .replace(
-      /\b(?:soft|softer|gentle|gentler|easy|easier)\s+dark\s+mode\b/gi,
-      'softer text in dark mode, lighter page in dark mode',
     )
     .replace(
       /\b(?:big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
@@ -9250,7 +9261,6 @@ export function draftAnswer(ctx, env, question) {
       });
   // ("badges uppercase bold": two looks of a part's text said together are
   // each an ask of their own, run in turn.)
-  const TEXT_LOOKS = ['case', 'weight', 'italic', 'tracking', 'fontsize'];
   for (const [ci, c] of [...clauses.entries()].reverse()) {
     // ("large bold headings", "bigger, bolder headings": a heading's size
     // word beside its weight is its text size.)
@@ -13897,6 +13907,7 @@ export function draftAnswer(ctx, env, question) {
     if (
       literals.length &&
       steps.length &&
+      !colorInOtherDraft(c, steps, Object.keys(HUES), literals) &&
       !steps.some(x => x.verb !== 'set') &&
       !literals.some(l => values.some(v => v.includes(l)))
     )
@@ -14818,6 +14829,19 @@ export function draftAnswer(ctx, env, question) {
     // (A font's name before "font": "Inter font", "SF Pro font".)
     if (/^(?:fonts?|typefaces?|famil(?:y|ies)|serif|sans|mono)$/.test(stop))
       return null;
+    // (The system type as the whole subject, "bold system type", names no
+    // part: it is the theme's text, as "bold system font" is.)
+    const sysWords = (label ?? body)
+      .replace(/[^a-z\s-]/g, ' ')
+      .trim()
+      .split(/\s+/);
+    if (
+      /\bsystem type$/.test(sysWords.join(' ')) &&
+      sysWords.every(
+        w => /^(?:system|type)$/.test(w) || aspectsOf(w).length > 0,
+      )
+    )
+      return null;
     // (Words before the theme's accent or neutral name its color or its
     // product, never a part: "system blue accent", "brand red accent",
     // "Windows 11 accent".)
@@ -14878,9 +14902,9 @@ export function draftAnswer(ctx, env, question) {
         ),
     );
     if (!unknown.length) return null;
-    // (A subject is a thing on the page: a plural noun, a word of a part's
-    // own name, or a name in capitals, "FAB"; a brand or a mood said
-    // before a look, "IBM Carbon:", "design feedback:", is not one.)
+    // (A subject is a thing on the page: a plural noun or a word of a
+    // part's own name; a brand or a mood said before a look, "IBM Carbon:",
+    // "design feedback:", is not one.)
     const thing =
       unknown.some(w => /[a-z]{2}[^su']s$/.test(w)) ||
       near(unknown.join(' ')) !== '' ||
@@ -14899,9 +14923,7 @@ export function draftAnswer(ctx, env, question) {
           a =>
             !THEME_ASPECTS.includes(a) &&
             !['colors', 'mode', 'contrast', 'spacing', 'corners'].includes(a),
-        )) ||
-      (words.length === 1 &&
-        new RegExp(`\\b${words[0].toUpperCase()}\\b`).test(raw0));
+        ));
     return thing ? phrase : null;
   };
   // ("filled blue with white text on hover": a state said at the end of
@@ -15442,6 +15464,15 @@ export function draftAnswer(ctx, env, question) {
     drafts.splice(from, 0, d);
     draftClause.set(d, gc);
   };
+  barLinksAreNavItems(
+    clauses,
+    t => lex.parts.some(([re, p]) => BAR_PARTS.has(p.on) && re.test(` ${t} `)),
+    c => {
+      for (let n = placeNotes.length - 1; n >= 0; n--)
+        if (placeNotes[n].c === c) placeNotes.splice(n, 1);
+    },
+  );
+  addRunLooks(clauses, Object.keys(HUES));
   for (const c of clauses) {
     clauseNow = c;
     settleSubject();
