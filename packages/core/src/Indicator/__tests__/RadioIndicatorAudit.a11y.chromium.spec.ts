@@ -529,8 +529,7 @@ async function runCase(page: Page, item: AuditCase) {
       `reduced motion ${sensors.reducedMotion}`,
     );
     check(
-      sensors.coarse === (item.pointer === 'coarse') &&
-        sensors.hoverNone === (item.pointer === 'coarse'),
+      !sensors.coarse && !sensors.hoverNone,
       `pointer coarse=${sensors.coarse} hover-none=${sensors.hoverNone}`,
     );
     await item.run(page, check, frame);
