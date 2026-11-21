@@ -730,7 +730,37 @@ function lineWay(C, was, now, tw, tn, steps, intent, visible, groups) {
           // looks at rest are held to an added line; a stronger one is
           // held everywhere.)
           const atRest = !/(?:^|\s):/.test(render);
-          if (fainter && y > x + 1e-6 && (atRest || (intent.fainter && x > 0)))
+          // (An edge added where the answer takes the shadow away is the
+          // edge that sets a floating surface apart, given in the shadow's
+          // place: never a stronger line than asked.)
+          const shadowGone = () => {
+            if (prop === 'box-shadow' || x !== 0) return false;
+            const sa = ruleValue(was, part, render, 'box-shadow');
+            const sb = ruleValue(now, part, render, 'box-shadow');
+            const before = lineStrength(
+              'box-shadow',
+              resolveIn(
+                String(sa.value ?? coreOf('box-shadow') ?? 'none'),
+                {...tw[mode], ...sa.tokens},
+                mode,
+              ),
+            );
+            const after = lineStrength(
+              'box-shadow',
+              resolveIn(
+                String(sb.value ?? coreOf('box-shadow') ?? 'none'),
+                {...tn[mode], ...sb.tokens},
+                mode,
+              ),
+            );
+            return before > 0 && after === 0;
+          };
+          if (
+            fainter &&
+            y > x + 1e-6 &&
+            (atRest || (intent.fainter && x > 0)) &&
+            !shadowGone()
+          )
             return `it would ${x ? 'strengthen' : 'add'} a ${what} on ${part}${look} in ${mode} mode, which the question makes fainter`;
           // (A shadow asked stronger may be new on a look that drew none.)
           if (
