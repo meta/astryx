@@ -5205,7 +5205,9 @@ export function draftAnswer(ctx, env, question) {
         while (
           k >= 0 &&
           (!String(lines[k]).trim() ||
-            /^\s*(?:\d+[.)]\s*)?[a-z]+[ \t]*:[ \t]*\S/.test(String(lines[k])))
+            /^\s*(?:\d+[.)]\s*)?[a-z][a-z -]*[ \t]*:[ \t]*\S/.test(
+              String(lines[k]),
+            ))
         )
           k--;
         const heading = k >= 0 ? String(lines[k]).replace(/:\s*$/, '') : '';
@@ -5214,6 +5216,7 @@ export function draftAnswer(ctx, env, question) {
         if (
           namesPart(sentence) ||
           (!/:/.test(heading) &&
+            !/[.!?]\s*$/.test(heading) &&
             heading.trim().split(/\s+/).length <= 3 &&
             namesPart(heading))
         )
