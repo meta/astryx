@@ -917,7 +917,8 @@ this flow passes the historical review benchmark and is enforced on pull request
   package that owns a record is the one whose source tree has its component
   root; when two packages have a root of that name, it is the one holding the
   record's code. A platform implementation's record sits in the same folder as
-  `<PublicName>.<language>.spec.md` (for example
+  `<PublicName>.<language>.spec.md`, where `<language>` is `swift` or
+  `react-native` (for example
   `docs/specs/components/Button/Button.swift.spec.md`), has the id
   `component:<language>/<PublicName>` (for example `component:swift/Button`),
   names its core component in `platform_of` (`component:<PublicName>`), and

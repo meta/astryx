@@ -558,6 +558,37 @@ describe('resolveSpecsForFile', () => {
     ).toEqual([]);
   });
 
+  it('keeps a React Native platform record off code, since no code root places it', () => {
+    const root = fixtureRoot();
+    write(root, 'packages/core/src/Avatar/Avatar.tsx');
+    write(root, 'packages/native/apple/Sources/Astryx/Avatar/Avatar.swift');
+    writeRecord(root, 'docs/specs/components/Avatar/Avatar.spec.md', {
+      kind: 'component',
+      id: 'component:Avatar',
+    });
+    writeRecord(
+      root,
+      'docs/specs/components/Avatar/Avatar.react-native.spec.md',
+      {
+        kind: 'component',
+        id: 'component:react-native/Avatar',
+        platform_of: 'component:Avatar',
+      },
+    );
+    const index = loadKnowledgeIndex(root);
+    const lookup = file => ids(resolveSpecsForFile(index, file).records);
+
+    expect(
+      lookup('docs/specs/components/Avatar/Avatar.react-native.spec.md'),
+    ).toEqual(['component:Avatar', 'component:react-native/Avatar']);
+    expect(lookup('packages/core/src/Avatar/Avatar.tsx')).toEqual([
+      'component:Avatar',
+    ]);
+    expect(
+      lookup('packages/native/apple/Sources/Astryx/Avatar/Avatar.swift'),
+    ).not.toContain('component:react-native/Avatar');
+  });
+
   it('names a member without its own consumer doc by its file stem', () => {
     const index = loadKnowledgeIndex(popoverFixture());
     expect(
