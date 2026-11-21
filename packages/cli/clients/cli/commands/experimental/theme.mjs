@@ -709,6 +709,18 @@ function widenedStatus(widened) {
 }
 
 /**
+ * Commands, one to a line and never wrapped, so a line pasted into a shell
+ * runs exactly one whole command; a sequence is one line.
+ * @param {string[]} cmds @param {boolean} [sequence]
+ * @returns {string[]}
+ */
+function commandLines(cmds, sequence) {
+  return sequence && cmds.length > 1
+    ? [cmds.join(' && '), 'sequence: run as one line, in this order']
+    : cmds;
+}
+
+/**
  * One line for each saved setting a change made reach more parts, with the
  * command that keeps it on its own part. Narrowed one at a time, the ones
  * not yet narrowed still paint the parts the narrowed ones left, so two or
@@ -726,7 +738,7 @@ function widenedLines(widened) {
     ),
     ...(keeps.length > 1
       ? [
-          `- to keep all ${keeps.length} as they were: ${keeps.join(' && ')}\n  sequence: run as one line, in this order`,
+          `- to keep all ${keeps.length} as they were: ${commandLines(keeps, true).join('\n  ')}`,
         ]
       : []),
   ];
@@ -1003,13 +1015,6 @@ function lookupBlocks(d) {
     items,
     ...rest
   } = /** @type {any} */ (shown);
-  // Commands print one to a line and are never wrapped, so a line pasted
-  // into a shell runs exactly one whole command; a sequence is one line.
-  /** @param {string[]} cmds @param {boolean} [sequence] */
-  const commandLines = (cmds, sequence) =>
-    sequence && cmds.length > 1
-      ? [cmds.join(' && '), 'sequence: run as one line, in this order']
-      : cmds;
   /** @param {Array<{command: string, why: string}>} refusedList */
   const refusedLines = refusedList =>
     refusedList.flatMap(r => [`x ${r.command}`, `  not run: ${r.why}`]);
