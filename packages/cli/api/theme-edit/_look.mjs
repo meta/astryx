@@ -27,9 +27,8 @@ import {
   plainOn,
   ratio,
   splitTop,
-  LIGHTNESS_STEP,
+  nearestLightness,
 } from './_color.mjs';
-import {hexToOklch, oklchClampedHex} from '../theme/palette/generate/color.mjs';
 import * as editorLook from '../theme/palette/generate/editor-look.mjs';
 import {acceptCovers} from './_accepted.mjs';
 import {familyOf} from './_tables.mjs';
@@ -99,23 +98,6 @@ const CARD = '--color-background-card';
 const SURFACE = '--color-background-surface';
 const GROUNDS = [PAGE, SURFACE, CARD, POPOVER];
 const EDGE = '--color-border-emphasized';
-/**
- * The nearest lightness of a color (hue and chroma kept, as the gamut
- * allows) that passes a test, or null when none does.
- * @param {Rgb} from @param {(c: Rgb) => boolean} test
- * @returns {Rgb | null}
- */
-function nearestLightness(from, test) {
-  const {L, C, H} = hexToOklch(hex(from));
-  for (let step = LIGHTNESS_STEP; step <= 1; step += LIGHTNESS_STEP)
-    for (const l of [L - step, L + step]) {
-      if (l < 0 || l > 1) continue;
-      const c = parseColor(oklchClampedHex(l, C, H));
-      if (c && test(c)) return c;
-    }
-  return null;
-}
-
 /** The category colors (Badge, Token and Card tints) and the chart colors. */
 const CATEGORY_OR_CHART =
   /^--color-(data-[a-z0-9-]+|(background|text|icon|border)-(red|orange|yellow|green|teal|cyan|blue|purple|pink|gray))$/;

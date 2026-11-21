@@ -824,6 +824,42 @@ export const officialTheme = defineTheme({name: 'official', extends: neutralThem
         fs.chmodSync(path.join(cwd, '.gitignore'), 0o644);
       }
       fs.rmSync(path.join(cwd, '.gitignore'));
+      // A protection file it cannot read beside an app file the repair
+      // would change: refused before the theme file is written.
+      if (process.getuid?.() !== 0) {
+        const root = app('fold');
+        fs.mkdirSync(path.join(root, 'theme'));
+        const src = themeFile('fold', {
+          '--color-background-body': '#14161a',
+          '--color-text-primary': '#eceef2',
+        });
+        fs.renameSync(
+          path.join(cwd, src),
+          path.join(root, 'theme', 'foldTheme.ts'),
+        );
+        const main = path.join(root, 'src', 'main.tsx');
+        fs.writeFileSync(
+          main,
+          fs
+            .readFileSync(main, 'utf8')
+            .replace("'./foldTheme'", "'../theme/foldTheme'"),
+        );
+        fs.writeFileSync(path.join(root, 'src', '.gitignore'), 'nothing/\n');
+        fs.chmodSync(path.join(root, 'src', '.gitignore'), 0o000);
+        const was = fs.readFileSync(
+          path.join(root, 'theme', 'foldTheme.ts'),
+          'utf8',
+        );
+        expect(
+          await code(
+            themeEditCheck('theme/foldTheme.ts', {cwd: root, fix: true}),
+          ),
+        ).toBe('ERR_CODEMOD_PROTECTION_SOURCE');
+        fs.chmodSync(path.join(root, 'src', '.gitignore'), 0o644);
+        expect(
+          fs.readFileSync(path.join(root, 'theme', 'foldTheme.ts'), 'utf8'),
+        ).toBe(was);
+      }
       // An editor theme is the editor's: its show lists the problems.
       fs.mkdirSync(path.join(cwd, 'themes', 'made'), {recursive: true});
       fs.writeFileSync(
