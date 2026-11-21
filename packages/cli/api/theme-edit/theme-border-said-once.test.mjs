@@ -97,11 +97,24 @@ describe('a whole-theme link color said once', () => {
       (lum(/** @type {RegExpExecArray} */ (m)[1]) + 0.05) /
         (lum('#1b1b1b') + 0.05),
     ).toBeGreaterThanOrEqual(4.5);
-    // (In light mode, on the muted accent fill an applied preset draws, it
-    // reads under 4.5:1: named, the color kept as asked.)
-    expect(data.results[0].text).toMatch(
-      /on the muted accent fill .* in light mode/,
+    // (The applied preset draws it on that fill: that part alone takes the
+    // nearest readable shade of the same hue, in light mode, named with both
+    // ratios.)
+    const chip = cmds.find(x =>
+      / --on date-range-input-preset --state selected --mode light$/.test(x),
     );
+    expect(chip).toBeDefined();
+    const shade = /--color-text-accent '(#[0-9a-f]{6})'/.exec(String(chip));
+    expect(shade).not.toBeNull();
+    const said =
+      /date-range-input-preset selected draws it on the muted accent fill, where #0969da reads (\d\.\d\d):1 in light mode, under 4\.5:1: there it takes (#[0-9a-f]{6}), the nearest shade of the same hue, (\d\.\d\d):1/.exec(
+        data.results[0].text,
+      );
+    expect(said).not.toBeNull();
+    const [, before, named, after] = /** @type {RegExpExecArray} */ (said);
+    expect(Number(before)).toBeLessThan(4.5);
+    expect(named).toBe(/** @type {RegExpExecArray} */ (shade)[1]);
+    expect(Number(after)).toBeGreaterThanOrEqual(4.5);
     // (One kept to dark mode is never named for the light fill, and a
     // twinned border gets no light-only note.)
     const darkOnly = (await themeEditHow('links #93c5fd', {cwd, theme: 'lk'}))

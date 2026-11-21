@@ -38,6 +38,7 @@ import {
 } from '../../foundation/render/render-page.mjs';
 import {
   SAMPLE_PAGE,
+  SAMPLE_PRESETS,
   SAMPLE_SOURCE,
   elementNames,
   pageSource,
@@ -243,6 +244,20 @@ export function demoProps(project, name) {
       // the component cannot be shown from its doc alone.
       if (v === undefined) return null;
       props[p] = v;
+    }
+  // A list of preset ranges (a date range input's quick picks): the page's
+  // sample ones, the first the sample range, so the part data reads a
+  // preset at rest and the one applied. (Its days are SAMPLE_DAYS.)
+  for (const [p, d] of Object.entries(info.props ?? {}))
+    if (
+      !(p in props) &&
+      /^(?:ReadonlyArray|Array)<DateRangePreset>$/.test(String(d.type).trim())
+    ) {
+      props[p] = SAMPLE_PRESETS;
+      const range = Object.entries(info.props ?? {}).find(([, x]) =>
+        /^DateRange(?:\s*\|\s*null)?$/.test(String(x.type).trim()),
+      )?.[0];
+      if (range && !(range in props)) props[range] = {...SAMPLE_DAYS};
     }
   const kids = info.props?.children;
   // A part whose children are required and whose doc suggests none (a

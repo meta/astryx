@@ -210,6 +210,13 @@ export const SAMPLE_SEARCH_ITEMS = Object.freeze([
 export const SAMPLE_SOURCE = Object.freeze({__code: 'SAMPLE_SOURCE'});
 
 /**
+ * The page's sample preset ranges (a date range input's quick picks): two
+ * fixed ones, the first the range the sample value holds, so the part data
+ * reads a preset at rest and the one applied.
+ */
+export const SAMPLE_PRESETS = Object.freeze({__code: 'SAMPLE_PRESETS'});
+
+/**
  * Overlays the overlays section draws open in a deeper state than their docs
  * show: a menu with its submenu open, a popover that holds a form, a date and
  * time field with its time list, a table with a row selected and a column
@@ -509,9 +516,10 @@ export function pageSource({
   lines.push(`const SAMPLE_ITEMS = ${JSON.stringify(SAMPLE_SEARCH_ITEMS)};`);
   lines.push(
     'const SAMPLE_SOURCE = {search: q => SAMPLE_ITEMS.filter(i => i.label.toLowerCase().includes(String(q).toLowerCase())), bootstrap: () => SAMPLE_ITEMS, cancel: () => {}};',
+    "const SAMPLE_PRESETS = [{label: 'This week', getRange: () => ({start: '2026-01-12', end: '2026-01-16'})}, {label: 'Next week', getRange: () => ({start: '2026-01-19', end: '2026-01-23'})}];",
   );
   lines.push(
-    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && v.__code === "SAMPLE_SOURCE" ? SAMPLE_SOURCE : isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
+    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && v.__code === "SAMPLE_SOURCE" ? SAMPLE_SOURCE : v && typeof v === "object" && v.__code === "SAMPLE_PRESETS" ? SAMPLE_PRESETS : isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
   );
   lines.push(`const ITEMS = ${JSON.stringify(items)};`);
   lines.push(

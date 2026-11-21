@@ -14537,6 +14537,55 @@ export function draftAnswer(ctx, env, question) {
     return best?.c ?? null;
   };
   /**
+   * The shade of a color, of its own hue, nearest to it that reads at
+   * `min` on a fill, or null when none does.
+   * @param {string} v @param {number[]} fill @param {number} min
+   * @returns {{c: string, r: number} | null}
+   */
+  const readableShade = (v, fill, min) => {
+    const rgb = parseColor(v);
+    if (!rgb) return null;
+    for (let i = 1; i <= 95; i++)
+      for (const k of [-i * 0.01, i * 0.01]) {
+        const c = shift(hex(rgb.slice(0, 3)), k);
+        const p = c ? parseColor(c) : null;
+        if (c && p && ratio(p.slice(0, 3), fill.slice(0, 3)) >= min)
+          return {c, r: ratio(p.slice(0, 3), fill.slice(0, 3))};
+      }
+    return null;
+  };
+  /**
+   * The parts that draw accent text on the muted accent fill, each with the
+   * state it does so in (an applied preset, selected): Core's own pairs,
+   * read from the part data.
+   * @returns {Array<{part: string, state: string}>}
+   */
+  const accentOnMuted = () => {
+    /** @type {Array<{part: string, state: string}>} */
+    const out = [];
+    for (const part of Object.keys(C.MAP)) {
+      const text = (C.partReads(part, 'text') ?? []).filter(
+        (/** @type {any} */ r) => r.token === '--color-text-accent',
+      );
+      const fill = (C.partReads(part, 'background') ?? []).filter(
+        (/** @type {any} */ r) => r.token === '--color-accent-muted',
+      );
+      const target = ctx.project.target.get(part);
+      for (const w of new Set(text.flatMap((/** @type {any} */ r) => r.when)))
+        if (fill.some((/** @type {any} */ q) => q.when.includes(w))) {
+          // (One state the part's target names, as its attribute: "selected=selected".)
+          const m = /^([\w-]+)=([\w-]+)$/.exec(String(w));
+          if (
+            m &&
+            (target?.states ?? []).includes(m[1]) &&
+            String(target?.stateValues?.[m[1]] ?? m[1]) === m[2]
+          )
+            out.push({part, state: m[1]});
+        }
+    }
+    return out;
+  };
+  /**
    * A color word's shade in the theme's own family for its hue: grey (and
    * gray, neutral) the theme's grays, which every theme has; another hue
    * its palette family when the theme's colors define one; at the stop
@@ -26891,9 +26940,10 @@ export function draftAnswer(ctx, env, question) {
                 (darkTwin(color, 4.5, ['--color-accent-muted']) ??
                 darkTwin(color, 4.5))
               : null;
-          // (Accent text on the muted accent fill in light mode, the color
-          // as said: measured and named when it reads under 4.5:1, never
-          // changed, as the color is the one asked.)
+          // (Accent text on the muted accent fill in light mode: the color
+          // as said stays wherever it reads; a part that draws it on that
+          // fill, where it reads under 4.5:1, takes the nearest shade of the
+          // same hue that reads there, in light mode.)
           const lightMuted = parseColor(
             String(current('--color-accent-muted', 'light') ?? ''),
           );
@@ -26906,12 +26956,23 @@ export function draftAnswer(ctx, env, question) {
             ratio(rgb, lightMuted) < 4.5
               ? ratio(rgb, lightMuted).toFixed(2)
               : null;
+          const shade =
+            mutedMiss && lightMuted && !holder
+              ? readableShade(color, lightMuted, 4.5)
+              : null;
+          const onFill = shade ? accentOnMuted() : [];
           const oneMode =
             !twin && !c.mode && modal && readable.length === 1 && !bothAsked
               ? readable[0]
               : null;
           return {
-            text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${twin ? `; on the dark page ${color} would read under 4.5:1, so the dark mode takes its twin as far off the dark page, ${twin}` : oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}${mutedMiss && oneMode !== 'dark' ? `; on the muted accent fill (an applied preset or a selected row) it reads ${mutedMiss}:1 in light mode, under 4.5:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable` : ''}`,
+            text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${twin ? `; on the dark page ${color} would read under 4.5:1, so the dark mode takes its twin as far off the dark page, ${twin}` : oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}${
+              mutedMiss && oneMode !== 'dark'
+                ? shade && onFill.length
+                  ? `; ${onFill.map(x => `${x.part} ${x.state}`).join(', ')} draws it on the muted accent fill, where ${color} reads ${mutedMiss}:1 in light mode, under 4.5:1: there it takes ${shade.c}, the nearest shade of the same hue, ${shade.r.toFixed(2)}:1`
+                  : `; on the muted accent fill (an applied preset or a selected row) it reads ${mutedMiss}:1 in light mode, under 4.5:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable`
+                : ''
+            }`,
             options: [
               [
                 set(
@@ -26919,6 +26980,15 @@ export function draftAnswer(ctx, env, question) {
                   twin ? `light-dark(${color}, ${twin})` : color,
                   twin ? {} : oneMode ? {mode: oneMode} : modeOf(c),
                 ),
+                ...(shade && oneMode !== 'dark'
+                  ? onFill.map(x =>
+                      set('--color-text-accent', shade.c, {
+                        on: x.part,
+                        state: x.state,
+                        mode: 'light',
+                      }),
+                    )
+                  : []),
               ],
             ],
           };
