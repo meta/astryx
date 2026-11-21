@@ -12,7 +12,7 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, cleanup, screen} from '@testing-library/react';
+import {render, cleanup, fireEvent, screen} from '@testing-library/react';
 import {act, Profiler, useRef, useState, type RefObject} from 'react';
 import {Popover} from './Popover';
 
@@ -170,7 +170,7 @@ describe('Popover children mode', () => {
 });
 
 describe('Popover trigger mode change', () => {
-  it('keeps the render-prop trigger as its anchor after children change from an element to a render function', () => {
+  it('opens anchored to the render-prop trigger after children change from an element to a render function', () => {
     let useRenderProp: () => void = () => {};
     function Parent() {
       const [isRenderProp, setIsRenderProp] = useState(false);
@@ -193,7 +193,12 @@ describe('Popover trigger mode change', () => {
 
     act(() => useRenderProp());
 
+    // A closed trigger names no anchor; the shown popover anchors to it.
     const trigger = screen.getByRole('button', {name: 'Render trigger'});
+    act(() => {
+      fireEvent.click(trigger);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(trigger.style.getPropertyValue('anchor-name')).toMatch(
       /^--astryx-layer-/,
     );
