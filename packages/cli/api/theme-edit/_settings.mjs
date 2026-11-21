@@ -8580,6 +8580,9 @@ export function compileTheme(ctx, data, base) {
     };
     /** Whether a part draws a focus ring itself, by its own rules, in whatever shape (a button's outline, a switch's track), but not a frame's ring for the control inside it (a card's), which is read for what it holds. @param {string} target */
     const drawsRing = target =>
+      // (An indicator drawn under a native input, a checkbox's box, rings
+      // where that input has focus: on an element of its own, around it.)
+      Boolean(ctx.C.MAP[target]?.underInput) ||
       Object.values(ctx.C.MAP[target]?.own ?? {}).some((/** @type {any} */ v) =>
         /** @type {string[]} */ (
           v?.tokens?.['--focus-outline-color'] ?? []
