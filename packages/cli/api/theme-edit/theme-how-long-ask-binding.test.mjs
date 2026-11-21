@@ -151,6 +151,34 @@ const ROWS = [
     {q: 'Card\nPadding: roomy\nRadius: large', never: /^corners large$/},
   ],
   [
+    'a heading with a colon keeps its labels',
+    {q: 'Cards:\nPadding: roomy\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a heading with a colon over one label keeps it',
+    {q: 'Card:\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a blank line under a heading keeps its labels',
+    {q: 'Card\n\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    "numbered labels under a heading stay the part's",
+    {q: 'Card\n1. Padding: roomy\n2. Radius: large', never: /^corners large$/},
+  ],
+  [
+    "a decimal in a part's sentence keeps its label",
+    {q: 'cards: 1.5px border, radius: large', never: /^corners large$/},
+  ],
+  [
+    "a decimal in a part's sentence keeps a spacing label",
+    {q: 'cards: 0.5rem gap, padding: roomy', never: /^spacing roomy$/},
+  ],
+  [
+    'a label after an earlier part sentence still sets its dial',
+    {q: 'soft shadows on cards. Radius: small.', has: ['corners small']},
+  ],
+  [
     "a label in a part's colon list stays the part's",
     {q: 'cards: white background, radius: large', never: /^corners large$/},
   ],
