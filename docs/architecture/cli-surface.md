@@ -87,13 +87,20 @@ rather than left to the command author.
    command tree, the answer reads other command lines' word orders (`add
 theme matcha` is `theme add matcha`) and the table of their words in
    `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
-   uses it and no word is a command or a command's plural. The answer only
+   uses it and no word is a command or a command's plural. A word that points
+   at nothing names the commands it is a typo of (one edit in a word of up to
+   four letters, two in a longer one, two swapped letters counting as one),
+   else `help`, which lists every command with what it does. Every help run
+   the answer names keeps the program options the reader typed (`--json`). A
+   word that names a script in the project's package.json names that
+   script's run first, with the project's package manager. The answer only
    suggests: it runs nothing and names no experimental command, except that a
    share word (`export`, `render`, `share`, `bundle`, `snapshot`,
    `standalone`) names `experimental export` under `spec:AST-017` FR27's
-   shareable-page exception, and a way-back word (`import`, `back`,
-   `restore`, `unrender`, `reverse`) names `experimental import` under the
-   same exception.
+   shareable-page exception, a way-back word (`import`, `back`, `restore`,
+   `unrender`, `reverse`) names `experimental import` under the same
+   exception, and where icon features are on, an icon word (`icon`, `icons`)
+   names `experimental icon` (`spec:AST-084` FR0).
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -167,6 +174,10 @@ and remains available through explicit Core package selection.
   command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
+  A hook whose doc lists its options as props prints that doc in the
+  component read's layout at each level, without an import line (the hook's
+  JSON names none); at `full` it prints each prop description whole and both
+  its description and its usage text.
   The detail level never changes a component read's JSON. A field shown in
   one section of the text projection is not repeated in another: a read of
   one family member prints its props once, under Props. The stdout of `astryx mcp` carries protocol messages only, and
@@ -504,7 +515,9 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   installed, or has more source files than `doctor` reads, the check does not
   run and says why, whatever props the pages give. When there is a candidate
   and Core's types or the files that augment Core cannot be read, it reports
-  no prop and says why. The warning names up to eight props, each with its
+  no prop and says why. Where installing a package fixes the reason (no
+  installed Core, no TypeScript it can use, React's types unread), the reason
+  names what to install. The warning names up to eight props, each with its
   file, line and component and the documented prop that has the same words
   when there is one, and counts the rest. It never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
@@ -958,11 +971,23 @@ non-interactive guarantee.
   `unknown-prop` warning of `astryx experimental export`: each prop name the
   page's own files give a Core component, read and judged as INV42 reads and
   judges it: with the docs and types of the Core the page finds installed,
-  read with the project's own TypeScript and React types; a page that finds
-  no installed Core, or a project without them, gets no judgment. Each
-  element gets one warning, and React's console line for a prop it names is
-  not printed as page output. Only the docs are read while every prop is
-  documented.
+  read with the project's own TypeScript and React types. When a prop the
+  docs leave out is a candidate and INV42 would say why it was not judged
+  (no installed Core, no TypeScript it can use, React's or Core's types or
+  the files that augment Core unread, another JSX runtime or a `css` prop,
+  more source files than are read), one `props-not-checked` warning gives
+  that reason and, where an install fixes it, what to install; outside a
+  project (`spec:AST-081` FR3) it gives the reason alone. A candidate
+  INV42 leaves unjudged without a reason (a `paths` mapping, a generic or
+  unreadable component, a file that finds no installed Core while the
+  page's other files do) gets no line. Each element gets one warning, and a
+  cut list of props names the command that lists the rest, with the command
+  name `spec:AST-081` FR5 picks for the folder and
+  `--package @astryxdesign/core` (`spec:AST-035` FR12), so an integration
+  that replaces the component does not answer it. React's console
+  line for a prop a warning names is dropped from the page output before it
+  is cut to its first lines, so it never hides a line the page printed
+  itself. Only the docs are read while every prop is documented.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
