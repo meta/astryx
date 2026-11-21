@@ -183,6 +183,11 @@ test('with a bottom divider a wrapped row keeps the indicator on its tab', async
     .toBe(true);
 });
 
+/** The page's record of what the toolbar's first frame paints. */
+type FirstFrameWindow = typeof window & {
+  firstFrame?: {indicatorBottom: number; tabBottom: number} | 'missing';
+};
+
 test('with a bottom divider a wrapped row paints its first frame with the indicator on its tab', async ({
   page,
 }) => {
@@ -191,9 +196,7 @@ test('with a bottom divider a wrapped row paints its first frame with the indica
   // delivery, between layout and paint, so it reads what the first frame
   // paints.
   await page.addInitScript(() => {
-    const frameWindow = window as typeof window & {
-      firstFrame?: {indicatorBottom: number; tabBottom: number} | 'missing';
-    };
+    const frameWindow = window as FirstFrameWindow;
     new MutationObserver((_, mutations) => {
       const row = document.querySelector('[role="toolbar"]');
       if (row == null) {
@@ -220,16 +223,16 @@ test('with a bottom divider a wrapped row paints its first frame with the indica
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-toolbar--with-center-tab-navigation&viewMode=story`,
   );
-  const firstFrame = await page
-    .waitForFunction(
-      () => (window as typeof window & {firstFrame?: unknown}).firstFrame,
-    )
-    .then(handle => handle.jsonValue());
-  expect(firstFrame).not.toBe('missing');
-  const {indicatorBottom, tabBottom} = firstFrame as {
-    indicatorBottom: number;
-    tabBottom: number;
-  };
+  await page.waitForFunction(
+    () => (window as FirstFrameWindow).firstFrame !== undefined,
+  );
+  const firstFrame = await page.evaluate(
+    () => (window as FirstFrameWindow).firstFrame,
+  );
+  if (firstFrame == null || firstFrame === 'missing') {
+    throw new Error('No visible indicator in the first frame');
+  }
+  const {indicatorBottom, tabBottom} = firstFrame;
   expect(Math.abs(indicatorBottom - tabBottom)).toBeLessThanOrEqual(2);
 });
 
