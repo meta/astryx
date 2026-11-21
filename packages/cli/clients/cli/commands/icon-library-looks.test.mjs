@@ -1836,12 +1836,12 @@ describe('the default variant on every path', () => {
   const NEW_SET_REFUSALS = /** @type {const} */ ({
     looks: [
       'ERR_INVALID_ARGUMENT',
-      'no look word of a library whose export names encode looks',
+      'no variant word of a library whose export names encode variants',
     ],
     refresh: ['ERR_INVALID_ARGUMENT', 'without `from`'],
     keep: [
       'ERR_INVALID_ARGUMENT',
-      'when the export names of its icons name no looks',
+      'when the export names of its icons name no variants',
     ],
     drop: ['ERR_INVALID_OPTION', '`variants` leave out the default variant'],
     name: ['ERR_INVALID_OPTION', 'declares no default'],
