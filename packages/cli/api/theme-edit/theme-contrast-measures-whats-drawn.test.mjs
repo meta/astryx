@@ -4,7 +4,8 @@
  * @file Contrast is measured on the color drawn under the text: text in a
  * see-through region (a top nav item in a translucent top bar) over the
  * region blended onto the page, never over the region's color taken as
- * solid.
+ * solid; and a fill color and its on-color set inside a part are measured as
+ * that part draws them.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -115,6 +116,76 @@ describe('contrast measures what is drawn', () => {
       expect(texts(white).some(p => /^text in button\b/.test(p.problem))).toBe(
         true,
       );
+    },
+    T,
+  );
+
+  it(
+    'measures a fill and its on-color as the part they are set on draws them',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('wa', {cwd, like: 'neutral'});
+      const set = await themeEditSet('wa', '--color-accent', '#ffffff', {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      const [problem, ...rest] = texts(set).filter(p =>
+        /^inside app-shell-header, --color-on-accent /.test(p.problem),
+      );
+      expect(rest).toEqual([]);
+      expect(problem.problem).toMatch(/is 1\.00:1 in light/);
+      expect(problem.fix).toMatch(
+        / set wa --color-on-accent '#[0-9a-f]{6}' --on app-shell-header --mode light$/,
+      );
+      const color = /'(#[0-9a-f]{6})'/.exec(String(problem.fix))?.[1];
+      await themeEditSet('wa', '--color-on-accent', String(color), {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      expect(
+        texts(await themeEditShow('wa', {cwd})).filter(p =>
+          /^inside app-shell-header/.test(p.problem),
+        ),
+      ).toEqual([]);
+      // A part that reads the on-color itself (a button: the text pairs
+      // measure it), or holds no part that reads it (a link), is left out.
+      for (const on of ['button', 'link', 'top-nav-item']) {
+        const r = await themeEditSet('wa', '--color-accent', '#ffffff', {
+          cwd,
+          on,
+          mode: 'light',
+        });
+        expect(
+          texts(r).filter(p => p.problem.startsWith(`inside ${on},`)),
+        ).toEqual([]);
+      }
+      // An on-color the theme sets on a part around it is what its readers
+      // draw: the pair in this part's scope alone says nothing.
+      await themeEditNew('wb', {cwd, like: 'neutral'});
+      await themeEditSet('wb', '--color-on-accent', '#000000', {
+        cwd,
+        on: 'app-shell',
+      });
+      const around = await themeEditSet('wb', '--color-accent', '#ffffff', {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      expect(
+        texts(around).filter(p => /^inside app-shell-header/.test(p.problem)),
+      ).toEqual([]);
+      // A see-through fill shows the part under it, not one known color.
+      const glass = await themeEditSet(
+        'wa',
+        '--color-accent',
+        'rgba(255,255,255,0.2)',
+        {cwd, on: 'app-shell-header', mode: 'light'},
+      );
+      expect(
+        texts(glass).filter(p => /^inside app-shell-header/.test(p.problem)),
+      ).toEqual([]);
     },
     T,
   );
