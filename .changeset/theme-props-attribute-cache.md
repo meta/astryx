@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[perf] `themeDataAttributes` iterates props with `for...in` instead of `Object.entries`, so it no longer allocates an entries array on each render.
+[perf] `themeDataAttributeName` returns a lowercase prop name without running its regular expression, and `themeDataAttributes` iterates props with `for...in` instead of allocating an `Object.entries` array on each render.
 
 @TbhVishal
