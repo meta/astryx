@@ -14,11 +14,15 @@
  * a reader has one. next.config.mjs traces it into the /mcp function.
  *
  * It installs outside the repository and then copies the folder in place: npm
- * refuses to run under the root manifest's `devEngines`. Before that, it calls
+ * refuses to run under the root manifest's `devEngines`. The install pins the
+ * registry dependencies to the versions the lockfile resolved (npm `overrides`,
+ * lockfile-overrides.mjs), so a release published moments earlier cannot break
+ * or change them; lockfile-overrides.mjs names the one nested case npm leaves
+ * to the registry, within the lockfile's range. Before that, it calls
  * every tool the folder's server lists, and fails unless each one answers for
  * the documented Core.
  *
- * @input the workspace CLI; the documented Core; the npm registry
+ * @input the workspace CLI; the documented Core; pnpm-lock.yaml; the npm registry
  * @output apps/docsite/.mcp-runtime
  * @position docsite build — run by `pnpm build` before `next build`
  */
@@ -29,6 +33,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {askMcpServer, RUNTIME_DIR} from '../src/lib/mcpBridge.mjs';
+import {lockfileOverrides, scopedOverrides} from './lockfile-overrides.mjs';
 import {resolveContentRoot} from './resolve-content-root.mjs';
 
 const DOCSITE_ROOT = path.resolve(
@@ -132,6 +137,24 @@ async function checkEveryTool(runtime, coreVersion) {
   return answeredBy;
 }
 
+/**
+ * The overrides that pin the packed packages' dependencies to this
+ * repository's lockfile. On `canary` the CLI and Core both come from this
+ * workspace, so the pins cover both. On `latest` Core is the published release,
+ * which this lockfile does not resolve, so the pins apply only inside the CLI's
+ * dependency tree and Core's dependencies resolve from the registry.
+ * @param {string} contentRoot the checkout the documented Core comes from
+ * @returns {Record<string, string | Record<string, unknown>>}
+ */
+function installOverrides(contentRoot) {
+  const lock = fs.readFileSync(path.join(REPO_ROOT, 'pnpm-lock.yaml'), 'utf8');
+  const cli = {path: 'packages/cli', name: '@astryxdesign/cli'};
+  const core = {path: 'packages/core', name: '@astryxdesign/core'};
+  if (path.resolve(contentRoot) === REPO_ROOT)
+    return lockfileOverrides(lock, [cli, core]);
+  return scopedOverrides(lockfileOverrides(lock, [cli]), cli.name);
+}
+
 /** Build the folder, check it, and move it into place. */
 async function main() {
   const {target, contentRoot} = resolveContentRoot();
@@ -168,7 +191,15 @@ async function main() {
 
     fs.writeFileSync(
       path.join(project, 'package.json'),
-      `${JSON.stringify({name: 'astryx-docs-mcp', private: true}, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          name: 'astryx-docs-mcp',
+          private: true,
+          overrides: installOverrides(contentRoot),
+        },
+        null,
+        2,
+      )}\n`,
     );
     execFileSync(
       'npm',

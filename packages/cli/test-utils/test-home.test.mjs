@@ -30,6 +30,11 @@ describe('the run home folder', () => {
     const tmp = path.join(os.tmpdir(), 'made-up-tmp');
     /** @type {Record<string, string | undefined>} */
     const env = {
+      PNPM_HOME: '/somewhere/else/.local/share/pnpm',
+      COREPACK_HOME: '/somewhere/else/.cache/node/corepack',
+      BUN_INSTALL: '/somewhere/else/.bun',
+      YARN_GLOBAL_FOLDER: '/somewhere/else/.yarn/global',
+      npm_config_global_folder: '/somewhere/else/.config/yarn/global',
       HOME: '/somewhere/else',
       USERPROFILE: '/somewhere/else',
       XDG_CACHE_HOME: '/somewhere/cache',
@@ -58,6 +63,16 @@ describe('the run home folder', () => {
     ]) {
       const rel = path.relative(home, String(env[key]));
       expect(rel.startsWith('..') || path.isAbsolute(rel)).toBe(false);
+    }
+    // Each takes its default under the moved home folder.
+    for (const key of [
+      'PNPM_HOME',
+      'COREPACK_HOME',
+      'BUN_INSTALL',
+      'YARN_GLOBAL_FOLDER',
+      'npm_config_global_folder',
+    ]) {
+      expect(env[key]).toBeUndefined();
     }
   });
 
