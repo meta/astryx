@@ -1936,3 +1936,21 @@ export async function readSkillPlaces(cwd) {
     computerSkill: fs.existsSync(computerSkillFile()),
   };
 }
+
+/**
+ * The contrast problems the app's editor themes keep as designed, read by
+ * the editor itself (each with whether it still covers a problem), before
+ * any theme is added to the app. The editor is loaded only when a folder at
+ * or above `cwd` holds a themes folder: most apps have none, and doctor
+ * stays quick.
+ * @param {string} cwd
+ */
+export async function editorKeptContrast(cwd) {
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'themes'))) {
+      const {editorKeptContrastAt} = await import('../theme-edit/_adapter.mjs');
+      return editorKeptContrastAt(cwd);
+    }
+    if (path.dirname(dir) === dir) return [];
+  }
+}

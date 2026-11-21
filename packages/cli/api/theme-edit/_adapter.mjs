@@ -96,6 +96,11 @@ import {
   folderIsEmpty,
   editorMadeFolder,
   loadTheme,
+  acceptedContrast,
+  contrastPlace,
+  contrastProblems,
+  resolvedTokens,
+  withAccepted,
   setAfterBuild,
   editedThemes,
   themeFiles,
@@ -998,6 +1003,57 @@ export function editorThemesAt(cwd) {
   } catch {
     return [];
   }
+}
+
+/**
+ * The contrast problems the editor themes of the app the folder `cwd` is in
+ * keep as designed, each with its theme, read by the editor's own reader,
+ * and whether it still covers a problem: a record whose colors changed
+ * since covers nothing (the editor's `show` lists that problem as open
+ * again). None when the folder is in no app or a theme cannot be read.
+ * @param {string} cwd
+ * @returns {Promise<Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean}>>}
+ */
+export async function editorKeptContrastAt(cwd) {
+  /** @type {Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean}>} */
+  const out = [];
+  try {
+    const root = projectRoot(cwd);
+    for (const slug of editedThemes(root)) {
+      try {
+        const data = loadTheme(root, slug);
+        const kept = acceptedContrast(data);
+        if (!kept.length) continue;
+        const ctx = await context(root);
+        const res = await resolvedTokens(ctx, slug);
+        const covered = withAccepted(
+          data,
+          await contrastProblems(ctx, data, res),
+          res,
+        )
+          .filter(p => p.accepted)
+          .map(p => contrastPlace(p));
+        for (const a of kept)
+          out.push({
+            slug,
+            ...a,
+            inEffect: covered.some(
+              at =>
+                at != null &&
+                at.part === a.part &&
+                at.ground === a.ground &&
+                at.when === (a.when ?? '') &&
+                at.mode === a.mode,
+            ),
+          });
+      } catch {
+        // A theme that cannot be read keeps nothing doctor can list.
+      }
+    }
+  } catch {
+    // A folder in no app has no editor themes.
+  }
+  return out;
 }
 
 /**

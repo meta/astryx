@@ -96,6 +96,7 @@ import {
 } from '../../foundation/env/semver.mjs';
 import {
   checkAppThemes,
+  acceptedContrastCheck,
   checkThemes,
   moduleSpecifiers,
   stringValues,
@@ -151,6 +152,7 @@ import {
   doctorStylesheetAtRules,
   builtProjectRoot,
   readSkillPlaces,
+  editorKeptContrast,
 } from './_adapter.mjs';
 import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
@@ -3627,6 +3629,8 @@ export async function runChecks(options = {}) {
       );
       if (readsCore) checks.push(checkThemes(cwd, appThemeChecks, wiring));
       checks.push(...withProviderWiring(appThemeChecks, wiring));
+      const kept = acceptedContrastCheck(await editorKeptContrast(cwd));
+      if (kept) checks.push(kept);
       checks.push(await checkConfig(ctx));
     }
   }
