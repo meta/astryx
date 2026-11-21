@@ -82,7 +82,7 @@ import {
 import type {SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {createDevWarnings} from '../utils/devWarning';
+import {createDevWarnings, devMissingCallback} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
@@ -90,13 +90,23 @@ import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
+  cancelLayerFocus,
   focusForLastInput,
-  prepareFocusReturnOnRemoval,
-  returnFocusForLastInput,
+  focusForLastInputTemporarily,
+  isLayerFocusStranded,
+  prepareFocusRepairOnRemoval,
+  restoreLayerFocus,
+  trackLayerFocus,
+  type LayerFocusRecord,
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
+import {isHTMLElement} from '../utils/nodeType';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
@@ -223,6 +233,16 @@ const styles = stylex.create({
     // that sets no color of its own (a selected nav row) needs this.
     color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dialog-radius-top-left': 'initial',
+    '--_dialog-radius-top-right': 'initial',
+    '--_dialog-radius-bottom-right': 'initial',
+    '--_dialog-radius-bottom-left': 'initial',
+    '--_dialog-radius-start-start': 'initial',
+    '--_dialog-radius-start-end': 'initial',
+    '--_dialog-radius-end-start': 'initial',
+    '--_dialog-radius-end-end': 'initial',
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
     display: 'none',
@@ -313,15 +333,34 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
+  // A full-bleed child takes the dialog's radius, each corner as drawn.
   innerCorners: {
-    '--_container-corner-block-start': 'var(--_dialog-radius)',
-    '--_container-corner-block-end': 'var(--_dialog-radius)',
+    '--_container-host-radius': 'var(--_dialog-radius)',
+    '--_container-host-radius-top-left': 'var(--_dialog-radius-top-left)',
+    '--_container-host-radius-top-right': 'var(--_dialog-radius-top-right)',
+    '--_container-host-radius-bottom-right':
+      'var(--_dialog-radius-bottom-right)',
+    '--_container-host-radius-bottom-left': 'var(--_dialog-radius-bottom-left)',
+    '--_container-host-radius-start-start': 'var(--_dialog-radius-start-start)',
+    '--_container-host-radius-start-end': 'var(--_dialog-radius-start-end)',
+    '--_container-host-radius-end-start': 'var(--_dialog-radius-end-start)',
+    '--_container-host-radius-end-end': 'var(--_dialog-radius-end-end)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
     padding: 0,
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dialog-radius-top-left': 'initial',
+    '--_dialog-radius-top-right': 'initial',
+    '--_dialog-radius-bottom-right': 'initial',
+    '--_dialog-radius-bottom-left': 'initial',
+    '--_dialog-radius-start-start': 'initial',
+    '--_dialog-radius-start-end': 'initial',
+    '--_dialog-radius-end-start': 'initial',
+    '--_dialog-radius-end-end': 'initial',
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
     // Forced colors removes box-shadow, which is this surface's only edge.
@@ -536,6 +575,16 @@ export function Dialog({
   ref,
   ...props
 }: DialogProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'Dialog',
+      'onOpenChange',
+      'is required to close the dialog, for example onOpenChange={setIsOpen}. Dialog has no onClose prop.',
+    );
+  }
   // A modal dialog open on the server renders closed until hydration, and
   // opens in the render after it, the first one that can call showModal(): a
   // <dialog> painted open with aria-modal before it is modal claims a state it
@@ -595,13 +644,27 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  // A composed header whose title renders after the dialog mounted asks the
-  // dialog to look for the title again.
-  const syncDefaultName = useCallback(() => {
-    if (dialogRef.current != null) {
-      attachDialog(dialogRef.current);
-    }
-  }, [attachDialog]);
+  // A header title that mounts or unmounts after the dialog mounted reports
+  // it, so the default name follows the title. A composed header with no
+  // report asks the dialog to look for the title again.
+  const syncDefaultName = useCallback(
+    (isTitleMounted?: boolean) => {
+      const node = dialogRef.current;
+      if (node == null || hasConsumerName) {
+        return;
+      }
+      if (isTitleMounted === undefined) {
+        attachDialog(node);
+      } else if (isTitleMounted) {
+        node.setAttribute('aria-labelledby', titleId);
+      } else if (node.getAttribute('aria-labelledby') === titleId) {
+        // Only the default name goes. A report from a header that rendered
+        // before a caller name arrived leaves that name.
+        node.removeAttribute('aria-labelledby');
+      }
+    },
+    [attachDialog, hasConsumerName, titleId],
+  );
 
   const dialogContextValue = useMemo(
     () => ({isInline, titleId, syncDefaultName}),
@@ -619,6 +682,7 @@ export function Dialog({
   // Capture the element that was focused when the dialog opened, for
   // directional animation origin and focus restoration on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
+  const focusRecordRef = useRef<LayerFocusRecord | null>(null);
 
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,
@@ -646,6 +710,19 @@ export function Dialog({
       const dialogDocument = dialogRef.current?.ownerDocument ?? document;
       const doc = dialogDocument.hasFocus() ? dialogDocument : document;
       triggerElementRef.current = doc.activeElement as HTMLElement | null;
+      if (focusRecordRef.current != null) {
+        cancelLayerFocus(focusRecordRef.current);
+      }
+      const opener = triggerElementRef.current;
+      focusRecordRef.current = trackLayerFocus({
+        getLayer: () => dialogRef.current,
+        opener: isHTMLElement(opener) ? opener : null,
+        doc,
+        isFocusMovedInOnOpen: true,
+        // The ring follows the last input in the opener's own document.
+        focus: element =>
+          focusForLastInputTemporarily(element, {preventScroll: true}),
+      });
     }
     wasOpenRef.current = isOpenNow;
   }, [isOpen, isInline]);
@@ -694,6 +771,13 @@ export function Dialog({
           ),
         ];
         for (const target of autofocusTargets) {
+          // A request belongs to its nearest dialog. One inside a nested
+          // dialog is that dialog's, open or closed: a closed one can still be
+          // laid out (a display utility class beats its closed state), and
+          // focus would then land in a dialog nobody can see.
+          if (target.closest('dialog') !== dialog) {
+            continue;
+          }
           // Only hiding inside the dialog makes a request ineligible: the
           // modal dialog is not part of an inert region around it.
           const hiddenAncestor = target.closest(
@@ -719,14 +803,20 @@ export function Dialog({
       // unmount.
       return holdEntranceInput(dialog) ?? undefined;
     } else {
+      // The page stays inert until `close()`, so focus can return only after
+      // it. Whether focus would be stranded is read first. The browser's own
+      // restore reaches only an opener that is still there, with a ring
+      // whatever the last input was; the shared return then picks the opener
+      // or its nearest stand-in, with the ring the last input calls for.
+      const record = focusRecordRef.current;
+      focusRecordRef.current = null;
+      const wasStranded = record != null && isLayerFocusStranded(record);
       if (dialog.open) {
         dialog.close();
       }
-      // Return focus to the element that opened the dialog, with the ring
-      // the last input in that element's own document calls for.
-      const trigger = triggerElementRef.current;
-      if (trigger) {
-        returnFocusForLastInput(trigger);
+      if (record != null) {
+        restoreLayerFocus(record, {wasStranded});
+        cancelLayerFocus(record);
       }
       triggerElementRef.current = null;
     }
@@ -740,8 +830,23 @@ export function Dialog({
     if (isInline || dialog == null) {
       return;
     }
-    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
-    return () => returnFocusOnRemoval(triggerElementRef.current);
+    const repairOnRemoval = prepareFocusRepairOnRemoval(dialog);
+    return () => {
+      const record = focusRecordRef.current;
+      if (record == null) {
+        return;
+      }
+      repairOnRemoval(() => {
+        restoreLayerFocus(record, {warnsWhenNothingQualifies: false});
+      });
+      // After the repair's own check: a dialog StrictMode only pretended to
+      // unmount is still in the document and keeps its record.
+      queueMicrotask(() => {
+        if (!dialog.isConnected) {
+          cancelLayerFocus(record);
+        }
+      });
+    };
   }, [isInline]);
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so
@@ -857,6 +962,7 @@ export function Dialog({
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
         styles.innerCorners,
+        containerCornerStyles.fromHostRadius,
         containerCornerStyles.publish,
       )}>
       <DialogContext value={dialogContextValue}>

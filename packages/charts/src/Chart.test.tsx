@@ -15,7 +15,7 @@ import {createRef} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, screen, act, within, fireEvent} from '@testing-library/react';
 import {Chart} from './Chart';
-import {bar, line} from './marks';
+import {bar, dot, line} from './marks';
 import {computeLayout} from './layout';
 import {InternationalizationProvider} from '@astryxdesign/core';
 
@@ -134,6 +134,31 @@ describe('Chart accessible name', () => {
         200,
       );
     }
+  });
+
+  it('insets a linear x range by the widest mark overhang', () => {
+    const data = [
+      {i: 0, v: 1},
+      {i: 13, v: 2},
+    ];
+    const rangeFor = (series: Parameters<typeof computeLayout>[0]['series']) =>
+      (
+        computeLayout({
+          data,
+          xKey: 'i',
+          series,
+          width: 600,
+          height: 300,
+          xDomain: [0, 13],
+        }).xScale as {range(): number[]}
+      ).range();
+    // Without dots nothing draws past the end points.
+    expect(rangeFor([line('v')])).toEqual([0, 600]);
+    // End dots draw whole inside the clipped plot; the domain stays exact.
+    expect(rangeFor([line('v', {dots: true})])).toEqual([3, 597]);
+    expect(rangeFor([line('v', {dots: true}), dot('v', {radius: 6})])).toEqual([
+      6, 594,
+    ]);
   });
 
   it('prefers the title prop as the accessible name', () => {

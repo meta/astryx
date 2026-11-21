@@ -6,8 +6,9 @@
  * @input A linked fixture's path and the bundled theme names it needs.
  * @output An empty string, or why a theme could not be installed.
  * @position Test support. A checkout that built only Core has no theme
- *   `dist`, and a package build that is still running has a module without
- *   its icon registry: the theme is then built as its package build's theme
+ *   `dist`, a package build that is still running has a module without
+ *   its icon registry, and a build older than the theme's source shows the
+ *   theme as it was: the theme is then built as its package build's theme
  *   step does, from its own source with its own installed packages, once for
  *   the run (in the run's folder the node project's global setup provides,
  *   `astryxBaseThemesDir`), and every fixture links that build. Out of a run
@@ -20,6 +21,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {inject} from 'vitest';
 import {themeBuild} from '../api/theme/build/build.mjs';
+import {coreBuildIsStale} from '../clients/cli/commands/ensure-core-built.mjs';
 
 const THEMES = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -53,14 +55,17 @@ function ownScope(cwd) {
 }
 
 /**
- * Whether the theme package's build is complete: its module, and the icon
- * registry the module imports, which a later build step writes.
+ * Whether the theme package's build is complete and current: its module,
+ * the icon registry the module imports (a later build step writes it), and
+ * no source file newer than the module. A build older than its source
+ * shows the theme as it was, so the theme is built again from its source.
  * @param {string} own
  * @param {string} like
  */
 function builtWhole(own, like) {
   const module = path.join(own, 'dist', `${like}.js`);
   if (!fs.existsSync(module)) return false;
+  if (coreBuildIsStale(module, [path.join(own, 'src')])) return false;
   return (
     !/from ["']\.\/icons\.mjs["']/.test(fs.readFileSync(module, 'utf8')) ||
     fs.existsSync(path.join(own, 'dist', 'icons.mjs'))

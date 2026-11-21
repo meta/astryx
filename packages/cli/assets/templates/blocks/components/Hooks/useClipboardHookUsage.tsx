@@ -15,7 +15,7 @@ export default function UseClipboardHookUsage() {
   const {copy, isCopied} = useClipboard({announce: 'Link copied'});
 
   return (
-    <Card width={420} padding={4}>
+    <Card width={420} maxWidth="100%" padding={4}>
       <VStack gap={3}>
         <Text type="body" weight="bold">
           Share

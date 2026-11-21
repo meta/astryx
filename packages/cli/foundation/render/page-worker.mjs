@@ -46,12 +46,18 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
+import {NOT_AN_IMAGE, showsImage} from './image-attributes.mjs';
+import {parseSrcset} from './srcset.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
+import {packageResolveHooks} from './package-resolve-hooks.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports, importUses} from './value-uses.mjs';
+import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs';
+import {corePropUsesOf} from '../discovery/core-props.mjs';
+import {writtenValue} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -85,8 +91,17 @@ for (const level of /** @type {const} */ (['log', 'info', 'warn', 'error', 'debu
 
 const requireFromCli = createRequire(import.meta.url);
 const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'));
+/**
+ * The class-name prefix of the page's own compiled styles. Core's built sheet
+ * uses StyleX's default, `x`. A page rule with the same declaration as a Core
+ * rule would otherwise get the same class, unlayered, and override Core's
+ * layered rules on Core's own elements. With its own prefix the page's rules
+ * apply to the page's elements only, as in an app that @astryxdesign/build
+ * compiles with one prefix for Astryx and another for product files.
+ */
+const PAGE_CLASS_PREFIX = 'p';
 
-/** StyleX rules collected from every local module the page loads. */
+/** StyleX rules collected from every local module the page loads, and from each package file that holds StyleX source. */
 /** @type {unknown[]} */
 const stylexRules = [];
 /** CSS text of local stylesheets the page imports, in load order. */
@@ -109,6 +124,54 @@ const outsideFiles = [];
 const packageCss = [];
 /** Sass and Less stylesheets the page imports, which a render cannot compile. @type {string[]} */
 const skippedCss = [];
+/** https image addresses the page's own files name as literals, which the first paint may not show. @type {Set<string>} */
+const remoteLiterals = new Set();
+/**
+ * Of those, the addresses that count only because a name says they are
+ * images (`imageUploadUrl`, an object's `src`), never by their path or an
+ * element that shows them: such a name can hold an API's or a player's
+ * address. @type {Set<string>}
+ */
+const namedOnlyLiterals = new Set();
+/** The addresses that count by their path or an element that shows them. @type {Set<string>} */
+const placedLiterals = new Set();
+/**
+ * Record an https literal the render fetches as an image. A `srcSet` value
+ * lists candidates (`a.png 1x, a@2x.png 2x`): each https one is an image.
+ * @param {string} value
+ * @param {{srcset: boolean, byName: boolean} | null} why see imageLiteralKind
+ */
+function noteRemoteLiteral(value, why) {
+  if (!why) return;
+  const urls = why.srcset ? srcsetCandidates(value).filter(url => /^https:\/\//i.test(url) && !namesNoImage(url)) : [value];
+  for (const url of urls) {
+    remoteLiterals.add(url);
+    (why.byName ? namedOnlyLiterals : placedLiterals).add(url);
+  }
+}
+
+/**
+ * Whether an address's path names a type that is never an image.
+ * @param {string} url
+ */
+function namesNoImage(url) {
+  try {
+    return NOT_AN_IMAGE.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The addresses a `srcset` value lists, one per candidate.
+ * @param {string} value
+ * @returns {string[]}
+ */
+function srcsetCandidates(value) {
+  return parseSrcset(value).map(candidate => candidate.url);
+}
+/** https image addresses the page builds in code where an image goes, which a render cannot carry. @type {{text: string, file: string, line: number}[]} */
+const builtRemote = [];
 /** Local files inlined from asset imports. */
 /** @type {Set<string>} */
 const assetsInlined = new Set();
@@ -116,11 +179,26 @@ const assetsInlined = new Set();
 /** @type {Set<string>} */
 const packages = new Set();
 /** Static JSX text per element, for the dropped-children warning. */
-/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number}[]} */
+/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number, chain: {component: string, line: number, from: string | null, name: string}[]}[]} */
 const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/**
+ * What a page's own file certainly gives a Core component's prop
+ * (`<Button variant="danger">`, each branch of
+ * `variant={busy ? 'ghost' : 'danger'}`, `status="error"`), for the
+ * unknown-prop-value warning.
+ * @type {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]}
+ */
+const propValues = [];
+/**
+ * Each prop a page's own file gives a Core component by name, for the
+ * unknown-prop warning; a file that compiles its JSX with another runtime
+ * gives none.
+ * @type {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]}
+ */
+const propNames = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -196,6 +274,23 @@ const jsxName = node => {
       : '';
 };
 
+/**
+ * The module a JSX component name is imported from, and the name that module
+ * exports it under; `from` is null for a component the page defines itself.
+ * @param {any} p a JSX element path
+ * @param {string} name the element's name as the page writes it
+ * @returns {{from: string | null, name: string}}
+ */
+const importOf = (p, name) => {
+  const binding = p.scope.getBinding(name);
+  if (binding?.kind !== 'module') return {from: null, name};
+  const spec = binding.path.node;
+  return {
+    from: binding.path.parent.source.value,
+    name: spec.type === 'ImportSpecifier' ? (spec.imported.name ?? spec.imported.value) : name,
+  };
+};
+
 /** @type {Record<string, string>} */
 const ENTITIES = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
@@ -227,6 +322,82 @@ const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
  * @param {string} file */
 const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
+
+/**
+ * The real folders of the packages that a `node_modules` folder links to
+ * inside the folder whose modules the page carries (`npm link`, a `file:`
+ * dependency, a workspace package). Node loads such a package's modules by
+ * their real path, so they read as the page's own. They compile as the
+ * page's own do, but the file carries only what the page reaches by a path
+ * (see dropLinkedPackageFiles), because the page imports the package by its
+ * name. The search covers each `node_modules` folder that Node reads for the
+ * page's imports, from the page's folder up, and the `node_modules` folders
+ * of each linked package and of the folders above it, as a workspace links
+ * one package into another. A link to a folder that holds the page is not a
+ * package of the page's. Empty when no link leads into the carried folder.
+ * @returns {string[]} each folder, with a trailing separator
+ */
+function linkedPackageRoots() {
+  /** @type {Set<string>} */
+  const roots = new Set();
+  /** @type {Set<string>} */
+  const scanned = new Set();
+  /** @type {string[]} */
+  const found = [];
+  /** @param {string} link */
+  const addIfLinkedIn = link => {
+    let real;
+    try {
+      if (!fs.lstatSync(link).isSymbolicLink()) return;
+      real = fs.realpathSync(link);
+    } catch {
+      return;
+    }
+    const folder = real + path.sep;
+    if (isLocal(folder) && !entry.startsWith(folder) && !roots.has(folder)) {
+      roots.add(folder);
+      found.push(real);
+    }
+  };
+  /** Read the links in `dir`'s `node_modules` folder and in those above it, up to `top`. @param {string} dir @param {string | null} top */
+  const scanUp = (dir, top) => {
+    for (let at = dir; ; at = path.dirname(at)) {
+      if (!scanned.has(at)) {
+        scanned.add(at);
+        const modules = path.join(at, 'node_modules');
+        /** @type {string[]} */
+        let names = [];
+        try {
+          names = fs.readdirSync(modules);
+        } catch {
+          // No node_modules folder here.
+        }
+        for (const name of names) {
+          const link = path.join(modules, name);
+          if (!name.startsWith('@')) {
+            addIfLinkedIn(link);
+            continue;
+          }
+          try {
+            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped));
+          } catch {
+            // A scope that cannot be read holds no package that Node can load.
+          }
+        }
+      }
+      if (at === top || path.dirname(at) === at) break;
+    }
+  };
+  scanUp(path.dirname(entry), null);
+  // A linked package resolves its own imports from its folder up.
+  for (let next = found.shift(); next !== undefined; next = found.shift()) scanUp(next, scope);
+  return [...roots];
+}
+
+const LINKED_ROOTS = linkedPackageRoots();
+
+/** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
+const inLinkedPackage = file => LINKED_ROOTS.some(root => file.startsWith(root));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -462,6 +633,49 @@ async function drawCharts(markup, Page) {
 }
 
 /**
+ * The markup of a part's open layers. A layer opened from inside another
+ * (its opener, the control naming it in aria-controls, sits in that layer:
+ * a submenu's flyout) is drawn once, beside the layer it opens from, in a
+ * row with it, as a browser places it; never again inside that layer, where
+ * the document holds it too.
+ * @param {any[]} open the open layers, in the order they opened
+ * @returns {string}
+ */
+function nestedLayers(open) {
+  /** @param {any} layer */
+  const parentOf = layer => {
+    const ids = new Set(
+      [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean),
+    );
+    return (
+      open.find(
+        other =>
+          other !== layer &&
+          !layer.contains(other) &&
+          [...other.querySelectorAll('[aria-controls]')].some(c =>
+            ids.has(c.getAttribute('aria-controls')),
+          ),
+      ) ?? null
+    );
+  };
+  const parents = new Map(open.map(layer => [layer, parentOf(layer)]));
+  /** @param {any} layer @returns {string} */
+  const draw = layer => {
+    const kids = open.filter(o => parents.get(o) === layer);
+    if (!kids.length) return layer.outerHTML;
+    const own = layer.cloneNode(true);
+    for (const inner of own.querySelectorAll('[data-astryx-layer-root]'))
+      inner.remove();
+    return `<div data-astryx-layer-nest="">${own.outerHTML}${kids.map(draw).join('')}</div>`;
+  };
+  return open
+    .filter(layer => !parents.get(layer))
+    .map(draw)
+    .join('');
+}
+
+
+/**
  * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
  * as nothing when nothing opens), or `mounted`, as the browser shows the part
  * once it runs, nothing opened.
@@ -495,6 +709,26 @@ async function withLoadDocument(fn) {
     else delete g.window;
     if (had.document) Object.defineProperty(g, 'document', had.document);
     else delete g.document;
+  }
+}
+
+/**
+ * Run `fn` with console.timeStamp hidden. A development build of React DOM
+ * decides as it loads whether to log every render to the Performance panel
+ * (console.timeStamp and performance.measure), and logs only when both are
+ * there. The worker has no Performance panel, and Node copies the props a
+ * logged re-render changed into its user timing buffer: a page of four
+ * charts of 50,000 points each spent most of its drawing time there.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withoutRenderTimings(fn) {
+  const had = Object.getOwnPropertyDescriptor(console, 'timeStamp');
+  /** @type {any} */ (console).timeStamp = undefined;
+  try {
+    await fn();
+  } finally {
+    if (had) Object.defineProperty(console, 'timeStamp', had);
+    else delete (/** @type {any} */ (console)).timeStamp;
   }
 }
 
@@ -545,10 +779,12 @@ async function drawLayers(markup, server) {
           );
           if (open.length) {
             // The part as drawn, then each overlay open now, after it; never a
-            // closed one, nor the markers that place them.
+            // closed one, nor the markers that place them. A layer opened from
+            // inside another (a submenu's flyout) is drawn beside the layer it
+            // opens from, as a browser places it.
             const part = host.cloneNode(true);
             for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
-            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + nestedLayers(open);
           }
         }
       } catch {
@@ -618,7 +854,11 @@ async function drawOpenLayers(elements, React) {
       flushSync(() => root.render(createElement(Alone, null, element)));
       // (A part that opens nothing on a press and holds a layer, a context
       // menu's area, is right-clicked, as one drawn in its own place is.)
-      layers.push(...(await openLayerMarkup(host, flushSync)));
+      // A layer opened from inside another is drawn beside it (nestedLayers).
+      const box = g.document.createElement('div');
+      box.innerHTML = (await openLayerMarkup(host, flushSync)).join('');
+      const drawn = nestedLayers([...box.children]);
+      if (drawn) layers.push(drawn);
     } catch {
       // A part that cannot be drawn there adds no overlays.
     }
@@ -634,35 +874,285 @@ async function drawOpenLayers(elements, React) {
 
 /**
  * Babel plugin: a bare import that a path alias places loads from that file,
- * as in TypeScript, before any installed copy. An import the aliases do not
- * place is left alone, so an installed package loads. It runs on the page's
+ * as in TypeScript, before any installed copy. A relative `.js`-family import
+ * that names no file loads the TypeScript source it stands for (`./fmt.js`
+ * for fmt.ts). Any other import is left alone, so an installed package
+ * loads. It runs on the page's
  * own files, before {@link pagePlugin}, and on every module the page loads
  * from outside them and outside `node_modules` (a sibling package's source,
  * say).
  */
 function aliasPlugin() {
   return () => {
-    /** @param {any} node a string literal to point at the file an alias places */
-    const point = node => {
+    /**
+     * Point a string literal at the file an alias places, or at the
+     * TypeScript source a relative `.js`-family name stands for when no file
+     * has that name (`./fmt.js` for fmt.ts), as TypeScript and bundlers read
+     * it.
+     * @param {any} node
+     * @param {string} from the importing file
+     */
+    const point = (node, from) => {
       if (node?.type !== 'StringLiteral') return;
       const file = resolvePath(PATHS, node.value);
-      if (file) node.value = file;
+      if (file) {
+        node.value = file;
+        return;
+      }
+      const source = from ? typeScriptSourceOf(node.value, from) : null;
+      if (source) node.value = source;
     };
     return {
       visitor: {
-        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
-          point(p.node.source);
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
-        CallExpression(/** @type {any} */ p) {
+        CallExpression(/** @type {any} */ p, /** @type {any} */ state) {
           const callee = p.node.callee;
-          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require'))
+            point(p.node.arguments?.[0], state.filename);
         },
-        ImportExpression(/** @type {any} */ p) {
-          point(p.node.source);
+        ImportExpression(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
       },
     };
   };
+}
+
+/** An image file's extension at the end of an address's path. */
+const IMAGE_PATH = /\.(png|jpe?g|gif|webp|avif|svg|ico)$/i;
+
+/** The words a property or attribute name uses for an image. */
+const IMAGE_WORDS = new Set([
+  'avatar',
+  'image',
+  'img',
+  'photo',
+  'picture',
+  'thumbnail',
+  'thumb',
+  'logo',
+  'icon',
+  'cover',
+  'banner',
+  'poster',
+  'background',
+]);
+
+/**
+ * Whether a property or attribute name names an image: one of its words
+ * (`avatarUrl`, `cover_image`, `hero-photos`) is an image word, singular or
+ * plural. A word that only holds one (`logoutUrl`, `discoverUrl`) does not.
+ * @param {string} name
+ */
+function namesImage(name) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .some(word => {
+      const lower = word.toLowerCase();
+      return IMAGE_WORDS.has(lower) || (lower.endsWith('s') && IMAGE_WORDS.has(lower.slice(0, -1)));
+    });
+}
+
+/** The attributes where JSX puts an image's address. */
+const SRC_ATTR = /^(src|srcset|poster)$/i;
+
+/** The attributes and properties where a page puts a link's address. */
+const LINK_ATTR = /^(href|xlinkHref)$/i;
+
+/**
+ * The name a value is given, through the expressions that only choose or
+ * wrap it (`a ? x : y`, `x ?? y`, `x as string`): the key of the object
+ * property it is the value of, or the JSX attribute it is in.
+ * @param {any} p a path to the value
+ * @returns {{name: string, jsx: boolean, element?: string | null} | null}
+ *   `element`: the JSX element's name, for an attribute
+ */
+function nameOfValue(p) {
+  let at = p;
+  while (
+    at.parentPath &&
+    (at.parentPath.isConditionalExpression() ||
+      at.parentPath.isLogicalExpression() ||
+      at.parentPath.isParenthesizedExpression?.() ||
+      at.parentPath.isTSAsExpression?.() ||
+      at.parentPath.isTSSatisfiesExpression?.() ||
+      at.parentPath.isJSXExpressionContainer())
+  ) {
+    if (at.parentPath.isConditionalExpression() && at.parentPath.node.test === at.node) return null;
+    at = at.parentPath;
+  }
+  const holder = at.parentPath;
+  if (!holder) return null;
+  if (holder.isJSXAttribute() && holder.node.value === at.node) {
+    const n = holder.node.name;
+    const tag = holder.parentPath?.node?.name;
+    return {
+      name: n.type === 'JSXNamespacedName' ? n.name.name : n.name,
+      jsx: true,
+      element: tag?.type === 'JSXIdentifier' ? tag.name : null,
+    };
+  }
+  if (holder.isObjectProperty() && holder.node.value === at.node && !holder.node.computed) {
+    const k = holder.node.key;
+    const name = k.type === 'Identifier' ? k.name : k.type === 'StringLiteral' ? k.value : null;
+    return name === null ? null : {name, jsx: false};
+  }
+  return null;
+}
+
+/**
+ * What the place a value is given says about it: `shown` where an HTML
+ * element shows an image from it (showsImage), `name` where only a name
+ * says it is an image (a component's or an object's `src`, `srcSet` or
+ * `poster`, or a name with an image word), `other` at an HTML element's
+ * `src`, `srcset` or `poster` that shows no image (an `<iframe>`'s or a
+ * `<video>`'s `src`), and null where nothing says.
+ * @param {{name: string, jsx: boolean, element?: string | null} | null} named
+ * @returns {'shown' | 'name' | 'other' | null}
+ */
+function imagePlace(named) {
+  if (!named) return null;
+  if (named.jsx && named.element && /^[a-z]/.test(named.element) && SRC_ATTR.test(named.name)) {
+    return showsImage(named.element, named.name.toLowerCase()) ? 'shown' : 'other';
+  }
+  return SRC_ATTR.test(named.name) || namesImage(named.name) ? 'name' : null;
+}
+
+/**
+ * Where a value the page writes in its code goes: the place it is given, or,
+ * for a variable's value, the place a read of the variable gives it
+ * (`const hero = '…'` with `<img src={hero}>`). A read where an element
+ * shows it wins over one where only a name says so.
+ * @param {any} p a path to the value
+ * @returns {{place: 'shown' | 'name' | 'other' | null, srcset: boolean}}
+ *   `srcset` when that place is a `srcset`, whose candidates are the images
+ */
+function placeOf(p) {
+  const own = nameOfValue(p);
+  const ownPlace = imagePlace(own);
+  if (own && ownPlace) return {place: ownPlace, srcset: /^srcset$/i.test(own.name)};
+  const reads = readsOf(p).map(ref => {
+    const named = nameOfValue(ref);
+    return {place: imagePlace(named), srcset: Boolean(named && /^srcset$/i.test(named.name))};
+  });
+  return (
+    reads.find(read => read.place === 'shown') ??
+    reads.find(read => read.place === 'name') ??
+    reads.find(read => read.place === 'other') ?? {place: null, srcset: false}
+  );
+}
+
+/**
+ * Whether a literal is the value of a variable that the page uses as a
+ * link's address (`const full = 'https://…/a.png'` with `<a href={full}>`).
+ * @param {any} p a path to the literal
+ */
+function reachesLink(p) {
+  return readsOf(p).some(ref => {
+    const named = nameOfValue(ref);
+    return Boolean(named && LINK_ATTR.test(named.name));
+  });
+}
+
+/**
+ * The reads of the variable a literal is the value of (`const full = '…'`),
+ * through the expressions that only choose or wrap it; none when the literal
+ * is not a variable's value.
+ * @param {any} p a path to the literal
+ * @returns {any[]}
+ */
+function readsOf(p) {
+  let at = p;
+  while (
+    at.parentPath &&
+    (at.parentPath.isConditionalExpression() ||
+      at.parentPath.isLogicalExpression() ||
+      at.parentPath.isParenthesizedExpression?.() ||
+      at.parentPath.isTSAsExpression?.() ||
+      at.parentPath.isTSSatisfiesExpression?.())
+  ) {
+    at = at.parentPath;
+  }
+  const declarator = at.parentPath;
+  if (!declarator?.isVariableDeclarator() || declarator.node.init !== at.node) return [];
+  const id = declarator.node.id;
+  if (id.type !== 'Identifier') return [];
+  return declarator.scope.getBinding(id.name)?.referencePaths ?? [];
+}
+
+/**
+ * The address a template or a `+` chain builds, with each value it puts in
+ * written as `x`, so its fixed parts read as an address.
+ * @param {any} node
+ * @returns {string}
+ */
+function builtSkeleton(node) {
+  if (node.type === 'StringLiteral') return node.value;
+  if (node.type === 'TemplateLiteral') return node.quasis.map((/** @type {any} */ q) => q.value.cooked ?? '').join('x');
+  if (node.type === 'BinaryExpression' && node.operator === '+') return builtSkeleton(node.left) + builtSkeleton(node.right);
+  return 'x';
+}
+
+/**
+ * Why an https address the page writes as a literal is an image the
+ * render fetches: its path ends in an image extension; an HTML element shows
+ * it (showsImage), where the literal is written or where the page reads the
+ * variable it is the value of; or a name says it is one: a component's or an
+ * object's `src`, `srcSet` or `poster`, or a name with an image word. A
+ * link's address, written in `href` or in a variable only links read, never
+ * counts, nor does an address an HTML element takes for something else (an
+ * `<iframe>`'s or a `<video>`'s `src`) or one whose path names a type that is
+ * never an image (`clip.mp4`), and no other address does. A variable counts
+ * by the reads in its own file.
+ * @param {string} value
+ * @param {any} p a path to the literal
+ * @returns {{srcset: boolean, byName: boolean} | null} whether it is a
+ *   `srcSet` (whose candidates are the images) and whether only a name says
+ *   it is an image; null for no image the render fetches
+ */
+function imageLiteralKind(value, p) {
+  const {place, srcset} = placeOf(p);
+  // A srcset lists candidates, each with its own address, so any of them
+  // can be an https image (`./a.png 1x, https://cdn.example.com/a@2x.png 2x`,
+  // or a value written over several lines).
+  if (srcset ? !srcsetCandidates(value).some(url => /^https:\/\//i.test(url)) : !/^https:\/\//i.test(value)) return null;
+  const named = nameOfValue(p);
+  // A link's address is where the reader goes, even when it names an image
+  // file: the file keeps it as written.
+  // A variable a link and an image both read is an image's address too.
+  const image = place === 'shown' || place === 'name';
+  if ((named && LINK_ATTR.test(named.name)) || (reachesLink(p) && !image)) return null;
+  if (place === 'other') return null;
+  if (srcset) return {srcset: true, byName: place === 'name'};
+  /** @type {string} */
+  let pathname;
+  try {
+    pathname = new URL(value).pathname;
+  } catch {
+    return null;
+  }
+  // A clip, a font or a document is never an image, whatever name holds it.
+  if (NOT_AN_IMAGE.test(pathname)) return null;
+  if (IMAGE_PATH.test(pathname)) return {srcset: false, byName: false};
+  return image ? {srcset: false, byName: place === 'name'} : null;
+}
+
+/**
+ * The TypeScript source a relative `.js`-family import names when no file has
+ * the name as written, as the import walk and the browser bundle resolve it,
+ * or null.
+ * @param {string} spec
+ * @param {string} from the importing file
+ */
+function typeScriptSourceOf(spec, from) {
+  if (!spec.startsWith('.') || spec.includes('?')) return null;
+  const written = path.resolve(path.dirname(from), spec);
+  const file = existingFile(written, []);
+  return file && file !== written ? file : null;
 }
 
 /**
@@ -696,9 +1186,26 @@ function carriedName(p, t) {
  * recorded it already.
  * @param {string} filename
  * @param {boolean} [browser]
+ * @param {boolean} [reactJsx] whether the module compiles its JSX with
+ *   React's runtime, so its Core props are recorded for the unknown-prop
+ *   warning
  */
-function pagePlugin(filename, browser = false) {
+function pagePlugin(filename, browser = false, reactJsx = true) {
   const dir = path.dirname(filename);
+  /**
+   * Record an https image address the page builds in code (a template with
+   * values, or `+`) that would count as an image if it were whole (see
+   * imageLiteralKind), read with each value it puts in as `x`
+   * (`https://cdn.example.com/x.png`): the render cannot know it, so the
+   * file asks the network for it when the script draws it.
+   * @param {any} p
+   */
+  const builtAddress = p => {
+    if (!imageLiteralKind(builtSkeleton(p.node), p)) return;
+    const {start, end} = p.node;
+    const text = typeof start === 'number' && typeof end === 'number' ? p.hub?.file?.code?.slice(start, end) : null;
+    builtRemote.push({text: text ?? '(an address built in code)', file: filename, line: p.node.loc?.start.line ?? 0});
+  };
   return (/** @type {any} */ {types: t}) => ({
     visitor: {
       ImportDeclaration(/** @type {any} */ p) {
@@ -848,6 +1355,46 @@ function pagePlugin(filename, browser = false) {
         const call = screenQuery(p);
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
+      StringLiteral(/** @type {any} */ p) {
+        if (browser || p.parentPath.isImportDeclaration() || p.parentPath.isExportDeclaration()) return;
+        // The first part of an address built with `+` is not an address: the
+        // chain gets its own warning.
+        if (p.parentPath.isBinaryExpression({operator: '+'})) return;
+        noteRemoteLiteral(p.node.value, imageLiteralKind(p.node.value, p));
+      },
+      TemplateLiteral(/** @type {any} */ p) {
+        if (browser || p.parentPath.isTaggedTemplateExpression()) return;
+        if (p.node.expressions.length === 0) {
+          if (p.parentPath.isBinaryExpression({operator: '+'})) return;
+          const value = p.node.quasis[0]?.value.cooked ?? '';
+          noteRemoteLiteral(value, imageLiteralKind(value, p));
+          return;
+        }
+        // A template inside a `+` chain is part of the chain's address.
+        if (p.parentPath.isBinaryExpression({operator: '+'})) return;
+        builtAddress(p);
+      },
+      BinaryExpression(/** @type {any} */ p) {
+        if (browser || p.node.operator !== '+' || p.parentPath.isBinaryExpression({operator: '+'})) return;
+        builtAddress(p);
+      },
+      JSXOpeningElement(/** @type {any} */ p) {
+        if (browser) return;
+        const component = coreComponentOf(p.node.name, p.scope);
+        if (!component) return;
+        const attrs = p.node.attributes;
+        // A spread after an attribute can replace its value.
+        const lastSpread = attrs.findLastIndex((/** @type {any} */ a) => a.type === 'JSXSpreadAttribute');
+        for (const attr of attrs.slice(lastSpread + 1)) {
+          if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
+          const written = writtenValue(attr, p.scope);
+          if (written) propValues.push({component, prop: attr.name.name, ...written, file: filename, line: attr.loc?.start.line ?? 0});
+        }
+        if (reactJsx) {
+          const element = {line: p.node.loc?.start.line ?? 0, column: (p.node.loc?.start.column ?? 0) + 1};
+          for (const use of corePropUsesOf(p)) propNames.push({...use, file: filename, element});
+        }
+      },
       JSXText(/** @type {any} */ p) {
         if (browser) return;
         const v = cleanText(p.node);
@@ -919,6 +1466,17 @@ function pagePlugin(filename, browser = false) {
             }
           }
         }
+        // The element and the components around it in the same JSX tree,
+        // innermost first: any of them can be the one that drops the text.
+        /** @type {{component: string, line: number, from: string | null, name: string}[]} */
+        const chain = [];
+        for (let up = p; up && (up.isJSXElement() || up.isJSXFragment()); up = up.parentPath) {
+          if (!up.isJSXElement()) continue;
+          const name = jsxName(up.node);
+          // Host elements are not components; a member name (`ui.Box`) is.
+          if (!/^[A-Z]/.test(name) && !name.includes('.')) continue;
+          chain.push({component: name, line: up.node.loc?.start.line ?? 0, ...importOf(up, name)});
+        }
         texts.push({
           file: filename,
           component,
@@ -926,6 +1484,7 @@ function pagePlugin(filename, browser = false) {
           hidden: hidden || conditional,
           fn: fnKey(p),
           line: p.node.loc?.start.line ?? 0,
+          chain,
         });
       },
     },
@@ -1031,11 +1590,30 @@ function serveFromSet() {
         ? packageOf(request)
         : null;
       if (!name || !isServedPackage(name, served.integrations)) throw e;
-      const file = resolveFilename.call(this, request, servedParent, false);
+      const file = servedFile(request, () => resolveFilename.call(this, request, servedParent, false));
       if (!fromSet.has(name)) fromSet.set(name, packageDirOf(file, name));
       return file;
     }
   };
+}
+
+/**
+ * The file the set serves for `request`: what the CommonJS resolve gives,
+ * or, when that finds the subpath not exported, the file the package exports
+ * to an ES module import (a subpath exported under `import` only).
+ * @param {string} request
+ * @param {() => string} resolveAsRequire
+ * @returns {string}
+ */
+function servedFile(request, resolveAsRequire) {
+  try {
+    return resolveAsRequire();
+  } catch (e) {
+    const file =
+      /** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && served ? servedImportTarget(request, served.dir) : null;
+    if (!file) throw e;
+    return file;
+  }
 }
 
 /**
@@ -1066,6 +1644,12 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
+// Imports between the files of an installed package resolve by path (a
+// Node without in-thread hooks resolves them itself). The hook answers only
+// relative imports inside a package, and single-copy-hooks.mjs answers only
+// package names, so neither changes what the other resolves.
+const registerHooks = /** @type {any} */ (Module).registerHooks;
+if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
@@ -1093,6 +1677,106 @@ function servedThemeFiles(source, filename) {
   return Object.keys(files).length > 0 ? files : null;
 }
 
+/**
+ * The StyleX compiler and its options for one file: the page's class-name
+ * prefix, and the theme files a module outside a project imports.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {[unknown, object]}
+ */
+function stylexPluginFor(source, filename) {
+  const themeFiles = servedThemeFiles(source, filename);
+  return [
+    stylexPlugin,
+    {
+      dev: false,
+      runtimeInjection: false,
+      treeshakeCompensation: true,
+      classNamePrefix: PAGE_CLASS_PREFIX,
+      unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+      ...(themeFiles ? {aliases: themeFiles} : {}),
+    },
+  ];
+}
+
+/**
+ * A StyleX call that the compiler replaces at build time. Compiled StyleX
+ * keeps only runtime calls such as `props`, so a package file without one of
+ * these calls ships compiled styles.
+ */
+const STYLEX_BUILD_CALL = /\b(?:create|keyframes|defineVars|defineConsts|createTheme|firstThatWorks|positionTry|defineMarker|defaultMarker|viewTransitionClass)\s*\(/g;
+
+/** @param {string} code how many StyleX build-time calls the code holds */
+const buildCalls = code => code.match(STYLEX_BUILD_CALL)?.length ?? 0;
+
+/** Each package file checked for StyleX source: its compiled code, or null when it stays as it ships. @type {Map<string, string | null>} */
+const packageStylex = new Map();
+/** Each package file that holds StyleX source, for the page's script. @type {Set<string>} */
+const stylexSourceFiles = new Set();
+
+/**
+ * A package file (installed, or a workspace package linked in) that ships
+ * StyleX source, compiled with StyleX only, as an app's build compiles it:
+ * with the page's class-name prefix, its rules joining the page's. Null for
+ * every other file, which stays byte for byte as it ships. Each file is
+ * compiled once, for the server and the browser both.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {string | null}
+ */
+function compilePackageStylex(source, filename) {
+  const known = packageStylex.get(filename);
+  if (known !== undefined) return known;
+  /** @type {string | null} */
+  let code = null;
+  if (source.includes('@stylexjs/stylex') && buildCalls(source) > 0) {
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'unambiguous',
+      parserOpts: {
+        plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+          ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+        ),
+      },
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [stylexPluginFor(source, filename)],
+    });
+    const rules = /** @type {any} */ (result?.metadata)?.stylex;
+    // A marker (`defineMarker`, `defaultMarker`) compiles to a class name with
+    // no rule, so a file whose compile replaced a build-time call counts too.
+    // Compiled StyleX keeps its count: only comments and other names match.
+    const hasRules = Array.isArray(rules) && rules.length > 0;
+    if (result?.code && (hasRules || buildCalls(result.code) < buildCalls(source))) {
+      if (hasRules) stylexRules.push(...rules);
+      code = result.code;
+      stylexSourceFiles.add(filename);
+    }
+  }
+  packageStylex.set(filename, code);
+  return code;
+}
+
+/**
+ * The package files in a built script that no render checked yet, checked
+ * for StyleX source now: files only the browser loads, such as a package a
+ * click imports or a module of one that only a lazily loaded module imports.
+ * @param {string[]} files
+ * @returns {boolean} whether one of them holds StyleX source
+ */
+function checkScriptFiles(files) {
+  let found = false;
+  for (const file of files) {
+    if (packageStylex.has(file) || isLocal(file) || !/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(file)) continue;
+    if (!fs.existsSync(file)) continue;
+    if (compilePackageStylex(fs.readFileSync(file, 'utf8'), file) !== null) found = true;
+  }
+  return found;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -1110,9 +1794,10 @@ const jiti = createJiti(entry, {
  * One of the page's own files, or a file outside them and outside
  * `node_modules` that a path alias may reach, compiled as the server
  * compiles it: the page's files with its plugins and StyleX, the other with
- * its path aliases. The code stays an ES module with its JSX and types. For
- * the browser (`browser`), the page's files keep their real charts and
- * record nothing. Null for any other file.
+ * its path aliases. A package file that ships StyleX source compiles with
+ * StyleX ({@link compilePackageStylex}). The code stays an ES module with its
+ * JSX and types. For the browser (`browser`), the page's files keep their
+ * real charts and record nothing. Null for any other file.
  * @param {string} source
  * @param {string} filename
  * @param {boolean} [browser]
@@ -1123,7 +1808,6 @@ function compilePageModule(source, filename, browser = false) {
     if (!localFiles.includes(filename)) localFiles.push(filename);
     moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
-    const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
     const result = transformSync(source, {
       filename,
       babelrc: false,
@@ -1134,28 +1818,18 @@ function compilePageModule(source, filename, browser = false) {
       compact: false,
       plugins: [
         aliasPlugin(),
-        pagePlugin(filename, browser),
-        ...(source.includes('stylex')
-          ? [
-              [
-                stylexPlugin,
-                {
-                  dev: false,
-                  runtimeInjection: false,
-                  treeshakeCompensation: true,
-                  unstable_moduleResolution: {type: 'commonJS', rootDir: root},
-                  ...(themeFiles ? {aliases: themeFiles} : {}),
-                },
-              ],
-            ]
-          : []),
+        pagePlugin(filename, browser, !OTHER_JSX_RUNTIME.test(source)),
+        ...(source.includes('stylex') ? [stylexPluginFor(source, filename)] : []),
       ],
     });
     const rules = /** @type {any} */ (result?.metadata)?.stylex;
     if (Array.isArray(rules)) stylexRules.push(...rules);
     return result?.code ?? source;
   }
-  if (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) return null;
+  const packageCode = compilePackageStylex(source, filename);
+  if (packageCode !== null) source = packageCode;
+  if (PATHS.length > 0 && !filename.includes(NODE_MODULES)) {
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const result = transformSync(source, {
       filename,
@@ -1176,7 +1850,7 @@ function compilePageModule(source, filename, browser = false) {
     });
     return result?.code ?? source;
   }
-  return null;
+  return packageCode;
 }
 
 /**
@@ -1339,7 +2013,10 @@ function notExportedSubpath(spec, file) {
   const pkg = packageOf(spec);
   const attempts = [() => createRequire(file).resolve(spec)];
   if (served && isServedPackage(pkg, served.integrations)) {
-    attempts.push(() => createRequire(path.join(served.dir, 'package.json')).resolve(spec, {paths: [served.dir]}));
+    const servedDir = served.dir;
+    attempts.push(() =>
+      servedFile(spec, () => createRequire(path.join(servedDir, 'package.json')).resolve(spec, {paths: [servedDir]})),
+    );
   }
   for (const attempt of attempts) {
     try {
@@ -1437,6 +2114,21 @@ function classify(e) {
 function browserSource(file) {
   const filename = path.normalize(file);
   const compiled = compilePageModule(fs.readFileSync(filename, 'utf8'), filename, true);
+  if (compiled === null) return null;
+  const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
+  return {contents: compiled, loader};
+}
+
+/**
+ * A package file that holds StyleX source, for esbuild (client-bundle.mjs):
+ * compiled with StyleX, else null, and esbuild loads it as it ships.
+ * @param {string} file
+ * @returns {{contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null}
+ */
+function browserPackageSource(file) {
+  const filename = path.normalize(file);
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) return null;
+  const compiled = compilePackageStylex(fs.readFileSync(filename, 'utf8'), filename);
   if (compiled === null) return null;
   const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
   return {contents: compiled, loader};
@@ -1577,6 +2269,56 @@ function describeFile(file) {
 }
 
 /**
+ * Keep only the files of a linked package (see linkedPackageRoots) that the
+ * page reaches by a path, as --reverse walks it: from the page, through each
+ * relative or path-alias import of a carried module. The rest belong to the
+ * package, and so do the files that only its modules import: none is
+ * carried or named as not carried. A file that no module imports by a path
+ * (one Node loaded by itself) and is not a linked package's stays, as do the
+ * images, which the page's script reads from the file.
+ * @returns {string[]} the modules left out, whose image names the script may still draw
+ */
+function dropLinkedPackageFiles() {
+  /** @type {Map<string, Set<string>>} */
+  const importers = new Map();
+  for (const file of [...localFiles, ...outsideFiles]) {
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      if (!target || !path.isAbsolute(target)) continue;
+      const set = importers.get(target) ?? new Set();
+      set.add(file);
+      importers.set(target, set);
+    }
+  }
+  const reached = new Set([entry]);
+  const queue = [entry];
+  for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+    for (const [target, from] of importers) {
+      if (!reached.has(target) && from.has(file)) {
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  /** @param {string} file */
+  const kept = file =>
+    reached.has(file) || assetsInlined.has(file) || (!importers.has(file) && !inLinkedPackage(file));
+  const dropped = localFiles.filter(file => !kept(file) && /\.[cm]?[jt]sx?$/.test(file));
+  const keptLocal = localFiles.filter(kept);
+  localFiles.splice(0, localFiles.length, ...keptLocal);
+  const keptOutside = outsideFiles.filter(kept);
+  outsideFiles.splice(0, outsideFiles.length, ...keptOutside);
+  return dropped;
+}
+
+/**
  * Tell the host what the page is doing, so an end without an answer can say
  * where it ended.
  * @param {string} name
@@ -1689,7 +2431,7 @@ try {
   // into a field: a typeahead's search would reach no change handler. It is
   // loaded first, with a document that fires input events as a browser's
   // does; the page then renders on the server with no document.
-  await withLoadDocument(() => jiti.import('react-dom/client'));
+  await withoutRenderTimings(() => withLoadDocument(() => jiti.import('react-dom/client')));
   try {
     reach('importing the page');
     const notInstalled = missingPackages();
@@ -1781,16 +2523,18 @@ try {
   // The page's script is built first: it compiles every module the page
   // can load, a lazily imported one included, and their styles join the
   // stylesheet below.
-  /** @type {{code: string, modules: number} | null} */
+  /** @type {{code: string, modules: number, astryx: boolean, module: boolean, files: string[]} | null} */
   let script = null;
   if (workerData.buildScript) {
     reach("building the page's script");
     try {
       const loaded = await import(pathToFileURL(workerData.esbuild).href);
-      script = await bundleForBrowser({
+      const build = () => bundleForBrowser({
         esbuild: loaded.default ?? loaded,
         entry,
         source: browserSource,
+        stylexFiles: [...stylexSourceFiles],
+        packageSource: browserPackageSource,
         // The files compilePageModule compiles: the page's own, and, when
         // the project has path aliases, every module outside node_modules.
         isPageFile: file => {
@@ -1806,6 +2550,11 @@ try {
         describe: describeFile,
         oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
       });
+      script = await build();
+      // A package file only the browser loads can hold StyleX source too: the
+      // script is built once more with it compiled. Compiling only removes
+      // StyleX calls, so the second build holds no file the first did not.
+      if (checkScriptFiles(script.files)) script = await build();
     } catch (e) {
       if (e instanceof BundleError && e.compile !== undefined) {
         classify(e.compile);
@@ -1875,6 +2624,7 @@ try {
       }
     }
   }
+  const linkedModules = LINKED_ROOTS.length > 0 ? dropLinkedPackageFiles() : [];
   parentPort?.postMessage({
     ok: true,
     markup,
@@ -1889,13 +2639,24 @@ try {
     assets: [...assetsInlined],
     files: localFiles,
     uncarried: outsideFiles,
+    linkedRoots: LINKED_ROOTS,
+    linkedModules,
     aliasImports,
     texts,
     fnTexts,
     screenQueries,
+    remoteLiterals: [...remoteLiterals],
+    remoteNamedOnly: [...namedOnlyLiterals].filter(url => !placedLiterals.has(url)),
+    builtRemote,
+    propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
+    propNames,
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
+    // Whether the script's module graph holds an Astryx module; null when no
+    // script was built. The stylesheets it imports are read by the render.
+    astryx: script ? script.astryx : null,
+    scriptIsModule: script?.module ?? false,
   });
 } catch (e) {
   if (e !== null) classify(e);

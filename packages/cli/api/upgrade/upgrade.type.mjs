@@ -35,19 +35,34 @@
  * integration manifests. Present on every upgrade response. Dry-run only
  * reports; apply writes after selected codemods and hooks succeed.
  *
- * - `refreshed`     — a stale block was rewritten (`--apply` only).
- * - `would-refresh` — a stale block was detected in dry-run; nothing written.
- * - `nudge-init`    — no managed block exists; user should run `init`.
- * - `error`         — the expected block could not be rendered or written.
- * - `none`          — nothing to do (block already matches expected content).
+ * - `refreshed`     — a block or a skill file was rewritten (`--apply` only).
+ * - `would-refresh` — a block or a skill file differs in a dry run; nothing written.
+ * - `nudge-init`    — the project saves `agents-md` and has no block; run `init`.
+ * - `error`         — a block or a saved skill place could not be rendered,
+ *                     written, or refreshed (as a place linked out of the project).
+ * - `none`          — nothing to do: the block and every saved skill file match.
  *
  * @typedef {object} AgentDocsSummary
- * @property {'missing' | 'stale' | 'current'} status
+ * @property {'missing' | 'stale' | 'current'} status The Astryx block, and the skill files of the saved skill places: `stale` when either needs a refresh. In a project that saves no `agents-md` place and has no block, the skill files alone (`missing` when none is there).
  * @property {string} installedVersion Installed core version the block should reflect.
  * @property {string[]} fromVersions Distinct stale block versions found (the "from" side of the refresh).
- * @property {string[]} files Files rewritten (apply) or that would be rewritten (dry-run), relative to the folder the command ran in.
- * @property {boolean} refreshed True only when a block was actually rewritten (apply mode).
- * @property {'refreshed' | 'would-refresh' | 'nudge-init' | 'error' | 'none'} action
+ * @property {string[]} files Agent files whose block was rewritten (apply) or would be (dry-run), relative to the folder the command ran in; skill files are in `skills`.
+ * @property {boolean} refreshed True only when a block or a skill file was actually rewritten (apply mode).
+ * @property {'refreshed' | 'would-refresh' | 'nudge-init' | 'error' | 'none'} action See the list above.
+ * @property {UpgradeSkillFile[]} skills One row per file of the project's saved skill places (astryx.config `skills.to`: `skills` or a folder); empty when the project saves only the AGENTS.md block. An Astryx block is checked wherever it is.
+ */
+
+/**
+ * What upgrade found, or did, for one file of a saved skill place.
+ * `current`: it holds this release's text. `would-create` and `would-update`
+ * (a dry run), `created` and `updated` (`--apply`): it was missing, or held
+ * another release's text. `kept`: left as it is (see `reason`).
+ * @typedef {object} UpgradeSkillFile
+ * @property {string} path The file, relative to the folder the command ran in.
+ * @property {string} place The place, as astryx.config saves it: `skills` or `./<folder>`.
+ * @property {string} [skill] Only for an integration's skill: its name.
+ * @property {'current' | 'would-create' | 'would-update' | 'would-remove' | 'created' | 'updated' | 'removed' | 'kept'} action `would-remove`/`removed`: a skill Astryx wrote for an integration the project no longer has.
+ * @property {'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill' | 'not-written'} [reason] Only on `kept`: a person edited it since Astryx wrote it, Astryx did not write it, (`pair-kept`) another copy of the same place is a person's, so the copies are left as they are together, (`computer-skill`) it is the computer-level skill reached through the place, or (`not-written`) `--apply` could not write a copy of the place, so none was written.
  */
 
 /**

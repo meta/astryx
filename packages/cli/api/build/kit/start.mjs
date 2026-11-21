@@ -77,7 +77,7 @@ export const asTemplate = (t, to = null) => ({
  */
 function placement(kind, inPage, away = {}) {
   if (kind === 'edit')
-    return 'the idea changes a page you already have, so keep it and add blocks to it; a new page starts from the app shell.';
+    return 'the idea changes a page you already have, so keep it and add components to it; a new page starts from the app shell.';
   if (kind === 'part')
     return inPage
       ? 'the idea is a part of a page, so it starts from the page it names.'

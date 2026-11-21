@@ -25,6 +25,7 @@ import {
   claimContextMenuPress,
   claimPress,
   currentGesture,
+  currentInputTarget,
   isPressInFlight,
   isReleaseInFlight,
   listenForGestures,
@@ -615,6 +616,38 @@ describe('the release in flight and afterRelease', () => {
     browserClick(button);
     vi.runOnlyPendingTimers();
     expect(callback).not.toHaveBeenCalled();
+  });
+});
+
+describe('currentInputTarget', () => {
+  it('names the element a press or a click landed on while that event is dispatched, and nothing after', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    // Starts the listeners.
+    currentInputTarget();
+    const seen: (EventTarget | null)[] = [];
+    const read = () => seen.push(currentInputTarget());
+    button.addEventListener('pointerdown', read);
+    button.addEventListener('click', read);
+
+    button.dispatchEvent(
+      Object.assign(
+        new MouseEvent('pointerdown', {bubbles: true, composed: true}),
+        {pointerId: 31, isPrimary: true, pointerType: 'mouse'},
+      ),
+    );
+    expect(currentInputTarget()).toBeNull();
+    button.dispatchEvent(
+      Object.assign(
+        new MouseEvent('pointerup', {bubbles: true, composed: true}),
+        {pointerId: 31, isPrimary: true, pointerType: 'mouse'},
+      ),
+    );
+    button.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    expect(currentInputTarget()).toBeNull();
+
+    expect(seen).toEqual([button, button]);
+    button.remove();
   });
 });
 

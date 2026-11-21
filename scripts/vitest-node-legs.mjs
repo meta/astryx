@@ -50,8 +50,9 @@ export const JOB_LIMIT_SECONDS = 15 * 60;
 // VITEST_SHARD_WATCHDOG_SECONDS), so a leg that runs long names its files.
 export const WATCHDOG_MARGIN_SECONDS = 60;
 // The longest a leg takes from its job's start until Vitest starts:
-// checkout, install, the Core build and a scoped run's two listings. Measured
-// at most 96 s to the test step and 21 s of listing in it, over 65 legs.
+// checkout, install, unpacking build-core's Core build and a scoped run's two
+// listings. Measured at most 96 s to the test step and 21 s of listing in it,
+// over 65 legs that still built Core themselves.
 export const SETUP_SECONDS = 120;
 // Recorded test seconds a leg's Vitest finishes per second of wall time on
 // the four-core runner (three test files at once): 2.62 to 2.89 over 21 legs.

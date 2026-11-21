@@ -54,10 +54,21 @@ export const doc = {
       description: 'Install all features (agents, theme, template).',
     },
     {
-      name: 'options.removeAgents',
+      name: 'options.remove',
       type: 'boolean',
       description:
-        'Remove the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. With `user`, remove the computer-level agent text instead.',
+        'Remove instead of installing: the Astryx skill from every place the project saves (with `to`, the places named, which may be a folder saved for this computer or `user`) and drop each from what is saved, and the managed block at the project root and in `ctx.cwd` when no `to` is given or `to` names `agents-md`. An edited skill file, or one Astryx did not write (in a linked skill folder too), is kept; in the project, linked copy folders share one file, removed once. Folders saved for this computer stay unless `to` names them. With `user`, remove the computer-level agent text instead.',
+    },
+    {
+      name: 'options.removeAgents',
+      type: 'boolean',
+      description: 'The same as `remove`.',
+    },
+    {
+      name: 'options.once',
+      type: 'boolean',
+      description:
+        'With `to`, write a copy that is saved nowhere, so no later init, upgrade, or background refresh touches it. Refused without `to`, with `user`, with `remove`, and for `agents-md` or a place the project or this computer already saves.',
     },
     {
       name: 'options.user',
@@ -108,12 +119,12 @@ export const doc = {
     {
       type: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (the agent docs before the write: `missing` | `stale` | `current`; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, whether the next-steps were emitted (never outside a project, and not when `agentDocsStatus` was `current`: a set-up app gets the build and search commands instead), the places written (`to`), one `{path, place, action, reason?}` row per skill file (`skills`; action `created` | `updated` | `unchanged` | `removed` | `kept`, reason `edited` | `not-astryx` | `pair-kept`), and the `user` place\'s `init.user` data (`user`, null without it). In a project whose saved places hold no `agents-md`, `agentDocsStatus` describes the project skill files.',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (the agent docs before the write: `missing` | `stale` | `current`; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, whether the next-steps were emitted (never outside a project, and not when `agentDocsStatus` was `current`: a set-up app gets the build and search commands instead), the places written (`to`), one `{path, place, action, reason?}` row per skill file (`skills`; action `created` | `updated` | `unchanged` | `removed` | `kept`, reason `edited` | `not-astryx` | `pair-kept` | `computer-skill`), the `user` place\'s `init.user` data (`user`, null without it), and `once` (true when the copy is saved nowhere). In a project whose saved places hold no `agents-md`, `agentDocsStatus` describes the project skill files.',
     },
     {
       type: 'init.remove',
       description:
-        'The removal receipt, returned when `removeAgents` is set: `data.removed` is true when a managed agent-docs block was found and removed, and false when there was none to remove.',
+        'The removal receipt, returned when `remove` (or `removeAgents`, the same option) is set: `data.removed` is true when it removed an Astryx block or skill file; `data.from`, the places it removed from (each saved place, or the ones `to` named); `data.skills`, one `{path, place, action, reason?}` row per skill file (action `removed` | `kept`, reason `edited` | `not-astryx` | `computer-skill`); `data.user`, the `init.user` data when the `user` place was named (null otherwise). Folders saved for this computer are kept unless `to` names them.',
     },
     {
       type: 'init.user',
@@ -124,7 +135,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-            when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features; or `to` names an unknown place, `skills` outside a project, or no place, is combined with `user` or `removeAgents`, is `user` alone with `features`, `all`, `agent`, or `agentDocsPath`, leaves out `agents-md` while `agent` or `agentDocsPath` is set, or comes with `features` that leave out agents',
+            when: '--remove-agents is combined with --features, --all, --agent, or --agent-docs-path; --user is combined with --features, --all, --agent, or --agent-docs-path; or --all is combined with --features; or `to` names an unknown place, `skills` outside a project, or no place, is combined with `user`, is `user` alone with `features`, `all`, `agent`, or `agentDocsPath`, leaves out `agents-md` while `agent` or `agentDocsPath` is set, or comes with `features` that leave out agents; or `once` comes without `to`, with `user`, with `remove`, or with `agents-md` or a place already saved',
+    },
+    {
+      code: 'ERR_WRITE_FAILED',
+      when: 'with `user`, the file system refuses a write or removal of the computer-level agent text (as a `~/.agents/skills` the user cannot write); the message names the path, the errno, and what to change',
     },
     {
       code: 'ERR_UNKNOWN_AGENT',

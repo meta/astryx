@@ -22,6 +22,18 @@ function isSwizzledSource(filePath: string, memo: Map<string, boolean>) {
 }
 
 const LIBRARY_PATTERN = 'node_modules/@astryxdesign/';
+
+/**
+ * Core's prebuilt stylesheet export, as the PostCSS integration names it
+ * (`./astryx.css`), read from beside babel.js like the marker reader.
+ */
+function corePrebuiltStylesheet(): string {
+  const {PREBUILT_STYLESHEETS} = createRequire(import.meta.url)(
+    path.resolve(__dirname, 'source-stylesheet.js'),
+  ) as {PREBUILT_STYLESHEETS: Record<string, string>};
+  return PREBUILT_STYLESHEETS['@astryxdesign/core'];
+}
+
 const STYLEX_CSS_PATH = '/virtual:stylex.css';
 
 /**
@@ -236,10 +248,20 @@ export function astryxStylex(
         'node_modules/@astryxdesign/core',
       );
       const coreSourceDir = path.join(corePackageDir, 'src');
+      // StyleX compiles Core's rules from source. The prebuilt
+      // `astryx.css` holds a second copy of them, so its import loads an
+      // empty stylesheet. A real file serves a CSS `@import` too, which
+      // Vite reads from disk. The package-wide alias below maps the other
+      // stylesheets (`reset.css`) to their files in `src`.
+      const prebuiltAlias = {
+        find: `@astryxdesign/core/${corePrebuiltStylesheet().slice(2)}`,
+        replacement: path.resolve(__dirname, 'replaced-stylesheet.css'),
+      };
 
       return {
         resolve: {
           alias: [
+            prebuiltAlias,
             {
               find: /^@astryxdesign\/core\/locales\/(.+)\.generated\.js$/,
               replacement: path.join(

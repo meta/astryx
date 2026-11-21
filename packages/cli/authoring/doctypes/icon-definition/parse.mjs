@@ -42,6 +42,18 @@ function buildSchemas() {
         )
         .min(1, 'a definition must have at least one word'),
       builtIn: z.literal(true).optional(),
+      group: nonBlank('group')
+        .regex(
+          ICON_DEFINITION_NAME_RE,
+          'group must be camelCase starting with a lower-case letter',
+        )
+        .optional(),
+      replaces: nonBlank('replaces')
+        .regex(
+          ICON_DEFINITION_NAME_RE,
+          'replaces must name a definition in camelCase',
+        )
+        .optional(),
       stability: z.literal('experimental').optional(),
     })
     .strict();

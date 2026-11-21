@@ -24,8 +24,9 @@
  *   integration's themes, by theme build
  *   (foundation/discovery/core-theme-facts.mjs) for what it checks a theme
  *   against in Core's component docs,
- *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
- *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
+ *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
+ *   its theme-wiring scan, its Core-props scan and its Core-button scan, by
+ *   the docs adapter (api/docs/_adapter.mjs) for
  *   the CLI's own docs tree, which `docs` and `search` read, by the discover
  *   adapter (api/discover/_adapter.mjs) for the integrations a project loads
  *   and what each adds, which `discover` lists, and for what discover
@@ -41,11 +42,15 @@
  *   modules (api/theme/build/self-contained.mjs), each kept while every
  *   path it stamped but the CLI's own files (which its build id and the
  *   folder it runs from, both in every entry's key, stand for) is
- *   unchanged, in any command. Through `persistedValue`, the stored docs
+ *   unchanged, in any command. That JavaScript alone is kept across builds:
+ *   its key holds the content of the code that compiles it in place of the
+ *   build id, and it keeps the stamps of the CLI's own files too. Through `persistedValue`, the stored docs
  *   (foundation/doc-compiler/stored-docs.mjs keptParse) keep each stored
- *   doc's parse by the doc's text and the zod release the parsers load,
- *   which with the build id are all the parse depends on, in a run that
- *   keeps catalogs. The commands whose runs keep the other
+ *   doc's parse by the doc's text and the zod release the parsers load, and
+ *   `template` (foundation/discovery/template-adapter.mjs keptTemplateSyntax)
+ *   keeps what it reads from a template's source to name its components by
+ *   the source's text and the parser's release: with the build id, all each
+ *   value depends on, in a run that keeps catalogs. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
@@ -131,9 +136,10 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // Its project check, with or without `--built`, keeps its docs checks and
-  // theme-wiring scan; its `integration` checks run neither, and keep only
-  // the project gathers they load, as the commands above do.
+  // Its project check, with or without `--built`, keeps its docs checks,
+  // theme-wiring scan, Core-props scan and Core-button scan; its
+  // `integration` checks run none of them, and keep only the project gathers
+  // they load, as the commands above do.
   'doctor',
 ]);
 
@@ -681,7 +687,9 @@ function entryKey(key, id) {
   return JSON.stringify([
     FORMAT,
     // The build and the folder it runs from stand for the CLI's own files.
-    [id, cliFolder()],
+    // A summary kept across builds names the code it depends on in its key,
+    // wherever the CLI runs from.
+    id === ACROSS_BUILDS ? [id] : [id, cliFolder()],
     process.version,
     process.platform,
     process.arch,
@@ -1179,7 +1187,8 @@ export function persistedDerived(key, compute, codec, inputs = []) {
 /**
  * A value that is a function of `key` and of this CLI build alone, kept in
  * the catalogs folder: the parse of a doc the CLI reads from the stored docs,
- * by the doc's text. The build and the folder it runs from stand for the
+ * by the doc's text, or what `template` reads from a template's source, by
+ * the source's text and the parser's release. The build and the folder it runs from stand for the
  * CLI's own code, as in every kept entry, so nothing else is stamped. Kept
  * only in a run that keeps catalogs (recordRunFor), by an installed CLI whose
  * cache folder exists, and only when `codec` stores the value as text that
@@ -1300,18 +1309,22 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
- * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - `accept`: whether a
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean, acrossBuilds?: boolean}} [options] - `accept`: whether a
  *   stored value serves this call, else it is made again and stored over (a
  *   summary that holds more only once a caller asks for it); `keep`: whether
- *   a value just made is stored at all (a failed or partial answer is not).
+ *   a value just made is stored at all (a failed or partial answer is not);
+ *   `acrossBuilds`: kept for every build of the CLI in its folder, for a
+ *   summary whose key holds the content of the CLI code that makes it
+ *   (loaded-files.mjs codeDigest), since no build id covers that code. Its
+ *   stamps keep the CLI's own files too.
  * @returns {T}
  */
 export function persistedSummary(
   key,
   make,
-  {accept = () => true, keep = () => true} = {},
+  {accept = () => true, keep = () => true, acrossBuilds = false} = {},
 ) {
-  const at = summaryAt(key);
+  const at = summaryAt(key, acrossBuilds);
   if (!at) return make().value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
@@ -1335,7 +1348,7 @@ export async function persistedSummaryAsync(
   make,
   {accept = () => true, keep = () => true} = {},
 ) {
-  const at = summaryAt(key);
+  const at = summaryAt(key, false);
   if (!at) return (await make()).value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
@@ -1344,21 +1357,28 @@ export async function persistedSummaryAsync(
   return value;
 }
 
+/** What a summary kept across builds has in its key in place of a build id. */
+const ACROSS_BUILDS = 'across-builds';
+
 /**
  * Where the summary for `key` is kept, or null where none is kept.
  * @param {unknown[]} key
- * @returns {{dir: string, file: string, entry: string} | null}
+ * @param {boolean} acrossBuilds - kept for every build of the CLI, not under
+ *   this build's id
+ * @returns {{dir: string, file: string, entry: string, acrossBuilds: boolean} | null}
  */
-function summaryAt(key) {
+function summaryAt(key, acrossBuilds) {
   const id = withoutRecording(buildId);
   const dir =
     id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) return null;
   const summaryKey = ['summary', ...key];
+  const build = acrossBuilds ? ACROSS_BUILDS : id;
   return {
     dir,
-    file: entryFile(dir, summaryKey, id),
-    entry: entryKey(summaryKey, id),
+    file: entryFile(dir, summaryKey, build),
+    entry: entryKey(summaryKey, build),
+    acrossBuilds,
   };
 }
 
@@ -1430,15 +1450,18 @@ function inCliBuild(file) {
  * value does not read back the same. Silent on any failure. A file in jiti's
  * cache is not kept as a stamp, as for a kept gather (inJitiCache), nor is
  * one of the CLI's own files: the build id in the summary's key covers them
- * (inCliBuild), so a new build makes the summary again. Every other file,
- * an installed package's included, keeps its own stamp: an edit in place
- * makes the summary again.
- * @param {{dir: string, file: string, entry: string}} at
+ * (inCliBuild), so a new build makes the summary again. A summary kept
+ * across builds has no build id in its key, so it keeps those stamps too.
+ * Every other file, an installed package's included, keeps its own stamp:
+ * an edit in place makes the summary again.
+ * @param {{dir: string, file: string, entry: string, acrossBuilds: boolean}} at
  * @param {unknown} value
  * @param {[string, string][]} made the stamps the summary was made with
  */
-function storeSummary({dir, file, entry}, value, made) {
-  const stamps = made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at));
+function storeSummary({dir, file, entry, acrossBuilds}, value, made) {
+  const stamps = made.filter(
+    ([at]) => !inJitiCache(at) && (acrossBuilds || !inCliBuild(at)),
+  );
   if (!settled(stamps)) return;
   withoutRecording(() => {
     try {

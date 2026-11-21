@@ -37,7 +37,7 @@ export const doc = {
     'Outside a project it writes the same files but prints no step that sets up a project: ' +
     'no getting-started steps, and no step that adds a theme to an app. ' +
         '--user writes the computer-level agent text instead (see the flag), in any folder, and touches nothing in the folder. ' +
-    'The CLI installed for the computer also keeps that text current in the background, unless --user --remove-agents turned it off; ' +
+    'The CLI installed for the computer also keeps that text current in the background, unless --user --remove turned it off; ' +
     'package install scripts, project setup, and upgrade never write it.',
   fn: 'init',
   options: [
@@ -46,7 +46,7 @@ export const doc = {
       param: 'options.features',
       description:
         'Comma-separated features: agents (agent docs), theme (writes theme.template.ts), template (prints the page-building commands; writes no file). ' +
-        'An unknown feature exits 1 with ERR_UNKNOWN_FEATURE. Refused with --all or --remove-agents',
+        'An unknown feature exits 1 with ERR_UNKNOWN_FEATURE. Refused with --all or --remove',
     },
     {
       flag: '--all',
@@ -58,25 +58,33 @@ export const doc = {
       flag: '--to <places>',
       param: 'options.to',
       description:
-        'Where the Astryx skill goes, a comma list: agents-md (the AGENTS.md block, the default), skills (.agents/skills/astryx-project and .claude/skills/astryx-project in the project), ' +
-        'user (this computer, same as --user), or a folder written as a path (./team-skills, ~/team-skills). The choice is saved: in astryx.config `skills.to` for the project, so a later init writes the same places; ' +
-        'in the settings file for a folder outside it, whose copy the CLI installed for the computer refreshes after each of its upgrades while it is there. Moving a project off a place removes the skill there. ' +
-        'An unknown place exits 1 with ERR_INVALID_ARGUMENT',
+        'Where the Astryx skill goes, a comma list: agents-md (default), skills, user (same as --user), or a folder path. ' +
+        'Saved, so later runs keep each place current (a deleted copy in a folder outside the project stays deleted); moving off a place removes the skill there. Which to pick: `{@command docs cli/skill-places}`',
+    },
+    {
+      flag: '--once',
+      param: 'options.once',
+      description:
+        'With --to, a copy saved nowhere, so init and upgrade never refresh it; doctor still reports one in the project skills folders beside the AGENTS.md block as a second copy. Refused without --to, with user, and for agents-md or a place already saved',
+    },
+    {
+      flag: '--remove',
+      param: 'options.remove',
+      description:
+        "Remove the skill from the project's saved places (with --to, the places named) and drop them from what is saved; without --to, or with agents-md, also the block from AGENTS.md, CLAUDE.md, .claude/CLAUDE.md, GEMINI.md, .cursorrules, .hermes.md and HERMES.md at the project root (where init writes them) and in this folder. " +
+        'A skill file you edited is kept; folders saved for this computer stay unless --to names them. --features, --all, --agent, --agent-docs-path and --once are refused',
     },
     {
       flag: '--remove-agents',
       param: 'options.removeAgents',
-      description:
-        'Remove the managed block from AGENTS.md, CLAUDE.md, .claude/CLAUDE.md, GEMINI.md, .cursorrules, .hermes.md and HERMES.md, ' +
-        'at the project root (where init writes them) and in this folder, and do nothing else. ' +
-        '--features, --all, --agent and --agent-docs-path are refused',
+      description: 'The same as --remove',
     },
     {
       flag: '--user',
       param: 'options.user',
       description:
         'Write the computer-level agent skill (~/.agents/skills/astryx/SKILL.md, linked into the skill folders of other agents) instead of setting up this folder; ' +
-        'with --remove-agents, remove it and turn it off. --features, --all, --agent and --agent-docs-path are refused',
+        'with --remove, remove it and turn it off. --features, --all, --agent and --agent-docs-path are refused',
     },
     {
       flag: '--agent <tool>',
@@ -101,7 +109,9 @@ export const doc = {
     {label: 'Machine-readable receipt', cli: 'astryx init --json'},
     {label: 'The skill in the project skills folders', cli: 'astryx init --to skills'},
     {label: 'Agent text for the whole computer', cli: 'astryx init --to user'},
-    {label: 'Remove the computer-level agent text and turn it off', cli: 'astryx init --user --remove-agents'},
+    {label: 'A copy in a folder, saved nowhere', cli: 'astryx init --to ./bundle --once'},
+    {label: "Remove the skill from the project's saved places", cli: 'astryx init --remove'},
+    {label: 'Remove the computer-level agent text and turn it off', cli: 'astryx init --remove --to user'},
   ],
   outsideProject: 'own',
   exitCodes: [
@@ -111,7 +121,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written)',
+      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written); with --user, a folder of the computer-level agent text the user cannot write (ERR_WRITE_FAILED)',
     },
   ],
   related: ['doctor', 'upgrade', 'build', 'theme'],
@@ -119,14 +129,14 @@ export const doc = {
     {
       type: 'prose',
       text:
-        'The options in detail. `--remove-agents` also removes the file itself: AGENTS.md or .claude/CLAUDE.md when only init\'s heading is left, GEMINI.md when nothing is left. ' +
+        'The options in detail. `--remove` also removes the file itself: AGENTS.md or .claude/CLAUDE.md when only init\'s heading is left, GEMINI.md when nothing is left. ' +
         'Below the project root, a project-root agent file whose block resolves outside the project is left as it is, with a note. A file written with --agent-docs-path keeps its block. ' +
         '`--user` writes one skill file, ~/.agents/skills/astryx/SKILL.md, which most coding agents read, ' +
         'linked into the skill folders of agents that read only their own (~/.claude/skills always; Kiro, Windsurf, Letta, Xcode\'s coding assistant, and ~/.config/agents/skills when that folder exists): a folder symlink with a relative target, a junction on Windows, or a copy where neither can be made. Continue, whose scanner skips links, gets a managed copy, refreshed with the file. ' +
         'The file tells agents anywhere on the computer that Astryx is there, when it is relevant, to start a page with `astryx build` and anything else with `astryx search`. ' +
         'It records the links it made in astryx/settings.json in the per-user configuration folder, so removal removes exactly those; the CLI installed for the computer refreshes the file in the background after each upgrade. ' +
         'It works in any folder. A file without the Astryx markers, one edited since Astryx wrote it, or a symlink, is kept as it is, and so is anything at a link target that Astryx did not create. ' +
-        'It warns, and still writes, when no `astryx` command on the computer runs the Astryx CLI. With --remove-agents it removes the file, the links, and the copy, and records that the text is turned off. ' +
+        'It warns, and still writes, when no `astryx` command on the computer runs the Astryx CLI. With --remove it removes the file, the links, and the copy, and records that the text is turned off. ' +
         '`--agent`: claude writes CLAUDE.md or .claude/CLAUDE.md, else creates .claude/CLAUDE.md; all writes every existing agent doc except GEMINI.md, which keeps its one-line import of AGENTS.md, else AGENTS.md and .claude/CLAUDE.md. ' +
         'With claude and all, when CLAUDE.md gets the block, .claude/CLAUDE.md gets none and a block already there is removed, unless the project ignores CLAUDE.md: then a .claude/CLAUDE.md the project commits gets a copy too, with claude and all alike. ' +
         '`--agent-docs-path`: a path in the home folder itself, or in a settings folder in it outside a project (such as ~/.claude or ~/.claude/hooks), is refused with a note (exit 0), and nothing is written.',
@@ -137,12 +147,12 @@ export const doc = {
         'Exit 0 covers five soft cases, each reported as docsError with one note: running in the home folder, or in a settings folder in it outside a project; a GEMINI.md that resolves outside the project; ' +
         'when init runs below the project root, a project-root agent file that resolves outside the project; the project\'s Claude Code file (root CLAUDE.md, or .claude/CLAUDE.md when there is no root one) when it resolves outside the project and is a block-less import of an existing AGENTS.md, which 0.7.1 left alone; ' +
         'and a .claude/CLAUDE.md that resolves outside the project and that 0.7.1 did not write: beside a CLAUDE.md the project ignores, the one --agent claude adds or a block-less import of an existing AGENTS.md; with --agent claude beside a CLAUDE.md, one whose block it would remove. ' +
-        'Exit 1 with ERR_INVALID_ARGUMENT covers --remove-agents combined with install options, --user combined with --features, --all, --agent or --agent-docs-path, and --all with --features. ' +
+        'Exit 1 with ERR_INVALID_ARGUMENT covers --remove combined with install options, --user combined with --features, --all, --agent or --agent-docs-path, and --all with --features. ' +
         'ERR_PATH_TRAVERSAL applies when init runs at the project root and an agent file 0.7.1 also wrote there resolves outside the project (docsError path-safety).',
     },
     {
       type: 'prose',
-      text: "In global mode: outside a project, init writes the agent docs (AGENTS.md) into the folder and prints no getting-started steps. `init --user` (or `--to user`) writes the agent guide for your computer, in any folder, and is never handed to a project's own CLI. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
+      text: "In global mode: outside a project, init writes the agent docs (AGENTS.md) into the folder and prints no getting-started steps. `init --user` (or `--to user`) writes the agent guide for your computer, in any folder, and is never handed to a project's own CLI. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global}, {@link generic:computer-agent-guide}, and {@link generic:skill-places}.",
     },
   ],
 };

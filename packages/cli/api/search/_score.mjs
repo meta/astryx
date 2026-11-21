@@ -53,9 +53,10 @@ export function bestForToken(tok, candidate, opts = {}, direct = undefined) {
   let own = best ? (best.used ? (best.own ?? 0) : best.score) : 0;
   const syns = SYNONYM_INDEX.get(tok);
   if (syns) {
+    // A synonym of a family's name names no family: its members stay put.
+    const synonymOpts = {...opts, synonym: true};
     for (const s of syns) {
-      // A synonym of a family's name names no family: its members stay put.
-      const h = scoreCandidate(s, candidate, {...opts, synonym: true});
+      const h = scoreCandidate(s, candidate, synonymOpts);
       if (h) {
         const score = Math.round(h.score * 0.85);
         const hOwn = Math.round((h.used ? (h.own ?? 0) : h.score) * 0.85);
@@ -208,6 +209,11 @@ export function scoreQuery(
   // Multi-word natural language: score each content token, counting only
   // strong hits, then reward coverage so candidates matching more terms win.
   let strongest = 0;
+  // The distinct query words a hit of keyword strength answers, or a word of
+  // the candidate's own name (see ownName below). A word said twice counts
+  // once.
+  /** @type {Set<string>} */
+  const strongWords = new Set();
   // Words the candidate answers with its own text: not only through a
   // component a template uses (see STRONG_TOKEN_SCORE). A word of its own
   // name, display name or title, or the start of one, is its own answer,
@@ -255,10 +261,16 @@ export function scoreQuery(
     }
     if (h && h.score >= MIN_TOKEN_SCORE) {
       if (h.score > strongest) strongest = h.score;
+      /** @type {boolean | undefined} */
+      let inOwnName;
+      const own = () => (inOwnName ??= ownName(tok));
+      if (h.score >= STRONG_TOKEN_SCORE || (ownEvidence && own())) {
+        strongWords.add(joined(tok));
+      }
       if (
         !('used' in h && h.used) ||
         (h.own ?? 0) >= MIN_TOKEN_SCORE ||
-        ownName(tok)
+        own()
       ) {
         ownMatched++;
       }
@@ -302,6 +314,7 @@ export function scoreQuery(
     for (const tok of tokens) {
       if (!hitTerms.includes(tok) && inTitle(tok)) {
         if (STRONG_TOKEN_SCORE > strongest) strongest = STRONG_TOKEN_SCORE;
+        strongWords.add(joined(tok));
         matched++;
         ownMatched++;
         hitTerms.push(tok);
@@ -320,7 +333,12 @@ export function scoreQuery(
   // both; a candidate that has both comes first, ordered among its peers by
   // how strong its matches are. It needs one keyword-strength hit:
   // every word mentioned in prose, or rendered by a page, is breadth, and
-  // stays on the token sum below an exact hit on one word.
+  // stays on the token sum below an exact hit on one word. In search's
+  // reading (`ownEvidence`), an entry that is not a doc needs two strong
+  // words: a hit of keyword strength, or a word of its own name, display
+  // name or title, or the start of one. One strong word and a mention of the others is a match on
+  // that word, not on the ask. A doc answers in prose, so it keeps the bar
+  // of one.
   //
   // The TOTAL quality of matches orders candidates within this tier, not
   // just the strongest single hit. A doc matching both words by keyword
@@ -330,7 +348,8 @@ export function scoreQuery(
   if (
     matched === tokens.length &&
     ownMatched === tokens.length &&
-    strongest >= STRONG_TOKEN_SCORE
+    strongest >= STRONG_TOKEN_SCORE &&
+    (!ownEvidence || candidate.domain === 'doc' || strongWords.size >= 2)
   ) {
     return {
       score:

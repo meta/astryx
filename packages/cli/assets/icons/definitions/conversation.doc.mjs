@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'conversation',
+  group: 'messaging',
   description: 'A conversation between people.',
   words: ['chat', 'discussion', 'thread', 'chat bubbles', 'messages square'],
 };

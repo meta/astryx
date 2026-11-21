@@ -218,6 +218,7 @@ describe('per-job scope step', () => {
         'packages/core/package.json',
         'packages/cli/assets/codemods/__tests__/registry.test.mjs',
         'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
+        'docs/specs/AST-057-row-actions/spec.md',
       ),
     });
     expect(outputs).toMatchObject({
