@@ -17,6 +17,7 @@ import {
   useCallback,
   useMemo,
   useRef,
+  useId,
   useState,
   type KeyboardEvent,
   type PointerEvent,
@@ -67,6 +68,7 @@ import {
   useMediaSelector,
 } from './MediaPlayerContext';
 import {useMediaIcon} from './mediaIcons';
+import {useCommittedRef} from '@astryxdesign/core/internal/committed-ref';
 
 // A marker's popover is optional, so its module loads on intent: a timeline
 // with no marker content loads no Popover code. A failed load is not kept, so
@@ -720,12 +722,30 @@ function MarkerButton({
     () => markerPopover.loaded()?.default ?? null,
   );
   const [isOpen, setIsOpen] = useState(false);
+  const isOpenRef = useRef(false);
   const setOpen = useCallback(
     (next: boolean) => {
+      isOpenRef.current = next;
       setIsOpen(next);
       onOpenChange(next);
     },
     [onOpenChange],
+  );
+  // A marker removed while its popover is open reports the close, so its
+  // layer does not keep the controls shown.
+  const onOpenChangeRef = useCommittedRef(onOpenChange);
+  const attachButton = useCallback(
+    (node: HTMLButtonElement | null) => {
+      buttonRef.current = node;
+      return () => {
+        buttonRef.current = null;
+        if (isOpenRef.current) {
+          isOpenRef.current = false;
+          onOpenChangeRef.current(false);
+        }
+      };
+    },
+    [onOpenChangeRef],
   );
   const loadPopover = (openOnLoad: boolean) => {
     void markerPopover.load().then(
@@ -759,7 +779,7 @@ function MarkerButton({
   };
   const button = (
     <button
-      ref={buttonRef}
+      ref={attachButton}
       type="button"
       aria-label={marker.label}
       aria-haspopup="dialog"
@@ -857,8 +877,14 @@ export function MediaTimeSlider({
   style,
   ...rest
 }: MediaTimeSliderProps) {
-  const {store, scrubTime, setScrubTime, holdControls, wakeControls} =
-    useMediaPlayerContext('MediaTimeSlider');
+  const {
+    store,
+    scrubTime,
+    setScrubTime,
+    holdControls,
+    holdLayer,
+    wakeControls,
+  } = useMediaPlayerContext('MediaTimeSlider');
   const duration = useMediaSelector('MediaTimeSlider', state => state.duration);
   const bufferedEnd = useMediaSelector(
     'MediaTimeSlider',
@@ -1155,7 +1181,9 @@ export function MediaTimeSlider({
                 marker={marker}
                 x={toX(marker.time)}
                 onPress={() => store.actions.seek(marker.time)}
-                onOpenChange={isOpen => holdControls('menu', isOpen)}
+                onOpenChange={isOpen =>
+                  holdLayer(`marker-${marker.time}-${marker.label}`, isOpen)
+                }
               />
             ))}
         </div>
@@ -1459,7 +1487,8 @@ function RateMenu({
   rates: readonly number[];
   size?: MediaControlSize;
 }) {
-  const {store, holdControls} = useMediaPlayerContext('MediaPlaybackRate');
+  const {store, holdLayer} = useMediaPlayerContext('MediaPlaybackRate');
+  const owner = useId();
   const rate = useMediaSelector(
     'MediaPlaybackRate',
     state => state.playbackRate,
@@ -1476,7 +1505,7 @@ function RateMenu({
         xstyle: styles.rateLabel,
         ...themeProps('media-playback-rate-button'),
       }}
-      onOpenChange={isOpen => holdControls('menu', isOpen)}>
+      onOpenChange={isOpen => holdLayer(owner, isOpen)}>
       <DropdownMenuRadioGroup
         label={text.tooltip}
         value={String(rate)}
