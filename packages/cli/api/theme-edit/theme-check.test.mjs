@@ -272,6 +272,11 @@ describe('experimental theme check', () => {
         token: '--color-text-primary',
       });
       expect(leak?.parts).toContain('text-input');
+      // A button in the dark panel, whose hover overlay does not show
+      // there, looks the same under the pointer.
+      expect(
+        bar.problems.some(p => p.kind === 'hover' && p.part === 'button'),
+      ).toBe(true);
       // The panel's own text, white on its dark fill, reads.
       expect(
         bar.problems.some(
@@ -577,11 +582,12 @@ describe('experimental theme check', () => {
           {'dropdown-menu': {base: {boxShadow: 'none'}}},
         ),
       );
-      expect(
-        flat.problems.some(
-          p => p.kind === 'blend' && p.part === 'dropdown-menu',
-        ),
-      ).toBe(true);
+      const flatMenu = flat.problems.find(
+        p => p.kind === 'blend' && p.part === 'dropdown-menu',
+      );
+      expect(flatMenu?.message).toMatch(
+        /In dropdown-menu's style, change boxShadow: 'none' to boxShadow: 'var\(--shadow-[a-z]+\)'/,
+      );
       const still = await check(
         themeFile('still', {
           ...READABLE,
@@ -678,6 +684,11 @@ export const officialTheme = defineTheme({name: 'official', extends: neutralThem
       expect(
         d.fixed.some(x => x.token === '--color-background-error-inverted'),
       ).toBe(true);
+      // Both inverted surfaces are written whole, read or moved, like every
+      // other unset color.
+      const text = fs.readFileSync(path.join(cwd, file), 'utf8');
+      expect(text).toMatch(/'--color-background-inverted': /);
+      expect(text).toMatch(/'--color-background-error-inverted': /);
     },
     T,
   );
@@ -696,6 +707,33 @@ export const officialTheme = defineTheme({name: 'official', extends: neutralThem
       expect(
         fixed.fixed.some(x => (x.token ?? '').startsWith('--color-data-')),
       ).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'finds a named font the app does not load, with the line that installs it',
+    async () => {
+      const root = app('matcha');
+      const dir = path.join(root, 'src');
+      const src = themeFile('matcha', {
+        ...READABLE,
+        '--font-family-body': "'DM Sans', sans-serif",
+      });
+      fs.renameSync(path.join(cwd, src), path.join(dir, 'matchaTheme.ts'));
+      const d = (await themeEditCheck('src/matchaTheme.ts', {cwd: root})).data;
+      const lost = d.problems.find(p => p.kind === 'font-unloaded');
+      expect(lost?.message).toMatch(
+        /install @fontsource\/dm-sans and add import '@fontsource\/dm-sans'; to src\/main\.tsx/,
+      );
+      // Once the app loads it, it is not a problem.
+      fs.writeFileSync(
+        path.join(dir, 'main.tsx'),
+        `import '@fontsource/dm-sans';\n${fs.readFileSync(path.join(dir, 'main.tsx'), 'utf8')}`,
+      );
+      const after = (await themeEditCheck('src/matchaTheme.ts', {cwd: root}))
+        .data;
+      expect(after.problems.some(p => p.kind === 'font-unloaded')).toBe(false);
     },
     T,
   );

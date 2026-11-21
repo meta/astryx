@@ -464,7 +464,7 @@ const PAGE_HEAD_FILES = [
  * @param {string} projectDir
  * @returns {{families: Set<string>, head: string | null}}
  */
-function pageFontLinks(projectDir) {
+export function pageFontLinks(projectDir) {
   /** @type {Set<string>} */
   const families = new Set();
   /** @type {string | null} */

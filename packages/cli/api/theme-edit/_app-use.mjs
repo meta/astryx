@@ -20,6 +20,10 @@ import {renderedElements} from '../../foundation/discovery/module-exports.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {listProjectSourceFiles} from '../../foundation/fs/project-source-files.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {
+  fontKey,
+  importedFontFamilies,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 
 /** Core's stylesheet, the one an app's entry loads. */
 const CORE_CSS = '@astryxdesign/core/astryx.css';
@@ -39,6 +43,7 @@ const PAGE_RULE =
  * @property {'light' | 'dark' | null} pinned the mode every one of them pins, or null
  * @property {boolean} painted whether a stylesheet of the app paints the page with the theme
  * @property {string | null} entry the file that loads Core's stylesheet
+ * @property {Set<string> | null} fonts the font families the app loads, as family keys
  */
 
 /**
@@ -152,7 +157,54 @@ export async function appThemeUse(root, themeFiles) {
     pinned: one === 'light' || one === 'dark' ? one : null,
     painted,
     entry: app ? coreStylesheetLoad(app).file : null,
+    fonts: app ? await appLoadedFonts(app, files) : null,
   };
+}
+
+/**
+ * The font families an app loads, as family keys: what its stylesheets
+ * load with `@font-face` or import, what its modules import (a Fontsource
+ * package, a stylesheet, a `next/font/google` font), and what its page
+ * head links from a font service.
+ * @param {string} app the app's folder
+ * @param {string[]} files the project's source files
+ * @returns {Promise<Set<string>>}
+ */
+async function appLoadedFonts(app, files) {
+  const {pageFontLinks} = await import('../doctor/theme-checks.mjs');
+  /** @type {Set<string>} */
+  const loaded = new Set(pageFontLinks(app).families);
+  for (const file of files) {
+    if (!isWithin(app, file)) continue;
+    const dir = path.dirname(file);
+    /** @param {string} spec */
+    const add = spec => {
+      for (const f of importedFontFamilies(spec, dir)) loaded.add(f);
+    };
+    if (file.endsWith('.css')) {
+      add(`./${path.basename(file)}`);
+      continue;
+    }
+    const source = fs.readFileSync(file, 'utf8');
+    for (const [, spec] of source.matchAll(
+      /\bimport\s+(?:[^'";]*?\sfrom\s+)?['"]([^'"]+)['"]/g,
+    ))
+      if (/^@fontsource(-variable)?\/|\.css$/.test(spec)) add(spec);
+    for (const [, names] of source.matchAll(
+      /\bimport\s*\{([^}]*)\}\s*from\s*['"]next\/font\/google['"]/g,
+    ))
+      for (const name of names.split(','))
+        if (name.trim())
+          loaded.add(
+            fontKey(
+              name
+                .trim()
+                .split(/\s+as\s+/)[0]
+                .replace(/_/g, ' '),
+            ),
+          );
+  }
+  return loaded;
 }
 
 /**

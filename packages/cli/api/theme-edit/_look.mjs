@@ -37,6 +37,7 @@ import {
   hasGenericFamily,
   namedFontFamilies,
 } from '../theme/build/font-warning.mjs';
+import {fontKey} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   NON_TEXT,
   STATUS_TOKEN,
@@ -57,7 +58,7 @@ import {
 /**
  * One problem a person would see.
  * @typedef {object} LookProblem
- * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'charts'} kind
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts'} kind
  * @property {Mode | 'both'} mode
  * @property {string} message
  * @property {string} [token] the token that draws it
@@ -82,8 +83,9 @@ import {
  * @property {TextPair[]} pairs every real text-on-background pair
  * @property {Record<string, import('./_parts.mjs').PartRecord>} map the part data
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
- * @property {{themed: boolean, pinned: Mode | null, painted: boolean} | null} app what the app does with the theme; null outside an app
+ * @property {{themed: boolean, pinned: Mode | null, painted: boolean, fonts: Set<string> | null, entry: string | null} | null} app what the app does with the theme, the font families it loads (as family keys) and the file that loads Core's stylesheet; null outside an app
  * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
+ * @property {(family: string) => string | null} fontPackage the package that installs a font family, or null
  * @property {string[]} unloadedFonts the font families the theme names that are neither generic nor installed with the system
  * @property {(pair: TextPair, fill: string | null, tokens: Record<string, string>, mode: Mode) => string[]} textTokens
  *   the text tokens a pair's text reads on its fill in a mode, as the
@@ -118,7 +120,7 @@ function nearestLightness(from, test) {
 const CATEGORY_OR_CHART =
   /^--color-(data-[a-z0-9-]+|(background|text|icon|border)-(red|orange|yellow|green|teal|cyan|blue|purple|pink|gray))$/;
 /** The surfaces Core's media parts paint and hold their on-colors on. */
-const INVERTED_SURFACES = [
+export const INVERTED_SURFACES = [
   '--color-background-inverted',
   '--color-background-error-inverted',
 ];
@@ -551,8 +553,10 @@ function barTextProblems(look) {
   return [...out.values()];
 }
 
-/** The smallest OKLab step a person sees as a change when a pointer moves on. */
+/** The OKLab step a hover changes a fill by that a person sees at a glance. */
 const HOVER_SHOWS = 0.02;
+/** A hover that changes a fill by less than this OKLab step looks the same. */
+const HOVER_SAME = 0.01;
 
 /**
  * The hover fill a part's own style gives in a block, or null.
@@ -600,7 +604,23 @@ function hoverProblems(look) {
   };
   for (const [part, rec] of Object.entries(map)) {
     const at = rec?.at?.['background-color'] ?? {};
-    for (const key of Object.keys(at)) {
+    // A hover is a fill that replaces the part's own, or a layer drawn
+    // over it: a `::before`, or a one-color background image (a Button's).
+    /** @type {Array<{key: string, value: string, layer: boolean}>} */
+    const hovers = [];
+    for (const [key, value] of Object.entries(at))
+      if (/:hover(::before)?$/.test(key))
+        hovers.push({key, value, layer: key.endsWith('::before')});
+    for (const [key, value] of Object.entries(
+      rec?.at?.['background-image'] ?? {},
+    )) {
+      const flat = /^linear-gradient\((.+),\s*\1\)$/.exec(
+        String(value).replace(/\s+/g, ''),
+      );
+      if (/:hover$/.test(key) && flat)
+        hovers.push({key, value: flat[1], layer: true});
+    }
+    for (const {key, value, layer} of hovers) {
       const hovered = /^(.*?)\s*:hover(::before)?$/.exec(key);
       if (!hovered) continue;
       const restKey = hovered[1] || 'always';
@@ -638,7 +658,7 @@ function hoverProblems(look) {
           );
           const hoverValue =
             ownHover(styles, part, m, block) ??
-            (ownRest != null && !hovered[2] ? ownRest : at[key]);
+            (ownRest != null && !layer ? ownRest : value);
           const c = colorIn(hoverValue, tokens[m], m);
           const top = c ? /** @type {Rgb} */ (parseColor(c)) : null;
           const hover =
@@ -648,7 +668,7 @@ function hoverProblems(look) {
         const theme = paints(res, components, around(part, m));
         const core = paints(base, {}, null);
         if (theme == null || core == null) continue;
-        if (core < HOVER_SHOWS || theme >= HOVER_SHOWS) continue;
+        if (core < HOVER_SHOWS || theme >= HOVER_SAME) continue;
         const k = `${part}|${block ?? ''}|${m}`;
         if (out.has(k)) continue;
         out.set(k, {
@@ -675,7 +695,27 @@ function fontProblems(look) {
   const out = [];
   for (const t of [...look.own].filter(x => /^--font-family/.test(x)).sort()) {
     const value = String(look.res.light[t] ?? '');
-    if (!value || hasGenericFamily(value)) continue;
+    if (!value) continue;
+    // A font the app does not load, with a generic after it: the page
+    // shows the generic, and the theme's look is lost.
+    const fonts = look.app?.themed ? look.app.fonts : null;
+    if (hasGenericFamily(value)) {
+      const lost = namedFontFamilies(value)
+        .filter(f =>
+          look.unloadedFonts.some(u => u.toLowerCase() === f.toLowerCase()),
+        )
+        .filter(f => fonts && !fonts.has(fontKey(f)));
+      if (lost.length) {
+        const pkg = look.fontPackage(lost[0]);
+        out.push({
+          kind: 'font-unloaded',
+          mode: 'both',
+          token: t,
+          message: `${t} names ${lost.join(', ')}, which the app does not load, so the page shows the fallback${pkg ? `: install ${pkg} and add import '${pkg}'; to ${look.app?.entry ?? "the file that loads Core's stylesheet"}` : ''}`,
+        });
+      }
+      continue;
+    }
     const missing = namedFontFamilies(value).filter(f =>
       look.unloadedFonts.some(u => u.toLowerCase() === f.toLowerCase()),
     );
@@ -769,7 +809,14 @@ export function lookProblems(look) {
         message: `menus and dialogs blend into the page in ${m}: the same fill as the page and cards, and no shadow (${[
           ...flat.tokens,
           ...flat.parts.map(q => `${q}'s own boxShadow`),
-        ].join(', ')})`,
+        ].join(', ')})${flat.parts
+          .map(q => {
+            const shadow =
+              menuParts(look.map).find(x => x.part === q)?.shadows[0] ??
+              '--shadow-low';
+            return `. In ${q}'s style, change boxShadow: 'none' to boxShadow: 'var(${shadow})'`;
+          })
+          .join('')}`,
       });
     // Control edges: at least EDGE_SHARE of Core's own edge contrast on
     // Core's same ground, and 3:1 always passes.
@@ -987,12 +1034,13 @@ export function lookRepair(look, problems) {
   for (const [t, mv] of Object.entries(perMode))
     for (const m of modes) if (mv[m]) res[m][t] = /** @type {string} */ (mv[m]);
   // An inverted surface the theme leaves unset (a toast's, an error
-  // toast's): Core draws the theme's own text on it where that reads at
-  // 3:1, else the on-color that reads better. Where what Core draws there
-  // does not read, the surface's lightness moves to the nearest where it
-  // does.
+  // toast's) is written in both modes like every other unset color. Core
+  // draws the theme's own text on it where that reads at 3:1, else the
+  // on-color that reads better; where what Core draws there does not read,
+  // its lightness moves to the nearest where it does.
   for (const t of INVERTED_SURFACES) {
     if (own.has(t)) continue;
+    let moved = false;
     for (const m of modes) {
       const c = shown(colorIn(`var(${t})`, res[m], m), null);
       if (!c) continue;
@@ -1002,19 +1050,22 @@ export function lookRepair(look, problems) {
       const sides = [read('--color-on-dark'), read('--color-on-light')].filter(
         x => x != null,
       );
-      if (!sides.length) continue;
       /** What Core draws on a fill reads at 4.5:1. @param {Rgb} f */
       const reads = f =>
+        !sides.length ||
         (text && ratio(text, f) >= 3
           ? ratio(text, f)
           : Math.max(...sides.map(x => ratio(x, f)))) >= TEXT;
-      if (reads(c)) continue;
-      const moved = nearestLightness(c, reads);
-      if (!moved) continue;
-      (perMode[t] ??= {})[m] = res[m][t] = hex(moved);
+      const to = reads(c) ? c : (nearestLightness(c, reads) ?? c);
+      if (to !== c) moved = true;
+      const mv = (perMode[t] ??= {});
+      // (A color the fill made keeps its own spelling when it reads.)
+      mv[m] = res[m][t] = to === c && mv[m] ? mv[m] : hex(to);
+    }
+    if (moved)
       why[t] =
         `${filledHad.has(t) ? 'unset: filled from the colors the theme sets, ' : 'unset: '}as light or dark as the text Core draws on it needs to read`;
-    }
+    else why[t] ??= "unset: filled with Core's own color, which reads";
   }
   const filled = new Set(Object.keys(perMode));
   /** @type {Record<string, Array<Omit<AcceptRecord, 'reason'>>>} */

@@ -2976,8 +2976,10 @@ function checkLines(d, name, fix) {
 function checkNextEdit(p) {
   if (p.kind === 'hover')
     return `give ${p.part}${p.parts?.length ? ` ${p.parts[0].replace(/^\S+ /, '')}` : ''} a ':hover' fill that differs from its fill at rest`;
-  if (p.kind === 'blend' && p.part)
-    return `remove boxShadow: 'none' from ${p.part}'s style, or give it a border`;
+  if (p.kind === 'blend' && p.part) {
+    const edit = p.message.split('. In ')[1];
+    return edit ? `in ${edit}` : `give ${p.part}'s style a shadow or a border`;
+  }
   if (p.token && p.needs != null)
     return `set ${p.token} to a color that reads at ${p.needs}:1${p.on ? ` on ${p.on}` : ''} in ${p.mode}, or keep it as designed with a record in the theme's .accepted.json`;
   if (p.part) return `change ${p.part}'s own style: ${p.message}`;
