@@ -9,7 +9,7 @@
  *   after its task, though the engine ran its pending play task first. A
  *   pause before that frame keeps the motion paused. A change made while a
  *   motion runs starts at the change
- * @position Testing; the browser proofs and the device takes prove the real
+ * @position Testing; the browser proofs under __tests__ cover the real
  *   engines
  */
 
