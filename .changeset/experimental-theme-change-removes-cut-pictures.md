@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] A theme editor change removes the pictures cut from a tall family picture (`sheet-containers-1.png`) with the others, so none keeps showing the old look.
+[experimental] A theme editor change removes the pictures cut from a tall family picture (`sheet-containers-1.png`) with the others, so none keeps showing the old look, and a change that fails to build puts them back with the others.
 
 @josephfarina
