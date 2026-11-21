@@ -102,7 +102,7 @@ import {
   PALETTE_TOKENS,
   isLookToken,
   VIBRANCY_DEFAULT,
-  vibrancyMoves,
+  vibrancyMovesAny,
   paletteToken,
   seedsInEffect,
 } from './_palette.mjs';
@@ -7126,9 +7126,7 @@ function checkOne(
       // counts when vibrancy changes the shades made from it at all (a warm
       // gray has a little hue to take out or add; a pure gray has none).
       const inEffect = seedsInEffect(ctx.project.cwd, slug, data);
-      const canApply = inEffect.some(f =>
-        vibrancyMoves(f.dial, f.seed, 0, 100),
-      );
+      const canApply = vibrancyMovesAny(inEffect);
       // The fills the theme's own source sets win over their settings.
       const fromSource = inEffect.filter(f => f.source);
       if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {

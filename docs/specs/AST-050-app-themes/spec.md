@@ -683,7 +683,16 @@ alike, and `settingIssues` still lists each. A saved `only` on a part styled
 on its own (one no group spreads to) is read as absent, with one note, by the
 one rule `set --only` follows, so a theme saved with one still opens; read so,
 an entry at the same place as a later entry of the same setting gives way to
-the later one, the one the build shows.
+the later one, the one the build shows. The colors the theme editor derives
+from a look (the category tints, the chart series and the status roles it
+leaves unset) are always written in the same spirit: a chart series takes
+the nearest shade that reads and stands apart, a card tint the nearest
+quieter tint that carries the text and stands apart from the other tints
+and the page (else the nearest stronger one), a status fill gives up standing out from
+the page, then standing apart from the accent, a status role whose text or
+icon reads at no shade keeps the base theme's colors with a note, and a
+limit no shade meets, such as hues a look at vibrancy 0 draws as alike grays,
+is a note the editor says, never a whole set falling back to the base theme's colors.
 
 The editor writes a state so that the build takes it. A state word with
 exactly one reading among a part's states (`pressed` where the part's press is
