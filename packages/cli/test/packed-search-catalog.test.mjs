@@ -24,9 +24,22 @@ import {
   recyclePlacedCopies,
   seedPackedRelease,
 } from '../test-utils/global-local-fixtures.mjs';
-import {releaseTree} from '../foundation/release/cache.mjs';
+import {
+  cachedRelease,
+  releasesDir,
+  releaseTree,
+} from '../foundation/release/cache.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
 import {hasModuleHooks} from '../test-utils/packed-gather-cache-fixture.mjs';
+
+/**
+ * The registry every CLI run here installs from: a local port that refuses at
+ * once (as global-local.shared.mjs's OFFLINE). The copies keep the global
+ * copy's background Core step, and a run without `CI` starts it; it must
+ * install from here, never from npm, so a run on a person's computer behaves
+ * as one in CI and no published release lands in a test's cache.
+ */
+const OFFLINE_REGISTRY = 'http://127.0.0.1:9/';
 
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
@@ -80,7 +93,15 @@ afterAll(() => {
  * @param {Record<string, string>} [extraEnv]
  */
 function run(cliRoot, args, extraEnv = {}, cwd = project) {
-  const env = {...process.env, NO_COLOR: '1', COLUMNS: '100', ...extraEnv};
+  const env = {
+    ...process.env,
+    NO_COLOR: '1',
+    COLUMNS: '100',
+    npm_config_registry: OFFLINE_REGISTRY,
+    // npm retries a refused registry for over a minute by default.
+    npm_config_fetch_retries: '0',
+    ...extraEnv,
+  };
   for (const key of Object.keys(env)) {
     if (key.startsWith('VITEST')) delete env[key];
   }
@@ -391,6 +412,35 @@ describe('the stored search catalog', () => {
       const inProject = run(installed, ask, env);
       expect(guides(inProject).length).toBeGreaterThan(0);
       expect(run(installed, ask, env)).toEqual(inProject);
+    },
+    120_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    "starts the global copy's background Core step from the offline registry, never npm, with CI unset",
+    async () => {
+      // An installed copy is a global copy: outside CI it starts the step.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'o-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      const home = fs.mkdtempSync(path.join(work, 'home-'));
+      const env = {XDG_CACHE_HOME: cache, HOME: home, CI: ''};
+      expect(run(installed, ['--version'], env).status).toBe(0);
+      const cacheDir = userCacheDir({home, env});
+      const failed = path.join(
+        releasesDir(cacheDir),
+        `.failed-${VERSION}.json`,
+      );
+      // The step runs detached after the command ends: wait for its outcome.
+      const deadline = Date.now() + 90_000;
+      while (
+        Date.now() < deadline &&
+        !fs.existsSync(failed) &&
+        !cachedRelease(VERSION, cacheDir)
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      expect(cachedRelease(VERSION, cacheDir)).toBeFalsy();
+      expect(fs.existsSync(failed)).toBe(true);
     },
     120_000,
   );
