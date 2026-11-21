@@ -32478,9 +32478,10 @@ export function draftAnswer(ctx, env, question) {
   // is measured against the theme's text in that mode, as the fill of a
   // part is; a text token that would not read (under 4.5:1) there takes a
   // color that does, in its own line: primary text white or black,
-  // secondary text the farthest shade toward the page that still reads,
-  // and any other color a part draws its text with straight on the page
-  // or a surface (a code block's title) the nearest shade that reads.
+  // secondary text the farthest shade toward the page that still reads;
+  // where the answer fills the page, surfaces and cards with that one
+  // color, any other color a part draws its text with on them (a code
+  // block's title) the nearest shade that reads.
   /** @type {string[] | null} */
   let onPageText = null;
   const pageTextTokens = () => {
@@ -32555,11 +32556,28 @@ export function draftAnswer(ctx, env, question) {
             ? ['light', 'dark']
             : [env.data.mode === 'dark-only' ? 'dark' : 'light']
       );
+      // (The other text colors are measured only where this answer fills
+      // the page, the surfaces and the cards with this one color: the
+      // panels a part's text sits in, a code block's own background among
+      // them, follow the surface then. A page color alone leaves them as
+      // they are.)
+      const everyGround = [
+        '--color-background-surface',
+        '--color-background-card',
+      ].every(t =>
+        d.options[0].some(
+          x =>
+            !x.on &&
+            x.thing === t &&
+            String(x.value) === String(st.value) &&
+            (x.mode ?? '') === (st.mode ?? ''),
+        ),
+      );
       for (const m of modes)
         for (const tok of [
           '--color-text-primary',
           '--color-text-secondary',
-          ...pageTextTokens(),
+          ...(everyGround ? pageTextTokens() : []),
         ]) {
           // (A text color the ask itself writes for this mode, in any of
           // its lines, is the asker's: "page #ffffff in dark mode, text
