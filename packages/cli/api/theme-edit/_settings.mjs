@@ -8201,11 +8201,12 @@ export function compileTheme(ctx, data, base) {
           }
           // Chat surfaces (a composer, its drawer, a message bubble) read
           // --radius-chat, which Core defaults to the container radius and
-          // the bundled themes pin to a value of their own: the dial gives it
-          // back to the container radius, as Core's own default does, so it
-          // follows whatever container radius the theme ends up with (the
-          // dial's, or an exact one set after it).
-          putTok('--radius-chat', 'var(--radius-container)');
+          // the bundled themes pin to a value of their own. The dial writes
+          // it from the container radius, at the base's ratio of the two, so
+          // it follows whatever container radius the theme ends up with (the
+          // dial's, or an exact one set after it) and moves the way the
+          // corners move.
+          putTok('--radius-chat', chatRadiusValue(base));
         }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
@@ -16597,10 +16598,59 @@ export function radiusAt(base, value, token) {
     return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
   }
   // Chat surfaces are on the container step (Core's chat radius defaults to
-  // the container radius): the container radius at this value.
-  if (token === '--radius-chat')
-    return radiusAt(base, value, '--radius-container');
+  // the container radius), at the base's ratio of the two.
+  if (token === '--radius-chat') {
+    const container = radiusAt(base, value, '--radius-container');
+    const chat = chatRatio(base);
+    return chat == null
+      ? container
+      : Math.min(
+          Math.round((container * chat.chat) / chat.container),
+          chat.cap,
+        );
+  }
   return pill ? 9999 : px;
+}
+
+/**
+ * The base theme's chat and container radii in px, when the base pins a
+ * chat radius other than its container radius. Null when the base sets no
+ * length for either, has square containers, or gives both the same radius:
+ * then the chat radius is the container radius. (The two stay a fraction,
+ * so the base's own corners give its chat radius exactly.)
+ * @param {{light: Record<string, string>}} base
+ * @returns {{chat: number, container: number, cap: number} | null}
+ */
+export function chatRatio(base) {
+  const chat = lengthPx(base.light?.['--radius-chat'] ?? '');
+  const container = lengthPx(base.light?.['--radius-container'] ?? '');
+  if (chat == null || container == null || container <= 0) return null;
+  // (A chat surface is never rounder than one and a half times the base's
+  // own chat radius: a composer one line tall has room for no more, and
+  // its drawer tucks under it by that radius.)
+  return chat === container
+    ? null
+    : {chat, container, cap: Math.round(chat * 1.5)};
+}
+
+/**
+ * The chat radius the corners dial writes: the container radius at the
+ * base's ratio of the two, up to the cap {@link chatRatio} names, or the
+ * container radius when the base pins no other. A bound (`at most 8px`)
+ * holds it there too, still read from the container radius.
+ * @param {{light: Record<string, string>}} base
+ * @param {{limit: number, up: boolean} | null} [bound]
+ */
+export function chatRadiusValue(base, bound = null) {
+  const chat = chatRatio(base);
+  const follow =
+    chat == null
+      ? 'var(--radius-container)'
+      : `min(calc(var(--radius-container) * ${chat.chat} / ${chat.container}), ${chat.cap}px)`;
+  if (!bound) return follow;
+  if (!bound.up && chat)
+    return `min(calc(var(--radius-container) * ${chat.chat} / ${chat.container}), ${Math.min(chat.cap, bound.limit)}px)`;
+  return `${bound.up ? 'max' : 'min'}(${follow}, ${bound.limit}px)`;
 }
 
 /**
