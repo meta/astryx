@@ -12673,15 +12673,24 @@ export function draftAnswer(ctx, env, question) {
    * in pixels beside it.
    * Null when no clause says one.
    * @param {Clause} c the leading's own clause
+   * @param {number} [leadAt] where the leading's own pixels sit in it
    * @returns {number | null}
    */
-  const saidTextPx = c => {
-    const re =
-      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b|\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b(?!\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i;
-    for (const o of [c, ...clauses.filter(x => x !== c)]) {
-      const m = re.exec(o.text);
-      if (m) return Number(m[1] ?? m[2]);
-    }
+  const saidTextPx = (c, leadAt = -1) => {
+    // (Each form read on its own, so one never hides the other: "line
+    // height 18px font size 13px".)
+    const forms = [
+      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b/gi,
+      /\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b/gi,
+    ];
+    for (const o of [c, ...clauses.filter(x => x !== c)])
+      for (const re of forms)
+        for (const m of o.text.matchAll(re)) {
+          const at = (m.index ?? 0) + m[0].indexOf(m[1]);
+          // (Never the leading's own pixels.)
+          if (o === c && at === leadAt) continue;
+          return Number(m[1]);
+        }
     // (Or the whole theme's text size another clause asks, "Type:
     // Helvetica 13px".)
     for (const o of clauses) {
@@ -22245,14 +22254,27 @@ export function draftAnswer(ctx, env, question) {
         // A leading in pixels ("18px leading") is that many pixels over the
         // text size: the size the question says for the text ("13px text,
         // 18px leading" is 1.385), else the size the text has now.
-        const pxLeading =
-          /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)|\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/.exec(
+        // ("line height 18px" first: in "font size 13px line height 18px"
+        // the 13px is the text size.)
+        const pxAfter =
+          /\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/i.exec(
             c.text,
           );
-        const leadPx = pxLeading ? Number(pxLeading[1] ?? pxLeading[2]) : null;
+        const pxBefore = pxAfter
+          ? null
+          : /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i.exec(
+              c.text,
+            );
+        const pxLeading = pxAfter ?? pxBefore;
+        const leadPx = pxLeading ? Number(pxLeading[1]) : null;
+        // (Where those pixels sit, so the text size is never read from them.)
+        const leadAt = pxLeading
+          ? pxLeading.index + pxLeading[0].lastIndexOf(pxLeading[1])
+          : -1;
         // (On a part, the pixels as typed: its text size is its own.)
         const leadOnBody = !on || on === 'body' || p?.role === 'body';
-        const textPxSaid = leadPx == null || !leadOnBody ? null : saidTextPx(c);
+        const textPxSaid =
+          leadPx == null || !leadOnBody ? null : saidTextPx(c, leadAt);
         const textPx =
           textPxSaid ??
           (leadPx == null || !leadOnBody
