@@ -154,9 +154,16 @@ export function makeCompiler(project, parts) {
     return found;
   }
 
+  /** Each short condition made, by target and condition. @type {Map<string, string>} */
+  const shortConds = new Map();
   /** A condition, kept to what a person can act on. @param {string} target @param {string} cond */
   function shortCond(target, cond) {
     if (cond === 'always') return '';
+    // The part data never changes while the compiler lives, and a part's
+    // reads name the same conditions under many tokens and properties.
+    const id = `${target}\0${cond}`;
+    const known = shortConds.get(id);
+    if (known !== undefined) return known;
     const attrs = MAP[target]?.attrs ?? {};
     const [attrPart, ...css] = cond.split(' ');
     const t = TARGET.get(target);
@@ -182,7 +189,9 @@ export function makeCompiler(project, parts) {
       .join(' ')
       .replace(/\[data-astryx-press="[a-z]+"\]/g, ':active')
       .trim();
-    return [...kept, cssPart].filter(Boolean).join(' ');
+    const short = [...kept, cssPart].filter(Boolean).join(' ');
+    shortConds.set(id, short);
+    return short;
   }
 
   /**

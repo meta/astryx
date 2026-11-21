@@ -84,4 +84,27 @@ describe('part conditions from the target declaration', () => {
       )?.when,
     ).toEqual(['expanded=expanded']);
   });
+
+  it("reads each condition by its own compiler's part data only", () => {
+    // One target declares `variant` as the part's own look prop and the
+    // other does not, so the same condition reads short differently.
+    const compilerWith = (/** @type {string[]} */ props) => {
+      const project = projectWith(['expanded']);
+      project.target.get('disclosure').props = props;
+      const parts = partsOf(project);
+      parts.map.disclosure.own['background-color'].tokens[
+        '--color-accent-muted'
+      ] = ['variant=plain,expanded=expanded'];
+      return makeCompiler(project, parts);
+    };
+    const whenOf = (/** @type {ReturnType<typeof makeCompiler>} */ C) =>
+      C.partReads('disclosure', 'background').find(
+        r => r.token === '--color-accent-muted',
+      )?.when;
+    expect(whenOf(compilerWith(['variant']))).toEqual(['expanded=expanded']);
+    expect(whenOf(compilerWith([]))).toEqual([
+      'variant=plain expanded=expanded',
+    ]);
+    expect(whenOf(compilerWith(['variant']))).toEqual(['expanded=expanded']);
+  });
 });
