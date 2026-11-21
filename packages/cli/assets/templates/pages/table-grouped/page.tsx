@@ -43,17 +43,20 @@ import {
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useToast} from '@astryxdesign/core/Toast';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  PencilIcon,
-  DocumentDuplicateIcon,
+  EditIcon,
+  CopyIcon,
   ArrowRightIcon,
   TagIcon,
   UserIcon,
-  TrashIcon,
-  EllipsisHorizontalIcon,
-} from '@heroicons/react/24/outline';
-import {XMarkIcon} from '@heroicons/react/24/outline';
-import {ChartBarIcon} from '@heroicons/react/24/solid';
+  DeleteIcon,
+  MoreHorizontalIcon,
+} from '@astryxdesign/template-icons';
+import {CloseIcon} from '@astryxdesign/template-icons';
+import {ChartIcon} from '@astryxdesign/template-icons/24/solid';
 
 // Types
 type TaskStatus = 'in_progress' | 'todo' | 'backlog' | 'done';
@@ -100,7 +103,7 @@ const PRIORITY_COLOR: Record<
 const allTasks: TaskRow[] = [
   {
     id: '1',
-    taskId: 'T235040469',
+    taskId: 'TASK-1001',
     title: 'Update user interface',
     subtitle: 'Update payment gateway integration',
     status: 'in_progress',
@@ -115,7 +118,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '2',
-    taskId: 'T235040470',
+    taskId: 'TASK-1002',
     title: 'Use Projects to organize work for features or releases',
     subtitle: '',
     status: 'in_progress',
@@ -130,7 +133,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '3',
-    taskId: 'T235040471',
+    taskId: 'TASK-1003',
     title: 'Use Cycles to focus work over n-weeks',
     subtitle: '',
     status: 'in_progress',
@@ -145,7 +148,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '4',
-    taskId: 'T235040472',
+    taskId: 'TASK-1004',
     title: 'Testing code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -160,7 +163,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '5',
-    taskId: 'T235040473',
+    taskId: 'TASK-1005',
     title: 'Update backend code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -175,7 +178,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '6',
-    taskId: 'T235040474',
+    taskId: 'TASK-1006',
     title: 'Update front end code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -190,7 +193,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '7',
-    taskId: 'T235040475',
+    taskId: 'TASK-1007',
     title: 'Update payment gateway integration',
     subtitle: '',
     status: 'todo',
@@ -205,7 +208,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '8',
-    taskId: 'T235040476',
+    taskId: 'TASK-1008',
     title: 'Update payment gateway backend code',
     subtitle: '',
     status: 'todo',
@@ -220,7 +223,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '9',
-    taskId: 'T235040477',
+    taskId: 'TASK-1009',
     title: 'Invite your teammates',
     subtitle: '',
     status: 'todo',
@@ -235,7 +238,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '10',
-    taskId: 'T235040478',
+    taskId: 'TASK-1010',
     title: 'Next steps',
     subtitle: '',
     status: 'todo',
@@ -250,7 +253,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '11',
-    taskId: 'T235040479',
+    taskId: 'TASK-1011',
     title: 'Welcome to Linear',
     subtitle: '',
     status: 'backlog',
@@ -265,7 +268,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '12',
-    taskId: 'T235040480',
+    taskId: 'TASK-1012',
     title: 'Connect GitHub or GitLab',
     subtitle: '',
     status: 'backlog',
@@ -280,7 +283,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '13',
-    taskId: 'T235040481',
+    taskId: 'TASK-1013',
     title: 'Customize settings',
     subtitle: '',
     status: 'backlog',
@@ -295,7 +298,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '14',
-    taskId: 'T235040482',
+    taskId: 'TASK-1014',
     title: 'Try 3 ways to navigate: Command menu, keyboard or mouse',
     subtitle: '',
     status: 'done',
@@ -310,7 +313,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '15',
-    taskId: 'T235040483',
+    taskId: 'TASK-1015',
     title: 'Connect to Slack',
     subtitle: '',
     status: 'done',
@@ -325,7 +328,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '16',
-    taskId: 'T235040484',
+    taskId: 'TASK-1016',
     title: 'Migrate database schema to v2',
     subtitle: 'Payment gateway integration',
     status: 'in_progress',
@@ -340,7 +343,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '17',
-    taskId: 'T235040485',
+    taskId: 'TASK-1017',
     title: 'Write integration tests for checkout flow',
     subtitle: '',
     status: 'in_progress',
@@ -355,7 +358,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '18',
-    taskId: 'T235040486',
+    taskId: 'TASK-1018',
     title: 'Set up CI/CD pipeline for staging',
     subtitle: '',
     status: 'in_progress',
@@ -370,7 +373,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '19',
-    taskId: 'T235040487',
+    taskId: 'TASK-1019',
     title: 'Add rate limiting to public API endpoints',
     subtitle: '',
     status: 'todo',
@@ -385,7 +388,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '20',
-    taskId: 'T235040488',
+    taskId: 'TASK-1020',
     title: 'Refactor auth middleware to support OAuth2',
     subtitle: '',
     status: 'todo',
@@ -400,7 +403,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '21',
-    taskId: 'T235040489',
+    taskId: 'TASK-1021',
     title: 'Design error pages for 404 and 500',
     subtitle: '',
     status: 'todo',
@@ -415,7 +418,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '22',
-    taskId: 'T235040490',
+    taskId: 'TASK-1022',
     title: 'Audit third-party dependencies for vulnerabilities',
     subtitle: '',
     status: 'todo',
@@ -430,7 +433,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '23',
-    taskId: 'T235040491',
+    taskId: 'TASK-1023',
     title: 'Implement webhook retry logic with exponential backoff',
     subtitle: 'Payment gateway integration',
     status: 'todo',
@@ -445,7 +448,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '24',
-    taskId: 'T235040492',
+    taskId: 'TASK-1024',
     title: 'Add dark mode support to dashboard',
     subtitle: '',
     status: 'backlog',
@@ -460,7 +463,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '25',
-    taskId: 'T235040493',
+    taskId: 'TASK-1025',
     title: 'Create onboarding flow for new team members',
     subtitle: '',
     status: 'backlog',
@@ -475,7 +478,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '26',
-    taskId: 'T235040494',
+    taskId: 'TASK-1026',
     title: 'Set up error tracking with Sentry',
     subtitle: '',
     status: 'backlog',
@@ -490,7 +493,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '27',
-    taskId: 'T235040495',
+    taskId: 'TASK-1027',
     title: 'Improve search performance with indexing',
     subtitle: '',
     status: 'backlog',
@@ -505,7 +508,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '28',
-    taskId: 'T235040496',
+    taskId: 'TASK-1028',
     title: 'Write API documentation for v2 endpoints',
     subtitle: '',
     status: 'done',
@@ -520,7 +523,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '29',
-    taskId: 'T235040497',
+    taskId: 'TASK-1029',
     title: 'Set up staging environment',
     subtitle: '',
     status: 'done',
@@ -535,7 +538,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '30',
-    taskId: 'T235040498',
+    taskId: 'TASK-1030',
     title: 'Fix flaky end-to-end tests in CI',
     subtitle: '',
     status: 'done',
@@ -584,144 +587,158 @@ function getGroupLabel(groupBy: GroupByField, key: string): string {
   return key;
 }
 
-const columns: TableColumn<TaskRow>[] = [
-  {
-    key: 'status',
-    header: '',
-    width: pixel(44),
-    renderCell: task => (
-      <Center axis="horizontal">
-        <StatusDot
-          variant={STATUS_DOT_VARIANT[task.status]}
-          label={STATUS_LABEL[task.status]}
-        />
-      </Center>
-    ),
-  },
-  {
-    key: 'title',
-    header: 'Issue',
-    width: proportional(1),
-    renderCell: task => (
-      <HStack gap={3} vAlign="center">
-        <Icon
-          icon={ChartBarIcon}
-          size="sm"
-          color={PRIORITY_COLOR[task.priority]}
-        />
-        <Text type="supporting" color="secondary">
-          {task.taskId}
-        </Text>
-        <Text type="body" maxLines={1}>
-          {task.title}
-        </Text>
-        {task.subtitle && (
-          <Text type="body" color="secondary" maxLines={1}>
-            › {task.subtitle}
+function getColumns({
+  onEdit,
+  onDuplicate,
+  onDemo,
+  onDelete,
+}: {
+  onEdit: (task: TaskRow) => void;
+  onDuplicate: (task: TaskRow) => void;
+  /** Says what a menu action would do, for actions this demo does not perform. */
+  onDemo: (task: TaskRow, action: string) => void;
+  /** Asks before the destructive Delete issue action. */
+  onDelete: (task: TaskRow) => void;
+}): TableColumn<TaskRow>[] {
+  return [
+    {
+      key: 'status',
+      header: <VisuallyHidden>Status</VisuallyHidden>,
+      width: pixel(44),
+      renderCell: task => (
+        <Center axis="horizontal">
+          <StatusDot
+            variant={STATUS_DOT_VARIANT[task.status]}
+            label={STATUS_LABEL[task.status]}
+          />
+        </Center>
+      ),
+    },
+    {
+      key: 'title',
+      header: 'Issue',
+      width: proportional(1),
+      renderCell: task => (
+        <HStack gap={3} vAlign="center">
+          <Icon
+            icon={ChartIcon}
+            size="sm"
+            color={PRIORITY_COLOR[task.priority]}
+          />
+          <Text type="supporting" color="secondary">
+            {task.taskId}
           </Text>
-        )}
-      </HStack>
-    ),
-  },
-  {
-    key: 'project',
-    header: 'Project',
-    width: pixel(180),
-    renderCell: task =>
-      task.project ? (
-        <Text type="body" maxLines={1}>
-          {task.project}
-        </Text>
-      ) : (
+          <Text type="body" maxLines={1}>
+            {task.title}
+          </Text>
+          {task.subtitle && (
+            <Text type="body" color="secondary" maxLines={1}>
+              › {task.subtitle}
+            </Text>
+          )}
+        </HStack>
+      ),
+    },
+    {
+      key: 'project',
+      header: 'Project',
+      width: pixel(180),
+      renderCell: task =>
+        task.project ? (
+          <Text type="body" maxLines={1}>
+            {task.project}
+          </Text>
+        ) : (
+          <Text type="supporting" color="secondary">
+            —
+          </Text>
+        ),
+    },
+    {
+      key: 'created',
+      header: 'Created',
+      width: pixel(88),
+      renderCell: task => (
         <Text type="supporting" color="secondary">
-          —
+          {task.created}
         </Text>
       ),
-  },
-  {
-    key: 'created',
-    header: 'Created',
-    width: pixel(88),
-    renderCell: task => (
-      <Text type="supporting" color="secondary">
-        {task.created}
-      </Text>
-    ),
-  },
-  {
-    key: 'updated',
-    header: 'Updated',
-    width: pixel(88),
-    renderCell: task => (
-      <Text type="supporting" color="secondary">
-        {task.updated}
-      </Text>
-    ),
-  },
-  {
-    key: 'assignee',
-    header: 'Assignee',
-    width: pixel(88),
-    renderCell: task => <Avatar name={task.assignee} size="sm" />,
-  },
-  {
-    key: 'actions',
-    header: '',
-    width: pixel(56),
-    renderCell: () => (
-      <DropdownMenu
-        button={{
-          label: 'Actions',
-          variant: 'ghost',
-          size: 'sm',
-          icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
-          isIconOnly: true,
-        }}
-        hasChevron={false}
-        items={[
-          {
-            label: 'Edit issue',
-            icon: PencilIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Assign to...',
-            icon: UserIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Add label',
-            icon: TagIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Duplicate',
-            icon: DocumentDuplicateIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Move to project',
-            icon: (
-              <Icon
-                icon={ArrowRightIcon}
-                size="sm"
-                color="secondary"
-                xstyle={rtlStyles.mirror}
-              />
-            ),
-            onClick: () => {},
-          },
-          {type: 'divider' as const},
-          {
-            label: 'Delete issue',
-            icon: TrashIcon,
-            onClick: () => {},
-          },
-        ]}
-      />
-    ),
-  },
-];
+    },
+    {
+      key: 'updated',
+      header: 'Updated',
+      width: pixel(88),
+      renderCell: task => (
+        <Text type="supporting" color="secondary">
+          {task.updated}
+        </Text>
+      ),
+    },
+    {
+      key: 'assignee',
+      header: 'Assignee',
+      width: pixel(88),
+      renderCell: task => <Avatar name={task.assignee} size="sm" />,
+    },
+    {
+      key: 'actions',
+      header: <VisuallyHidden>Actions</VisuallyHidden>,
+      width: pixel(56),
+      renderCell: task => (
+        <DropdownMenu
+          button={{
+            label: 'Actions',
+            variant: 'ghost',
+            size: 'sm',
+            icon: <Icon icon={MoreHorizontalIcon} size="sm" />,
+            isIconOnly: true,
+          }}
+          hasChevron={false}
+          items={[
+            {
+              label: 'Edit issue',
+              icon: EditIcon,
+              onClick: () => onEdit(task),
+            },
+            {
+              label: 'Assign to...',
+              icon: UserIcon,
+              onClick: () => onDemo(task, 'assigning'),
+            },
+            {
+              label: 'Add label',
+              icon: TagIcon,
+              onClick: () => onDemo(task, 'labeling'),
+            },
+            {
+              label: 'Duplicate',
+              icon: CopyIcon,
+              onClick: () => onDuplicate(task),
+            },
+            {
+              label: 'Move to project',
+              icon: (
+                <Icon
+                  icon={ArrowRightIcon}
+                  size="sm"
+                  color="secondary"
+                  xstyle={rtlStyles.mirror}
+                />
+              ),
+              onClick: () => onDemo(task, 'moving'),
+            },
+            {type: 'divider' as const},
+            {
+              label: 'Delete issue',
+              icon: DeleteIcon,
+              onClick: () => onDelete(task),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+}
 
 const powerSearchConfig: PowerSearchConfig = {
   name: 'IssueSearch',
@@ -830,7 +847,7 @@ function TaskDetailPanel({
             label="Close panel"
             variant="ghost"
             size="sm"
-            icon={<Icon icon={XMarkIcon} size="sm" />}
+            icon={<Icon icon={CloseIcon} size="sm" />}
             isIconOnly
             onClick={onClose}
           />
@@ -858,7 +875,7 @@ function TaskDetailPanel({
           <MetadataListItem label="Priority">
             <HStack gap={2} vAlign="center">
               <Icon
-                icon={ChartBarIcon}
+                icon={ChartIcon}
                 size="sm"
                 color={PRIORITY_COLOR[task.priority]}
               />
@@ -901,6 +918,47 @@ export default function DataTableTemplate() {
   const [priorityFilter, _setPriorityFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
+  const {show: showConfirm, hide: hideConfirm} = confirm;
+  const columns = useMemo(
+    () =>
+      getColumns({
+        onEdit: task =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: editing ${task.taskId} would open here`,
+            uniqueID: `edit-${task.taskId}`,
+          }),
+        onDuplicate: task =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: ${task.taskId} would be duplicated here`,
+            uniqueID: `duplicate-${task.taskId}`,
+          }),
+        onDemo: (task, action) =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: ${action} ${task.taskId} would happen here`,
+            uniqueID: `${action}-${task.taskId}`,
+          }),
+        onDelete: task =>
+          showConfirm({
+            title: `Delete ${task.taskId}?`,
+            description: "This demo won't delete anything.",
+            actionLabel: 'Delete issue',
+            onAction: () => {
+              hideConfirm();
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Demo: ${task.taskId} would be deleted here`,
+                uniqueID: `delete-${task.taskId}`,
+              });
+            },
+          }),
+      }),
+    [showToast, showConfirm, hideConfirm],
+  );
   const [powerSearchFilters, setPowerSearchFilters] = useState<
     ReadonlyArray<PowerSearchFilter>
   >([]);
@@ -987,7 +1045,8 @@ export default function DataTableTemplate() {
         header={
           <LayoutHeader hasDivider padding={4}>
             <VStack gap={4}>
-              <HStack gap={3} vAlign="center">
+              {/* On a narrow screen the action moves under the title instead of squeezing it. */}
+              <HStack gap={3} vAlign="center" wrap="wrap">
                 <StackItem size="fill">
                   <Heading level={1}>All Issues</Heading>
                 </StackItem>
@@ -1141,6 +1200,7 @@ export default function DataTableTemplate() {
           }
         />
       </Dialog>
+      {confirm.element}
     </>
   );
 }

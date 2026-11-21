@@ -21,6 +21,12 @@ import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
 import {formatTokenLabel} from './formatTokenValue';
+import {pickDataAttributes} from '../utils/themeProps';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 const tokenValueStyles = stylex.create({
   value: {
@@ -45,7 +51,15 @@ export function PowerSearchToken({
   onRemove,
   isDisabled,
   timezoneID,
+  ...rest
 }: PowerSearchTokenProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearchToken',
+      'config',
+      'is required: the same config as the PowerSearch it belongs to.',
+    );
+  }
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
   const locale = useLocale();
@@ -77,6 +91,7 @@ export function PowerSearchToken({
 
   return (
     <Token
+      {...pickDataAttributes(rest)}
       label={tokenLabel}
       endContent={valueContent}
       onClick={

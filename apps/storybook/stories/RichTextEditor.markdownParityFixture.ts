@@ -199,6 +199,18 @@ export const MARKDOWN_PARITY_BLOCKS: readonly MarkdownParityBlock[] = [
       '```',
     ),
   },
+  // A language label longer than the header: it wraps before Copy, and the
+  // header grows with it, as tall in read as in edit mode.
+  {
+    key: 'code-long-label',
+    label: 'Fenced code, long language label',
+    probe: 'longLabelFence',
+    markdown: lines(
+      '```alonglanguagenamethatwrapsintheheaderofthecodeblockoneverysurfaceandinbothmodesofthedocumentsurface',
+      'longLabelFence()',
+      '```',
+    ),
+  },
   // A long line in a fence that names no language: the copy button sits in
   // its own column beside the code, so the line wraps before it.
   {

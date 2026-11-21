@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports CheckboxInput component and types from CheckboxInput.tsx
@@ -12,7 +10,4 @@
  */
 
 export {CheckboxInput} from './CheckboxInput';
-export type {
-  CheckboxInputProps,
-  CheckboxInputSize,
-} from './CheckboxInput';
+export type {CheckboxInputProps, CheckboxInputSize} from './CheckboxInput';

@@ -9,9 +9,14 @@
 
 import {Buffer} from 'node:buffer';
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
+
+const {TRAINER_WAITING_TEXT} = createRequire(import.meta.url)(
+  './review-signal-decision.cjs',
+);
 
 // The raw file host is offline here, so jobs read their helpers through the API.
 vi.stubGlobal('fetch', async () => {
@@ -47,6 +52,14 @@ async function runSignal({
   commenter = 'engineer',
   engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
+  author = {login: 'contributor', type: 'User'},
+  // More files than a compare names, and the head the pull request points at
+  // when its live file list has been read.
+  changedFiles = 1,
+  liveHead = HEAD,
+  // The pull request's changed files, as both the compare and the file list
+  // name them.
+  files = [{filename: 'README.md', status: 'modified'}],
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
     {
@@ -59,10 +72,10 @@ async function runSignal({
 } = {}) {
   const pr = {
     number: 42,
-    user: {login: 'contributor', type: 'User'},
+    user: author,
     base: {sha: baseSha, ref: 'main'},
     head: {sha: HEAD, ref: 'feature'},
-    changed_files: 1,
+    changed_files: changedFiles,
     draft,
     labels: [{name: 'needs:code-review'}, {name: 'community'}],
   };
@@ -100,21 +113,22 @@ async function runSignal({
   });
   const github = {
     paginate: async (method, options) => (await method(options)).data,
-    request: async () => ({data: ''}),
+    request: vi.fn(async () => ({data: ''})),
     graphql: mutations.graphql,
     rest: {
       pulls: {
-        get: vi.fn(async () => ({data: pr})),
+        get: vi.fn(async () => ({
+          data: {...pr, head: {...pr.head, sha: liveHead}},
+        })),
         // Like GitHub's list endpoint, the listed PR omits changed_files.
         list: vi.fn(async () => ({data: [{...pr, changed_files: undefined}]})),
-        listFiles: vi.fn(async () => ({
-          data: [{filename: 'README.md', status: 'modified'}],
-        })),
+        listFiles: vi.fn(async () => ({data: files})),
         listReviews: async () => ({data: reviews}),
         requestReviewers: mutations.requestReviewers,
       },
       repos: {
         getContent,
+        compareCommitsWithBasehead: vi.fn(async () => ({data: {files}})),
         createCommitStatus: mutations.createCommitStatus,
         listCommitStatusesForRef: vi.fn(async () => ({
           data:
@@ -450,7 +464,8 @@ describe('review-signal appearance-only contract', () => {
     expect(workflow).toContain(
       'sources[file.filename] = {base: baseSource, head: headSource}',
     );
-    expect(workflow).toContain('if (coreChange || designReasons.length === 0)');
+    expect(workflow).toContain('(coreChange || designReasons.length === 0) &&');
+    expect(workflow).toContain('pr.changed_files <= COMPARE_FILES');
     expect(workflow).toContain(
       "throw new Error('classify-visual.js must stay dependency-free')",
     );
@@ -515,6 +530,78 @@ describe('review-signal appearance-only contract', () => {
     expect(workflow).toContain(
       'Content-based visual classification failed closed',
     );
+  });
+});
+
+describe('a pull request the review app opens waits for a trainer pass (spec:AST-030 FR15)', () => {
+  const APP = 'review-app[bot]';
+  const bot = {login: APP, type: 'Bot'};
+  const review = (login, state, commitId = HEAD) => ({
+    user: {login, type: 'User'},
+    state,
+    commit_id: commitId,
+  });
+  const gate = async options => {
+    const {mutations, github} = await runSignal({
+      eventName: 'pull_request_target',
+      author: bot,
+      reviewApp: APP,
+      ...options,
+    });
+    const calls = mutations.createCommitStatus.mock.calls.map(
+      ([input]) => input,
+    );
+    expect(calls.every(call => call.context === 'review-required')).toBe(true);
+    return {last: calls.at(-1), github};
+  };
+
+  it('keeps review-required pending with no trainer pass at the head', async () => {
+    const {last} = await gate({reviews: []});
+    expect(last).toMatchObject({
+      state: 'pending',
+      description: TRAINER_WAITING_TEXT,
+    });
+  });
+
+  it("keeps it pending when the trainer's approval is for an older head, or was withdrawn", async () => {
+    expect(
+      (await gate({reviews: [review('engineer', 'APPROVED', OLD_BASE)]})).last
+        .state,
+    ).toBe('pending');
+    expect(
+      (
+        await gate({
+          reviews: [
+            review('engineer', 'APPROVED'),
+            review('engineer', 'CHANGES_REQUESTED'),
+          ],
+        })
+      ).last.state,
+    ).toBe('pending');
+  });
+
+  it('keeps it pending when only someone who is not an engineering owner approves', async () => {
+    expect(
+      (await gate({reviews: [review('someone', 'APPROVED')]})).last.state,
+    ).toBe('pending');
+  });
+
+  it('passes once an engineering owner approves the exact head', async () => {
+    const {last} = await gate({reviews: [review('engineer', 'APPROVED')]});
+    expect(last.state).toBe('success');
+    // review-clear's own text, so it re-gates a later withdrawal.
+    expect(last.description).toContain('Cleared by code-owner approval.');
+  });
+
+  it('still exempts other bots, and every bot when no review app is set', async () => {
+    const other = await gate({
+      author: {login: 'dependabot[bot]', type: 'Bot'},
+    });
+    expect(other.last.state).toBe('success');
+    expect(other.last.description).toContain('exempt from code review');
+    const unset = await gate({reviewApp: ''});
+    expect(unset.last.state).toBe('success');
+    expect(unset.last.description).toContain('exempt from code review');
   });
 });
 
@@ -708,5 +795,68 @@ describe("a fork's held review run blocks nothing the owner command and a dispat
       'Only the review-clear reconcile waits on the held review run',
     );
     expect(gate).toContain('run the "Review signal" workflow by hand');
+  });
+});
+
+describe('review-signal reads the event head, not the live pull request', () => {
+  it("reads the files and the diff from a compare of the event's base and head", async () => {
+    const h = await runSignal({eventName: 'pull_request'});
+    expect(h.github.rest.repos.compareCommitsWithBasehead).toHaveBeenCalledWith(
+      {owner: 'meta', repo: 'astryx', basehead: `${OLD_BASE}...${HEAD}`},
+    );
+    expect(h.github.rest.pulls.listFiles).not.toHaveBeenCalled();
+    expect(h.github.request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/compare/{basehead}',
+      expect.objectContaining({
+        basehead: `${OLD_BASE}...${HEAD}`,
+        headers: {accept: 'application/vnd.github.diff'},
+      }),
+    );
+    for (const [route] of h.github.request.mock.calls) {
+      expect(route).not.toMatch(/\/pulls\/\{pull_number\}/);
+    }
+  });
+
+  it("never asks for the pull request's live diff", () => {
+    expect(script).not.toMatch(
+      /['"]GET \/repos\/\{owner\}\/\{repo\}\/pulls\/\{pull_number\}['"]/,
+    );
+    expect(script.match(/application\/vnd\.github\.diff/g)).toHaveLength(1);
+  });
+
+  it('reads a larger pull request from its list, and leaves it to the newer run when the head moved', async () => {
+    const files = Array.from({length: 301}, (_, i) => ({
+      filename: `docs/page-${i}.md`,
+      status: 'modified',
+    }));
+    const moved = await runSignal({
+      eventName: 'pull_request',
+      changedFiles: files.length,
+      files,
+      liveHead: '4'.repeat(40),
+    });
+    expect(moved.github.rest.pulls.listFiles).toHaveBeenCalled();
+    expect(
+      moved.github.rest.repos.compareCommitsWithBasehead,
+    ).not.toHaveBeenCalled();
+    expect(moved.mutations.createCommitStatus).not.toHaveBeenCalled();
+    expect(moved.core.info).toHaveBeenCalledWith(
+      expect.stringContaining('the run for the newer head decides'),
+    );
+  });
+
+  it('never classifies the diff of a pull request larger than a compare names, and still posts its status', async () => {
+    const files = Array.from({length: 301}, (_, i) => ({
+      filename: `docs/page-${i}.md`,
+      status: 'modified',
+    }));
+    const h = await runSignal({
+      eventName: 'pull_request',
+      changedFiles: files.length,
+      files,
+    });
+    expect(h.github.rest.pulls.listFiles).toHaveBeenCalled();
+    expect(h.github.request).not.toHaveBeenCalled();
+    expect(h.mutations.createCommitStatus).toHaveBeenCalled();
   });
 });

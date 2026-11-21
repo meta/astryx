@@ -37,12 +37,12 @@ import {
   FrameStarvationError,
   freezePageOn,
   freezePageWhen,
-  holdAnimations,
   installPageFreeze,
   installTimerGate,
   MARKER_RGB,
   openStory,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   seekAnimations,
@@ -52,9 +52,8 @@ import {
   toTouchEvents,
   touchArrivalsFrom,
   touchDriver,
-  TouchPacingError,
   touchPacingFault,
-  TouchPageStallError,
+  touchPlayError,
   touchStoryboard,
   traceRendering,
   trackMarker,
@@ -74,6 +73,8 @@ const storybook = withStorybook(test);
 const OMEGA = (2 * Math.PI) / 0.3;
 /** Its starting speed, widths per second. */
 const PUSH_VELOCITY = 8.773;
+/** How long a heavy push commit holds the main thread, in ms. */
+const HEAVY_COMMIT_MS = 300;
 
 interface Stack {
   driver: TouchDriver;
@@ -106,7 +107,13 @@ async function newFinePage(browser: Browser) {
  */
 async function openStack(
   page: Page,
-  story: 'settings' | 'pushed' | 'carousel' | 'declines-pops' | 'large-title',
+  story:
+    | 'settings'
+    | 'pushed'
+    | 'carousel'
+    | 'declines-pops'
+    | 'large-title'
+    | 'raised-content',
   {
     standalone = false,
     pointer = 'touch',
@@ -879,11 +886,15 @@ test('brought back past its start, the screen follows with resistance, then spri
     });
   }
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
-  await driver.play(frames);
-  // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top, {
+  // The return, held as it starts and read every 2 ms from its start. The
+  // page holds it itself. A hold sent after the play reaches the page later
+  // the busier the machine is, and the return can be over by then.
+  const returning = await armHold(page, top, {
     judges: {target: top, property: 'translate'},
+    newOnly: true,
   });
+  await driver.play(frames);
+  const heldAnimations = await returning.held();
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -1015,7 +1026,8 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   }
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
   const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
-  const run = await armInputRun(page, TOUCH_INPUT_TYPES);
+  // With the page's frames, so a starved runner's late move reads as such.
+  const run = await armInputRun(page, TOUCH_INPUT_TYPES, {frames: true});
   // The page reads the release from when the moves arrive: pace on spacing.
   await driver.play(script, {pacing: 'spacing'});
   await waitForRest(card(page, 'screen-General'));
@@ -1024,8 +1036,9 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   } catch (error) {
     // A starved runner delivers the moves late, so the page reads a release
     // far from the script's. Past half of it, the run did not deliver the
-    // flick this test describes. It fails by name, as the page's when its own
-    // listeners held a move.
+    // flick this test describes. It fails by name. It is the page's when its
+    // own listeners held a move. It is the starved runner's when the page drew
+    // no frame across the late gap.
     const record = await run.evaluate(recorded => {
       recorded.stop();
       return {
@@ -1033,17 +1046,14 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
         pointerTypes: recorded.pointerTypes.slice(),
         stamps: recorded.stamps.slice(),
         handledAt: recorded.handledAt.slice(),
+        frames: recorded.frames.slice(),
       };
     });
-    const fault = touchPacingFault(
-      toTouchEvents(script),
-      touchArrivalsFrom(record),
-      0.5,
-    );
+    const steps = toTouchEvents(script);
+    const arrivals = touchArrivalsFrom(record);
+    const fault = touchPacingFault(steps, arrivals, 0.5);
     if (fault != null) {
-      throw fault.heldByPage == null
-        ? new TouchPacingError(fault)
-        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+      throw touchPlayError(steps, arrivals, fault, [], record.frames);
     }
     throw error;
   }
@@ -1147,6 +1157,159 @@ function blockDuringPush(page: Page, ms: number) {
     minProgressMs: 16,
   });
 }
+
+test('a push whose commit blocks the main thread starts from its first frame', async ({
+  page,
+}) => {
+  // A heavy screen blocks the main thread in the task that pushes it (here
+  // for 300 ms, right after the stack mounts it). The push starts when that
+  // task ends, so its first frames show it near where it starts. Dated
+  // before the block, it would show almost all of its travel at once. The
+  // check reads the time since the block with the position, because an
+  // engine's first frames after a long task can take far longer than 16 ms.
+  const {driver, width} = await openStack(page, 'settings');
+  await page.evaluate(blockMs => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector('[data-navigation-screen="screen-General"]') ==
+        null
+      ) {
+        return;
+      }
+      observer.disconnect();
+      const until = performance.now() + blockMs;
+      while (performance.now() < until) {
+        // Hold the main thread, as a heavy commit does.
+      }
+      (window as Window & {blockEnd?: number}).blockEnd = performance.now();
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  }, HEAVY_COMMIT_MS);
+  await driver.tap(await rowCenter(page, 'General'));
+  // The second frame after the block, and how long after the block it ran.
+  const {x, sinceBlock} = await page.evaluate(
+    () =>
+      new Promise<{x: number; sinceBlock: number}>(resolve => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const pushed = document.querySelector(
+              '[data-navigation-screen="screen-General"]',
+            );
+            const value =
+              pushed == null ? 'none' : getComputedStyle(pushed).translate;
+            const blockEnd =
+              (window as Window & {blockEnd?: number}).blockEnd ?? 0;
+            resolve({
+              x: value === 'none' ? 0 : parseFloat(value),
+              sinceBlock: performance.now() - blockEnd,
+            });
+          }),
+        );
+      }),
+  );
+  // The push spring from the trailing edge (OMEGA, starting at
+  // PUSH_VELOCITY): about 70 % of the width is still to travel after 33 ms.
+  // The share left `ms` into the push:
+  const leftAt = (ms: number) => {
+    const s = ms / 1000;
+    return (1 + (OMEGA - PUSH_VELOCITY) * s) * Math.exp(-OMEGA * s);
+  };
+  // Started at the block's end, at least half of what the spring leaves at
+  // that time is still to travel. Dated before the 300 ms block, almost none
+  // would be.
+  expect(Math.abs(x) / width).toBeGreaterThan(0.5 * leftAt(sinceBlock));
+});
+
+test('a push from rest after a heavy commit never skips into its curve', async ({
+  page,
+}) => {
+  // The first frame that moves shows no more of the spring than the time
+  // since the frame before it (or since the block ended) allows, plus one
+  // frame, so the push never skips into its curve. A mouse click is an input
+  // task in every engine, as a tap is, so the test needs no touch path. The
+  // frames are read from the task that blocks, so the count starts there.
+  await openStory(page, storybook(), 'lab-navigationstack--settings');
+  const stackBox = await page.getByTestId('navigation-stack').boundingBox();
+  if (stackBox == null) {
+    throw new Error('no stack');
+  }
+  const width = stackBox.width;
+  await page.evaluate(blockMs => {
+    type Frame = {offset: number; t: number; isFound: boolean};
+    const trace = window as Window & {
+      blockEnd?: number;
+      pushFrames?: Frame[];
+    };
+    const selector = '[data-navigation-screen="screen-General"]';
+    const observer = new MutationObserver(() => {
+      if (document.querySelector(selector) == null) {
+        return;
+      }
+      observer.disconnect();
+      const until = performance.now() + blockMs;
+      while (performance.now() < until) {
+        // Hold the main thread, as a heavy commit does.
+      }
+      trace.blockEnd = performance.now();
+      // The pushed card's offset and the frame time, in the first six
+      // frames after the block.
+      const read: Frame[] = [];
+      const step = (t: number) => {
+        const pushed = document.querySelector(selector);
+        const value =
+          pushed == null ? 'none' : getComputedStyle(pushed).translate;
+        read.push({
+          offset: value === 'none' ? 0 : Math.abs(parseFloat(value)),
+          t,
+          isFound: pushed != null,
+        });
+        if (read.length < 6) {
+          requestAnimationFrame(step);
+        } else {
+          trace.pushFrames = read;
+        }
+      };
+      requestAnimationFrame(step);
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  }, HEAVY_COMMIT_MS);
+  const row = await rowCenter(page, 'General');
+  await page.mouse.click(row.x, row.y);
+  await page.waitForFunction(
+    () =>
+      (window as Window & {pushFrames?: unknown[]}).pushFrames?.length === 6,
+  );
+  const {frames, blockEnd} = await page.evaluate(() => {
+    const trace = window as Window & {
+      blockEnd?: number;
+      pushFrames?: {offset: number; t: number; isFound: boolean}[];
+    };
+    return {frames: trace.pushFrames ?? [], blockEnd: trace.blockEnd ?? 0};
+  });
+  // The push happened: the block ran, and every frame found the pushed card.
+  expect(blockEnd).toBeGreaterThan(0);
+  expect(frames.map(frame => frame.isFound)).toEqual(Array(6).fill(true));
+  const travelled = frames.map(frame => 1 - frame.offset / width);
+  const firstMoving = travelled.findIndex(share => share > 0.005);
+  expect(firstMoving).toBeGreaterThanOrEqual(0);
+  // The push starts on the first frame after the task. Chromium can run the
+  // first two frames after a long task on one frame time, so the card can
+  // still read at rest on the second read.
+  expect(firstMoving).toBeLessThanOrEqual(2);
+  // The spring's share after `ms` from rest (OMEGA, starting at
+  // PUSH_VELOCITY), and the most the first moving frame may show: the time
+  // since the frame before it (or since the block ended), plus one frame.
+  const shareAt = (ms: number) => {
+    const s = ms / 1000;
+    return 1 - (1 + (OMEGA - PUSH_VELOCITY) * s) * Math.exp(-OMEGA * s);
+  };
+  const sincePrevious =
+    frames[firstMoving].t -
+    (firstMoving > 0 ? frames[firstMoving - 1].t : blockEnd);
+  expect(travelled[firstMoving]).toBeLessThanOrEqual(
+    shareAt(sincePrevious + 17) + 0.02,
+  );
+});
 
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
@@ -1498,6 +1661,58 @@ test('under a finger, a pop that reveals a screen two levels down leaves its bar
   expect(await readCut(page, 'root')).toEqual({shown: 0});
   expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
 });
+
+for (const pointer of ['touch', 'mouse'] as const) {
+  test(`screen content with z-index 2 stays under the bar's title and Back (${pointer})`, async ({
+    page,
+    browser,
+  }) => {
+    // A mouse page reads a fine pointer only in its own context.
+    const {context, page: target} =
+      pointer === 'mouse' ? await newFinePage(browser) : {context: null, page};
+    try {
+      await openStack(target, 'raised-content', {pointer});
+      await expect(target.getByTestId('raised-content')).toBeVisible();
+      // At rest, after the animator lets go of `will-change` (it holds it
+      // briefly after the last motion, and that alone makes a stacking
+      // context), so only the card's own isolation keeps the content under.
+      await expect
+        .poll(() =>
+          target.evaluate(() =>
+            [...document.querySelectorAll('[data-navigation-screen]')].every(
+              screen => getComputedStyle(screen).willChange === 'auto',
+            ),
+          ),
+        )
+        .toBe(true);
+      const hits = await target.evaluate(() => {
+        const at = (element: Element | null) => {
+          const box = element?.getBoundingClientRect();
+          if (element == null || box == null) {
+            return null;
+          }
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return hit != null && element.contains(hit);
+        };
+        const title = [...document.querySelectorAll('h2')].find(
+          h => h.closest('[inert]') == null,
+        );
+        return {
+          title: at(title ?? null),
+          back: at(document.querySelector('[data-navigation-back]')),
+        };
+      });
+      expect(hits).toEqual({title: true, back: true});
+      await target.locator('[data-navigation-back]').click();
+      await expect(card(target, 'screen-General')).toHaveCount(0);
+    } finally {
+      await context?.close();
+    }
+  });
+}
 
 test('under a finger, Back reveals the covered bar whole', async ({page}) => {
   const {driver} = await openStack(page, 'settings');
@@ -2469,28 +2684,60 @@ test('under Reduce Motion the bar title cross-fades in place, without the rise',
   await page.emulateMedia({reducedMotion: 'reduce'});
   await openStack(page, 'large-title');
   const barText = page.locator('[data-navigation-bar="root"] h2');
-  await card(page, 'root').evaluate(element =>
-    (element.firstElementChild as HTMLElement).scrollTo({top: 300}),
-  );
-  const samples = await sampleRects(barText, 900);
-  await expect
-    .poll(async () =>
-      barText.evaluate(e => Number(getComputedStyle(e).opacity)),
-    )
-    .toBe(1);
+  const scrollTo = (top: number) =>
+    card(page, 'root').evaluate(
+      (element, y) =>
+        (element.firstElementChild as HTMLElement).scrollTo({top: y}),
+      top,
+    );
+  const opacity = () =>
+    barText.evaluate(e => Number(getComputedStyle(e).opacity));
+  // The read starts before the scroll, so it covers the whole fade.
+  const reading = sampleRects(barText, 900);
+  await scrollTo(300);
+  const samples = await reading;
+  await expect.poll(opacity).toBe(1);
   // Where the shown title rests (hidden, it sits 15 px lower for the rise).
   const rest = await barText.boundingBox();
-  const fading = samples.filter(
-    sample => sample.opacity > 0.05 && sample.opacity < 0.95,
-  );
-  // A fade, not a jump…
-  expect(fading.length, JSON.stringify(samples)).toBeGreaterThan(2);
+  // A fade, not a jump: frames the page drew mid-fade. A page starved of
+  // frames draws too few of them, and fails by name.
+  requireFrames(samples, {
+    min: 3,
+    during: 'the bar title faded in',
+    where: sample => sample.opacity > 0.05 && sample.opacity < 0.95,
+  });
   // …in place: every visible frame is already at the resting position.
   for (const sample of samples.filter(item => item.opacity > 0.05)) {
     expect(
       Math.abs((sample.box?.y ?? NaN) - (rest?.y ?? NaN)),
       JSON.stringify(samples),
     ).toBeLessThan(0.5);
+  }
+  // The same fade, held as it starts and read at fixed times through the
+  // 200 ms cross-fade. It is part-way at more than two of them, so it is a
+  // fade and not a jump. The title is in place at each.
+  await scrollTo(0);
+  await expect.poll(opacity).toBe(0);
+  const fade = await armHold(page, barText, {
+    judges: {target: barText, property: 'opacity'},
+    newOnly: true,
+  });
+  await scrollTo(300);
+  await fade.held();
+  const curve = await sampleCurve(
+    barText,
+    Array.from({length: 9}, (_, i) => (i + 1) * 20),
+  );
+  await releaseAnimations(page, {finish: true});
+  const trace = JSON.stringify(
+    curve.map(c => [c.t, c.opacity, c.transform.translateY]),
+  );
+  expect(
+    curve.filter(c => c.opacity > 0.05 && c.opacity < 0.95).length,
+    trace,
+  ).toBeGreaterThan(2);
+  for (const c of curve) {
+    expect(Math.abs(c.transform.translateY), trace).toBeLessThan(0.5);
   }
 });
 
@@ -2697,3 +2944,61 @@ test(
     expect(Math.max(...frames.map(f => f.top))).toBeGreaterThan(width * 0.5);
   },
 );
+
+test.describe('a tap that wobbles keeps its click', () => {
+  test('a tap on a pushed screen\u2019s row that drifts 3 px toward the back swipe keeps every move, and Chromium runs its click: the content back swipe waits out a tap\u2019s wobble (spec:AST-094 FR19, DEC-30)', async ({
+    page,
+  }) => {
+    // A pushed screen: the content back swipe can pop it.
+    const {driver, topTitle} = await openStack(page, 'pushed');
+    expect(await topTitle()).toBe('About');
+    await page.evaluate(() => {
+      const moves: {travel: number; cancelled: boolean}[] = [];
+      (window as unknown as {__wobble: typeof moves}).__wobble = moves;
+      let startX = 0;
+      window.addEventListener(
+        'touchstart',
+        event => {
+          startX = event.touches[0]?.clientX ?? 0;
+        },
+        {passive: true},
+      );
+      window.addEventListener(
+        'touchmove',
+        event => {
+          moves.push({
+            travel: Math.round((event.touches[0]?.clientX ?? 0) - startX),
+            cancelled: event.defaultPrevented,
+          });
+        },
+        {passive: true},
+      );
+    });
+    const at = await rowCenter(page, 'Done');
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: at.x, y: at.y}]},
+      {t: 30, fingers: [{id: 0, x: at.x + 2, y: at.y}]},
+      {t: 60, fingers: [{id: 0, x: at.x + 3, y: at.y}]},
+      {t: 90, fingers: []},
+    ]);
+    // WebKit ends a touch's click when one of its moves is cancelled;
+    // Chromium sends no move inside its 15 px slop.
+    const moves = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __wobble: {travel: number; cancelled: boolean}[];
+          }
+        ).__wobble,
+    );
+    if (driver.engine === 'webkit') {
+      // WebKit sends the wobble's moves; each reaches the page uncancelled.
+      expect(moves.length, JSON.stringify(moves)).toBeGreaterThan(0);
+    }
+    expect(moves.filter(({cancelled}) => cancelled)).toEqual([]);
+    if (driver.engine === 'chromium') {
+      // Chromium makes the play's click: Done pops to the root.
+      await expect.poll(topTitle).toBe('Settings');
+    }
+  });
+});

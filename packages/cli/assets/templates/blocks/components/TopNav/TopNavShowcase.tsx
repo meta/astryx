@@ -6,17 +6,23 @@ import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
-import {BellIcon, CubeIcon, UserCircleIcon} from '@heroicons/react/24/outline';
+import {
+  NotificationIcon,
+  PackageIcon,
+  UserCircleIcon,
+} from '@astryxdesign/template-icons';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function TopNavShowcase() {
+  const showToast = useToast();
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Main navigation"
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
         />
       }
       startContent={
@@ -29,18 +35,25 @@ export default function TopNavShowcase() {
       endContent={
         <>
           <Button
+            onClick={() => showToast({body: 'Demo: search would open here'})}
             label="Search"
             variant="ghost"
             icon={<Icon icon="search" color="inherit" />}
             isIconOnly
           />
           <Button
+            onClick={() =>
+              showToast({body: 'Demo: your notifications would open here'})
+            }
             label="Notifications"
             variant="ghost"
-            icon={<BellIcon />}
+            icon={<NotificationIcon />}
             isIconOnly
           />
           <Button
+            onClick={() =>
+              showToast({body: 'Demo: your profile menu would open here'})
+            }
             label="Profile"
             variant="ghost"
             icon={<UserCircleIcon />}

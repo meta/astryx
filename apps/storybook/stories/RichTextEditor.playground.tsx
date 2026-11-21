@@ -762,7 +762,7 @@ export function RichTextEditorPlayground() {
                         {/* Outside the toolbar: a Toolbar is a roving tab stop,
                           so a dialog rendered in its endContent cannot be
                           tabbed through. RichTextEditorToolbar puts its own
-                          link dialog beside the toolbar for the same reason. */}
+                          link popover beside the toolbar for the same reason. */}
                         <InsertImageDialog />
                       </>
                     )}

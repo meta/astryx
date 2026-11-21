@@ -11,7 +11,9 @@
  *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
  *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
  *   group's box from its edge members, and shrinks a side the members do not
- *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on
+ *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on.
+ *   `screenScale` reads how far transforms scale a box, and `layoutSize` a
+ *   box's untransformed size (hooks/useOverflow.ts uses both)
  * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
  *   Groups that measure their actions at press start pass `resolveHitTarget`;
  *   a standalone control writes `watchHitArea`'s insets to an invisible
@@ -30,6 +32,9 @@
 // layout px. A layer that opens from a smaller scale then keeps the insets of
 // the size it settles at.
 
+import {subscribeInput} from './inputStream';
+import {isElement} from './nodeType';
+import {sharedState} from './sharedRealm';
 import {
   flushMutations,
   observeContent,
@@ -307,6 +312,12 @@ const FRAME_BUDGET_MS = 4;
  */
 const CONTENT_SETTLE_MS = 100;
 
+/**
+ * How long the page must go without a scroll event before a pass runs, ms,
+ * where the browser sends no `scrollend`.
+ */
+const SCROLL_STILL_MS = 150;
+
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
 
 /**
@@ -343,6 +354,8 @@ interface Watch {
   readonly onInsets: (insets: HitInsets) => void;
   isVisible: boolean;
   last: HitInsets;
+  /** The ancestor animations the watch waits out before a pass reads it. */
+  readonly heldBy: Set<Animation>;
 }
 
 /** Each watched element: its watches, and what observes it while coarse. */
@@ -367,16 +380,24 @@ let visibility: IntersectionObserver | null = null;
 let resize: ResizeObserver | null = null;
 let isCoarse = false;
 /**
- * The page's interactive elements, as the last pass found them. A pass keeps
- * them until a mutation or a watch change can change them.
+ * The page's interactive elements. An added subtree, an attribute change or
+ * a watch change updates them, and a read drops the elements that left the
+ * page. So the page is matched only once.
  */
-let interactive: Element[] | null = null;
+let interactive: Set<Element> | null = null;
 let interactiveDocument: Document | null = null;
 let stopInteractiveWatch: (() => void) | null = null;
-
-function forgetInteractive(): void {
-  interactive = null;
-}
+/**
+ * The page's scroll gate, one for every copy of Core. It knows whether the
+ * page is scrolling, from a scroll to its end or a still beat. Each copy that
+ * observes adds what it runs as the scroll ends.
+ */
+const scrollGate = sharedState('utils/hit-area/scroll-gate', 1, () => ({
+  isScrolling: false,
+  timer: undefined as ReturnType<typeof setTimeout> | undefined,
+  stop: null as (() => void) | null,
+  onEnd: new Set<() => void>(),
+}));
 
 function stopWatchingInteractive(): void {
   stopInteractiveWatch?.();
@@ -429,14 +450,64 @@ function plainRect(element: Element): HitRect {
 /** A box that the transforms around it leave at its layout size. */
 const UNSCALED = {x: 1, y: 1} as const;
 
+/**
+ * What `screenScale` reads as unscaled. `pixels`: a box within this many
+ * pixels of its whole-pixel offset size, read without a style lookup (0 turns
+ * the shortcut off). `ratio`: a scale less than this far from 1.
+ */
+export interface ScreenScaleTolerance {
+  readonly pixels: number;
+  readonly ratio: number;
+}
+
 /** One axis of a box's scale on screen: its client size over its layout size. */
-function axisScale(onScreen: number, layout: number): number {
+function axisScale(onScreen: number, layout: number, ratio: number): number {
   if (!(layout > 0) || !(onScreen > 0)) {
     return 1;
   }
   const scale = onScreen / layout;
-  // Within rounding of 1 the box is at its layout size: no change to the rects.
-  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+  // Within the tolerance of 1 the box is at its layout size.
+  return Math.abs(scale - 1) < ratio ? 1 : scale;
+}
+
+/**
+ * Hit areas: within a pixel of its layout size a box reads as unscaled, which
+ * bounds the inset error at about a pixel and skips a style lookup.
+ */
+const HIT_AREA_TOLERANCE: ScreenScaleTolerance = {pixels: 1, ratio: 1e-3};
+
+/**
+ * A box's border-box size in layout px, from its computed style. Transforms
+ * do not change it, and it keeps the sub-pixel size a scaled rect loses to
+ * the browser's rounding. Null when the style has no pixel width.
+ */
+export function layoutSize(
+  element: Element,
+): {width: number; height: number} | null {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style == null || !style.width.endsWith('px')) {
+    return null;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const isContentBox = style.boxSizing !== 'border-box';
+  return {
+    width:
+      px(style.width) +
+      (isContentBox
+        ? px(style.paddingLeft) +
+          px(style.paddingRight) +
+          px(style.borderLeftWidth) +
+          px(style.borderRightWidth)
+        : 0),
+    height:
+      px(style.height) +
+      (isContentBox
+        ? px(style.paddingTop) +
+          px(style.paddingBottom) +
+          px(style.borderTopWidth) +
+          px(style.borderBottomWidth)
+        : 0),
+  };
 }
 
 /**
@@ -445,9 +516,10 @@ function axisScale(onScreen: number, layout: number): number {
  * the layout box keeps the size the layer settles at. Only a scale is
  * expected: a rotated or skewed box would read as a larger scale.
  */
-function screenScale(
+export function screenScale(
   element: Element,
   onScreen: HitRect,
+  tolerance: ScreenScaleTolerance,
 ): {x: number; y: number} {
   // The offset size is the layout size in whole pixels, unaffected by
   // transforms, and costs no style resolution. A box with none, such as an SVG
@@ -458,40 +530,24 @@ function screenScale(
   if (offsetWidth === 0 || offsetHeight === 0) {
     return UNSCALED;
   }
-  // Within a pixel of its layout size the box reads as unscaled, which bounds
-  // the inset error at about a pixel. Only a box that a transform shrinks or
-  // grows reads its exact size from the computed style.
+  // Within `tolerance.pixels` of its layout size the box reads as unscaled.
+  // Any other box reads its exact size from the computed style.
   if (
-    Math.abs(onScreen.right - onScreen.left - offsetWidth) <= 1 &&
-    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= 1
+    tolerance.pixels > 0 &&
+    Math.abs(onScreen.right - onScreen.left - offsetWidth) <=
+      tolerance.pixels &&
+    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= tolerance.pixels
   ) {
     return UNSCALED;
   }
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style == null || !style.width.endsWith('px')) {
+  const size = layoutSize(element);
+  if (size == null) {
     return UNSCALED;
   }
-  const px = (value: string) => Number.parseFloat(value) || 0;
-  const isContentBox = style.boxSizing !== 'border-box';
-  const width =
-    px(style.width) +
-    (isContentBox
-      ? px(style.paddingLeft) +
-        px(style.paddingRight) +
-        px(style.borderLeftWidth) +
-        px(style.borderRightWidth)
-      : 0);
-  const height =
-    px(style.height) +
-    (isContentBox
-      ? px(style.paddingTop) +
-        px(style.paddingBottom) +
-        px(style.borderTopWidth) +
-        px(style.borderBottomWidth)
-      : 0);
+  const {width, height} = size;
   return {
-    x: axisScale(onScreen.right - onScreen.left, width),
-    y: axisScale(onScreen.bottom - onScreen.top, height),
+    x: axisScale(onScreen.right - onScreen.left, width, tolerance.ratio),
+    y: axisScale(onScreen.bottom - onScreen.top, height, tolerance.ratio),
   };
 }
 
@@ -549,26 +605,106 @@ function interactiveElements(doc: Document): Element[] {
     stopInteractiveWatch = observeMutations(
       doc,
       CANDIDATE_MUTATIONS,
-      forgetInteractive,
+      updateInteractive,
     );
   } else {
     // A mutation earlier in this task is not delivered yet.
     flushMutations(CANDIDATE_MUTATIONS);
   }
   if (interactive != null) {
-    return interactive;
+    // A removed element leaves the list here, at the next read.
+    for (const element of interactive) {
+      if (!element.isConnected) {
+        interactive.delete(element);
+      }
+    }
+    return [...interactive];
   }
-  const seen = new Set<Element>();
-  const elements: Element[] = [];
-  for (const found of doc.querySelectorAll(INTERACTIVE_SELECTOR)) {
-    const element = watchedOwner(found) ?? found;
-    if (!seen.has(element)) {
-      seen.add(element);
-      elements.push(element);
+  const elements = new Set<Element>();
+  addMatches(elements, doc);
+  interactive = elements;
+  return [...elements];
+}
+
+/** Adds the interactive elements in `root`, each as its watched owner. */
+function addMatches(kept: Set<Element>, root: Document | Element): void {
+  if (isElement(root) && root.matches(INTERACTIVE_SELECTOR)) {
+    kept.add(watchedOwner(root) ?? root);
+  }
+  for (const found of root.querySelectorAll(INTERACTIVE_SELECTOR)) {
+    kept.add(watchedOwner(found) ?? found);
+  }
+}
+
+/**
+ * Keeps the list current from one batch of mutations: an added subtree is
+ * matched alone, and an element that the selector stops matching leaves.
+ */
+function updateInteractive(records: ReadonlyArray<MutationRecord>): void {
+  const kept = interactive;
+  if (kept == null) {
+    return;
+  }
+  for (const record of records) {
+    if (record.type !== 'attributes') {
+      record.addedNodes.forEach(node => {
+        if (isElement(node)) {
+          addMatches(kept, node);
+        }
+      });
+      continue;
+    }
+    const {target} = record;
+    if (!isElement(target)) {
+      continue;
+    }
+    if (target.matches(INTERACTIVE_SELECTOR)) {
+      kept.add(watchedOwner(target) ?? target);
+    } else if (!watched.has(target)) {
+      kept.delete(target);
     }
   }
-  interactive = elements;
-  return elements;
+}
+
+/** Whether a watched element counts by its own box for anything in it. */
+function ownsAMatch(owner: Element): boolean {
+  if (owner.matches(INTERACTIVE_SELECTOR)) {
+    return true;
+  }
+  for (const found of owner.querySelectorAll(INTERACTIVE_SELECTOR)) {
+    if (watchedOwner(found) === owner) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** A newly watched element: what it holds now counts by its box. */
+function regroup(element: Element): void {
+  const kept = interactive;
+  if (kept == null) {
+    return;
+  }
+  for (const found of element.querySelectorAll(INTERACTIVE_SELECTOR)) {
+    kept.delete(found);
+  }
+  addMatches(kept, element);
+  // An outer watch that counted only for what `element` holds stops counting.
+  const outer =
+    element.parentElement == null ? null : watchedOwner(element.parentElement);
+  if (outer != null && kept.has(outer) && !ownsAMatch(outer)) {
+    kept.delete(outer);
+  }
+}
+
+/** An element no longer watched: what it held counts by its own box again. */
+function ungroup(element: Element): void {
+  const kept = interactive;
+  if (kept == null) {
+    return;
+  }
+  kept.delete(element);
+  addMatches(kept, element);
 }
 
 /** The page's interactive elements and their rects: one read. */
@@ -579,13 +715,55 @@ function readCandidates(doc: Document): Candidate[] {
   }));
 }
 
+/**
+ * Whether a tap can reach `element`. A touch nearer a neighbour that no tap
+ * reaches is still the control's. Only the touch check asks. The measuring
+ * pass reads no style, so such a neighbour still stops a hit area halfway.
+ * That strip takes no tap from anyone. Opacity does not count: a control
+ * drawn at opacity 0, such as a native input over its own drawn box, takes
+ * the tap.
+ */
+function takesTaps(element: Element): boolean {
+  if (element.matches(':disabled') || element.closest('[inert]') != null) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return true;
+  }
+  const style = view.getComputedStyle(element);
+  if (style.pointerEvents === 'none') {
+    return false;
+  }
+  if (typeof element.checkVisibility === 'function') {
+    return element.checkVisibility({checkVisibilityCSS: true});
+  }
+  // Without `checkVisibility`, its two checks are read from the styles.
+  if (style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+  for (
+    let node = element.parentElement;
+    node != null;
+    node = node.parentElement
+  ) {
+    if (
+      view.getComputedStyle(node).getPropertyValue('content-visibility') ===
+      'hidden'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** A control's rect and clamped insets, from candidates already read. */
 function measureOne(
   watch: Watch,
   candidates: ReadonlyArray<Candidate>,
-): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
+): {target: HitRect; insets: HitInsets; neighbours: Candidate[]} {
   const target = plainRect(watch.element);
-  const scale = screenScale(watch.element, target);
+  const scale = screenScale(watch.element, target, HIT_AREA_TOLERANCE);
   // Two targets each growing up to half the minimum reach each other from a
   // minimum apart.
   const reach = Math.max(0, watch.minSize);
@@ -595,15 +773,13 @@ function measureOne(
     bottom: reach * scale.y,
     left: reach * scale.x,
   });
-  const neighbours = candidates
-    .filter(
-      ({element, rect}) =>
-        rect.right > rect.left &&
-        rect.bottom > rect.top &&
-        intersects(band, rect) &&
-        !isOwn(watch, element),
-    )
-    .map(({rect}) => rect);
+  const neighbours = candidates.filter(
+    ({element, rect}) =>
+      rect.right > rect.left &&
+      rect.bottom > rect.top &&
+      intersects(band, rect) &&
+      !isOwn(watch, element),
+  );
   return {
     target,
     // The insets are in the control's layout px. The returned rects stay in
@@ -613,7 +789,7 @@ function measureOne(
     // still counts that neighbour.
     insets: clampedHitInsets(
       inLayout(target, target, scale),
-      neighbours.map(rect => inLayout(rect, target, scale)),
+      neighbours.map(({rect}) => inLayout(rect, target, scale)),
       watch.minSize,
       watch.growth?.(inLayout(target, target, scale), rect =>
         inLayout(rect, target, scale),
@@ -623,16 +799,119 @@ function measureOne(
   };
 }
 
+/**
+ * The finite animations running or held in `root` and its subtree. An endless
+ * one, such as a spinner, moves nothing that comes to rest. Core pauses an
+ * animation only inside a gesture, and the gesture ends it. So a watch that a
+ * paused animation holds is released.
+ */
+export function settlingAnimations(root: Element | Document): Animation[] {
+  if (typeof root.getAnimations !== 'function') {
+    return [];
+  }
+  const animations = isElement(root)
+    ? root.getAnimations({subtree: true})
+    : root.getAnimations();
+  return animations.filter(animation => {
+    if (animation.playState !== 'running' && animation.playState !== 'paused') {
+      return false;
+    }
+    const end = animation.effect?.getComputedTiming().endTime;
+    return typeof end === 'number' && Number.isFinite(end);
+  });
+}
+
+/** The properties whose animation moves or resizes a box on screen. */
+const BOX_MOTION =
+  /^(transform|translate|scale|rotate|offset[A-Z]\w*|inset\w*|top|right|bottom|left|(min|max)?(Width|Height|width|height|BlockSize|InlineSize)|blockSize|inlineSize|margin\w*|padding\w*)$/;
+
+/**
+ * Whether an animation can move or resize a box on screen. Its keyframes'
+ * properties tell: a fade or a color change moves nothing.
+ */
+function movesBoxes(animation: Animation): boolean {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (typeof effect?.getKeyframes !== 'function') {
+    return true;
+  }
+  return effect
+    .getKeyframes()
+    .some(frame => Object.keys(frame).some(key => BOX_MOTION.test(key)));
+}
+
+/**
+ * The animations in `doc` that move boxes now: running and finite, on a
+ * property that moves or resizes a box. A paused one holds still, which an
+ * app can leave paused, and a fade or a tint moves nothing. The pass and the
+ * click's check read the same motion.
+ */
+function movingAnimations(doc: Document): Animation[] {
+  return settlingAnimations(doc).filter(
+    animation => animation.playState === 'running' && movesBoxes(animation),
+  );
+}
+
+/** Runs `then` once each animation has finished or been cancelled. */
+export function whenSettled(
+  animations: ReadonlyArray<Animation>,
+  then: () => void,
+): void {
+  void Promise.allSettled(
+    animations.map(async animation => animation.finished),
+  ).then(then);
+}
+
+/**
+ * Whether a running animation on an ancestor holds the watch back. It moves
+ * the control, so a read now takes a box in motion. The watch is measured
+ * once each such animation ends. The control's own motion, such as a press's
+ * scale, is its owner's to wait out.
+ */
+function isHeldBack(watch: Watch, moving: ReadonlyArray<Animation>): boolean {
+  let isHeld = false;
+  for (const animation of moving) {
+    const target = (animation.effect as KeyframeEffect | null)?.target;
+    if (
+      target == null ||
+      target === watch.element ||
+      !target.contains(watch.element)
+    ) {
+      continue;
+    }
+    isHeld = true;
+    if (!watch.heldBy.has(animation)) {
+      watch.heldBy.add(animation);
+      whenSettled([animation], () => {
+        watch.heldBy.delete(animation);
+        if (watch.isVisible && watched.get(watch.element)?.watches.has(watch)) {
+          schedule(watch);
+        }
+      });
+    }
+  }
+  return isHeld;
+}
+
 /** One pass: every pending control's reads, then every write. */
 function measure(): void {
   frame = null;
-  const due = [...pending].filter(watch => watch.isVisible);
+  if (scrollGate.isScrolling) {
+    // The pending watches wait: the scroll's end asks for the frame.
+    return;
+  }
+  const visible = [...pending].filter(watch => watch.isVisible);
   pending.clear();
-  if (!isCoarse || due.length === 0) {
+  if (!isCoarse || visible.length === 0) {
+    return;
+  }
+  const doc = visible[0].element.ownerDocument;
+  const moving = movingAnimations(doc);
+  const due = visible.filter(watch => !isHeldBack(watch, moving));
+  if (due.length === 0) {
     return;
   }
   // Reads: the page's interactive elements once for the whole pass.
-  const candidates = readCandidates(due[0].element.ownerDocument);
+  const candidates = readCandidates(doc);
   // The budget is for the controls: the page read above is once a frame.
   const started = now();
   const results: {watch: Watch; insets: HitInsets}[] = [];
@@ -655,8 +934,41 @@ function measure(): void {
 }
 
 function requestFrame(): void {
-  if (frame == null && typeof requestAnimationFrame === 'function') {
+  if (
+    frame == null &&
+    !scrollGate.isScrolling &&
+    typeof requestAnimationFrame === 'function'
+  ) {
     frame = requestAnimationFrame(measure);
+  }
+}
+
+function onScroll(): void {
+  scrollGate.isScrolling = true;
+  if (scrollGate.timer !== undefined) {
+    clearTimeout(scrollGate.timer);
+  }
+  scrollGate.timer = setTimeout(endScroll, SCROLL_STILL_MS);
+}
+
+function endScroll(): void {
+  if (scrollGate.timer !== undefined) {
+    clearTimeout(scrollGate.timer);
+    scrollGate.timer = undefined;
+  }
+  if (!scrollGate.isScrolling) {
+    return;
+  }
+  scrollGate.isScrolling = false;
+  for (const resume of [...scrollGate.onEnd]) {
+    resume();
+  }
+}
+
+/** This copy's pass, once the page's scroll ends. */
+function resumeAfterScroll(): void {
+  if (pending.size > 0) {
+    requestFrame();
   }
 }
 
@@ -675,12 +987,13 @@ function scheduleAll(): void {
 }
 
 /**
- * At a touch's start, re-measure the control it landed on, at once: if the
- * touch is outside the fresh area (a neighbour moved nearer since the last
- * measurement), the control's click is swallowed. The tap then does
- * nothing rather than toggle the wrong control; nothing is re-sent to the
- * neighbour, and the next tap uses the fresh insets. A watch whose owner reads
- * its own targets when a press begins skips this (`checkAtPress`).
+ * At a touch's start, arm a check on the control it landed on. The touch's
+ * click re-measures the control, or the press does while an animation moves
+ * it. If a neighbour moved nearer since the last measurement, the click is
+ * swallowed: the tap does nothing rather than toggle the wrong control.
+ * Nothing is re-sent to the neighbour, and the next tap uses the fresh
+ * insets. A watch whose owner reads its own targets when a press begins skips
+ * this (`checkAtPress`).
  */
 function onPress(event: Event): void {
   // One listener on the document for every watched control, so a control, row
@@ -704,28 +1017,144 @@ function checkPress(element: Element, event: PointerEvent): void {
   if (entry == null) {
     return;
   }
-  // A swallower left from a touch that sent no click goes with the next one.
+  // A check left from a touch that sent no click goes with the next one.
   entry.disarm?.();
-  const press = event;
-  if (!isCoarse || press.pointerType !== 'touch') {
+  if (!isCoarse || event.pointerType !== 'touch') {
     return;
   }
   const checked = [...entry.watches].filter(watch => watch.checkAtPress);
   if (checked.length === 0) {
     return;
   }
-  const candidates = readCandidates(element.ownerDocument);
-  const x = press.clientX;
-  const y = press.clientY;
+  const press = {x: event.clientX, y: event.clientY, target: event.target};
+  // A control that an ancestor animation moves is measured now. By its
+  // click, its box is no longer where the finger landed.
+  const isMoving = checked.some(watch => watch.heldBy.size > 0);
+  const isNearerAtPress =
+    isMoving &&
+    isNearerNeighbour(
+      element,
+      entry,
+      checked,
+      press,
+      readCandidates(element.ownerDocument),
+    );
+  if (isMoving && !isNearerAtPress) {
+    return;
+  }
+  // A control at rest reads no layout at the press, so a scroll it starts
+  // never waits on a read. Its click comes only once the touch is a tap, and
+  // measures then.
+  const check = (click: Event) => {
+    disarm();
+    // A keyboard or assistive-technology activation (detail 0) is never
+    // this touch's click: it goes through.
+    if ((click as MouseEvent).detail === 0) {
+      return;
+    }
+    if (isNearerAtPress || isNearerAtClick(element, entry, checked, press)) {
+      click.preventDefault();
+      click.stopPropagation();
+    }
+  };
+  const doc = element.ownerDocument;
+  let stopNextPress: (() => void) | null = null;
+  const disarm = () => {
+    element.removeEventListener('click', check, true);
+    element.removeEventListener('pointercancel', disarm, true);
+    stopNextPress?.();
+    stopNextPress = null;
+    if (entry.disarm === disarm) {
+      entry.disarm = null;
+    }
+  };
+  element.addEventListener('click', check, true);
+  // A touch the browser takes (a scroll) sends no click.
+  element.addEventListener('pointercancel', disarm, true);
+  // Any next press, here or elsewhere (the control's own label), ends it.
+  // This press has already passed the window, so only a later press does.
+  const pageView = doc.defaultView;
+  if (pageView != null) {
+    stopNextPress = subscribeInput(pageView, 'pointerdown', disarm);
+  }
+  entry.disarm = disarm;
+}
+
+/**
+ * The control's box on screen without its own scale transform, such as a
+ * press's. The scale is about the box's center, so the center stays.
+ */
+function withoutOwnScale(element: Element, onScreen: HitRect): HitRect {
+  const transform =
+    element.ownerDocument.defaultView?.getComputedStyle(element).transform;
+  const scale = /^matrix\(([^,]+),[^,]+,[^,]+,([^,]+),/.exec(transform ?? '');
+  if (scale == null) {
+    return onScreen;
+  }
+  const scaleX = Number.parseFloat(scale[1]);
+  const scaleY = Number.parseFloat(scale[2]);
+  if (!(scaleX > 0) || !(scaleY > 0)) {
+    return onScreen;
+  }
+  const centerX = (onScreen.left + onScreen.right) / 2;
+  const centerY = (onScreen.top + onScreen.bottom) / 2;
+  const halfWidth = (onScreen.right - onScreen.left) / scaleX / 2;
+  const halfHeight = (onScreen.bottom - onScreen.top) / scaleY / 2;
+  return {
+    left: centerX - halfWidth,
+    top: centerY - halfHeight,
+    right: centerX + halfWidth,
+    bottom: centerY + halfHeight,
+  };
+}
+
+/** Measures the watch in a pass once the control's own motion has ended. */
+function scheduleAtRest(watch: Watch): void {
+  const {element} = watch;
+  const moving = settlingAnimations(element);
+  if (moving.length === 0) {
+    schedule(watch);
+    return;
+  }
+  whenSettled(moving, () => {
+    if (watched.get(element)?.watches.has(watch)) {
+      schedule(watch);
+    }
+  });
+}
+
+/**
+ * Whether a fresh measurement puts the press nearer a neighbour than the
+ * control. A press on content that the control paints past its box is the
+ * control's.
+ */
+function isNearerNeighbour(
+  element: Element,
+  entry: Watched,
+  checked: ReadonlyArray<Watch>,
+  press: {x: number; y: number; target: EventTarget | null},
+  candidates: ReadonlyArray<Candidate>,
+): boolean {
   // The touch is the control's unless a neighbour is nearer it: inside the
   // fresh area too (a corner beside an offset or diagonal neighbour), and
   // a few px past it, where a browser's own touch adjustment reaches.
-  let isNearerNeighbour = false;
+  let isNearer = false;
   for (const watch of checked) {
     const {target, insets, neighbours} = measureOne(watch, candidates);
-    deliver(watch, insets);
-    const own = distanceTo(target, x, y);
-    isNearerNeighbour ||= neighbours.some(rect => distanceTo(rect, x, y) < own);
+    const own = distanceTo(
+      withoutOwnScale(watch.element, target),
+      press.x,
+      press.y,
+    );
+    isNearer ||= neighbours.some(
+      ({element: neighbour, rect}) =>
+        distanceTo(rect, press.x, press.y) < own && takesTaps(neighbour),
+    );
+    // The press still scales the control, so these insets read a scaled box.
+    // A pass after the press's motion ends takes the insets instead.
+    if (!sameInsets(watch.last, insets)) {
+      scheduleAtRest(watch);
+    }
   }
   // A watch can own its descendants' touches. Then a press that the browser
   // hit-tests onto a descendant lands on content the element paints, even
@@ -736,35 +1165,41 @@ function checkPress(element: Element, event: PointerEvent): void {
     press.target instanceof Node &&
     press.target !== element &&
     element.contains(press.target);
-  if (isNearerNeighbour && !isOnOwnContent) {
-    const swallow = (click: Event) => {
-      disarm();
-      // A keyboard or assistive-technology activation (detail 0) is never
-      // this touch's click: it goes through.
-      if ((click as MouseEvent).detail === 0) {
-        return;
-      }
-      click.preventDefault();
-      click.stopPropagation();
-    };
-    const doc = element.ownerDocument;
-    const disarm = () => {
-      element.removeEventListener('click', swallow, true);
-      element.removeEventListener('pointercancel', disarm, true);
-      doc.removeEventListener('pointerdown', onNextPress, PASSIVE_CAPTURE);
-      if (entry.disarm === disarm) {
-        entry.disarm = null;
-      }
-    };
-    // Any next press, here or elsewhere (the control's own label), ends it.
-    const onNextPress = () => disarm();
-    element.addEventListener('click', swallow, true);
-    // A touch the browser takes (a scroll) sends no click.
-    element.addEventListener('pointercancel', disarm, true);
-    // Registered after this press's own dispatch has passed the document.
-    doc.addEventListener('pointerdown', onNextPress, PASSIVE_CAPTURE);
-    entry.disarm = disarm;
+  return isNearer && !isOnOwnContent;
+}
+
+/**
+ * Whether a fresh measurement at a touch's click puts the press nearer a
+ * neighbour than the control.
+ */
+function isNearerAtClick(
+  element: Element,
+  entry: Watched,
+  checked: ReadonlyArray<Watch>,
+  press: {x: number; y: number; target: EventTarget | null},
+): boolean {
+  const doc = element.ownerDocument;
+  // The touch landed before its click. An animation that the press did not
+  // see may have moved the control or a neighbour since. Its fresh box is
+  // not the one the finger landed on. The control's click then goes through,
+  // as the browser's hit test took it, and a moving neighbour is left out.
+  const moving = movingAnimations(doc);
+  const isMoved = (node: Element, isOwnMotionCounted: boolean) =>
+    moving.some(animation => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return (
+        target != null &&
+        target.contains(node) &&
+        (isOwnMotionCounted || target !== node)
+      );
+    });
+  if (isMoved(element, false)) {
+    return false;
   }
+  const candidates = readCandidates(doc).filter(
+    candidate => !isMoved(candidate.element, true),
+  );
+  return isNearerNeighbour(element, entry, checked, press, candidates);
 }
 
 function onScopeChange(scope: Element): void {
@@ -824,6 +1259,16 @@ function startObserving(): void {
     return;
   }
   view.addEventListener('resize', scheduleAll);
+  // The first copy to observe listens for the page; the others share it.
+  if (scrollGate.stop == null) {
+    const stopScroll = subscribeInput(view, 'scroll', onScroll);
+    const stopScrollEnd = subscribeInput(view, 'scrollend', endScroll);
+    scrollGate.stop = () => {
+      stopScroll();
+      stopScrollEnd();
+    };
+  }
+  scrollGate.onEnd.add(resumeAfterScroll);
   pressDocument = view.document;
   pressDocument.addEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
   if (typeof IntersectionObserver === 'function') {
@@ -881,6 +1326,17 @@ function stopObserving(): void {
     entry.release = null;
   }
   view?.removeEventListener('resize', scheduleAll);
+  scrollGate.onEnd.delete(resumeAfterScroll);
+  // The last copy to stop observing ends the page's listening.
+  if (scrollGate.onEnd.size === 0) {
+    scrollGate.stop?.();
+    scrollGate.stop = null;
+    if (scrollGate.timer !== undefined) {
+      clearTimeout(scrollGate.timer);
+      scrollGate.timer = undefined;
+    }
+    scrollGate.isScrolling = false;
+  }
   // The listener leaves the document it went on. A window can close first, as
   // a removed iframe's, and then it has no document to read.
   pressDocument?.removeEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
@@ -939,8 +1395,9 @@ export interface WatchHitAreaOptions {
   ) => HitInsets;
   /**
    * Whether a finger's press on the control re-measures it against every
-   * interactive element on the page, at once. An owner that reads its own
-   * targets when a press begins, such as a group's tracker, turns it off.
+   * interactive element on the page, at the press's click. An owner that reads
+   * its own targets when a press begins, such as a group's tracker, turns it
+   * off.
    * @default true
    */
   readonly checkAtPress?: boolean;
@@ -966,11 +1423,12 @@ export function resetHitAreaForTests(): void {
 /**
  * Keeps `element`'s hit insets live until the returned function runs:
  * `onInsets` hears each change (typically `writeHitInsets` on the control).
- * Where the primary pointer is not coarse the insets are 0 and nothing but
- * the pointer query is listened to; where it is, the element is measured
- * while on screen, on resize (its own, its parent's, the window's) and once
- * its parent's text and children settle after a change, all in the shared
- * per-frame pass, and re-measured at once when a touch starts on it.
+ * Where the primary pointer is not coarse, the insets are 0, and only the
+ * pointer query is listened to. Where it is, the shared per-frame pass
+ * measures the element while it is on screen. It measures again on a resize
+ * of the element, its parent or the window, and once its parent's text and
+ * children settle after a change. The click of a touch that lands on the
+ * element measures it again.
  */
 export function watchHitArea(
   element: Element,
@@ -1006,12 +1464,13 @@ export function watchHitArea(
     onInsets,
     isVisible: isCoarse && visibility == null,
     last: NO_HIT_INSETS,
+    heldBy: new Set(),
   };
   let entry = watched.get(element);
   if (entry == null) {
     entry = {watches: new Set(), release: null, disarm: null};
     watched.set(element, entry);
-    forgetInteractive();
+    regroup(element);
     entry.watches.add(watch);
     if (isCoarse) {
       observe(element, entry);
@@ -1033,7 +1492,7 @@ export function watchHitArea(
     if (own.watches.size === 0) {
       own.release?.();
       watched.delete(element);
-      forgetInteractive();
+      ungroup(element);
     }
     if (watched.size === 0) {
       stopObserving();

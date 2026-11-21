@@ -201,7 +201,12 @@ the app reaches every layer instead of the components that happen to read it.
   the placement axis that positional bound is the larger of the axis's two
   gutters, applied to both edges, so a bar declared on one block edge keeps a
   layer the same distance from the opposite edge (the size cap still
-  subtracts each edge's own gutter). Content taller than either side can hold
+  subtracts each edge's own gutter). While its anchor is in view, every
+  option bounds the layer by the viewport itself, also when the anchor runs
+  partly past a viewport edge (an anchor in a panel that scrolls sideways): an
+  aligned edge meets its anchor's edge
+  but never comes closer to the viewport edge than the gutter, and no option
+  fits where the layer would leave the viewport. Content taller than either side can hold
   is capped to the viewport and shifted into it, keeping its anchor clearance
   from the edge it meets. A layer that keeps its anchor clear — Tooltip, which
   the hover on its trigger keeps open — never settles over its anchor, and no
@@ -363,8 +368,9 @@ the app reaches every layer instead of the components that happen to read it.
 
 ### Platform support
 
-- Supported feature/engine floor: CSS Anchor Positioning (`position-area`,
-  `position-try-fallbacks`, `anchor-size()`) and the Popover API, as
+- Supported feature/engine floor: CSS Anchor Positioning (`anchor()` insets,
+  `position-try-fallbacks`, `anchor-size()`, `anchor-center`) and the Popover
+  API, as
   `architecture:layer-runtime` already requires for anchor mode. FR5 needs
   the runtime to know whether the anchor is in view; a synchronous read before
   first paint plus an observation while open is the layer's mechanism to own.
@@ -677,6 +683,48 @@ passes.
 
 Rejected: CSS alone (the tooltip stays off-screen at the edge), and a re-pick
 in every scroll frame (the layer bounces mid-scroll).
+
+### DEC-9 — Script never moves a layer to follow its anchor
+
+**Reference:** `spec:AST-059/DEC-9`
+**Decider:** `cixzhang`, `2026-11-10`
+
+An anchored layer follows its anchor only through CSS anchor positioning
+(`position-anchor`, `anchor()` insets and `@position-try`). No script
+moves a layer to keep it on its anchor: no scroll, resize, observer or
+animation-frame handler writes a layer's `top`, `left`, `inset`, `translate`
+or `transform` from a measured anchor or layer rectangle. The out-of-view hold and the re-pick that DEC-7 keeps choose among the
+layer's CSS options or hold it in place, and write no coordinates. Four uses stay
+outside this rule because none of them follows an anchor: fixed mode's coordinates, which a caller sets once from
+an event such as a context-menu press; a one-time entrance or exit transform
+that plays and ends; the software keyboard's lift (FR9, DEC-6), which writes an
+inset to keep a layer clear of the keyboard, not to follow its anchor; and the
+reduced fallback for browsers without anchor
+positioning, which has no anchored geometry (`spec:AST-003` FR22).
+
+The owner, on popover scroll jank: "We should avoid repositioning layers to
+meet the anchor manually in js and ban such strategies in speed since we keep
+seeing this happen".
+
+Rejected: script positioning as a fallback for CSS anchor positioning in
+supported browsers (it lags the scroll by a frame and forces layout).
+
+### DEC-10 — A layer never inherits its trigger's press transform
+
+**Reference:** `spec:AST-059/DEC-10`
+**Decider:** `cixzhang`, `2026-11-10`
+
+A trigger's press feedback scales only the trigger's own visual. A layer the
+trigger opens renders outside that scaled subtree, so a press never scales,
+moves or distorts the layer or its entrance, and the layer anchors to the
+trigger's untransformed box.
+
+The owner: "since we scale the button on press the popover also gets scaled
+from it which makes the animation look weird. We probably need the popover
+menu to be outside of the scale css".
+
+Rejected: counter-scaling the layer to cancel the press (it lags the press and
+still distorts the entrance).
 
 ## Open questions
 

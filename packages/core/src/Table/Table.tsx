@@ -17,7 +17,13 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {use, useMemo, type ReactElement, type Ref} from 'react';
+import {
+  use,
+  useMemo,
+  type CSSProperties,
+  type ReactElement,
+  type Ref,
+} from 'react';
 import {TableRuntimeContext, registerTableScrollWrapper} from './tableRuntime';
 import {mergeRefs} from '../utils/mergeRefs';
 import * as stylex from '@stylexjs/stylex';
@@ -27,6 +33,7 @@ import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import type {
@@ -42,6 +49,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
 import {createSharedContext} from '../utils/sharedContext';
+import {
+  NOT_BODY_ROW,
+  TableRowPlacementContext,
+} from './TableRowPlacementContext';
 
 registerEnglishFallback(english);
 
@@ -57,7 +68,7 @@ export type TableDensity = 'compact' | 'balanced' | 'spacious';
 
 export type TableDividers = 'rows' | 'columns' | 'grid' | 'none';
 
-/** How body cell text behaves when it exceeds column width */
+/** How cell text behaves when it exceeds column width; header cells follow the same mode */
 
 export type TableTextOverflow = 'wrap' | 'truncate';
 
@@ -86,13 +97,14 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
    */
   verticalAlign?: TableVerticalAlign;
   /**
-   * How body cell text behaves when it exceeds the column width.
+   * How cell text behaves when it exceeds the column width.
    *
    * - `'wrap'` — text wraps and the row grows taller. No content is hidden.
    * - `'truncate'` — text is clipped with an ellipsis. Default-rendered cells
    *   show a tooltip on hover when truncated.
    *
-   * Header cells always truncate regardless of this setting.
+   * Header cells follow the same mode: under `'wrap'` a long heading wraps in
+   * a data-driven table, and in children mode its column grows to fit it.
    *
    * @default 'wrap'
    *
@@ -115,7 +127,11 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
 export interface TableProps<
   T extends Record<string, unknown>,
 > extends TableAppearanceProps<T> {
-  /** Fixed-height opt-in. Requires data and explicit idKey; invalid combinations fall back with diagnostics. */
+  /**
+   * Windowing opt-in: a rows or columns capability, or a list with at most one
+   * of each. Requires data and explicit idKey; invalid combinations fall back
+   * with diagnostics.
+   */
   virtualization?: BaseTableProps<T>['virtualization'];
 }
 
@@ -130,8 +146,32 @@ const tableStyles = stylex.create({
   },
 });
 
+// The table's direct parent never scrolls: the wrapper is the one viewport.
+// Some page hosts give every table's parent `overflow-x: auto` (or the
+// `overflow` shorthand) in a rule outside any cascade layer. Such a rule
+// beats every class in Astryx's layers, so only an inline style keeps the
+// inner box from scrolling. Both axes stay visible: one visible axis beside
+// a scrolling one computes to `auto`. If the inner box scrolled, the wrapper
+// would lose its overflow state, its named region, and its focus ring.
+const CONTENT_STYLE: CSSProperties = {overflow: 'visible'};
+
 const scrollWrapperStyles = stylex.create({
-  viewport: (height: number) => ({height, maxHeight: height}),
+  // A windowed table scrolls inside the height its parent gives it. Where a
+  // padding host publishes block bleed to the region (containerBleed), its
+  // height adds that padding back, so it ends at the same edge.
+  blockViewport: {
+    '--_table-bleed-block-start': {
+      default: '0px',
+      ':first-child': 'var(--_container-bleed-block-start, 0px)',
+    },
+    '--_table-bleed-block-end': {
+      default: '0px',
+      ':last-child': 'var(--_container-bleed-block-end, 0px)',
+    },
+    height:
+      'calc(100% + var(--_table-bleed-block-start) + var(--_table-bleed-block-end))',
+    minHeight: 0,
+  },
   base: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
@@ -143,15 +183,17 @@ const scrollWrapperStyles = stylex.create({
       'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
     marginTop: {
       default: null,
-      ':first-child': 'calc(-1 * var(--container-padding-block-start, 0px))',
+      ':first-child': 'calc(-1 * var(--_container-bleed-block-start, 0px))',
     },
     marginBottom: {
       default: null,
-      ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
+      ':last-child': 'calc(-1 * var(--_container-bleed-block-end, 0px))',
     },
-    // As its container's first or last child, the region reaches that block
-    // edge. There it takes the published corner, so its ring and fills follow
-    // the curve. Every other corner is square.
+    // A padding host publishes block bleed only to its direct first or last
+    // child, never through a Stack or wrapper. A nested table therefore keeps
+    // the host's block padding and cannot overlap the next sibling. Where the
+    // region reaches a block edge, it takes the published corner, so its ring
+    // and fills follow the curve. Every other corner is square.
     borderStartStartRadius: {
       default: '0px',
       ':first-child': 'var(--container-corner-start-start, 0px)',
@@ -219,8 +261,7 @@ function TableScrollWrapper({
       ? undefined
       : (tableName?.label ?? t('@astryx.table.label'));
   const runtime = use(TableRuntimeContext);
-  const viewportHeight = runtime?.viewportHeight;
-  const hasBlockViewport = viewportHeight != null;
+  const hasBlockViewport = runtime?.viewportHeight != null;
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
@@ -259,7 +300,8 @@ function TableScrollWrapper({
         // theme restyles through the focus-outline tokens.
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
-        hasBlockViewport && scrollWrapperStyles.viewport(viewportHeight),
+        hasBlockViewport && scrollWrapperStyles.blockViewport,
+        scrollEdgeFadeStyles(state.inline),
         ...(pluginStyles ?? []),
       ),
       pluginClassName,
@@ -272,7 +314,7 @@ function TableScrollWrapper({
   }
   return (
     <div {...viewportProps}>
-      <div {...getContentProps<HTMLDivElement>()}>
+      <div {...getContentProps<HTMLDivElement>({style: CONTENT_STYLE})}>
         {beforeTable}
         {children}
         {afterTable}
@@ -350,18 +392,21 @@ function TableInner<T extends Record<string, unknown>>({
 
   return (
     <TableContext value={contextValue}>
-      <TableNameContext value={tableName}>
-        <BaseTable<T>
-          ref={ref}
-          data={data}
-          columns={columns}
-          plugins={mergedPlugins}
-          textOverflow={textOverflowProp}
-          virtualization={virtualization}
-          scrollWrapper={TableScrollWrapper}
-          {...rest}
-        />
-      </TableNameContext>
+      {/* A table nested in a body cell starts outside any body again. */}
+      <TableRowPlacementContext value={NOT_BODY_ROW}>
+        <TableNameContext value={tableName}>
+          <BaseTable<T>
+            ref={ref}
+            data={data}
+            columns={columns}
+            plugins={mergedPlugins}
+            textOverflow={textOverflowProp}
+            virtualization={virtualization}
+            scrollWrapper={TableScrollWrapper}
+            {...rest}
+          />
+        </TableNameContext>
+      </TableRowPlacementContext>
     </TableContext>
   );
 }
@@ -375,9 +420,11 @@ function TableInner<T extends Record<string, unknown>>({
  * design tokens in the component styles.
  *
  * @compositionHint Use renderCell on columns to compose rich cell content.
- * Combine with Badge (status labels), StatusDot (colored indicators),
- * Text (formatted values), Avatar (user cells), and HStack/VStack
- * (multi-element cell layouts). Without renderCell, cells render as plain text.
+ * Combine with StatusDot beside a Text label (status columns), Text
+ * (formatted values), Avatar (user cells), and HStack/VStack (multi-element
+ * cell layouts). Keep Badge for a rare state that needs action; a solid badge
+ * in every row competes with the data. Without renderCell, cells render as
+ * plain text.
  * Columns without width remain equally flexible with a compact 60px readability
  * floor. Set one column's floor with proportional(1, { minWidth }), weight
  * columns with proportional(n), and fix widths with pixel().
@@ -394,7 +441,10 @@ function TableInner<T extends Record<string, unknown>>({
  *       </HStack>
  *     )},
  *     { key: 'status', header: 'Status', width: proportional(1), renderCell: (u) => (
- *       <Badge variant={u.active ? 'success' : 'error'} label={u.active ? 'Active' : 'Inactive'} />
+ *       <HStack gap={2} align="center">
+ *         <StatusDot variant={u.active ? 'success' : 'neutral'} label={u.active ? 'Active' : 'Inactive'} />
+ *         <Text>{u.active ? 'Active' : 'Inactive'}</Text>
+ *       </HStack>
  *     )},
  *   ]}
  *   density="compact"

@@ -2,6 +2,7 @@
 
 import {useRef, useState, type CSSProperties} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {TabList, Tab, TabMenu} from '@astryxdesign/core/TabList';
 import {Button} from '@astryxdesign/core/Button';
 import {
@@ -13,6 +14,8 @@ import {
 import {Heading} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {
   PlusIcon,
   FunnelIcon,
@@ -1117,6 +1120,56 @@ export const DescribedTabs: Story = {
   },
 };
 
+/**
+ * An editor-style strip that runs the selected indicator edge to edge. A
+ * nested Theme restyles the `tab-indicator` target, so only this strip
+ * changes; it takes the outer color mode. `insetInline` is not a guaranteed
+ * property of that target, so the override is best effort across releases.
+ */
+const fullWidthIndicatorTheme = defineTheme({
+  name: 'full-width-tab-indicator',
+  extends: neutralTheme,
+  components: {
+    'tab-indicator': {
+      base: {insetInline: '0'},
+    },
+  },
+});
+
+export const FullWidthIndicator: Story = {
+  name: 'Full-Width Indicator (Nested Theme)',
+  render: () => {
+    const [value, setValue] = useState('app');
+    const {mode} = useTheme();
+    return (
+      <VStack gap={4}>
+        <Theme theme={fullWidthIndicatorTheme} mode={mode}>
+          <TabList
+            value={value}
+            onChange={setValue}
+            aria-label="Open files"
+            size="sm"
+            hasDivider>
+            <Tab value="app" label="App.tsx" />
+            <Tab value="styles" label="styles.css" />
+            <Tab value="readme" label="README.md" />
+          </TabList>
+        </Theme>
+        <TabList
+          value={value}
+          onChange={setValue}
+          aria-label="Default indicator, for comparison"
+          size="sm"
+          hasDivider>
+          <Tab value="app" label="App.tsx" />
+          <Tab value="styles" label="styles.css" />
+          <Tab value="readme" label="README.md" />
+        </TabList>
+      </VStack>
+    );
+  },
+};
+
 export const PressedState: Story = {
   name: 'Pressed state',
   parameters: {
@@ -1139,6 +1192,80 @@ export const PressedState: Story = {
           label="Unavailable — no pressed state"
           aria-disabled="true"
         />
+      </TabList>
+    );
+  },
+};
+
+const wrappedLabelStyles = stylex.create({
+  tab: {
+    whiteSpace: 'normal',
+    flexShrink: 1,
+    height: 'auto',
+  },
+});
+
+export const WrappedLabel: Story = {
+  name: 'Wrapped label',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A Tab whose `xstyle` lets its label wrap. On a phone the long labels take two or three lines. The label stays centered in its tab, selected or not, so selection does not move it.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('overview');
+    return (
+      <TabList value={value} onChange={setValue}>
+        <Tab
+          value="overview"
+          label="Overview"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="eligibility"
+          label="Eligibility and registration requirements"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="documents"
+          label="Supporting documents to upload"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="contacts"
+          label="Emergency contact information"
+          xstyle={wrappedLabelStyles.tab}
+        />
+        <Tab
+          value="review"
+          label="Review and submit your application"
+          xstyle={wrappedLabelStyles.tab}
+        />
+      </TabList>
+    );
+  },
+};
+
+export const LinkTabs: Story = {
+  name: 'Link tabs',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Tabs that navigate render as links when given `href`. The label sits centered in the width its selected (semibold) weight reserves, as in a button tab.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('overview');
+    return (
+      <TabList value={value} onChange={setValue}>
+        <Tab value="overview" label="Overview" href="#overview" />
+        <Tab value="activity" label="Activity" href="#activity" />
+        <Tab value="settings" label="Settings" href="#settings" />
       </TabList>
     );
   },

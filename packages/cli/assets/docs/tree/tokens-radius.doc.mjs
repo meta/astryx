@@ -30,7 +30,7 @@ export const docs = {
           "type": "table",
           "headers": [
             "Token",
-            "Value"
+            "Core default"
           ],
           "rows": [
             [
@@ -55,7 +55,7 @@ export const docs = {
             ],
             [
               "--radius-chat",
-              "28px"
+              "var(--radius-container)"
             ],
             [
               "--radius-full",

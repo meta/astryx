@@ -8,6 +8,7 @@ import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Text} from '@astryxdesign/core/Text';
+import {readAnchorNames} from '../../../packages/core/src/Layer/anchorName';
 
 const styles = stylex.create({
   popoverContent: {
@@ -15,7 +16,6 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 16,
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    border: '1px solid var(--color-border-default)',
   },
   demoArea: {
     display: 'flex',
@@ -29,7 +29,6 @@ const styles = stylex.create({
     justifyContent: 'center',
     width: 200,
     height: 96,
-    border: '1px dashed var(--color-border-default)',
     borderRadius: 8,
   },
   contextRow: {
@@ -470,7 +469,9 @@ const viewportStyles = stylex.create({
   surface: {
     boxSizing: 'border-box',
     backgroundColor: 'var(--color-background-surface)',
-    border: '2px solid var(--color-border-accent, #6366f1)',
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border-accent, #6366f1)',
     borderRadius: 8,
     padding: 12,
     fontSize: 14,
@@ -489,7 +490,7 @@ const viewportStyles = stylex.create({
   tall: {
     blockSize: 2000,
     inlineSize: 200,
-    background:
+    backgroundImage:
       'repeating-linear-gradient(to bottom, transparent 0 39px, var(--color-border-default) 39px 40px)',
   },
   explicitWidth: (width: number) => ({width}),
@@ -629,13 +630,46 @@ function sameRect(a: DOMRect, b: DOMRect) {
   );
 }
 
+/** The open layer that anchors to this trigger, or null. */
+function openLayerOf(trigger: HTMLElement): HTMLElement | null {
+  const names = readAnchorNames(trigger);
+  for (const layer of document.querySelectorAll<HTMLElement>(
+    '[popover]:popover-open[id]',
+  )) {
+    if (names.includes(layer.style.getPropertyValue('position-anchor'))) {
+      return layer;
+    }
+  }
+  return null;
+}
+
 /**
- * Click the trigger, read the first frame's geometry synchronously (the
- * discrete event flushes React and the rect read forces layout), then settle
- * and read again. A difference is a paint-then-shift (FR8).
+ * Fail unless the trigger's own layer is open by the end of the click's task.
+ * The click's update can commit in the microtask after `click()` returns. That
+ * is still before the next paint, so a read after this check is the first
+ * frame's geometry.
+ */
+async function assertLayerOpened(trigger: HTMLElement): Promise<void> {
+  await committed();
+  if (openLayerOf(trigger) == null) {
+    fail("the layer did not open by the end of the click's task");
+  }
+}
+
+/**
+ * Click the trigger, check that its layer opened in the click's task, read the
+ * first frame's geometry (the rect read forces layout), then settle and read
+ * again. A difference is a paint-then-shift (FR8).
  */
 async function open(canvasElement: HTMLElement): Promise<Rects> {
-  canvasElement.querySelector<HTMLElement>('[data-testid="trigger"]')?.click();
+  const trigger = canvasElement.querySelector<HTMLElement>(
+    '[data-testid="trigger"]',
+  );
+  if (!trigger) {
+    throw new Error('No trigger');
+  }
+  trigger.click();
+  await assertLayerOpened(trigger);
   const first = rects(canvasElement);
   await settle();
   const settled = rects(canvasElement);
@@ -665,7 +699,6 @@ function diagnose(): string {
   const cs = getComputedStyle(layer);
   const read = (prop: string) => cs.getPropertyValue(prop).trim();
   return [
-    `position-area=${read('position-area')}`,
     `fallbacks=${read('position-try-fallbacks')}`,
     `justify-self=${read('justify-self')} align-self=${read('align-self')}`,
     `inset t/r/b/l=${read('top')}/${read('right')}/${read('bottom')}/${read('left')}`,
@@ -1002,6 +1035,63 @@ export const AnchorAlreadyOffScreen: Story = {
       );
     }
     await scrollAndSettle(0);
+    // Once the anchor is back in view, the layer is back beside it and on
+    // screen (FR4, FR5): aligned to it where it fits, slid where it does not.
+    const back = rects(canvasElement);
+    if (
+      back.layer.left > back.trigger.right + TOLERANCE ||
+      back.layer.right < back.trigger.left - TOLERANCE
+    ) {
+      fail(
+        `The layer ${fmt(back.layer)} did not return to its trigger ${fmt(back.trigger)} once the trigger was back in view`,
+      );
+    }
+    assertOnScreen(back, 'anchor back in view');
+  },
+};
+
+export const AnchorStaysInViewWhileScrolling: Story = {
+  name: 'Viewport inset: anchor stays in view while the page scrolls',
+  parameters: viewportParameters,
+  render: () => (
+    <ViewportLayer
+      at={{top: 120, left: 400}}
+      width={240}
+      canvasXstyle={viewportStyles.wideCanvas}
+      caption="FR4 — The page is scrolled so the trigger sits inside the start gutter, and the layer opens held at the gutter. Scroll back a little: the trigger stays in view and clears the gutter. Once the scroll stops, the layer is placed again, aligned to the trigger, not where the old gutter hold left it.">
+      Re-placed at each scroll stop
+    </ViewportLayer>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="trigger"]',
+    );
+    if (!trigger) {
+      throw new Error('No trigger');
+    }
+    // Put the trigger 6px from the start edge, inside the 16px gutter.
+    const start = window.scrollX + trigger.getBoundingClientRect().left - 6;
+    await scrollAndSettle(start);
+    const held = await open(canvasElement);
+    if (held.layer.left < held.trigger.left + 4) {
+      throw new Error(
+        `Fixture: the layer ${fmt(held.layer)} is not held at the gutter past its trigger ${fmt(held.trigger)}`,
+      );
+    }
+    // Scroll back 50px: the trigger clears the gutter and stays in view.
+    await scrollAndSettle(start - 50);
+    const after = rects(canvasElement);
+    if (after.trigger.left < 16 || after.trigger.right > window.innerWidth) {
+      throw new Error(
+        `Fixture: trigger at ${after.trigger.left}..${after.trigger.right} is not clear of the gutter and in view`,
+      );
+    }
+    assertOnScreen(after, 'after a scroll with the anchor in view');
+    if (Math.abs(after.layer.left - after.trigger.left) > TOLERANCE) {
+      fail(
+        `The layer ${fmt(after.layer)} kept the old gutter hold instead of aligning to its trigger ${fmt(after.trigger)} once the scroll stopped`,
+      );
+    }
   },
 };
 
@@ -1247,6 +1337,29 @@ export const GutterAtTheEdge: Story = {
         `Layer end edge ${r.layer.right} is inside the ${GUTTER}px gutter (viewport ${r.vw})`,
       );
     }
+  },
+};
+
+export const AnchorRunsPastTheEdge: Story = {
+  name: 'Viewport inset: anchor runs past the viewport edge',
+  parameters: viewportParameters,
+  render: () => (
+    <ViewportLayer
+      at={{top: 120, right: -40}}
+      width={240}
+      caption="FR1, FR4 — The trigger runs 40px past the inline-end edge, as a control in a panel that scrolls sideways does. The start-aligned 240px layer does not fit beside it, so it flips to end alignment, and its inline-end edge stops 16px short of the viewport edge, not at the trigger's hidden edge.">
+      Kept on screen
+    </ViewportLayer>
+  ),
+  play: async ({canvasElement}) => {
+    const r = await open(canvasElement);
+    if (r.trigger.right <= r.vw) {
+      throw new Error(
+        `The trigger must run past the edge: its end edge is ${r.trigger.right} in a ${r.vw}px viewport`,
+      );
+    }
+    assertWidth(r, 240, 'anchor past the edge');
+    assertOnScreen(r, 'anchor past the edge');
   },
 };
 

@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from TopNav component files
@@ -32,8 +30,5 @@ export type {TopNavMegaMenuItemProps} from './TopNavMegaMenuItem';
 export {TopNavMegaMenuFeaturedCard} from './TopNavMegaMenuFeaturedCard';
 export type {TopNavMegaMenuFeaturedCardProps} from './TopNavMegaMenuFeaturedCard';
 
-export {
-  TopNavRenderContext,
-  useTopNavRenderMode,
-} from './TopNavRenderContext';
+export {TopNavRenderContext, useTopNavRenderMode} from './TopNavRenderContext';
 export type {TopNavRenderMode} from './TopNavRenderContext';

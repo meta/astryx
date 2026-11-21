@@ -51,11 +51,14 @@ This record owns the moves a read offers and how they appear in text and JSON.
 - **FR3 — Down.** A read that has children MUST list them, each with its
   summary, and give the command that opens one: a namespace its children, a
   topic's index its sections, and the topic list its topics and namespaces. In text,
-  a topic with more than one section is read one level at a time: a bare read
-  lists its sections, and `--full` prints the whole doc; the dense variant is
-  written to be read whole, so `--dense` prints it whole. The JSON contract is
-  unchanged: `docs(topic)` and `--json` return the whole doc, and `--index` its
-  sections.
+  a bare read of a topic prints the whole doc, because a reader acts on the first
+  read it gets; only a topic whose whole text is over 16 KB lists its sections
+  instead, because up to that size the whole read costs no more than a reader
+  who wants the answer reads through the section list.
+  `--index` lists the sections of any topic, `--full` prints any topic whole, and
+  the dense variant is written to be read whole, so `--dense` prints it whole.
+  The JSON contract is unchanged: `docs(topic)` and `--json` return the whole doc,
+  and `--index` its sections.
 - **FR4 — Across.** A read with a place in an ordered level MUST offer the
   commands that open the item before it and the item after it, when they exist:
   a section's neighbors in its topic, and a docs-tree node's neighbors in its

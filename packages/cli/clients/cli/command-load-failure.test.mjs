@@ -21,6 +21,8 @@ const BIN = fileURLToPath(new URL('./bin/astryx.mjs', import.meta.url));
 let dir;
 /** @type {string} */
 let register;
+/** @type {string} */
+let registerTheme;
 
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-load-failure-'));
@@ -42,17 +44,35 @@ beforeAll(() => {
     register,
     `import {register} from 'node:module';\nregister(${JSON.stringify(pathToFileURL(hooks).href)});\n`,
   );
+  const themeHooks = path.join(dir, 'theme-hooks.mjs');
+  fs.writeFileSync(
+    themeHooks,
+    [
+      'export async function load(url, context, nextLoad) {',
+      "  if (url.endsWith('/clients/cli/commands/experimental/theme.mjs')) {",
+      "    throw new Error('simulated load failure');",
+      '  }',
+      '  return nextLoad(url, context);',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  registerTheme = path.join(dir, 'register-theme.mjs');
+  fs.writeFileSync(
+    registerTheme,
+    `import {register} from 'node:module';\nregister(${JSON.stringify(pathToFileURL(themeHooks).href)});\n`,
+  );
 });
 
 afterAll(() => {
   fs.rmSync(dir, {recursive: true, force: true});
 });
 
-/** @param {string[]} args */
-function run(args) {
+/** @param {string[]} args @param {string} [hook] */
+function run(args, hook = register) {
   const res = spawnSync(
     process.execPath,
-    ['--import', pathToFileURL(register).href, BIN, ...args],
+    ['--import', pathToFileURL(hook).href, BIN, ...args],
     {cwd: dir, encoding: 'utf-8', timeout: 20_000},
   );
   return {status: res.status, stdout: res.stdout, stderr: res.stderr};
@@ -75,16 +95,62 @@ describe('a command that fails to load', () => {
     expect(stderr).toMatch(/blog.*failed to load.*simulated load failure/s);
   });
 
+  it('reports the load failure whatever options and words the run passed', () => {
+    const {status, stderr} = run([
+      'blog',
+      'some-post',
+      '--list',
+      '--limit',
+      '3',
+    ]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/blog.*failed to load.*simulated load failure/s);
+    expect(stderr).not.toMatch(/unknown option|too many arguments/);
+  });
+
   it('leaves the other commands working', () => {
     const {status, stdout} = run(['docs', '--json']);
     expect(status).toBe(0);
     expect(JSON.parse(stdout).type).toMatch(/^docs\./);
   });
 
-  it('is listed in help, which loads every command, beside the others', () => {
+  it("is listed in a checkout's help, which loads every command, beside the others", () => {
     const {status, stdout} = run(['--help']);
     expect(status).toBe(0);
     expect(stdout).toMatch(/blog\s+\(failed to load: simulated load failure\)/);
     expect(stdout).toMatch(/\bdocs\b/);
+  });
+});
+
+describe('an experimental subcommand that fails to load', () => {
+  it("lists the group as failed to load in a checkout's help, beside the others", () => {
+    const {status, stdout} = run(['--help'], registerTheme);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(
+      /experimental\s+\(failed to load: simulated load failure\)/,
+    );
+    expect(stdout).toMatch(/\bdocs\b/);
+  });
+
+  it('answers the group with the load failure, and --json with one envelope, never a stack', () => {
+    const text = run(['experimental'], registerTheme);
+    expect(text.stderr).toMatch(
+      /experimental.*failed to load.*simulated load failure/s,
+    );
+    expect(text.stderr).not.toMatch(/\n\s+at /);
+    const json = run(['experimental', '--json'], registerTheme);
+    expect(json.status).toBe(1);
+    expect(json.stderr).toBe('');
+    expect(JSON.parse(json.stdout)).toMatchObject({apiVersion: 1});
+  });
+
+  it('leaves a run of another subcommand working, which loads only that one', () => {
+    const {stdout} = run(
+      ['--json', 'experimental', 'export', 'missing.tsx'],
+      registerTheme,
+    );
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).not.toBe('ERR_UNKNOWN');
+    expect(envelope.error).not.toMatch(/failed to load/);
   });
 });

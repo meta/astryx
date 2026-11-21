@@ -1,5 +1,116 @@
 # @astryxdesign/richtext
 
+# 0.7.17
+
+#### New Features
+
+- In `RichTextEditor`, a Markdown block marker typed at the start of a list item now re-marks it and keeps its text: `- `, `1. `, or `[ ] ` switches the item's list between bullets, numbers, and tasks, and `# ` or `> ` takes a top-level item out of its list as a heading or a quote, the rest of the list continuing after it. Each change is one undo step, back to the marker as typed.
+
+#### Fixes
+
+- In RichTextEditor and RichTextView, a code block's language label too long for its header wraps instead of being cut off, and the code starts below the taller header, as in Markdown, so a block is as tall in edit mode as in read mode.
+- Apps that install the rich text package no longer see "Warning: @astryxdesign/richtext has N integration issue(s)" on `astryx search`, `component`, `template`, `theme`, `discover` and `upgrade`. The editor's internal plugins now live in a folder the CLI does not read as components, so the integration check reports no issues. The public components and imports are unchanged.
+- RichText text reads the way it is written, in either document, and the shared first-strong classifier reads three Arabic marks, the Rumi numerals, and the digits of Devanagari, Bengali, Tamil, Thai and other scripts by their bidi class, which changes `Markdown` output too: a line opening `०१ שלום` now reads left-to-right where it read right-to-left before. `Badge`, `Token` and `InputGroupText` read the same strong set to decide whether their own text holds any right-to-left character, so the three Arabic marks — the semicolon, the question mark and tatweel — now count there too, wherever they sit in the label. A paragraph, heading, quote or list item takes the direction of its own text at any depth, so a Hebrew paragraph in an English document flushes right with its caret following the arrow keys instead of walking backwards, and an English paragraph, list item or table cell in a Hebrew document does the mirror. Each line of a fenced code block reads its own way too, so a Hebrew comment reads right-to-left while `const x = 1;` keeps its semicolon at the end. Top-level lists, tables and code blocks keep ordering their contents in the document's direction; a nested list follows the item that holds it. The stored value now drops a `dir` that arrives on them with pasted HTML or an older document.
+- A line break typed with Shift+Enter at the end of a paragraph, list item or quote no longer saves as a backslash that comes back as a literal `\` the next time the Markdown loads. Markdown has no line break at the end of a block, so the editor leaves it out of the Markdown; a line break inside a block still saves and loads as a line break.
+
+#### Documentation
+
+- RichText: the README says that server rendering outputs no document content, because `RichTextView` and `RichTextEditor` fill their blocks on the client, and points server HTML at core `Markdown`, which renders the same Markdown document on the server (affordances only RichText draws appear in their Markdown form), or at `@astryxdesign/richtext/markdown`.
+
+#### Other Changes
+
+- Internal: the toolbar's link popover, its URL form, the link address rule, and the toolbar's inline-format helpers move into modules RichText shares internally. Apps see no change.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+- @josephfarina
+- @potatowagon
+
+---
+
+# 0.7.16
+
+#### New Features
+
+- `RichTextEditorToolbar`'s Link button, and Cmd/Ctrl+K in the editor, open a popover anchored to the button instead of a modal dialog. The popover holds one URL field, applied with Enter, and Apply, Remove (when the selection is in a link), and Cancel icon buttons with tooltips. It is not modal: Escape or Cancel closes it and returns focus and the selection to the editor, and a URL that cannot be linked shows an error under the field, which keeps focus. The URL rules (`sanitizeUrl`), `hasNewTabLinks`, and `promptForUrl` are unchanged; with `promptForUrl` the Link button opens no popover, as it opened no dialog. ([#8717](https://github.com/meta/astryx/pull/8717))
+  The popover opens above the toolbar and flips below it only when there is no room above. Apply and Cancel use the shared `check` and `close` icons, so a theme that restyles those icons restyles them too; Remove's glyph is fixed artwork. `RICHTEXT_ICON_KEYS` is unchanged.
+
+#### Fixes
+
+- Pasting into a `RichTextEditor` table no longer drops the paste or empties cells. A pasted table fills the cells one by one from the caret's cell, or within the selected cells. A merged cell in it fills only the cell where it starts instead of emptying the cells it covered, and a table whose rows differ in length arrives whole. A table pasted together with other content, as a web page copies it, goes into the cell as text instead of being discarded. ([#8577](https://github.com/meta/astryx/pull/8577))
+- A link typed without a scheme, whose host has a dot or is `localhost`, followed by a port, such as `example.com:8080`, `www.example.com:8080/docs` or `localhost:3000`, now gets the default `https://` like `example.com` does, instead of being read as an unknown scheme and turned into `about:blank` ([#11042](https://github.com/meta/astryx/pull/11042))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @emilyhorsman
+- @ernestt
+- @kevin9327
+
+---
+
+# 0.7.15
+
+#### Fixes
+
+- useLinkify and RichTextEditorAutoLinkPlugin: email detection now takes linear time. A long word with no email in it, such as a pasted hash or base64 string, no longer freezes the page for seconds. Valid email addresses link as before, with three exceptions. In the rich-text editor, an address directly after a period no longer links, and a quoted local part ends at the next quote. In useLinkify, a fragment glued to the end of an earlier address no longer links on its own. (#11306)
+- RichTextEditor: importing Markdown no longer freezes the page on a block that has a backtick and, below its first line, a line with a `|`, a dash and a long run of spaces. The check for a table delimiter row now takes linear time; which lines count as delimiter rows is unchanged. (#11338)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @ChenyangLi4288
+- @cixzhang
+
+---
+
+# 0.7.14
+
+---
+
+# 0.7.13
+
+---
+
+# 0.7.12
+
+#### New Features
+
+- In `RichTextEditor`, Tab and Shift+Tab in a code block indent and outdent every line the selection touches, by the indent the block already uses (a tab when one of its lines starts with a tab, otherwise the fewest leading spaces of any indented line, kept between 2 and 8, otherwise 2 spaces). The selection stays on the same characters and each press is one undo step. Tab used to put a tab character in place of the selection, and Shift+Tab did the same. Escape then Tab still moves focus out of the editor. (#8579)
+
+#### Fixes
+
+- Declare renderer-owned DOM boundaries so decorator overlays mount outside managed content without changing safe inline hosting. RichTextEditor also mirrors its `dir` prop onto the wrapper around the editable surface, so the editing surface and its content blocks, the placeholder, UI rendered through `plugins`, and relocated overlays follow `dir`; the editing surface previously kept the surrounding direction. (#7633)
+- `RichTextEditorAutoLinkPlugin` no longer turns a URL inside a code block into a link. A URL typed or pasted into a code block, or one in an imported fence, now stays code. Before, the link nested inside the code block, and the exported Markdown fence lost it. (#10664)
+- In `RichTextEditor`, pasting rich content into a code block inserts plain text: the plain text on the clipboard, or, when there is none, each pasted block as one line of its text. Headings, lists, tables, and formatting used to land inside the code block, where the Markdown export wrote them as plain lines of the fence, so the document read back differently from what the editor showed. (#8580)
+- A link inside a disabled `RichTextEditor` no longer navigates, shows no pointer cursor, and is not a tab stop. Before, a disabled editor's links acted as live links: a click or Enter opened them, and Tab stopped on each one. (#10679)
+- TextInput, TextArea, NumberInput, DateInput, DateRangeInput, DateTimeInput, TimeInput, Tokenizer, Typeahead, PowerSearch, ChatComposer and RichTextEditor: when the primary pointer is coarse (a phone or tablet), the focus look shows at once, with no fade, so a tapped field repaints once while the keyboard rises. With a fine primary pointer, such as a mouse, a click and the Tab key keep the fade. ChatComposer's focus depth also shows at once under reduced motion, as the other fields' focus look already does. (#10611)
+
+#### Documentation
+
+- `RichTextView`, `RichTextEditorToolbar` and `RichTextEditorAutoLinkPlugin` each ship a doc file, so `astryx component`, `astryx discover` and the docs list their props, defaults and usage. (#10407)
+- A source comment in the editor theme now says that core `Markdown` gives each block the direction of its own text, while the editor keeps blocks in the surface's direction. (#10293)
+- RichTextEditor documents how to switch between reading and editing in place without reflow: set the field's inset and border outside the reading width with `xstyle`, so every paragraph keeps its line count across the switch. A standalone editor keeps its form width. (#10429)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+- @freddymeta
+- @vjeux
+
+---
+
 # 0.7.11
 
 #### Fixes

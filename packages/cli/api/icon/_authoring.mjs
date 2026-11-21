@@ -62,6 +62,7 @@ import {
   resolveDefaultLook,
 } from './_default-look.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {isPackagePath} from '../../authoring/doctypes/icon-set/parse.mjs';
 import {
   hasLicenseNotice,
   licenseNoticeFix,
@@ -92,6 +93,45 @@ const ICON_SETS_ROOT_KEY = 'experimental.iconSets';
 // ── Icon set ────────────────────────────────────────────────────────
 
 /**
+ * Read `--adapter <module>#<export>`: a `./` path from the package root and
+ * a named export. Null when it is not given.
+ * @param {unknown} value
+ * @returns {{module: string, export: string} | null}
+ */
+function adapterOption(value) {
+  if (value == null || value === '') return null;
+  const match =
+    typeof value === 'string'
+      ? /^(\.\/[^#\s]+)#([$A-Z_a-z][$\w]*)$/u.exec(value.trim())
+      : null;
+  if (!match || !isPackagePath(match[1])) {
+    throw new AstryxError(
+      `Invalid --adapter "${String(value)}": name a file in your package and its named export, as ./<path>#<export>, such as ./src/adapt.js#adaptIcon.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  return {module: match[1], export: match[2]};
+}
+
+/**
+ * The adapter, once its file is known to be in the package and to exist.
+ * @param {{module: string, export: string}} adapter
+ * @param {string} packageDir
+ */
+function checkedAdapter(adapter, packageDir) {
+  const file = assertWithin(adapter.module, packageDir, {label: 'adapter'});
+  if (!fs.existsSync(file)) {
+    throw new AstryxError(
+      `The adapter module ${adapter.module} does not exist. Write the function that turns one icon export into a component there, export it as ${adapter.export}, and run this command again.`,
+      undefined,
+      ERROR_CODES.ERR_NOT_FOUND,
+    );
+  }
+  return adapter;
+}
+
+/**
  * A single-quoted JavaScript string literal for any text.
  * @param {string} value
  */
@@ -110,7 +150,7 @@ function quoteJs(value) {
  * discoverable; `integration check` then names every built-in icon
  * definition it still has to map.
  * @param {string} name  icon set name (kebab-case)
- * @param {{cwd?: string, dryRun?: boolean, from?: string, exclude?: string[] | string, variants?: string[] | string, defaultVariant?: string, displayName?: string, description?: string}} options
+ * @param {{cwd?: string, dryRun?: boolean, from?: string, exclude?: string[] | string, adapter?: string, variants?: string[] | string, defaultVariant?: string, displayName?: string, description?: string}} options
  * @returns {Promise<{type: 'integration.add', data: import('./icon.type.mjs').IconNewData}>}
  */
 export async function addIconSet(name, options) {
@@ -130,6 +170,7 @@ export async function addIconSet(name, options) {
       ERROR_CODES.ERR_INVALID_OPTION,
     );
   }
+  const adapterSpec = adapterOption(options.adapter);
   if (!KEBAB_NAME_RE.test(name)) {
     throw new AstryxError(
       `Invalid icon set name "${name}": use lowercase kebab-case starting with a letter.`,
@@ -194,6 +235,9 @@ export async function addIconSet(name, options) {
     throw error;
   }
 
+  const adapter = adapterSpec
+    ? checkedAdapter(adapterSpec, packageDir)
+    : undefined;
   const setDir = assertWithin(name, root, {label: 'icon set directory'});
   const docFile = assertWithin(`${name}.doc.mjs`, setDir, {
     label: 'icon set descriptor',
@@ -208,6 +252,7 @@ export async function addIconSet(name, options) {
       dryRun,
       from,
       exclude,
+      adapter,
       looks: given,
       describe: {
         displayName: options.displayName,
@@ -225,6 +270,7 @@ export async function addIconSet(name, options) {
     fs.existsSync(docFile) &&
     fs.existsSync(dataFile) &&
     (given != null ||
+      adapter != null ||
       options.displayName?.trim() ||
       options.description?.trim())
   ) {
@@ -232,6 +278,7 @@ export async function addIconSet(name, options) {
       cwd,
       dryRun,
       looks: given,
+      adapter,
       describe: {
         displayName: options.displayName,
         description: options.description,
@@ -285,6 +332,7 @@ export async function addIconSet(name, options) {
       resolveIconSource(from, {packageDir, pkg}),
     );
     const found = libraryIcons(source.file, {
+      adapter: adapter != null,
       exclude,
       // The library's look words decide the default before any glyph is
       // picked, so each icon's export draws it.
@@ -307,7 +355,7 @@ export async function addIconSet(name, options) {
     });
     if (found.length === 0) {
       throw new AstryxError(
-        `"${from}" exports no icon components this command can read. If its icons are data (objects or SVG strings), run \`astryx experimental icon new-set ${name}\`, declare an "adapter" in ${name}.icons.json, and run this command again; or add icons one at a time with \`astryx experimental icon add <Export> --from ${from} --set ${name}\`.`,
+        `"${from}" exports no icon components this command can read. If its icons are data (objects or SVG strings), write a function in your package that turns one into a component and run this command again with \`--adapter ./<path>#<export>\`; or add icons one at a time with \`astryx experimental icon add <Export> --from ${from} --set ${name}\`.`,
         undefined,
         ERROR_CODES.ERR_NOT_FOUND,
       );
@@ -336,6 +384,7 @@ export async function addIconSet(name, options) {
       : {}),
     ...(exclude.length > 0 ? {exclude: [...new Set(exclude)].sort()} : {}),
     generated,
+    ...(adapter ? {adapter} : {}),
     ...(looks
       ? {variants: looks.variants, default: {variant: looks.default}}
       : {}),
@@ -504,9 +553,15 @@ export async function addIconSet(name, options) {
     const typescript = resolveProjectTypeScript([packageDir]);
     /** @type {Record<string, any>} */
     const packageAfter = pkgUpdate ? JSON.parse(pkgUpdate.contents) : pkg;
+    // npm refuses to publish a package whose package.json sets
+    // `"private": true`, such as an app that holds its own set. Peers, the
+    // strict check, and the public description are publishing steps, so its
+    // receipt leaves them out, and its notes end with the step that turns
+    // the set on.
+    const isPrivate = packageAfter.private === true;
     result.data.notes = [
       // First, so a long receipt never hides it: the strict check needs it.
-      ...(typescript?.ts
+      ...(typescript?.ts || isPrivate
         ? []
         : [
             typescript
@@ -517,10 +572,10 @@ export async function addIconSet(name, options) {
       // (architecture:cli-surface INV16), each as the exact change to make.
       ...[
         entryWiringNote(packageDir, packageAfter, generated),
-        peerNote(packageAfter),
-        typecheckNote(packageAfter),
+        isPrivate ? null : peerNote(packageAfter),
+        isPrivate ? null : typecheckNote(packageAfter),
       ].filter(note => note != null),
-      ...(options.description?.trim()
+      ...(options.description?.trim() || isPrivate
         ? []
         : [
             `The set's description is a placeholder ("${displayName} icons."): apps and discover show it. Pass --description when you create a set, or edit ${projectPath(path.relative(packageDir, docFile))}.`,
@@ -540,6 +595,11 @@ export async function addIconSet(name, options) {
       ...mappedNotes(map, name),
       ...suggestionNotes(suggestions, name),
       'Run `astryx integration check` to see the icon definitions still to map.',
+      ...(isPrivate
+        ? [
+            `When \`integration check\` passes, turn the set on in the app: \`astryx experimental icon use ${name}\`. Run it in the app's folder; when this package is not the app, install it in the app first.`,
+          ]
+        : []),
     ];
     if (missingNotice) {
       result.data.licenseNoticeMissing = missingNotice.receipt;
@@ -599,15 +659,43 @@ function describedDoc(source, describe) {
  * name its looks moves it. With none declared,
  * its default is the look its icons' exports draw.
  * @param {string} name
- * @param {{cwd: string, dryRun: boolean, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
+ * @param {{cwd: string, dryRun: boolean, looks: Looks | null, adapter?: {module: string, export: string}, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
 async function redeclareIconSet(
   name,
-  {cwd, dryRun, looks: given, describe, packageDir, rootPath, manifestPath},
+  {
+    cwd,
+    dryRun,
+    looks: given,
+    adapter,
+    describe,
+    packageDir,
+    rootPath,
+    manifestPath,
+  },
 ) {
   return iconAuthoring(async () => {
     const where = await findLocalIconSet(cwd, name);
     const {set} = where;
+    // The generated module already adapts the set's icons with the declared
+    // adapter: another one takes effect only when the icons are wrapped
+    // again.
+    if (
+      adapter &&
+      set.data.icons.length > 0 &&
+      JSON.stringify(adapter) !== JSON.stringify(set.data.adapter ?? null)
+    ) {
+      throw new AstryxError(
+        `Icon set "${name}" already has icons. Pass --adapter with --from to wrap the library again through it.`,
+        [
+          {
+            name: `astryx experimental icon new-set ${name} --from <module> --adapter ${adapter.module}#${adapter.export}`,
+            reason: 'wrap the library again through the adapter',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_OPTION,
+      );
+    }
     const current = set.data.default?.variant;
     const drawn =
       given && set.data.icons.length > 0
@@ -657,6 +745,7 @@ async function redeclareIconSet(
     }
     const next = {
       ...set.data,
+      ...(adapter ? {adapter} : {}),
       ...(looks
         ? {variants: looks.variants, default: {variant: looks.default}}
         : {}),
@@ -691,6 +780,7 @@ async function redeclareIconSet(
     );
     result.data.icons = set.data.icons.length;
     result.data.updated = true;
+    if (where.moduleUpdate) result.data.moduleUpdate = where.moduleUpdate;
     // A look the icons' own library draws comes from that library, so its
     // command runs as printed; any other look comes from a module the
     // author names.
@@ -1005,7 +1095,7 @@ function claimRootMoves(set, origins, root, moves) {
  * them), the generated module gains the new exports, `map` keeps every entry
  * whose icon still exists, and the receipt names the entries that lost theirs.
  * @param {string} name
- * @param {{cwd: string, dryRun: boolean, from: string, exclude: string[], looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
+ * @param {{cwd: string, dryRun: boolean, from: string, exclude: string[], adapter?: {module: string, export: string}, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
 async function refreshIconSet(
   name,
@@ -1014,6 +1104,7 @@ async function refreshIconSet(
     dryRun,
     from,
     exclude,
+    adapter,
     looks: given,
     describe,
     packageDir,
@@ -1024,6 +1115,12 @@ async function refreshIconSet(
   return iconAuthoring(async () => {
     const where = await findLocalIconSet(cwd, name);
     const {set} = where;
+    // A given adapter replaces the declared one before the library is read,
+    // so its data exports become icons through it.
+    if (adapter) set.data = {...set.data, adapter};
+    // Wrapping a library into a set with no icons yet creates its icons:
+    // the receipt says so, not that it refreshed them.
+    const hadIcons = set.data.icons.length > 0;
     const current = set.data.default?.variant;
     const source = resolveIconSource(from, where);
     // Exports left out before stay out; --exclude adds to them.
@@ -1343,13 +1440,16 @@ async function refreshIconSet(
         generated,
         next,
         rewritten,
-        // The icons the library no longer exports leave the module too; a
-        // renamed icon keeps its export. An icon moved to the new default
+        // The icons the library no longer exports leave the module too, in
+        // every look they drew; a renamed icon keeps its export. An icon moved to the new default
         // look keeps its export, which now names that look. An export moved
         // to the root is written again with the root import. Every other
         // export stays as it is, because the data file still lists it.
         [
-          ...gone.map(icon => icon.export),
+          ...gone.flatMap(icon => [
+            icon.export,
+            ...(icon.variants ?? []).map(variant => variant.export),
+          ]),
           ...repicked,
           ...[...rootMoves.keys()].filter(name => rewrittenNames.has(name)),
         ],
@@ -1387,7 +1487,8 @@ async function refreshIconSet(
       dryRun,
     );
     result.data.icons = icons.length;
-    result.data.refreshed = true;
+    if (hadIcons) result.data.refreshed = true;
+    if (where.moduleUpdate) result.data.moduleUpdate = where.moduleUpdate;
     // Every entry an exact name gives, kept or new, so a refresh lists
     // them for review again.
     const byName = Object.fromEntries(
@@ -1542,7 +1643,7 @@ export async function addIconDefinition(name, options) {
         throw error;
       }
     }
-    return receipt(
+    const result = receipt(
       'icon-definition',
       doc.name,
       {
@@ -1559,5 +1660,10 @@ export async function addIconDefinition(name, options) {
       files,
       dryRun,
     );
+    // Only a new definition with an icon writes the data file.
+    if (icon != null && where.moduleUpdate) {
+      result.data.moduleUpdate = where.moduleUpdate;
+    }
+    return result;
   });
 }

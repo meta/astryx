@@ -29,7 +29,7 @@ import {
   radiusVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {Link} from '../Link';
 import {Icon} from '../Icon';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -42,8 +42,12 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
-import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
+import {
+  NavHeadingCloseContext,
+  NavHeadingMenuHostContext,
+} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
+import {useTopNavRenderMode} from './TopNavRenderContext';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -375,6 +379,11 @@ export function TopNavHeading({
   ...props
 }: TopNavHeadingProps) {
   const t = useComponentTranslator();
+  // In the phone menu TopNav draws the heading as the menu's title: a theme
+  // keys that placement with `mode:drawer`, as it keys the menu's links.
+  const headingTheme = themeProps('top-nav-heading', {
+    mode: useTopNavRenderMode() === 'drawer' ? 'drawer' : null,
+  });
   const LinkComponent = useLinkComponent(as);
   // When the logo is wrapped in a link it needs its own accessible name (the
   // logo image itself is decorative). Prefer an explicit logoLabel, fall back
@@ -383,7 +392,9 @@ export function TopNavHeading({
 
   const rootRef = useRef<HTMLElement>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     dialogLabel: t('@astryx.topNav.heading.dialogLabel'),
     // The popup exposes its own role="menu" semantics; a role="dialog"
     // aria-modal wrapper would announce "dialog, Navigation menu" around a
@@ -546,7 +557,7 @@ export function TopNavHeading({
         aria-label={headingHref ? logoLabel : undefined}
         data-testid={testId}
         {...mergeProps(
-          themeProps('top-nav-heading'),
+          headingTheme,
           stylex.props(
             styles.root,
             rootColumns,
@@ -572,7 +583,7 @@ export function TopNavHeading({
         href={headingHref}
         data-testid={testId}
         {...mergeProps(
-          themeProps('top-nav-heading'),
+          headingTheme,
           stylex.props(styles.root, rootColumns, styles.menuTrigger, xstyle),
           className,
           style,
@@ -597,7 +608,7 @@ export function TopNavHeading({
           data-testid={testId}
           {...triggerProps}
           {...mergeProps(
-            themeProps('top-nav-heading'),
+            headingTheme,
             stylex.props(styles.root, rootColumns, styles.menuTrigger, xstyle),
             className,
             style,
@@ -648,7 +659,9 @@ export function TopNavHeading({
               onPointerDown={productMenuPointerDown}
               {...productMenuTouch}>
               <NavHeadingCloseContext value={closeMenuCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingCloseContext>
             </div>
           </div>,
@@ -671,7 +684,7 @@ export function TopNavHeading({
           data-testid={testId}
           {...triggerProps}
           {...mergeProps(
-            themeProps('top-nav-heading'),
+            headingTheme,
             stylex.props(styles.root, rootColumns, xstyle),
             className,
             style,
@@ -734,7 +747,9 @@ export function TopNavHeading({
               onPointerDown={productMenuPointerDown}
               {...productMenuTouch}>
               <NavHeadingCloseContext value={closeMenuCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingCloseContext>
             </div>
           </div>,
@@ -758,7 +773,7 @@ export function TopNavHeading({
         ref={ref as React.Ref<HTMLDivElement>}
         data-testid={testId}
         {...mergeProps(
-          themeProps('top-nav-heading'),
+          headingTheme,
           stylex.props(styles.root, linkColumns, xstyle),
           className,
           style,
@@ -824,7 +839,7 @@ export function TopNavHeading({
       ref={ref as React.Ref<HTMLDivElement>}
       data-testid={testId}
       {...mergeProps(
-        themeProps('top-nav-heading'),
+        headingTheme,
         stylex.props(styles.root, rootColumns, xstyle),
         className,
         style,

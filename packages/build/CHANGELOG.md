@@ -1,5 +1,61 @@
 # @astryxdesign/build
 
+# 0.7.17
+
+#### Fixes
+
+- A `Theme` in `system` mode now takes the light or dark scheme of the page around it. A host that draws the page dark, such as an artifact viewer in its dark theme, now gets the dark theme inside the `Theme` too; before, everything inside it followed the device's setting, so a reader on a light device saw dark text on the host's dark page. `useTheme()` and `useSyntaxTheme()` report the same mode, so charts and canvas match: a `system` Theme resolves to the scheme the page root names (light when it names none), else the device's setting, and under a `Theme` that forces light or dark it follows the device. If your app sets the page root's `color-scheme` to `light` or `dark` itself, that setting now decides what a `system` Theme shows. `useSyntaxTheme()` also follows a `Theme` that forces light or dark, as code blocks do. `reset.css` makes the page root follow the device's light or dark setting. Core's stylesheet, prebuilt or from a source build, sets no scheme on the page root. An app that does not load `reset.css` and names no scheme (no `color-scheme` on the page root and no `<meta name="color-scheme">`) stays light, and so do Astryx's tokens and `useTheme()` there; a theme's own `@dark` component styles still follow the device on such a page. To follow the device everywhere, import `@astryxdesign/core/reset.css`, or set `color-scheme: light dark` on `html`. `useTheme()` also reads the page's `<meta name="color-scheme">`, as the browser does.
+- In a Vite source build with `astryxStylex()`, importing `@astryxdesign/core/astryx.css`, from a module or with a CSS `@import`, no longer fails the build or the dev server. `reset.css` resolves to its file, and `astryx.css`, the prebuilt stylesheet a source build replaces, loads an empty stylesheet, because StyleX already compiles those rules from source.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+
+---
+
+# 0.7.16
+
+---
+
+# 0.7.15
+
+---
+
+# 0.7.14
+
+---
+
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.12
+
+#### Fixes
+
+- A swizzled copy can now compile as Astryx source in the Babel, PostCSS, and Vite integrations. Every module under a folder that holds an `astryx-swizzle.json` marker gets the library class prefix and lands in `@layer astryx-base`, below `astryx-theme`, so a theme's component overrides reach it. `astryx swizzle` does not write the marker yet: add the file to the swizzle output folder. Under webpack, `withAstryx()` rebuilds a cached copy when its marker appears or disappears. Turbopack builds do not read the marker yet. No API changes. (#10334)
+- `astryx swizzle` writes an `astryx-swizzle.json` marker into an output folder it owns (one the copy creates, an empty one, or one it marked before), naming each package the folder's copies came from and its version. `@astryxdesign/build`'s Babel, PostCSS and Vite integrations, and `withAstryx()` under webpack, compile the copies under that folder below `astryx-theme`, so a theme's component overrides reach a swizzled component as they reach the package component. For a folder that already holds other files it writes no marker and says what it found and how to add the marker by hand; the `swizzle.copy` receipt reports this in a new optional `marker` field. Under Turbopack and with the stock StyleX plugins, a copy's styles still land above the theme. The marker is not listed among the copy's files. (#10483)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
 # 0.7.11
 
 ---

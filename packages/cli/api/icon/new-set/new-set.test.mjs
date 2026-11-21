@@ -191,8 +191,11 @@ describe('iconNewSet (experimental icon new-set)', () => {
           'The set\'s description is a placeholder ("Outline icons."): apps and discover show it. Pass --description when you create a set, or edit icon-sets/outline/outline.doc.mjs.',
           'Run `astryx integration check` to see the icon definitions still to map.',
         ],
+        // A new set maps nothing yet, so every template meaning is listed.
+        templateMeanings: {unmapped: expect.any(Array)},
       },
     });
+    expect(result.data.templateMeanings?.unmapped.length).toBeGreaterThan(0);
     // No entry, peer, or script is written: package policy is the author's.
     expect(fs.existsSync(path.join(tmpDir, 'index.js'))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, 'index.d.ts'))).toBe(false);

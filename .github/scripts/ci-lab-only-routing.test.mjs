@@ -257,7 +257,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     );
     expect(decide.env.LAB_ONLY).toBe('${{ steps.scope.outputs.lab_only }}');
     expect(decide.run).toContain(
-      'if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ]; then',
+      'if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ] || [ "$RELEASE_CRITICAL" = true ] || [ "$REVIEW_PASSES" = true ]; then',
     );
   });
 

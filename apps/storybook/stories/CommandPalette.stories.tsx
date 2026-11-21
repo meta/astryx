@@ -280,6 +280,53 @@ export const AsyncSearch: Story = {
   },
 };
 
+// ─── Source replaced while open ──────────────────────────────────────────────
+
+const RECENT_COMMANDS = [
+  {id: 'settings', label: 'Settings'},
+  {id: 'profile', label: 'Profile'},
+];
+
+const ALL_COMMANDS = [
+  ...RECENT_COMMANDS,
+  {id: 'setup-billing', label: 'Set up billing'},
+  {id: 'set-status', label: 'Set status'},
+  {id: 'help', label: 'Help'},
+];
+
+/**
+ * The palette opens with recent commands, and the full command list arrives
+ * 1.5 seconds later as a new `searchSource`. The open palette asks the new
+ * source at once: type "set" before the list arrives, and "Set up billing"
+ * and "Set status" join the results without another keystroke.
+ */
+export const SourceReplacedWhileOpen: Story = {
+  render: function Render() {
+    const [isOpen, setIsOpen] = useState(false);
+    const recentSource = useMemo(() => createStaticSource(RECENT_COMMANDS), []);
+    const allSource = useMemo(() => createStaticSource(ALL_COMMANDS), []);
+    const [hasLoaded, setHasLoaded] = useState(false);
+    useEffect(() => {
+      if (!isOpen) {
+        setHasLoaded(false);
+        return;
+      }
+      const timer = setTimeout(() => setHasLoaded(true), 1500);
+      return () => clearTimeout(timer);
+    }, [isOpen]);
+    return (
+      <>
+        <Button label="Open Command Palette" onClick={() => setIsOpen(true)} />
+        <CommandPalette
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          searchSource={hasLoaded ? allSource : recentSource}
+        />
+      </>
+    );
+  },
+};
+
 // ─── Built-in strings ────────────────────────────────────────────────────────
 
 /**

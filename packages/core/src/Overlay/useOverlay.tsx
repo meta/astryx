@@ -71,7 +71,7 @@ export interface UseOverlayOptions {
   /**
    * CSS-driven visibility trigger.
    * - `"always"` — always visible
-   * - `"hover"` — hover + focus (accessible default). Touch: strip = always visible, fill = tap-to-toggle.
+   * - `"hover"` — hover + focus (accessible default). Touch (`hover: none`): a tap on the container toggles it.
    * - `"focus"` — focus-within only
    * - `"hover-or-focus"` — alias for "hover"
    * @default "always"

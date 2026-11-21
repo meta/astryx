@@ -64,6 +64,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {moveRegionsTab} from './menuRegionStops';
+import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -97,6 +98,7 @@ import {
   mergeProps,
   rtlStyles,
 } from '../utils';
+import {visibleText} from '../utils/accessibleName';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -142,9 +144,9 @@ const triggerStyles = stylex.create({
     width: '100%',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
-    borderRadius: `max(0px, calc(var(--_dropdown-menu-radius, ${spacingVars['--spacing-2']}) - var(--_dropdown-menu-padding, ${spacingVars['--spacing-1']})))`,
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
@@ -205,11 +207,34 @@ const flyoutStyles = stylex.create({
       MENU_MAX_BLOCK_SIZE_FALLBACK,
     ),
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -296,6 +321,16 @@ const regionStyles = stylex.create({
       MENU_MAX_BLOCK_SIZE_FALLBACK,
     ),
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',
   },
@@ -575,6 +610,15 @@ export function DropdownMenuSubMenu(
   const isOnStack = activeDrillIn?.viewStack.includes(viewId) === true;
   const isTopView = isOnStack && activeDrillIn?.viewStack.at(-1) === viewId;
   const stringLabel = typeof label === 'string' ? label : undefined;
+  // A node label renders in its own element, so a drilled-in view is named by
+  // the label alone, not by the whole row with its description. Its text,
+  // read when this level opens, names a nested view's Back row.
+  const labelId = useId();
+  const hasNodeLabel = stringLabel == null && isRenderable(label);
+  const rowLabel = hasNodeLabel ? <span id={labelId}>{label}</span> : label;
+  const viewLabelledBy =
+    stringLabel != null ? undefined : hasNodeLabel ? labelId : triggerId;
+  const [nodeLabelText, setNodeLabelText] = useState<string | undefined>();
   const parentLabel = menuCtx?.menuLabel;
   const backLabel =
     parentLabel != null
@@ -743,6 +787,13 @@ export function DropdownMenuSubMenu(
         return;
       }
       if (activeDrillIn != null) {
+        if (hasNodeLabel) {
+          const labelElement =
+            triggerRef.current?.ownerDocument.getElementById(labelId);
+          setNodeLabelText(
+            labelElement != null ? visibleText(labelElement) : undefined,
+          );
+        }
         pendingViewFocusRef.current = options?.focusFirst
           ? 'first'
           : 'container';
@@ -760,7 +811,17 @@ export function DropdownMenuSubMenu(
         }
       }
     },
-    [canOpen, activeDrillIn, viewId, onOpenChange, layer, focusFirst, menuRef],
+    [
+      canOpen,
+      activeDrillIn,
+      viewId,
+      onOpenChange,
+      layer,
+      focusFirst,
+      menuRef,
+      hasNodeLabel,
+      labelId,
+    ],
   );
 
   const close = useCallback(
@@ -1053,9 +1114,9 @@ export function DropdownMenuSubMenu(
         menuCtx?.closeMenu();
       },
       drillIn,
-      menuLabel: stringLabel,
+      menuLabel: stringLabel ?? nodeLabelText,
     }),
-    [menuSize, close, menuCtx, drillIn, stringLabel],
+    [menuSize, close, menuCtx, drillIn, stringLabel, nodeLabelText],
   );
 
   // The press model for this flyout: the row under a release acts, the
@@ -1254,7 +1315,7 @@ export function DropdownMenuSubMenu(
             ? renderIconSlot(icon, {size: 'sm', color: 'secondary'})
             : undefined
         }
-        label={label}
+        label={rowLabel}
         description={description}
         endContent={endAffordance}
         onClick={handleRowClick}
@@ -1263,6 +1324,7 @@ export function DropdownMenuSubMenu(
         xstyle={[
           focusOutlineStyles.focusVisible,
           triggerStyles.root,
+          menuRowCornerStyles.root,
           menuPressLitRowStyle,
           triggerSizeStyles[menuSize],
           isOpen && triggerStyles.open,
@@ -1288,9 +1350,7 @@ export function DropdownMenuSubMenu(
                     role="menu"
                     tabIndex={0}
                     aria-label={stringLabel}
-                    aria-labelledby={
-                      stringLabel == null ? triggerId : undefined
-                    }
+                    aria-labelledby={viewLabelledBy}
                     onKeyDown={handleContentKeyDown}
                     onFocus={handleMenuFocus}
                     onBlur={handleMenuBlur}
@@ -1309,8 +1369,7 @@ export function DropdownMenuSubMenu(
                   </div>,
                   {
                     'aria-label': stringLabel,
-                    'aria-labelledby':
-                      stringLabel == null ? triggerId : undefined,
+                    'aria-labelledby': viewLabelledBy,
                     // A deeper view shows in its place; this one waits, hidden.
                     hidden: !isTopView,
                     inert: !isTopView,
@@ -1327,7 +1386,7 @@ export function DropdownMenuSubMenu(
                   tabIndex={-1}
                   // The drilled-in list is named by its row's label.
                   aria-label={stringLabel}
-                  aria-labelledby={stringLabel == null ? triggerId : undefined}
+                  aria-labelledby={viewLabelledBy}
                   // A deeper view shows in its place; this one waits, hidden.
                   hidden={!isTopView}
                   inert={!isTopView}

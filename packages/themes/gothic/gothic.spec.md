@@ -13,6 +13,7 @@ verified_by:
     packages/themes/gothic/src/gothicTheme.test.ts,
     packages/themes/gothic/src/gothicColorMapping.test.ts,
     scripts/generate-gothic-palette-refs.test.mjs,
+    packages/cli/api/theme/build/build.media-accent-contrast.test.mjs,
   ]
 package: '@astryxdesign/theme-gothic'
 source_theme: packages/themes/gothic/src/gothicTheme.ts
@@ -93,6 +94,10 @@ clearing normal-text AA. Syntax comments use `neutral.dark[65]` (`#7e8791`) on
 `neutral.dark[10]` (`#101314`) at 5.12:1, so the maintained syntax mapping also
 clears normal-text AA without an off-palette value.
 
+On a light media surface, accent text and accent icons use the surface's
+accent, `--color-on-light` (`neutral.dark[10]`, `#101314`), at 18.7:1 against a
+white surface. On a dark media surface they keep `neutral.dark[95]`.
+
 ## Build and artifact contract
 
 The package and CLI template carry identical palette requests, generated
@@ -112,6 +117,7 @@ values.
 | Role mapping            | Gothic mapping and theme tests                       | semantic, categorical, syntax, effects | A maintained role bypasses selected Gothic references.     |
 | Public compatibility    | Flat-ramp compatibility test and package build       | numeric stops; `hue`; `chroma`         | A released member or shape changes.                        |
 | Mode contract           | Theme CSS and rendered evidence                      | dark only                              | Light-dependent output or divergent mode values appear.    |
+| Media-surface accent    | Built-theme media accent contrast test               | dark and light media surfaces          | Accent text or icons fall below 4.5:1 on a media surface.  |
 | Package/template parity | Byte comparison and build                            | package and CLI template               | Copies diverge.                                            |
 
 ## Decision log
