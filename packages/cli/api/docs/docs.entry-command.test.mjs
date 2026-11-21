@@ -109,7 +109,7 @@ describe('the docs hint', () => {
     expect(entryCommand('wobble', NAMES)?.name).toBe('astryx template wobble');
   });
 
-  it('gives nothing for a near name, a route, or an empty name', () => {
+  it('gives nothing for a near name, a route without a docs tail, or an empty name', () => {
     expect(entryCommand('Zorblt', NAMES)).toBeNull();
     expect(entryCommand('ZorbletCards', NAMES)).toBeNull();
     expect(entryCommand('components/Zorblet', NAMES)).toBeNull();
@@ -279,6 +279,8 @@ describe('docs() for a name another command reads', () => {
       for (const [typed, command] of [
         ['widgets/Buttons', 'astryx component Button'],
         ['Buttons', 'astryx component Button'],
+        // Only experimental docs are named `table`; they never win.
+        ['widgets/Tables', 'astryx component Table'],
         ['widgets/use-collapsible', 'astryx hook useCollapsible'],
       ]) {
         const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);

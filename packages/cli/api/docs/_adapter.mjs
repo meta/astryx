@@ -2465,11 +2465,12 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
  * it spells with hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
  * none shares a word with the argument, with the names a slip or two from it
- * first). When the argument matches a component, hook or template
- * (exact, folded or last segment), the command that reads that entry joins the list as
- * foundation/suggest/other-command.mjs places it, and the list keeps its
- * length; when no suggested doc
- * shares a word with the argument, that command is the only suggestion.
+ * first). When the argument matches a component, hook or template (exact,
+ * folded or last segment, or a Core component or hook its last path segment
+ * names, unless a stable doc has that name), the command that reads that
+ * entry joins the list as foundation/suggest/other-command.mjs places it, and
+ * the list keeps its length; when no suggested doc shares a word with the
+ * argument, that command is the only suggestion.
  * When no command joins, the docs whose route, title or declared keywords
  * carry a typed word ({@link wordMatches}) take the place of the topics and
  * namespaces, the named route that list leads with first, in a list no
@@ -2608,8 +2609,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
 
 /**
  * The names a typed last route segment may give a Core component or hook by,
- * or none when a doc or topic name, as typed or with its words singular, is
- * one of them: a doc wins (`icons` is a topic, so `foundations/icon` names no
+ * or none when a stable doc or topic name, as typed or with its words
+ * singular, is one of them (an experimental doc changes no stable answer): a doc wins (`icons` is a topic, so `foundations/icon` names no
  * component).
  * @param {string} topic
  * @param {(name: string) => string[]} formsOf other-command.mjs tailForms
@@ -2620,7 +2621,9 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
 function componentTail(topic, formsOf, tree, catalog) {
   const forms = formsOf(topic);
   const docNames = [
-    ...[...tree.nodes.values()].map(node => node.name),
+    ...[...tree.nodes.values()]
+      .filter(node => !isExperimentalTreeNode(tree, node))
+      .map(node => node.name),
     ...catalog.names(),
   ];
   const namesADoc = docNames.some(name =>
