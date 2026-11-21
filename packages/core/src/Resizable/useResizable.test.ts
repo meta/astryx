@@ -260,10 +260,30 @@ describe('useResizable persistence', () => {
   it('does not write a restored size back before a person resizes', () => {
     localStorage.setItem(KEY, JSON.stringify({size: 300, isCollapsed: false}));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      const {result} = renderHook(() => useResizable(BASE_CONFIG));
+      expect(result.current.size).toBe(300);
+      expect(setItem).not.toHaveBeenCalled();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it('writes nothing for a press on the divider that moves nothing', () => {
     const {result} = renderHook(() => useResizable(BASE_CONFIG));
-    expect(result.current.size).toBe(300);
-    expect(setItem).not.toHaveBeenCalled();
-    setItem.mockRestore();
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeEnd());
+    expect(localStorage.getItem(KEY)).toBeNull();
+    act(() => result.current.props._onResizeCancel?.());
+    expect(localStorage.getItem(KEY)).toBeNull();
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-20));
+    act(() => result.current.props._onResizeEnd());
+    expect(readStored()).toEqual({
+      size: result.current.size,
+      isCollapsed: false,
+    });
   });
 
   it('does not touch storage without an autoSaveId', () => {
@@ -1109,6 +1129,33 @@ describe('useResizable percentage configuration (AST-010)', () => {
       clientWidth.mockRestore();
       clientHeight.mockRestore();
       container.remove();
+    });
+
+    it('saves a collapse made before the first measurement against the real container only', () => {
+      // Before the container is measured, 1200px stands in for it. A size
+      // resolved against that stand-in must never reach storage.
+      content = 0;
+      const containerRef = makeContainer();
+      const {result} = renderHook(() =>
+        useResizable({
+          defaultSize: percent(40, {min: pixel(333)}),
+          containerRef,
+          collapsible: true,
+          autoSaveId: 'structured-early-collapse',
+        }),
+      );
+      expect(result.current.size).toBe(480);
+      act(() => result.current.collapse());
+      expect(
+        localStorage.getItem('astryx-resizable:structured-early-collapse'),
+      ).toBeNull();
+      act(() => {
+        content = 500;
+        StubResizeObserver.resizeAll();
+      });
+      expect(
+        localStorage.getItem('astryx-resizable:structured-early-collapse'),
+      ).toBe(JSON.stringify({size: 333, isCollapsed: true}));
     });
 
     it('waits for a positive basis and then removes a default-only observer', () => {

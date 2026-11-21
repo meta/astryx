@@ -506,10 +506,12 @@ export function createResizableAs(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
-  // Storage keeps a size someone chose: a drag or key step, or a collapse,
-  // expand or resize call. The default's first resolution and a restored
-  // size are not written.
+  // Storage keeps a size someone chose: a drag or key step that changed the
+  // size or collapse state, or a collapse, expand or resize call that did.
+  // The default's first resolution, a restored size and a press that moves
+  // nothing are not written.
   let hasBeenResized = false;
+  let stateAtGestureStart: {size: number; isCollapsed: boolean} | null = null;
   let snapshot: ResizableSnapshot | null = null;
   const snapshotListeners = new Set<() => void>();
 
@@ -949,8 +951,10 @@ export function createResizableAs(
     if (isDestroyed) {
       return;
     }
-    hasBeenResized = true;
     const wasCollapsed = derived.isCollapsed;
+    if (wasCollapsed) {
+      hasBeenResized = true;
+    }
     setCollapsed(false);
     commit();
     if (wasCollapsed) {
@@ -976,7 +980,9 @@ export function createResizableAs(
     }
     const clamped = clampSize(next, derived.min, derived.max, snaps());
     const wasCollapsed = derived.isCollapsed;
-    hasBeenResized = true;
+    if (wasCollapsed || clamped !== derived.size) {
+      hasBeenResized = true;
+    }
     chosenSize = clamped;
     setCollapsed(false);
     commit();
@@ -1004,7 +1010,10 @@ export function createResizableAs(
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
-      hasBeenResized = true;
+      stateAtGestureStart = {
+        size: derived.size,
+        isCollapsed: derived.isCollapsed,
+      };
       isCarryingToSnap = false;
       // Only a pointer catches a slide or a spring-back; a key steps.
       const isPointer = regionSlot?.isPointerDragging() === true;
@@ -1440,6 +1449,14 @@ export function createResizableAs(
     if (!isGestureActive) {
       return;
     }
+    if (
+      stateAtGestureStart != null &&
+      (stateAtGestureStart.size !== derived.size ||
+        stateAtGestureStart.isCollapsed !== derived.isCollapsed)
+    ) {
+      hasBeenResized = true;
+    }
+    stateAtGestureStart = null;
     gestureBasis = null;
     isGestureActive = false;
     mustWrite = true;
