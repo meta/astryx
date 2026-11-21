@@ -4731,9 +4731,28 @@ export function borderFrames(ctx, data, value) {
     );
   /** @type {Array<{part: string, why: string, steps: Array<{thing: string, value: string, on: string, when?: string}>}>} */
   const out = [];
-  for (const p of borderlessSurfaces(C).filter(
-    x => ctx.project.target.has(x) && !covered(x),
-  )) {
+  // (The parts the surfaces dial styles keep the edge it gives them; a
+  // surface drawn inside another bare surface (a dropdown menu's list in
+  // its popover) takes that one's frame, never a ring of its own.)
+  const rung = surfacesRung(data);
+  const bare = borderlessSurfaces(C).filter(
+    x =>
+      ctx.project.target.has(x) &&
+      !covered(x) &&
+      !(rung && SURFACE_PARTS.includes(x)),
+  );
+  const groups = groupsOf(ctx);
+  const floating = new Set([
+    ...(groups.overlays ?? []),
+    ...(groups.menus ?? []),
+  ]);
+  const nested = (/** @type {string} */ p) =>
+    floating.has(p) &&
+    bare.some(
+      q =>
+        q !== p && floating.has(q) && (C.MAP?.[q]?.contains ?? []).includes(p),
+    );
+  for (const p of bare.filter(x => !nested(x))) {
     // A part whose variants differ, some with a filled box and some with
     // none (a button's ghost): only the variants that draw a filled box
     // at rest get a frame; one with no fill is borderless on purpose.
@@ -4805,8 +4824,8 @@ export function edgeCopies(ctx, data, s) {
   // (A theme border width frames the floating surfaces already; one of
   // zero asks for no borders at all, so no edge is drawn.)
   const width = wholeBorderWidth(data);
-  if (framingSetting(ctx, data) || (width && zeroLength(width.value)))
-    return [];
+  if (width && zeroLength(width.value)) return [];
+  const framed = Boolean(framingSetting(ctx, data));
   const groups = groupsOf(ctx);
   const floating = [
     ...new Set([...(groups.overlays ?? []), ...(groups.menus ?? [])]),
@@ -4815,12 +4834,29 @@ export function edgeCopies(ctx, data, s) {
   const bare = new Set(C ? borderlessSurfaces(C) : []);
   /** @type {Setting[]} */
   const out = [];
+  const rung = surfacesRung(data);
   for (const p of floating) {
-    if (!ctx.project.target.has(p) || !bare.has(p)) continue;
-    const reads = (C?.partReads(p, 'shadow') ?? []).some(
-      (/** @type {{token: string}} */ r) => r.token === s.thing,
-    );
-    if (!reads) continue;
+    if (!ctx.project.target.has(p)) continue;
+    // (A part the surfaces dial styles is judged by the look it gives it:
+    // an edge where that look draws no border and its shadow is the one
+    // taken away.)
+    const look =
+      rung && SURFACE_PARTS.includes(p) ? surfaceLook(p, rung) : null;
+    if (look) {
+      if (String(look.borderStyle ?? 'none') !== 'none') continue;
+      if (!String(look.boxShadow ?? '').includes(`var(${s.thing})`)) continue;
+    } else {
+      if (framed || !bare.has(p)) continue;
+      const reads = (C?.partReads(p, 'shadow') ?? []).some(
+        (/** @type {{token: string}} */ r) => r.token === s.thing,
+      );
+      if (!reads) continue;
+    }
+    // (One drawn inside another floating surface takes that one's edge.)
+    if (
+      floating.some(q => q !== p && (C?.MAP?.[q]?.contains ?? []).includes(p))
+    )
+      continue;
     if (
       data.settings.some(
         x =>
@@ -4898,7 +4934,7 @@ export function disabledCopies(ctx, data, s) {
       data.settings.some(
         x =>
           x.state === 'disabled' &&
-          /^background(-image)?$/.test(kebab(String(x.thing))) &&
+          /^background(-image|-color)?$/.test(kebab(String(x.thing))) &&
           // (One set for one variant keeps that variant only.)
           (!x.when || x.when === copy.when) &&
           partsOf(ctx, x).includes(t),
@@ -4965,6 +5001,32 @@ export function frameCopies(ctx, data, s) {
     );
 }
 
+/**
+ * The rung the theme's surfaces dial sets, if it sets one.
+ * @param {ThemeData} data
+ * @returns {string | null}
+ */
+export function surfacesRung(data) {
+  const x = [...data.settings]
+    .reverse()
+    .find(y => y.source === 'dial' && y.thing === 'surfaces' && !y.on);
+  return x ? String(x.value) : null;
+}
+
+/**
+ * The look the surfaces dial gives a part at a rung (a floating panel's
+ * own where it differs).
+ * @param {string} part @param {string} rung
+ * @returns {Record<string, string>}
+ */
+function surfaceLook(part, rung) {
+  return /** @type {any} */ (
+    FLOATING_PANELS.includes(part) && FLOATING_SURFACES[rung]
+      ? FLOATING_SURFACES[rung]
+      : (SURFACES[rung] ?? {})
+  );
+}
+
 /** Whether a length is zero. @param {unknown} v */
 function zeroLength(v) {
   return /^0(?:px|rem|em)?$/.test(String(v).trim());
@@ -4993,18 +5055,12 @@ export function wholeBorderWidth(data) {
  * the build: the edges dial at outlines (every box, at the theme's width,
  * unless that width is zero), else the theme's border width when it is
  * wider than Core's own (a thinner width frames nothing new); whatever
- * their order. None where the surfaces dial sets the surfaces' look, which
- * decides their edges itself.
+ * their order. The parts the surfaces dial styles keep the edge it gives
+ * them (borderFrames).
  * @param {Ctx} ctx @param {ThemeData} data
  * @returns {Setting | null}
  */
 export function framingSetting(ctx, data) {
-  if (
-    data.settings.some(
-      x => x.source === 'dial' && x.thing === 'surfaces' && !x.on,
-    )
-  )
-    return null;
   const width = wholeBorderWidth(data);
   const outlines = outlinesOf(data);
   if (width && zeroLength(width.value)) return null;
