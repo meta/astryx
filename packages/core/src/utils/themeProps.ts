@@ -7,15 +7,8 @@ export type ClassProps = Record<string, ClassValue>;
 export type ThemeDataAttributes = Record<`data-${string}`, string | undefined>;
 export type ThemeProps = {className: string} & ThemeDataAttributes;
 
-const attributeNames = new Map<string, `data-${string}`>();
-
 export function themeDataAttributeName(prop: string): `data-${string}` {
-  let name = attributeNames.get(prop);
-  if (name === undefined) {
-    name = `data-${prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
-    attributeNames.set(prop, name);
-  }
-  return name;
+  return `data-${prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
 }
 
 /**
