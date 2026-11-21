@@ -5,8 +5,8 @@
  * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
  * changed. This file: a kept catalog keeps the component list, template
  * discovery, an integration's themes, doctor's theme-wiring scan, Core-props
- * scan and docs checks, finds an edit to any of them, and is skipped silently
- * when its folder cannot be used.
+ * and Core-button scans and docs checks, finds an edit to any of them, and is
+ * skipped silently when its folder cannot be used.
  * Each case's answer from a kept catalog must equal a fresh gather's.
  */
 
@@ -686,6 +686,184 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         expect(scansAgain().message).toMatch(
           /^Not checked: the project compiles JSX with `@emotion\/react`/,
         );
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    300_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps doctor's Core-button scan, and a change to a page, a script that listens for a press, an installed package, an MDX page, a package root, a package's name or imports, or a config's paths shows on the very next run",
+    () => {
+      const tmp = keptTmp('button-actions');
+      const other = makeProject();
+      try {
+        const src = path.join(other.dir, 'src');
+        fs.mkdirSync(src, {recursive: true});
+        const page = path.join(src, 'App.tsx');
+        const app = (/** @type {string} */ element) =>
+          [
+            "import {Button} from '@astryxdesign/core';",
+            'export default function App() {',
+            `  return ${element};`,
+            '}',
+            '',
+          ].join('\n');
+        fs.writeFileSync(page, app('<Button label="Start" />'));
+        const buttons = (/** @type {string} */ at) => {
+          const result = run(['doctor'], {tmp: at, cwd: other.dir});
+          return JSON.parse(result.stdout).data.checks.find(
+            (/** @type {{id: string}} */ c) => c.id === 'button-actions',
+          );
+        };
+        const scanEntries = () =>
+          fs.readdirSync(path.join(tmp, CACHE_NAME)).filter(name => {
+            const {value} = readKept(path.join(tmp, CACHE_NAME, name));
+            return Array.isArray(value?.found) && 'incomplete' in value;
+          });
+        const scanEntry = () => {
+          const kept = scanEntries();
+          expect(kept).toHaveLength(1);
+          return fs.statSync(path.join(tmp, CACHE_NAME, kept[0])).ino;
+        };
+        // Each change: the kept run scans again and answers as a fresh run
+        // does, and the run after it reads that answer back.
+        const scansAgain = () => {
+          const before = fs.existsSync(path.join(tmp, CACHE_NAME))
+            ? scanEntries().map(
+                name => fs.statSync(path.join(tmp, CACHE_NAME, name)).ino,
+              )
+            : [];
+          const answer = buttons(tmp);
+          expect(answer).toEqual(buttons(freshTmp()));
+          const kept = scanEntry();
+          expect(before).not.toContain(kept);
+          expect(buttons(tmp)).toEqual(answer);
+          expect(scanEntry()).toBe(kept);
+          return answer;
+        };
+        // A button with no action.
+        expect(scansAgain().message).toContain('src/App.tsx:3 "Start"');
+        // A new page, then the same page deleted.
+        const second = path.join(src, 'Other.tsx');
+        fs.writeFileSync(second, app('<Button label="Stop" />'));
+        expect(scansAgain().message).toContain('src/Other.tsx:3 "Stop"');
+        fs.rmSync(second);
+        expect(scansAgain().message).not.toContain('src/Other.tsx');
+        // An edit in place that keeps the size and the modification time.
+        const {atime, mtime} = fs.statSync(page);
+        fs.writeFileSync(page, app('<Button label="Begin" />'));
+        fs.utimesSync(page, atime, mtime);
+        expect(scansAgain().message).toContain('src/App.tsx:3 "Begin"');
+        // A save that writes a copy and renames it over the page gives the
+        // button an action.
+        const copy = path.join(src, '.App.tsx.saving');
+        fs.writeFileSync(
+          copy,
+          app('<Button label="Begin" onClick={() => console.log(1)} />'),
+        );
+        fs.renameSync(copy, page);
+        expect(scansAgain().status).toBe('pass');
+        // A script that listens for a press through the DOM, then not.
+        const script = path.join(src, 'delegate.ts');
+        fs.writeFileSync(
+          script,
+          "document.getElementById('root')?.addEventListener('click', event => {\n  void event;\n});\n",
+        );
+        expect(scansAgain().status).toBe('info');
+        fs.rmSync(script);
+        expect(scansAgain().status).toBe('pass');
+        // A package the page imports, installed after a run without it, then
+        // removed: each is a change, as a fresh run reads it.
+        fs.writeFileSync(
+          page,
+          [
+            "import {Button} from '@astryxdesign/core';",
+            "import {Panel} from 'acme-panel';",
+            'export default function App() {',
+            '  return <Panel><Button label="Begin" /></Panel>;',
+            '}',
+            '',
+          ].join('\n'),
+        );
+        scansAgain();
+        const panel = path.join(other.dir, 'node_modules', 'acme-panel');
+        fs.mkdirSync(panel, {recursive: true});
+        fs.writeFileSync(
+          path.join(panel, 'package.json'),
+          JSON.stringify({
+            name: 'acme-panel',
+            version: '1.0.0',
+            main: 'index.js',
+          }),
+        );
+        fs.writeFileSync(
+          path.join(panel, 'index.js'),
+          'export const Panel = () => null;\n',
+        );
+        scansAgain();
+        fs.rmSync(panel, {recursive: true, force: true});
+        scansAgain();
+        // Inputs beyond the pages: an MDX page that names the app, a
+        // `dist` folder that is skipped only once its folder is a package
+        // root, and, once that package has source of its own, which the scan
+        // reads its package.json for, its name and a `#` key in its
+        // `imports`.
+        const write = (/** @type {Record<string, string>} */ files) => {
+          for (const [rel, text] of Object.entries(files)) {
+            const file = path.join(other.dir, rel);
+            fs.mkdirSync(path.dirname(file), {recursive: true});
+            fs.writeFileSync(file, text);
+          }
+        };
+        write({'src/pages/home.mdx': "import App from '../App';\n\n<App />\n"});
+        scansAgain();
+        write({'lib/dist/Extra.tsx': app('<Button label="Extra" />')});
+        scansAgain();
+        write({
+          'lib/package.json': JSON.stringify({name: 'lib'}),
+          'lib/src/thing.ts': 'export const thing = 1;\n',
+        });
+        scansAgain();
+        write({'lib/package.json': JSON.stringify({name: '@acme/lib'})});
+        scansAgain();
+        write({
+          'lib/package.json': JSON.stringify({
+            name: '@acme/lib',
+            imports: {'#extra': './dist/Extra.tsx'},
+          }),
+        });
+        scansAgain();
+        // A page that imports through an alias, then a config that does not
+        // map it, then one that does.
+        write({
+          'src/Hero.tsx': app('<Button label="Hero" />'),
+          'src/App.tsx': [
+            "import Hero from '@/Hero';",
+            'export default function App() {',
+            '  return <a href="/start"><Hero /></a>;',
+            '}',
+            '',
+          ].join('\n'),
+        });
+        scansAgain();
+        write({
+          'tsconfig.json': JSON.stringify({
+            compilerOptions: {jsx: 'react-jsx'},
+          }),
+        });
+        scansAgain();
+        write({
+          'tsconfig.json': JSON.stringify({
+            compilerOptions: {
+              jsx: 'react-jsx',
+              baseUrl: '.',
+              paths: {'@/*': ['./src/*']},
+            },
+          }),
+        });
+        scansAgain();
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
       }
