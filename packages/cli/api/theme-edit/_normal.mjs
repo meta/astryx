@@ -1989,25 +1989,23 @@ const bareClause = c =>
  * @param {string} question
  * @param {(text: string) => boolean} [namesThing] - Whether a clause names a part, a dial or a value ("red buttons", "6px corners").
  * @param {(text: string) => boolean} [namesPart] - Whether words name a part or a dial, never a value alone ("blue accents", not "10% blue").
+ * @param {(text: string) => boolean} [turnsAway] - Whether the question turns something away ("avoid", "remove", "I hate").
  * @returns {boolean}
  */
 export function bareNeutralGrays(
   question,
   namesThing = () => false,
   namesPart = namesThing,
+  turnsAway = () => false,
 ) {
   const clauses = question
     .split(/[,;.!?\n]|\band\b/i)
     .map(c => c.trim())
     .filter(Boolean);
   // (An ask that turns something away, "avoid rounded corners and neutral
-  // grays", is no bare ask: what it turns away is not read here.)
-  if (
-    /\b(?:avoid|no|not|never|don'?t|without|except|instead of)\b/i.test(
-      question,
-    )
-  )
-    return false;
+  // grays", is no bare ask: what it turns away is not read here. The caller
+  // gives the words, from the readers that read a removal or a dislike.)
+  if (turnsAway(question)) return false;
   // ("neutral grays with blue accents"): a "with" phrase that names a part
   // or a dial is another part's color, said beside the grays; an amount or
   // a hue alone, "with 10% blue", is said of the grays themselves.

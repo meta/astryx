@@ -5507,8 +5507,8 @@ export function draftAnswer(ctx, env, question) {
   };
   /**
    * The plain gray seed the bare neutral-grays clause writes: in a sequence
-   * it runs with the whole-theme asks at the start (a dial applies before
-   * every exact setting, whatever the order, so nothing it meets changes).
+   * it joins the first one when that has room (a dial applies before every
+   * exact setting, whatever the order, so nothing it meets changes).
    * @type {WeakSet<Step>}
    */
   const untintedSeeds = new WeakSet();
@@ -5524,6 +5524,13 @@ export function draftAnswer(ctx, env, question) {
     question,
     text => !graysLook(text) && (/[\d#]/.test(text) || namesPart(text)),
     text => !graysLook(text) && namesPart(text),
+    // (The words that lead a removal, a prohibition or a dislike, as the
+    // clause readers read them.)
+    text =>
+      new RegExp(
+        `\\b(?:${REMOVAL_LEAD}|avoid|instead of|except|never|not|don'?t|do not|hate|dislike|can'?t stand|not a fan of|skip)\\b`,
+        'i',
+      ).test(text) || PROHIBITION.test(text),
   );
   question = question
     // ("mint green for positive numbers", "red for destructive actions"):

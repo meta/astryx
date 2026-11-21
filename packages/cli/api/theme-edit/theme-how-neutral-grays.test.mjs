@@ -157,6 +157,26 @@ describe('neutral grays', () => {
           q,
         ).toBe(false);
       }
+      // (A removal or a dislike before "and" turns the whole list away: the
+      // grays are never made plain.)
+      for (const q of [
+        'I hate rounded corners and neutral grays',
+        'remove rounded corners and neutral grays',
+        'get rid of the shadows and neutral grays',
+        'ditch the shadows and neutral grays',
+        'skip shadows and neutral grays',
+        'I dislike rounded corners and neutral grays',
+      ]) {
+        const results = await answer(q, 'warm');
+        expect(
+          results.flatMap(r => r.lines),
+          q,
+        ).not.toContain("neutral '#777777'");
+        expect(
+          results.some(r => /grays without a tint/.test(r.text)),
+          q,
+        ).toBe(false);
+      }
       // A hue in the "with", "but" or comma clause after the grays keeps
       // the clause's own reading: no plain gray, and no "pick one".
       for (const q of [
