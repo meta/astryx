@@ -65,7 +65,7 @@ owns response fields and compatibility.
   which build reads, keeps the gathered reading.
   Icons are not among the results: an icon ask's trailing `icons` section
   (`spec:AST-084` FR6) changes neither `results` nor `matchCount`.
-- **FR2 — bands do not cross.** Search orders matches only inside a run of one
+- **FR2 — bands do not cross, except a marked family root directly before its part.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind, except a family root as this requirement
@@ -75,8 +75,9 @@ owns response fields and compatibility.
   root does not, no query word, in any plural or stem form, is a word of the
   part's name that does not start a word of the root's name, and the query
   does not write the part's name of two or more words as one word, as is or
-  misspelled. Such a root, when the order places it below that part, moves
-  directly before the part, whatever its band; nothing else crosses a run. Among matches of the first
+  misspelled (a typed word that is the root's own name, or its plural, is no
+  misspelling), or spell it out as FR3's spelled-out-name lead reads it. A root leads its part from another run only when its own hits
+  on the words the part answers have keyword strength (the whole name, the name's head word, or a keyword, also one edit away), not a word inside its name or a mention in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its hits are weaker; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
   result that matched the whole query (a name, keyword, or title hit), or
@@ -89,7 +90,12 @@ owns response fields and compatibility.
   `table-sortable-table`) leads the lexical answer, and the order inside runs
   keeps it first. It does not lead when a longer named run of the query
   contains that word, or when a block's display name or a doc's title or
-  heading that the query holds contains it.
+  heading that the query holds contains it. An entry whose name of three or
+  more words the query spells out as words apart, every word in order and at
+  most one word misspelled with its first letter kept, as the lexical ranker
+  reads a misspelled name, leads its band, also ahead of its family's root, unless a longer name the query
+  names contains it or another entry's display name or title the query holds
+  contains it.
 - **FR4 — build orders the block catalog for its block slots.**
   `spec:AST-048` owns which blocks build lists and delegates their order here.
   Build's `blocks` hold as many blocks as build itself lists, each once, each
