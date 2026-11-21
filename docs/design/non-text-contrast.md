@@ -3,11 +3,11 @@ schema_version: 1
 template_version: 2
 kind: design
 id: design:non-text-contrast
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-11-21
 owners: [rubyycheung, cixzhang]
 review_triggers: [visual, theming, accessibility]
 verified_by: [scripts/check-knowledge.mjs]
