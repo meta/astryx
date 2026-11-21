@@ -5164,15 +5164,21 @@ function withHiddenShades(kept, before, data, steps) {
  * @template {Record<string, any> | null} K
  * @param {K} kept
  * @param {{settings?: Setting[]} | null | undefined} d the settings that module was built from
+ * @param {string | null} [module] the module's text: one written for a
+ *   palette kept as saved (KEPT_PAIRS_LINE) writes a palette token a
+ *   setting covers as a pair, so a single value there is no palette
+ *   token; in any other module it is the mapping's own
  * @returns {K}
  */
-function paletteStopsOnly(kept, d) {
+function paletteStopsOnly(kept, d, module = null) {
+  const pairs = String(module ?? '').includes(KEPT_PAIRS_LINE);
   if (!kept || !d?.settings) return kept;
   /** @type {Record<string, any>} */
   const out = {...kept};
   for (const {token, modes} of tokenWrites(d)) {
-    // (A setting for both modes is written as one value, which the module
-    // reader does not read: its token is the mapping's own all the same.)
+    // (In a module this CLI wrote, a token written as a single value was
+    // never the palette's: it is not kept. Elsewhere it is the mapping's.)
+    if (!out[token] && pairs) continue;
     const next = out[token]
       ? {...out[token]}
       : {light: {family: 'mapped', stop: 0}, dark: {family: 'mapped', stop: 0}};
@@ -5181,6 +5187,10 @@ function paletteStopsOnly(kept, d) {
   }
   return /** @type {K} */ (out);
 }
+
+/** The settings module line a kept palette's module carries (see paletteStopsOnly). */
+const KEPT_PAIRS_LINE =
+  '// Palette kept as saved: a palette token a setting covers is written as a pair.';
 
 /**
  * The kept stops of a module built from other settings than the file holds
@@ -5313,36 +5323,61 @@ function textColorReachesInside(b) {
 }
 
 /**
- * A border color carried to a frame's strength: its hue and chroma at the
- * lightness where it reads on the ground as the frame does. Null for a gray
- * border (it lends no color) or one that cannot reach that strength.
- * @param {string} border
- * @param {string} frame
- * @param {string} ground
+ * The edges the fields draw: for each token the census reads for an input
+ * group member's border color at rest, with the token it reads for its fill
+ * there (the ground the edge must read on). Read from the census, so a Core
+ * that moves the field edge to another token is followed.
+ * @param {Ctx} ctx
+ * @returns {Array<{token: string, fill: string}>}
+ */
+export function fieldEdgeTokens(ctx) {
+  const C = /** @type {any} */ (ctx).C;
+  if (!C) return [];
+  const rest = (/** @type {{when: string[]}} */ r) =>
+    r.when.some(
+      w => w === '' || !/[:[]|=/.test(w) || /^variant=input$/.test(w),
+    );
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const p of groupsOf(ctx).inputs ?? []) {
+    const edges = (C.partReads(p, 'border') ?? []).filter(
+      (/** @type {any} */ r) =>
+        /^--color-/.test(r.token) &&
+        (r.props ?? []).some((/** @type {string} */ x) => /color/.test(x)) &&
+        rest(r),
+    );
+    const fill = (C.partReads(p, 'background') ?? []).find(
+      (/** @type {any} */ r) => /^--color-/.test(r.token) && rest(r),
+    )?.token;
+    for (const e of edges)
+      if (!out.has(e.token))
+        out.set(e.token, fill ?? '--color-background-surface');
+  }
+  return [...out].map(([token, fill]) => ({token, fill}));
+}
+
+/**
+ * A color itself where it reads at `min` on the ground, else the nearest
+ * shade of it (its hue and chroma, its lightness stepped away from the
+ * ground) that does; null when none does.
+ * @param {string} color @param {string} ground @param {number} min
  * @returns {string | null}
  */
-function inFrameStrength(border, frame, ground) {
-  const b = parseColor(border);
-  const f = parseColor(frame);
+export function shadeAt(color, ground, min) {
+  const c = parseColor(color);
   const g = parseColor(ground);
-  if (!b || !f || !g) return null;
-  const {C, H} = hexToOklch(hex(b));
-  if (C < 0.02) return null;
-  const want = ratio(
-    /** @type {[number, number, number]} */ (f),
-    /** @type {[number, number, number]} */ (g),
-  );
-  const darker = hexToOklch(hex(g)).L > 0.5;
-  for (let i = 0; i <= 100; i++) {
-    const L = darker ? 1 - i / 100 : i / 100;
-    const c = oklchClampedHex(L, C, H);
-    const rgb = /** @type {[number, number, number]} */ (parseColor(c));
-    const r = ratio(rgb, /** @type {[number, number, number]} */ (g));
-    if (
-      r >= want &&
-      (darker ? L <= hexToOklch(hex(b)).L : L >= hexToOklch(hex(b)).L)
-    )
-      return c;
+  if (!c || !g) return null;
+  const rc = /** @type {[number, number, number]} */ (c);
+  const rg = /** @type {[number, number, number]} */ (g);
+  if (ratio(rc, rg) >= min) return hex(rc);
+  const {L, C: chroma, H} = hexToOklch(hex(rc));
+  const away = hexToOklch(hex(rg)).L > 0.5 ? -1 : 1;
+  for (let i = 1; i <= 100; i++) {
+    const l = L + (away * i) / 100;
+    if (l < 0 || l > 1) break;
+    const shade = oklchClampedHex(l, chroma, H);
+    const rgb = /** @type {[number, number, number]} */ (parseColor(shade));
+    if (ratio(rgb, rg) >= min) return shade;
   }
   return null;
 }
@@ -7426,6 +7461,41 @@ export function compileTheme(ctx, data, base) {
                 : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
+        /**
+         * A surface's variant axis that tells its plain fills (the card,
+         * surface, page, popover or muted color, or none) from its colored
+         * ones (a blue card, a status tint), with the values that draw the
+         * plain one; null when every variant draws the plain surface.
+         * @param {string} t
+         */
+        const surfaceVariantsOf = t => {
+          const PLAIN =
+            /^(?:transparent|inherit|none|var\(--color-background-(?:card|surface|body|popover|muted)\))$/;
+          const fills = Object.entries(
+            ctx.C.MAP[t]?.at?.['background-color'] ?? {},
+          )
+            .filter(([c]) => !/[\s:[]/.test(c) && c !== 'always')
+            .map(([c, v]) => ({
+              props: Object.fromEntries(c.split(',').map(kv => kv.split('='))),
+              plain: PLAIN.test(String(v).trim()),
+            }));
+          if (!fills.some(f => !f.plain)) return null;
+          const axes = [...new Set(fills.flatMap(f => Object.keys(f.props)))];
+          for (const axis of axes) {
+            const plain = new Set(
+              fills.filter(f => f.plain).map(f => f.props[axis]),
+            );
+            const colored = new Set(
+              fills.filter(f => !f.plain).map(f => f.props[axis]),
+            );
+            if (
+              [...colored].every(v => v != null && !plain.has(v)) &&
+              [...plain].every(v => v != null)
+            )
+              return {axis, plain: [...plain]};
+          }
+          return null;
+        };
         for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x))) {
           // (A panel floating over the page keeps an edge under flat.)
           const look =
@@ -7446,6 +7516,55 @@ export function compileTheme(ctx, data, base) {
               )
             : undefined;
           if (!fill) {
+            // A plain surface change leaves the colored and status
+            // variants their own fill (a blue card stays blue under flat):
+            // the fill goes on the variants that draw the plain surface.
+            const keep = surfaceVariantsOf(t);
+            // (A fill the theme sets on the part, itself or through a group
+            // it is in, before or after the surfaces look, is the part's
+            // own: the look's fill never covers it, from a variant block or
+            // the part's own, in the modes that fill is set for; in a mode
+            // it leaves, the look's fill stays.)
+            const ownFills = data.settings.filter(
+              (/** @type {any} */ o) =>
+                !o.state &&
+                !o.when &&
+                /^(?:background-color|background)$/.test(kebab(o.thing)) &&
+                (o.on === t || partsOf(ctx, o).includes(t)),
+            );
+            if (ownFills.length && look.backgroundColor != null) {
+              Object.assign(
+                block({...s, mode: undefined}, t),
+                Object.fromEntries(
+                  Object.entries(look).filter(([k]) => k !== 'backgroundColor'),
+                ),
+              );
+              const covered = new Set(
+                ownFills.flatMap((/** @type {any} */ o) =>
+                  o.mode ? [o.mode] : ['light', 'dark'],
+                ),
+              );
+              for (const mode of /** @type {const} */ ([
+                'light',
+                'dark',
+              ]).filter(m => !covered.has(m)))
+                for (const when of keep
+                  ? keep.plain.map(v => `${keep.axis}:${v}`)
+                  : [undefined])
+                  block({...s, mode, when}, t).backgroundColor =
+                    look.backgroundColor;
+              continue;
+            }
+            if (keep && look.backgroundColor != null) {
+              const {backgroundColor, ...others} = look;
+              Object.assign(block({...s, mode: undefined}, t), others);
+              for (const v of keep.plain)
+                block(
+                  {...s, mode: undefined, when: `${keep.axis}:${v}`},
+                  t,
+                ).backgroundColor = backgroundColor;
+              continue;
+            }
             Object.assign(block({...s, mode: undefined}, t), look);
             continue;
           }
@@ -7790,7 +7909,12 @@ export function compileTheme(ctx, data, base) {
             for (const tok of lines) putComp(s, t, tok, s.value);
         }
         if (kebab(s.thing) === 'color')
-          for (const tok of colorTokensReached(ctx.C, t))
+          for (const tok of colorTokensReached(
+            ctx.C,
+            t,
+            ctx.project,
+            /** @type {any} */ (ctx).parts?.pairs,
+          ))
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
               putComp(s, t, tok, s.value);
         // A padding on a part whose box reads Core's padding variables is
@@ -7931,26 +8055,73 @@ export function compileTheme(ctx, data, base) {
       theme.typography.heading = {family: f.family, fallbacks: f.fallbacks};
     }
   }
-  // A heading font of its own, other than the body's, reaches the parts
-  // drawn as a heading element that inherit the body's family (an empty
-  // state's title); where the two are one family nothing is written.
+  // The parts drawn as a heading element that inherit the body's family (an
+  // empty state's title) take the heading font, as every other heading
+  // does, when the two fonts end up as different families: after a heading
+  // font of its own, or after a body font set alone (which keeps the base
+  // theme's heading font) on a base that draws its headings and body in one
+  // family. A base with two families draws that title in the body's
+  // family, and a body font keeps it so. A title given a font of its own,
+  // or inside a part given one, keeps it.
   {
-    const said = [...data.settings]
-      .reverse()
-      .find(
+    const latest = (/** @type {(x: Setting) => boolean} */ f) =>
+      [...data.settings].reverse().find(f);
+    /** @param {string} token @param {Record<string, any>} [from] */
+    const fontFamilyOf = (token, from) =>
+      fontOf((from ? from[token]?.light : undefined) ?? base.light[token] ?? '')
+        .family;
+    const baseOneFamily =
+      fontFamilyOf('--font-family-heading') ===
+      fontFamilyOf('--font-family-body');
+    const said =
+      latest(
         x => x.source === 'dial' && x.thing === 'font' && x.on === 'heading',
+      ) ??
+      (baseOneFamily
+        ? latest(
+            x =>
+              (x.source === 'dial' && x.thing === 'font' && x.on === 'body') ||
+              (x.source === 'token' &&
+                x.thing === '--font-family-body' &&
+                !x.on),
+          )
+        : undefined);
+    // The families the built theme draws: an exact token wins over a font
+    // dial, as Core applies the tokens after the typography.
+    /** @param {'heading' | 'body'} role */
+    const drawn = role =>
+      tok[`--font-family-${role}`]?.light != null
+        ? fontFamilyOf(`--font-family-${role}`, tok)
+        : (theme.typography?.[role]?.family ??
+          fontFamilyOf(`--font-family-${role}`));
+    const headingFamily = drawn('heading');
+    const bodyFamily = drawn('body');
+    /**
+     * A part whose font a plain font-family setting already gives: one on
+     * the part itself, or on a part around it, whose font it inherits.
+     * @param {string} t
+     */
+    const ownFont = t =>
+      data.settings.some(
+        x =>
+          x.source === 'property' &&
+          x.thing === 'font-family' &&
+          !x.when &&
+          !x.state &&
+          partsOf(ctx, x).some(
+            p =>
+              p === t ||
+              /** @type {any} */ (ctx.C.MAP[p]?.contains ?? []).includes(t),
+          ),
       );
-    const headingFamily = theme.typography?.heading?.family;
-    const bodyFamily =
-      theme.typography?.body?.family ??
-      fontOf(base.light['--font-family-body'] ?? '').family;
     if (said && headingFamily && headingFamily !== bodyFamily)
       for (const t of headingElements(
         'font-family',
         k => k === '--font-family-heading',
       ))
-        block({...said, on: undefined, mode: undefined}, t).fontFamily =
-          'var(--font-family-heading)';
+        if (!ownFont(t))
+          block({...said, on: undefined, mode: undefined}, t).fontFamily =
+            'var(--font-family-heading)';
   }
   // A scale steeper or flatter than the standard one changes the headings;
   // the steps below the base text size keep the standard ratio, so small
@@ -8104,35 +8275,32 @@ export function compileTheme(ctx, data, base) {
         }
         putTok(k, color, m);
       }
-    // The emphasized border (input and selector frames) is never fainter
-    // than the border: an opaque border stronger than it on the surface
-    // carries it. A fainter border in a color of its own lends that color
-    // to the frame at the frame's own strength, so inputs, selectors and
-    // selectable cards stay in the border's family and keep their contrast;
-    // a fainter gray leaves the frame as it is.
+    // The edge the fields draw (the token the census reads for their
+    // border color at rest: today --color-border-emphasized) follows a
+    // whole-theme border color: the color itself where it reads at 3:1 on
+    // the field's fill, else the nearest shade of it that does, so a field
+    // keeps a boundary people can see (WCAG 1.4.11) in the border's color.
+    // A field edge the theme sets itself keeps its value.
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
       : null;
-    const emphasized =
-      written('--color-border-emphasized', m) ??
-      baseColor('--color-border-emphasized', m);
-    const ground =
-      written('--color-background-surface', m) ??
-      baseColor('--color-background-surface', m);
-    /** A color's contrast on the surface. @param {string} c */
-    const onGround = c =>
-      ratio(
-        /** @type {[number, number, number]} */ (parseColor(c)),
-        /** @type {[number, number, number]} */ (parseColor(String(ground))),
-      );
-    if (border && !pinned('--color-border-emphasized', m)) {
-      if (!emphasized || !ground || onGround(border) > onGround(emphasized))
-        putTok('--color-border-emphasized', border, m);
-      else {
-        const framed = inFrameStrength(border, emphasized, String(ground));
-        if (framed) putTok('--color-border-emphasized', framed, m);
+    if (border)
+      for (const edge of fieldEdgeTokens(ctx)) {
+        if (edge.token === '--color-border' || pinned(edge.token, m)) continue;
+        const fill =
+          written(edge.fill, m) ??
+          baseColor(edge.fill, m) ??
+          written('--color-background-surface', m) ??
+          baseColor('--color-background-surface', m);
+        if (!fill) continue;
+        const shade = shadeAt(border, String(fill), 3);
+        if (!shade) continue;
+        putTok(edge.token, shade, m);
+        if (shade.toLowerCase() !== String(border).toLowerCase())
+          (ctx.compileNotes ??= []).push(
+            `fields kept at 3:1: their edge (${edge.token}) is ${shade} in ${m} mode, the nearest shade of ${border} that reads on their fill; for the exact color: \`${P} set ${data.name} ${edge.token} ${quoteCommandArgument(String(border))}${data.mode === 'both' ? ` --mode ${m}` : ''}\``,
+          );
       }
-    }
   }
   // A flat panel is tinted with the muted fill. The pieces inside it drawn
   // in that same color (a neutral badge, a track, whatever token the base
@@ -9070,6 +9238,8 @@ const liftValue = (lift, only) =>
  * @param {Record<string, any> | null} [baseParts] the base theme's components, whose state objects each written one starts from
  */
 function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
+  /** Whether a palette token a setting covers was written as a pair. */
+  let pairsWritten = false;
   // Core merges a theme's state object (`:hover` in a rule) over the base
   // theme's whole, one level deep: each one starts as the base theme's own
   // for that rule, so the properties no setting names keep the base's.
@@ -9120,7 +9290,16 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
       const [l, d] = Array.isArray(now) ? now : [now, now];
       // (A setting for one mode writes that half itself; the other half
       // stays the palette's reference, so the next build keeps its shade.)
-      if (l !== v.light.color && d !== v.dark.color) continue;
+      if (l !== v.light.color && d !== v.dark.color) {
+        // (On a palette kept as saved, a token the palette maps that a
+        // setting writes in both modes is written as a pair, so the next
+        // build knows it as the palette's once that setting goes.)
+        if (/** @type {any} */ (pal).stored && now != null) {
+          out.tokens[k] = [l, d];
+          pairsWritten = true;
+        }
+        continue;
+      }
       // A half kept at the base theme's (family 'literal') is its color;
       // one that is the base theme's own value is read from the base, so
       // that mode follows the base theme as it changes.
@@ -9194,6 +9373,16 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
     [
       `// Generated by \`${P}\` from ${slug}.settings.json on every change: do not edit.`,
       `// Built from settings ${settingsStamp(data)}.`,
+      `// Colors from settings ${colorsStamp(data)}.`,
+      // (For a palette kept as saved whose settings set a whole-theme
+      // color for both modes: a palette token such a setting covers is
+      // written as a pair, so a single value is no palette token.)
+      ...(pairsWritten ||
+      /** @type {any} */ (
+        pal?.stored && tokenWrites(data).some(w => w.modes.length > 1)
+      )
+        ? [KEPT_PAIRS_LINE]
+        : []),
       // The theme source as it is when the build starts (the editor's
       // own when the build writes it), so an own change to it after the
       // build is told by content.
@@ -9953,15 +10142,20 @@ async function buildThemeSteps(ctx, slug, data) {
     if (moduleUnedited(kept) !== false) {
       const builtFrom = settingsBeforeChange(cwd, slug);
       const stamp = /\/\/ Built from settings ([0-9a-f]{16}) /.exec(kept)?.[1];
+      const colors = /\/\/ Colors from settings ([0-9a-f]{16})\./.exec(
+        kept,
+      )?.[1];
       const read = stopsIn(kept, true);
+      // (A hand edit that leaves the color-token settings as the module
+      // records them wrote no color the module shows: each half stays.)
+      const asBuilt =
+        builtFrom &&
+        (stamp === settingsStamp(builtFrom).split(' ')[0] ||
+          colors === colorsStamp(builtFrom));
       ctx.keepStops = paletteStopsOnly(
-        paletteStopsOnly(
-          builtFrom && stamp === settingsStamp(builtFrom).split(' ')[0]
-            ? read
-            : literalsMapped(read),
-          data,
-        ),
+        paletteStopsOnly(asBuilt ? read : literalsMapped(read), data, kept),
         builtFrom,
+        kept,
       );
     }
   }
@@ -11158,9 +11352,12 @@ export async function contrastProblems(ctx, data, res) {
         ? tokens.includes(x.thing)
         : x.source === 'property' &&
           x.thing === 'color' &&
-          colorTokensReached(ctx.C, /** @type {string} */ (t)).some(k =>
-            tokens.includes(k),
-          ));
+          colorTokensReached(
+            ctx.C,
+            /** @type {string} */ (t),
+            ctx.project,
+            /** @type {any} */ (ctx).parts?.pairs,
+          ).some(k => tokens.includes(k)));
     // (On the part around it, a setting for that part's variant the text
     // sits on counts.)
     const viaGround = latest(
@@ -14917,9 +15114,15 @@ export function stateSlot(
  * @param {{MAP: Record<string, any>}} C
  * @param {string} part
  * @param {boolean} [deep]
+ * @param {(part: string) => boolean} [keep] which contained parts count, when deep
  * @returns {string[]}
  */
-export function innerTextTokens(C, part, deep = false) {
+export function innerTextTokens(
+  C,
+  part,
+  deep = false,
+  keep = (/** @type {string} */ _q) => true,
+) {
   const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
   /** @type {Set<string>} */
   const out = new Set();
@@ -14932,6 +15135,7 @@ export function innerTextTokens(C, part, deep = false) {
   add(rec?.inside);
   if (deep)
     for (const inner of rec?.contains ?? []) {
+      if (!keep(inner)) continue;
       const r = C.MAP[inner];
       add(r?.inside);
       // A part's own color counts where it reads the token always, or for
@@ -15099,12 +15303,62 @@ export function columnLineTokens(C, part, prop) {
  * it count, on the part alone.
  * @param {{MAP: Record<string, any>}} C
  * @param {string} part
+ * @param {{target?: Map<string, {component?: string}>}} [project]
+ * @param {Array<{text: string, within?: string[]}>} [pairs] the census's text pairs
  * @returns {string[]}
  */
-export function colorTokensReached(C, part) {
+export function colorTokensReached(C, part, project, pairs) {
   const inner = innerTextTokens(C, part);
-  if (inner.length || C.MAP[part]?.own?.color) return inner;
-  return innerTextTokens(C, part, true);
+  if (inner.length) return inner;
+  if (!C.MAP[part]?.own?.color) return innerTextTokens(C, part, true);
+  // A row drawn more than once inside another part (a select's option row,
+  // a menu's item) that draws no text itself, whose text is a label of its
+  // own component drawn inside it (the option's item): the color reaches
+  // the tokens that label reads. A part drawn on a kept part's element
+  // (the Item an option is drawn as, inside the row) counts as kept. A
+  // part with a color of its own that is not such a row (a table, a
+  // markdown block) keeps the color on itself: content an app puts inside
+  // it keeps its own.
+  const componentOf = (/** @type {string} */ q) =>
+    project?.target?.get(q)?.component;
+  const own = componentOf(part);
+  const listedRow = Object.values(C.MAP).some(r =>
+    (r?.listed ?? []).includes(part),
+  );
+  if (own == null || !listedRow || drawsOwnText(pairs, part)) return inner;
+  const ownParts = (C.MAP[part]?.contains ?? []).filter(
+    (/** @type {string} */ q) => componentOf(q) === own,
+  );
+  /** @param {string} q */
+  const drawnWith = q =>
+    ownParts.some((/** @type {string} */ k) =>
+      (C.MAP[k]?.drawnAs ?? []).includes(q),
+    ) ||
+    (C.MAP[q]?.drawnAs ?? []).some(
+      (/** @type {string} */ x) => componentOf(x) === own,
+    );
+  return innerTextTokens(
+    C,
+    part,
+    true,
+    q => componentOf(q) === own || drawnWith(q),
+  );
+}
+
+/**
+ * Whether a part draws text of its own, as the census draws it: false for a
+ * part whose every text is another part's inside it (a select's option row,
+ * whose label is an item), so a color set on it may reach the tokens those
+ * parts read. Without census pairs, true (the part's own color is its text).
+ * @param {Array<{text: string, within?: string[]}> | undefined} pairs
+ * @param {string} part
+ */
+function drawsOwnText(pairs, part) {
+  if (!Array.isArray(pairs)) return true;
+  return (
+    pairs.some(x => x.text === part) ||
+    !pairs.some(x => (x.within ?? []).includes(part))
+  );
 }
 
 /**
@@ -15593,6 +15847,31 @@ export function settingsStamp(data) {
 }
 
 /**
+ * The stamp of a theme's whole-theme color-token settings, as the file
+ * keeps them: a module records it, so a hand edit that leaves them as they
+ * were is told from one that changes a color the module wrote out.
+ * @param {ThemeData} data
+ */
+export function colorsStamp(data) {
+  const saved = savedForm(loadedForm(data));
+  return createHash('sha256')
+    .update(
+      JSON.stringify(
+        saved.settings.filter(
+          (/** @type {any} */ x) =>
+            x?.source === 'token' &&
+            isColorToken(x.thing) &&
+            !x.on &&
+            !x.when &&
+            !x.state,
+        ),
+      ),
+    )
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/**
  * Whether the theme's settings module is one a newer CLI wrote for a
  * palette recipe this CLI does not know, and still current: built from
  * these same settings, on the base version installed, by a CLI no older
@@ -16053,6 +16332,8 @@ export async function commitTheme(
       saved = null;
     }
   const staleBefore = saved ? staleBuild(cwd, slug, saved) : null;
+  /** Whether the settings before the change could not be built. */
+  let unbuiltBefore = false;
   if (staleBefore)
     notes.push(
       `the build was not current (${staleBefore}), so the change is measured against the saved settings, built again`,
@@ -16107,7 +16388,7 @@ export async function commitTheme(
   const keptPalette = paletteRecipeUnknown(cwd, slug);
   const stopsNow =
     keptPalette && moduleNow && moduleUnedited(moduleNow) !== false
-      ? paletteStopsOnly(stopsIn(moduleNow, true), before)
+      ? paletteStopsOnly(stopsIn(moduleNow, true), before, moduleNow)
       : null;
   // (A kept palette always keeps what its module showed, less what a token
   // setting wrote: `stopsNow`.)
@@ -16118,7 +16399,7 @@ export async function commitTheme(
     colorKey(before) === colorKey(data) &&
     moduleNow &&
     moduleUnedited(moduleNow) !== false
-      ? paletteStopsOnly(stopsIn(moduleNow, keptPalette), before)
+      ? paletteStopsOnly(stopsIn(moduleNow, keptPalette), before, moduleNow)
       : null);
   // The same for the whole-theme radii: kept while corners and the base
   // stay as they are; a step back restores the radii it was built with.
@@ -16162,8 +16443,36 @@ export async function commitTheme(
     refuseIfLockLost();
     // The saved settings built first (inside the rollback), so the change
     // is measured against what they show.
-    if (staleBefore && saved) {
-      await buildTheme(ctx, slug, saved);
+    // (Saved settings whose colors were changed by hand away from a
+    // palette kept as saved cannot be built: a change that brings them
+    // back is measured against nothing.)
+    const savedBuilds =
+      staleBefore && saved
+        ? await buildTheme(ctx, slug, saved).then(
+            () => true,
+            e => {
+              if (
+                /** @type {any} */ (e)?.code !==
+                  ERROR_CODES.ERR_PALETTE_GENERATION ||
+                !paletteRecipeUnknown(cwd, slug)
+              )
+                throw e;
+              return false;
+            },
+          )
+        : false;
+    if (staleBefore && saved && !savedBuilds) {
+      // Nothing is compared: the note that says it was is replaced.
+      const said = notes.findIndex(n =>
+        n.startsWith('the build was not current ('),
+      );
+      if (said >= 0) notes.splice(said, 1);
+      notes.push(
+        'the settings before this change do not build (a color changed by hand away from the palette kept as saved), so nothing is compared: no changed values or new problems are listed',
+      );
+      unbuiltBefore = true;
+    }
+    if (savedBuilds) {
       cssBefore = cssNow();
       resBefore = await resolvedTokens(ctx, slug).catch(() => {
         notes.push(
@@ -16384,7 +16693,7 @@ export async function commitTheme(
     const beforeList =
       before && resBefore ? await contrastProblems(ctx, before, resBefore) : [];
     const had = new Set(beforeList.map(x => x.key));
-    newProblems = problemList.filter(x => !had.has(x.key));
+    newProblems = unbuiltBefore ? [] : problemList.filter(x => !had.has(x.key));
     // A problem the theme had that this change moved but did not clear (a
     // fill made darker, still not dark enough) is said apart, with what it
     // was: no new problem, but this change's to finish, and show would be
