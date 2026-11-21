@@ -19680,6 +19680,18 @@ export function draftAnswer(ctx, env, question) {
     // ("undo the light mode accent change": a setting of that mode only. A
     // setting saved for both modes has no light half to take back alone.)
     const mode = saidMode(c);
+    // (A theme with one mode keeps settings for either mode, and which of
+    // them its build writes for the other mode's regions, a toast or a
+    // lightbox, differs by setting: an undo that names a mode is not read
+    // there yet.)
+    if (mode && !modal && matches.length)
+      return {
+        text: `${env.slug} shows ${env.data.mode === 'dark-only' ? 'dark' : 'light'} mode only, so an undo that names a mode is not read here yet; an undo that names no mode takes back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}`,
+        options: [],
+        // (A change of that mode said earlier in the same ask is still
+        // taken back by it.)
+        takesBack: `${what}${on ? ` on ${on}` : ''}`,
+      };
     const ofMode = mode ? matches.filter(st => st.mode === mode) : matches;
     const bothModes = matches.filter(st => !st.mode);
     if (mode && !ofMode.length && bothModes.length)

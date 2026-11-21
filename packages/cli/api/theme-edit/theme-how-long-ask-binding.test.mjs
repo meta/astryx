@@ -1010,6 +1010,46 @@ describe('an undo that names a mode, on a theme that sets the thing', () => {
     }
   }, 300_000);
 
+  it('on a theme with one mode, reads no undo that names a mode yet', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('mo', {cwd, like: 'neutral'});
+    await themeEditSet('mo', '--color-accent', '#2563eb', {cwd});
+    await themeEditSet('mo', 'mode', 'dark-only', {cwd});
+    for (const q of [
+      'reset the dark mode accent',
+      'reset the light mode accent',
+    ]) {
+      const r = await lines('mo', q);
+      expect(r.writes, q).toEqual([]);
+      expect(r.text, q).toMatch(
+        /mo shows dark mode only, so an undo that names a mode is not read here yet/,
+      );
+    }
+    // (A change said in the same ask stays written.)
+    const red = await lines(
+      'mo',
+      'make the accent red. undo the dark mode accent change',
+    );
+    expect(red.writes.some(w => / accent '#dc2626'$/.test(w))).toBe(true);
+    expect(red.text).toMatch(/not read here yet/);
+    // (A change said for the undo's own mode is taken back by it.)
+    const same = await lines(
+      'mo',
+      'make the accent red in dark mode. undo the dark mode accent change',
+    );
+    expect(same.writes).toEqual([]);
+    expect(same.text).toMatch(/taken back by its undo/);
+    // (A one-mode theme that sets no accent says so.)
+    await themeEditNew('mn', {cwd, like: 'neutral'});
+    await themeEditSet('mn', 'mode', 'dark-only', {cwd});
+    const none = await lines('mn', 'reset the dark mode accent');
+    expect(none.writes).toEqual([]);
+    expect(none.text).toMatch(/sets nothing for accent in dark mode/);
+  }, 300_000);
+
   it('on its own, takes back only a setting of that mode', async test => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
