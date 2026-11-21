@@ -13439,7 +13439,7 @@ export function draftAnswer(ctx, env, question) {
       !/url\(|light-dark\(/i.test(v ?? '') &&
       (matchValue('background-image', String(v)) ||
         !/\)[^()]*\s\/\s/.test(String(v)) ||
-        /,/.test(String(v).replace(/\((?:[^()]|\([^()]*\))*\)/g, '')) ||
+        splitTop(String(v), ',').length > 1 ||
         // (A layer the ask said more layers after is part of a value.)
         new RegExp(
           `${String(v).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\s*,\\s*(?:repeating-)?(?:linear|radial|conic)-gradient\\(`,

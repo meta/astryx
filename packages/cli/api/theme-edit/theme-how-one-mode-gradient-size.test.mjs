@@ -95,3 +95,13 @@ it('two sized layers said for one mode are never written in part', async () => {
     ),
   ).toBe(false);
 }, 240_000);
+
+it('a one-mode layer with a max() inside a stop is written whole too', async () => {
+  expect(
+    await commands(
+      'dark mode header background linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px',
+    ),
+  ).toContain(
+    "set pg background 'linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+}, 240_000);
