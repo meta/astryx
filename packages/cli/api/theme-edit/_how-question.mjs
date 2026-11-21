@@ -13420,9 +13420,14 @@ export function draftAnswer(ctx, env, question) {
       )
         return inValue.has(st);
       if (st.thing.startsWith('--')) return C.typeOf(st.thing) === 'color';
-      // A gradient goes per mode too, as a background image (the other
-      // mode keeps its background color).
-      if (/^background(-image)?$/.test(st.thing) && gradientOnly(st.value))
+      // A gradient goes per mode too, as a background image or the
+      // shorthand with its size (the other mode keeps its background
+      // color).
+      if (
+        /^background(-image)?$/.test(st.thing) &&
+        /gradient\(/i.test(st.value ?? '') &&
+        !/url\(|light-dark\(/i.test(st.value ?? '')
+      )
         return true;
       if (st.thing === 'background')
         return (

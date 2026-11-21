@@ -7,7 +7,7 @@
  */
 
 import {afterAll, beforeAll, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -104,4 +104,24 @@ it('a one-mode layer with a max() inside a stop is written whole too', async () 
   ).toContain(
     "set pg background 'linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
   );
+}, 240_000);
+
+it('a saved sized gradient made darker for one mode is answered for that mode', async () => {
+  await themeEditNew('pd', {cwd, like: 'neutral'});
+  await themeEditSet(
+    'pd',
+    'background',
+    'linear-gradient(#3b82f6 1px, transparent 1px) 0 0 / 24px 24px',
+    {cwd, on: 'app-shell-header'},
+  );
+  const {data} = /** @type {any} */ (
+    await themeEditHow('make the header gradient darker in dark mode', {
+      cwd,
+      theme: 'pd',
+    })
+  );
+  const texts = /** @type {Array<{text: string}>} */ (data.results ?? []).map(
+    r => r.text,
+  );
+  expect(texts.some(t => /cannot be dark mode only/.test(t))).toBe(false);
 }, 240_000);
