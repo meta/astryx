@@ -498,6 +498,64 @@ describe('MultiSelector', () => {
     expect(screen.getByText('Apple and 1 more')).toBeInTheDocument();
   });
 
+  it('joins the labels display in the provider locale', () => {
+    render(
+      <InternationalizationProvider locale="de">
+        <MultiSelector
+          label="Obst"
+          options={defaultOptions}
+          value={['Apple', 'Banana', 'Orange']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('Apple, Banana und Orange')).toBeInTheDocument();
+  });
+
+  it('writes the labels overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {
+            '@astryx.multiSelector.overflowCount': '{count} weitere',
+          },
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByText('Apple, Banana, Orange und 2 weitere'),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the badges overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {'@astryx.multiSelector.overflowCount': '{count} weitere'},
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="badges"
+          maxBadges={2}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('3 weitere')).toBeInTheDocument();
+  });
+
   it('formats the labels display with formatValue', () => {
     render(
       <MultiSelector

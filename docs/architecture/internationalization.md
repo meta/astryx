@@ -414,6 +414,12 @@ inferred from an implementation pull request.
   shared locale-sensitive formatters, parsers, and collation. Component consumers
   pass the provider locale; naming a module here does not approve a duplicate
   formatting path or incomplete propagation in its callers.
+- `packages/core/src/i18n/listFormat.ts` `createListFormatter` — the one narrow
+  conjunction list format. The `useListFormatter` hook binds it to the provider
+  locale for components. The PowerSearch value formatters
+  (`PowerSearch/formatFilterValue.ts`, `PowerSearch/formatTokenValue.ts`) call
+  it with the provider locale they receive, because `formatFilterValue` is on
+  the server-safe `PowerSearch/utils` entry, which cannot import a client hook.
 - `packages/core/src/Timestamp/tooltipEntries.ts` — time-zone identifier
   validation, isolated from localized date rendering.
 - `packages/core/src/utils/plainDate.ts` `getTimeZoneParts` — deterministic
