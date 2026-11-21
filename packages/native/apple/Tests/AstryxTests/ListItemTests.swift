@@ -59,6 +59,9 @@ private func inList<V: View>(_ view: V, _ context: ListContext) -> some View {
   let square = Pixels(inList(ListItem("Ada", isSelected: true), ListContext(hasDividers: true, isFlush: false)))
   #expect(rounded.at(0, 0)[3] < 8)
   #expect(close(square.at(0, 0), plate(accent), within: 6))
+  // A bleed list squares its rows too (component:List FR5, FR6).
+  let bleed = Pixels(inList(ListItem("Ada", isSelected: true), ListContext(hasDividers: false, isFlush: false, isBleed: true)))
+  #expect(close(bleed.at(0, 0), plate(accent), within: 6))
 }
 
 @MainActor
