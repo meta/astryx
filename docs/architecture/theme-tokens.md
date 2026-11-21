@@ -228,6 +228,17 @@ then have contradictory winners.
   and is the smallest drop in CIE L* that meets 4.5:1 on every default tint.
   The lowest pair is `--color-background-gray` over the page body (4.52:1).
 
+- **INV15 — Hue text is page text.** `--color-text-<hue>` is coloured text
+  on the default page and card surfaces, at 4.5:1 or more against them in each
+  colour mode, and at 4.5:1 or more on its own `--color-background-<hue>` plate
+  over those surfaces. It is not ink for a stronger plate. The floors bind
+  Core's defaults and Astryx's first-party themes in light and dark mode; a
+  value a third-party theme sets is that theme's own. A theme that needs ink
+  for a plate stronger than its hue background defines a local token (INV8).
+  Reported current gap: the dark values in the y2k, butter, and gothic themes
+  are plate ink and fall below the page floor; bringing them to INV15 is a
+  conformance follow-up, not part of this record change.
+
 This record does not own:
 
 - the `defineTheme` input shape, generated scales, or precedence;
@@ -338,6 +349,41 @@ surfaces would darken with it.
 Rejected: pointing fields at `--color-border-gray`, because it fails 3:1 in some
 themes and ties fields to badge theming.
 
+### DEC-3 — Hue text reads on the page
+
+**Decider:** pending
+
+A person reading coloured text, such as a field's status message, a syntax
+token, or a schedule label, sees it on the page or a card. In some first-party
+themes the dark value of `--color-text-<hue>` is ink for a strong plate, so it
+is near-invisible on the page. The name's grammar (INV10) already says it is
+text for the `text` paint property, so it follows the same floor as status
+text (INV15). One value works on the page and on the translucent hue plate.
+
+Rejected: reading `--color-text-<hue>` as plate ink and moving page text to
+status roles, which renames the meaning of a released token and leaves every
+current page use wrong.
+
+### DEC-5 — A colour pair a theme breaks is reported, and accent content is derived
+
+**Decider:** pending
+
+A theme author who tunes one colour by hand, such as a darker dark-mode
+accent, can silently drop the paired label below its floor. Nothing tells
+them, and people see unreadable buttons. Theme generation already derives
+status content when a theme sets only the fill
+(`architecture:theme-compilation` INV17). It now derives `--color-on-accent`
+the same way, and the compiler reports any pair below its floor
+(`architecture:theme-compilation` INV22). The same applies on media
+surfaces: unset accent text and icon colours there follow the surface's
+content colour, so a theme that authors one accent value for both modes no
+longer keeps it on a media band where it can fail contrast. A value the theme sets still wins,
+and output does not change because of a report.
+
+Rejected: documentation only, which leaves the failure invisible until someone
+measures pixels. Rejected: rewriting a theme's own value to meet the floor,
+which overrides the author's decision.
+
 ## Verification
 
 | Invariant                    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                 |
@@ -352,5 +398,6 @@ themes and ties fields to badge theming.
 | INV12                        | `packages/core/src/theme/contrast.test.ts` "the stock accent pair meets 4.5:1 in the light/dark theme" (current values: light `#0064E0`, dark `#0171E3`, label `#FFFFFF`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The stock `--color-on-accent` on `--color-accent` falls below 4.5:1 in light or dark mode                                                                                                                                                                                      |
 | INV13                        | `packages/core/src/theme/contrast.test.ts` resolves `--color-border-control` against the surface and the page body in light and dark for Core's defaults, each theme template and a colour-scale theme                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `--color-border-control` falls below 3:1 against the surface or the page body in either mode, for any of them, or a colour-scale theme emits no `--color-border-control`                                                                                                       |
 | INV14                        | `packages/core/src/theme/contrast.test.ts` resolves `--color-text-secondary` on each default palette tint over the surface and the page body for Core's defaults; `expandColorScale.test.ts` does the same over the generated surface and body for each representative colour-scale config                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `--color-text-secondary` falls below 4.5:1 on a default palette tint over the surface or the page body in either mode                                                                                                                                                          |
+| INV15                        | A contrast check over Core's defaults and every first-party theme in light and dark mode: each `--color-text-<hue>` against the default page and card surfaces and over its own `--color-background-<hue>` plate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | A hue text value below 4.5:1 on the page, on a card, or on its plate                                                                                                                                                                                                           |
 | Released token compatibility | Type checking plus representative package/source builds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | A released CSS variable or typed token name disappears without an explicit migration decision                                                                                                                                                                                  |
 | Visual defaults              | Real Chromium examples in light, dark, status, and high-contrast contexts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | A changed default produces unreadable or semantically inconsistent output                                                                                                                                                                                                      |
