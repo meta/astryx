@@ -332,6 +332,21 @@ const ROWS = [
     },
   ],
   [
+    'an undo of a look no earlier change had takes nothing back and says so',
+    {
+      q: 'Make the headings bold. Undo the heading size change.',
+      has: ['headings bold'],
+      says: /no heading change of that look was said earlier/,
+    },
+  ],
+  [
+    'an undo followed by another change phrase reads as before',
+    {
+      q: 'Make the headings bigger. Make the headings bold. Undo the heading size change and the heading bold change.',
+      has: ['--text-heading-1-size 1.725rem'],
+    },
+  ],
+  [
     'an undo of an italic keeps the bold said earlier',
     {
       q: 'Make the headings italic. Make the headings bold. Undo the heading italic change.',

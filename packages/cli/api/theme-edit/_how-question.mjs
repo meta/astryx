@@ -29187,10 +29187,20 @@ export function draftAnswer(ctx, env, question) {
           : []),
       ]),
     ];
-    if (lookNamed.length && !several && !colorSaid) {
+    // (Only an undo said alone: one followed by another "… change" phrase
+    // reads as before.)
+    const followed = next && /\bchanges?\W*$/i.test(String(next.text ?? ''));
+    if (lookNamed.length && !several && !colorSaid && !followed) {
       const ofLook = undone.filter(d =>
         lookNamed.some(a => lookOf(d).includes(a)),
       );
+      if (!ofLook.length && undone.length) {
+        // ("Make the headings bold. Undo the heading size change.": no
+        // change of that look was said, so nothing is taken back.)
+        unmet.text = `no ${part ? `${part} ` : ''}change of that look was said earlier in this ask, so nothing is taken back`;
+        if (uc) answeredByUndo.add(uc);
+        continue;
+      }
       undone.splice(0, undone.length, ...ofLook);
     }
     const looks = new Set(undone.flatMap(lookOf));

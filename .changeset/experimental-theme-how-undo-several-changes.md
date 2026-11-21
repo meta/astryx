@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] In `astryx experimental theme editor how`, an undo that names a look takes back only that look's earlier change ("Make the headings bigger. Make the headings bold. Undo the heading size change." keeps the bold; "Undo the heading italic change" keeps the bold; "Undo the heading font size change" keeps the family), where it took back nothing before. An undo that names more than one change still takes back none and says so.
+[experimental] In `astryx experimental theme editor how`, an undo said alone that names a bare "size" or "weights" takes back only that look's earlier change ("Make the headings bigger. Make the headings bold. Undo the heading size change." takes back the sizes and keeps the bold), where it took back nothing before; when no change of that look was said, it says so. An undo followed by another "… change" phrase reads as before.
 
 @josephfarina
