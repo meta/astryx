@@ -424,8 +424,8 @@ const styles = stylex.create({
   // A mark is a vertical tick centered on the track via their shared positioning container.
   // It stays outside role="progressbar" so it remains independently focusable.
   // The centering translate keeps themed overhang symmetric;
-  // insetInlineStart and the mirrored translate preserve RTL. Both follow the
-  // bar's own direction, as `insetInlineStart` does.
+  // insetInlineStart and the mirrored translate preserve RTL. The translate
+  // follows the `dir` that the bar inherits.
   //
   // The dimensions read private vars rather than being plain declarations: a
   // theme writes `width`/`height` on the `progressbar-mark` target as usual and

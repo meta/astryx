@@ -15,13 +15,15 @@ import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('progress-bar-audit-evidence');
+const EVIDENCE = path.resolve('progress-bar-audit-evidence');
+let OUTPUT = EVIDENCE;
 
 type Mode = 'light' | 'dark';
 type Direction = 'ltr' | 'rtl';
@@ -296,8 +298,8 @@ for (const mode of ['light', 'dark'] as const) {
         `disabled track opacity ${b?.trackOpacity}`,
       );
       check(b?.fillVariant === 'disabled', `fill variant ${b?.fillVariant}`);
-      // WCAG 1.4.3 exempts the text of an inactive component, and FR5 mutes
-      // a disabled bar's label and value text. Any other axe result fails.
+      // WCAG 1.4.3 exempts the text of an inactive component, and a disabled
+      // bar mutes its label and value text. Any other axe result fails.
       const all = await axe(page);
       const inactiveText = all.filter(v => v.startsWith('color-contrast:'));
       const violations = all.filter(v => !v.startsWith('color-contrast:'));
@@ -361,7 +363,7 @@ addCase({
   },
 });
 
-// FR8: the root keeps its reflected variant when a caller passes data-variant.
+// The root keeps its reflected variant when a caller passes data-variant.
 addCase({
   key: 'caller-data-variant',
   group: 'api',
@@ -389,7 +391,7 @@ addCase({
   },
 });
 
-// FR4 and INV14: a variant a theme adds paints the default accent fill.
+// A variant a theme adds paints the default accent fill.
 addCase({
   key: 'theme-added-variant',
   group: 'api',
@@ -402,6 +404,10 @@ addCase({
   reducedMotion: 'reduce',
   run: async (page, check, frame) => {
     const accent = await bar(page);
+    check(
+      accent?.fillColor != null && accent.fillColor !== 'rgba(0, 0, 0, 0)',
+      `accent fill ${accent?.fillColor}`,
+    );
     await setArgs(page, 'core-progressbar--with-target-mark', {
       variant: 'brand',
       marks: [{value: 20, label: 'Start'}],
@@ -435,18 +441,39 @@ for (const direction of ['ltr', 'rtl'] as const) {
     run: async (page, check, frame) => {
       const b = await bar(page);
       check(
-        b?.valuenow == null && b?.valuetext == null,
+        b != null && b.valuenow == null && b.valuetext == null,
         'value attributes while indeterminate',
+      );
+      check(
+        b?.animationName != null && b.animationName !== 'none',
+        `slide animation ${b?.animationName}`,
       );
       const violations = await axe(page);
       check(violations.length === 0, `axe: ${violations.join(' | ')}`);
       await frame('rest', {bar: b});
+      // The same bar set left-to-right takes the other keyframe.
+      const flipped = await page.evaluate(
+        other => {
+          const root = document.querySelector<HTMLElement>(
+            '#storybook-root .astryx-progress-bar',
+          ) as HTMLElement;
+          root.setAttribute('dir', other);
+          const fill = root.querySelector('[role="progressbar"]')
+            ?.firstElementChild as HTMLElement;
+          return getComputedStyle(fill).animationName;
+        },
+        direction === 'rtl' ? 'ltr' : 'rtl',
+      );
+      check(
+        flipped !== 'none' && flipped !== b?.animationName,
+        `${direction} slide ${b?.animationName}, other direction ${flipped}`,
+      );
     },
   });
 }
 
-// FR6 and INV11: in a left-to-right region of a right-to-left page the slide
-// and the mark centering follow the bar's own direction.
+// In a left-to-right region of a right-to-left page the slide and the mark
+// centering follow the bar's own direction.
 addCase({
   key: 'ltr-region-in-rtl-page',
   group: 'indeterminate',
@@ -459,6 +486,7 @@ addCase({
   reducedMotion: 'no-preference',
   run: async (page, check, frame) => {
     const ltrName = (await bar(page))?.animationName;
+    check(ltrName != null && ltrName !== 'none', `LTR slide ${ltrName}`);
     await page.evaluate(() => {
       const root = document.querySelector<HTMLElement>(
         '#storybook-root .astryx-progress-bar',
@@ -524,6 +552,68 @@ for (const pointer of ['fine', 'coarse'] as const) {
   });
 }
 
+// On a right-to-left page a mark centers by moving toward inline start.
+addCase({
+  key: 'marks-rtl-centering',
+  group: 'marks',
+  story: 'core-progressbar--with-target-mark',
+  ready: '#storybook-root .astryx-progress-bar-mark',
+  mode: 'light',
+  direction: 'rtl',
+  viewport: DESKTOP,
+  pointer: 'fine',
+  reducedMotion: 'reduce',
+  run: async (page, check, frame) => {
+    const shift = await page.evaluate(() => {
+      const m = document.querySelector<HTMLElement>(
+        '#storybook-root .astryx-progress-bar-mark',
+      ) as HTMLElement;
+      return new DOMMatrixReadOnly(getComputedStyle(m).transform).m41;
+    });
+    check(shift > 0, `RTL mark centering shifts ${shift}px`);
+    await frame('rest', {shift});
+  },
+});
+
+// Under reduced motion a right-to-left bar pulses in place like a
+// left-to-right one, with no slide.
+addCase({
+  key: 'reduced-motion-pulse-rtl',
+  group: 'pulse-fine',
+  story: 'core-progressbar--indeterminate',
+  ready: READY,
+  mode: 'light',
+  direction: 'rtl',
+  viewport: DESKTOP,
+  pointer: 'fine',
+  reducedMotion: 'reduce',
+  run: async (page, check, frame) => {
+    const b = await bar(page);
+    check(
+      b?.fill != null &&
+        b.track != null &&
+        Math.abs(b.fill.width - b.track.width) <= 1,
+      `RTL pulse fill width ${b?.fill?.width} of ${b?.track?.width}`,
+    );
+    const ltrName = await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>(
+        '#storybook-root .astryx-progress-bar',
+      ) as HTMLElement;
+      root.setAttribute('dir', 'ltr');
+      const fill = root.querySelector('[role="progressbar"]')
+        ?.firstElementChild as HTMLElement;
+      return getComputedStyle(fill).animationName;
+    });
+    check(
+      b?.animationName != null &&
+        b.animationName !== 'none' &&
+        b.animationName === ltrName,
+      `RTL pulse ${b?.animationName}, LTR pulse ${ltrName}`,
+    );
+    await frame('rest', {bar: b, ltrName});
+  },
+});
+
 for (const direction of ['ltr', 'rtl'] as const) {
   addCase({
     key: `narrow-${direction}`,
@@ -550,7 +640,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
 }
 
 test.beforeAll(async () => {
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

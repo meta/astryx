@@ -110,7 +110,7 @@ describe('ProgressBar', () => {
     expect(ref.current).toBe(container.firstElementChild);
   });
 
-  it('puts className, style, and DOM props on the root after its own classes', () => {
+  it('puts className, style, and DOM props on the root beside its own classes', () => {
     const onClick = vi.fn();
     const {container} = render(
       <ProgressBar
