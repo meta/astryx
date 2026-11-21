@@ -51,7 +51,7 @@ test('a render-function trigger that replaces an element trigger anchors the pop
   const {positionAnchor} = await readLayer(page);
   expect(positionAnchor).toMatch(/^--/);
   await expect
-    .poll(() =>
+    .poll(async () =>
       trigger.evaluate(node =>
         getComputedStyle(node).getPropertyValue('anchor-name').trim(),
       ),

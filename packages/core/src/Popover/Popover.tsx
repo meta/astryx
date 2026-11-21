@@ -945,7 +945,6 @@ export function Popover({
       }
       // The trigger's text is in the DOM the caller rendered, read as the
       // trigger attaches; it names a sheet that has no `label` (DEC-8).
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the caller-rendered trigger's text, which only the DOM holds
       setTriggerText(readTriggerText(button));
 
       // Event handlers
