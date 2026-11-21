@@ -435,6 +435,22 @@ describe('show --on: what one part of a theme shows', () => {
     ).toBe(true);
   }, 120_000);
 
+  it('reads a token set on the part for one mode into what the part draws in that mode', async () => {
+    await themeEditNew('lamp', {cwd, like: 'neutral'});
+    await themeEditSet('lamp', '--color-background-card', '#abcdef', {
+      cwd,
+      on: 'card',
+      mode: 'light',
+    });
+    const r = /** @type {any} */ (
+      await themeEditShow('lamp', {cwd, on: 'card'})
+    );
+    const fill = valueOf(r, 'background-color');
+    expect(fill).toMatchObject({source: 'theme', via: 'token'});
+    expect(fill.value.light).toBe('#abcdef');
+    expect(fill.value.dark).not.toBe('#abcdef');
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})

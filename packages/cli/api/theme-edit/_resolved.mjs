@@ -430,16 +430,49 @@ export async function themePartValues(cwd, name, part) {
    * own rule on the part sets.
    * @param {string} when
    */
-  const inside = when => ({
-    theme: {
-      light: scopedTokens(themeRules, theme.tokens.light, when),
-      dark: scopedTokens(themeRules, theme.tokens.dark, when),
-    },
-    parent: {
-      light: scopedTokens(parentRules, theme.parentTokens.light, when),
-      dark: scopedTokens(parentRules, theme.parentTokens.dark, when),
-    },
-  });
+  const inside = when => {
+    /**
+     * A mode's tokens with what the rules' `@light` or `@dark` blocks set
+     * for that mode on the part, at rest and under this condition.
+     * @param {Record<string, string>} map
+     * @param {typeof folded.modeSets} sets
+     * @param {'light' | 'dark'} mode
+     */
+    const withBlocks = (map, sets, mode) => {
+      const out = {...map};
+      for (const w of ['base', when])
+        for (const m of sets)
+          if (
+            m.mode === mode &&
+            !m.state &&
+            m.property.startsWith('--') &&
+            sameWhen(m.when, w)
+          )
+            out[m.property] = m.value;
+      return out;
+    };
+    const tl = scopedTokens(themeRules, theme.tokens.light, when);
+    const td = scopedTokens(themeRules, theme.tokens.dark, when);
+    const pl = scopedTokens(parentRules, theme.parentTokens.light, when);
+    const pd = scopedTokens(parentRules, theme.parentTokens.dark, when);
+    return {
+      theme: {
+        light: withBlocks(tl, folded.modeSets, 'light'),
+        dark: withBlocks(td, folded.modeSets, 'dark'),
+      },
+      parent: {
+        light: withBlocks(pl, parentFolded.modeSets, 'light'),
+        dark: withBlocks(pd, parentFolded.modeSets, 'dark'),
+      },
+    };
+  };
+  // The tokens a rule's mode block sets on the part, which a value reading
+  // them shows in that mode.
+  const blockTokens = new Set(
+    folded.modeSets
+      .filter(m => m.property.startsWith('--'))
+      .map(m => m.property),
+  );
   /** @type {PartValue[]} */
   const values = [];
   /** @type {WeakMap<PartValue, {when: string, state: string, own: boolean}>} */
@@ -576,14 +609,32 @@ export async function themePartValues(cwd, name, part) {
       source = 'base';
       if (onPart) via = 'part';
     }
+    // A value that reads a token a mode block sets on the part is the
+    // theme's, through that token.
+    if ([...light, ...dark].some(t => blockTokens.has(t))) {
+      source = 'theme';
+      via = theme.tokenVia
+        ? theme.tokenVia(
+            [...light, ...dark].find(t => blockTokens.has(t)) ?? '',
+            key,
+            true,
+          )
+        : 'token';
+    }
     const cond = condOf(when, state, own.has(k) ? property : null);
     const row = {
       property,
       ...cond,
-      value:
-        v.light === v.dark
-          ? orNull(v.light)
-          : {light: orNull(v.light), dark: orNull(v.dark)},
+      value: pairOf(
+        .../** @type {[string, string]} */ (
+          [...light, ...dark].some(t => blockTokens.has(t))
+            ? [
+                resolveIn(v.raw, at.theme.light, 'light'),
+                resolveIn(v.raw, at.theme.dark, 'dark'),
+              ]
+            : [v.light, v.dark]
+        ),
+      ),
       expression: v.raw,
       tokens: light.join(' ') === dark.join(' ') ? light : {light, dark},
       source,
@@ -601,9 +652,13 @@ export async function themePartValues(cwd, name, part) {
     const at = inside(m.when);
     const shown = orNull(resolveIn(m.value, at.theme[m.mode], m.mode));
     const chain = tokenChain(m.value, at.theme[m.mode]);
-    const via = theme.propertyVia
-      ? theme.propertyVia(m.property, key, m.when, m.state)
-      : 'part';
+    // (A token a block sets is the setting that wrote it, as in a rule.)
+    const via =
+      m.property.startsWith('--') && theme.tokenVia
+        ? theme.tokenVia(m.property, key, true)
+        : theme.propertyVia
+          ? theme.propertyVia(m.property, key, m.when, m.state)
+          : 'part';
     /** @param {any} x @param {'light' | 'dark'} mode */
     const half = (x, mode) =>
       x && typeof x === 'object' && !Array.isArray(x) ? x[mode] : x;
@@ -665,8 +720,18 @@ export async function themePartValues(cwd, name, part) {
     target.value = pair(shown, half(target.value, other));
     target.expression = pair(m.value, half(target.expression, other));
     target.tokens = pair(chain, half(target.tokens, other));
-    target.source = 'theme';
-    target.via = via;
+    // (A block the theme takes as it is from the theme it extends is the
+    // base's.)
+    const inherited = parentFolded.modeSets.some(
+      p =>
+        p.mode === m.mode &&
+        p.property === m.property &&
+        p.state === m.state &&
+        p.value === m.value &&
+        sameWhen(p.when, m.when),
+    );
+    target.source = inherited ? 'base' : 'theme';
+    target.via = inherited ? 'part' : via;
   }
   // At rest first, then each variant, in the order the part reads them.
   values.sort((a, b) => Number(a.when != null) - Number(b.when != null));
@@ -716,6 +781,15 @@ export async function themePartValues(cwd, name, part) {
     data: {theme: name, kind: theme.kind, part: key, values: said},
   };
 }
+
+/**
+ * A value in each mode, one value when the modes agree; a value with a
+ * var() still in it is no value.
+ * @param {string} light
+ * @param {string} dark
+ */
+const pairOf = (light, dark) =>
+  light === dark ? orNull(light) : {light: orNull(light), dark: orNull(dark)};
 
 /**
  * A value with a var() still in it is no value: null.
