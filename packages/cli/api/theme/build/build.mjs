@@ -2687,10 +2687,10 @@ async function validateRegistryGraphs(/** @type {Array<{specifier: string, expor
     if (/\.[cm]?[jt]sx?$/i.test(file)) for (const edge of moduleDependencies(fs.readFileSync(file, 'utf8'), file)) pending.push({...edge, parent: file});
   }
   for (const [index, root] of runtimeChecks.entries()) {
-    // The built module imports a local TypeScript or JSX registry from its
-    // compiled copy, so its source loads through the build's own loader, as
-    // the member did: Node cannot import `.tsx` or `.jsx`, imports `.ts` only
-    // from 22.18, and does not resolve an import without its extension.
+    // A local TypeScript or JSX registry loads through the build's own loader,
+    // as the member did and as a single build loads it: Node cannot import
+    // `.tsx` or `.jsx`, imports `.ts` only from 22.18, and does not resolve an
+    // import without its extension.
     const local = COMPILED_SOURCE.test(root.file) && !root.file.split(path.sep).includes('node_modules');
     let exports; try { exports = local ? await sourceLoader.import(root.file) : await import(`${pathToFileURL(root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
     catch (error) { throw registryGraphError(`Cannot import family registry ${root.file}: ${error instanceof Error ? error.message : String(error)}`); }

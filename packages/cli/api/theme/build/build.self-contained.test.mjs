@@ -337,6 +337,35 @@ describe('a theme family whose member’s registry is TSX, built by the CLI in i
   }
 });
 
+describe('a theme family whose member’s slot module is TSX, built by the CLI in its own process', () => {
+  it('compiles the slot module beside the family outputs', () => {
+    write(
+      'fam/slots.tsx',
+      `import * as React from 'react';\nexport const calmSlots = {Button: {chevron: () => <svg />}};\n`,
+    );
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmSlots} from './slots.tsx';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', componentIcons: calmSlots});\n`,
+    );
+    const run = cli([
+      'theme',
+      'build',
+      '--family',
+      'fam/ocean.ts',
+      'fam/ocean-calm.ts',
+      '--family-key',
+      'ocean-family',
+    ]);
+    expect(run.stderr).not.toContain('Cannot import family registry');
+    expect(run.status).toBe(0);
+    expect(exists('fam/ocean-family.modules/slots.tsx.js')).toBe(true);
+  });
+});
+
 describe('a family build over a file of yours at a compiled path', () => {
   it('keeps the file and the TypeScript import, and warns as a single build does', async () => {
     write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);
