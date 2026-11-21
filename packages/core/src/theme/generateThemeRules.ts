@@ -48,6 +48,10 @@ import {
   deriveStatusRoleTokens,
   resolveModes,
 } from './statusRoleDerivation';
+import {
+  deriveFilledStatePaints,
+  readsFilledStatePaint,
+} from './filledStatePaint';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
@@ -1046,6 +1050,13 @@ export function generateThemeRules(
   const tokenRules = tokenBlock(theme, '', sink, [
     ...Object.entries(theme.tokens),
     ...rootAliases,
+    // Each filled Button variant's hover and pressed paint, measured on this
+    // theme's own fill and label (filledStatePaint.ts).
+    ...deriveFilledStatePaints(
+      {...Object.fromEntries(rootAliases), ...theme.tokens},
+      theme.localTokens,
+      withoutUnsetComponents(theme.components)?.button,
+    ),
   ]);
   if (tokenRules !== null) {
     parts.push(tokenRules);
@@ -1881,6 +1892,20 @@ export function generateOnMediaCSS(
     const tokenEntries = [
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
+      // A surface that re-points a colour the filled paint reads measures it
+      // again on the surface's own fill and label.
+      ...(readsFilledStatePaint(onMedia.tokens)
+        ? deriveFilledStatePaints(
+            {
+              ...Object.fromEntries(rootAliases),
+              ...theme.tokens,
+              ...onMedia.tokens,
+              ...Object.fromEntries(statusRoleDefaults),
+            },
+            theme.localTokens,
+            withoutUnsetComponents(theme.components)?.button,
+          )
+        : []),
     ];
     if (tokenEntries.length > 0) {
       // The surface re-declares font sizes the way a theme's root does, so they
@@ -2031,11 +2056,13 @@ function generateAdaptationRuleRules(
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
   themeDarkPageSides: ReadonlySet<MediaSide>,
+  filledStatePaints: [string, string][] = [],
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(rule, location, sink, [
     ...Object.entries(rule.tokens),
     ...statusRoleDefaults,
+    ...filledStatePaints,
   ]);
   if (tokens !== null) {
     parts.push(tokens);
@@ -2117,12 +2144,27 @@ export function generateAdaptationCSS(
   // does not. Pairwise merging cannot repair that: multiple mutually exclusive
   // earlier rules can each overlap one broad later rule.
   for (const [index, rule] of rules.entries()) {
+    // A rule that writes a colour the filled paint reads measures it again,
+    // over the root's tokens.
+    const filledStatePaints = readsFilledStatePaint(rule.tokens)
+      ? deriveFilledStatePaints(
+          {
+            ...Object.fromEntries(context.rootAliases),
+            ...theme.tokens,
+            ...rule.tokens,
+            ...Object.fromEntries(statusRoleDefaults[index]),
+          },
+          theme.localTokens,
+          withoutUnsetComponents(theme.components)?.button,
+        )
+      : [];
     const parts = generateAdaptationRuleRules(
       rule,
       `adaptations[${index}].`,
       sink,
       statusRoleDefaults[index],
       themeDarkPageSides,
+      filledStatePaints,
     );
     if (parts.length === 0) {
       continue;

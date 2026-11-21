@@ -101,7 +101,8 @@ fills directly: `--color-info` `['#0074e2', '#6d9cfe']`, `--color-success`
 `['#c9303a', '#ff705d']`, the colours its Badges have always shown. Accent
 variants of ProgressBar, StatusDot, and Stepper indicators paint Neutral's
 accent, and Banner and the pale destructive Button use the portable overlay
-and neutral roles; Neutral adds no component override for any of them. Every new mapping needs exact-head theme review and
+and neutral roles, except where the overlay drops the destructive label under
+4.5:1 (its dark-mode press), where Button FR15's readable tint applies; Neutral adds no component override for any of them. Every new mapping needs exact-head theme review and
 rendered light/dark evidence; shared color alone is not enough.
 
 Neutral's selected fill, `--color-accent-muted`, is `neutral.light[85]` /
@@ -305,7 +306,9 @@ hex values still match the approved palette.
 **Decider:** `cixzhang`, `2026-10-25`
 
 Neutral paints status, tinted surfaces, and the pale destructive Button through
-the portable `--color-*` roles. It defines no local token for them other than
+the portable `--color-*` roles. The one exception is the destructive Button's
+dark-mode press: there the portable overlay drops its label under 4.5:1, so it
+takes Button FR15's readable tint. It defines no local token for them other than
 the deprecated `--astryx-theme-neutral-color-status-fill-accent` of DEC-1.
 
 This is the `spec:AST-006` FR10 exception for nine local names that earlier
