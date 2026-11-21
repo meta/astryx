@@ -43,6 +43,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {inject} from 'vitest';
 import {releaseTree} from '../foundation/release/cache.mjs';
+import {removeCoreStep} from './core-step.mjs';
 import {packCli} from './pack-cli.mjs';
 import {installCore, tempDir, writeJson} from './release-fixtures.mjs';
 import {scopedList} from './fixture-scope.mjs';
@@ -517,11 +518,7 @@ function buildCopy(dir, version, options) {
   // there imports the CLI's code or packages. One link to each serves every
   // copy. Each copy keeps its own code and its other assets.
   linkTree(from, dir, new Set(['assets/templates', 'assets/icons']));
-  if (!options.coreStep) {
-    fs.rmSync(path.join(dir, 'foundation', 'release', 'core-worker.mjs'), {
-      force: true,
-    });
-  }
+  if (!options.coreStep) removeCoreStep(dir);
   const pkgFile = path.join(dir, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
   fs.unlinkSync(pkgFile);
