@@ -21351,7 +21351,6 @@ export function draftAnswer(ctx, env, question) {
       }
       const pageMode = pageModeOf(c, String(color));
       const pm = pageMode ? {mode: pageMode} : {};
-      // (The frame and main panel follow, below, for every page answer.)
       // ("green text on a black page"": the text color said with the page
       // is the theme's text, in the page's mode, with it.)
       const ink = /\btext\b/.test(c.text) ? colorFor(c, 'text') : null;

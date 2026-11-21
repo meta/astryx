@@ -5,7 +5,7 @@
  * with the range that reads; the room between items is the gap of the
  * part that holds them; a visited link has no state set can name; a
  * selected tab's underline said with "with"; a date picker's selected
- * date; the joined answer paints the page as its own answer does; a
+ * date; the joined answer sets the page token in each mode; a
  * readable-text line names no empty mode; white text on the header goes
  * to the mode it reads in; a weight word before a size word is a weight;
  * a rung set "instead of" another is one ask. Every line offered is run.
@@ -127,7 +127,7 @@ describe('values and holders', () => {
 });
 
 describe('the page and its text', () => {
-  it('the joined answer paints the page as its own answer does', async () => {
+  it('the joined answer sets the page token in each mode, the frame left as it is', async () => {
     const t = await fresh('p1');
     const lines = top(
       await how(
