@@ -60,13 +60,40 @@ export function pageDom(html, options = {}) {
  * @returns {Promise<void>}
  */
 export async function pageDrawn(dom) {
-  await vi.waitFor(
-    () => {
-      const drawn = [...dom.window.document.querySelectorAll('body *')].some(el =>
-        Object.keys(el).some(key => key.startsWith('__reactProps$')),
-      );
-      if (!drawn) throw new Error('React has not drawn the page');
-    },
-    {timeout: 10_000, interval: 10},
-  );
+  await pageWaitFor(() => {
+    const drawn = [...dom.window.document.querySelectorAll('body *')].some(el =>
+      Object.keys(el).some(key => key.startsWith('__reactProps$')),
+    );
+    if (!drawn) throw new Error('React has not drawn the page');
+  });
+}
+
+/**
+ * How long a page test waits for a value the page produces. A loaded CI
+ * machine can take longer than Vitest's 1 s default.
+ */
+export const PAGE_WAIT = {timeout: 10_000, interval: 10};
+
+/**
+ * Runs `check` until it stops throwing, as `vi.waitFor` does, for as long as
+ * {@link PAGE_WAIT} allows.
+ * @template T
+ * @param {() => T} check
+ * @returns {Promise<T>}
+ */
+export function pageWaitFor(check) {
+  return vi.waitFor(check, PAGE_WAIT);
+}
+
+/**
+ * Resolves after every task the page has queued with no delay so far, such
+ * as a decision the page defers with `setTimeout(fn)`. Timers of the same
+ * delay run in the order they were set, so this is an order, not a wait for
+ * time; a test that reads something React draws waits for it with
+ * `vi.waitFor` instead.
+ * @param {JSDOM} dom
+ * @returns {Promise<void>}
+ */
+export function pageTasks(dom) {
+  return new Promise(resolve => dom.window.setTimeout(resolve, 0));
 }

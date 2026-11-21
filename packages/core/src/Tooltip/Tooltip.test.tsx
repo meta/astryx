@@ -239,6 +239,28 @@ describe('Tooltip', () => {
     });
   });
 
+  describe('invoker', () => {
+    // A popover takes its invoker's place in the focus order. A tooltip has
+    // nothing to focus, and a popover its trigger opens needs that place.
+    it('shows an HTML trigger tooltip with no invoker source', async () => {
+      const showSpy = vi.mocked(HTMLElement.prototype.showPopover);
+      showSpy.mockClear();
+
+      render(
+        <Tooltip content="Save the file" isDefaultOpen>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+
+      await waitFor(() => {
+        expect(showSpy).toHaveBeenCalled();
+      });
+
+      const [options] = showSpy.mock.calls[0];
+      expect(options?.source).toBeUndefined();
+    });
+  });
+
   describe('WCAG 1.4.13 — content on hover or focus', () => {
     it('dismisses on Escape while visible (dismissible)', async () => {
       const onOpenChange = vi.fn();

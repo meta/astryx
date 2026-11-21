@@ -477,7 +477,7 @@ export function analyzeTemplateNeeds(source, cwd) {
   }
   if (stylexCompilerNeeded) {
     notes.push(
-      `This template uses StyleX. Your project needs a StyleX compiler plugin \u2014 see \`${formatCliCommand('docs styling-overview')}\` for setup steps.`,
+      `This template uses StyleX. Your project needs a StyleX compiler plugin \u2014 see \`${formatCliCommand('docs styling-overview stylex-own-code')}\` for setup steps.`,
     );
   }
 

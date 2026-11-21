@@ -8,6 +8,7 @@ import {renderComputerAgentText} from './computer-agent-text.mjs';
 import {
   generateCompressedIndex,
   projectHasBuiltCheck,
+  projectHasExport,
   detectStylingSystem,
   getXdsVersion,
   installAgentDocs,
@@ -160,6 +161,47 @@ describe('generateCompressedIndex', () => {
   });
 
 
+
+  it('names a command and option this CLI has', async () => {
+    const {doc} = await import(
+      '../../clients/cli/commands/experimental-export.doc.mjs'
+    );
+    expect(doc.name).toBe('experimental export');
+    expect(doc.options.map((/** @type {{flag: string}} */ o) => o.flag)).toContain(
+      '--reverse',
+    );
+  });
+
+  describe('projectHasExport reads the CLI the project installs', () => {
+    /** @param {string | null} cliVersion */
+    const project = cliVersion => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-export-check-'));
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({name: 'web'}));
+      if (cliVersion) {
+        const cliDir = path.join(root, 'node_modules', '@astryxdesign', 'cli');
+        fs.mkdirSync(cliDir, {recursive: true});
+        fs.writeFileSync(
+          path.join(cliDir, 'package.json'),
+          JSON.stringify({name: '@astryxdesign/cli', version: cliVersion}),
+        );
+      }
+      return root;
+    };
+    it.each([
+      ['an installed CLI 0.7.17', '0.7.17', true],
+      ['an installed CLI 0.8.0', '0.8.0', true],
+      ['an installed CLI 0.7.16', '0.7.16', false],
+      ['an installed 0.7.17 canary', '0.7.17-canary.b25f95e', false],
+      ['no installed CLI', null, false],
+    ])('%s', (_label, cliVersion, expected) => {
+      const root = project(cliVersion);
+      try {
+        expect(projectHasExport(root)).toBe(expected);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+  });
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
@@ -363,6 +405,23 @@ describe('generateCompressedIndex', () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it('names the one-file share route after the workflow, only when the CLI has it', () => {
+    const share =
+      'When asked to share a page as one file, run `astryx experimental export <page.tsx>`: the file opens anywhere and its controls work; `--reverse` gets the source back.';
+    const block = generateCompressedIndex('1.0.0', {topics: [], exportCheck: true});
+    expect(block).toContain(share);
+    expect(block.indexOf(share)).toBeLessThan(block.indexOf('RULES:'));
+    const withDoctor = generateCompressedIndex('1.0.0', {
+      topics: [],
+      builtCheck: true,
+      exportCheck: true,
+    });
+    expect(withDoctor).toContain(`don't deliver it if it fails.\n${share}\n`);
+    expect(generateCompressedIndex('1.0.0', {topics: []})).not.toContain(
+      'experimental export',
+    );
   });
 
   it('caps the configured project at 32 integration lines', () => {
