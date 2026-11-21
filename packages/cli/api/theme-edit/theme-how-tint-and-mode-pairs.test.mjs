@@ -239,6 +239,32 @@ describe('a tint word', () => {
   );
 
   it(
+    'measures card text on each mode’s tint, and writes a color as pale as its tint as said',
+    async test => {
+      needsBases(test);
+      const lines = async (/** @type {string} */ q) =>
+        ((await themeEditHow(q, {cwd, theme: 'n'})).data.results ?? [])
+          .flatMap(r => r.commands ?? [])
+          .filter(c => / editor set /.test(c))
+          .map(c => c.replace(/^.* editor set \S+ /, ''));
+      const navy = (await lines('cards tinted blue with navy text')).filter(c =>
+        /^--color-text-primary '#1e3a8a' --on card/.test(c),
+      );
+      expect(navy.length).toBeGreaterThan(0);
+      for (const c of navy) expect(c).toMatch(/--mode light$/);
+      const white = (await lines('cards tinted blue with white text')).filter(
+        c => /^--color-text-primary '#ffffff' --on card/.test(c),
+      );
+      expect(white.length).toBeGreaterThan(0);
+      for (const c of white) expect(c).toMatch(/--mode dark$/);
+      expect(await lines('cards with a cream tint')).toContain(
+        "background-color '#fef3c7' --on card --when variant:default --mode light",
+      );
+    },
+    T,
+  );
+
+  it(
     'writes a color said with its own shade word as said',
     async test => {
       needsBases(test);
