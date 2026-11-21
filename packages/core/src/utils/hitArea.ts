@@ -351,7 +351,7 @@ interface Watch {
     toLayout: (rect: HitRect) => HitRect,
   ) => HitInsets;
   readonly checkAtPress: boolean;
-  readonly onInsets: (insets: HitInsets) => void;
+  readonly onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void;
   isVisible: boolean;
   last: HitInsets;
   /** The ancestor animations the watch waits out before a pass reads it. */
@@ -415,12 +415,16 @@ function sameInsets(a: HitInsets, b: HitInsets): boolean {
   );
 }
 
-function deliver(watch: Watch, insets: HitInsets): void {
+function deliver(
+  watch: Watch,
+  insets: HitInsets,
+  readSettling: SettlingRead,
+): void {
   if (sameInsets(watch.last, insets)) {
     return;
   }
   watch.last = insets;
-  watch.onInsets(insets);
+  watch.onInsets(insets, readSettling);
 }
 
 /** Whether `candidate` is the control itself, or part of it. */
@@ -821,6 +825,27 @@ export function settlingAnimations(root: Element | Document): Animation[] {
   });
 }
 
+/** Reads `settlingAnimations` of a root. */
+export type SettlingRead = (root: Element) => Animation[];
+
+/**
+ * A `settlingAnimations` read for one loop of writes, which reads each root
+ * once. Each read recalculates the styles that the loop's earlier writes
+ * changed, so one read per root also prevents those recalculations. A write
+ * of hit insets starts no animation, so a root's list stays true for the loop.
+ */
+function readOncePerRoot(): SettlingRead {
+  const reads = new Map<Element, Animation[]>();
+  return root => {
+    let animations = reads.get(root);
+    if (animations === undefined) {
+      animations = settlingAnimations(root);
+      reads.set(root, animations);
+    }
+    return animations;
+  };
+}
+
 /** The properties whose animation moves or resizes a box on screen. */
 const BOX_MOTION =
   /^(transform|translate|scale|rotate|offset[A-Z]\w*|inset\w*|top|right|bottom|left|(min|max)?(Width|Height|width|height|BlockSize|InlineSize)|blockSize|inlineSize|margin\w*|padding\w*)$/;
@@ -925,8 +950,9 @@ function measure(): void {
     results.push({watch, insets: measureOne(watch, candidates).insets});
   }
   // Writes.
+  const readSettling = readOncePerRoot();
   for (const {watch, insets} of results) {
-    deliver(watch, insets);
+    deliver(watch, insets, readSettling);
   }
   if (pending.size > 0) {
     requestFrame();
@@ -1366,8 +1392,9 @@ function onPointerChange(): void {
     return;
   }
   stopObserving();
+  const readSettling = readOncePerRoot();
   for (const entry of watched.values()) {
-    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS));
+    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS, readSettling));
   }
 }
 
@@ -1423,6 +1450,7 @@ export function resetHitAreaForTests(): void {
 /**
  * Keeps `element`'s hit insets live until the returned function runs:
  * `onInsets` hears each change (typically `writeHitInsets` on the control).
+ * A pass also gives it a read of settling animations that its writes share.
  * Where the primary pointer is not coarse, the insets are 0, and only the
  * pointer query is listened to. Where it is, the shared per-frame pass
  * measures the element while it is on screen. It measures again on a resize
@@ -1432,7 +1460,7 @@ export function resetHitAreaForTests(): void {
  */
 export function watchHitArea(
   element: Element,
-  onInsets: (insets: HitInsets) => void,
+  onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void,
   {
     minSize = MIN_TOUCH_TARGET,
     ownsDescendantTouches = false,

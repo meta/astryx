@@ -225,7 +225,7 @@ describe('the corners an ask names', () => {
           ?.commands ?? []
       ).map((/** @type {string} */ c) => c.replace(/^.*? editor set n /, ''));
     // (An elliptical radius already rounded on top: nothing is written;
-    // the line that squares the bottom, as "only" says, is offered.)
+    // the line that squares the bottom is offered.)
     await themeEditSet('n', 'border-radius', '12px / 6px', {cwd, on: 'card'});
     {
       const rs = /** @type {Array<{text: string, commands: string[]}>} */ (
@@ -235,6 +235,8 @@ describe('the corners an ask names', () => {
       expect(rs.map(r => r.text).join('\n')).toMatch(
         /the top corners on card: already rounded .*the bottom corners stay as they are/,
       );
+      // (The ask said no "only", so the offer does not quote it.)
+      expect(rs.map(r => r.text).join('\n')).not.toMatch(/as "only" says/);
       expect(
         rs
           .flatMap(r => r.commands)
