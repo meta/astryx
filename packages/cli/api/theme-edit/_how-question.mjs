@@ -5325,6 +5325,13 @@ export function draftAnswer(ctx, env, question) {
     (/\b(?:pages?|surfaces?|backgrounds?|grounds?)\b/i.test(text) &&
       (colorsIn(text.toLowerCase()).length > 0 ||
         /#[0-9a-f]{3,8}\b/i.test(text)));
+  /**
+   * The plain gray seed the bare neutral-grays clause writes: in a sequence
+   * it runs with the whole-theme asks at the start (a dial applies before
+   * every exact setting, whatever the order, so nothing it meets changes).
+   * @type {WeakSet<Step>}
+   */
+  const untintedSeeds = new WeakSet();
   const untintedAsk =
     !setsColors &&
     bareNeutralGrays(question, text => {
@@ -28420,11 +28427,14 @@ export function draftAnswer(ctx, env, question) {
       const keptSaid = kept.length
         ? `; ${kept.join(', ')} ${kept.length > 1 ? 'keep their' : 'keeps its'} tint whatever the seed is: set ${kept.length > 1 ? 'them' : 'it'} to a plain gray to lose it`
         : '';
-      if (tintedNow.some(k => !kept.includes(k)))
+      if (tintedNow.some(k => !kept.includes(k))) {
+        const seed = set('neutral', SEED);
+        untintedSeeds.add(seed);
         return {
           text: `the theme's grays without a tint: the page, surfaces, cards, popovers, muted fills, text and borders the seed makes take plain grays ${inModes}${keptSaid || `; a part ${env.slug} sets itself keeps its own`}`,
-          options: [[set('neutral', SEED)]],
+          options: [[seed]],
         };
+      }
       return kept.length
         ? {
             text: `the grays the seed of ${env.slug} makes have no tint, so a new seed changes nothing${keptSaid}`,
@@ -29331,6 +29341,19 @@ export function draftAnswer(ctx, env, question) {
           coversProperty(st.thing, x.thing),
       );
       if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
+    }
+    // (The plain gray seed of a bare neutral-grays clause runs first: it is
+    // a dial, which applies before every exact setting whatever the order,
+    // so it joins the whole-theme asks instead of a sequence of its own.)
+    {
+      const seeds = all.filter(st => untintedSeeds.has(st));
+      if (seeds.length)
+        all.splice(
+          0,
+          all.length,
+          ...seeds,
+          ...all.filter(st => !untintedSeeds.has(st)),
+        );
     }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
