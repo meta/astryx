@@ -1611,6 +1611,17 @@ async function capture(browser: Browser, auditCase: AuditCase, mode: Mode) {
     if (interaction === 'pressed' && !(row?.active ?? false)) {
       stateFailures.push('target row is not :active');
     }
+    // A checked row keeps its fill and paints the hover or pressed overlay
+    // over it as an image layer (FR18).
+    if (
+      (interaction === 'hover' || interaction === 'pressed') &&
+      row?.checked === true &&
+      !(row.rowBackgroundImage ?? '').includes('gradient')
+    ) {
+      stateFailures.push(
+        `checked target row paints no ${interaction} overlay over its fill`,
+      );
+    }
     if (
       interaction === 'focus-visible' &&
       !(row?.focused && row.focusVisible)

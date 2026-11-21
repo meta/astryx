@@ -146,7 +146,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR15 | A checked, enabled, editable row paints the checked-row fill and reflects a `selected` state on the row's `item` and `list-item` targets, so a theme can restyle checked rows and the text on that fill (`architecture:component-theming-surface` INV6). A read-only or disabled row paints no fill and reflects no state; its targets match unchecked rows. | `architecture:component-theming-surface/INV6`                                                                         |
 | FR16 | Shipped behavior, not a requirement until its open question is ruled: consumer DOM inputs split between two elements: data attributes and ARIA reach the row, while `onClick` runs on the checkbox and is typed for the row, so `event.currentTarget` is the checkbox and does not carry the row's data attributes (OQ3).                                    | `architecture:public-component-api/INV5`; `INV9` for any retype or move                                               |
 | FR17 | Shipped behavior, not a requirement until its open question is ruled: on a read-only item with `onClick`, the item stops the click's propagation, so React ancestors never receive those clicks, while they do for enabled items (OQ4). The item's own `onClick` still fires once per click (FR10).                                                          | Current source; shared clickable-container hook behavior                                                              |
-| FR18 | Shipped behavior, not a requirement until its open question is ruled: on an enabled, editable, checked row, the checked-row fill replaces the row's hover and pressed overlays, so pointer hover and hold give no row feedback (OQ5).                                                                                                                        | the Chromium accessibility suite; `design:user-states` leaves hover and selection treatment outside its current claim |
+| FR18 | Shipped behavior, not a requirement until its open question is ruled: on an enabled, editable, checked row, the checked-row fill replaces the row's hover overlay, so pointer hover gives no row feedback; the pressed overlay still paints over the fill (OQ5).                                                                                             | the Chromium accessibility suite; `design:user-states` leaves hover and selection treatment outside its current claim |
 | FR19 | One keyboard focus move paints two indicators: Item's row focus-within outline and CheckboxInput's indicator ring (OQ6). One focus move MUST have one owning indicator (`architecture:interaction-modality` INV3). Implementation gap: both indicators paint.                                                                                                | the Chromium accessibility suite; `architecture:interaction-modality/INV3`                                            |
 
 ### Allowed variation
@@ -289,8 +289,9 @@ No component-local decision. CheckboxListItem applies `spec:AST-021` and
   authority owns ancestor propagation. The stop exists because the shared
   clickable-container hook would otherwise re-delegate a click that came from
   its `aria-readonly` delegate target back to it.
-- **OQ5 — What hover and pressed feedback should a checked row show?**
-  (`human-design`) The checked-row fill currently replaces both overlays.
+- **OQ5 — What hover feedback should a checked row show?** (`human-design`)
+  The checked-row fill currently replaces the hover overlay; the pressed
+  overlay paints over it.
 - **OQ6 — Which element paints the option's focus ring?** (`human-design`)
   `architecture:interaction-modality/INV3` requires one indicator; RadioList
   composes the same two painters.
