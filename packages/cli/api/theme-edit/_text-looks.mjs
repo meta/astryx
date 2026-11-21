@@ -193,16 +193,26 @@ export function addRunLooks(clauses, hues) {
   // ("… and selected tabs with …": a clause the reader gives a run's words
   // it read elsewhere holds no color it failed to read.)
   const hex = /#[0-9a-f]{3,8}\b/gi;
+  // (Keyed by the part as well: another part's state run with the same
+  // color is its own, and reads as before.)
+  const key = (
+    /** @type {{parts: Array<{on: string}>}} */ x,
+    /** @type {string} */ h,
+  ) => `${x.parts.map(p => p.on).join(',')} ${h}`;
   const read = new Set(
     clauses
       .filter(x => RUN_READ.has(x))
-      .flatMap(x => (ownRun(x, hues) ?? '').toLowerCase().match(hex) ?? []),
+      .flatMap(x =>
+        ((ownRun(x, hues) ?? '').toLowerCase().match(hex) ?? []).map(h =>
+          key(x, h),
+        ),
+      ),
   );
   for (const x of clauses) {
     if (RUN_READ.has(x)) continue;
     const said = lookRun(hues).exec(String(x.text ?? ''))?.[0] ?? '';
     const hexes = said.toLowerCase().match(hex) ?? [];
-    if (x.state && hexes.length && hexes.every(h => read.has(h)))
+    if (x.state && hexes.length && hexes.every(h => read.has(key(x, h))))
       RUN_READ.add(x);
   }
 }

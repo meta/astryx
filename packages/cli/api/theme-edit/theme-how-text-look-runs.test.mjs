@@ -502,7 +502,7 @@ it(
     ]) {
       const {sets} = await answer(q);
       expect(
-        sets.some(c => /top-nav-item/.test(c)),
+        sets.some(c => /top-nav-item|--on button\b/.test(c)),
         q,
       ).toBe(false);
     }
@@ -511,6 +511,22 @@ it(
     );
     expect(two.sets).toContain("color '#3b5998' --on tab");
     expect(two.texts.some(t => /but not "#3b5998"/.test(t))).toBe(false);
+  },
+  T,
+);
+
+it(
+  "still reports a state run's color said for another part",
+  async test => {
+    needsBases(test);
+    for (const q of [
+      'tabs with bold 13px #3b5998 text and hovered buttons with bold 14px #3b5998 text',
+      'cards with bold 13px #3b5998 text and selected tabs with bold 13px #3b5998 text',
+    ])
+      expect(
+        (await answer(q)).texts.some(t => t.includes('but not "#3b5998"')),
+        q,
+      ).toBe(true);
   },
   T,
 );
