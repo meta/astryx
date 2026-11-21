@@ -194,6 +194,43 @@ describe('light and dark said as what the theme must work in', () => {
     );
     expect(headings).not.toContain('set lo mode both');
     expect(headings.join('\n')).not.toMatch(/headings light/);
+    // (The heading's text takes the color; nothing reads a weight in it.)
+    expect(headings.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
+    expect(headings.join('\n')).not.toMatch(/font-weight|headings bold/);
+    // (On a theme that draws both modes, the color is for both: a light
+    // one is not kept to light mode.)
+    const cards = (
+      await results(
+        'fresh',
+        'cards that hold up in light and dark mode should be white',
+      )
+    ).flatMap(r => r.commands);
+    expect(cards.join('\n')).toMatch(/'#ffffff' --on card/);
+    expect(cards.join('\n')).not.toMatch(/--mode light/);
+    // ("must work" is no plural part said to work: the text is kept to the
+    // mode it reads in, as before.)
+    const must = (
+      await results(
+        'fresh',
+        'text that must work in light and dark mode should be #111111',
+      )
+    ).flatMap(r => r.commands);
+    expect(must.join('\n')).toMatch(
+      /--color-text-primary '#111111' --mode light/,
+    );
+    // (Said to be usable in both modes, a color one page makes hard to
+    // read is written for both, with a note naming that mode and the
+    // ratio.)
+    const links = await results(
+      'fresh',
+      'links that are usable in light and dark mode should be navy',
+    );
+    const linkLines = links.flatMap(r => r.commands).join('\n');
+    expect(linkLines).toMatch(/'#1e3a8a'/);
+    expect(linkLines).not.toMatch(/'#1e3a8a'[^\n]*--mode/);
+    expect(links.map(r => r.text).join('\n')).toMatch(
+      /#1e3a8a reads \d+\.\d\d:1 on the dark page \(under 4\.5:1\); for dark mode, set a lighter color with --mode dark/,
+    );
   }, 300_000);
   it('asks for nothing when "not" comes before it', async () => {
     for (const q of [
