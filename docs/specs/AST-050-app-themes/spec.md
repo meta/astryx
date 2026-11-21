@@ -835,7 +835,8 @@ that still does not read, with the line that fixes it. A badge `soft` or
 `outline` draws (the status badges under `soft`, every badge under
 `outline`) takes, inside a primary or destructive button, that button's public
 color pair, inverted (the button's on-color as the fill, its color as the
-text), as Core's neutral badge does there. The neutral badge keeps Core's look. A property the theme
+text), as Core's neutral badge does there. Inside a secondary button, such a
+badge draws on the page color, its tint over it, where its pair reads. The neutral badge keeps Core's look. A property the theme
 sets on the badge itself, for every variant or for one, stays in each mode it
 is set for: the style writes only what the theme leaves.
 

@@ -4687,6 +4687,10 @@ function badgePairs(style, variant) {
  * neutral badge takes them, so the badge reads on the button. The rule
  * selects the badge inside that button.
  */
+/** Where a badge sits inside a secondary button (Button's default). */
+export const BADGE_IN_SECONDARY_BUTTON =
+  ':is(.astryx-button[data-variant="secondary"] *)';
+
 export const BADGE_IN_BUTTON = /** @type {const} */ ({
   ':is(.astryx-button[data-variant="primary"] *)': {
     backgroundColor: 'var(--color-on-accent)',
@@ -8344,10 +8348,28 @@ export function compileTheme(ctx, data, base) {
             const owned = /** @type {const} */ (['light', 'dark']).map(m =>
               badgeOwnProperties(ctx, data, variant, m),
             );
-            for (const [inside, colors] of Object.entries(BADGE_IN_BUTTON)) {
+            // (Inside a secondary button, whose fill a see-through badge
+            // would show, the badge draws on the page color, where its
+            // pair was chosen to read: its tint, when it has one, over it.)
+            const tint = look.backgroundColor;
+            const onPage = /** @type {Record<string, string>} */ ({
+              backgroundColor: 'var(--color-background-body)',
+              ...(tint && tint !== 'transparent'
+                ? {backgroundImage: `linear-gradient(${tint}, ${tint})`}
+                : {}),
+            });
+            for (const [inside, colors] of [
+              ...Object.entries(BADGE_IN_BUTTON),
+              [BADGE_IN_SECONDARY_BUTTON, onPage],
+            ]) {
               const left = owned.map(own =>
                 Object.fromEntries(
-                  Object.entries(colors).filter(([p]) => !own.has(kebab(p))),
+                  Object.entries(colors).filter(
+                    ([p]) =>
+                      !own.has(kebab(p)) &&
+                      // (A fill the theme sets keeps its layer too.)
+                      !(p === 'backgroundImage' && own.has('background-color')),
+                  ),
                 ),
               );
               const same = JSON.stringify(left[0]) === JSON.stringify(left[1]);

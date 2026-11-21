@@ -635,4 +635,26 @@ describe('the badges dial', () => {
       /variant teal, badges solid\) is [\d.]+:1 in light/,
     );
   }, 240_000);
+
+  it('a see-through badge inside a secondary button draws on the page color', async ctx => {
+    if (needBases(ctx)) return;
+    for (const style of ['outline', 'soft']) {
+      const slug = `sec${style}`;
+      await themeEditNew(slug, {cwd, like: 'neutral'});
+      await themeEditSet(slug, 'badges', style, {cwd});
+      const css = fs.readFileSync(
+        path.join(cwd, 'themes', slug, `${slug}.css`),
+        'utf8',
+      );
+      const rule = new RegExp(
+        String.raw`\.astryx-badge\[data-variant="success"\][^{}]*\.astryx-button\[data-variant="secondary"\][^{}]*\{([^{}]*)\}`,
+      ).exec(css)?.[1];
+      expect(rule, style).toBeTruthy();
+      expect(rule, style).toMatch(
+        /background-color:\s*var\(--color-background-body\)/,
+      );
+      if (style === 'soft')
+        expect(rule, style).toMatch(/background-image:\s*linear-gradient\(/);
+    }
+  }, 240_000);
 });
