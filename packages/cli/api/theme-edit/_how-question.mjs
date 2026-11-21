@@ -4773,6 +4773,17 @@ const PROPERTY_WORDS = wordTable(
   }),
 );
 
+/** The start of a CSS gradient. */
+const GRADIENT_START = /(?:repeating-)?(?:linear|radial|conic)-gradient\(/;
+
+/**
+ * One gradient layer of a background as text: the gradient with its
+ * position, size and repeat words ("linear-gradient(#0001 1px, transparent
+ * 1px) 0 0 / 24px 24px").
+ */
+const GRADIENT_LAYER =
+  /(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\([^()]*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|\/|repeat(?:-x|-y)?|no-repeat|space|round|center|top|bottom|left|right|fixed|scroll|local|cover|contain|auto))*/;
+
 /**
  * The words of a value, with each function call kept whole, nested calls
  * included ("linear-gradient(135deg, rgba(0,0,0,.1) 0%, #fff 100%)").
@@ -7630,6 +7641,27 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /(\)|#[0-9a-f]{3,8}\b)\s*,\s*(?=(?:inset\s+)?-?\d+(?:px)?\s+-?\d)/g,
       '$1\u2e34 ',
+    )
+    // A background's gradient layers stay one value: a comma after a
+    // gradient layer (with its position, size and repeat words) that another
+    // gradient layer or the final color follows is not a clause break, in a
+    // background said with its property word. (A layer after it that names
+    // a part of its own, "… on cards", is an ask of its own.)
+    .replace(
+      new RegExp(
+        `(${GRADIENT_LAYER.source})\\s*,\\s*(?=(?:${GRADIENT_START.source})|(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch)\\([^()]*\\))\\s*(?:$|[;.]))`,
+        'gi',
+      ),
+      (m, layer, at, all) => {
+        const before = String(all).slice(0, at).split(/[;.](?=\s|$)/).pop() ?? '';
+        const next = String(all)
+          .slice(at + m.length)
+          .match(/^(?:[^(),;]|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ?? '';
+        return /\bbackground(?:-image)?\b/.test(before) &&
+          !/\b(?:on|for)\s+(?:the\s+|all\s+|every\s+)?[a-z]/.test(next)
+          ? `${layer}\u2e34 `
+          : m;
+      },
     )
     // "font-family: Georgia, serif": the font list is one value.
     .replace(
