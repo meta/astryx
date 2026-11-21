@@ -15,7 +15,6 @@
  */
 
 import React, {
-  use,
   useCallback,
   useRef,
   type ReactElement,
@@ -32,7 +31,6 @@ import {
 } from './useTooltip';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
-import {TooltipDescribesContext} from './tooltipPresentInterest';
 
 export type {TooltipFocusTrigger, TooltipTouchTrigger} from './useTooltip';
 
@@ -215,7 +213,6 @@ export function Tooltip({
 }: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
-  const isDescribing = use(TooltipDescribesContext);
 
   // Determine if hover indication should be shown
   const showHoverIndication =
@@ -253,11 +250,6 @@ export function Tooltip({
     const attach = (el: HTMLElement) => {
       // Use combined ref for position + interaction
       tooltip.ref(el);
-      if (!isDescribing) {
-        return () => {
-          tooltip.ref(null);
-        };
-      }
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
@@ -301,7 +293,7 @@ export function Tooltip({
       cancelled = true;
       detach?.();
     };
-  }, [anchorRef, tooltip.ref, tooltip.describedBy, isDescribing]);
+  }, [anchorRef, tooltip.ref, tooltip.describedBy]);
 
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {
@@ -382,21 +374,27 @@ export function Tooltip({
 Tooltip.displayName = 'Tooltip';
 
 /**
- * A tooltip whose content is its anchor's own name (a cut Button label or
- * table heading), so it adds no description. It is open while it is mounted;
- * `onHide` closes it (Escape). Internal: the truncation tooltip module loads
- * it with this module; the Tooltip entry does not export it.
+ * A tooltip whose content is its anchor's own text (cut Text, a cut Button
+ * label or table heading), so it adds no description: the anchor gets no
+ * `aria-describedby`. With `isOpen`, it is open while `isOpen` is true and
+ * `onHide` closes it (Escape). Without `isOpen`, hover, tap and focus open it,
+ * as they open a Tooltip. Internal: the truncation tooltip module loads it
+ * with this module; the Tooltip entry does not export it.
  */
 export function UndescribedTooltip({
   anchorRef,
   content,
+  placement = 'above',
+  isOpen,
   onHide,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
-  onHide: () => void;
+  placement?: LayerPlacement;
+  isOpen?: boolean;
+  onHide?: () => void;
 }): ReactNode {
-  const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
+  const tooltip = useTooltip({placement, isOpen, onHide});
   const attach = tooltip.ref;
   // Syncs the trigger listeners with the anchor's current element on every
   // render: a Button that renders a new element (a link Button that becomes

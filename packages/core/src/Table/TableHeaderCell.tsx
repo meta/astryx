@@ -235,6 +235,7 @@ export function TableHeaderCell({
         <cutHeading.Tooltip
           anchorRef={cellRef}
           content={cutHeading.cutText}
+          isOpen
           onHide={cutHeading.hide}
         />
       ) : null}

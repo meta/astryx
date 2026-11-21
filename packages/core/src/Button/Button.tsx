@@ -1237,6 +1237,7 @@ export function Button({
         <cutLabel.Tooltip
           anchorRef={buttonRef}
           content={cutLabel.cutText}
+          isOpen
           onHide={cutLabel.hide}
         />
       ) : null}

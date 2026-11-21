@@ -6,8 +6,7 @@
  * @file tooltipPresentInterest.ts
  * @input createSharedContext
  * @output Exports `TooltipPresentInterestContext` and its value types: the
- *   interaction on a tooltip's anchor that mounted the tooltip; and
- *   `TooltipDescribesContext`: whether a tooltip describes its anchor
+ *   interaction on a tooltip's anchor that mounted the tooltip
  * @position Internal to Core, not exported from the Tooltip entry. A
  *   truncated Text or Heading mounts its tooltip on the first hover, tap or
  *   focus, and provides that interaction here, so the tooltip answers it when
@@ -42,16 +41,3 @@ export const TooltipPresentInterestContext =
     null,
   );
 TooltipPresentInterestContext.displayName = 'TooltipPresentInterestContext';
-
-/**
- * Whether a tooltip describes its anchor (`aria-describedby`). False where
- * the tooltip's content is the anchor's own text, such as the truncation
- * tooltip of Text and Heading: a description would make a screen reader
- * read that text twice.
- */
-export const TooltipDescribesContext = createSharedContext<boolean>(
-  'TooltipDescribesContext',
-  1,
-  true,
-);
-TooltipDescribesContext.displayName = 'TooltipDescribesContext';

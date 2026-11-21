@@ -26,20 +26,16 @@ import {
 } from 'react';
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type {
-  Tooltip as TooltipType,
-  UndescribedTooltip as UndescribedTooltipType,
-} from '../Tooltip/Tooltip';
+import type {UndescribedTooltip as UndescribedTooltipType} from '../Tooltip/Tooltip';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
-  TooltipDescribesContext,
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
 } from '../Tooltip/tooltipPresentInterest';
 
-type TooltipComponent = typeof TooltipType;
+type UndescribedTooltipComponent = typeof UndescribedTooltipType;
 
 // The Tooltip module. Once loaded, a tooltip renders from it at once: no
 // boundary suspends, so the first hover's delay starts on the hover.
@@ -50,8 +46,8 @@ const tooltipModule = createModuleLoader(
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
-  /** The Tooltip component, once its module has loaded. */
-  readonly tooltip: TooltipComponent | null;
+  /** The tooltip component, once its module has loaded. */
+  readonly tooltip: UndescribedTooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
   readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
@@ -72,8 +68,8 @@ export function useTruncationTooltipInterest(
   isEnabled: boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
-  const [tooltip, setTooltip] = useState<TooltipComponent | null>(
-    () => tooltipModule.loaded()?.Tooltip ?? null,
+  const [tooltip, setTooltip] = useState<UndescribedTooltipComponent | null>(
+    () => tooltipModule.loaded()?.UndescribedTooltip ?? null,
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once.
@@ -85,7 +81,7 @@ export function useTruncationTooltipInterest(
     tooltipModule.load().then(
       loaded => {
         if (isCurrent) {
-          setTooltip(() => loaded.Tooltip);
+          setTooltip(() => loaded.UndescribedTooltip);
         }
       },
       () => {},
@@ -174,7 +170,10 @@ export function useTruncationTooltipInterest(
   };
 }
 
-/** The truncated element's Tooltip, given the interaction that mounted it. */
+/**
+ * The truncated element's tooltip, given the interaction that mounted it. Its
+ * text is the element's own, so it adds no description.
+ */
 export function TruncationTooltip({
   anchorRef,
   content,
@@ -194,15 +193,7 @@ export function TruncationTooltip({
   }
   return (
     <TooltipPresentInterestContext value={interest.interestRef}>
-      {/* The full text is already the element's own content, so the
-          tooltip adds no description: a screen reader reads it once. */}
-      <TooltipDescribesContext value={false}>
-        <Tooltip
-          anchorRef={anchorRef}
-          content={content}
-          placement={placement}
-        />
-      </TooltipDescribesContext>
+      <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
     </TooltipPresentInterestContext>
   );
 }
@@ -269,8 +260,6 @@ function visibleText(root: HTMLElement): string {
   walk(root);
   return text.replace(/\s+/g, ' ').trim();
 }
-
-type UndescribedTooltipComponent = typeof UndescribedTooltipType;
 
 export interface CutTextOnKeyboardFocus {
   /** The full text while keyboard focus is inside and the text is cut. */
