@@ -120,6 +120,15 @@ describe('a light neutral', () => {
     const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
     expect(slate).toContain("set q0 neutral '#64748b'");
     expect(slate.join('\n')).not.toMatch(/--color-background-/);
+    // (A lighter neutral worked out from the saved one names no color:
+    // the surfaces stay as they are.)
+    await themeEditNew('q1', {cwd, like: 'neutral'});
+    await themeEditSet('q1', 'neutral', '#64748b', {cwd});
+    const lighter = (await how('q1', 'lighter neutral')).flatMap(
+      r => r.commands,
+    );
+    expect(lighter.join('\n')).toMatch(/ neutral '#/);
+    expect(lighter.join('\n')).not.toMatch(/--color-background-/);
   }, 240_000);
 });
 

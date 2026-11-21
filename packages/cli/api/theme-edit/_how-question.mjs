@@ -28630,22 +28630,22 @@ export function draftAnswer(ctx, env, question) {
     const seedRgb = dial === 'neutral' && color ? parseColor(color) : null;
     const surfaces =
       seedRgb &&
+      // (A color the ask states, never one a lighter or darker step works
+      // out from the saved neutral.)
+      !c.dir &&
       alphaOf(String(color)) >= 1 &&
-      !darkStep &&
       env.data.mode !== 'dark-only' &&
       ratio([0, 0, 0], seedRgb) >= ratio([255, 255, 255], seedRgb)
         ? SURFACE_TOKENS.map(t =>
             set(t, hex(seedRgb), modal ? {mode: 'light'} : {}),
           )
         : [];
+    // (The page text check below measures the theme's text on the page
+    // color and offers its own line where it would not read.)
     if (surfaces.length) {
       const rgb = /** @type {number[]} */ (seedRgb);
-      const ink = parseColor(
-        String(current('--color-text-primary', 'light') ?? ''),
-      );
-      const reads = !ink || ratio(ink, rgb) >= 4.5;
       return {
-        text: `${dial}: the editor makes its light and dark shades from ${color}, and the page, surface and card backgrounds take ${hex(rgb)}${modal ? ' in light mode (dark mode keeps the dark shades)' : ''}${reads ? '' : ` (note: the theme's text measures ${ratioWords(ratio(/** @type {number[]} */ (ink), rgb))}:1 on it, under the 4.5:1 text needs; set --color-text-primary to ${ratio([0x11, 0x18, 0x27], rgb) >= 4.5 ? '#111827' : '#000000'} too)`}`,
+        text: `${dial}: the editor makes its light and dark shades from ${color}, and the page, surface and card backgrounds take ${hex(rgb)}${modal ? ' in light mode (dark mode keeps the dark shades)' : ''}`,
         options: [[set(dial, color), ...surfaces]],
         sequence: true,
       };
