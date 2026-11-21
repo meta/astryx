@@ -350,7 +350,7 @@ function grayStop(family, stop) {
 }
 
 /** A mode's page said as a sentence head, "dark mode: page plum". */
-const MODE_PAGE_HEAD = /^\s*(?:light|dark)[- ]mode\s*:\s*page\b/i;
+const MODE_PAGE_HEAD = /^\s*(light|dark)[- ]mode\s*:\s*page\b/i;
 /**
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
@@ -4987,19 +4987,29 @@ export function draftAnswer(ctx, env, question) {
       '$1 $2 ',
     );
   // (A color said for a mode or for everything is the page.)
-  // (The ask before the page reading: a mode page head it does not hold
-  // is one the page reading wrote.)
-  const beforePages = question.toLowerCase();
+  // (The modes the person typed a page head for, "dark mode: page …",
+  // before the page reading writes any: a head for such a mode is the
+  // person's, whatever later rewrites make of its color.)
+  const typedHeadModes = new Set(
+    [
+      ...question.matchAll(
+        /(?:^|[,.;!\n])\s*(?:[-*•]\s+)?(light|dark)[- ]mode\s*:\s*page\b/gi,
+      ),
+    ].map(m => m[1].toLowerCase()),
+  );
   /**
    * Whether a clause's words are a mode page head the page reading wrote,
-   * never one the person typed (in any spelling the mode grammar reads).
+   * never one the person typed.
    * @param {string} text
    */
-  const writtenHead = text =>
-    MODE_PAGE_HEAD.test(text) &&
-    !beforePages.includes(String(text).trim().toLowerCase());
-  question = colorsSaidForPages(question, w => Object.hasOwn(HUES, w), w =>
-    new RegExp(`^(?:${SHADE_WORDS})$`).test(w),
+  const writtenHead = text => {
+    const mode = MODE_PAGE_HEAD.exec(text)?.[1]?.toLowerCase();
+    return mode != null && !typedHeadModes.has(mode);
+  };
+  question = colorsSaidForPages(
+    question,
+    w => Object.hasOwn(HUES, w),
+    w => new RegExp(`^(?:${SHADE_WORDS})$`).test(w),
   );
   question = question
     // ("dark purple theme", "moody dark purple": dark said of a whole look
