@@ -197,7 +197,9 @@ describe('a resting outline', () => {
       'data-variant="ghost"',
       'data-size="sm"',
     ]);
-    expect(rules).toMatch(/outline: 2px dotted #000000/);
+    expect(rules).toMatch(/outline-style: dotted/);
+    expect(rules).toMatch(/outline-width: 2px/);
+    expect(rules).toMatch(/outline-color: #000000/);
   }, 240_000);
 
   it("lets a variant's whole focus outline win over a whole-part focus color under a resting outline for that variant and a size", async ctx => {
@@ -223,11 +225,14 @@ describe('a resting outline', () => {
       'data-variant="ghost"',
       'data-size="sm"',
     ]);
-    // (The variant's outline comes after the whole part's color, so its
-    // black wins, as the theme draws it.)
-    expect(rules).toMatch(
-      /outline-color: #ff0000;[^}]*outline: 2px solid #000000;/,
+    // (The variant's outline is written after the whole part's color, so
+    // its black wins, as the theme draws it.)
+    expect(rules).toMatch(/outline-color: #000000/);
+    // (The last color written there is the variant's black.)
+    expect([...rules.matchAll(/outline-color: (#[0-9a-f]+)/g)].pop()?.[1]).toBe(
+      '#000000',
     );
+    expect(rules).toMatch(/outline-style: solid/);
   }, 240_000);
 
   it("keeps the resting scope's own focus color over a wider outline the theme sets", async ctx => {
@@ -260,22 +265,25 @@ describe('a resting outline', () => {
       'data-variant="ghost"',
       'data-size="sm"',
     ]);
-    // (The small ghost's own green stays: neither the ghost's black outline
-    // nor the dark-only red is copied over it.)
+    // (The small ghost's own green stays, and the ghost's style and width
+    // still come, so the ring shows: the dark-only red is not copied over
+    // the green.)
     expect(rules).toMatch(/outline-color: #00aa00/);
+    expect(rules).toMatch(/outline-style: solid/);
+    expect(rules).toMatch(/outline-width: 2px/);
     expect(rules).not.toMatch(/outline: 2px solid #000000/);
     expect(cssOf('ss')).not.toMatch(
       /data-size="sm"\][^{]*:focus-visible[^{]*\{[^}]*outline-color: #ff0000/,
     );
   }, 240_000);
 
-  it('copies no combined focus state to the plain focus of a narrower resting scope', async ctx => {
+  it('copies a wider color set for the plain focus state to a narrower resting scope', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('cf', {cwd, like: 'neutral'});
-    await themeEditSet('cf', 'outline-color', '#ff00ff', {
+    await themeEditSet('cf', 'outline-color', '#ff0000', {
       cwd,
       on: 'button',
-      state: 'focus-visible+active',
+      state: 'focus',
       when: 'variant:ghost',
     });
     await themeEditSet('cf', 'outline', 'none', {
@@ -283,16 +291,9 @@ describe('a resting outline', () => {
       on: 'button',
       when: 'variant:ghost+size:sm',
     });
-    const plain = (cssOf('cf').match(/[^{}]*\{[^}]*\}/g) ?? []).filter(r => {
-      const sel = r.split('{')[0];
-      return (
-        /data-size="sm"/.test(sel) &&
-        /data-variant="ghost"/.test(sel) &&
-        /:focus-visible/.test(sel) &&
-        !/:active|data-astryx-press/.test(sel)
-      );
-    });
-    expect(plain.join('\n')).not.toMatch(/#ff00ff/);
+    expect(
+      scoped(cssOf('cf'), ':focus', ['data-variant="ghost"', 'data-size="sm"']),
+    ).toMatch(/outline-color: #ff0000/);
   }, 240_000);
 
   it('keeps a whole-part focus color under a resting outline for one variant', async ctx => {

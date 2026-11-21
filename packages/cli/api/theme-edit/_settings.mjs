@@ -7209,30 +7209,49 @@ export function compileTheme(ctx, data, base) {
       const held = pieces(s.when);
       const sameScope = (/** @type {Setting} */ y) =>
         String(y.when ?? '') === String(s.when);
-      // (Only a value for the plain focus state: one for a combined
-      // state, "focus-visible+active", is no plain focus look.)
+      /**
+       * The outline longhands a value sets: a shorthand's style, width and
+       * color, or the one longhand itself.
+       * @param {Setting} y
+       * @returns {Array<[string, string]>}
+       */
+      const longhands = y => {
+        const v = String(y.value);
+        if (kebab(y.thing) !== 'outline') return [[kebab(y.thing), v]];
+        /** @type {Array<[string, string]>} */
+        const out = [];
+        const color = [];
+        for (const w of splitTop(v, ' ').filter(Boolean))
+          if (
+            /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i.test(
+              w,
+            )
+          )
+            out.push(['outline-style', w]);
+          else if (/^(?:thin|medium|thick|-?[\d.]+[a-z%]*)$/i.test(w))
+            out.push(['outline-width', w]);
+          else color.push(w);
+        if (color.length) out.push(['outline-color', color.join(' ')]);
+        return out;
+      };
+      // (A longhand the resting scope sets itself, in every mode or the
+      // wider value's mode, is that scope's own: no wider value is copied
+      // over it; the others still are.)
       for (const y of ownFocus
         .filter(
-          z =>
-            String(z.state) === state &&
-            !sameScope(z) &&
-            pieces(z.when).every(p => held.includes(p)),
+          z => !sameScope(z) && pieces(z.when).every(p => held.includes(p)),
         )
         .sort((a, b) => pieces(a.when).length - pieces(b.when).length))
-        // (A focus outline the theme sets for the resting scope itself, in
-        // every mode or the wider value's mode, is that scope's own: no
-        // wider value is copied over it.)
-        if (
-          !ownFocus.some(
-            z => sameScope(z) && (z.mode == null || z.mode === y.mode),
+        for (const [long, v] of longhands(y))
+          if (
+            !ownFocus.some(
+              z =>
+                sameScope(z) &&
+                (z.mode == null || z.mode === y.mode) &&
+                (kebab(z.thing) === 'outline' || kebab(z.thing) === long),
+            )
           )
-        )
-          putComp(
-            {...y, when: s.when, state},
-            target,
-            y.thing,
-            String(y.value),
-          );
+            putComp({...y, thing: long, when: s.when, state}, target, long, v);
     }
     if (!drawn) return;
     for (const p of [

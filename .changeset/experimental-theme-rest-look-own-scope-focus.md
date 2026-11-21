@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor set`: a focus outline the theme sets for a variant and a size stays as set under a resting `outline` for that same scope; a wider focus outline (one variant's, or one mode's) is no longer copied over it, and a focus outline set for a combined state (`focus-visible+active`) is never copied to the plain focus state.
+[experimental] `astryx experimental theme editor set`: under a resting `outline` for a variant and a size, a focus outline property the theme sets for that same scope stays as set (a small ghost's own green), and the wider outline's other properties (the ghost's style and width) still come, so the ring shows in the scope's own color.
 
 @josephfarina
