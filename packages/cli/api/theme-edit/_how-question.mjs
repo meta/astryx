@@ -12875,8 +12875,12 @@ export function draftAnswer(ctx, env, question) {
       // ends at a clause that names the other mode: what follows takes
       // the nearer mode, as said.)
       if (MODE_PAGE_HEAD.test(o.text)) break;
+      // (Only a head the page reading wrote: one the person typed,
+      // "dark mode: page #111111, …", scopes its whole sentence, as
+      // before.)
       if (
         MODE_PAGE_HEAD.test(c.text) &&
+        !asked0.includes(String(c.text).trim().toLowerCase()) &&
         o.mode &&
         o.mode !== c.mode &&
         !o.except

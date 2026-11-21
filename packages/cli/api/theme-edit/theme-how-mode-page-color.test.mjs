@@ -239,6 +239,20 @@ describe('a color said for one mode is its page', () => {
       expect(nearerAccent.length).toBeGreaterThan(0);
       for (const l of nearerAccent)
         expect(String(l)).not.toMatch(/--mode light$/);
+      // (A typed head scopes its whole sentence, as before: the buttons
+      // after a light-mode clause stay dark.)
+      const typed = /** @type {string[]} */ (
+        (
+          await themeEditHow(
+            'dark mode: page #111111, cards #222222, borders #333333 in light mode, buttons #444444',
+            {cwd, theme: 'c'},
+          )
+        ).data.results ?? []
+      )
+        .flatMap(r => r.commands ?? [])
+        .filter(l => /'#444444' --on button/.test(String(l)));
+      expect(typed.length).toBeGreaterThan(0);
+      for (const l of typed) expect(String(l)).toMatch(/--mode dark$/);
       const links = await first('dark mode is navy, with blue links');
       const accent = links.filter(l => /--color-text-accent/.test(l));
       expect(accent.length).toBeGreaterThan(0);
