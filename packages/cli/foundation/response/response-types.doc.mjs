@@ -146,7 +146,7 @@ export const doc = {
       value: 'themeEdit.showPart',
       stability: 'experimental',
       description:
-        'What one part of a theme shows (`show <theme> --on <part>`, which writes nothing): the `theme`, its `kind` (editor, local, package or bundled), the `part`, and `values`: each CSS `property` at rest and per variant (`when`, `state`), its final `value` (per mode when the modes differ), the `expression` that gives it, the `tokens` it reads, and who decides it (`source`: core, base or theme; `via`: token, dial, part or value). Experimental: may change or be removed in a patch release.',
+        'What one part of a theme shows (`show <theme> --on <part>`, which writes nothing): the `theme`, its `kind` (editor, local, package or bundled), the `part`, and `values`: each CSS `property` at rest and per variant (`when`, `state`, as `set` takes them; `notSettable`, with why, for a condition no flag reaches), its final `value` (per mode when the modes differ), the `expression` that gives it (per mode when a rule sets one mode), the `tokens` it reads, and who decides it (`source`: core, base or theme; `via`: token, dial, part or value). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',

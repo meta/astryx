@@ -624,8 +624,9 @@ export async function themePartValues(cwd, name, part) {
       );
     });
     if (!target) {
-      // The other mode shows what the part shows there without the block:
-      // the row for the same condition, else the part at rest.
+      // The other mode shows what the same condition shows without the
+      // block: its own row, else the same variant at rest (Core's state
+      // conditions are not rows of their own), else the part at rest.
       const cond = condOf(m.when, m.state, m.property);
       const base =
         values.find(
@@ -634,6 +635,14 @@ export async function themePartValues(cwd, name, part) {
             v.when === cond.when &&
             v.state === cond.state,
         ) ??
+        (cond.when != null
+          ? values.find(
+              v =>
+                v.property === m.property &&
+                v.when === cond.when &&
+                v.state == null,
+            )
+          : undefined) ??
         values.find(
           v => v.property === m.property && v.when == null && v.state == null,
         );

@@ -402,6 +402,23 @@ describe('show --on: what one part of a theme shows', () => {
       expect(v.value.light).toBe('#123456');
       expect(v.expression.light).toBe('#123456');
     }
+    // The dark half is what that variant shows there without the block:
+    // a destructive button's own fill, not the main button's.
+    const destructive = hover.find(
+      (/** @type {any} */ v) => v.when === 'variant:destructive',
+    );
+    const destructiveRest = valueOf(
+      r,
+      'background-color',
+      'variant:destructive',
+    );
+    const main = valueOf(r, 'background-color');
+    expect(destructive).toBeDefined();
+    expect(destructiveRest).toBeDefined();
+    const dark = (/** @type {any} */ x) =>
+      x && typeof x === 'object' ? x.dark : x;
+    expect(destructive.value.dark).toBe(dark(destructiveRest.value));
+    expect(destructive.value.dark).not.toBe(dark(main.value));
     // neutral's own `segmented-control-item: {selected: …}` rule is the
     // part's selected state, which set takes as --state selected.
     const seg = /** @type {any} */ (
