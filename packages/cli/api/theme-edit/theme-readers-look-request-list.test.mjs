@@ -109,7 +109,7 @@ describe('a one-line look request', () => {
     );
     const lines = top(rs);
     expect(lines).toContain(
-      `set ${t} --color-background-body '#fef3c7' --mode light`,
+      `set ${t} --color-background-body '#f8f1e3' --mode light`,
     );
     expect(lines).toContain(`set ${t} accent '#c2603d'`);
     expect(lines).toContain(`set ${t} font serif --on heading`);
@@ -166,7 +166,7 @@ describe('colors and complaints', () => {
         ),
       ),
     ).toEqual([
-      `set q0 background-color '#fef3c7' --on layout-content --mode light`,
+      `set q0 background-color '#f8f1e3' --on layout-content --mode light`,
     ]);
   }, 240_000);
 

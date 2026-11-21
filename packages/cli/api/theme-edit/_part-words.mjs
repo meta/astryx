@@ -106,7 +106,7 @@ export const OVERRIDES = [
     /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav(?:igation)? ?bar|app ?bar|masthead)\b/,
     {on: 'app-shell-header'},
   ],
-  [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
+  [/\b(pages?|app background|whole background|body background)\b/, {on: 'page'}],
   // A radio's dot is its own part (the mark a checked radio shows).
   [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
