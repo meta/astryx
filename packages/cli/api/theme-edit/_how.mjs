@@ -1109,6 +1109,16 @@ function finish(env, drafts) {
         continue;
     }
     const {commands, refused} = checked(env, d.options);
+    // (A choice whose options hold more than one step, a fill with the text
+    // that reads on it: each option is one line, so a line is one whole
+    // choice.)
+    if (d.joined) {
+      const whole = d.options
+        .map(o => checked(env, [o]))
+        .filter(r => r.commands.length && !r.refused.length)
+        .map(r => r.commands.join(' && '));
+      commands.splice(0, commands.length, ...whole);
+    }
     const lookups = d.lookup ? [d.lookup] : [];
     // (The draft found it in place already: said, with no command.)
     if (d.already) {
@@ -2303,7 +2313,12 @@ async function pictureLook(cwd, name, read) {
   const familyHolds = (family, on) => {
     const families =
       family === 'controls' ? ['button-like', 'inputs'] : [family];
-    return families.some(f => on === f || (groups[f] ?? []).includes(on));
+    // (The family itself holds what is set on it: a height set on a
+    // control is saved on the controls.)
+    return (
+      on === family ||
+      families.some(f => on === f || (groups[f] ?? []).includes(on))
+    );
   };
   const env = await howTheme(ctx, cwd, name);
   const own = env.data.settings;

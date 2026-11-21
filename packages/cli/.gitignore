@@ -56,3 +56,9 @@ assets/search-catalog.generated.json
 # by scripts/generate-build-id.mjs. A checkout has none, so it keeps no
 # gathered catalogs between runs (foundation/fs/gather-cache.mjs).
 clients/cli/build-id.generated.json
+
+# The official package list `astryx discover` reads, written at `prepack` by
+# scripts/generate-official-packages.mjs and removed at `postpack`. A checkout
+# has none, so it derives the list from the repository on each run
+# (foundation/discovery/official-list.mjs).
+assets/discover/official-packages.json
