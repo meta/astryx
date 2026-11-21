@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "e41a8634edba6f179b0a455f1c76e213f04a4bed3a0662a3c6bff261d3c142d7",
+      "skeleton": "bb4dcd414d45a39dd4743c19e9975a818c4a14a6f6b755243167141d2d8bc936",
       "mentions": []
     },
     "browser-support": {
@@ -280,7 +280,7 @@
         "nesting-themes",
         "runtime-vs-built-themes"
       ],
-      "skeleton": "c2941d6fc4d91afea2972ff0934246160d80dfecfcbfbafa36a86e406cb0cb96",
+      "skeleton": "e657033b7f181f816924a1de793dcdda9cd22d6e0630d0be30b8e6fe4707493f",
       "mentions": []
     },
     "use-integrations": {

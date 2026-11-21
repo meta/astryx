@@ -3,8 +3,9 @@
 /**
  * @file numberParser.ts
  * @input Text a person typed or pasted, plus the resolved BCP 47 locale
- * @output Exports parseLocaleNumber and formatEditableNumber
- * @position Internal to NumberInput; not part of the public surface
+ * @output Exports parseLocaleNumber, formatEditableNumber and formatPercent
+ * @position Internal number reading and writing for NumberInput, and the
+ *   percentage ProgressBar writes; not part of the public surface
  *
  * People paste numbers out of spreadsheets, and a spreadsheet writes them
  * grouped, signed, and decorated. This reads those back. Everything locale
@@ -36,6 +37,7 @@
  * - /packages/core/src/NumberInput/NumberInput.tsx
  * - /packages/core/src/NumberInput/numberParser.test.ts
  * - /packages/core/src/NumberInput/numberParser.docblock.test.ts
+ * - /packages/core/src/ProgressBar/ProgressBar.tsx
  */
 
 import type {Locale} from '../i18n';
@@ -362,4 +364,15 @@ export function formatEditableNumber(value: number, locale?: Locale): string {
   const {decimal} = getLocaleNumberSymbols(locale);
   const raw = String(value);
   return decimal === '.' ? raw : raw.replace('.', decimal);
+}
+
+/**
+ * A whole percentage (0 to 100) as the locale writes it: `45%` in English,
+ * `%45` in Turkish, `45 %` in German.
+ */
+export function formatPercent(percent: number, locale: Locale): string {
+  return new Intl.NumberFormat(locale, {
+    style: 'percent',
+    maximumFractionDigits: 0,
+  }).format(percent / 100);
 }

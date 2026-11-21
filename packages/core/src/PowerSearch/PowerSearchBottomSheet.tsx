@@ -72,8 +72,6 @@ import {Text} from '../Text/Text';
 import {TextInput} from '../TextInput/TextInput';
 import type {SearchSource} from '../Typeahead/types';
 import {useAnnounce, type AnnounceFn} from '../hooks/useAnnounce';
-import type {TranslatorFn} from '../i18n';
-import {useListFormatter} from '../i18n/useListFormatter';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {SheetConfirmation} from '../internal/SheetConfirmation';
@@ -88,27 +86,12 @@ import {isImeKeyEvent} from '../utils/ime';
 import {rtlStyles} from '../utils/rtlStyles';
 import {formatTokenValueText} from './formatTokenValue';
 
-function resolveRelativeDateLabel(
-  operatorValue: OperatorValue & {type: 'date_relative'},
-  value: string,
-  t: TranslatorFn,
-  buildRelativeDateOptions: PowerSearchSheetEditors['buildRelativeDateOptions'],
-): string {
-  return (
-    buildRelativeDateOptions(operatorValue, t).find(
-      option => option.value === value,
-    )?.label ?? value
-  );
-}
-
 // A placeholder the Filters row formats `labelValue` with, then splits on, so
 // the value segment can render bold inside the catalog's ordering. A private
 // use code point: never part of a label or value.
 const ROW_VALUE_SLOT = '\uE000';
-import type {
-  buildRelativeDateOptions,
-  PowerSearchValueEditor,
-} from './PowerSearchValueEditor';
+import type {PowerSearchValueEditor} from './PowerSearchValueEditor';
+import {buildRelativeDateOptions} from './relativeDateOptions';
 import type {NestedEditor} from './PowerSearchEditPopover';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useInternalListFocus} from '../hooks/useListFocus';
@@ -159,7 +142,6 @@ registerEnglishFallback(english);
 export interface PowerSearchSheetEditors {
   NestedEditor: typeof NestedEditor;
   PowerSearchValueEditor: typeof PowerSearchValueEditor;
-  buildRelativeDateOptions: typeof buildRelativeDateOptions;
 }
 
 export interface PowerSearchBottomSheetProps {
@@ -734,7 +716,7 @@ function SheetValueEditor({
   timezoneID?: string;
   editors: PowerSearchSheetEditors;
 }) {
-  const {buildRelativeDateOptions, PowerSearchValueEditor} = editors;
+  const {PowerSearchValueEditor} = editors;
   const t = useComponentTranslator();
   const selectedValues = useMemo<ReadonlyArray<string>>(() => {
     if (filterValue?.type === 'enum' || filterValue?.type === 'date_relative') {
@@ -843,7 +825,6 @@ export function PowerSearchBottomSheet({
   const t = useComponentTranslator();
   const locale = useLocale();
   const calendar = useCalendarSystem(undefined, 'PowerSearch');
-  const formatList = useListFormatter();
   const isInteractive = !isDisabled && !isReadOnly;
 
   // ---- draft ----
@@ -1381,32 +1362,18 @@ export function PowerSearchBottomSheet({
       if (operator == null) {
         return {label, value: null};
       }
-      // A relative-date value is stored as a key (`3d_ago`); the row reads it
-      // as the value step's choice row does ("3 days ago"), through the
-      // catalog's relative-date messages, so the sheet agrees with itself. The popover token
-      // shows the stored key (a known gap of the record).
-      const value =
-        operator.value.type === 'date_relative' &&
-        filter.value.type === 'date_relative'
-          ? resolveRelativeDateLabel(
-              operator.value,
-              filter.value.value,
-              t,
-              editors.buildRelativeDateOptions,
-            )
-          : formatTokenValueText(
-              operator.value,
-              filter.value,
-              Number.MAX_SAFE_INTEGER,
-              locale,
-              calendar,
-              t,
-              formatList,
-              timezoneID,
-            );
+      const value = formatTokenValueText(
+        operator.value,
+        filter.value,
+        Number.MAX_SAFE_INTEGER,
+        locale,
+        calendar,
+        t,
+        timezoneID,
+      );
       return {label, value};
     },
-    [calendar, config, editors, formatList, locale, t, timezoneID],
+    [calendar, config, locale, t, timezoneID],
   );
   const describeFilter = useCallback(
     (filter: PowerSearchFilter): string => {
