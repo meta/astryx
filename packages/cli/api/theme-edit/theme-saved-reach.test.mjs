@@ -4,7 +4,7 @@
  * A saved setting keeps saying how far it reaches: the build records
  * (`reached`) the parts each setting that reaches beyond its own part
  * writes, and the first change after that reach grows names the setting
- * once, at the top of its result, with the line that keeps it as it was.
+ * once, at the top of its result, with the line that keeps it on its own part.
  * A setting with no record yet is recorded as it reaches, with no word.
  * `--only` on a setting the theme already holds replaces it, so the look
  * leaves the group, and a theme saved with both still builds as it did.
@@ -66,15 +66,18 @@ const cliText = args =>
   ).stdout;
 
 /**
- * Makes the record of each saved setting whose key starts with `prefix`
- * hold only the part it is set on, as an editor whose groups were smaller
- * saved it.
+ * Takes the text area out of the record of each saved setting whose key
+ * starts with `prefix`, as an editor whose group did not hold it yet saved
+ * it: the record still reaches past the part the setting is on.
  * @param {string} slug @param {string} prefix
  */
 const narrowRecord = (slug, prefix) => {
   const data = saved(slug);
   for (const k of Object.keys(data.reached ?? {}))
-    if (k.startsWith(prefix)) data.reached[k] = [k.split('|')[2]];
+    if (k.startsWith(prefix))
+      data.reached[k] = data.reached[k].filter(
+        (/** @type {string} */ t) => t !== 'text-area',
+      );
   save(slug, data);
 };
 
@@ -115,7 +118,9 @@ describe('a saved setting and how far it reaches', () => {
     );
     expect(key).toBeTruthy();
     expect(data.reached[key]).toEqual(expect.arrayContaining(['text-area']));
-    data.reached[/** @type {string} */ (key)] = ['text-input'];
+    data.reached[/** @type {string} */ (key)] = data.reached[
+      /** @type {string} */ (key)
+    ].filter((/** @type {string} */ t) => t !== 'text-area');
     save('grow', data);
 
     const r = /** @type {any} */ (
@@ -191,7 +196,9 @@ describe('a saved setting and how far it reaches', () => {
     const key = /** @type {string} */ (
       Object.keys(data.reached).find(k => k.startsWith('border-color|'))
     );
-    data.reached[key] = ['text-input'];
+    data.reached[key] = data.reached[key].filter(
+      (/** @type {string} */ t) => t !== 'text-area',
+    );
     save('grp', data);
     const r = /** @type {any} */ (
       await themeEditSet('grp', 'corners', '4px', {cwd})
@@ -218,9 +225,11 @@ describe('a saved setting and how far it reaches', () => {
     expect(lines[0]).toMatch(
       /but it also made 2 saved settings reach more parts:$/,
     );
-    expect(out).toMatch(/to keep it as it was: .* --on text-input --only/);
+    expect(out).toMatch(
+      /to keep it on text-input alone: .* --on text-input --only/,
+    );
     const seq = lines.findIndex(l =>
-      l.startsWith('- to keep all 2 as they were: '),
+      l.startsWith('- to keep each on its own part: '),
     );
     expect(seq).toBeGreaterThan(0);
     expect(lines[seq].split(' && ')).toHaveLength(2);
