@@ -7823,6 +7823,15 @@ export function compileTheme(ctx, data, base) {
           if (toks.length === 1) putComp(s, t, toks[0], s.value);
           else if (lines.length && lines.join() === toks.join())
             for (const tok of lines) putComp(s, t, tok, s.value);
+          else if (kebab(s.thing) === 'font-size' && parts.length === 1) {
+            // (A text size with several pieces goes into its main text's
+            // token alone: a font-size on the part reaches none of them.)
+            const main = mainTextSizeToken(ctx.C, t, TOKENS);
+            if (main && !namesToken(s.value, main)) {
+              putComp(s, t, main, s.value);
+              continue;
+            }
+          }
         }
         if (kebab(s.thing) === 'color')
           for (const tok of colorTokensReached(ctx.C, t))
@@ -15102,6 +15111,52 @@ export function innerPropTokens(C, part, prop) {
       .slice(0, 4);
   if (!toks.length) toks = columnLineTokens(C, part, prop);
   return toks;
+}
+
+/**
+ * The size token of a part's main text, when the part draws no size of its
+ * own and the elements inside it read several text size tokens: the
+ * largest as the sizes resolve (a top nav heading's title, --text-large-size,
+ * over its supporting line). Null for a text column, whose lines each take a
+ * size said for the part, for a tie or a size that cannot be read, and when
+ * the sizes come from the parts it holds (a heading drawn at any level, an
+ * icon sized by spacing): no one main text can be told there.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @param {Record<string, string>} tokens Core's token defaults
+ * @returns {string | null}
+ */
+export function mainTextSizeToken(C, part, tokens) {
+  const rec = C.MAP[part];
+  if (!rec || rec.own?.['font-size']) return null;
+  const toks = Object.entries(rec.inside ?? {})
+    .filter(([, props]) =>
+      /** @type {string[]} */ (props).includes('font-size'),
+    )
+    .map(([tok]) => tok);
+  if (
+    toks.length < 2 ||
+    innerPropTokens(C, part, 'font-size').join() !== toks.join() ||
+    !toks.every(tok => /^--text-[a-z0-9-]*size$/.test(tok))
+  )
+    return null;
+  const lines = columnLineTokens(C, part, 'font-size');
+  if (lines.length && lines.join() === toks.join()) return null;
+  const sized = toks
+    .map(tok => /** @type {const} */ ([tok, sizePx(`var(${tok})`, tokens)]))
+    .sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1));
+  if (sized.some(([, px]) => px == null) || sized[0][1] === sized[1][1])
+    return null;
+  return sized[0][0];
+}
+
+/**
+ * Whether a value names a token (written into that token, it would read
+ * itself).
+ * @param {unknown} value @param {string} token
+ */
+export function namesToken(value, token) {
+  return new RegExp(`var\\(\\s*${token}\\s*[,)]`).test(String(value));
 }
 
 /**
