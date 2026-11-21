@@ -9,9 +9,9 @@ export const doc = {
   displayName: 'astryx experimental icon add',
   namespace: 'cli/commands',
   stability: 'experimental',
-  summary: 'Register one icon you chose from a library in your icon set',
+  summary: 'Add one icon you chose from a library to your icon set',
   description:
-    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without a definition it lists the icon definitions that fit and the command for each. With --definition it adds the icon and maps the definition to it; --new-definition first adds your set's own definition. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without --definition it lists the icon meanings that fit and the command for each. With --definition it adds the icon and maps the meaning to it; --new-definition first adds your set's own icon meaning. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
   fn: 'iconAdd',
   args: [{name: 'export', param: 'exportName', required: false}],
   options: [
@@ -24,13 +24,13 @@ export const doc = {
     {
       flag: '--definition <name>',
       param: 'options.definition',
-      description: 'Map the icon to this icon definition',
+      description: 'Map the icon to this icon meaning',
     },
     {
       flag: '--new-definition <name>',
       param: 'options.newDefinition',
       description:
-        "Add your set's own definition, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words",
+        "Add your set's own icon meaning, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words",
     },
     {
       flag: '--description <text>',
@@ -74,7 +74,7 @@ export const doc = {
   ],
   examples: [
     {
-      label: 'Which definitions fit',
+      label: 'Which meanings fit',
       cli: 'astryx experimental icon add Bin --from @acme/glyph-library',
     },
     {
@@ -86,7 +86,7 @@ export const doc = {
       cli: 'astryx experimental icon add --variant solid --from @heroicons/react/24/solid --all',
     },
     {
-      label: 'Add your own definition',
+      label: 'Add your own meaning',
       cli: "astryx experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance",
     },
     {
@@ -98,11 +98,11 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the icon is added, already present, or the matching definitions are listed, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
+      when: 'the icon is added, already present, or the matching meanings are listed, or, typed alone, an icon (or, with no icon set installed, an icon meaning) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,
-      when: 'the export is missing or is data, the definition is unknown, the id is taken, or the variant is not one the set declares',
+      when: 'the export is missing or is data, the icon meaning is unknown, the id is taken, or the variant is not one the set declares',
     },
   ],
   related: ['experimental icon map', 'integration add', 'integration check'],

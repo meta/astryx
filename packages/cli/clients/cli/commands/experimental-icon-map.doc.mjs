@@ -9,9 +9,9 @@ export const doc = {
   displayName: 'astryx experimental icon map',
   namespace: 'cli/commands',
   stability: 'experimental',
-  summary: 'Register which icon of your set draws an icon definition',
+  summary: 'Map an icon meaning to an icon of your set',
   description:
-    "Run inside an icon-set package. Sets `map[<definition>]` to the icon's id in the set's data file; name the icon by its id, its export name in any case, or another name its library exports it as (`trash-2` or `Trash2`), never by one word of its id, and the definition by its name or kebab id; `integration check` prints these commands for definitions your set already has a fitting icon for. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. Sets `map[<meaning>]` to the icon's id in the set's data file; name the icon by its id, its export name in any case, or another name its library exports it as (`trash-2` or `Trash2`), never by one word of its id, and the icon meaning by its name or kebab id; `integration check` prints these commands for meanings your set already has a fitting icon for. Experimental: it may change or be removed in a patch release.",
   fn: 'iconMap',
   args: [
     {name: 'definition', param: 'definition', required: false},
@@ -26,18 +26,18 @@ export const doc = {
     {
       flag: '--remove',
       param: 'options.remove',
-      description: "Remove the definition's entry; takes no icon",
+      description: "Remove the meaning's entry; takes no icon",
     },
     {
       flag: '--pairs <list>',
       param: 'options.pairs',
       description:
-        'Many entries in one write: <definition>=<icon> pairs, comma-separated; checked together, all or none; an existing entry is replaced',
+        'Many entries in one write: <meaning>=<icon> pairs, comma-separated; checked together, all or none; an existing entry is replaced',
     },
   ],
   examples: [
     {
-      label: 'Map a definition',
+      label: 'Map a meaning',
       cli: 'astryx experimental icon map delete trash',
     },
     {
@@ -53,11 +53,11 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the entry is written, removed, or already as asked, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
+      when: 'the entry is written, removed, or already as asked, or, typed alone, an icon (or, with no icon set installed, an icon meaning) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,
-      when: 'the definition is unknown, the set has no such icon, or no set is found',
+      when: 'the icon meaning is unknown, the set has no such icon, or no set is found',
     },
   ],
   related: ['experimental icon add', 'integration add', 'integration check'],
