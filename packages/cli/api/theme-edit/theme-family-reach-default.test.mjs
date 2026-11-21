@@ -194,6 +194,60 @@ describe('family reach by default', () => {
     expect(r.data.parts.length).toBeGreaterThan(1);
   }, 240_000);
 
+  it('a look set for a variant names the parts drawn as it with no keep line; a keep line run says nothing is covered', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('gv', {cwd, like: 'neutral'});
+    const r = /** @type {any} */ (
+      await themeEditSet('gv', 'background-color', '#123456', {
+        cwd,
+        on: 'button',
+        when: 'variant:ghost',
+      })
+    );
+    const embedded = /** @type {any[]} */ (r.data.embedded ?? []);
+    expect(embedded.length).toBeGreaterThan(0);
+    expect(embedded.every(x => !x.keep)).toBe(true);
+    expect(r.data.notes.join('\n')).toMatch(/no line on (them|it) keeps/);
+    // (A keep line for a plain look rolls back to Core's paints.)
+    await themeEditNew('gk', {cwd, like: 'neutral'});
+    const k = /** @type {any} */ (
+      await themeEditSet('gk', 'background-color', 'revert-layer', {
+        cwd,
+        on: 'pagination-item',
+      })
+    );
+    expect(k.data.notes.join('\n')).not.toMatch(/fills? now covers?/);
+    // (A later token change names no covered fill for the keep line.)
+    const tk = /** @type {any} */ (
+      await themeEditSet('gk', '--color-neutral', '#dddddd', {cwd})
+    );
+    expect(tk.data.notes.join('\n')).not.toMatch(
+      /fill set on pagination-item \(revert-layer\) covers/,
+    );
+    // (A primary look names no ghost button drawn inside a component.)
+    await themeEditNew('gp', {cwd, like: 'neutral'});
+    const gp = /** @type {any} */ (
+      await themeEditSet('gp', 'background-color', '#123456', {
+        cwd,
+        on: 'button',
+        when: 'variant:primary',
+      })
+    );
+    expect(
+      (gp.data.embedded ?? []).map((/** @type {any} */ x) => x.part),
+    ).not.toContain('pagination-item');
+    // (A look for two conditions names the parts drawn with both.)
+    await themeEditNew('gs', {cwd, like: 'neutral'});
+    const gs = /** @type {any} */ (
+      await themeEditSet('gs', 'background-color', '#123456', {
+        cwd,
+        on: 'button',
+        when: 'variant:ghost+size:sm',
+      })
+    );
+    expect((gs.data.embedded ?? []).length).toBeGreaterThan(0);
+  }, 240_000);
+
   it('a drill-in is undone the way it was set, without --only', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('du', {cwd, like: 'neutral'});
