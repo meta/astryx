@@ -1173,6 +1173,9 @@ function DropdownMenuPopover({
     // The entrance runs on the surface: an anchored layer lays out again on
     // each frame its own style animates.
     xstyle: layerAnimations[placement],
+    // The popover surface paints the menu's box, so a theme reaches the box
+    // there; `dropdown-menu` stays on the list inside it.
+    surfaceTarget: 'dropdown-menu-popup',
     onOpenPendingChange: handleOpenPendingChange,
   });
 
