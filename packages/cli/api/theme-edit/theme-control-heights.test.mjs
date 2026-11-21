@@ -695,11 +695,17 @@ describe('one control height per size', () => {
       on: 'button',
     });
     save('carrynew', data);
-    await themeEditSet('carrynew', 'height', '25px', {
-      cwd,
-      on: 'button',
-      when: 'size:sm',
-    });
+    const r = /** @type {any} */ (
+      await themeEditSet('carrynew', 'height', '25px', {
+        cwd,
+        on: 'button',
+        when: 'size:sm',
+      })
+    );
+    // (The note names the value the theme writes there.)
+    expect(r.data.notes.join('\n')).toMatch(
+      /calc\(28px \+ 4px\) stays every control's height at md and lg/,
+    );
     const tokens = Object.fromEntries(
       saved('carrynew')
         .settings.filter((/** @type {any} */ x) => x.on === 'controls')
