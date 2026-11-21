@@ -5262,12 +5262,17 @@ export function holdCopies(ctx, data, s) {
   // (The holds the set decided, and the ones this build's own grounds call
   // for: a menu made white after the light link color was set holds its
   // links too.)
+  // (Only a true placement holds: one that puts the text on another
+  // part's ground, never a heading level or a text variant.)
+  const placements = placementHolds(ctx, data, s);
   const hold = [
     ...new Set([
       ...(Array.isArray(/** @type {any} */ (s).hold)
-        ? /** @type {any} */ (s).hold
+        ? /** @type {any[]} */ (/** @type {any} */ (s).hold).filter(v =>
+            placements.includes(v),
+          )
         : []),
-      ...placementHolds(ctx, data, s),
+      ...placements,
     ]),
   ];
   /** @type {Setting[]} */
@@ -5290,11 +5295,26 @@ export function holdCopies(ctx, data, s) {
       s.mode || (modesOf(data).length > 1 && open.length < 2)
         ? [s.mode ?? open[0]]
         : [undefined];
-    for (const mode of modes)
+    // (A state the theme paints a fill of its own for, a selected link's
+    // block, keeps the setting's color there: Core's would sit on the
+    // theme's fill.)
+    // (A state the theme paints a fill of its own for, set on the part or
+    // reaching it through its family, for this placement: a selected
+    // link's block keeps a readable color there, the theme's own color for
+    // that state if it sets one, else the setting's, in the fill's mode.)
+    const fills = data.settings.filter(
+      x =>
+        x.on &&
+        x.state &&
+        /^background(-color|-image)?$/.test(kebab(String(x.thing))) &&
+        (!x.when || x.when === variant) &&
+        partsOf(ctx, x).includes(String(s.on)),
+    );
+    for (const mode of modes) {
       out.push({
         ...s,
         ...(mode ? {mode} : {}),
-        // (Core's own color there in every state, a selected link's included:
+        // (Core's own color there in every state the theme leaves to Core:
         // the theme's rule rolls back to Core's layer.)
         value: 'revert-layer',
         when: variant,
@@ -5303,6 +5323,38 @@ export function holdCopies(ctx, data, s) {
         keep: undefined,
         note: undefined,
       });
+      const seen = new Set();
+      for (const x of fills) {
+        if (mode && x.mode && x.mode !== mode) continue;
+        const m = mode ?? x.mode ?? undefined;
+        const key = `${x.state}|${m ?? ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const own = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              y !== s &&
+              y.on &&
+              kebab(String(y.thing)) === kebab(String(s.thing)) &&
+              (y.state ?? '') === String(x.state) &&
+              (!y.when || y.when === variant) &&
+              (!y.mode || !m || y.mode === m) &&
+              partsOf(ctx, y).includes(String(s.on)),
+          );
+        out.push({
+          ...s,
+          ...(m ? {mode: m} : {}),
+          value: own ? own.value : s.value,
+          when: variant,
+          state: String(x.state),
+          only: true,
+          hold: undefined,
+          keep: undefined,
+          note: undefined,
+        });
+      }
+    }
   }
   return out;
 }
@@ -16296,6 +16348,21 @@ function scopedTextProblems(ctx, data, res) {
       /** The latest setting matching, scoped first, then at rest. @param {(y: Setting) => boolean} test @param {string} m */
       const latest = (test, m) =>
         [...data.settings].reverse().find(y => test(y) && here(y, m, true)) ??
+        // (A state within a placement, a selected link in the phone menu,
+        // draws the fill set for the state alone.)
+        (st && when
+          ? [...data.settings]
+              .reverse()
+              .find(
+                y =>
+                  test(y) &&
+                  Boolean(y.on) &&
+                  (!y.mode || y.mode === m) &&
+                  (y.state ?? null) === st &&
+                  !y.when &&
+                  partsOf(ctx, y).includes(t),
+              )
+          : null) ??
         [...data.settings].reverse().find(y => test(y) && here(y, m, false)) ??
         null;
       /** The value of a token on this part in this scope, in a mode. @param {string} tok @param {'light' | 'dark'} m */
