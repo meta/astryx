@@ -256,6 +256,7 @@ describe('a color said for one mode is its page', () => {
       for (const ask of [
         'dark-mode: page #111111, cards #222222, borders #333333 in light mode, buttons #444444',
         'dark mode: page #111111, cards #222222, light mode: page #eeeeee, buttons #444444',
+        'dark mode: page near-black, cards #222222, borders #333333 in light mode, buttons #444444',
       ]) {
         const lines = /** @type {string[]} */ (
           (await themeEditHow(ask, {cwd, theme: 'c'})).data.results ?? []
