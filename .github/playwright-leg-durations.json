@@ -40,6 +40,7 @@
     "packages/core/src/DropdownMenu/__tests__/DropdownMenuDragHighlight.interaction.browser.spec.ts": 18,
     "packages/core/src/DropdownMenu/__tests__/DropdownMenuEntranceHold.interaction.browser.spec.ts": 6.9,
     "packages/core/src/DropdownMenu/__tests__/DropdownMenuOpeningRelease.interaction.browser.spec.ts": 7.2,
+    "packages/core/src/DropdownMenu/__tests__/DropdownMenuPickTapThrough.interaction.browser.spec.ts": 10,
     "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchGrow.interaction.browser.spec.ts": 13.2,
     "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchHandoff.interaction.browser.spec.ts": 5.1,
     "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchPress.interaction.browser.spec.ts": 7.9,
