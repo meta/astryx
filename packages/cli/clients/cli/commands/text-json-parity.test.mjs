@@ -512,8 +512,9 @@ const CASES = [
     name: 'experimental export',
     args: ['experimental', 'export', 'page.jsx'],
     cwd: '__TMP__',
-    // A page with no imports, in a folder that can resolve React and Core, so
-    // the page gets Core's stylesheets in every runner.
+    // A page that imports only Core's stylesheet (export refuses a page with
+    // no Astryx), in a folder that can resolve React and Core, so the page
+    // gets Core's stylesheets in every runner.
     setup: dir => {
       fs.mkdirSync(path.join(dir, 'node_modules', '@astryxdesign'), {
         recursive: true,
@@ -530,10 +531,59 @@ const CASES = [
       );
       fs.writeFileSync(
         path.join(dir, 'page.jsx'),
-        'export default function Page() { return <h1>Hello</h1>; }\n',
+        "import '@astryxdesign/core/astryx.css';\nexport default function Page() { return <h1>Hello</h1>; }\n",
       );
     },
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
+    textBlockAllowlist: [
+      "The file's markup and stylesheets load nothing from outside the file. — the text form of an empty checks.outside",
+    ],
+  },
+  {
+    // A page that names an https image: the text names the images not
+    // fetched under the JSON's own key. `.invalid` never resolves. It shares
+    // the folder of the case above, which links React and Core.
+    name: 'experimental export',
+    args: ['experimental', 'export', 'remote.jsx'],
+    cwd: '__TMP__',
+    setup: dir => {
+      fs.writeFileSync(
+        path.join(dir, 'remote.jsx'),
+        'export default function Page() { return <img src="https://images.example.invalid/a.png" alt="" />; }\nimport "@astryxdesign/core/astryx.css";\n',
+      );
+    },
+    jsonFieldAllowlist: [
+      'warnings — listed under Warnings when present',
+      "code — each warning's kind; the text prints its message",
+    ],
+  },
+  {
+    // A page that gives a Core component a prop it does not take: the text
+    // prints the unknown-prop warning the JSON carries. It shares the folder
+    // of the cases above; TypeScript and React's types let the export read
+    // Core's.
+    name: 'experimental export',
+    args: ['experimental', 'export', 'wrong-prop.tsx'],
+    cwd: '__TMP__',
+    setup: dir => {
+      fs.mkdirSync(path.join(dir, 'node_modules', '@types'), {recursive: true});
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'node_modules', '@types', 'react'),
+        path.join(dir, 'node_modules', '@types', 'react'),
+      );
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'node_modules', 'typescript'),
+        path.join(dir, 'node_modules', 'typescript'),
+      );
+      fs.writeFileSync(
+        path.join(dir, 'wrong-prop.tsx'),
+        'import {AlertDialog} from \'@astryxdesign/core/AlertDialog\';\nexport default function Page() { return <AlertDialog isOpen onOpenChange={() => {}} title="Delete?" description="Gone for good." actionLabel="Delete" onAction={() => {}} onConfirm={() => {}} />; }\n',
+      );
+    },
+    jsonFieldAllowlist: [
+      'warnings — listed under Warnings when present',
+      "code — each warning's kind; the text prints its message",
+    ],
     textBlockAllowlist: [
       "The file's markup and stylesheets load nothing from outside the file. — the text form of an empty checks.outside",
     ],
@@ -554,7 +604,7 @@ const CASES = [
     // A rendered file that carries its page.
     setup: dir => {
       const source = Buffer.from(
-        'export default function Page() { return <h1>Hello</h1>; }\n',
+        'export default function Page() { return <h1>Hello</h1>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const json = JSON.stringify({
         version: 1,
@@ -587,7 +637,7 @@ const CASES = [
     cwd: '__TMP__',
     setup: dir => {
       const source = Buffer.from(
-        'export default function Page() { return <h1>Hello</h1>; }\n',
+        'export default function Page() { return <h1>Hello</h1>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const json = JSON.stringify({
         version: 1,

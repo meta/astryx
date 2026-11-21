@@ -37,6 +37,7 @@ import {
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {Icon} from '../Icon';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
@@ -205,6 +206,13 @@ const styles = stylex.create({
   headerTitle: {
     display: 'flex',
     alignItems: 'center',
+    // The root is a <pre>, so the title inherits `white-space: pre` and
+    // stays on one line. A long title then runs under the header's controls.
+    // It wraps instead and keeps its own spacing.
+    minWidth: 0,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -1140,7 +1148,7 @@ export function CodeBlock({
     : isDiff
       ? languageName === 'plaintext'
         ? 'diff'
-        : `${languageName} diff`
+        : t('@astryx.codeBlock.diffLabel', {language: languageName})
       : languageName !== 'plaintext'
         ? languageName
         : null;
@@ -1172,7 +1180,11 @@ export function CodeBlock({
   // both axes, keeps focus where it is when overflow goes away, and owns the
   // overflow declarations. role="group" (not "region") so several code
   // blocks on a page don't create duplicate same-named landmarks.
-  const {getViewportProps, getContentProps} = useScrollableArea({
+  const {
+    getViewportProps,
+    getContentProps,
+    state: scrollState,
+  } = useScrollableArea({
     axis: 'both',
     // Nothing inside the code viewport sticks to an outer scroller, so the
     // viewport stays a scroll container while its code fits. A long line, or
@@ -1323,6 +1335,7 @@ export function CodeBlock({
           styles.viewport,
           styles.viewportFocusRingInset,
         ),
+        xstyle: scrollEdgeFadeStyles(scrollState.inline),
         style: scrollStyle,
         // Code scrolls and wraps left to right in every page direction.
         dir: 'ltr',

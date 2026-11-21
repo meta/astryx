@@ -411,11 +411,13 @@ function resolveSelfReference(specifier, fromFile) {
 }
 
 /**
+ * The module file a bare package specifier names from a file: the
+ * package's exports map, else its `module`, `main` or index file.
  * @param {string} specifier a bare package specifier, with an optional subpath
  * @param {string} fromFile
  * @returns {string | null}
  */
-function resolvePackageModule(specifier, fromFile) {
+export function resolvePackageModule(specifier, fromFile) {
   if (specifier.startsWith('node:') || specifier.startsWith('/')) return null;
   const self = resolveSelfReference(specifier, fromFile);
   if (self) return self.target;

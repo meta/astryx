@@ -686,6 +686,22 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(303.5 82% 25%)',
       },
     },
+    'banner-message': {
+      base: {
+        backgroundColor: 'hsl(50.1 85% 62%)',
+        color: 'hsl(315.7 75% 12%)',
+        borderColor: 'hsl(339.7 85% 25%)',
+        outlineColor: 'hsl(259.7 74% 25%)',
+      },
+    },
+    'banner-title': {
+      base: {
+        backgroundColor: 'hsl(278.0 91% 55%)',
+        color: 'hsl(82.4 80% 12%)',
+        borderColor: 'hsl(346.0 70% 25%)',
+        outlineColor: 'hsl(284.8 85% 25%)',
+      },
+    },
     blockquote: {
       base: {
         backgroundColor: 'hsl(281.1 79% 50%)',
@@ -5158,6 +5174,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(151.6 83% 25%)',
         outlineColor: 'hsl(17.2 94% 25%)',
       },
+      striped: {
+        backgroundColor: 'hsl(282.7 90% 52%)',
+        color: 'hsl(298.3 85% 12%)',
+        borderColor: 'hsl(70.8 75% 25%)',
+        outlineColor: 'hsl(126.6 74% 25%)',
+      },
     },
     'table-scroll-wrapper': {
       base: {
@@ -5973,6 +5995,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(192.0 86% 12%)',
         borderColor: 'hsl(273.2 82% 25%)',
         outlineColor: 'hsl(341.5 79% 25%)',
+      },
+      mode: {
+        backgroundColor: 'hsl(289.1 73% 57%)',
+        color: 'hsl(329.3 80% 12%)',
+        borderColor: 'hsl(82.6 88% 25%)',
+        outlineColor: 'hsl(140.5 91% 25%)',
       },
     },
     'top-nav-item': {

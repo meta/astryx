@@ -43,7 +43,7 @@ import {
 } from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
-import {partData} from './_parts.mjs';
+import {addCensusStates, partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
   assetRef,
@@ -146,6 +146,7 @@ export async function context(cwd) {
   let uncheckedCode = null;
   try {
     parts = await partData(project);
+    addCensusStates(project, parts);
   } catch (e) {
     if (!isRenderFailure(e)) throw e;
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
@@ -179,7 +180,7 @@ export async function context(cwd) {
  * Core's registry of the variables a part's plain border-radius or padding
  * also writes (a card's inner corners), or empty on a Core without it.
  * @param {string} coreDir
- * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>>}
+ * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>>}
  */
 async function derivedVars(coreDir) {
   const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');
@@ -443,7 +444,8 @@ export const SAMPLE_PAGE_NAME = 'the sample page';
  * whether every text is drawn whole once the part keeps its width
  * (`flex-shrink: 0`, applied in the page and measured). `broken`: the
  * texts are words drawn broken across two lines inside the word, not cut.
- * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean, broken?: boolean}} CutShort
+ * `overlaps`: the texts run past their own box over a neighbor's text.
+ * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean, broken?: boolean, overlaps?: boolean}} CutShort
  */
 
 /** The texts named, the first six and how many more. @param {string[]} texts */
@@ -462,6 +464,8 @@ export function cutShortNote(c) {
   const what = c.part
     ? `${c.part} label${n === 1 ? '' : 's'}`
     : `text${n === 1 ? '' : 's'}`;
+  if (c.overlaps)
+    return `${c.page} (${c.file}) draws ${n} ${what} over the text beside ${n === 1 ? 'it' : 'them'}${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text is wider than the space ${c.part ? `the ${c.part}` : 'its box'} gives it`;
   if (c.broken)
     return `${c.page} (${c.file}) breaks ${n} word${n === 1 ? '' : 's'} across lines inside the word${c.part ? ` in the ${c.part}` : ''}${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the word is wider than the space ${c.part ? `the ${c.part}` : 'its box'} has`;
   return `${c.page} (${c.file}) draws ${n} ${what} cut short${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text no longer fits ${c.part ? `the ${c.part}` : 'its box'}`;
@@ -479,9 +483,11 @@ export function cutShortNote(c) {
  */
 export function cutShortProblem(ctx, slug, c) {
   const label = c.part ? `${c.part} labels` : 'text';
-  const problem = c.broken
-    ? `words broken across lines inside the word${c.part ? ` in the ${c.part}` : ''} in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`
-    : `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
+  const problem = c.overlaps
+    ? `${label} drawn over the text beside them in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`
+    : c.broken
+      ? `words broken across lines inside the word${c.part ? ` in the ${c.part}` : ''} in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`
+      : `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
   if (c.part && c.whole && ctx.project.target.has(c.part))
     return {problem, fix: `${P} set ${slug} flex-shrink 0 --on ${c.part}`};
   return {
@@ -493,38 +499,52 @@ export function cutShortProblem(ctx, slug, c) {
 }
 
 /**
+ * Text a picture draws too faint to read, as the browser measured it: the
+ * part it sits in, its text, the mode, its ratio and its two colors, and
+ * the page (`page`, null for a sheet) and picture it is on.
+ * @typedef {{page: string | null, file: string, part: string, text: string, mode: 'light' | 'dark', ratio: number, fg: string, bg: string}} LowContrast
+ */
+
+/**
  * Pictures of HTML files, on request. A shot with a `name` is a page laid
  * out so its text fits in the base theme (the sample page): the text its
  * pictures draw cut short, as the browser measured it, comes back in
  * `cutShort`, one entry for each part on each page ({@link cutShortNote},
  * {@link cutShortProblem}). The sheets (the open
  * states among them) have no name: their cells are narrow, and the full
- * sheet cuts long labels short in every theme.
+ * sheet cuts long labels short in every theme, so from a sheet only text
+ * drawn over the text beside it comes back.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {Array<{html: string, png: string, name?: string, most?: number}>} shots
  *   `most`: the tallest the page's picture may be; a taller one is cut into
  *   pictures that tall, in order ({@link pagesOfPicture})
  * @param {Array<'light' | 'dark'>} modes
- * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[]}>}
+ * Every picture also measures the text it draws too faint to read
+ * (`lowContrast`): one entry for each part, text, pair of colors and mode,
+ * with the page it is on.
+ * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[], lowContrast: LowContrast[]}>}
  */
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /** @type {Map<string, LowContrast>} */
+  const faint = new Map();
+  const faintNotes = () => [...faint.values()];
   /**
    * The text drawn cut short, by page, then by part: its texts, the modes
    * it was drawn so in, whether keeping the part's width draws every one
    * whole, and the page's picture.
-   * Keyed by part, and apart for words broken across lines.
-   * @type {Map<string, {file: string, parts: Map<string, {part: string, broken: boolean, texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
+   * Keyed by part, and apart for words broken across lines and for text drawn over its neighbor.
+   * @type {Map<string, {label: string, file: string, parts: Map<string, {part: string, broken: boolean, overlaps: boolean, texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
    */
   const cut = new Map();
   /** One entry for each part on each page, from what was measured. */
   const cutShortNotes = () =>
-    [...cut].flatMap(([name, page]) =>
+    [...cut].flatMap(([, page]) =>
       [...page.parts.values()].map(
-        ({part, broken, texts, modes: drawnIn, whole}) =>
+        ({part, broken, overlaps, texts, modes: drawnIn, whole}) =>
           /** @type {CutShort} */ ({
-            page: name,
+            page: page.label,
             file: page.file,
             part: part || null,
             texts: [...texts],
@@ -532,6 +552,7 @@ export async function pictures(project, shots, modes) {
               modes.length > 1 && drawnIn.size === 1 ? [...drawnIn][0] : null,
             whole,
             ...(broken ? {broken: true} : {}),
+            ...(overlaps ? {overlaps: true} : {}),
           }),
       ),
     );
@@ -588,6 +609,7 @@ export async function pictures(project, shots, modes) {
       return {
         files,
         cutShort: [],
+        lowContrast: [],
         problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move ${st.isSymbolicLink() ? 'the link' : 'it'}, then run the command again`,
       };
   }
@@ -597,6 +619,7 @@ export async function pictures(project, shots, modes) {
     return {
       files,
       cutShort: [],
+      lowContrast: [],
       problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
     };
   /** The pictures to take, each with where it goes. @type {Array<{html: string, out: string, part: string, m: 'light' | 'dark', name?: string, most?: number}>} */
@@ -634,6 +657,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
         };
       // A folder it cannot write gets no picture: named before the browser
@@ -644,6 +668,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
@@ -670,6 +695,7 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: files.length
             ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r?.reason ?? 'the browser stopped first'}`
             : `No picture was taken: ${r?.reason ?? 'the browser stopped first'}`,
@@ -682,11 +708,14 @@ export async function pictures(project, shots, modes) {
         return {
           files,
           cutShort: cutShortNotes(),
+          lowContrast: faintNotes(),
           problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
         };
       }
       r.file = path.relative(project.cwd, out).split(path.sep).join('/');
       files.push(r.file);
+      /** The pictures this one became: itself, or the pieces it is cut into. */
+      let pieces = [r.file];
       // A picture in a theme folder is recorded as the editor's, so a later
       // change removes it and never a picture of the user's.
       const slug = themeOf(out);
@@ -708,20 +737,49 @@ export async function pictures(project, shots, modes) {
             files.pop();
             files.push(...cut.files);
             r.file = cut.files[0];
+            pieces = cut.files;
           }
         }
       }
       for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
-      // What the browser measured on a page laid out to fit, kept by page
-      // and part; nothing when its script measured nothing.
-      if (name && r.cutShort?.length) {
-        const page = cut.get(name) ?? {file: r.file, parts: new Map()};
-        cut.set(name, page);
-        for (const {part, text, whole, broken} of r.cutShort) {
-          const key = `${part ?? ''}${broken ? '\0broken' : ''}`;
+      for (const x of r.lowContrast ?? []) {
+        const key = `${name ?? r.file}\u0000${x.part}\u0000${x.text}\u0000${x.fg}\u0000${x.bg}\u0000${m}`;
+        if (!faint.has(key))
+          faint.set(key, {
+            page: name ?? null,
+            file: r.file,
+            part: x.part,
+            text: x.text,
+            mode: m,
+            ratio: x.ratio,
+            fg: x.fg,
+            bg: x.bg,
+          });
+      }
+      // What the browser measured, kept by page and part; nothing when its
+      // script measured nothing. A sheet's narrow cells cut long labels in
+      // every theme, so a sheet keeps only text drawn over its neighbor.
+      const measured = (r.cutShort ?? []).filter(c => name || c.overlaps);
+      if (measured.length) {
+        // Each sheet is its own page: its pictures (one per mode, or the
+        // pieces a tall one is cut into) are named by the first of them.
+        const key = name ?? `\0${out.replace(/-dark\.png$/, '.png')}`;
+        const shownFile =
+          pieces.length > 1
+            ? `${pieces[0]} to ${path.basename(pieces[pieces.length - 1])}`
+            : r.file;
+        const page = cut.get(key) ?? {
+          label: name ?? 'the sheet',
+          file: shownFile,
+          parts: new Map(),
+        };
+        cut.set(key, page);
+        for (const {part, text, whole, broken, overlaps} of measured) {
+          const key = `${part ?? ''}${broken ? '\0broken' : ''}${overlaps ? '\0overlaps' : ''}`;
           const at = page.parts.get(key) ?? {
             part: part ?? '',
             broken: Boolean(broken),
+            overlaps: Boolean(overlaps),
             texts: new Set(),
             modes: new Set(),
             whole: true,
@@ -758,6 +816,7 @@ export async function pictures(project, shots, modes) {
     // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
     cutShort: cutShortNotes(),
+    lowContrast: faintNotes(),
   };
 }
 
@@ -876,7 +935,9 @@ export function themeImageNotes(ctx, slug) {
     else if (named.kind === 'missing')
       notes.set(
         named.ref,
-        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+        named.ref.startsWith('/')
+          ? `${named.ref} was not found in ${shown(ctx.project.cwd, path.join(at.root, 'public'))}/, where a path from the site's root is read, so neither the previews nor the app show it.`
+          : `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
       );
     else if (named.kind === 'not-file')
       notes.set(
@@ -898,6 +959,23 @@ export function themeImageNotes(ctx, slug) {
     }
   }
   return [...notes.values()];
+}
+
+/**
+ * The open fonts a set's families name whose package is not installed, each
+ * with the line that installs it: until then the pictures and the app draw
+ * the next font in the stack.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Array<{family: string, run: string[]}>}
+ */
+export function fontsNotLoaded(ctx, data) {
+  return fontPackages(ctx, data)
+    .filter(p => !p.installed)
+    .map(p => ({
+      family: p.family,
+      run: [installLine(ctx.project.cwd, [p.pkg])],
+    }));
 }
 
 /**

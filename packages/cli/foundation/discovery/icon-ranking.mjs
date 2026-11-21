@@ -87,12 +87,16 @@ import {iconIdOf} from '../text/icon-id.mjs';
 /** @typedef {import('../../api/icon/icon.type.mjs').IconMatchEntry} IconMatchEntry */
 
 /**
- * The import line for one export.
+ * The import line for one export, under `local` when that name differs from
+ * the export's.
  * @param {string} exportName
  * @param {string} module
+ * @param {string} [local]
  */
-export function importLine(exportName, module) {
-  return `import {${exportName}} from '${module}';`;
+export function importLine(exportName, module, local = exportName) {
+  const binding =
+    local === exportName ? exportName : `${exportName} as ${local}`;
+  return `import {${binding}} from '${module}';`;
 }
 
 /**

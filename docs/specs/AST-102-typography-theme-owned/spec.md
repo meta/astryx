@@ -129,9 +129,8 @@ the person's device.
     browsers are unverified, and macOS Safari at its default text size is a
     recorded follow-up verification.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`
-    FR1's block size, `component:Token` FR1's element size, and InputGroup's
-    row height in `family:input-fields`, so a larger label can overflow; those
-    records treat their sizes as minimums under FR4.
+    FR1's block size and `component:Token` FR1's element size, so a larger
+    label can overflow; those records treat their sizes as minimums under FR4.
 
 ## Verification
 

@@ -12,6 +12,7 @@ import {
   astryxIconDefinitions,
   findLocalIconSet,
   loadIconSets,
+  meaningWithFallbacks,
   templateIconMeanings,
 } from '../_adapter.mjs';
 import {oneNamedSet} from '../_records.mjs';
@@ -41,14 +42,7 @@ export async function iconDefinitions({cwd, set: selector}) {
         ...(doc.group ? {group: doc.group} : {}),
         ...(doc.replaces ? {replaces: doc.replaces} : {}),
         templates: templates.get(doc.name) ?? 0,
-        ...(checked
-          ? {
-              mapped: Object.prototype.hasOwnProperty.call(
-                checked.map,
-                doc.name,
-              ),
-            }
-          : {}),
+        ...(checked ? mappedBy(checked.map, doc.name) : {}),
       })),
     },
   };
@@ -82,4 +76,19 @@ async function checkedSet(cwd, selector) {
   const choice = loaded?.choice;
   if (choice?.status === 'selected' && choice.set) return entry(choice.set);
   return local ? entry(local.set) : null;
+}
+
+/**
+ * Whether a set's `map` names a definition, and the fallback (FR23) its
+ * icons draw by when it does not.
+ * @param {Record<string, string>} map
+ * @param {string} name
+ * @returns {{mapped: boolean, fallback?: string}}
+ */
+function mappedBy(map, name) {
+  if (Object.hasOwn(map, name)) return {mapped: true};
+  const fallback = meaningWithFallbacks(name)
+    .slice(1)
+    .find(each => Object.hasOwn(map, each));
+  return fallback ? {mapped: false, fallback} : {mapped: false};
 }

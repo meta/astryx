@@ -108,8 +108,15 @@ async function fadedSides(strip: Locator): Promise<Sides> {
     }
     const isClear = (stop: string) =>
       /^(transparent|rgba\(0, 0, 0, 0\))/.test(stop);
-    const first = isClear(stops[0]);
-    const last = isClear(stops[stops.length - 1]);
+    // A stop's position follows its colour. An edge fades only when its clear
+    // stop and the stop beside it sit apart; at one position the clear stop
+    // paints nothing.
+    const position = (stop: string) =>
+      stop.replace(/^(transparent|rgba?\([^)]*\))\s*/, '');
+    const fades = (clear: string, next: string) =>
+      isClear(clear) && position(clear) !== position(next);
+    const first = fades(stops[0], stops[1]);
+    const last = fades(stops[stops.length - 1], stops[stops.length - 2]);
     return leftward ? {left: last, right: first} : {left: first, right: last};
   });
 }

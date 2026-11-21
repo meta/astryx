@@ -21,6 +21,7 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from '../../packages/cli/api/render/render.mjs';
+import {renderPage} from '../../packages/cli/foundation/render/render-page.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -177,6 +178,7 @@ const ROUTES_LAZY = `document.addEventListener('click', e => {
   e.preventDefault();
   window.dispatchEvent(new Event('lazy'));
 }, true);
+export {};
 `;
 
 // A page that registers its own click and key handlers the ways pages do: one
@@ -218,6 +220,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `;
 
 // What a viewer may do in the frame it shows a file in: cancel every link to a
@@ -674,6 +677,317 @@ describe.runIf(BROWSER_STEP)(
       } finally {
         await context.close();
       }
+    }, 120_000);
+  },
+);
+
+/** A page that shows images from the web, some only after a click. */
+const REMOTE_PAGE = `import {useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+
+const stripe = 'https://images.example.com/stripe.png';
+const hero = 'https://images.example.com/hero.png';
+const team = {logo: 'https://images.example.com/40'};
+
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <div data-probe="stripe" style={{backgroundImage: \`url(\${stripe})\`, width: 20, height: 20}} />
+      <Button label="Show" onClick={() => setOpen(true)} />
+      {open && (
+        <section>
+          <a href={hero}><img src={hero} alt="Hero" width={10} height={10} /></a>
+          <p data-probe="text">{hero}</p>
+          <img src={\`\${team.logo}?u=alex\`} alt="Alex" width={10} height={10} />
+          <div data-probe="later" style={{backgroundImage: \`url(\${hero})\`, width: 20, height: 20}} />
+        </section>
+      )}
+    </main>
+  );
+}
+`;
+
+/** One pixel, the image every remote address answers with. */
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+describe.runIf(BROWSER_STEP)(
+  'a rendered page with images from the web, in a viewer that blocks the network',
+  () => {
+    /** @type {string} */
+    let home;
+    /** @type {any} */
+    let browser;
+
+    beforeAll(async () => {
+      home = makeLinkedFixture('astryx-render-remote-browser-', [
+        '@astryxdesign',
+        '@stylexjs',
+        'react',
+        'react-dom',
+      ]);
+      browser = await chromium.launch();
+    }, 120_000);
+
+    afterAll(async () => {
+      await browser?.close();
+      if (home) removeLinkedFixture(home);
+    });
+
+    it('draws each carried image from its data once the script runs, and keeps links, text and other queries as written', async () => {
+      const file = path.join(home, 'page.tsx');
+      fs.writeFileSync(file, REMOTE_PAGE);
+      const page = await renderPage(file, {
+        cwd: home,
+        remoteImages: {
+          fetch: async () =>
+            new Response(PIXEL, {headers: {'content-type': 'image/png'}}),
+        },
+      });
+      expect(page.remoteImages?.fetched).toEqual(
+        expect.arrayContaining([
+          'https://images.example.com/stripe.png',
+          'https://images.example.com/hero.png',
+          'https://images.example.com/40',
+        ]),
+      );
+      const context = await browser.newContext({
+        viewport: {width: 1024, height: 900},
+      });
+      /** @type {string[]} */
+      const asked = [];
+      await context.route('**/*', (/** @type {any} */ route) => {
+        asked.push(route.request().url());
+        return route.request().url().startsWith('about:')
+          ? route.continue()
+          : route.abort();
+      });
+      try {
+        const viewer = await context.newPage();
+        const framed = page.html.replace(
+          '<head>',
+          `<head><meta http-equiv="Content-Security-Policy" content="${VIEWER_POLICY}">`,
+        );
+        await viewer.setContent(
+          `<!doctype html><body style="margin:0"><iframe sandbox="allow-scripts" style="border:0;width:1024px;height:900px" srcdoc="${framed
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')}"></iframe></body>`,
+        );
+        const frame = viewer
+          .frames()
+          .find((/** @type {any} */ f) => f !== viewer.mainFrame());
+        const scope = viewer.frameLocator('iframe');
+        // The click works once the script has drawn the page.
+        await expect
+          .poll(
+            async () => {
+              await scope.getByRole('button', {name: 'Show'}).click();
+              return scope.getByRole('img', {name: 'Hero'}).count();
+            },
+            {timeout: 20_000},
+          )
+          .toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const seen = await frame.evaluate(() => {
+          const hero = /** @type {HTMLImageElement} */ (
+            document.querySelector('img[alt="Hero"]')
+          );
+          const alex = /** @type {HTMLImageElement} */ (
+            document.querySelector('img[alt="Alex"]')
+          );
+          const background = (/** @type {string} */ probe) =>
+            getComputedStyle(
+              /** @type {Element} */ (
+                document.querySelector(`[data-probe="${probe}"]`)
+              ),
+            ).backgroundImage;
+          return {
+            heroSrc: hero.getAttribute('src'),
+            heroDrawn: hero.complete && hero.naturalWidth > 0,
+            alexSrc: alex.getAttribute('src'),
+            link: document.querySelector('a')?.getAttribute('href'),
+            text: document.querySelector('[data-probe="text"]')?.textContent,
+            stripe: background('stripe'),
+            later: background('later'),
+          };
+        });
+        expect(seen.heroSrc?.startsWith('data:image/png;base64,')).toBe(true);
+        expect(seen.heroDrawn).toBe(true);
+        expect(seen.stripe).toContain('data:image/png;base64,');
+        expect(seen.later).toContain('data:image/png;base64,');
+        expect(seen.link).toBe('https://images.example.com/hero.png');
+        expect(seen.text).toBe('https://images.example.com/hero.png');
+        // Another query can name another image: it keeps the page's address.
+        expect(seen.alexSrc).toBe('https://images.example.com/40?u=alex');
+        // Opened with no viewer policy, every image the page asks for
+        // reaches the network layer: an address with another query does,
+        // and no carried address does.
+        const bare = await context.newPage();
+        asked.length = 0;
+        await bare.setContent(page.html);
+        await expect
+          .poll(
+            async () => {
+              await bare.getByRole('button', {name: 'Show'}).click();
+              return bare.getByRole('img', {name: 'Hero'}).count();
+            },
+            {timeout: 20_000},
+          )
+          .toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        expect(asked).toContain('https://images.example.com/40?u=alex');
+        for (const url of [
+          'https://images.example.com/stripe.png',
+          'https://images.example.com/hero.png',
+          'https://images.example.com/40',
+        ])
+          expect(asked).not.toContain(url);
+      } finally {
+        await context.close();
+      }
+    }, 300_000);
+  },
+);
+
+describe.runIf(BROWSER_STEP)(
+  'a light-only theme in a dark viewer',
+  () => {
+    /** @type {string} */
+    let home;
+    /** @type {any} */
+    let browser;
+
+    /**
+     * A built theme package with no colorModes export: its module and the
+     * stylesheet that scopes its tokens.
+     * @param {string} name
+     * @param {string} css
+     */
+    const themePackage = (name, css) => {
+      const dir = path.join(home, 'node_modules', '@acme', name);
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({name: `@acme/${name}`, version: '1.0.0', type: 'module', main: 'index.js'}),
+      );
+      fs.writeFileSync(
+        path.join(dir, 'index.js'),
+        `export const theme = {name: '${name}', __built: true, tokens: {}};\n`,
+      );
+      fs.writeFileSync(path.join(dir, 'theme.css'), css);
+    };
+
+    /**
+     * Export a page under the theme, and read the page's colors in a
+     * Chromium that prefers dark.
+     * @param {string} name
+     */
+    const colorsInDark = async name => {
+      fs.writeFileSync(
+        path.join(home, `${name}.tsx`),
+        `import {Theme} from '@astryxdesign/core/theme';
+import {theme} from '@acme/${name}';
+import '@acme/${name}/theme.css';
+export default function Page() {
+  return (<Theme theme={theme}><main><h1>Saved notes</h1></main></Theme>);
+}
+`,
+      );
+      await render(`${name}.tsx`, {cwd: home, out: `${name}.html`});
+      const context = await browser.newContext({viewport: {width: 800, height: 600}});
+      try {
+        const page = await context.newPage();
+        await page.emulateMedia({colorScheme: 'dark'});
+        await page.setContent(fs.readFileSync(path.join(home, `${name}.html`), 'utf8'));
+        return await page.evaluate(() => {
+          const root = getComputedStyle(document.documentElement);
+          return {
+            scheme: root.colorScheme,
+            background: root.backgroundColor,
+            text: getComputedStyle(/** @type {Element} */ (document.querySelector('h1'))).color,
+          };
+        });
+      } finally {
+        await context.close();
+      }
+    };
+
+    beforeAll(async () => {
+      home = makeLinkedFixture('astryx-render-light-only-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
+      themePackage('retro', '[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;--color-text-primary:#000000}');
+      themePackage('duo', '[data-astryx-theme="duo"]{--color-background-body:light-dark(#ffffff,#111111)}');
+      browser = await chromium.launch();
+    }, 120_000);
+
+    afterAll(async () => {
+      await browser?.close();
+      if (home) removeLinkedFixture(home);
+    });
+
+    it('stays light: the text sits on the theme\'s light page color, not the viewer\'s dark canvas', async () => {
+      const colors = await colorsInDark('retro');
+      expect(colors.scheme).toBe('light');
+      expect(colors.background).toBe('rgb(192, 192, 192)');
+      // Dark text: each channel well below the page color's.
+      const channels = (colors.text.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+      expect(Math.max(...channels)).toBeLessThan(100);
+    }, 120_000);
+
+    it('keeps a dark-only theme dark: Core\'s track and fill colors resolve to their dark values', async () => {
+      fs.cpSync(
+        path.join(REPO_ROOT, 'packages/cli/assets/templates/themes/gothic'),
+        path.join(home, 'gothic'),
+        {recursive: true},
+      );
+      // The template's icons come from lucide-react, which the theme package lists.
+      const lucide = path.dirname(
+        createRequire(path.join(REPO_ROOT, 'packages/themes/gothic/package.json')).resolve('lucide-react/package.json'),
+      );
+      fs.mkdirSync(path.join(home, 'gothic/node_modules'), {recursive: true});
+      fs.symlinkSync(lucide, path.join(home, 'gothic/node_modules/lucide-react'), 'junction');
+      const {spawnSync} = await import('node:child_process');
+      const built = spawnSync(
+        process.execPath,
+        [path.join(REPO_ROOT, 'packages/cli/clients/cli/bin/astryx.mjs'), 'theme', 'build', 'gothic/gothicTheme.ts'],
+        {cwd: home, encoding: 'utf8', timeout: 120_000},
+      );
+      expect(built.status, built.stderr).toBe(0);
+      fs.writeFileSync(
+        path.join(home, 'gothic-page.tsx'),
+        `import {Theme} from '@astryxdesign/core/theme';
+import {gothicTheme} from './gothic/gothic.js';
+import './gothic/gothic.css';
+export default function Page() {
+  return (<Theme theme={gothicTheme}><main><h1>Saved notes</h1><p data-probe="track" style={{backgroundColor: 'var(--color-track)'}}>Track</p></main></Theme>);
+}
+`,
+      );
+      await render('gothic-page.tsx', {cwd: home, out: 'gothic-page.html'});
+      for (const colorScheme of /** @type {const} */ (['dark', 'light'])) {
+        const context = await browser.newContext({viewport: {width: 800, height: 600}});
+        try {
+          const page = await context.newPage();
+          await page.emulateMedia({colorScheme});
+          await page.setContent(fs.readFileSync(path.join(home, 'gothic-page.html'), 'utf8'));
+          const seen = await page.evaluate(() => ({
+            scheme: getComputedStyle(document.documentElement).colorScheme,
+            track: getComputedStyle(/** @type {Element} */ (document.querySelector('[data-probe="track"]'))).backgroundColor,
+          }));
+          // Core's track is light-dark(#CCD3DB, #5A5E66): its dark value in any viewer.
+          expect(seen, colorScheme).toEqual({scheme: 'dark', track: 'rgb(90, 94, 102)'});
+        } finally {
+          await context.close();
+        }
+      }
+    }, 240_000);
+
+    it('leaves a two-mode theme to follow the viewer, as before', async () => {
+      const colors = await colorsInDark('duo');
+      expect(colors.scheme).toBe('light dark');
+      expect(colors.background).toBe('rgba(0, 0, 0, 0)');
     }, 120_000);
   },
 );

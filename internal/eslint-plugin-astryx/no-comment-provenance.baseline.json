@@ -48,8 +48,6 @@
     "spec quote"
   ],
   "packages/core/src/Banner/Banner.tsx": [
-    "#4166",
-    "#4166",
     "FR3",
     "FR3",
     "INV11",
@@ -390,7 +388,6 @@
     "FR7",
     "INV1",
     "architecture:interaction-modality",
-    "component:DropdownMenu/DEC-1",
     "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059"
@@ -520,11 +517,7 @@
     "spec:AST-059"
   ],
   "packages/core/src/Layer/useLayer.tsx": [
-    "#3389",
-    "#3671",
     "#4803",
-    "FR1",
-    "FR1",
     "FR1",
     "FR1",
     "FR3",
@@ -533,9 +526,6 @@
     "FR4",
     "FR4",
     "FR4",
-    "FR4",
-    "FR4",
-    "FR5",
     "FR5",
     "FR5",
     "FR6",
@@ -547,12 +537,6 @@
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec:AST-059",
-    "spec:AST-059",
-    "spec:AST-059",
-    "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059",

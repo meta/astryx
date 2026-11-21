@@ -188,7 +188,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. Beside each
   theme, the package exports `colorModes`, the modes the theme draws:
   `['light', 'dark']`, or `['light']` or `['dark']` for a theme that draws
-  one mode on every page. A theme that exports none draws both. The font
+  one mode on every page. In an app, a theme that exports none draws both; a
+  rendered file can still keep such a theme in one mode by its root colors
+  (`architecture:cli-surface` DEC-19). The font
   stylesheet owns loading its fonts: it may ship the font files with
   `@font-face` rules or import them from a font service. An import MUST fail,
   naming what is missing, when a theme has no resolvable built module and
@@ -677,7 +679,26 @@ such a setting still opens. The check passes only when every local theme's
 build check ran. A file that says a tool generates it (a marker in its
 leading comments) is not where such a fix goes: its settings are one note
 per file, with their count and the tool, in `theme build` and in this check
-alike, and `settingIssues` still lists each.
+alike, and `settingIssues` still lists each. A saved `only` on a part styled
+on its own (one no group spreads to) is read as absent, with one note, by the
+one rule `set --only` follows, so a theme saved with one still opens; read so,
+an entry at the same place as a later entry of the same setting gives way to
+the later one, the one the build shows.
+
+The editor writes a state so that the build takes it. A state word with
+exactly one reading among a part's states (`pressed` where the part's press is
+`active`) is written as that state, with one note. A state a part shows only
+through the element it rides (a list item's `selected`, which its item marks)
+is written as that element's attribute inside the part's rule (plain or
+variant).
+
+A theme whose palette recipe the editor does not know (a newer CLI's) keeps
+its palette and settings module exactly as saved, and that CLI's build of the
+same settings counts as current; on a theme not edited by hand, a change that
+leaves its colors alone keeps the shades it shows, and a change to what its palette is made from (a color
+dial, the vibrancy or the whole-theme accent token) is refused, saying what
+still works, with no update step, as a CLI that makes that recipe may not be
+released.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 
@@ -703,6 +724,23 @@ a copy the builder can see in full and undo with `theme remove`.
 Rejected: routing the shared copy through `theme eject`, the author's fork verb.
 Rejected: installing every imported package, which runs scripts the builder never chose.
 Rejected: building or renaming a shared theme, which runs its code during an add.
+
+### DEC-13 — An editor-made theme's corners move its chat corners with its containers
+
+**Reference:** `spec:AST-050/DEC-13`
+**Decider:** `josephfarina`, `2026-11-18`
+
+Core's chat radius (`--radius-chat`, read by a chat composer, its drawer, and
+message bubbles) defaults to the container radius, and the bundled themes pin
+a chat radius of their own. When a theme the editor makes moves its corners
+with the whole-theme corners dial, it sets the chat radius to
+`var(--radius-container)`, Core's own default, so its chat corners follow its
+container corners, including an exact container radius set after the dial. A
+corners rung set on one part that reads the chat radius gives that part the
+container step.
+
+Rejected: the page radius; Core's chat default is the container radius.
+Rejected: a copied pixel value, which drifts from a container radius set later.
 
 ## Open questions
 

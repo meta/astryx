@@ -80,7 +80,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "A `{@@pm}` token is a verb, its names, and the flags it takes. Each row below runs the same way in every package manager; the CLI writes the reader's own.",
+          text: "A `{@@pm}` token is a verb, its names, and the flags it takes. Each row below runs the same way in every package manager; the CLI writes the reader's own. Write the package name alone in a `{@@pm}` install. When a docs, component or template page is read in a project that names a Core release, the CLI shows `@astryxdesign/core`, `@astryxdesign/cli` and each package Astryx releases with Core, such as a theme, at that release, saved exactly when the project pins Core exactly and every package the step adds is one of these. Every other package stays as you wrote it.",
         },
         {
           type: 'table',

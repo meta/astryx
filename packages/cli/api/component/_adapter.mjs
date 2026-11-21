@@ -21,6 +21,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {fillTemplatePlaceholders} from '../../foundation/discovery/template-placeholders.mjs';
 import {
   coreContentDir as answerCoreContentDir,
   discoverExternalPackages,
@@ -1121,4 +1122,14 @@ async function listingParent(block, coreDir, cwd) {
     }
   }
   return null;
+}
+
+/**
+ * A template source as a showcase hands it out: each icon placeholder import
+ * becomes the library import that draws it (AST-084 FR22).
+ * @param {string} source
+ * @returns {string}
+ */
+export function showcaseSource(source) {
+  return fillTemplatePlaceholders(source).source;
 }

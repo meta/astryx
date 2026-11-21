@@ -76,6 +76,10 @@ import {
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {
+  componentHasAugmentableInterface as componentDeclaresInterface,
+  resolveAugmentationTarget as resolveCoreAugmentationTarget,
+} from '../../../foundation/discovery/core-augmentation-points.mjs';
+import {
   CLI_ROOT,
   findCoreDir,
   findInstalledPackage,
@@ -112,7 +116,7 @@ import {
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
 } from './font-warning.mjs';
-import {interceptCore} from './core-interception.mjs';
+import {interceptCore, withVirtualModules} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {extendsOf, moduleBindings, themeObjectOf} from './theme-object.mjs';
 import {generatedSource} from '../../../foundation/fs/file-protection.mjs';
@@ -133,7 +137,11 @@ import {
   sourceInputField,
   sourceTypography,
 } from './input-fields.mjs';
-import {styleKeyProblems} from './style-keys.mjs';
+import {
+  holdsOnlyVariantMaps,
+  styleKeyProblems,
+  withoutVariantMaps,
+} from './style-keys.mjs';
 import {
   bigIntAsText,
   writtenPrimitives,
@@ -1479,7 +1487,10 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `ownsOutputs` says the caller made the folder the outputs go into and owns
  * every file there named like one (the theme editor's theme folder), so a
  * damaged or half-written output is replaced, never refused.
- * @typedef {{ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
+ * `warnings` takes each warning message of the build, in check mode too,
+ * where the receipt carries none (the theme editor, recording a source as
+ * built without building it, keeps the warnings that build gives).
+ * @typedef {{warnings?: string[], ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
  */
 
 /**
@@ -1674,15 +1685,20 @@ function assertOutputsReplaceable(
     // that source.
     const owner = /** @type {{source?: string}} */ (write).source ?? filePath;
     if (key === sourceKey) {
+      // The module is named after the theme, so a .js source of that name
+      // (brand.js for theme brand) has its built module at its own path:
+      // only another folder takes every output.
+      const free = freeOutPath(writes);
       throw new AstryxError(
-        `The output ${rel(write.dest)} is the theme source itself. Pick another --out.`,
-        [
-          {
-            // The same build without --out (its --icons-specifier kept).
-            name: beside.name,
-            reason: 'write the outputs beside the source',
-          },
-        ],
+        `The output ${rel(write.dest)} is the theme source itself, so the build does not write it. Build the outputs into another folder with --out${free ? `, such as --out ${rel(free)}` : ''}.`,
+        free && rerun
+          ? [
+              {
+                name: rerun(rel(free)),
+                reason: 'a folder where no output of this build exists yet',
+              },
+            ]
+          : [],
         ERROR_CODES.ERR_THEME_INVALID,
       );
     }
@@ -1932,22 +1948,6 @@ function toIdentifier(name) {
 }
 
 /**
- * Convert a kebab-case component name to PascalCase.
- * e.g. 'button' → 'Button', 'progress-bar' → 'ProgressBar', 'avatar-status-dot' → 'AvatarStatusDot'
- * @param {string} name
- * @returns {string}
- */
-function toPascalCase(name) {
-  return name
-    .split('-')
-    .map(
-      (/** @type {string} */ part) =>
-        part.charAt(0).toUpperCase() + part.slice(1),
-    )
-    .join('');
-}
-
-/**
  * The known values index of each Core `src` folder.
  * @type {Map<string | null, Promise<Record<string, Record<string, string[]>>>>}
  */
@@ -2033,228 +2033,31 @@ function coreSrcPath() {
 }
 
 /**
- * Read the type declarations `@astryxdesign/core/<Component>` exposes so we can
- * check whether a given augmentation-target interface actually exists before
- * generating a module augmentation against it.
- *
- * Reads the shipped `dist/<Component>/index.d.ts` (what a consumer's TypeScript
- * actually sees), falling back to the `src/<Component>/index.ts` in the
- * monorepo. Returns the file contents, or '' if nothing is found.
- */
-/** @type {Map<string, string>} */
-const _componentDeclCache = new Map();
-/**
- * @param {string} pascalName
- * @param {{includeTypes?: boolean}} [options]
- * @returns {string}
- */
-function readComponentDeclarations(pascalName, options = {}) {
-  const includeTypes = options.includeTypes === true;
-  const coreRoot = resolveCoreRoot();
-  const cacheKey = `${coreRoot}\0${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
-  if (_componentDeclCache.has(cacheKey)) {
-    return _componentDeclCache.get(cacheKey) ?? '';
-  }
-  let contents = '';
-  if (coreRoot) {
-    const candidateSets = [
-      [path.join(coreRoot, 'dist', pascalName, 'index.d.ts')],
-      [path.join(coreRoot, 'src', pascalName, 'index.ts')],
-    ];
-    if (includeTypes) {
-      candidateSets[0].push(
-        path.join(coreRoot, 'dist', pascalName, 'types.d.ts'),
-      );
-      candidateSets[1].push(path.join(coreRoot, 'src', pascalName, 'types.ts'));
-    }
-    for (const files of candidateSets) {
-      if (fs.existsSync(files[0])) {
-        for (const file of files) {
-          try {
-            if (fs.existsSync(file)) {
-              contents += fs.readFileSync(file, 'utf-8') + '\n';
-            }
-          } catch {
-            // ignore
-          }
-        }
-        if (contents) break;
-      }
-    }
-  }
-  _componentDeclCache.set(cacheKey, contents);
-  return contents;
-}
-
-/** @type {Map<string, Array<{moduleName: string, interfacePrefix: string}>>} */
-const _augmentationTargetCache = new Map();
-
-/**
- * Resolve a rendered theme class token (the key without `astryx-`) to candidate
- * public core subpaths and interface prefixes that may own its augmentable prop
- * maps. Some tokens are subtargets documented by a parent component
- * (`avatar-status-dot` augments `@astryxdesign/core/Avatar`). Component docs are
- * the source of truth for the target token → owning component relationship.
- *
- * @param {string} componentName
- * @returns {Promise<Array<{moduleName: string, interfacePrefix: string}>>}
- */
-async function resolveAugmentationTargetCandidates(componentName) {
-  const coreSrc = coreSrcPath();
-  const cacheKey = `${coreSrc}\0${componentName}`;
-  if (_augmentationTargetCache.has(cacheKey)) {
-    return /** @type {Array<{moduleName: string, interfacePrefix: string}>} */ (
-      _augmentationTargetCache.get(cacheKey)
-    );
-  }
-
-  const fallback = [
-    {
-      moduleName: toPascalCase(componentName),
-      interfacePrefix: toPascalCase(componentName),
-    },
-  ];
-
-  if (!coreSrc || !fs.existsSync(coreSrc)) {
-    _augmentationTargetCache.set(cacheKey, fallback);
-    return fallback;
-  }
-
-  /** @type {Array<{moduleName: string, interfacePrefix: string}>} */
-  const matches = [];
-  /** @type {Set<string>} */
-  const seen = new Set();
-
-  /**
-   * @param {string} moduleName
-   * @param {string} interfacePrefix
-   */
-  function addCandidate(moduleName, interfacePrefix) {
-    const key = `${moduleName}:${interfacePrefix}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    matches.push({moduleName, interfacePrefix});
-  }
-
-  const {owners} = await coreThemeValues(coreSrc);
-  for (const {moduleName, components} of Object.hasOwn(owners, componentName)
-    ? owners[componentName]
-    : []) {
-    // Try the exact rendered token first for documented subtargets such as
-    // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
-    // component name (for example, ProgressBar for progress-bar-fill).
-    addCandidate(moduleName, toPascalCase(componentName));
-    addCandidate(moduleName, moduleName);
-    for (const name of components) addCandidate(moduleName, name);
-  }
-  // A target documented by a parent component may also have its own public
-  // subpath and augmentation interface (Heading is documented under Text but
-  // owns @astryxdesign/core/Heading). Keep the direct-name candidate after
-  // discovered owners so both shapes are reachable without guessing which one
-  // the source tree uses.
-  for (const candidate of fallback) {
-    addCandidate(candidate.moduleName, candidate.interfacePrefix);
-  }
-  const resolved = matches;
-  _augmentationTargetCache.set(cacheKey, resolved);
-  return resolved;
-}
-
-/**
- * Determine whether `@astryxdesign/core/<Component>` exports an interface named
- * `interfaceName` that can be augmented via module augmentation.
- *
- * Only interfaces are extension points — closed literal-union types (e.g.
- * `HeadingType`, `ButtonSize`) are NOT augmentable, so a generated augmentation
- * against them is dead code. We check that the name is exported (directly or
- * re-exported) as a type/interface.
+ * Whether the Core the build reads declares `interfaceName` in
+ * `@astryxdesign/core/<Component>` ({@link componentDeclaresInterface}).
  * @param {string} pascalName
  * @param {string} interfaceName
  * @param {{includeTypes?: boolean}} [options]
  * @returns {boolean}
  */
 function componentHasAugmentableInterface(pascalName, interfaceName, options) {
-  const decl = readComponentDeclarations(pascalName, options);
-  if (!decl) return false;
-  // Require an actual interface declaration in this public subpath, not just a
-  // type re-export. Module augmentation only widens consumers that import the
-  // module where the interface is declared; augmenting a barrel that re-exports
-  // the type (e.g. Field re-exporting FieldStatusVariantMap) creates a dead
-  // sibling interface for consumers of the real FieldStatus subpath.
-  const re = new RegExp(String.raw`\binterface\s+${interfaceName}\b`);
-  return re.test(decl);
-}
-
-/**
- * Public augmentable maps whose axis requests artwork instead of styling.
- * `Icon.variant` selects a theme's icon artwork, so it has no component styling
- * map (architecture:component-theming-surface INV14): a `components` key on it
- * never enrolls a value or generates an augmentation of its map.
- */
-const ARTWORK_REQUEST_MAPS = new Set(['IconVariantMap']);
-
-/**
- * Whether a theme's component styling keys may enroll values in `interfaceName`
- * on `@astryxdesign/core/<Component>`.
- * @param {string} pascalName
- * @param {string} interfaceName
- * @returns {boolean}
- */
-function isComponentValueAugmentationPoint(pascalName, interfaceName) {
-  return (
-    !ARTWORK_REQUEST_MAPS.has(interfaceName) &&
-    componentHasAugmentableInterface(pascalName, interfaceName)
+  return componentDeclaresInterface(
+    resolveCoreRoot(),
+    pascalName,
+    interfaceName,
+    options,
   );
 }
 
 /**
- * Extension points whose public module and interface do not follow the usual
- * `<Component><Prop>Map` convention. TextType reads CustomTextTypes from the
- * theme module, so both classification and declaration emission must resolve
- * this same public augmentation point.
- *
- * @type {Record<string, {moduleName: string, interfaceName: string, includeTypes?: boolean}>}
- */
-const AUGMENTATION_OVERRIDES = {
-  'text.type': {
-    moduleName: 'theme',
-    interfaceName: 'CustomTextTypes',
-    includeTypes: true,
-  },
-};
-
-/**
- * Resolve the public module/interface that can widen a component prop value.
+ * The public module/interface that can widen a component prop value, in the
+ * Core the build reads ({@link resolveCoreAugmentationTarget}).
  * @param {string} component
  * @param {string} prop
  * @returns {Promise<{moduleName: string, interfaceName: string}|null>}
  */
-async function resolveAugmentationTarget(component, prop) {
-  const override = AUGMENTATION_OVERRIDES[`${component}.${prop}`];
-  if (override) {
-    return componentHasAugmentableInterface(
-      override.moduleName,
-      override.interfaceName,
-      {includeTypes: override.includeTypes},
-    )
-      ? {moduleName: override.moduleName, interfaceName: override.interfaceName}
-      : null;
-  }
-
-  const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
-  const target = (await resolveAugmentationTargetCandidates(component)).find(
-    candidate =>
-      isComponentValueAugmentationPoint(
-        candidate.moduleName,
-        `${candidate.interfacePrefix}${propPascal}Map`,
-      ),
-  );
-  return target
-    ? {
-        moduleName: target.moduleName,
-        interfaceName: `${target.interfacePrefix}${propPascal}Map`,
-      }
-    : null;
+function resolveAugmentationTarget(component, prop) {
+  return resolveCoreAugmentationTarget(resolveCoreRoot(), component, prop);
 }
 
 /**
@@ -3344,7 +3147,7 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
         ? jitiError
         : new Error(`it threw ${thrownText(jitiError)}`);
     throw new Error(
-      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
+      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}${await baseImportHint(filePath, je)}`,
       {cause: jitiError},
     );
   }
@@ -3416,15 +3219,12 @@ export async function loadThemeExport(file, {cwd = process.cwd(), base} = {}) {
       base.exportName,
     )
   ).theme;
-  const withBase = {
-    ...recorder,
-    modules: {
-      ...recorder.modules,
-      ...Object.fromEntries(
-        base.specifiers.map(s => [s, {[base.exportName]: shared}]),
-      ),
-    },
-  };
+  const withBase = withVirtualModules(
+    recorder,
+    Object.fromEntries(
+      base.specifiers.map(s => [s, {[base.exportName]: shared}]),
+    ),
+  );
   const again = await extractThemeDefinition(
     filePath,
     withBase,
@@ -3525,6 +3325,53 @@ function thrownText(value) {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * The import that fixes a base Core refuses as no theme, when the theme
+ * extends a package's default export or the package as one object: a theme
+ * package exports its themes by name, and the hint names them.
+ * @param {string} filePath
+ * @param {Error} error
+ * @returns {Promise<string>} '' when the base is no such import
+ */
+async function baseImportHint(filePath, error) {
+  if (!/`extends` must be a theme from defineTheme\(\)/.test(error.message))
+    return '';
+  const binding = themeBaseBinding(filePath, 'default');
+  const specifier = binding?.importPath;
+  if (
+    !specifier ||
+    specifier.startsWith('.') ||
+    path.isAbsolute(specifier) ||
+    (binding.exportName !== 'default' && binding.exportName !== '*')
+  )
+    return '';
+  /** @type {string[]} */
+  let themes = [];
+  try {
+    const resolved = createRequire(filePath).resolve(specifier);
+    const mod = await import(pathToFileURL(resolved).href);
+    themes = Object.entries(mod)
+      .filter(
+        ([name, value]) =>
+          name !== 'default' &&
+          value &&
+          typeof value === 'object' &&
+          typeof value.name === 'string' &&
+          value.tokens &&
+          typeof value.tokens === 'object',
+      )
+      .map(([name]) => name);
+  } catch {
+    // The package's exports are not read: the hint names the form only.
+  }
+  const how =
+    binding.exportName === '*'
+      ? `all of ${specifier} as one object`
+      : `the default export of ${specifier}`;
+  const example = themes[0] ?? '<theme>';
+  return `\nThe theme extends ${how}, which is not a theme: a theme package exports its theme by name${themes.length ? ` (${themes.join(', ')})` : ''}. Import it so: import {${example}} from '${specifier}', and extend ${example}.`;
 }
 
 /**
@@ -4663,6 +4510,9 @@ export function validateComponentOverridesAgainstRegistry(
       const knownProps = knownComponents.propsByKey[component];
       for (const key of Object.keys(rules)) {
         if (key === 'base') continue;
+        // A wrapper of variant maps (`variants: {variant: {…}}`): the
+        // warning on each map names the keys that write it.
+        if (holdsOnlyVariantMaps(rules[key])) continue;
 
         const pairs = key.split('+');
         for (const pair of pairs) {
@@ -5801,6 +5651,9 @@ async function themeBuildInternal(
     // too. A boxed primitive in a part would be written as JSON text (with
     // its quotes), where a token writes its text: it gets its primitive.
     resolvedTheme = writtenPrimitives(resolvedTheme);
+    // A map of values to blocks in a style block is warned at its line with
+    // the keys that write it; Core would only drop it again.
+    resolvedTheme = withoutVariantMaps(resolvedTheme);
 
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;
@@ -6435,6 +6288,7 @@ async function themeBuildInternal(
         );
     }
     warnMissingDeclarations(writes, cwd);
+    handOff.warnings?.push(...warningMessages);
     return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {

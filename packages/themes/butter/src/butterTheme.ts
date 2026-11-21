@@ -52,8 +52,10 @@ const SURFACE_TEXT = {
 };
 
 /**
- * The selector Core's TableRow gives a striped table's painted rows (its
- * even rows, not counting expansion panels); the striped-row rule repeats it.
+ * The selector Core's TableRow gives a striped table's painted rows: its
+ * even rows, not counting expansion panels. The striped-row rule repeats it
+ * under the row's `striped` state, so a plain table's rows keep the text
+ * around them.
  */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
@@ -84,7 +86,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['avatar-group-overflow', 'base'],
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
-  ['table-row', 'base', STRIPED_ROW],
+  ['table-row', 'striped', STRIPED_ROW],
   ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
@@ -739,8 +741,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Progress bar — pale track in light, warm brown in dark. Vivid
-    // semantic fills match the banner colors (Success / Warning / Error).
+    // Progress bar — pale track in light, warm brown in dark. Status fills take
+    // the theme's status roles, which reach 3:1 on that track.
     'progress-bar-track': {
       base: {
         backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),
@@ -748,13 +750,41 @@ export const butterTheme = defineTheme({
     },
     'progress-bar-fill': {
       'variant:success': {
-        backgroundColor: green.light[70],
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: yellow.light[80],
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: red.light[60],
+        backgroundColor: 'var(--color-error)',
+      },
+      // The secondary text color (stop 70) reads under 3:1 on the dark track,
+      // so a neutral or disabled fill takes stop 80 there.
+      'variant:neutral': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+      'variant:disabled': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+    },
+
+    // A status fill is the status color, so its mark takes that status's
+    // on-color.
+    'progress-bar-mark': {
+      'placement:fill+variant:success': {
+        backgroundColor: 'var(--color-on-success)',
+      },
+      'placement:fill+variant:warning': {
+        backgroundColor: 'var(--color-on-warning)',
+      },
+      'placement:fill+variant:error': {
+        backgroundColor: 'var(--color-on-error)',
       },
     },
 

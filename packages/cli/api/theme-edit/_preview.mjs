@@ -53,6 +53,7 @@ import {
   themeFiles,
   APP_COPY_BUILT,
   appCopyNames,
+  groupsOf,
 } from './_settings.mjs';
 import {readRegularFile, writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -60,24 +61,38 @@ import {importPathOf, installLine} from './_project.mjs';
 import {
   COLOR_PROP_PARTS,
   DIRECT,
-  FAMILIES,
   P,
   SHOWCASE_GROUPS,
   wordTable,
 } from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
+import {fillTemplatePlaceholders} from '../../foundation/discovery/template-placeholders.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {PICTURE_TAKEN} from '../../foundation/render/picture-window.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
 import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
+import {LOW_CONTRAST_PREFIX} from '../../foundation/render/drawn-contrast.mjs';
+import {PART_BOXES_PREFIX} from '../../foundation/render/part-boxes.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../assets/templates/pages',
 );
+
+/**
+ * A template page's source as a copy of it reads: icon placeholders filled.
+ * @param {string} template
+ * @returns {string}
+ */
+function templatePageSource(template) {
+  return fillTemplatePlaceholders(
+    fs.readFileSync(path.join(TEMPLATES_DIR, template, 'page.tsx'), 'utf8'),
+  ).source;
+}
 
 /** The groups of the theme-building page, in order. */
 export {SHOWCASE_GROUPS};
@@ -164,21 +179,41 @@ export function familyOf(project, name) {
 }
 
 /**
+ * Whether a section's own page draws a component in a cell of its own. On
+ * the overlays section's page, a part of an overlay (a dialog's header, a
+ * command palette's list) shows inside the overlay it belongs to, never
+ * alone beside it, and inside it only while the overlay is open: that page
+ * stays one or two screens. The whole sheet draws it alone.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {string | null | undefined} group the section drawn, none for the whole sheet
+ */
+export function shownOnSection(project, name, group) {
+  return !(
+    group === 'overlays' &&
+    familyOf(project, name) === 'overlays' &&
+    project.components[name]?.subComponentOf
+  );
+}
+
+/**
  * The sections of the theme-building page whose parts the theme's settings
  * set on their own (`--on badge`, or a group of parts such as `--on
  * inputs`): the components each part names a class of, each in its section. A setting for the whole theme (a color, the
  * corners) sets no section here: the sample page and the open states show
  * it.
- * @param {import('./_project.mjs').ThemeProject} project
+ * A family role (`--on option-rows`) is read from the census, as the
+ * change itself reads it, so the pictured set is what the change touched.
+ * @param {{project: import('./_project.mjs').ThemeProject, C?: any}} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
-export function touchedFamilies(project, data) {
-  // A group (`--on inputs`) sets each of its parts.
+export function touchedFamilies(ctx, data) {
+  const {project} = ctx;
+  // A group (`--on inputs`, `--on option-rows`) sets each of its parts.
+  const groups = groupsOf(ctx);
   const parts = new Set(
-    (data.settings ?? []).flatMap(s =>
-      s.on ? (FAMILIES[s.on] ?? [s.on]) : [],
-    ),
+    (data.settings ?? []).flatMap(s => (s.on ? (groups[s.on] ?? [s.on]) : [])),
   );
   /** @type {Set<string>} */
   const out = new Set();
@@ -189,6 +224,71 @@ export function touchedFamilies(project, data) {
     if (family) out.add(family);
   }
   return [...out];
+}
+
+/** The Astryx control each plain HTML text control is drawn as. */
+const ASTRYX_CONTROLS = Object.freeze({
+  input: 'TextInput',
+  textarea: 'TextArea',
+});
+
+/** The input types a text input draws. */
+const TEXT_TYPES = new Set([
+  '',
+  'text',
+  'email',
+  'search',
+  'url',
+  'tel',
+  'password',
+]);
+
+/**
+ * A value with each plain HTML text control in a doc's sample (a field's
+ * `<input>`) drawn as the Astryx control for it, its label hidden, so the
+ * sheet shows the theme's own control where an app would use one: a bare
+ * browser control shows nothing of the theme. Every other value is the same
+ * object.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withAstryxControls(project, v) {
+  if (Array.isArray(v)) {
+    const out = v.map(x => withAstryxControls(project, x));
+    return out.every((x, i) => x === v[i]) ? v : out;
+  }
+  if (!v || typeof v !== 'object') return v;
+  if (isElement(v)) {
+    const own = /** @type {Record<string, string>} */ (ASTRYX_CONTROLS)[
+      v.__element
+    ];
+    const p = /** @type {Record<string, unknown>} */ (v.props ?? {});
+    if (
+      own &&
+      project.components[own] &&
+      (v.__element !== 'input' || TEXT_TYPES.has(String(p.type ?? '')))
+    )
+      return {
+        __element: own,
+        props: {
+          label: String(p['aria-label'] ?? p.placeholder ?? 'Text'),
+          isLabelHidden: true,
+          ...(p.placeholder != null ? {placeholder: p.placeholder} : {}),
+          ...(p.id != null ? {id: p.id} : {}),
+        },
+      };
+    const props = withAstryxControls(project, v.props);
+    const children = withAstryxControls(project, v.children);
+    return props === v.props && children === v.children
+      ? v
+      : {...v, props, children};
+  }
+  const entries = Object.entries(v);
+  const out = entries.map(([k, x]) => [k, withAstryxControls(project, x)]);
+  return out.every(([, x], i) => x === entries[i][1])
+    ? v
+    : {...v, ...Object.fromEntries(out)};
 }
 
 /**
@@ -293,22 +393,13 @@ function componentItems(project, group) {
     // so it would draw an empty cell: it gets none.
     if (!importPathOf(project, name)) continue;
     const info = project.components[name];
-    // On the overlays section's own page, a part of an overlay (a dialog's
-    // header, a command palette's list) shows inside the overlay it belongs
-    // to, never alone beside it: that page stays one or two screens.
-    if (group === 'overlays' && g === 'overlays' && info?.subComponentOf)
-      continue;
+    if (!shownOnSection(project, name, group)) continue;
     // A deprecated part is not drawn: a theme styles the part that replaces
     // it. An overlay whose playground opens it over the page draws nothing
     // closed (a phone's navigation drawer, slid out of the window): where
-    // the open states draw it open (below), that is its only cell.
+    // the open states draw it open, that is its only cell, on every page.
     if (info?.deprecated) continue;
-    if (
-      (!group || group === 'overlays') &&
-      info?.overlay &&
-      OPEN_SCENES.some(s => s.name === name)
-    )
-      continue;
+    if (info?.overlay && OPEN_SCENES.some(s => s.name === name)) continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
@@ -319,7 +410,13 @@ function componentItems(project, group) {
           // A doc's sample children may name a part by an older name (a
           // stack, a heading): each is drawn by the name Core exports.
           props: /** @type {Record<string, unknown>} */ (
-            withCoreAliases(project, withSampleContent(project, name, v.props))
+            withAstryxControls(
+              project,
+              withCoreAliases(
+                project,
+                withSampleContent(project, name, v.props),
+              ),
+            )
           ),
         }),
         // An overlay shown open is drawn open: Core places a popover,
@@ -414,7 +511,7 @@ function withPages(project, group, items) {
   for (const t of PAGE_TEMPLATES) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
     if (!fs.existsSync(file)) continue;
-    const src = fs.readFileSync(file, 'utf8');
+    const src = templatePageSource(t);
     const pkgs = [...extractImportedPackages(src)].filter(
       pkg => !findNodeModulesPackage(project.cwd, pkg),
     );
@@ -518,9 +615,11 @@ function inParentOf(project, name) {
 }
 
 /**
- * Template page modules the theme-building page imports, copied beside it.
+ * Template page modules the theme-building page imports, written beside it
+ * as a copy of the template writes them: each icon placeholder import is the
+ * library import that draws it.
  * @param {Record<string, import('./_catalog.mjs').Binding>} imports
- * @returns {Array<{name: string, from: string}>}
+ * @returns {Array<{name: string, text: string}>}
  */
 function templateFiles(imports) {
   return Object.values(imports).flatMap(b => {
@@ -529,7 +628,7 @@ function templateFiles(imports) {
       ? [
           {
             name: `templates/${m[1]}.tsx`,
-            from: path.join(TEMPLATES_DIR, m[1], 'page.tsx'),
+            text: templatePageSource(m[1]),
           },
         ]
       : [];
@@ -586,11 +685,19 @@ export function baseFontsSheet(ctx, data) {
   } catch {
     return null;
   }
-  // The families the sheet loads; with the theme's build at hand, the sheet
-  // is imported only while the build still names one of them.
-  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-    decodeURIComponent(m[1].replace(/\+/g, ' ')),
-  );
+  // The families the sheet loads, from a font service request or from its
+  // own `@font-face` rules (a base that ships its font files); with the
+  // theme's build at hand, the sheet is imported only while the build still
+  // names one of them.
+  const faces = fontFaces(text);
+  const families = [
+    ...new Set([
+      ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+        decodeURIComponent(m[1].replace(/\+/g, ' ')),
+      ),
+      ...faces.map(f => f.family),
+    ]),
+  ];
   /** @type {string | null} */
   let built = null;
   try {
@@ -625,6 +732,20 @@ export function baseFontsSheet(ctx, data) {
       weights.set(
         family,
         [...new Set(list)].sort((a, b) => a - b),
+      );
+  }
+  // The weights the sheet's own faces load: one weight each; a range
+  // (`100 900`) is a variable face, every weight in it, so none is listed.
+  for (const family of new Set(faces.map(f => f.family))) {
+    const own = faces.filter(f => f.family === family).map(f => f.weights);
+    if (own.some(w => !w || w[0] !== w[1])) continue;
+    const list = own.flatMap(w => (w ? [w[0]] : []));
+    if (list.length)
+      weights.set(
+        family,
+        [...new Set([...(weights.get(family) ?? []), ...list])].sort(
+          (a, b) => a - b,
+        ),
       );
   }
   return {spec: sheet, families, remote, weights};
@@ -714,19 +835,9 @@ export function fontIndexWeights(ctx, pkg) {
   } catch {
     return null;
   }
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
-    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
-    const nums = value
-      .trim()
-      .replace(/\bnormal\b/gi, '400')
-      .replace(/\bbold\b/gi, '700')
-      .split(/\s+/)
-      .map(Number);
-    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
-    spans.push([nums[0], nums[1] ?? nums[0]]);
-  }
+  const spans = fontFaces(text).flatMap(face =>
+    face.weights ? [face.weights] : [],
+  );
   return spans.length ? spans : null;
 }
 
@@ -2074,7 +2185,7 @@ export async function screenshot(
 }
 
 /**
- * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ * @typedef {{ok: true, file: string, notes?: string[], boxes?: Record<string, Array<[number, number]>>, cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string}} PictureResult
  */
 
 /** The time a batch adds to its browser's bound for each page after the first. */
@@ -2094,8 +2205,9 @@ const PAGE_BOUND_MS = 20_000;
  * took the picture, each with whether its part keeping its width draws it
  * whole; absent when that browser's script measured nothing.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Array<{html: string, png: string, mode: 'light' | 'dark'}>} jobs
- *   absolute paths
+ * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[]}>} jobs
+ *   absolute paths; `boxes`: parts whose drawn sizes the picture measures
+ *   (its result's `boxes`)
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
  * @returns {Promise<PictureResult[]>}
@@ -2202,6 +2314,8 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
           ...pictureFontNotes(out),
         ],
         ...measuredCutShort(out),
+        ...measuredLowContrast(out),
+        ...measuredBoxes(out),
       });
     }
     if (results.length === jobs.length) return results;
@@ -2240,6 +2354,92 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
         },
   );
   return results;
+}
+
+/**
+ * How much each part's drawn size changes from one page to another (the
+ * sheet before a change and after it): both pictured in one browser run,
+ * each part's boxes measured, and the largest growth of a box at the same
+ * place in the page taken, in px. A part not drawn on both pages is
+ * counted as not drawn. The pictures themselves are not kept.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} before absolute path of the page before
+ * @param {string} after absolute path of the page after
+ * @param {string[]} parts
+ * @param {'light' | 'dark'} mode
+ * @returns {Promise<{changes: Array<{part: string, width: number, height: number, drawn: number}>} | {problem: string}>}
+ */
+export async function partSizeChanges(project, before, after, parts, mode) {
+  const pngs = [before, after].map(h => h.replace(/\.html$/, '.png'));
+  /** @type {PictureResult[]} */
+  let shots;
+  try {
+    shots = await screenshots(project, [
+      {html: before, png: pngs[0], mode, boxes: parts},
+      {html: after, png: pngs[1], mode, boxes: parts},
+    ]);
+  } finally {
+    for (const p of pngs) fs.rmSync(p, {force: true});
+  }
+  const [a, b] = shots;
+  if (!a?.ok || !b?.ok)
+    return {
+      problem:
+        (a && !a.ok ? a.reason : b && !b.ok ? b.reason : null) ??
+        'no picture was taken',
+    };
+  return {changes: boxChanges(parts, a.boxes ?? {}, b.boxes ?? {})};
+}
+
+/**
+ * How much each part's drawn boxes grow from one measurement to another:
+ * the largest growth in width and in height of a box at the same place in
+ * the page, in px, to a hundredth (0 when none grows; a box that shrinks
+ * does not count), and how many boxes both measurements draw.
+ * @param {string[]} parts
+ * @param {Record<string, Array<[number, number]>>} was
+ * @param {Record<string, Array<[number, number]>>} now
+ * @returns {Array<{part: string, width: number, height: number, drawn: number}>}
+ */
+export function boxChanges(parts, was, now) {
+  const round = (/** @type {number} */ n) => Math.round(n * 100) / 100;
+  return parts.map(part => {
+    const a = was[part] ?? [];
+    const b = now[part] ?? [];
+    const drawn = Math.min(a.length, b.length);
+    let width = 0;
+    let height = 0;
+    for (let i = 0; i < drawn; i++) {
+      width = Math.max(width, b[i][0] - a[i][0]);
+      height = Math.max(height, b[i][1] - a[i][1]);
+    }
+    return {part, width: round(width), height: round(height), drawn};
+  });
+}
+
+/**
+ * What a change of size says about the parts it measured: how much each
+ * part that grows grows, else that they keep their size; null when none
+ * of them is drawn.
+ * @param {Array<{part: string, width: number, height: number, drawn: number}>} changes
+ * @param {string} cause what grew them ("the added border")
+ * @returns {string | null}
+ */
+export function sizeChangeNote(changes, cause) {
+  const drawn = changes.filter(x => x.drawn);
+  if (!drawn.length) return null;
+  const grows = drawn.filter(x => x.width > 0 || x.height > 0);
+  if (!grows.length)
+    return `${drawn.map(x => x.part).join(', ')} keeps its size with ${cause} (measured on the sheet, at rest and in each state it draws)`;
+  return grows
+    .map(
+      x =>
+        `${x.part} grows by ${[
+          ...(x.height > 0 ? [`${x.height}px in height`] : []),
+          ...(x.width > 0 ? [`${x.width}px in width`] : []),
+        ].join(' and ')} (${cause}; measured on the sheet)`,
+    )
+    .join('; ');
 }
 
 /** The generic families any font of a common kind stands in for. */
@@ -2288,7 +2488,7 @@ export function pictureFontNotes(stdout) {
  * The text a picture script measured cut short, from the line it prints
  * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
  * @param {string} stdout what the picture script printed
- * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}}
+ * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>}}
  */
 function measuredCutShort(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
@@ -2309,8 +2509,70 @@ function measuredCutShort(stdout) {
         text: x.text,
         whole: x.whole === true,
         ...(x.broken === true ? {broken: true} : {}),
+        ...(x.overlaps === true ? {overlaps: true} : {}),
       })),
   };
+}
+
+/**
+ * The text a picture script measured too faint to read, from the line it
+ * prints after `LOW_CONTRAST_PREFIX`; nothing when it printed none that
+ * reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>}}
+ */
+function measuredLowContrast(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(LOW_CONTRAST_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(LOW_CONTRAST_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(found)) return {};
+  return {
+    lowContrast: found.filter(
+      x =>
+        x &&
+        typeof x.part === 'string' &&
+        typeof x.text === 'string' &&
+        typeof x.ratio === 'number' &&
+        /^#[0-9a-f]{6}$/.test(String(x.fg)) &&
+        /^#[0-9a-f]{6}$/.test(String(x.bg)),
+    ),
+  };
+}
+
+/**
+ * The part sizes a picture script measured, from the line it prints after
+ * `PART_BOXES_PREFIX`; nothing when it printed none that reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{boxes?: Record<string, Array<[number, number]>>}}
+ */
+function measuredBoxes(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(PART_BOXES_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(PART_BOXES_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!found || typeof found !== 'object' || Array.isArray(found)) return {};
+  /** @type {Record<string, Array<[number, number]>>} */
+  const boxes = {};
+  for (const [part, list] of Object.entries(found))
+    if (Array.isArray(list))
+      boxes[part] = list.filter(
+        (/** @type {unknown} */ b) =>
+          Array.isArray(b) &&
+          b.length === 2 &&
+          b.every(n => typeof n === 'number'),
+      );
+  return {boxes};
 }
 
 /** A Chrome or Chromium on this machine, at a usual place or on PATH. */
