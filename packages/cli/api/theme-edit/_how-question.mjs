@@ -99,6 +99,7 @@ import {
   partsOf,
   MOMENT_STATES,
   groupsOf,
+  growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
 } from './_settings.mjs';
@@ -112,6 +113,7 @@ import {
   inheritedReach,
   settableStates,
   stateSynonym,
+  pillDrawnRadios,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
@@ -135,6 +137,15 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * measured check keeps.
  * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean}} Draft
  */
+
+/** The words a badge style ask is made of when the style is all it asks. */
+const BADGE_STYLE_WORDS = new Set(
+  (
+    'soft tint tinted outline outlined solid filled badge badges tag tags ' +
+    'chip chips the a all every my our their its make made ' +
+    'use with in be to look style styled color colors colour colours'
+  ).split(' '),
+);
 
 /**
  * Words a near miss is corrected to (one or two letters off), besides the
@@ -488,6 +499,27 @@ const JOINING_WORD =
   /^(?:keep|keeps|leave|leaves|stay|stays|remain|remains|and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/;
 
 /**
+ * Whether words are only chat said to the editor ("thanks a lot", "no
+ * rush", "please", "love it"), never an ask.
+ * @param {string} text
+ */
+function chatOnly(text) {
+  // (A typed value, a hex or a number, is never chat.)
+  if (/[\d#]/.test(String(text))) return false;
+  const words =
+    String(text)
+      .toLowerCase()
+      .replace(
+        /\b(?:(?:thank(?:s| you| u)|thx)(?: so much| a lot| very much)?|many thanks|ty|tysm|cheers|hmm+|idk|cool|nice|great|(?:i\s+)?love it|asap|no rush|appreciate it|much appreciated)\b/g,
+        ' ',
+      )
+      .match(/[a-z']+/g) ?? [];
+  return words.every(
+    w => PRONOUN_WORD.test(w) || JOINING_WORD.test(w) || /^(?:i|u)$/.test(w),
+  );
+}
+
+/**
  * The opposite of a look a word names, for the word said with "un-" or
  * "non-" ("un-rounded" buttons are square; "non-bold" headings regular).
  * @type {Record<string, string>}
@@ -792,7 +824,7 @@ export function cornersNamed(text, part = null, names = []) {
   // for the context menu, names no corner either.)
   for (const re of names)
     t = t.replace(
-      new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`),
+      lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
       ' ',
     );
   t = t.replace(/\bupper\b/g, 'top').replace(/\blower\b/g, 'bottom');
@@ -1272,7 +1304,7 @@ function sharedAsk(q, partWords) {
         const middle = pieces.slice(1, -1).map(x => x.trim());
         const isPart = (/** @type {string} */ x) =>
           partWords.some(([re]) =>
-            new RegExp(`^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
+            lexAround(re, `^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
           );
         if (pieces.length > 2 && !middle.every(isPart)) return seg;
         const m = /\s+and\s+/.exec(seg);
@@ -1293,7 +1325,7 @@ function sharedAsk(q, partWords) {
         const right = seg.slice(lastAnd);
         for (const [re] of partWords) {
           // (A state word before the part, "hovered buttons", goes with it.)
-          const lm = new RegExp(`(?:${re.source})\\s*$`).exec(left);
+          const lm = lexAround(re, `(?:${re.source})\\s*$`).exec(left);
           if (!lm) continue;
           const lw = /(\b[a-z]+)\s+$/.exec(left.slice(0, lm.index));
           const withState = lw != null && stateWord(lw[1]) != null;
@@ -1303,9 +1335,10 @@ function sharedAsk(q, partWords) {
           };
           for (const [re2] of partWords) {
             const r =
-              new RegExp(`^\\s*(?:${re2.source})`).exec(right) ??
+              lexAround(re2, `^\\s*(?:${re2.source})`).exec(right) ??
               (() => {
-                const m2 = new RegExp(
+                const m2 = lexAround(
+                  re2,
                   `^\\s*([a-z]+)\\s+(?:${re2.source})`,
                 ).exec(right);
                 // (A word that describes the part, "the draft badge", "the
@@ -3038,9 +3071,66 @@ const NEEDS = new WeakMap();
  * @returns {RegExp}
  */
 function needing(source, need) {
-  const re = new RegExp(source);
+  const re = new NeedRegExp(source, '', need);
   NEEDS.set(re, need);
   return re;
+}
+
+/**
+ * A made lexicon pattern. A text without its word holds no match, so `exec`,
+ * and with it `test`, `match`, `matchAll`, `replace` and `split`, answers at
+ * once there without running the pattern, or compiling it first: an ask runs
+ * every lexicon pattern, and most never need compiling.
+ */
+export class NeedRegExp extends RegExp {
+  /**
+   * @param {string | RegExp} pattern
+   * @param {string} [flags]
+   * @param {string} [need]
+   */
+  constructor(pattern, flags, need) {
+    super(pattern, flags);
+    // A case-blind copy matches the word in any case: it holds no word.
+    /** @type {string | undefined} */
+    this.need = this.ignoreCase
+      ? undefined
+      : (need ?? (pattern instanceof NeedRegExp ? pattern.need : undefined));
+  }
+
+  /** @param {string} text */
+  exec(text) {
+    const s = String(text);
+    if (this.need !== undefined && !s.includes(this.need)) {
+      if (this.global || this.sticky) this.lastIndex = 0;
+      return null;
+    }
+    return super.exec(s);
+  }
+}
+
+/**
+ * `new RegExp(re.source, flags)`, kept a made pattern if `re` is one.
+ * @param {RegExp} re
+ * @param {string} flags
+ * @returns {RegExp}
+ */
+function lexCopy(re, flags) {
+  return re instanceof NeedRegExp
+    ? new NeedRegExp(re, flags)
+    : new RegExp(re.source, flags);
+}
+
+/**
+ * `new RegExp(source)` for a pattern every match of which holds a match of
+ * `re`: a made pattern with `re`'s word if `re` is one.
+ * @param {RegExp} re
+ * @param {string} source
+ * @returns {RegExp}
+ */
+function lexAround(re, source) {
+  return re instanceof NeedRegExp
+    ? new NeedRegExp(source, '', re.need)
+    : new RegExp(source);
 }
 
 /**
@@ -3066,10 +3156,7 @@ const PLAIN_COPIES = new WeakMap();
 function globalOf(re) {
   let copy = GLOBAL_COPIES.get(re);
   if (!copy) {
-    copy = new RegExp(
-      re.source,
-      re.flags.includes('g') ? re.flags : `${re.flags}g`,
-    );
+    copy = lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`);
     GLOBAL_COPIES.set(re, copy);
   }
   return copy;
@@ -3082,10 +3169,10 @@ function globalOf(re) {
  */
 function plainOf(re) {
   // A sticky pattern reads its own lastIndex: it is made anew each time.
-  if (re.sticky) return new RegExp(re.source, re.flags.replace('g', ''));
+  if (re.sticky) return lexCopy(re, re.flags.replace('g', ''));
   let copy = PLAIN_COPIES.get(re);
   if (!copy) {
-    copy = new RegExp(re.source, re.flags.replace('g', ''));
+    copy = lexCopy(re, re.flags.replace('g', ''));
     PLAIN_COPIES.set(re, copy);
   }
   return copy;
@@ -3408,7 +3495,7 @@ function clausesOf(q, partWords, words = null) {
       partWords
         .filter(([, x]) => x.on === p.on)
         .flatMap(([re, x]) =>
-          [...text.matchAll(new RegExp(re.source, 'g'))].map(m => ({
+          [...text.matchAll(lexCopy(re, 'g'))].map(m => ({
             index: m.index ?? 0,
             end: (m.index ?? 0) + m[0].length,
             ...(x.when ? {when: x.when} : {}),
@@ -3562,7 +3649,7 @@ function clausesOf(q, partWords, words = null) {
       const firstAt = p =>
         partWords
           .filter(([, x]) => x.on === p.on)
-          .map(([re]) => new RegExp(re.source, 'g').exec(text))
+          .map(([re]) => lexCopy(re, 'g').exec(text))
           .filter(m => m != null)
           .map(m => m.index)
           .sort((x, y) => x - y)[0] ?? null;
@@ -6575,6 +6662,13 @@ export function draftAnswer(ctx, env, question) {
     HYPOTHETICAL.test(question) ||
     (gated.length > 0 && gated.length === segments.length) ||
     segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
+  /**
+   * Held-back clauses that name no part and no thing ("spooky vibes"). The
+   * not-used line names them; chat words ("please", "thanks!") and a
+   * question back to the editor ("what do you think?") are not asks.
+   * @type {string[]}
+   */
+  const heldAside = [];
   if (gated.length && !gateAll) {
     // A held-back clause gives the next clause what it names: its part, and
     // the thing a "them" or "it" there stands for.
@@ -6627,6 +6721,22 @@ export function draftAnswer(ctx, env, question) {
           /\b(borders?|shadows?|radius|corners|padding|spacing|gap|font|underlines?|background)\b/i.exec(
             x,
           )?.[0];
+        const aside = x
+          .trim()
+          .replace(/^(?:and|or|but|also|plus)\s+/i, '')
+          .replace(/[\s,]+(?:please|pls|plz|thanks|thx)[.!]*$/i, '')
+          .trim();
+        if (
+          !part &&
+          !thing &&
+          /[a-z]{3}/i.test(aside) &&
+          !chatOnly(x) &&
+          !chatOnly(aside) &&
+          !/^(?:what|how|do|does|did|can|could|would|should|is|are|was|why|which|any|will|shall)\b[^?]*\?\s*$/i.test(
+            x.trim(),
+          )
+        )
+          heldAside.push(aside);
         carry = [part, thing].filter(Boolean).join(' ');
         carryPart = part ?? '';
         continue;
@@ -7507,7 +7617,7 @@ export function draftAnswer(ctx, env, question) {
       lex.parts
         .filter(([, x]) => x.on === on)
         .flatMap(([re]) =>
-          [...t.matchAll(new RegExp(re.source, 'g'))].map(m => [
+          [...t.matchAll(lexCopy(re, 'g'))].map(m => [
             m.index ?? 0,
             (m.index ?? 0) + m[0].length,
           ]),
@@ -8305,7 +8415,7 @@ export function draftAnswer(ctx, env, question) {
         c.aspects.some(a => ['background', 'text', 'border'].includes(a))),
   );
   /** A word-table regex without its global flag. @param {RegExp} re */
-  const once = re => new RegExp(re.source, re.flags.replace('g', ''));
+  const once = re => lexCopy(re, re.flags.replace('g', ''));
   // The part the word table reads a list head as ("the progress bars"), and
   // the words it read; never a piece the part does not have.
   const headPartOf = (/** @type {string} */ headText) => {
@@ -13357,16 +13467,13 @@ export function draftAnswer(ctx, env, question) {
     const noParts = lex.parts.reduce(
       (t, [re]) =>
         t.replace(
-          new RegExp(
-            re.source,
-            re.flags.includes('g') ? re.flags : `${re.flags}g`,
-          ),
+          lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
           ' ',
         ),
       text,
     );
     for (const [re, st] of STATE_WORDS) {
-      const m = new RegExp(re.source).exec(noParts);
+      const m = lexCopy(re, '').exec(noParts);
       if (
         m &&
         !steps.some(
@@ -13707,8 +13814,8 @@ export function draftAnswer(ctx, env, question) {
     let named = false;
     for (const [re, x] of lex.parts)
       if (c.parts.some(p => p.on === x.on)) {
-        const g = new RegExp(
-          re.source,
+        const g = lexCopy(
+          re,
           re.flags.includes('g') ? re.flags : `${re.flags}g`,
         );
         if (g.test(rest)) named = true;
@@ -15018,6 +15125,54 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // "soft badges", "outlined tags": the badges dial, the status and
+    // category badges together in the theme's colors. (A style for some
+    // badges only, "solid status badges", is not this dial.)
+    {
+      // (The style word said next to the badge noun: in "solid buttons and
+      // soft badges" the buttons' word is not the badges'.)
+      const STYLE = '(soft|tint(?:ed)?|outlined?|solid|filled)';
+      const NOUN = '(?:badges?|tags?|chips?)';
+      const style = (new RegExp(`\\b${STYLE}\\s+${NOUN}\\b`, 'i').exec(
+        c.text,
+      ) ??
+        new RegExp(
+          `\\b${NOUN}\\s+(?:(?:are|be|look|made|in|with)\\s+){0,2}${STYLE}\\b`,
+          'i',
+        ).exec(c.text))?.[1]?.toLowerCase();
+      // (Only when the style is the whole ask: "soft shadows on badges",
+      // "solid red error badges" or "filled pill badges" ask for more, and
+      // the rest of the answer reads them.)
+      const onlyStyle = (c.text.toLowerCase().match(/[a-z]+/g) ?? []).every(w =>
+        BADGE_STYLE_WORDS.has(w),
+      );
+      if (
+        style &&
+        onlyStyle &&
+        !c.except &&
+        !c.neg &&
+        !c.lengths.length &&
+        /\b(?:badges?|tags?|chips?)\b/.test(c.text) &&
+        c.parts.every(p => p.on === 'badge')
+      ) {
+        const value = /^(?:soft|tint)/.test(style)
+          ? 'soft'
+          : /^outline/.test(style)
+            ? 'outline'
+            : 'solid';
+        const d = {
+          text: `${value} badges: the badges dial (${
+            String(DIALS.badges?.help ?? '')
+              .split('. ')
+              .find(x => x.startsWith(value)) ?? value
+          })`,
+          options: [[set('badges', value)]],
+        };
+        push(d);
+        recordTop(c, d.options[0]);
+        continue;
+      }
+    }
     // "the controls 40px tall", "all controls taller by 4px": the control
     // heights every button, input and selector reads, each size moved by
     // the same amount, for the whole theme.
@@ -16288,7 +16443,9 @@ export function draftAnswer(ctx, env, question) {
           );
         });
         const pills =
-          r.dial === 'corners' && !c.parts.length ? pillsSquare(r.value) : null;
+          r.dial === 'corners' && !c.parts.length
+            ? pillsSquare(r.value, c)
+            : null;
         if (pills) steps.push(...pills.steps);
         const d = {
           text: `${r.dial} ${r.value}${ons[0] ? ` on ${ons.map(p => p?.on).join(', ')}` : ''}: the ${r.dial} dial set to ${r.value}, as set reads it${pills ? `, ${pills.said}` : ''}`,
@@ -19531,7 +19688,7 @@ export function draftAnswer(ctx, env, question) {
     const ons = new Set(c.parts.map(x => x.on));
     const text = lex.parts
       .filter(([, x]) => ons.has(x.on))
-      .reduce((t, [re]) => t.replace(new RegExp(re.source, 'g'), ' '), c.text);
+      .reduce((t, [re]) => t.replace(lexCopy(re, 'g'), ' '), c.text);
     // left/right/top/bottom/sides name a side anywhere; inline, block,
     // horizontal and vertical only beside the padding or margin they
     // qualify ("inline padding", "padding-inline", "padding 8px vertical"),
@@ -19567,18 +19724,39 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
-   * "No rounding anywhere", "… badges and avatars too": the corners dial at
-   * square squares every pill that is a styling choice itself (a badge, a
-   * progress track); the parts drawn as circles keep their shape unless the
-   * question names one, which then goes square on its own. Null unless the
-   * value is square and the question asks for it everywhere or names a
-   * pill or circle part.
+   * The corners dial at square, asked of the whole theme. When the corner
+   * clause itself says anywhere, everywhere, everything or at all ("no
+   * rounding anywhere"), the parts drawn with the pill radius go square
+   * too, circles included: --radius-full 0px, a radio's mark keeping its
+   * circle. Otherwise the dial squares every pill that is a styling choice
+   * itself (a badge, a progress track) and the parts drawn as circles keep
+   * their shape unless the question names one, which then goes square on
+   * its own. Null unless the value is square and the question asks for it
+   * everywhere, names a pill or circle part, or says pills, too or as well.
    * @param {string} value
+   * @param {Clause} corner the clause the corners ask is said in
    * @returns {{steps: Step[], said: string} | null}
    */
-  function pillsSquare(value) {
+  function pillsSquare(value, corner) {
     if (!/^(?:square|none|0(?:px)?)$/.test(value)) return null;
     const {pills, circles} = pillShapes(C);
+    // (The scope word read on the corner clause alone: "square corners, and
+    // bigger text too" says nothing of the circles.)
+    if (
+      /\b(?:anywhere|everywhere|everything|at all)\b/.test(
+        corner.text.toLowerCase(),
+      )
+    ) {
+      const radios = pillDrawnRadios(C);
+      const round = String(TOKENS['--radius-full'] ?? '9999px');
+      return {
+        steps: [
+          set('--radius-full', '0px'),
+          ...radios.map(m => set('--radius-full', round, {on: m})),
+        ],
+        said: `and --radius-full 0px for the parts drawn as pills and circles (${[...pills, ...circles].slice(0, 6).join(', ')}${pills.length + circles.length > 6 ? ` and ${pills.length + circles.length - 6} more` : ''})${radios.length ? `; the radio marks keep their circle (${radios.join(', ')})` : ''}`,
+      };
+    }
     const named = [
       ...new Set(
         clauses
@@ -19603,6 +19781,7 @@ export function draftAnswer(ctx, env, question) {
       said: `which squares the pills too (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${named.length ? `, and ${named.join(', ')} square on ${named.length > 1 ? 'their' : 'its'} own` : ''}${kept.length ? `; the parts drawn as circles keep their shape (${kept.slice(0, 6).join(', ')}${kept.length > 6 ? ` and ${kept.length - 6} more` : ''})` : ''}`,
     };
   }
+
   /**
    * Whether a part reads a token in any of its rules.
    * @param {string} part
@@ -22321,7 +22500,7 @@ export function draftAnswer(ctx, env, question) {
           const dial = /^\d*\.?\d+r?em$/.test(value)
             ? `${Math.round(parseFloat(value) * 16 * 100) / 100}px`
             : value;
-          const pills = pillsSquare(dial);
+          const pills = pillsSquare(dial, c);
           if (pills)
             return {
               text: `no rounding anywhere: the corners dial square, ${pills.said}`,
@@ -24236,7 +24415,14 @@ export function draftAnswer(ctx, env, question) {
                     };
                   })
                   .filter(x => x.tok);
-                if (!inner.length || inner.some(x => x.tok !== inner[0].tok))
+                // (A control that grows with its content keeps Core's block
+                // padding, so its padding never sets its height.)
+                if (
+                  !inner.length ||
+                  inner.some(
+                    x => x.tok !== inner[0].tok || growsWithContent(ctx, x.k),
+                  )
+                )
                   return null;
                 const px = (/** @type {string} */ t) =>
                   lengthPx(String(resolvedValue(t) || current(t) || ''));
@@ -29017,9 +29203,7 @@ export function draftAnswer(ctx, env, question) {
               // A part's name is never a comparative ("the container like
               // dialogs", "a header like cards"): masked, same length.
               (t, [re]) =>
-                t.replace(new RegExp(re.source, 'g'), m =>
-                  'x'.repeat(m.length),
-                ),
+                t.replace(lexCopy(re, 'g'), m => 'x'.repeat(m.length)),
               c.text,
             )
             .replace(/\b(?:i|we|you)(?: would|'d)? like(?: to| for)?\b/g, m =>
@@ -32333,8 +32517,19 @@ export function draftAnswer(ctx, env, question) {
       ...new Set(silent.flatMap(asTyped).filter(w => !named.includes(w))),
     ];
     const lines = [
-      ...named.map(w => `"${w}"`),
-      ...(clauses.length > 1 ? silentTyped.map(w => `"${w}"`) : []),
+      ...named.filter(w => !chatOnly(w)).map(w => `"${w}"`),
+      ...(clauses.length > 1
+        ? silentTyped.filter(w => !chatOnly(w)).map(w => `"${w}"`)
+        : []),
+      // (A held-back clause with nothing of its own, "spooky vibes", once.)
+      ...heldAside
+        .filter(
+          x =>
+            !texts.includes(x.toLowerCase()) &&
+            !named.some(w => w.includes(x)) &&
+            !silentTyped.some(w => w.toLowerCase() === x.toLowerCase()),
+        )
+        .map(x => `"${x}"`),
       // (An ask of one clause no answer took at all, "pagination pages in
       // one bordered strip", is named in its own words.)
       ...(clauses.length === 1 &&

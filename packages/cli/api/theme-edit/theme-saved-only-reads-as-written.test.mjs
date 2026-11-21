@@ -183,6 +183,33 @@ describe('--only, as set writes it and the reader reads it', () => {
   );
 
   it(
+    "a saved only on a control's height is read as set writes it: kept, with no note",
+    async () => {
+      write([
+        {
+          thing: 'height',
+          value: '40px',
+          source: 'property',
+          on: 'button',
+          only: true,
+        },
+      ]);
+      const r = await themeEditShow('n', {cwd});
+      expect(notes(r)).not.toMatch(/height on button was saved with only/);
+      // (An undo by name with --only finds the saved entry: it was read
+      // with its only.)
+      await themeEditUndo('n', {
+        cwd,
+        thing: 'height',
+        on: 'button',
+        only: true,
+      });
+      expect(read().settings).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'a saved only beside a plain entry of the same place opens; the later one shows',
     async () => {
       write([
