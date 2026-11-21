@@ -188,11 +188,11 @@
  * @property {string} [cwd]
  * @property {string} [set] - The set to edit, when the package ships several.
  * @property {boolean} [remove] - Remove the meaning's entry instead.
- * @property {string | string[]} [pairs] - Many entries at once, as `<meaning>=<icon>` pairs separated by commas or spaces; then no meaning or icon is passed. All are checked before any is written.
+ * @property {string | string[]} [pairs] - Many entries at once, as `<definition>=<icon>` pairs separated by commas or spaces; then no meaning or icon is passed. All are checked before any is written.
  */
 
 /**
- * `astryx --json experimental icon map --pairs <meaning>=<icon>,...`.
+ * `astryx --json experimental icon map --pairs <definition>=<icon>,...`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconMapManyResponse
  * @property {'icon.mapMany'} type
@@ -209,7 +209,7 @@
  */
 
 /**
- * `astryx --json experimental icon map <meaning> <icon>`.
+ * `astryx --json experimental icon map <definition> <icon>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconMapResponse
  * @property {'icon.map'} type
