@@ -9,9 +9,9 @@ export const docs = {
   name: 'icons',
   title: 'Icons',
   category: 'foundations',
-  keywords: ['built-in meaning', 'icon names', 'semantic icon', 'semantic icon names', 'icon registry', 'theme icons', 'IconName'],
+  keywords: ['semantic icon names', 'icon registry'],
   description:
-    "Built-in icon meanings available in the design system. These are drawn by the active theme's icons.",
+    "Built-in icon meanings available in the design system, drawn by the theme icons.",
 
   sections: [
     {
@@ -20,7 +20,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Components that accept an icon prop use IconType: either a built-in meaning by name or a direct SVG component. A name resolves through the theme icons: the drawings the active theme gives each name (a complete set is typed `IconRegistry`), else a registered or built-in drawing.',
+          text: 'Components that accept an icon prop use IconType: a built-in meaning or a direct SVG component. Built-in meanings resolve through the theme icons (a complete set is typed `IconRegistry`).',
         },
         {
           type: 'table',
@@ -65,7 +65,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'For icons that are not built-in meanings, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.',
+          text: 'For other icon drawings, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.',
         },
         {
           type: 'code',
@@ -85,7 +85,7 @@ import { HeartIcon } from 'lucide-react';
       content: [
         {
           type: 'prose',
-          text: 'Themes can replace the default SVGs for any built-in meaning with the `icons` field in `defineTheme()`. This lets you swap the icon set (e.g. heroicons → lucide) without touching component code, and keeps lookup scoped to the active theme instead of mutating global defaults.',
+          text: 'Themes replace the default SVGs for any built-in meaning with the `icons` field in `defineTheme()`. This lets you swap the icon set (e.g. heroicons → lucide) without touching component code, and keeps lookup scoped to the active theme instead of mutating global defaults.',
         },
         {
           type: 'code',
@@ -191,7 +191,7 @@ brandTheme.iconVariants; // ['outline', 'filled']`,
       content: [
         {
           type: 'prose',
-          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new built-in meaning. It resolves through the theme icons and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make the icons of every theme grow a key.',
+          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new built-in meaning. It resolves and is overridden the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not add a key to every theme.',
         },
         {
           type: 'code',

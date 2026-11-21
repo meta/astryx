@@ -18,10 +18,8 @@ export const docs = {
   keywords: [
     'icon',
     'svg',
-    'built-in meaning',
-    'semantic icon',
     'semantic icon name',
-    'theme icons',
+    'semantic icon names',
     'glyph',
     'symbol',
     'pictogram',
@@ -156,18 +154,18 @@ export const docs = {
   },
   usage: {
     description:
-      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning by name (`icon=\"close\"`; the full list: `astryx component Icon --props`), which the active theme's icons draw, or any SVG component from your icon library, such as a trash can: `<Icon icon={TrashIcon} />`.",
+      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning or any SVG from your icon library: `icon={TrashIcon}`.",
     anatomy,
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use a built-in meaning when one fits; the theme icons draw it, so it follows theme changes.',
+          'Prefer a built-in meaning; it follows theme changes.',
       },
       {
         guidance: true,
         description:
-          "Override icons through the theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>, and extends shallow-merges it into derived themes. registerIcons() changes the icons for the whole process and warns in dev, so keep it for app bootstrap rather than making it a library's theming seam.",
+          "Override icons through the theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>, and extends shallow-merges it into derived themes. registerIcons() is process-wide and warns in dev, so keep it for app bootstrap rather than making it a library's theming seam.",
       },
       {
         guidance: true,
@@ -308,12 +306,12 @@ export const docsZh = {
   },
   usage: {
     description:
-      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning by name (`icon=\"close\"`; the full list: `astryx component Icon --props`), which the active theme's icons draw, or any SVG component from your icon library, such as a trash can: `<Icon icon={TrashIcon} />`.",
+      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning or any SVG from your icon library: `icon={TrashIcon}`.",
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use a built-in meaning when one fits; the theme icons draw it, so it follows theme changes.',
+          'Prefer a built-in meaning; it follows theme changes.',
       },
       {
         guidance: true,
@@ -365,18 +363,18 @@ export const docsDense = {
     "Renders icons w/ Astryx design system colors + sizes. A built-in meaning by name (theme icons) or any SVG component from your icon library: `<Icon icon={TrashIcon} />`.",
   usage: {
     description:
-      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning by name (`icon=\"close\"`; the full list: `astryx component Icon --props`), which the active theme's icons draw, or any SVG component from your icon library, such as a trash can: `<Icon icon={TrashIcon} />`.",
+      "Icons are small visual symbols that represent actions, objects, or concepts. They improve scannability and reinforce meaning alongside text. Pass a built-in meaning or any SVG from your icon library: `icon={TrashIcon}`.",
     anatomy,
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use a built-in meaning when one fits; the theme icons draw it, so it follows theme changes.',
+          'Prefer a built-in meaning; it follows theme changes.',
       },
       {
         guidance: true,
         description:
-          'Override icons via theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>; extends shallow-merges into derived themes. registerIcons() changes the icons for the whole process and warns in dev: app bootstrap only, not a library theming seam.',
+          'Override icons via theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>; extends shallow-merges into derived themes. registerIcons() is process-wide and warns in dev: app bootstrap only, not a library theming seam.',
       },
       {
         guidance: true,

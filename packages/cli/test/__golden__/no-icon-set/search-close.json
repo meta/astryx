@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 53,
+    "matchCount": 52,
     "results": [
       {
         "domain": "component",
@@ -14,17 +14,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/AlertDialog",
         "command": "astryx component AlertDialog",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Drawer",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Drawer",
-        "command": "astryx component Drawer",
         "mentions": []
       },
       {
@@ -77,6 +66,17 @@
       },
       {
         "domain": "component",
+        "name": "Drawer",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component Drawer",
+        "mentions": []
+      },
+      {
+        "domain": "component",
         "name": "DropdownMenuSubMenu",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -84,28 +84,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/DropdownMenu",
         "command": "astryx component DropdownMenuSubMenu",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Icon",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Icon",
-        "command": "astryx component Icon",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "IconButton",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/IconButton",
-        "command": "astryx component IconButton",
         "mentions": []
       },
       {
@@ -235,6 +213,34 @@
         "command": "astryx docs cli/api/functions/build",
         "parent": "astryx docs cli/api/functions",
         "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons available-names",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons theme-overrides",
+        "parent": "astryx docs icons --index",
+        "mentions": [
+          "This lets you swap the icon set (e.g."
+        ]
       }
     ]
   },

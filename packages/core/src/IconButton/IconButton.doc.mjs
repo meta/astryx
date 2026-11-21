@@ -136,7 +136,7 @@ export const docs = {
 
   usage: {
     description:
-      "A button that shows only an icon with no visible text. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood. Pass an `Icon`: `icon={<Icon icon=\"close\" />}` for a built-in meaning, or any SVG component, such as `icon={<Icon icon={TrashIcon} />}`.",
+      "A button that shows only an icon with no visible text. Use IconButton in toolbars, table rows, and compact UI where space is tight and the icon is universally understood. Any SVG: `icon={<Icon icon={TrashIcon} />}`.",
     accessibility: [
       {
         name: 'Essential icon or spinner arc',

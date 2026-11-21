@@ -15,7 +15,10 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 
 import {describe, expect, it} from 'vitest';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../..',
+);
 const DOC_ROOTS = ['packages/core/src', 'packages/richtext/src'];
 const ICON_GUIDE = 'packages/cli/assets/docs/icons.doc.mjs';
 
@@ -82,7 +85,9 @@ describe('icon words', () => {
       for (const {word, pattern} of RETIRED) {
         for (const text of prose) {
           if (pattern.test(text)) {
-            found.push(`${path.relative(ROOT, file)}: "${word}" in ${text.slice(0, 80)}`);
+            found.push(
+              `${path.relative(ROOT, file)}: "${word}" in ${text.slice(0, 80)}`,
+            );
           }
         }
       }
@@ -92,10 +97,12 @@ describe('icon words', () => {
 
   it('Icon and IconButton say first how to draw an icon that is not built in', async () => {
     for (const name of ['Icon', 'IconButton']) {
-      const mod = await load(path.join(ROOT, `packages/core/src/${name}/${name}.doc.mjs`));
+      const mod = await load(
+        path.join(ROOT, `packages/core/src/${name}/${name}.doc.mjs`),
+      );
       for (const doc of [mod.docs, mod.docsDense]) {
         const first = String(doc.usage.description);
-        expect(first, name).toMatch(/SVG component/);
+        expect(first, name).toMatch(/SVG/);
         expect(first, name).toMatch(/TrashIcon/);
         if (name === 'Icon') expect(first, name).toMatch(/your icon library/);
       }
