@@ -47,6 +47,13 @@ export interface OverlayScrimProps {
 // Styles
 // =============================================================================
 
+const FADE = durationVars['--duration-fast'];
+// On hide, the clip path applies when the fade ends. On a hover reveal, it
+// lifts one frame after the fade starts. The first paint and the first click
+// then happen on the same frame, at any fade length.
+const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE;
+const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, 1ms';
+
 const styles = stylex.create({
   base: {
     position: 'absolute',
@@ -55,11 +62,13 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     padding: spacingVars['--spacing-3'],
     pointerEvents: 'none',
-    transitionProperty: 'opacity, visibility, transform',
+    transitionProperty: 'opacity, visibility, transform, clip-path',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: FADE + ', ' + FADE + ', ' + FADE + ', 0s',
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
+    // The clip path is discrete. Its delay times it against the fade.
+    transitionBehavior: 'allow-discrete',
     transitionTimingFunction: easeVars['--ease-standard'],
   },
 
@@ -108,21 +117,37 @@ const styles = stylex.create({
     },
   },
 
-  // CSS-driven: ancestor hover + focus (accessible default)
+  // CSS-driven reveals hide with opacity, not visibility. Hidden content stays
+  // in the tab order, so Tab can reach an action and focus-within can reveal it.
+  // At rest a clip path keeps the content out of hit-testing. This includes
+  // content that sets its own pointer-events, and a touch tap that arrives
+  // before the hover state. The clip path keeps the content in the tab order.
   hoverReveal: {
+    clipPath: {
+      default: 'inset(50%)',
+      [stylex.when.ancestor(':hover', overlayScope)]: {
+        '@media (hover: hover)': 'none',
+      },
+      [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
+    },
+    transitionDelay: {
+      default: CLIP_DELAY_ON_HIDE,
+      // The two media keys never match together, so their order does not
+      // matter.
+      [stylex.when.ancestor(':hover', overlayScope)]: {
+        '@media (hover: hover) and (prefers-reduced-motion: no-preference)':
+          CLIP_DELAY_ON_HOVER,
+        '@media (hover: hover) and (prefers-reduced-motion: reduce)': '0s',
+      },
+      [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     opacity: {
       default: 0,
       [stylex.when.ancestor(':hover', overlayScope)]: {
         '@media (hover: hover)': 1,
       },
       [stylex.when.ancestor(':focus-within', overlayScope)]: 1,
-    },
-    visibility: {
-      default: 'hidden',
-      [stylex.when.ancestor(':hover', overlayScope)]: {
-        '@media (hover: hover)': 'visible',
-      },
-      [stylex.when.ancestor(':focus-within', overlayScope)]: 'visible',
     },
     pointerEvents: {
       default: 'none',
@@ -153,15 +178,20 @@ const styles = stylex.create({
     },
   },
 
-  // CSS-driven: focus-within only
+  // CSS-driven: focus-within only, with the same rest clip path as hoverReveal.
   focusReveal: {
+    clipPath: {
+      default: 'inset(50%)',
+      [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
+    },
+    transitionDelay: {
+      default: CLIP_DELAY_ON_HIDE,
+      [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     opacity: {
       default: 0,
       [stylex.when.ancestor(':focus-within', overlayScope)]: 1,
-    },
-    visibility: {
-      default: 'hidden',
-      [stylex.when.ancestor(':focus-within', overlayScope)]: 'visible',
     },
     pointerEvents: {
       default: 'none',
