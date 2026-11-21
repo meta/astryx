@@ -586,6 +586,14 @@ const ROWS = [
     },
   ],
   [
+    'an undo phrase naming another changed part takes back both changes',
+    {
+      q: 'Make the card corners round. Make the headings bold. Undo the heading change and the card corners change.',
+      never: /--on card\b|^headings bold$/,
+      says: /the heading and card changes said earlier in this ask are taken back/,
+    },
+  ],
+  [
     'a step another clause also writes stays after the undo phrase',
     {
       q: 'Make the cards blue. Undo the card change and the heading weight change. Make the headings bold.',

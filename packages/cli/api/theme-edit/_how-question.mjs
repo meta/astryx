@@ -29576,7 +29576,15 @@ export function draftAnswer(ctx, env, question) {
       result.splice(0, result.length, ...result.filter(d => !own.includes(d)));
       for (const c of clauses) if (c.text === next.text) answeredByUndo.add(c);
     };
-    const several = (uc?.parts?.length ?? 0) > 1 || (alsoNamed && !nextNew);
+    // ("Undo the heading change and the card corners change" after both
+    // were changed: each named part's change is taken back.)
+    const nextOn = alsoNamed && !nextNew ? (next.parts ?? []) : [];
+    const both =
+      nextOn.length === 1 &&
+      (uc?.parts?.length ?? 0) === 1 &&
+      nextOn[0].on !== uc.parts[0].on;
+    const several =
+      (uc?.parts?.length ?? 0) > 1 || (alsoNamed && !nextNew && !both);
     // ("Make the headings bigger. Make the headings bold. Undo the heading
     // size change.": a look the undo names, read by `aspectsOf`, takes back
     // only the earlier change of that look. A bare "size" is the part's
@@ -29611,6 +29619,26 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
       undone.splice(0, undone.length, ...ofLook);
+    }
+    if (both) {
+      const nextLooks = /** @type {string[]} */ (next.aspects ?? []);
+      undone.push(
+        ...result.filter(d => {
+          const c = /** @type {any} */ (draftClause.get(d));
+          return (
+            d !== unmet &&
+            !d.unmet &&
+            d.options.length &&
+            c &&
+            clauses.indexOf(c) < undoAt &&
+            c.parts?.some(
+              (/** @type {{on: string}} */ p) => p.on === nextOn[0].on,
+            ) &&
+            (!nextLooks.length || nextLooks.some(a => lookOf(d).includes(a)))
+          );
+        }),
+      );
+      strikeNext();
     }
     const looks = new Set(undone.flatMap(lookOf));
     // ("Make the cards rounder. Undo the corner change.": an earlier change
@@ -29730,7 +29758,9 @@ export function draftAnswer(ctx, env, question) {
       if (c) answeredByUndo.add(c);
     }
     result.push({
-      text: `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
+      text: both
+        ? `the ${part ? `${part} ` : ''}and ${nextOn[0].on} changes said earlier in this ask are taken back by their undo, so they are not written`
+        : `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
       options: [],
     });
   }
