@@ -256,6 +256,42 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toBe(button);
   });
 
+  it.each([
+    ['primary', 'accent'],
+    ['destructive', 'error'],
+  ] as const)(
+    'gives a neutral Badge in a %s Button its fill pair inverted',
+    (variant, fill) => {
+      render(
+        <Button
+          label="Checkout"
+          variant={variant}
+          endContent={<Badge data-testid="count" label={3} />}
+        />,
+      );
+      const button = getComputedStyle(screen.getByRole('button'));
+      expect(button.getPropertyValue('--_button-fill')).toBe(
+        `var(--color-${fill})`,
+      );
+      expect(button.getPropertyValue('--_button-on-fill')).toBe(
+        `var(--color-on-${fill})`,
+      );
+      const badge = getComputedStyle(screen.getByTestId('count'));
+      expect(badge.backgroundColor).toContain('--_button-on-fill');
+      expect(badge.color).toContain('--_button-fill');
+    },
+  );
+
+  it.each(['secondary', 'ghost'] as const)(
+    'leaves a neutral Badge in a %s Button on its page colours',
+    variant => {
+      render(<Button label="Inbox" variant={variant} />);
+      const button = getComputedStyle(screen.getByRole('button'));
+      expect(button.getPropertyValue('--_button-fill')).toBe('');
+      expect(button.getPropertyValue('--_button-on-fill')).toBe('');
+    },
+  );
+
   // endContent tests
   it('renders endContent after label', () => {
     render(
@@ -829,6 +865,31 @@ describe('Button', () => {
     ) {
       expect(getComputedStyle(el).display).not.toBe('contents');
     }
+  });
+
+  describe('default size geometry (FR4)', () => {
+    const callerStyles = stylex.create({
+      short: {height: '20px', paddingBlock: 0},
+    });
+
+    // A caller's height decides a labelled button's height, as before the
+    // button grew with its label: no minimum holds it at the element size.
+    it("keeps a caller's height on a labelled button", () => {
+      render(<Button label="More" size="sm" xstyle={callerStyles.short} />);
+      const button = screen.getByRole('button', {name: 'More'});
+      const computed = getComputedStyle(button);
+      expect(computed.height).toBe('20px');
+      expect(['', '0px', 'auto']).toContain(computed.minHeight);
+    });
+
+    it('pads a labelled button by its block padding, as before', () => {
+      render(<Button label="Save" size="sm" />);
+      const computed = getComputedStyle(
+        screen.getByRole('button', {name: 'Save'}),
+      );
+      expect(computed.paddingBlock).toBe('var(--spacing-2)');
+      expect(['', '0px', 'auto']).toContain(computed.minHeight);
+    });
   });
 
   describe('in a narrow row', () => {

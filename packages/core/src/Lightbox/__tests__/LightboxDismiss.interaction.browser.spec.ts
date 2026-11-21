@@ -20,6 +20,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   blockMainThread,
   type BusyRun,
   type BusyWindow,
@@ -28,7 +29,7 @@ import {
   curveOf,
   drag,
   frames,
-  holdAnimations,
+  type HeldAnimation,
   openStory,
   pooledBusyProof,
   releaseAnimations,
@@ -36,8 +37,8 @@ import {
   startBusyControl,
   startScreencast,
   timeline,
-  touchDriver,
   type TouchDriver,
+  touchDriver,
   type TouchScript,
   touchStoryboard,
   trackBrightness,
@@ -47,6 +48,7 @@ import {
   withStorybook,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
+import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
 
@@ -120,6 +122,10 @@ const STORIES = {
     id: 'core-lightbox--gallery-with-zoom',
     trigger: 'Open gallery with zoom',
   },
+  captions: {
+    id: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  },
   // Its parent asks before closing; Playwright dismisses the confirm, so the
   // parent keeps the viewer open.
   confirm: {
@@ -132,7 +138,7 @@ async function openViewer(
   page: Page,
   story: keyof typeof STORIES = 'plain',
 ): Promise<Viewer> {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), STORIES[story].id);
@@ -146,7 +152,7 @@ async function openViewer(
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   const photo =
-    story === 'gallery'
+    story === 'gallery' || story === 'captions'
       ? dialog.locator('[data-current] img')
       : dialog.locator('img').first();
   await expect
@@ -261,11 +267,14 @@ test("a release moving down sends the photo on the dismissal's spring and closes
   page,
 }, testInfo) => {
   const v = await openViewer(page);
-  await v.driver.play(pullDown(v.centre, 110));
-  const [exit] = await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The viewer closes at the exit's end. A hold sent after the lift can
+  // arrive after that on a busy machine. So the page holds the exit itself as
+  // it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'translate'},
   });
+  await v.driver.play(pullDown(v.centre, 110));
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(v.photo, timeline(duration)),
@@ -295,7 +304,7 @@ test("a release moving down sends the photo on the dismissal's spring and closes
     'curves/lightbox-dismiss-exit',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {exit, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -306,6 +315,55 @@ test("a release moving down sends the photo on the dismissal's spring and closes
   expect(to).toBeGreaterThan(from + 200);
   await expect(v.dialog).toBeHidden();
 });
+
+test("the dismissal plays at the viewer's tempo", async ({page}) => {
+  // The same exit at tempo 1, to compare the paced one with.
+  const atTempo1 = await dismissCurves(page, await openViewer(page));
+  const v = await openViewer(page);
+  await slowViewer(page, DISMISS_TEMPO);
+  const paced = await dismissCurves(page, v);
+  // Released at rest, so each spring takes exactly that many times as long.
+  for (const part of ['move', 'fade'] as const) {
+    const ratio = paced[part] / atTempo1[part];
+    expect(ratio, part).toBeGreaterThan(DISMISS_TEMPO - 0.1);
+    expect(ratio, part).toBeLessThan(DISMISS_TEMPO + 0.1);
+  }
+});
+
+/** The tempo the dismissal's tempo case plays the viewer at. */
+const DISMISS_TEMPO = 2;
+
+/**
+ * Dismisses the photo with a slow drag held still before the lift. Returns
+ * how long the exit's curves run: the photo's move, on the position spring,
+ * and a control's fade, on the size spring. The viewer closes at the exit's
+ * end, and a read after the lift can come later than that on a busy machine.
+ * So the page holds both curves itself as they start.
+ */
+async function dismissCurves(
+  page: Page,
+  v: Viewer,
+): Promise<{move: number; fade: number}> {
+  const chrome = v.dialog.locator('[data-lightbox-chrome]').first();
+  const moves = await armHold(page, v.photo, {
+    judges: {target: v.photo, property: 'translate'},
+  });
+  const fades = await armHold(page, chrome, {
+    judges: {target: chrome, property: 'opacity'},
+  });
+  await v.driver.play(pullDown(v.centre, 110));
+  const length = (runs: ReadonlyArray<HeldAnimation>, property: string) =>
+    Math.max(
+      ...runs
+        .filter(run => run.keyframes.some(frame => property in frame))
+        .map(run => run.curveEndMs),
+    );
+  const move = length(await moves.held(), 'translate');
+  const fade = length(await fades.held(), 'opacity');
+  await releaseAnimations(page);
+  await expect(v.dialog).toBeHidden();
+  return {move, fade};
+}
 
 test('a pull flicked back up springs back on springs.settle', async ({
   page,
@@ -322,11 +380,13 @@ test('a pull flicked back up springs back on springs.settle', async ({
           t: f.t + 420,
         })),
     );
-  await v.driver.play(script);
-  const [ret] = await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The return runs half a second. A hold sent after the lift can arrive
+  // after it ends on a busy machine. So the page holds it itself as it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'scale'},
   });
+  await v.driver.play(script);
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(v.photo, timeline(duration)),
@@ -344,7 +404,7 @@ test('a pull flicked back up springs back on springs.settle', async ({
     'curves/lightbox-dismiss-cancel',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {ret, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -405,6 +465,37 @@ test("a zoomed photo's vertical drag pans it and never dismisses", async ({
   expect(await v.backdropAlpha()).toBeCloseTo(1, 2);
 });
 
+test("a drag down fades a gallery's caption band with the controls", async ({
+  page,
+}) => {
+  // The band carries the caption's backing. It fades in the caption's place,
+  // once, so no dark strip stays over the fading backdrop.
+  const v = await openViewer(page, 'captions');
+  const caption = v.dialog.locator('[data-current] [data-lightbox-caption]');
+  const band = caption.locator('xpath=..');
+  let compared = false;
+  await v.driver.play(pullDown(v.centre, 100), {
+    onEvent: async step => {
+      if (
+        compared ||
+        step.type !== 'touchMove' ||
+        step.changed[0].y - v.centre.y < 70
+      ) {
+        return;
+      }
+      compared = true;
+      await frames(page, 1);
+      const controls = await v.closeAlpha();
+      expect(controls).toBeLessThan(0.95);
+      const opacity = async (locator: Locator) =>
+        locator.evaluate(el => Number(getComputedStyle(el).opacity));
+      expect(await opacity(band)).toBeCloseTo(controls, 3);
+      expect(await opacity(caption)).toBe(1);
+    },
+  });
+  expect(compared).toBe(true);
+});
+
 test('a gallery photo dismisses with a drag down', async ({page}) => {
   const v = await openViewer(page, 'gallery');
   await v.driver.play(pullDown(v.centre, 120));
@@ -421,6 +512,9 @@ test('the dismissal keeps changing the screen every frame while the main thread 
   const runs: BusyRun[] = [];
   const windows: BusyWindow[] = [];
   const closed: boolean[] = [];
+  // The backdrop's level on the cast while the finger rests before each lift:
+  // the value the page itself set at the drag's end.
+  const beforeLift: (number | null)[] = [];
   let closest = Number.POSITIVE_INFINITY;
   for (let run = 0; run < DISMISS_RUNS; run += 1) {
     const v = await openViewer(page);
@@ -435,12 +529,15 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     // compositor presented while the main thread spun, on this machine.
     await startBusyControl(page);
     const cast = await startScreencast(page);
-    await v.driver.play(pullDown(v.centre, 60));
-    // Blocked inside the page once the dismissal runs on the compositor.
-    const block = await blockMainThread(page, 400, {
+    // Blocked inside the page once the dismissal runs on the compositor. The
+    // page already waits when the lift starts the dismissal, so a busy
+    // machine's round trip does not start the block later in the fade.
+    const blocking = blockMainThread(page, 400, {
       during: v.photo,
       minProgressMs: 16,
     });
+    const played = await v.driver.play(pullDown(v.centre, 60));
+    const block = await blocking;
     // A few frames after the block, so the screencast holds its end.
     await frames(page, 6);
     const castFrames = await cast.stop();
@@ -448,6 +545,15 @@ test('the dismissal keeps changing the screen every frame while the main thread 
       ...probe,
       size: 8,
     });
+    const lift =
+      played.find(e => e.type === 'touchEnd')?.dispatchedAt ?? Number.NaN;
+    const lastMove =
+      played.filter(e => e.type === 'touchMove').at(-1)?.dispatchedAt ??
+      Number.NaN;
+    beforeLift.push(
+      tracked.filter(f => f.box != null && f.t >= lastMove && f.t < lift).at(-1)
+        ?.box?.x ?? null,
+    );
     const final = tracked.at(-1)?.box?.x ?? 0;
     const settled =
       tracked.find(
@@ -475,12 +581,28 @@ test('the dismissal keeps changing the screen every frame while the main thread 
       ),
     );
   }
+  // Every drag ends at the same travel, so the page sets one backdrop level
+  // before each lift.
+  const setBeforeBlock = beforeLift[0];
+  expect(
+    setBeforeBlock,
+    'a frame shows the rest before the lift',
+  ).not.toBeNull();
+  beforeLift.forEach((level, i) => {
+    expect(level, `run ${i + 1}: the backdrop's level before the lift`).toBe(
+      setBeforeBlock,
+    );
+  });
   // A change of the backdrop's brightness counts, in 8-bit levels. So
   // judging stops where the fade's step between the closest two frames shown
   // falls below one level. A shown level is rounded, so half a level is added.
   const proof = pooledBusyProof(runs, {
     axis: 'x',
     settledWithin: wholeStepsUntil(closest) + 0.5,
+    // WebKit presents a just-started compositor fade late, so the backdrop can
+    // hold the page's own last level into the block. A hold at any other
+    // level is a freeze.
+    setBeforeBlock: setBeforeBlock ?? undefined,
     // A run whose control moved on fewer than two frames is too little to
     // judge. At least two of the four runs must be judged.
     minRunFrames: 2,
@@ -490,7 +612,7 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     'busy-main-thread/lightbox-dismiss',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {windows, proof},
+        {windows, beforeLift, proof},
         null,
         1,
       ),
@@ -532,11 +654,14 @@ test('under Reduce Motion the dismissal fades the photo out in place', async ({
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const v = await openViewer(page);
-  await v.driver.play(pullDown(v.centre, 110));
-  await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The fade runs 200 ms and the viewer closes at its end. A hold sent from
+  // here after the lift can arrive after the fade ends on a busy machine. So
+  // the page holds the fade itself as it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'opacity'},
   });
+  await v.driver.play(pullDown(v.centre, 110));
+  const held = await hold.held();
   const samples = await sampleCurve(v.photo, [0, 50]);
   await releaseAnimations(page);
   // Under reduced motion, a fade of 200 ms or less.
@@ -570,12 +695,24 @@ test(
       ),
       {
         name: 'lightbox-drag-to-dismiss',
+        // The viewer closes at the exit's end, and on a busy machine that can
+        // come before the frame after the lift. So the photo is read without
+        // a wait for it, and a closed viewer reads as closed.
         measure: async () => {
-          const s = await v.photoState();
-          return {
-            scale: +s.scale.toFixed(3),
-            backdrop: +(await v.backdropAlpha()).toFixed(2),
-          };
+          const [scale] = await v.photo.evaluateAll(photos =>
+            photos.map(el => {
+              const value = getComputedStyle(el).scale;
+              return value === 'none' ? 1 : parseFloat(value);
+            }),
+          );
+          const [backdrop] = await v.dialog.evaluateAll(dialogs =>
+            dialogs.map(el =>
+              parseFloat(getComputedStyle(el, '::backdrop').opacity),
+            ),
+          );
+          return scale == null || backdrop == null
+            ? {closed: true}
+            : {scale: +scale.toFixed(3), backdrop: +backdrop.toFixed(2)};
         },
         columns: 4,
         cellScale: 0.35,
@@ -588,7 +725,7 @@ test(
 test("reopening at the dismissed photo's neighbour shows that photo", async ({
   page,
 }) => {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), 'core-lightbox--gallery');
@@ -659,8 +796,10 @@ test('a caller that keeps the viewer open gets the photo, the backdrop and the c
 });
 
 test('a photo dragged to dismiss draws above its caption', async ({page}) => {
-  // Without zoom the caption sits right under the photo. So the drag carries
-  // the photo over it while the caption still shows, faded.
+  // The caption sits in its band under the photo's row. Held sideways, a
+  // landscape photo fills the row's height, so the drag carries it over the
+  // caption at once, while the caption still shows.
+  await page.setViewportSize({width: 874, height: 402});
   const v = await openViewer(page);
   const caption = v.dialog.locator('[data-lightbox-caption]');
   await expect(caption).toBeVisible();
@@ -773,12 +912,12 @@ for (const story of ['zoom', 'gallery'] as const) {
   });
 }
 
-test('a caption comes back under the photo once a drag to close springs back', async ({
+test('a caption stays in its band through a drag to close that springs back', async ({
   page,
 }) => {
-  // A 3:1 panorama leaves the stage free space below the fitted photo, so
-  // the caption moves up under it.
-  await page.route('https://picsum.photos/**', async route =>
+  // A 3:1 panorama leaves free space between the fitted photo and the
+  // caption's band. The band keeps its place through the drag.
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(3000, 1000),
@@ -802,15 +941,15 @@ test('a caption comes back under the photo once a drag to close springs back', a
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
   const caption = dialog.getByText('A winding path through the forest');
-  const gap = async () => {
-    const photo = await img.boundingBox();
+  const place = async () => {
     const below = await caption.boundingBox();
-    if (photo == null || below == null) {
-      throw new Error('no photo or caption');
+    if (below == null) {
+      throw new Error('no caption');
     }
-    return Math.round(below.y - (photo.y + photo.height));
+    return {x: Math.round(below.x), y: Math.round(below.y)};
   };
-  await expect.poll(gap).toBe(0);
+  await expect(caption).toBeVisible();
+  const before = await place();
   const box = await img.boundingBox();
   if (box == null) {
     throw new Error('no photo');
@@ -828,7 +967,7 @@ test('a caption comes back under the photo once a drag to close springs back', a
       ),
   );
   await expect(dialog).toBeVisible();
-  await expect.poll(gap).toBe(0);
+  await expect.poll(place).toEqual(before);
 });
 
 test("while the controls fade with a drag, a tap on Close still reaches it, above a gallery's pages", async ({

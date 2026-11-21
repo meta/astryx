@@ -33,7 +33,10 @@ import type {LinkComponentType} from './types';
 export interface LinkProviderProps {
   /**
    * The component to use for all link elements in the subtree.
-   * Must accept href, className, style, and children props.
+   * It receives the accepted `href`, and a `to` that equals `href` unless the
+   * link passes its own accepted `to`; a native `'a'` receives no `to`. It also
+   * receives the link's `ref`, `className`, `style`, event handlers, and
+   * `children`. A rejected destination never reaches it.
    *
    * @example
    * ```
@@ -42,6 +45,12 @@ export interface LinkProviderProps {
    * ```
    */
   component: LinkComponentType;
+  /**
+   * The subtree. Astryx links in it that render through `useLinkComponent`,
+   * such as Link and Button with `href`, use `component`, unless a link sets
+   * its own `as` or a nearer LinkProvider sets another component. A disabled
+   * Link does not use it.
+   */
   children: ReactNode;
 }
 

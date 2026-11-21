@@ -11,7 +11,9 @@
  * names, within at most three legs of about ten minutes each.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -22,11 +24,15 @@ import {
   changedPrimitives,
   dependentAudits,
   LATER_MAX_LEGS,
+  legsFor,
   listAuditSpecs,
   MAX_LEGS,
   planDependentAudits,
   PRIMITIVES_FILE,
   readPrimitives,
+  TOO_LARGE,
+  UNDECIDED,
+  undecidedMessage,
 } from './a11y-dependent-audits.mjs';
 import {
   fileSeconds,
@@ -233,27 +239,87 @@ describe("a component's source change runs its own audits", () => {
 });
 
 describe('an undecided scope', () => {
-  it('owes every audit, and a first run lists what does not fit', () => {
-    const all = plan([]);
-    expect(all.owed).toEqual([]);
-    const everything = planDependentAudits({
+  const everything = attempt =>
+    planDependentAudits({
       changed: [],
       primitives: readPrimitives(root),
       specs,
       importers,
       seconds,
+      attempt,
       everything: true,
     });
-    const audits = specs
+
+  it('owes every audit, runs what fits, and is never complete', () => {
+    const expected = specs
       .filter(({mode}) => mode === 'audit')
-      .map(({file}) => file);
-    expect([...everything.owed].sort()).toEqual([...audits].sort());
-    expect([...everything.files, ...everything.deferred].sort()).toEqual(
-      [...audits].sort(),
+      .map(({file}) => file)
+      .sort();
+    for (const attempt of [1, 2]) {
+      const plan = everything(attempt);
+      expect([...plan.owed].sort()).toEqual(expected);
+      expect([...plan.files, ...plan.deferred].sort()).toEqual(expected);
+      expect(plan.complete).toBe(false);
+      expect(plan.count).toBeLessThanOrEqual(MAX_LEGS);
+      expect(plan.longestMs).toBeLessThanOrEqual(
+        budgetFor(plan.files, seconds),
+      );
+    }
+  });
+
+  it('asks for a split only when GitHub truncated the file list', () => {
+    const plan = {deferred: ['a', 'b']};
+    const truncated = undecidedMessage(plan, true);
+    expect(truncated.annotation).toContain(
+      'diff too large to scope (>3,000 files); split the PR',
     );
-    expect(everything.longestMs).toBeLessThanOrEqual(
-      budgetFor(everything.files, seconds),
+    expect(truncated.summary).toContain(TOO_LARGE);
+    const unread = undecidedMessage(plan, false);
+    expect(unread.annotation).toContain(
+      'the changed files could not be read; re-run all jobs at this head',
     );
+    expect(unread.annotation).not.toContain('split the PR');
+    expect(unread.summary).toContain(UNDECIDED);
+  });
+
+  it('prints the message the scope calls for', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dependent-audits-'));
+    try {
+      const run = args =>
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/a11y-dependent-audits.mjs',
+            ...args,
+            '--out',
+            path.join(dir, 'record.json'),
+          ],
+          {
+            cwd: root,
+            encoding: 'utf8',
+            env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: ''},
+          },
+        );
+      expect(run(['--all', '--truncated'])).toContain(
+        `::error title=Diff too large to scope::${TOO_LARGE}`,
+      );
+      expect(run(['--all'])).toContain(
+        `::error title=Scope not decided::${UNDECIDED}`,
+      );
+      const record = JSON.parse(
+        fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
+      );
+      expect(record.complete).toBe(false);
+      // The last run here had no --truncated: the record says why it is undecided.
+      expect(record.undecided).toBe('unreadable');
+      run(['--all', '--truncated']);
+      expect(
+        JSON.parse(fs.readFileSync(path.join(dir, 'record.json'), 'utf8'))
+          .undecided,
+      ).toBe('truncated');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 
@@ -272,6 +338,10 @@ describe('the dependent-audits jobs', () => {
     // An undecided scope (a truncated diff) owes every audit; a decided
     // scope without its list stops.
     expect(run.run).toContain('changes=(--all)');
+    // Only a truncated file list asks for a split.
+    expect(run.env.TRUNCATED).toBe('${{ steps.scope.outputs.truncated }}');
+    expect(run.run).toContain('elif [ "$TRUNCATED" = true ]; then');
+    expect(run.run).toContain('changes=(--all --truncated)');
     expect(step(planJob, 'Require the changed-file list').if).toContain(
       "steps.scope.outputs.decided != 'false'",
     );
@@ -289,7 +359,47 @@ describe('the dependent-audits jobs', () => {
     expect(planJob.outputs.complete).toBe(
       "${{ steps.plan.outputs.complete || 'true' }}",
     );
+    // A run out of scope still writes a record that owes nothing.
+    const skip = step(planJob, 'Skip the dependent audits outside their scope');
+    expect(skip.run).toContain(
+      '"owed": [], "ran": [], "deferred": [], "complete": true',
+    );
+    expect(skip.run).toContain('> "$RUNNER_TEMP/a11y-dependent-audits.json"');
+    // It names the same fields as the planner's own record for a decided scope.
+    const template = /printf '(\{.*\})\\n'/.exec(skip.run)[1];
+    const outOfScope = JSON.parse(
+      template.replace('"%s"', '"head"').replace('%s', '1'),
+    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dependent-record-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'changed.txt'), 'README.md\n');
+      execFileSync(
+        process.execPath,
+        [
+          '.github/scripts/a11y-dependent-audits.mjs',
+          '--changed',
+          path.join(dir, 'changed.txt'),
+          '--out',
+          path.join(dir, 'record.json'),
+        ],
+        {
+          cwd: root,
+          env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: ''},
+        },
+      );
+      const planned = JSON.parse(
+        fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
+      );
+      expect(Object.keys(outOfScope).sort()).toEqual(
+        Object.keys(planned).sort(),
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
     const upload = step(planJob, 'Upload the dependent-audit record');
+    // Every run uploads a record, and a run without one fails in CI.
+    expect(upload.if).toBe('always()');
+    expect(upload.with['if-no-files-found']).toBe('error');
     expect(upload.with.name).toBe(
       'a11y-dependent-audits-record-${{ github.run_attempt }}',
     );
@@ -299,7 +409,35 @@ describe('the dependent-audits jobs', () => {
   });
 
   it('run up to six legs, on a full runner only when a leg has a share', () => {
-    expect(legs.strategy.matrix.leg).toEqual([1, 2, 3, 4, 5, 6]);
+    // Only the planned legs start; a plan that did not succeed starts one.
+    expect(legs.strategy.matrix.leg).toBe(
+      "${{ fromJSON(needs.a11y-dependent-audits-plan.result == 'success' && needs.a11y-dependent-audits-plan.outputs.legs || '[1]') }}",
+    );
+    // A plan that owes no audit starts no leg at all.
+    expect(legs.if).toContain(
+      "(needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0')",
+    );
+    // The name has no condition: GitHub shows a skipped job's name
+    // unevaluated, and a skipped job is the usual case when nothing is owed.
+    // The failing step's error says to re-run.
+    expect(legs.name).toBe(
+      'Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      '::error title=Dependent-audit plan did not run::',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      'Re-run all jobs.',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      'exit 1',
+    );
+    expect(planJob.outputs.legs).toBe(
+      "${{ steps.plan.outputs.legs || '[1]' }}",
+    );
+    expect(legsFor(0)).toEqual([1]);
+    expect(legsFor(3)).toEqual([1, 2, 3]);
+    expect(legsFor(LATER_MAX_LEGS)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(legs.strategy['fail-fast']).toBe(false);
     expect(legs['runs-on']).toBe(
       "${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}",
@@ -323,6 +461,16 @@ describe('the dependent-audits jobs', () => {
 
   it('block the merge through the test join', () => {
     expect(ci.jobs.test.needs).toContain('pr-a11y-dependent-audits');
+    expect(ci.jobs.test.needs).toContain('a11y-dependent-audits-plan');
+    const joinEnv = ci.jobs.test.steps.find(
+      s => s.name === 'Require expected test-owner outcomes',
+    ).env;
+    expect(joinEnv.A11Y_DEPENDENT_AUDITS_PLAN_RESULT).toBe(
+      '${{ needs.a11y-dependent-audits-plan.result }}',
+    );
+    expect(joinEnv.A11Y_DEPENDENT_AUDITS_COUNT).toBe(
+      '${{ needs.a11y-dependent-audits-plan.outputs.count }}',
+    );
     expect(
       ci.jobs.test.steps.find(
         s => s.name === 'Require expected test-owner outcomes',
@@ -333,8 +481,6 @@ describe('the dependent-audits jobs', () => {
         path.join(root, '.github/scripts/ci-test-join.mjs'),
         'utf8',
       ),
-    ).toContain(
-      "['pr-a11y-dependent-audits', process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT]",
-    );
+    ).toContain('process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT');
   });
 });

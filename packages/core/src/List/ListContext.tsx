@@ -5,17 +5,21 @@
 /**
  * @file ListContext.tsx
  * @input Layer-scoped React context
- * @output Exports ListContext for sharing density, dividers, the row edge
- *   treatment, and marker style between List and ListItem, and
- *   ListMarkerScope, which sets the marker for the items inside it, or a
- *   task item's checkbox in its place, and whether their List has a marker
- *   gutter whose outside counters keep the ordinary themed text inset
- * @position Internal context; consumed by List.tsx and ListItem.tsx
+ * @output Exports ListContext, which shares density, dividers, the row edge
+ *   treatment, marker style and a reorderable List's reorder with ListItem.
+ *   Also exports ListMarkerScope, which sets the marker for the items inside
+ *   it, or a task item's checkbox in its place. It also says whether their
+ *   List has a marker gutter whose outside counters keep the themed inset.
+ *   ListEdgeScope sets the row edge treatment for the items inside it.
+ *   ListStaticContext marks the next List inside it as static, without the
+ *   inline clip that swiped rows need
+ * @position Internal context. Consumed by List.tsx and ListItem.tsx
  */
 
 import {use, useMemo, type ReactNode} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {AnimatedLayout} from '../hooks/useAnimatedLayout';
+import type {ListReorderContextValue} from './listReorderContext';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
 export type ListMarkerStyle = 'none' | 'disc' | 'decimal' | 'circle';
@@ -76,6 +80,16 @@ export interface ListContextValue {
    * The list's `animatedLayout` handle, for its rows.
    */
   animatedLayout?: AnimatedLayout;
+  /**
+   * A reorderable List's reorder (`List reorderable`); internal. Its rows end
+   * with the handle it carries (List/listReorderContext.ts).
+   */
+  reorder?: ListReorderContextValue | null;
+  /**
+   * The static mark the List read (ListStaticContext); internal. A List under
+   * the same mark is in a row, not the marked List.
+   */
+  staticMark?: ListStaticMark | null;
 }
 
 export const ListContext = createLayerScopedContext<ListContextValue | null>(
@@ -121,3 +135,54 @@ export function ListMarkerScope({
     <ListContext value={value}>{children}</ListContext>
   );
 }
+
+/**
+ * Sets the row edge treatment of the List items inside it, in place of their
+ * List's `edge`; internal. Markdown's task lists use it with `flush` so the
+ * rows of the CheckboxList they render fit its column, as Markdown's other
+ * lists do. Outside a List it changes nothing.
+ */
+export function ListEdgeScope({
+  edge,
+  children,
+}: {
+  readonly edge: ListEdge;
+  readonly children: ReactNode;
+}): ReactNode {
+  const context = use(ListContext);
+  const value = useMemo(
+    () => (context == null ? null : {...context, edge}),
+    [context, edge],
+  );
+  return value == null ? (
+    children
+  ) : (
+    <ListContext value={value}>{children}</ListContext>
+  );
+}
+
+/**
+ * A mark that makes the next List inside it static; internal. Make a new mark
+ * for each List with `listStaticMark()`.
+ */
+export interface ListStaticMark {
+  readonly isStatic: true;
+}
+
+/** A new mark for one static List. */
+export function listStaticMark(): ListStaticMark {
+  return {isStatic: true};
+}
+
+/**
+ * The static mark for the next List; internal. Provide it only around a List
+ * whose rows never swipe aside. That List paints without its inline clip, so
+ * a focus ring or an outside counter on its edge draws whole. Each List
+ * passes the mark it read to its rows through ListContext, and a List that
+ * reads the same mark as its parent List is not static, so a List nested in a
+ * row keeps its clip. Markdown gives each of its lists, task lists included,
+ * its own mark.
+ */
+export const ListStaticContext =
+  createLayerScopedContext<ListStaticMark | null>('ListStaticContext', 1, null);
+ListStaticContext.displayName = 'ListStaticContext';

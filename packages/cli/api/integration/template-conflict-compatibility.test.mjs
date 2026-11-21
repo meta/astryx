@@ -11,6 +11,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('../../foundation/discovery/template-adapter.mjs')} */
@@ -37,7 +38,7 @@ function writeTemplate(pkgDir, id, type, replaces) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-template-conflict-compat-'),
+    path.join(REPO_ROOT, '.astryx-template-conflict-compat-'),
   );
 });
 

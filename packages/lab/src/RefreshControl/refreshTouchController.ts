@@ -43,6 +43,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -313,8 +314,12 @@ export function useRefreshTouchController({
     edge.current = {element: null, saved: null};
   }, []);
 
+  // Syncs the scroll listener's ref with the committed `isPullEnabled`. A
+  // render React discards must not leave its value.
   const isPullEnabledRef = useRef(isPullEnabled);
-  isPullEnabledRef.current = isPullEnabled;
+  useLayoutEffect(() => {
+    isPullEnabledRef.current = isPullEnabled;
+  });
 
   /**
    * Near the top, the browser draws no overscroll: the pull does. Only an

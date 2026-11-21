@@ -99,7 +99,7 @@ export const doc = {
     {
       type: 'icon.add',
       description:
-        'The icon registered, the definition mapped, and the files written.',
+        "The icon registered, the definition mapped, and the files written. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
     {
       type: 'icon.addVariants',
@@ -119,7 +119,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: "the export is data rather than a component, a new definition is named like an Astryx one, or the variant is not one the set declares, is the look each icon's own export already draws, or is no look word of a library whose export names encode looks",
+      when: "the export is data rather than a component, a new definition is named like an Astryx one, or the variant is not one the set declares, is the look each icon's own export already draws, or is no look word of a library whose export names encode looks, or `id` starts with a digit",
     },
     {code: 'ERR_FILE_EXISTS', when: 'another icon already has the id'},
     {

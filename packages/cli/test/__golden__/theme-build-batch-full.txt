@@ -137,8 +137,8 @@ Building theme from themes/orchid.mjs...
 Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
 
   import { Theme } from '@astryxdesign/core/theme';
-  import { amberTheme } from './themes/amber';
-  import './themes/amber.css';
+  import { amberTheme } from '../themes/amber';
+  import '../themes/amber.css';
 
   <Theme theme={amberTheme}>
     <App />
@@ -147,29 +147,29 @@ Install in your app (paths are relative to a file in src/; adjust if yours lives
 Or with a <link> tag:
 
   import { Theme } from '@astryxdesign/core/theme';
-  import { amberTheme } from './themes/amber';
+  import { amberTheme } from '../themes/amber';
 
-  <link rel="stylesheet" href="./themes/amber.css" />
+  <link rel="stylesheet" href="../themes/amber.css" />
   <Theme theme={amberTheme}>
     <App />
   </Theme>
 
 Each built theme imports the same way:
-  import { amberTheme } from './themes/amber'; import './themes/amber.css';
-  import { basilTheme } from './themes/basil'; import './themes/basil.css';
-  import { cedarTheme } from './themes/cedar'; import './themes/cedar.css';
-  import { duneTheme } from './themes/dune'; import './themes/dune.css';
-  import { emberTheme } from './themes/ember'; import './themes/ember.css';
-  import { fjordTheme } from './themes/fjord'; import './themes/fjord.css';
-  import { groveTheme } from './themes/grove'; import './themes/grove.css';
-  import { harborTheme } from './themes/harbor'; import './themes/harbor.css';
-  import { irisTheme } from './themes/iris'; import './themes/iris.css';
-  import { juniperTheme } from './themes/juniper'; import './themes/juniper.css';
-  import { kelpTheme } from './themes/kelp'; import './themes/kelp.css';
-  import { lagoonTheme } from './themes/lagoon'; import './themes/lagoon.css';
-  import { meadowTheme } from './themes/meadow'; import './themes/meadow.css';
-  import { nimbusTheme } from './themes/nimbus'; import './themes/nimbus.css';
-  import { orchidTheme } from './themes/orchid'; import './themes/orchid.css';
+  import { amberTheme } from '../themes/amber'; import '../themes/amber.css';
+  import { basilTheme } from '../themes/basil'; import '../themes/basil.css';
+  import { cedarTheme } from '../themes/cedar'; import '../themes/cedar.css';
+  import { duneTheme } from '../themes/dune'; import '../themes/dune.css';
+  import { emberTheme } from '../themes/ember'; import '../themes/ember.css';
+  import { fjordTheme } from '../themes/fjord'; import '../themes/fjord.css';
+  import { groveTheme } from '../themes/grove'; import '../themes/grove.css';
+  import { harborTheme } from '../themes/harbor'; import '../themes/harbor.css';
+  import { irisTheme } from '../themes/iris'; import '../themes/iris.css';
+  import { juniperTheme } from '../themes/juniper'; import '../themes/juniper.css';
+  import { kelpTheme } from '../themes/kelp'; import '../themes/kelp.css';
+  import { lagoonTheme } from '../themes/lagoon'; import '../themes/lagoon.css';
+  import { meadowTheme } from '../themes/meadow'; import '../themes/meadow.css';
+  import { nimbusTheme } from '../themes/nimbus'; import '../themes/nimbus.css';
+  import { orchidTheme } from '../themes/orchid'; import '../themes/orchid.css';
 
 [note] The built themes name fonts they do not load:
   "Space Grotesk" (amber, basil, fjord, grove, kelp, lagoon)

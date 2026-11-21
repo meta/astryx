@@ -21,7 +21,9 @@ import {useCallback, type RefCallback} from 'react';
 import {
   MIN_TOUCH_TARGET,
   NO_HIT_INSETS,
+  settlingAnimations,
   watchHitArea,
+  whenSettled,
   writeHitInsets,
   type HitInsets,
   type HitRect,
@@ -61,25 +63,6 @@ export interface TouchHitAreaOptions {
 const NO_OPTIONS: TouchHitAreaOptions = {};
 
 /**
- * The finite animations running or held in the element's parent, the element
- * included: a row's own motion and its neighbors'. An endless one (a spinner)
- * moves nothing that comes to rest, so it holds nothing.
- */
-function settlingAnimations(element: HTMLElement): Animation[] {
-  const scope = element.parentElement ?? element;
-  if (typeof scope.getAnimations !== 'function') {
-    return [];
-  }
-  return scope.getAnimations({subtree: true}).filter(animation => {
-    if (animation.playState !== 'running' && animation.playState !== 'paused') {
-      return false;
-    }
-    const end = animation.effect?.getComputedTiming().endTime;
-    return typeof end === 'number' && Number.isFinite(end);
-  });
-}
-
-/**
  * Watches `element` and takes its insets only at rest. Returns the stop.
  *
  * Under a coarse primary pointer, the shared utility measures how far the
@@ -116,8 +99,11 @@ function watchAtRest(
   const watch = (): void => {
     stopWatch = watchHitArea(
       element,
-      insets => {
-        const moving = settlingAnimations(element);
+      // A call without a pass's shared read reads at once.
+      (insets, readSettling = settlingAnimations) => {
+        // The finite animations in the element's parent, the element
+        // included: a row's own motion and its neighbors'.
+        const moving = readSettling(element.parentElement ?? element);
         if (moving.length === 0) {
           hasWritten = true;
           writeHitInsets(element, insets);
@@ -127,9 +113,7 @@ function watchAtRest(
           return;
         }
         isWaiting = true;
-        void Promise.allSettled(
-          moving.map(async animation => animation.finished),
-        ).then(() => {
+        whenSettled(moving, () => {
           isWaiting = false;
           if (!isStopped) {
             stop();

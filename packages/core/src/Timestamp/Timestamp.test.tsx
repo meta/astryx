@@ -1,5 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Timestamp.test.tsx
+ * @input Uses Timestamp, Testing Library, and mocked browser APIs
+ * @output Regression coverage for formatting and the focusable details trigger,
+ *   and counts of the date formatters a render and an opened card build
+ * @position Colocated Timestamp behavior and accessibility tests
+ */
+
 import 'temporal-polyfill/full/global';
 import {
   describe,
@@ -43,12 +51,7 @@ async function openTimestampHoverCard(): Promise<HTMLElement> {
   if (timestamp == null) {
     throw new Error('Expected Timestamp to render a <time> element');
   }
-  const trigger = timestamp.parentElement;
-  if (trigger == null) {
-    throw new Error('Expected Timestamp to render a hover-card trigger');
-  }
-
-  fireEvent.mouseEnter(trigger);
+  await userEvent.hover(timestamp);
   await waitFor(() => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
   });
@@ -81,6 +84,118 @@ describe('Timestamp', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  // A relative timestamp's name starts with the words it shows, so a control
+  // named from its content keeps those words in its name (WCAG 2.5.3, FR5).
+  describe('label in name', () => {
+    const TWO_HOURS_AGO = '2026-03-25T10:00:00Z';
+
+    it('pauses a live refresh while a control it names has focus, keeping its words and name in step', () => {
+      const now = Date.now() / 1000;
+      render(
+        <>
+          <button type="button">
+            Pushed <Timestamp value={now - 5} format="relative" isLive />
+          </button>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const pushed = screen.getByRole('button', {name: /^Pushed/});
+      act(() => {
+        pushed.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      // Neither the words nor the name change under the focused control.
+      expect(pushed).toHaveTextContent('Pushed now');
+      expect(pushed).toHaveAccessibleName(/^Pushed now, /);
+
+      act(() => {
+        screen.getByRole('button', {name: 'Elsewhere'}).focus();
+      });
+      expect(pushed).toHaveTextContent('Pushed 35 seconds ago');
+      expect(pushed).toHaveAccessibleName(/^Pushed 35 seconds ago, /);
+    });
+
+    it('keeps ticking inside a focused control that has a name of its own', () => {
+      const now = Date.now() / 1000;
+      render(
+        <button type="button" aria-label="Latest push">
+          Pushed <Timestamp value={now - 5} format="relative" isLive />
+        </button>,
+      );
+      const button = screen.getByRole('button', {name: 'Latest push'});
+      act(() => {
+        button.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(button).toHaveTextContent('Pushed 35 seconds ago');
+    });
+
+    it('keeps ticking inside a focused log region', () => {
+      const now = Date.now() / 1000;
+      render(
+        <div role="log" tabIndex={0} aria-label="Activity">
+          Pushed <Timestamp value={now - 5} format="relative" isLive />
+        </div>,
+      );
+      const log = screen.getByRole('log');
+      act(() => {
+        log.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(log).toHaveTextContent('Pushed 35 seconds ago');
+    });
+
+    it('names a standalone relative timestamp by its visible text, then the full date', () => {
+      render(
+        <Timestamp
+          value={TWO_HOURS_AGO}
+          format="relative"
+          hasTooltip={false}
+          data-testid="ts"
+        />,
+      );
+      const time = screen.getByTestId('ts');
+      const label = time.getAttribute('aria-label') ?? '';
+      expect(time.textContent).toBe('2 hours ago');
+      expect(label.startsWith('2 hours ago, ')).toBe(true);
+      expect(label).toContain('2026');
+    });
+
+    it('keeps the visible words in the name of a button that contains it', () => {
+      render(
+        <button type="button">
+          Pushed <Timestamp value={TWO_HOURS_AGO} format="relative" />
+        </button>,
+      );
+      expect(screen.getByRole('button')).toHaveAccessibleName(
+        /^Pushed 2 hours ago, .*2026/,
+      );
+    });
+
+    it('keeps the visible words in the name of a radio whose label contains it', () => {
+      render(
+        <label>
+          <input type="radio" name="version" />
+          Pushed{' '}
+          <Timestamp
+            value={TWO_HOURS_AGO}
+            format="relative_short"
+            hasTooltip={false}
+          />
+        </label>,
+      );
+      expect(screen.getByRole('radio')).toHaveAccessibleName(
+        /^Pushed 2h ago, .*2026/,
+      );
+    });
   });
 
   it('renders a <time> element with ISO datetime attribute', () => {
@@ -770,9 +885,15 @@ describe('Timestamp', () => {
       // installs fake timers, which would stall them).
       vi.useRealTimers();
 
-      // Mock the Popover API, which jsdom does not implement.
-      HTMLElement.prototype.showPopover = vi.fn();
-      HTMLElement.prototype.hidePopover = vi.fn();
+      // Match HoverCard's Popover API mock so dismissal can observe which
+      // layer is actually open, including the copy button's nested tooltip.
+      const openPopovers = new WeakSet<HTMLElement>();
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        openPopovers.add(this);
+      });
+      HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        openPopovers.delete(this);
+      });
 
       // jsdom does not derive :focus-visible from keyboard focus for a <time>
       // element; treat the focused element as focus-visible so the card's
@@ -781,6 +902,9 @@ describe('Timestamp', () => {
       (HTMLElement.prototype as any).matches = function (
         selector: string,
       ): boolean {
+        if (selector === ':popover-open') {
+          return openPopovers.has(this);
+        }
         if (selector === ':focus-visible') {
           return this === document.activeElement;
         }
@@ -820,23 +944,39 @@ describe('Timestamp', () => {
       expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '0');
     });
 
-    it('does not put aria-expanded on the role-less hover-card trigger', async () => {
-      render(
-        <Timestamp
-          value={Date.now() / 1000 - 3600}
-          format="relative"
-          data-testid="ts"
-        />,
-      );
-      const trigger = screen.getByTestId('ts').parentElement;
-      // The trigger is Text's <span>, which has no role, so aria-expanded is
-      // invalid on it (axe aria-allowed-attr, critical). aria-haspopup is
-      // global and still advertises the dialog.
-      await waitFor(() => {
-        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-      });
-      expect(trigger).not.toHaveAttribute('aria-expanded');
-    });
+    it.each([
+      ['relative', {format: 'relative'}],
+      ['relative_short', {format: 'relative_short'}],
+      ['auto', {format: 'auto'}],
+      ['configured absolute', {format: 'date_time', tooltipEntries: [{}]}],
+    ] as const)(
+      'names the %s details card from the tab stop only while it is open',
+      async (_, props) => {
+        render(
+          <Timestamp
+            value={Date.now() / 1000 - 3600}
+            {...props}
+            data-testid="ts"
+          />,
+        );
+        const trigger = screen.getByTestId('ts');
+        expect(trigger).toHaveAttribute('tabindex', '0');
+        expect(trigger).not.toHaveAttribute('aria-controls');
+        act(() => trigger.focus());
+        const card = await screen.findByRole('dialog', {hidden: true});
+        await waitFor(() => {
+          expect(trigger).toHaveAttribute('aria-controls', card.id);
+        });
+        // The time role supports neither aria-haspopup nor aria-expanded, and
+        // the time keeps its own role.
+        expect(trigger).not.toHaveAttribute('aria-haspopup');
+        expect(trigger).not.toHaveAttribute('aria-expanded');
+        expect(trigger).not.toHaveAttribute('role');
+        expect(trigger.closest('.astryx-timestamp')).not.toHaveAttribute(
+          'aria-haspopup',
+        );
+      },
+    );
 
     it('shows the hover card when the timestamp receives keyboard focus', async () => {
       const user = userEvent.setup();
@@ -875,6 +1015,144 @@ describe('Timestamp', () => {
       });
       const card = screen.getByRole('dialog', {hidden: true});
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
+      expect(el).toHaveAttribute('aria-controls', card.id);
+      expect(el).not.toHaveAttribute('aria-expanded');
+
+      // Move into the card before dismissing it: focus must return to the
+      // same semantic timestamp that exposed the popup relationship.
+      const copy = screen.getByRole('button', {name: /^Copy /, hidden: true});
+      act(() => copy.focus());
+      expect(copy).toHaveFocus();
+      // The copy button's own tooltip is the topmost layer on focus.
+      if (screen.queryByRole('tooltip', {hidden: true})) {
+        await user.keyboard('{Escape}');
+      }
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(el).not.toHaveAttribute('aria-controls');
+      });
+      expect(el).toHaveFocus();
+      expect(el).not.toHaveAttribute('aria-haspopup');
+    });
+
+    it('keeps the ref, caller props, and text styling when a card is attached', async () => {
+      const ref = {current: null as HTMLTimeElement | null};
+      const onFocus = vi.fn();
+      const {rerender} = render(
+        <Timestamp
+          ref={ref}
+          value="2026-02-19T17:00:00Z"
+          format="date_time"
+          tooltipEntries={[{}]}
+          aria-label="Published"
+          aria-controls="related-content"
+          id="published-at"
+          data-source="cms"
+          onFocus={onFocus}
+          type="body"
+          color="primary"
+          weight="bold"
+          className="custom-timestamp"
+          style={{marginInlineStart: 12}}
+          data-testid="ts"
+        />,
+      );
+      const time = screen.getByTestId('ts');
+      expect(ref.current).toBe(time);
+      expect(time).toHaveAttribute('aria-label', 'Published');
+      expect(time).toHaveAttribute('id', 'published-at');
+      expect(time).toHaveAttribute('data-source', 'cms');
+      const text = time.closest('.astryx-timestamp');
+      expect(text).toHaveClass('astryx-text', 'custom-timestamp');
+      expect(text).toHaveAttribute('data-type', 'body');
+      expect(text).toHaveAttribute('data-color', 'primary');
+      expect(text).toHaveStyle({marginInlineStart: '12px'});
+
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute(
+          'aria-controls',
+          `related-content ${card.id}`,
+        );
+      });
+      expect(onFocus).toHaveBeenCalledOnce();
+
+      rerender(
+        <Timestamp
+          ref={ref}
+          value="2026-02-19T17:00:00Z"
+          format="date_time"
+          tooltipEntries={[{}]}
+          hasTooltip={false}
+          aria-controls="related-content"
+          data-testid="ts"
+        />,
+      );
+      expect(ref.current).toBe(screen.getByTestId('ts'));
+      expect(ref.current).not.toHaveAttribute('tabindex');
+      expect(ref.current).not.toHaveAttribute('aria-haspopup');
+      expect(ref.current).toHaveAttribute('aria-controls', 'related-content');
+      expect(
+        screen.queryByRole('dialog', {hidden: true}),
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps a caller aria-controls changed while the card is open', async () => {
+      const props = {
+        value: '2026-02-19T17:00:00Z',
+        format: 'date_time',
+        tooltipEntries: [{}],
+        'data-testid': 'ts',
+      } as const;
+      const {rerender} = render(<Timestamp {...props} aria-controls="first" />);
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `first ${card.id}`);
+      });
+
+      rerender(<Timestamp {...props} aria-controls="second" />);
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `second ${card.id}`);
+      });
+
+      act(() => time.blur());
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', 'second');
+      });
+    });
+
+    it('names no card after an open card is removed and a new one attaches', async () => {
+      const view = (hasTooltip: boolean) => (
+        <>
+          <Timestamp
+            value="2026-02-19T17:00:00Z"
+            format="date_time"
+            tooltipEntries={[{}]}
+            hasTooltip={hasTooltip}
+            data-testid="ts"
+          />
+          <button type="button">Elsewhere</button>
+        </>
+      );
+      const {rerender} = render(view(true));
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', card.id);
+      });
+
+      // The open card unmounts without a hide. Focus then moves on, and a new
+      // card attaches closed.
+      rerender(view(false));
+      act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
+      rerender(view(true));
+      await act(async () => {});
+      expect(time).toHaveAttribute('tabindex', '0');
+      expect(time).not.toHaveAttribute('aria-controls');
     });
 
     it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
@@ -940,10 +1218,11 @@ describe('Timestamp', () => {
           data-testid="ts"
         />,
       );
-      const label = screen.getByTestId('ts').getAttribute('aria-label');
-      expect(label).toBeTruthy();
-      // The label is the full absolute string, not the relative text.
-      expect(label).not.toContain('ago');
+      const time = screen.getByTestId('ts');
+      const label = time.getAttribute('aria-label') ?? '';
+      // The label is the visible relative text, then the full absolute date.
+      expect(label.startsWith(`${time.textContent ?? ''}, `)).toBe(true);
+      expect(label).toMatch(/\d{4}/);
     });
   });
 
@@ -1039,6 +1318,41 @@ describe('Timestamp', () => {
       });
     });
 
+    it('names and announces a failed copy, then returns to rest', async () => {
+      (
+        navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+      ).mockRejectedValueOnce(new Error('clipboard denied'));
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      const restName = button.getAttribute('aria-label');
+      fireEvent.mouseEnter(button);
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(button).toHaveAccessibleName(
+          'Failed to copy value to clipboard.',
+        ),
+      );
+      // The tooltip says the same, in step with the name.
+      await waitFor(() =>
+        expect(
+          screen.getByText('Failed to copy value to clipboard.', {
+            selector: '[role="tooltip"] *, [role="tooltip"]',
+          }),
+        ).toBeInTheDocument(),
+      );
+      // A failure is an error, so it goes to the assertive region.
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-astryx-live-region="assertive"]'),
+        ).toHaveTextContent('Failed to copy value to clipboard.'),
+      );
+      await waitFor(
+        () => expect(button).toHaveAttribute('aria-label', restName ?? ''),
+        {timeout: 3000},
+      );
+    });
+
     it("shows a 'Copy' tooltip on the copy button, flipping to 'Copied' after a copy", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
@@ -1072,6 +1386,7 @@ describe('Timestamp', () => {
         check: <span data-icon="check" />,
         clock: <span data-icon="clock" />,
         checkDouble: <span data-icon="checkDouble" />,
+        close: <span data-icon="close" />,
       };
 
       async function renderCard(componentIcons?: ComponentIconMap<never>) {
@@ -1102,6 +1417,42 @@ describe('Timestamp', () => {
         expect(glyph(button)).toBe('copy');
         await copy(button);
         expect(glyph(button)).toBe('check');
+      });
+
+      it('draws close while a failed copy shows, when the theme maps nothing', async () => {
+        (
+          navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+        ).mockRejectedValueOnce(new Error('clipboard denied'));
+        const button = await renderCard();
+        fireEvent.click(button);
+        await waitFor(() =>
+          expect(button).toHaveAccessibleName(
+            'Failed to copy value to clipboard.',
+          ),
+        );
+        expect(glyph(button)).toBe('close');
+      });
+
+      it('passes `copied: false` to a slot function while a failure that follows a success shows', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+        await copy(button);
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+
+        // A second write fails within the 1.5 seconds the success shows.
+        (
+          navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+        ).mockRejectedValueOnce(new Error('clipboard denied'));
+        fireEvent.click(button);
+        await waitFor(() =>
+          expect(button).toHaveAccessibleName(
+            'Failed to copy value to clipboard.',
+          ),
+        );
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        expect(glyph(button)).toBe('clock');
       });
 
       it('passes `copied` to a slot function and draws the name it returns', async () => {
@@ -1602,8 +1953,9 @@ describe('Timestamp', () => {
           .formatToParts(date)
           .find(p => p.type === 'timeZoneName')?.value ?? '';
       const [line] = formatTooltipLines(date, [{format: 'full'}], 'en');
-      expect(screen.getByTestId('ts').getAttribute('aria-label')).toBe(
-        line.value.replace(tzPart('short'), tzPart('long')),
+      const time = screen.getByTestId('ts');
+      expect(time.getAttribute('aria-label')).toBe(
+        `${time.textContent ?? ''}, ${line.value.replace(tzPart('short'), tzPart('long'))}`,
       );
     });
   });
@@ -2117,12 +2469,14 @@ describe('Timestamp calendar systems', () => {
     vi.setSystemTime(new Date(INSTANT.getTime() + 2 * 3600 * 1000));
     try {
       renderTimestamp({locale: 'en', calendar: 'hebrew'}, 'relative');
-      const name = screen.getByTestId('ts').getAttribute('aria-label') ?? '';
+      const time = screen.getByTestId('ts');
+      const name = time.getAttribute('aria-label') ?? '';
       expect(name).toBe(
-        formatInstant(INSTANT, 'full', 'en', {
-          calendar: 'hebrew',
-          timeZoneNameStyle: 'long',
-        }),
+        `${time.textContent ?? ''}, ` +
+          formatInstant(INSTANT, 'full', 'en', {
+            calendar: 'hebrew',
+            timeZoneNameStyle: 'long',
+          }),
       );
       expect(name).toContain('5787');
       expect(screen.getByTestId('ts').textContent).toBe('2 hours ago');
@@ -2270,6 +2624,260 @@ describe('Timestamp calendar systems', () => {
       warn.mockRestore();
       act(() => root?.unmount());
       host.remove();
+    }
+  });
+});
+
+describe('Timestamp formatter builds', () => {
+  const RealDateTimeFormat = Intl.DateTimeFormat;
+  /** The options of each formatter built since the last reset. */
+  let builds: Intl.DateTimeFormatOptions[] = [];
+  const FULL: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    calendar: 'gregory',
+  };
+  const HOUR_SECONDS = 3600;
+  const originalTZ = process.env.TZ;
+
+  beforeAll(async () => {
+    // The hover card loads lazily. Load its chunk before any count.
+    await import('./TimestampHoverCard');
+  });
+
+  beforeEach(() => {
+    builds = [];
+    Intl.DateTimeFormat = new Proxy(RealDateTimeFormat, {
+      construct(target, args: unknown[], newTarget) {
+        builds.push((args[1] as Intl.DateTimeFormatOptions | undefined) ?? {});
+        return Reflect.construct(target, args, newTarget) as object;
+      },
+    });
+  });
+
+  afterEach(() => {
+    Intl.DateTimeFormat = RealDateTimeFormat;
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
+  /** Ends the task, so the next render runs in a task of its own. */
+  async function nextTask(): Promise<void> {
+    await new Promise(resolve => {
+      setTimeout(resolve, 0);
+    });
+  }
+
+  /** A palette's twelve rows, each an hour before `now`. */
+  function Rows({now}: {now: number}) {
+    return (
+      <ul>
+        {Array.from({length: 12}, (_, index) => (
+          <li key={index}>
+            <Timestamp
+              value={now - (index + 1) * HOUR_SECONDS}
+              format="relative"
+            />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  /** What a formatter built for the call writes, as each one did before. */
+  function fresh(
+    date: Date,
+    locale: string,
+    options: Intl.DateTimeFormatOptions,
+  ): string {
+    return new RealDateTimeFormat(locale, options).format(date);
+  }
+
+  /** Hovers the first time on the page and waits for its card. */
+  async function openFirstCard(): Promise<HTMLElement> {
+    const time = document.querySelector('time');
+    if (time == null) {
+      throw new Error('Expected Timestamp to render a <time> element');
+    }
+    await userEvent.hover(time);
+    return waitFor(() => screen.getByRole('dialog', {hidden: true}));
+  }
+
+  /** The long zone name a formatter built for the call writes. */
+  function freshZoneName(
+    date: Date,
+    locale: string,
+    timeZone?: string,
+  ): string {
+    return (
+      new RealDateTimeFormat(locale, {timeZoneName: 'long', timeZone})
+        .formatToParts(date)
+        .find(part => part.type === 'timeZoneName')?.value ?? ''
+    );
+  }
+
+  it('builds only the accessible names for a list of relative timestamps whose cards are closed', async () => {
+    // The first render builds the formatters that are kept, such as the
+    // calendar's.
+    render(<Rows now={Date.now() / 1000} />).unmount();
+    await nextTask();
+    builds = [];
+    render(<Rows now={Date.now() / 1000} />);
+    // Each row's accessible name carries its full date in the viewer's zone.
+    // The host can change that zone at any time, so each row builds that
+    // formatter.
+    expect(builds).toEqual(
+      Array.from({length: 12}, () => ({...FULL, timeZoneName: 'long'})),
+    );
+  });
+
+  it('formats a hover card line only when the card shows, with the same text', async () => {
+    const value = new Date('2026-03-25T10:00:00Z');
+    process.env.TZ = 'UTC';
+    render(<Timestamp value={value.getTime() / 1000} format="relative" />);
+    expect(builds.filter(options => options.timeZoneName === 'short')).toEqual(
+      [],
+    );
+    const card = await openFirstCard();
+    expect(card.textContent).toContain(
+      fresh(value, 'en-US', {...FULL, timeZoneName: 'short'}),
+    );
+    expect(card.textContent).toContain(freshZoneName(value, 'en-US'));
+  });
+
+  it('builds no formatter on a later render of a timestamp in the time format pinned to a zone', async () => {
+    const view = (value: number) => (
+      <Timestamp
+        value={value}
+        format="time"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+      />
+    );
+    const {rerender} = render(view(1665792474));
+    await nextTask();
+    builds = [];
+    rerender(view(1665792534));
+    expect(builds).toEqual([]);
+  });
+
+  it('writes a zone the host changes between two renders into the second', () => {
+    const value = new Date('2026-03-25T10:00:00Z');
+    const view = (key: string) => (
+      <Timestamp key={key} value={value.getTime() / 1000} format="relative" />
+    );
+    process.env.TZ = 'UTC';
+    const {rerender} = render(view('utc'));
+    expect(
+      document.querySelector('time')?.getAttribute('aria-label'),
+    ).toContain('Coordinated Universal Time');
+    process.env.TZ = 'Asia/Tokyo';
+    rerender(view('tokyo'));
+    expect(
+      document.querySelector('time')?.getAttribute('aria-label'),
+    ).toContain('Japan Standard Time');
+  });
+
+  it('warns about an unknown zone in an entry as the timestamp renders, before its card shows', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <Timestamp
+          value={1665792474}
+          format="relative"
+          tooltipEntries={[{timezoneID: 'Never/Shown'}]}
+        />,
+      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Never/Shown'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  describe('writes the text of a formatter built for the call', () => {
+    const cases: ReadonlyArray<{zone: string; at: string}> = [
+      {zone: 'UTC', at: '2026-03-25T10:00:00Z'},
+      {zone: 'Asia/Kolkata', at: '2026-03-25T10:00:00Z'},
+      // The last second of Pacific standard time, and the first of daylight
+      // time.
+      {zone: 'America/Los_Angeles', at: '2026-03-08T09:59:59Z'},
+      {zone: 'America/Los_Angeles', at: '2026-03-08T10:00:00Z'},
+      // Lord Howe Island moves its clocks by half an hour: the last second of
+      // daylight time, and the first of standard time.
+      {zone: 'Australia/Lord_Howe', at: '2026-04-04T14:59:59Z'},
+      {zone: 'Australia/Lord_Howe', at: '2026-04-04T15:00:00Z'},
+    ];
+    const locales = ['en-US', 'de-DE', 'ja-JP', 'ar-EG'];
+
+    for (const {zone, at} of cases) {
+      for (const locale of locales) {
+        it(`${locale}, ${zone}, ${at}`, async () => {
+          process.env.TZ = zone;
+          const date = new Date(at);
+          const value = date.getTime() / 1000;
+          const time: Intl.DateTimeFormatOptions = {
+            hour: 'numeric',
+            minute: '2-digit',
+          };
+          const view = render(
+            <InternationalizationProvider locale={locale}>
+              <Timestamp value={value} format="relative" />
+              <Timestamp value={value} format="time" hasTooltip={false} />
+              <Timestamp
+                value={value}
+                format="time"
+                timezoneID={zone}
+                hasTooltip={false}
+              />
+            </InternationalizationProvider>,
+          );
+          const [relative, local, pinned] = document.querySelectorAll('time');
+          expect(relative.getAttribute('aria-label')).toContain(
+            fresh(date, locale, {...FULL, timeZoneName: 'long'}),
+          );
+          expect(local.textContent).toBe(fresh(date, locale, time));
+          // A formatter pinned to a zone is kept. Each zone's second case
+          // reads the first case's formatter across its daylight-saving
+          // change.
+          expect(pinned.textContent).toBe(
+            fresh(date, locale, {...time, timeZone: zone}),
+          );
+          const card = await openFirstCard();
+          expect(card.textContent).toContain(
+            fresh(date, locale, {...FULL, timeZoneName: 'short'}),
+          );
+          expect(card.textContent).toContain(freshZoneName(date, locale));
+          view.unmount();
+
+          render(
+            <InternationalizationProvider locale={locale}>
+              <Timestamp
+                value={value}
+                format="relative"
+                tooltipEntries={[{timezoneID: zone}]}
+              />
+            </InternationalizationProvider>,
+          );
+          const pinnedCard = await openFirstCard();
+          expect(pinnedCard.textContent).toContain(
+            fresh(date, locale, {
+              ...FULL,
+              timeZoneName: 'short',
+              timeZone: zone,
+            }),
+          );
+          expect(pinnedCard.textContent).toContain(
+            freshZoneName(date, locale, zone),
+          );
+        });
+      }
     }
   });
 });

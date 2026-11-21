@@ -9,7 +9,8 @@ import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Grid} from '@astryxdesign/core/Grid';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
-import {ArrowRightIcon} from '@heroicons/react/20/solid';
+import {rtlStyles} from '@astryxdesign/core/utils';
+import {ArrowRightIcon} from '@astryxdesign/template-icons/20/solid';
 
 const IMAGES = [
   {
@@ -45,7 +46,7 @@ export default function GalleryHero() {
   return (
     <Layout
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6} hAlign="center">
               <VStack gap={3} hAlign="center">
@@ -69,17 +70,23 @@ export default function GalleryHero() {
                 <Button
                   label="Get started"
                   variant="primary"
+                  href="#"
                   endContent={
-                    <Icon icon={ArrowRightIcon} size="sm" color="inherit" />
+                    <Icon
+                      icon={ArrowRightIcon}
+                      size="sm"
+                      color="inherit"
+                      xstyle={rtlStyles.mirror}
+                    />
                   }
                 />
-                <Button label="Learn more" variant="secondary" />
+                <Button label="Learn more" variant="secondary" href="#" />
               </HStack>
             </VStack>
             <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>
               {IMAGES.map(image => (
                 <AspectRatio
-                  key={image.src}
+                  key={image.alt}
                   ratio={4 / 5}
                   style={galleryImageClip}>
                   <img style={galleryImage} src={image.src} alt={image.alt} />

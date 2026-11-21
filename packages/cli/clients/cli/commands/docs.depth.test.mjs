@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -11,7 +12,7 @@ const SLOW = 60_000;
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-docs-depth-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-docs-depth-test-'));
 });
 
 afterEach(() => {
@@ -236,6 +237,46 @@ describe('astryx docs --depth', () => {
         .find(line => line.includes('cli/api/functions/search'));
       expect(stable).toBeDefined();
       expect(stable).not.toContain('[experimental]');
+    },
+    SLOW,
+  );
+
+  it(
+    'marks each experimental child the same way in its namespace and on the list',
+    async () => {
+      const json = await runCli(['--json', 'docs', 'cli/experimental']);
+      expect(json.status).toBe(0);
+      /** @type {Array<{route: string, name: string, stability?: string}>} */
+      const children = JSON.parse(json.stdout).data.slots.flatMap(
+        (/** @type {{children: Array<any>}} */ slot) => slot.children,
+      );
+      const read = await runCli(['docs', 'cli/experimental']);
+      const list = await runCli(['docs', '--depth', '2']);
+      expect(read.status).toBe(0);
+      expect(list.status).toBe(0);
+      /**
+       * @param {string} stdout
+       * @param {string} name the row's first column
+       */
+      const marked = (stdout, name) => {
+        const row = stdout
+          .split('\n')
+          .find(line => line.split(/\s{2,}/u)[0] === name);
+        expect(row, name).toBeDefined();
+        return /^\S+\s{2,}\[experimental\]/u.test(/** @type {string} */ (row));
+      };
+      const inNamespace = children.map(child =>
+        marked(read.stdout, child.name),
+      );
+      const onList = children.map(child => marked(list.stdout, child.route));
+      expect(onList).toEqual(inNamespace);
+      // The namespace holds both kinds: an experimental child that is marked,
+      // and one whose own summary already says so and is not marked twice.
+      expect(children.every(child => child.stability === 'experimental')).toBe(
+        true,
+      );
+      expect(inNamespace).toContain(true);
+      expect(inNamespace).toContain(false);
     },
     SLOW,
   );

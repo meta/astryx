@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableRowIndex',
   description:
-    'Hook that returns a TablePlugin which prepends a right-aligned, monospaced row-number column. Numbering follows the rows the table renders (reflecting the current sort / filter / pagination view) and starts at 1 by default. Without data, Table gives each row its position; with data, numbers follow that array.',
+    'Hook that returns a TablePlugin which prepends a right-aligned, monospaced row-number column, starting at 1 by default. Without data, Table supplies row positions; with data, ordinary numbers follow that array. Windowed rows use the parent Table logical position directly; nondefault startFrom values use full rendering.',
   props: [
     {
       name: 'data',
@@ -39,10 +39,11 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Returns a TablePlugin that prepends a right-aligned monospaced row-number column. Numbering follows the rendered rows (current sort/filter/page view), 1-based by default. Without data, Table supplies each row position; with data, numbers follow it.',
+    'Returns a TablePlugin with a right-aligned monospaced row-number column, 1-based by default. Without data, Table supplies positions; with data, ordinary numbers follow it. Windowed rows use the parent logical position, and nondefault startFrom falls back to full rendering.',
   propDescriptions: {
-    data: 'Optional array whose order the numbers follow; omit to use Table row positions.',
-    getRowKey: 'Optional key extractor used with data; otherwise items match by reference.',
+    data: 'Optional array whose order ordinary numbers follow; omit to use Table row positions.',
+    getRowKey:
+      'Optional key extractor used with data; otherwise items match by reference.',
     label: "Header label for the index column. Default '#'.",
     startFrom: 'First index value. Default 1.',
   },

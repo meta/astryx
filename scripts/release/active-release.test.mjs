@@ -8,10 +8,14 @@
  * @position focused safety suite for the release-branch CI contract
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   createRepository,
@@ -23,21 +27,32 @@ import {
   buildMarker,
   buildPlan,
   canaryEligibility,
+  changedStatementsFromDiff,
   declaredVersionAtRef,
+  isReleaseTestRepairPath,
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
+  successorPlanReadiness,
+  validateCodemodPromotionApplicabilityAtRef,
+  validateCodemodPromotionApplicabilityMove,
   validateReleaseDiff,
+  validateReleaseTestRepair,
   validateHistoricalReleaseMergeBack,
   validateReleaseMergeBack,
   validateReleaseState,
   writeAuthority,
 } from './active-release.mjs';
+import {classifyReleaseDiff} from './release-paths.mjs';
 
 const CUT = '1'.repeat(40);
 const HEAD = '2'.repeat(40);
 const NEXT_HEAD = '3'.repeat(40);
+const ACTIVE_RELEASE = fileURLToPath(
+  new URL('./active-release.mjs', import.meta.url),
+);
 const BRANCH = 'release/v0.6.5';
+const execFileAsync = promisify(execFile);
 const roots = [];
 
 function fixture({withChangeset = false, changesetText = null} = {}) {
@@ -119,6 +134,39 @@ function validate(state, overrides = {}) {
     activeBranches: [BRANCH],
     ...overrides,
   });
+}
+
+function ownerRecutReceipt(
+  root,
+  {version = '0.6.5', tagSha, tagObjectType = 'commit', digestOverride} = {},
+) {
+  const document = {
+    schemaVersion: 1,
+    kind: 'tagged-unpublished-owner-recut-authority',
+    version,
+    priorTag: {
+      name: `v${version}`,
+      objectType: tagObjectType,
+      objectSha: tagSha ?? git(root, 'rev-parse', 'HEAD'),
+    },
+    publicationAbsence: {
+      npmVersion: `${version} absent for every stable package`,
+      githubRelease: 'absent',
+      deploy: 'absent',
+      mainSync: 'absent',
+    },
+    ownerAuthority: {
+      source: 'release owner',
+      time: '2026-11-20T04:41:00Z',
+      verbatim: 'recut the missed version from main',
+    },
+  };
+  const file = path.join(root, 'owner-recut.json');
+  const body = `${JSON.stringify(document, null, 2)}\n`;
+  fs.writeFileSync(file, body);
+  const digest =
+    digestOverride ?? crypto.createHash('sha256').update(body).digest('hex');
+  return `${file} SHA-256 ${digest}`;
 }
 
 afterEach(() => {
@@ -248,6 +296,349 @@ describe('one branch per release lifecycle', () => {
     expect(() => writeAuthority(root, identity(cutSha), false)).toThrow(
       'use a new release branch and version',
     );
+  });
+
+  it('allows only an authenticated unpublished owner recut over an existing tag', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.5');
+    const values = identity(cutSha);
+
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            digestOverride: '0'.repeat(64),
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt SHA-256 does not match');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {version: '0.6.6'}),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            tagObjectType: 'tag',
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root, {
+            tagSha: 'f'.repeat(40),
+          }),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt does not match the release version and tag');
+
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...values,
+          'owner-recut-receipt': ownerRecutReceipt(root),
+        },
+        false,
+      ),
+    ).not.toThrow();
+  });
+
+  it('runs create over an authenticated archived tag and binds the recut authority', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    const reference = ownerRecutReceipt(root);
+    const server = http.createServer((request, response) => {
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest: '0.6.4'}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+
+    try {
+      await execFileAsync(process.execPath, [
+        ACTIVE_RELEASE,
+        'create',
+        '--root',
+        root,
+        '--version',
+        '0.6.5',
+        '--branch',
+        BRANCH,
+        '--cut-sha',
+        cutSha,
+        '--owner-recut-receipt',
+        reference,
+        '--registry',
+        `http://127.0.0.1:${address.port}`,
+      ]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+
+    const plan = JSON.parse(
+      fs.readFileSync(path.join(root, '.release/plan.json'), 'utf8'),
+    );
+    const marker = JSON.parse(
+      fs.readFileSync(path.join(root, '.release/active.json'), 'utf8'),
+    );
+    expect(plan.ownerRecut).toMatchObject({
+      version: '0.6.5',
+      tagName: 'v0.6.5',
+      tagSha: git(root, 'rev-parse', 'v0.6.5^{commit}'),
+      receiptSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(marker.ownerRecut).toEqual(plan.ownerRecut);
+  });
+
+  it('refuses an owner recut when npm already published the version', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    const reference = ownerRecutReceipt(root);
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.end(JSON.stringify({version: '0.6.5', latest: '0.6.5'}));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+
+    try {
+      await expect(
+        execFileAsync(process.execPath, [
+          ACTIVE_RELEASE,
+          'create',
+          '--root',
+          root,
+          '--version',
+          '0.6.5',
+          '--branch',
+          BRANCH,
+          '--cut-sha',
+          cutSha,
+          '--owner-recut-receipt',
+          reference,
+          '--registry',
+          `http://127.0.0.1:${address.port}`,
+        ]),
+      ).rejects.toThrow(
+        /owner recut refuses v0\.6\.5 because npm already has a publication effect/,
+      );
+      expect(fs.existsSync(path.join(root, '.release/active.json'))).toBe(
+        false,
+      );
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('refuses refresh after the archived tag moves', () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    git(root, 'tag', 'v0.6.5');
+    writeAuthority(
+      root,
+      {
+        ...identity(cutSha),
+        'owner-recut-receipt': ownerRecutReceipt(root),
+      },
+      false,
+    );
+    const {movedTagTarget} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        parent: 'refs/heads/main',
+        name: 'movedTagTarget',
+        message: 'move archived tag',
+      },
+    ]);
+    git(root, 'tag', '-f', 'v0.6.5', movedTagTarget);
+
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        [
+          ACTIVE_RELEASE,
+          'refresh',
+          '--root',
+          root,
+          '--version',
+          '0.6.5',
+          '--branch',
+          BRANCH,
+          '--cut-sha',
+          cutSha,
+        ],
+        {encoding: 'utf8'},
+      ),
+    ).toThrow(/archived owner-recut tag no longer matches its bound commit/);
+  });
+
+  it('refuses the successor command until npm stable publication', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.5');
+    writeAuthority(
+      root,
+      {
+        ...identity(cutSha),
+        'owner-recut-receipt': ownerRecutReceipt(root),
+      },
+      false,
+    );
+    const {releaseHead} = importCommits(root, [
+      {
+        ref: `refs/heads/${BRANCH}`,
+        parent: 'refs/heads/main',
+        name: 'releaseHead',
+        message: 'owner recut authority',
+        snapshot: true,
+        files: workingTreeFiles(root),
+      },
+    ]);
+    let latest = '0.6.4';
+    const server = http.createServer((request, response) => {
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const args = [
+      ACTIVE_RELEASE,
+      'next-plan-version',
+      '--root',
+      root,
+      '--released-version',
+      '0.6.5',
+      '--release-ref',
+      `refs/heads/${BRANCH}`,
+      '--registry',
+      `http://127.0.0.1:${address.port}`,
+    ];
+
+    try {
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      git(root, 'tag', '-f', 'v0.6.5', releaseHead);
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      latest = '0.6.5';
+      const {stdout} = await execFileAsync(process.execPath, args);
+      expect(stdout.trim()).toBe('0.6.6');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('holds an ordinary tagged release through npm absence or unreadability', async () => {
+    const {root, cutSha} = cutFixture();
+    git(root, 'tag', 'v0.6.4');
+    writeAuthority(root, identity(cutSha), false);
+    const {releaseHead} = importCommits(root, [
+      {
+        ref: `refs/heads/${BRANCH}`,
+        parent: 'refs/heads/main',
+        name: 'releaseHead',
+        message: 'ordinary release authority',
+        snapshot: true,
+        files: workingTreeFiles(root),
+      },
+    ]);
+    git(root, 'tag', 'v0.6.5', releaseHead);
+
+    let registryState = 'absent';
+    const server = http.createServer((request, response) => {
+      if (registryState === 'unreadable') {
+        response.writeHead(503, {'content-type': 'application/json'});
+        response.end('{}');
+        return;
+      }
+      if (request.url?.endsWith('/dist-tags')) {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({latest: '0.6.4'}));
+        return;
+      }
+      if (registryState === 'published') {
+        response.writeHead(200, {'content-type': 'application/json'});
+        response.end(JSON.stringify({version: '0.6.5'}));
+        return;
+      }
+      response.writeHead(404, {'content-type': 'application/json'});
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const args = [
+      ACTIVE_RELEASE,
+      'next-plan-version',
+      '--root',
+      root,
+      '--released-version',
+      '0.6.5',
+      '--release-ref',
+      `refs/heads/${BRANCH}`,
+      '--registry',
+      `http://127.0.0.1:${address.port}`,
+    ];
+
+    try {
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan waits until v0\.6\.5 has a publication effect/,
+      );
+      registryState = 'unreadable';
+      await expect(execFileAsync(process.execPath, args)).rejects.toThrow(
+        /successor plan cannot verify npm stable publication/,
+      );
+      registryState = 'published';
+      const {stdout} = await execFileAsync(process.execPath, args);
+      expect(stdout.trim()).toBe('0.6.6');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('refuses an owner recut receipt when the archived tag is absent', () => {
+    const {root, cutSha} = cutFixture();
+    expect(() =>
+      writeAuthority(
+        root,
+        {
+          ...identity(cutSha),
+          'owner-recut-receipt': ownerRecutReceipt(root),
+        },
+        false,
+      ),
+    ).toThrow('owner-recut receipt requires the archived tag');
   });
 
   it("binds the release version to main's declared version at the cut", () => {
@@ -452,6 +843,731 @@ describe('active release branch authority', () => {
     ).toEqual([]);
   });
 
+  it('allows only the exact AST-057 pointers moved by codemod promotion', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const sources = [
+      'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+      'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+    ];
+    const destinations = sources.map(file =>
+      file.replace('/transforms/next/', '/transforms/v0.7.17/'),
+    );
+    const promotionEntries = sources.map(
+      (file, index) => `R100\t${file}\t${destinations[index]}`,
+    );
+    const entries = [`M\t${spec}`, ...promotionEntries];
+    const before = `{"paths":${JSON.stringify(sources)}}\n`;
+    const after = sources.reduce(
+      (text, file, index) => text.replace(file, destinations[index]),
+      before,
+    );
+    const validateMove = overrides =>
+      validateCodemodPromotionApplicabilityMove({
+        before,
+        after,
+        entries,
+        status: 'M',
+        version: '0.7.17',
+        ...overrides,
+      });
+
+    expect(classifyReleaseDiff(entries)).toBe('version-bump');
+    expect(validateMove()).toEqual([]);
+    expect(
+      validateReleaseDiff(entries, {
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(validateReleaseDiff(entries)).toContain(
+      `release bump contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+
+    expect(validateMove({entries: entries.slice(0, -1)})).toContain(
+      `codemod promotion does not rename ${sources[1]} to ${destinations[1]}`,
+    );
+    expect(validateMove({before: `${before}${sources[0]}\n`})).toContain(
+      `${spec} must contain the exact pre-promotion pointer once: ${sources[0]}`,
+    );
+    expect(validateMove({status: 'D'})).toContain(
+      `${spec} may only be modified by a generated codemod promotion`,
+    );
+    expect(
+      validateMove({after: after.replace('{"paths"', '{"other"')}),
+    ).toContain(
+      `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+    expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
+      'invalid',
+    );
+  });
+
+  it('reports a missing AST-057 record instead of reading null bytes', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-codemod-applicability-'),
+    );
+    roots.push(root);
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const {base, deleted} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'base',
+        snapshot: true,
+        files: {[spec]: 'record\n'},
+      },
+      {
+        ref: 'refs/heads/candidate',
+        name: 'deleted',
+        parent: 'base',
+        files: {[spec]: null},
+      },
+    ]);
+
+    const result = validateCodemodPromotionApplicabilityAtRef(root, {
+      base,
+      head: deleted,
+      entries: [`D\t${spec}`],
+      version: '0.7.17',
+    });
+    expect(result.errors).toContain(
+      `${spec} must exist before and after the codemod promotion`,
+    );
+    expect(result.validatedPaths).toEqual(new Set());
+  });
+
+  it('admits one post-bump test repair whose patch already merged on main', () => {
+    const patchId = 'a'.repeat(40);
+    const changeDigest = 'c'.repeat(64);
+    const sourceCommit = 'b'.repeat(40);
+    const valid = {
+      entries: [
+        'M\tpackages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts',
+      ],
+      changedLines: ['await mouseDrag(page, {duration: 50});'],
+      commitCount: 1,
+      mergeCommitCount: 0,
+      patchId,
+      changeDigest,
+      mainPatches: new Map([
+        [patchId, [{commit: sourceCommit, changeDigest, presentAtMain: true}]],
+      ]),
+      baseChangesets: new Map(),
+    };
+    expect(isReleaseTestRepairPath(valid.entries[0].split('\t')[1])).toBe(true);
+    expect(
+      isReleaseTestRepairPath(
+        'packages/cli/assets/codemods/transforms/v0.7.12/__tests__/remove-old-api.test.mjs',
+      ),
+    ).toBe(false);
+    expect(
+      isReleaseTestRepairPath(
+        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
+      ),
+    ).toBe(false);
+    expect(validateReleaseTestRepair(valid)).toEqual({
+      errors: [],
+      sourceCommit,
+    });
+  });
+
+  it('fails closed for any broader or unproven release test repair', () => {
+    const patchId = 'a'.repeat(40);
+    const changeDigest = 'c'.repeat(64);
+    const sourceCommit = 'b'.repeat(40);
+    const repair = overrides =>
+      validateReleaseTestRepair({
+        entries: ['M\tinternal/interaction-harness/runner.ts'],
+        changedLines: ['const release = event.timeStamp;'],
+        commitCount: 1,
+        mergeCommitCount: 0,
+        patchId,
+        changeDigest,
+        mainPatches: new Map([
+          [
+            patchId,
+            [{commit: sourceCommit, changeDigest, presentAtMain: true}],
+          ],
+        ]),
+        baseChangesets: new Map(),
+        ...overrides,
+      }).errors;
+
+    expect(
+      repair({
+        entries: [
+          'R100\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts.disabled',
+        ],
+      }),
+    ).toContain(
+      'release test repair may only modify an existing test: R100\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts.disabled',
+    );
+    expect(
+      repair({entries: ['A\tpackages/core/src/Button/Button.test.tsx']}),
+    ).toContain(
+      'release test repair may only modify an existing test: A\tpackages/core/src/Button/Button.test.tsx',
+    );
+    expect(
+      repair({entries: ['M\tpackages/core/src/Button/Button.tsx']}),
+    ).toContain(
+      'release test repair contains a non-test path: packages/core/src/Button/Button.tsx',
+    );
+    expect(
+      repair({
+        entries: ['M\tpackages/core/src/Button/__snapshots__/Button.snap'],
+      }),
+    ).toContain(
+      'release test repair contains a non-test path: packages/core/src/Button/__snapshots__/Button.snap',
+    );
+    expect(
+      repair({
+        entries: ['M\tapps/docsite/e2e/theme-showcase.spec.ts'],
+      }),
+    ).toContain(
+      'release test repair contains a non-test path: apps/docsite/e2e/theme-showcase.spec.ts',
+    );
+    expect(
+      repair({
+        entries: ['M\tapps/docsite/src/__tests__/routing.test.ts'],
+      }),
+    ).toContain(
+      'release test repair contains a non-test path: apps/docsite/src/__tests__/routing.test.ts',
+    );
+    for (const line of [
+      'expect(dialog).toBeHidden();',
+      '.toBeHidden({visible: false});',
+      'expectNoA11yViolations(page);',
+      'test.skip(true, "flaky");',
+      'test.fail();',
+      'test.slow();',
+      'skip();',
+      'ctx.fixme();',
+      'testInfo.skip();',
+      'test.info().fail();',
+      'it.skipIf(process.platform === "darwin")();',
+      'describe.runIf(false)();',
+      'const timeoutMs = 2_000;',
+      'retries: 3,',
+      'axe.disableRules(["color-contrast"]);',
+      'return;',
+      'expect(tree).toMatchSnapshot();',
+    ]) {
+      expect(repair({changedLines: [line]})).toContain(
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
+      );
+    }
+    const statementCases = [
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,6 +1,6 @@
+ before();
+ await expect.poll(() => count).toBeGreaterThan(
+-  0,
++  1,
+ );
+ after();`,
+        expected: 'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+      },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,6 +1,6 @@
+ before();
+ await expect(result).toEqual({
+-  value: 1,
++  value: 2,
+ });
+ after();`,
+        expected: 'await expect(result).toEqual({\n  value: 2,\n});',
+      },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,7 +1,7 @@
+ before();
+ await expect.poll(() => {
+-  return ready;
++  return settled;
+ }).toBe(true);
+ after();`,
+        expected:
+          'await expect.poll(() => {\n  return settled;\n}).toBe(true);',
+      },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -84,5 +84,5 @@
+       children: [
+         {type: 'paragraph'},
+       ],
+-      ordered: false,
++      ordered: true,
+     });`,
+        expected: '<unbounded changed statement>',
+      },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -493,5 +493,5 @@
+       brand: {
+         light: {
+-          accent: neutralPalettes.green.light[25],
++          accent: neutralPalettes.green.light[30],
+         },
+       },`,
+        expected: '<unbounded changed statement>',
+      },
+    ];
+    for (const {diff, expected} of statementCases) {
+      const changedStatements = changedStatementsFromDiff(diff);
+      expect(changedStatements).toContain(expected);
+      expect(repair({changedLines: undefined, changedStatements})).toContain(
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
+      );
+    }
+    const portStatements =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,7 +1,7 @@
+ /**
+  * @file BottomSheetRelease.a11y.chromium.spec.ts
+- * @input Built BottomSheet stories and real Chromium touch input (CDP), each
+- *   event with its own timestamp
++ * @input Built BottomSheet stories and real Chromium touch and mouse input
++ *   (CDP), each event with its own timestamp
+  * @output Browser evidence for the touch release.
+  */
+@@ -20,5 +20,8 @@
+ setup();
++const cdp = await page.context().newCDPSession(page);
++// 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
++// dismiss line even when event delivery is slow.
++await mouseDrag(cdp, sheet, 150, 50);
+ cleanup();`);
+    expect(portStatements).not.toContain('<unbounded changed statement>');
+
+    const multiStatementChange =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1 +1 @@
+-safe(); expect(value).toBe(true);
++safe(); expect(value).toBe(false);`);
+    expect(multiStatementChange).toContain('expect(value).toBe(false);');
+    expect(
+      repair({
+        changedLines: undefined,
+        changedStatements: multiStatementChange,
+      }),
+    ).toContain(
+      'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
+    );
+
+    expect(
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1 +1 @@
+-// @vitest-environment node
++// @vitest-environment jsdom`),
+    ).toContain('<unbounded changed statement>');
+
+    expect(repair({commitCount: 2})).toContain(
+      'release test repair must contain exactly one non-merge commit',
+    );
+    expect(repair({mergeCommitCount: 1})).toContain(
+      'release test repair must contain exactly one non-merge commit',
+    );
+    expect(repair({mainPatches: new Map()})).toContain(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+    expect(repair({changeDigest: 'd'.repeat(64)})).toContain(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+    expect(
+      repair({
+        mainPatches: new Map([
+          [
+            patchId,
+            [
+              {
+                commit: sourceCommit,
+                changeDigest,
+                presentAtMain: false,
+              },
+            ],
+          ],
+        ]),
+      }),
+    ).toContain(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+    expect(
+      repair({
+        baseChangesets: new Map([['.changeset/frozen.md', 'c'.repeat(64)]]),
+      }),
+    ).toContain(
+      'release test repair requires the generated version bump to be merged first',
+    );
+  });
+
+  it('proves the real git patch against current main without reading a mixed oversized commit', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-release-test-repair-'),
+    );
+    roots.push(root);
+    const testFile =
+      'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
+    const before = 'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
+    const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
+    const {cut} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'cut',
+        snapshot: true,
+        files: {
+          '.changeset/README.md': '# Changesets\n',
+          'pnpm-workspace.yaml': "packages:\n  - 'packages/*'\n",
+          'packages/core/package.json': JSON.stringify({
+            name: '@astryxdesign/core',
+            version: '0.6.5',
+          }),
+          [testFile]: before,
+        },
+      },
+    ]);
+    const plan = {
+      schemaVersion: 2,
+      version: '0.6.5',
+      branch: BRANCH,
+      cutSha: cut,
+      changesets: [],
+    };
+    const marker = buildMarker(plan);
+    const {
+      mainRepair,
+      largeMain,
+      mixedMain,
+      mainRevert,
+      releaseBase,
+      releaseRepair,
+      whitespaceRepair,
+    } = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'mainRepair',
+        parent: cut,
+        files: {[testFile]: after},
+      },
+      {
+        ref: 'refs/heads/main',
+        name: 'largeMain',
+        parent: 'mainRepair',
+        files: {
+          [testFile]: `${after}// later main context\n`,
+          'large-unrelated.txt': 'x'.repeat(65 * 1024 * 1024),
+        },
+      },
+      {
+        ref: 'refs/heads/mixed-main',
+        name: 'mixedMain',
+        parent: cut,
+        files: {
+          [testFile]: after,
+          'packages/core/src/Button/Button.tsx':
+            'export const productChange = true;\n',
+        },
+      },
+      {
+        ref: `refs/heads/${BRANCH}`,
+        name: 'releaseBase',
+        parent: cut,
+        files: {
+          '.release/active.json': `${JSON.stringify(marker)}\n`,
+          '.release/plan.json': `${JSON.stringify(plan)}\n`,
+        },
+      },
+      {
+        ref: 'refs/heads/repair',
+        name: 'releaseRepair',
+        parent: 'releaseBase',
+        files: {[testFile]: after},
+      },
+      {
+        ref: 'refs/heads/whitespace-repair',
+        name: 'whitespaceRepair',
+        parent: 'releaseBase',
+        files: {
+          [testFile]: 'const ready = true;\nawait mouse Drag(page);\n\n',
+        },
+      },
+      {
+        ref: 'refs/heads/reverted-main',
+        name: 'mainRevert',
+        parent: 'mainRepair',
+        files: {[testFile]: before},
+      },
+    ]);
+    const validator = path.join(import.meta.dirname, 'active-release.mjs');
+    const run = (head, mainRef) =>
+      execFileSync(
+        process.execPath,
+        [
+          validator,
+          'validate-diff',
+          '--root',
+          root,
+          '--base',
+          releaseBase,
+          '--head',
+          head,
+          '--main-ref',
+          mainRef,
+        ],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+      );
+
+    expect(JSON.parse(run(releaseRepair, largeMain))).toMatchObject({
+      kind: 'test-repair',
+      sourceCommit: mainRepair,
+      files: 1,
+    });
+    for (const [head, mainRef] of [
+      [whitespaceRepair, mainRepair],
+      [releaseRepair, mainRevert],
+      [releaseRepair, mixedMain],
+    ]) {
+      try {
+        run(head, mainRef);
+        throw new Error('expected validation to fail');
+      } catch (error) {
+        expect(error.stderr).toContain(
+          'does not exactly match a non-merge commit still present on main',
+        );
+      }
+    }
+  });
+
+  it('admits only an exact reviewed policy bundle onto a predating release branch', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-release-policy-carry-'),
+    );
+    roots.push(root);
+    const validatorFile = 'scripts/release/active-release.mjs';
+    const activeTestFile = 'scripts/release/active-release.test.mjs';
+    const touchedTestFile = '.github/scripts/touched-components.test.mjs';
+    const workflowFile = '.github/workflows/ci.yml';
+    const manifestPath = 'scripts/release/policy-carry/v0.6.5.json';
+    const patchPath = 'scripts/release/policy-carry/v0.6.5.diff';
+    const digest = value =>
+      crypto.createHash('sha256').update(value).digest('hex');
+    const {cut} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'cut',
+        snapshot: true,
+        files: {
+          [validatorFile]: 'main generated only\n',
+          [activeTestFile]: 'main validator tests\n',
+          [touchedTestFile]: 'main workflow contract tests\n',
+          [workflowFile]: 'main trusted base\n',
+          'packages/core/src/Button/Button.tsx': 'export const Button = 1;\n',
+        },
+      },
+    ]);
+    const policyFiles = {
+      [validatorFile]: 'generated or proven test repair\n',
+      [workflowFile]: 'trusted base plus current main\n',
+    };
+    const {releaseBase, policyCarry, wrongContent, productCarry} =
+      importCommits(root, [
+        {
+          ref: `refs/heads/${BRANCH}`,
+          name: 'releaseBase',
+          parent: cut,
+          files: {
+            [validatorFile]: 'release generated only\n',
+            [workflowFile]: 'release trusted base\n',
+          },
+        },
+        {
+          ref: 'refs/heads/policy-carry',
+          name: 'policyCarry',
+          parent: 'releaseBase',
+          files: policyFiles,
+        },
+        {
+          ref: 'refs/heads/wrong-content',
+          name: 'wrongContent',
+          parent: 'releaseBase',
+          files: {
+            ...policyFiles,
+            [workflowFile]: 'almost trusted base plus current main\n',
+          },
+        },
+        {
+          ref: 'refs/heads/product-carry',
+          name: 'productCarry',
+          parent: 'releaseBase',
+          files: {
+            ...policyFiles,
+            'packages/core/src/Button/Button.tsx': 'export const Button = 2;\n',
+          },
+        },
+      ]);
+    const patch = execFileSync(
+      'git',
+      ['diff', '--binary', releaseBase, policyCarry],
+      {cwd: root, encoding: 'utf8'},
+    );
+    const targets = Object.fromEntries(
+      Object.keys(policyFiles)
+        .sort()
+        .map(file => [
+          file,
+          digest(
+            execFileSync('git', ['show', `${policyCarry}:${file}`], {
+              cwd: root,
+            }),
+          ),
+        ]),
+    );
+    const manifest = {
+      schemaVersion: 1,
+      releaseBranch: BRANCH,
+      base: releaseBase,
+      patch: patchPath,
+      patchSha256: digest(patch),
+      targets,
+    };
+    const {mainPolicy} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'mainPolicy',
+        parent: cut,
+        files: {
+          [manifestPath]: `${JSON.stringify(manifest)}\n`,
+          [patchPath]: patch,
+        },
+      },
+    ]);
+    const validator = path.join(import.meta.dirname, 'active-release.mjs');
+    const run = (head, {base = releaseBase, source = mainPolicy} = {}) =>
+      execFileSync(
+        process.execPath,
+        [
+          validator,
+          'validate-policy-carry',
+          '--root',
+          root,
+          '--base',
+          base,
+          '--head',
+          head,
+          '--source',
+          source,
+          '--main-ref',
+          source,
+          '--manifest',
+          manifestPath,
+          '--release-branch',
+          BRANCH,
+        ],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+      );
+
+    expect(JSON.parse(run(policyCarry))).toMatchObject({
+      kind: 'policy-carry',
+      source: mainPolicy,
+      manifest: manifestPath,
+      files: 2,
+    });
+
+    const secondPolicyFiles = {
+      [validatorFile]: 'bounded validator output\n',
+      [activeTestFile]: 'validator regression tests\n',
+      [touchedTestFile]: 'fallback workflow contract tests\n',
+    };
+    const {secondCarry} = importCommits(root, [
+      {
+        ref: 'refs/heads/second-policy-carry',
+        name: 'secondCarry',
+        parent: policyCarry,
+        files: secondPolicyFiles,
+      },
+    ]);
+    const secondPatch = execFileSync(
+      'git',
+      ['diff', '--binary', policyCarry, secondCarry],
+      {cwd: root, encoding: 'utf8'},
+    );
+    const secondManifest = {
+      schemaVersion: 1,
+      releaseBranch: BRANCH,
+      base: policyCarry,
+      patch: patchPath,
+      patchSha256: digest(secondPatch),
+      targets: Object.fromEntries(
+        Object.keys(secondPolicyFiles)
+          .sort()
+          .map(file => [
+            file,
+            digest(
+              execFileSync('git', ['show', `${secondCarry}:${file}`], {
+                cwd: root,
+              }),
+            ),
+          ]),
+      ),
+    };
+    const {mainSecondPolicy} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'mainSecondPolicy',
+        parent: mainPolicy,
+        files: {
+          [manifestPath]: `${JSON.stringify(secondManifest)}\n`,
+          [patchPath]: secondPatch,
+        },
+      },
+    ]);
+    expect(
+      JSON.parse(
+        run(secondCarry, {
+          base: policyCarry,
+          source: mainSecondPolicy,
+        }),
+      ),
+    ).toMatchObject({
+      kind: 'policy-carry',
+      source: mainSecondPolicy,
+      manifest: manifestPath,
+      files: 3,
+    });
+
+    try {
+      run(wrongContent);
+      throw new Error('expected validation to fail');
+    } catch (error) {
+      expect(error.stderr).toContain(
+        `release policy carry file does not match its reviewed bundle: ${workflowFile}`,
+      );
+    }
+    try {
+      run(productCarry);
+      throw new Error('expected validation to fail');
+    } catch (error) {
+      expect(error.stderr).toContain(
+        'release policy carry contains an unauthorized path: packages/core/src/Button/Button.tsx',
+      );
+    }
+  });
+
   it('binds generated-only deletion to the frozen plan paths and hashes', () => {
     const digest = value => value.repeat(64).slice(0, 64);
     const plan = {
@@ -643,6 +1759,39 @@ describe('published release merge-back (FR50)', () => {
       }),
     ).toContain(
       `release merge-back rename does not match published branch: ${from} -> ${to}`,
+    );
+  });
+
+  it('admits only a byte-validated codemod applicability move', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const entries = [
+      'D\t.changeset/frozen.md',
+      'M\tpackages/core/CHANGELOG.md',
+      `M\t${spec}`,
+    ];
+    const common = {
+      entries,
+      base: mainAt('0.7.0'),
+      head: mainAt('0.7.0'),
+    };
+
+    expect(
+      mergeBack({
+        ...common,
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(mergeBack(common)).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+    expect(
+      mergeBack({
+        ...common,
+        entries: [...entries.slice(0, -1), `D\t${spec}`],
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toContain(
+      `release merge-back contains an unvalidated codemod-promotion applicability move: ${spec}`,
     );
   });
 
@@ -946,6 +2095,15 @@ describe('published release merge-back (FR50)', () => {
     expect(nextPlannedVersion('0.7.0', '0.8.0')).toBe('0.8.0');
     expect(nextPlannedVersion('0.7.0', '0.7.2')).toBeNull();
     expect(nextPlannedVersion('0.7.0-canary.1')).toBeNull();
+  });
+
+  it('holds every successor plan until its release has a publication effect', () => {
+    expect(
+      successorPlanReadiness({version: '0.7.17', stablePublished: false}),
+    ).toEqual(['successor plan waits until v0.7.17 has a publication effect']);
+    expect(
+      successorPlanReadiness({version: '0.7.17', stablePublished: true}),
+    ).toEqual([]);
   });
 });
 

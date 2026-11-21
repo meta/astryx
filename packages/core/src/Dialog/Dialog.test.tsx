@@ -480,6 +480,65 @@ describe('Dialog', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('keeps the opener when StrictMode re-runs the capture on a dialog first mounted open', () => {
+    // StrictMode simulates an unmount/remount after the first commit, which
+    // re-runs the layout effect AFTER DialogHeader's own passive effect has
+    // already focused the title. Capturing on every run would take the title
+    // as the opener, and closing would return focus to a node about to unmount.
+    const opener = document.createElement('button');
+    opener.type = 'button';
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const {rerender} = render(
+      <StrictMode>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <DialogHeader title="Review" />
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(screen.getByText('Review'));
+
+    rerender(
+      <StrictMode>
+        <Dialog isOpen={false} onOpenChange={() => {}}>
+          {null}
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('captures a fresh opener on each open, not only the first', () => {
+    const first = document.createElement('button');
+    const second = document.createElement('button');
+    for (const b of [first, second]) {
+      b.type = 'button';
+      document.body.appendChild(b);
+    }
+    // Content mounts only while open, as it does in the other opener test.
+    const dialog = (isOpen: boolean) => (
+      <Dialog isOpen={isOpen} onOpenChange={() => {}}>
+        {isOpen ? <DialogHeader title="Review" /> : null}
+      </Dialog>
+    );
+
+    first.focus();
+    const {rerender} = render(dialog(false));
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(first);
+
+    second.focus();
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(second);
+
+    first.remove();
+    second.remove();
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <Dialog isOpen={true} onOpenChange={() => {}}>
@@ -597,6 +656,22 @@ describe('Dialog', () => {
     );
 
     expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it('skips an initial-focus request inside a closed nested dialog', () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Composer">
+        <DialogHeader title="Compose" />
+        <Dialog isOpen={false} onOpenChange={() => {}} aria-label="Insert link">
+          <input aria-label="URL" data-autofocus />
+        </Dialog>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('heading', {name: 'Compose'})).toHaveFocus();
+    expect(
+      screen.getByRole('textbox', {name: 'URL', hidden: true}),
+    ).not.toHaveFocus();
   });
 
   it("focuses a header's title request when no explicit request is eligible", () => {
@@ -1114,6 +1189,10 @@ describe('Dialog', () => {
         fireEvent.pointerDown(document.body);
         opener.focus();
         rerender(<SecondDocumentDialog isOpen={true} />);
+        // A modal dialog holds focus while it is open, as showModal() makes it.
+        within(secondDocument.body)
+          .getByRole('button', {name: 'Inside', hidden: true})
+          .focus();
         fireEvent.keyDown(secondDocument.body, {key: 'Escape'});
         const focus = vi.spyOn(
           secondDocument.defaultView!.HTMLElement.prototype,
@@ -1892,6 +1971,84 @@ describe('Dialog', () => {
         </Dialog>,
       );
       expect(dialog).not.toHaveAttribute('aria-labelledby');
+    });
+
+    it('is named by a DialogHeader that mounts after the dialog opens, until it unmounts', () => {
+      function RenameDialog({hasHeader}: {hasHeader: boolean}) {
+        return (
+          <Dialog isOpen={true} onOpenChange={() => {}}>
+            {hasHeader && <DialogHeader title="Rename capture" />}
+          </Dialog>
+        );
+      }
+      const {rerender} = render(<RenameDialog hasHeader={false} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+      rerender(<RenameDialog hasHeader={true} />);
+      expect(dialog).toHaveAccessibleName('Rename capture');
+      rerender(<RenameDialog hasHeader={false} />);
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+    });
+
+    it('keeps a consumer aria-labelledby when a DialogHeader mounts after the dialog opens', () => {
+      function Named({hasHeader}: {hasHeader: boolean}) {
+        return (
+          <>
+            <span id="external-name">Share capture</span>
+            <Dialog
+              isOpen={true}
+              onOpenChange={() => {}}
+              aria-labelledby="external-name">
+              {hasHeader && <DialogHeader title="Rename capture" />}
+            </Dialog>
+          </>
+        );
+      }
+      const {rerender} = render(<Named hasHeader={false} />);
+      rerender(<Named hasHeader={true} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAttribute('aria-labelledby', 'external-name');
+      expect(dialog).toHaveAccessibleName('Share capture');
+      rerender(<Named hasHeader={false} />);
+      expect(dialog).toHaveAttribute('aria-labelledby', 'external-name');
+    });
+
+    it('keeps a consumer aria-labelledby that arrives while a DialogHeader is mounted', () => {
+      function Late({isNamed}: {isNamed: boolean}) {
+        return (
+          <>
+            <span id="later-name">Share capture</span>
+            <Dialog
+              isOpen={true}
+              onOpenChange={() => {}}
+              aria-labelledby={isNamed ? 'later-name' : undefined}>
+              <DialogHeader title="Rename capture" />
+            </Dialog>
+          </>
+        );
+      }
+      const {rerender} = render(<Late isNamed={false} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAccessibleName('Rename capture');
+      rerender(<Late isNamed={true} />);
+      expect(dialog).toHaveAttribute('aria-labelledby', 'later-name');
+      expect(dialog).toHaveAccessibleName('Share capture');
+    });
+
+    it('is named by an aria-label that arrives while a DialogHeader is mounted', () => {
+      function Late({label}: {label?: string}) {
+        return (
+          <Dialog isOpen={true} onOpenChange={() => {}} aria-label={label}>
+            <DialogHeader title="Rename capture" />
+          </Dialog>
+        );
+      }
+      const {rerender} = render(<Late />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAccessibleName('Rename capture');
+      rerender(<Late label="Share capture" />);
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+      expect(dialog).toHaveAccessibleName('Share capture');
     });
 
     it('prefers a consumer-provided aria-label over the header title', () => {

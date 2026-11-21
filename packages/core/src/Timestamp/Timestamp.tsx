@@ -4,9 +4,10 @@
 
 /**
  * @file Timestamp.tsx
- * @input Uses React, Text, provider locale and calendar, and Timestamp formatters
+ * @input Uses React, Text, lazy TimestampHoverCard, provider locale and
+ *   calendar, and Timestamp formatters
  * @output Exports Timestamp component and related types
- * @position Core implementation; renders formatted timestamps
+ * @position Core implementation; a stable time node anchors lazily attached details
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Timestamp/formatRelativeTime.ts
@@ -34,6 +35,10 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {
+  ROLELESS_TRIGGER,
+  labelledTriggerAttributes,
+} from '../HoverCard/popupTrigger';
 import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
@@ -115,7 +120,7 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    */
   autoThreshold?: number;
   /**
-   * Whether to show a hover card with the full date/time on hover. The card
+   * Whether to show a card with the full date/time on hover or keyboard focus. The card
    * is copyable — its default single row carries the full absolute time — and
    * `tooltipEntries` customizes its rows.
    * @default true
@@ -276,6 +281,27 @@ function isRelativeFormat(
 // Component
 // =============================================================================
 
+/** Controls whose accessible name comes from their content. */
+const NAMED_FROM_CONTENT =
+  'button,summary,a[href],[role=button],[role=link],[role=tab],[role^=menuitem],[role=option],[role=radio],[role=checkbox],[role=switch],[role=treeitem]';
+
+/**
+ * Whether `focused` is the time, or a control whose name the time helps form:
+ * a control named from its content with no name of its own, or the control
+ * of a label that holds the time. A focused region that only holds the time,
+ * such as a log, is neither.
+ */
+function focusIsNamedBy(time: HTMLElement, focused: Element | null): boolean {
+  return (
+    focused === time ||
+    (focused != null &&
+      focused.contains(time) &&
+      focused.matches(NAMED_FROM_CONTENT) &&
+      !focused.matches('[aria-label],[aria-labelledby]')) ||
+    (focused != null && time.closest('label')?.control === focused)
+  );
+}
+
 /**
  * Displays a formatted timestamp as human-readable text.
  *
@@ -329,6 +355,8 @@ export function Timestamp({
     canReadClockOnClient,
     canReadClockOnServer,
   );
+  // The open card's id, which the card reports as it shows and hides.
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(() =>
     needsClock && canReadClock ? new Date() : null,
   );
@@ -386,46 +414,80 @@ export function Timestamp({
             )
           : '';
 
-  // Full absolute text for the tooltip (visible — keeps the compact timezone
-  // abbreviation) and for the AT-facing aria-label, which spells the timezone
-  // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
-  // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
-  // viewer's zone: the default hover-card row and the relative accessible name.
-  const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
-    : '';
-  const ariaLabelText = isValidDate
-    ? formatInstant(date, 'full', locale, {
-        timeZone: undefined,
-        timeZoneNameStyle: 'long',
-        calendar,
-      })
-    : '';
+  // The AT-facing aria-label of a relative timestamp spells the timezone out
+  // in full. Abbreviations like "PST" or "GMT+2" are unexpanded abbreviations
+  // to a screen-reader user (WCAG 3.1.4). It stays in the viewer's zone. Only
+  // a relative timestamp carries the name, so no other format builds it.
+  const fullAbsoluteSpokenText =
+    isValidDate && isRelativeFormat(effectiveFormat)
+      ? formatInstant(date, 'full', locale, {
+          timeZone: undefined,
+          timeZoneNameStyle: 'long',
+          calendar,
+        })
+      : '';
+  // A relative name starts with the words the timestamp shows, then the full
+  // date. A control named from its content then keeps its visible words in its
+  // name, so voice control can find it (WCAG 2.5.3).
+  const ariaLabelText =
+    fullAbsoluteSpokenText === ''
+      ? ''
+      : t('@astryx.timestamp.relativeLabel', {
+          relative: displayText,
+          date: fullAbsoluteSpokenText,
+        });
+
+  // Syncs with the document's focus events. A focused control that the time
+  // names keeps its words and name through a refresh. Both update when focus
+  // leaves.
+  const isLiveRelative =
+    isLive && isValidDate && isRelativeFormat(effectiveFormat);
+  const holdsRefreshRef = useRef(false);
+  useEffect(() => {
+    const doc = timeRef.current?.ownerDocument;
+    if (!isLiveRelative || doc == null) {
+      return;
+    }
+    const syncHold = () => {
+      const time = timeRef.current;
+      const holds = time != null && focusIsNamedBy(time, doc.activeElement);
+      if (holdsRefreshRef.current && !holds) {
+        // Focus left: catch up with the refreshes that waited.
+        setNow(new Date());
+      }
+      holdsRefreshRef.current = holds;
+    };
+    syncHold();
+    doc.addEventListener('focusin', syncHold);
+    doc.addEventListener('focusout', syncHold);
+    return () => {
+      doc.removeEventListener('focusin', syncHold);
+      doc.removeEventListener('focusout', syncHold);
+      holdsRefreshRef.current = false;
+    };
+  }, [isLiveRelative]);
 
   // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
-    if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
+    if (!isLiveRelative) {
       return;
     }
 
     const interval = getLiveInterval(diffSeconds);
     const timer = setInterval(() => {
-      setNow(new Date());
+      if (!holdsRefreshRef.current) {
+        setNow(new Date());
+      }
     }, interval);
 
     return () => clearInterval(timer);
-  }, [isLive, isValidDate, effectiveFormat, diffSeconds]);
+  }, [isLiveRelative, diffSeconds]);
 
   useDevWarning(
     'Timestamp',
     `could not parse value ${JSON.stringify(value)} as a date. Rendering nothing.`,
     !isValidDate,
   );
-
-  // Placed after all hooks so the hook order stays stable across renders.
-  if (!isValidDate) {
-    return null;
-  }
 
   // An empty array is not a second way to spell "off" — `hasTooltip` stays the
   // only on/off axis — so normalize it away before anything reads it.
@@ -439,18 +501,42 @@ export function Timestamp({
   // `format` silently suppress another prop's output, so entry presence opens
   // it too. With no entries this reduces to the original condition exactly.
   const showTooltip =
-    hasTooltip && (isRelativeFormat(effectiveFormat) || entries !== undefined);
+    isValidDate &&
+    hasTooltip &&
+    (isRelativeFormat(effectiveFormat) || entries !== undefined);
+
+  // A card that unmounts while open never reports its hide. Without a card,
+  // forget its id, so the time names no element that is gone.
+  if (!showTooltip && openCardId !== null) {
+    setOpenCardId(null);
+  }
+
+  // Placed after all hooks so the hook order stays stable across renders.
+  if (!isValidDate) {
+    return null;
+  }
+
+  // An unknown zone in an entry warns as the timestamp renders, before its
+  // card shows.
+  for (const entry of entries ?? []) {
+    resolveTimezoneID(entry.timezoneID);
+  }
 
   // The rows the hover card renders: the configured entries, or the single
   // default absolute line shown when none are set. Either way the surface is
-  // the same copyable card — the default line is a one-row card carrying the
-  // full absolute time, itself copyable, just like a configured entry.
-  const lines: ReadonlyArray<TimestampTooltipLine> =
+  // the same copyable card. The default line is a one-row card with the full
+  // absolute time in the viewer's zone and its compact abbreviation. It is
+  // copyable, just like a configured entry. The card reads them only while it
+  // shows, so a closed card formats nothing.
+  const getLines = (): ReadonlyArray<TimestampTooltipLine> =>
     entries === undefined
       ? [
           {
-            value: fullAbsoluteText,
-            zoneName: isValidDate ? formatZoneName(date, locale) : '',
+            value: formatInstant(date, 'full', locale, {
+              timeZone: undefined,
+              calendar,
+            }),
+            zoneName: formatZoneName(date, locale),
             isCopyable: true,
           },
         ]
@@ -462,68 +548,63 @@ export function Timestamp({
   );
 
   const timeElement = (
-    <Text
-      type={type}
-      size={size}
-      color={color}
-      weight={weight}
-      xstyle={xstyle}
-      {...timestampProps}>
-      <time
-        ref={mergedTimeRef}
-        dateTime={isoString}
-        data-testid={testId}
-        {...stylex.props(styles.time)}
-        {...rest}
-        // `ariaLabelText` is '' only for an invalid date, which bails out
-        // before rendering — but keep the guard local: an empty aria-label
-        // must be omitted entirely (not rendered as aria-label="") so AT
-        // falls back to reading the visible <time> content.
-        // A caller's own name wins (`component:Timestamp` FR5).
-        {...(isRelativeFormat(effectiveFormat) &&
-        ariaLabelText !== '' &&
-        rest['aria-label'] == null
-          ? {'aria-label': ariaLabelText}
-          : {})}
-        // The hover card is anchored here with focusTrigger="always", which
-        // attaches focus listeners but does not itself make the anchor
-        // focusable. A bare <time> is not focusable, so without a tab stop
-        // sighted keyboard users could never reveal the card (WCAG 1.4.13 /
-        // 2.1.1). Add the tab stop only while a card is actually attached — no
-        // gratuitous tab stops otherwise. The card carries its own
-        // dashed-underline hover indication as the affordance, so the anchor
-        // needs no separate focus outline.
-        // A caller's own tabIndex wins (`component:Timestamp` FR9).
-        {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
-        {displayText}
-      </time>
-    </Text>
+    <time
+      ref={mergedTimeRef}
+      dateTime={isoString}
+      data-testid={testId}
+      {...stylex.props(styles.time)}
+      {...rest}
+      // `ariaLabelText` is '' only for an invalid date, which bails out
+      // before rendering — but keep the guard local: an empty aria-label
+      // must be omitted entirely (not rendered as aria-label="") so AT
+      // falls back to reading the visible <time> content.
+      // A caller's own name wins.
+      {...(isRelativeFormat(effectiveFormat) &&
+      ariaLabelText !== '' &&
+      rest['aria-label'] == null
+        ? {'aria-label': ariaLabelText}
+        : {})}
+      // A bare <time> cannot take focus. Add the tab stop only while a card
+      // is attached, so keyboard users can open it. A caller's tabIndex wins.
+      {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}
+      // The time names the open card after a caller's own ids. The time role
+      // supports neither aria-haspopup nor aria-expanded.
+      {...(showTooltip
+        ? labelledTriggerAttributes(
+            ROLELESS_TRIGGER,
+            {controls: rest['aria-controls']},
+            {id: openCardId, isOpen: openCardId != null},
+          )
+        : null)}>
+      {displayText}
+    </time>
   );
 
-  if (showTooltip) {
-    // One surface for every timestamp that shows one: the copyable hover card,
-    // loaded lazily so the default card-less path never bundles it. Each line
-    // becomes a labelled row with its own copy button. With no configured
-    // entries this is a single row carrying the full absolute time, itself
-    // copyable — so hovering a relative timestamp reveals the full time and
-    // lets the reader copy it. Opens on hover and on keyboard focus (the
-    // <time> tab stop above), with the dashed-underline affordance signalling
-    // it is interactive.
-    //
-    // While the chunk loads the bare <time> stays visible (the Suspense
-    // fallback), so nothing disappears — the card simply attaches once ready.
-    return (
-      <Suspense fallback={timeElement}>
-        <LazyTimestampHoverCard
-          lines={lines}
-          label={t('@astryx.timestamp.detailsLabel')}>
-          {timeElement}
-        </LazyTimestampHoverCard>
-      </Suspense>
-    );
-  }
-
-  return timeElement;
+  // Keep the focusable node outside Suspense. Attaching the lazy overlay must
+  // not replace a timestamp the reader focused while its chunk was loading.
+  return (
+    <>
+      <Text
+        type={type}
+        size={size}
+        color={color}
+        weight={weight}
+        xstyle={xstyle}
+        {...timestampProps}>
+        {timeElement}
+      </Text>
+      {showTooltip && (
+        <Suspense fallback={null}>
+          <LazyTimestampHoverCard
+            getLines={getLines}
+            label={t('@astryx.timestamp.detailsLabel')}
+            triggerRef={timeRef}
+            onCardOpenChange={setOpenCardId}
+          />
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 Timestamp.displayName = 'Timestamp';

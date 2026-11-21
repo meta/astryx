@@ -34,6 +34,10 @@ function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
 }
 
+function assertiveRegion(): HTMLElement | null {
+  return document.querySelector('[data-astryx-live-region="assertive"]');
+}
+
 // A code sample long enough to exceed the default collapsible threshold (10).
 const LONG_CODE = Array.from(
   {length: 15},
@@ -175,6 +179,18 @@ describe('CodeBlock', () => {
       expect(screen.getByText('tsx diff')).toBeInTheDocument();
     });
 
+    it('names a language diff with the provider catalog', () => {
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{fr: {'@astryx.codeBlock.diffLabel': 'diff {language}'}}}>
+          <CodeBlock code={diff} language="tsx" isDiff />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByRole('group', {name: 'diff tsx'})).toBeInTheDocument();
+      expect(screen.getByText('diff tsx')).toBeInTheDocument();
+    });
+
     it('copies the exact source, glyphs included', () => {
       render(<CodeBlock code={diff} language="typescript" isDiff />);
       fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
@@ -287,12 +303,16 @@ describe('CodeBlock', () => {
       // The tooltip says the same as the name, so Button does not repeat it
       // as a description.
       expect(failed).not.toHaveAttribute('aria-describedby');
+      // A failure is an error, so it goes to the assertive region.
       await waitFor(() => {
-        expect(politeRegion()).toHaveTextContent(
+        expect(assertiveRegion()).toHaveTextContent(
           'Failed to copy value to clipboard.',
         );
       });
-      expect(politeRegion()).not.toHaveTextContent('permission');
+      expect(assertiveRegion()).not.toHaveTextContent('permission');
+      expect(politeRegion()?.textContent ?? '').not.toContain(
+        'Failed to copy value to clipboard.',
+      );
     });
 
     it('calls onCopyError once with the rejection and never onCopy', async () => {

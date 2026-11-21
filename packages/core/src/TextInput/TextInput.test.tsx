@@ -11,7 +11,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -382,7 +382,11 @@ describe('TextInput', () => {
           status={{type: 'error'}}
         />,
       );
-      expect(screen.queryByText(/invalid/i)).not.toBeInTheDocument();
+      // No message box renders; only the hidden fallback text describes the
+      // error.
+      expect(
+        document.querySelector('.astryx-field-status'),
+      ).not.toBeInTheDocument();
     });
 
     it('sets aria-invalid when status type is error', () => {
@@ -1026,7 +1030,85 @@ describe('TextInput', () => {
         <TextInput label="Name" value="hello" onChange={onChange} hasClear />,
       );
       await user.click(screen.getByRole('button', {name: 'Clear Name'}));
-      expect(onChange).toHaveBeenCalledWith('', null);
+      expect(onChange).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({target: screen.getByRole('textbox')}),
+      );
+    });
+
+    it('calls onChange, then changeAction, with an empty string and the change event when clear is clicked', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+      render(
+        <TextInput
+          label="Name"
+          value="hello"
+          onChange={onChange}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Clear Name'}));
+      const input = screen.getByRole('textbox');
+      // A real change event, so an Action that reads e.target works on clear.
+      expect(onChange).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({target: input}),
+      );
+      expect(changeAction).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({target: input}),
+      );
+      expect(onChange.mock.invocationCallOrder[0]).toBeLessThan(
+        changeAction.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('runs no changeAction on clear when onChange prevents the change event', async () => {
+      const user = userEvent.setup();
+      const changeAction = vi.fn();
+      render(
+        <TextInput
+          label="Name"
+          value="hello"
+          onChange={(_value, e) => e.preventDefault()}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Clear Name'}));
+      expect(changeAction).not.toHaveBeenCalled();
+    });
+
+    it('presents optimistic empty value and busy state while clear changeAction is pending', async () => {
+      const user = userEvent.setup();
+      let resolveAction: () => void = () => {};
+      const changeAction = vi.fn(
+        async () =>
+          new Promise<void>(resolve => {
+            resolveAction = resolve;
+          }),
+      );
+      render(
+        <TextInput
+          label="Name"
+          value="hello"
+          onChange={() => {}}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveValue('hello');
+
+      await user.click(screen.getByRole('button', {name: 'Clear Name'}));
+      expect(input).toHaveValue('');
+      expect(input).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        resolveAction();
+      });
     });
   });
 
@@ -1483,5 +1565,87 @@ describe('TextInput in a narrow row', () => {
     );
     const root = container.querySelector('.astryx-field')!;
     expect(getComputedStyle(root).minWidth).toBe('0');
+  });
+});
+
+describe('TextInput error without a message', () => {
+  const messagelessWarnings = (warn: {mock: {calls: unknown[][]}}) =>
+    warn.mock.calls.filter(call =>
+      String(call[0]).includes('an error status has no message'),
+    );
+
+  it('describes the field by hidden translated fallback text and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {rerender} = render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    const field = screen.getByRole('textbox', {name: 'Email'});
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Invalid value');
+    rerender(
+      <TextInput
+        label="Email"
+        value="x"
+        onChange={() => {}}
+        status={{type: 'error'}}
+      />,
+    );
+    expect(messagelessWarnings(warn)).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('uses the caller message and no fallback when a message is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'error', message: 'Enter an email address'}}
+      />,
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Email'}),
+    ).toHaveAccessibleDescription('Enter an email address');
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('adds no fallback for a warning without a message', () => {
+    render(
+      <TextInput
+        label="Email"
+        value=""
+        onChange={() => {}}
+        status={{type: 'warning'}}
+      />,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+  });
+
+  it('leaves an error inside an InputGroup to the group status', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <InputGroup
+        label="Contact"
+        status={{type: 'error', message: 'Fix the contact'}}>
+        <TextInput
+          label="Email"
+          isLabelHidden
+          value=""
+          onChange={() => {}}
+          status={{type: 'error'}}
+        />
+      </InputGroup>,
+    );
+    expect(screen.queryByText('Invalid value')).toBeNull();
+    expect(messagelessWarnings(warn)).toHaveLength(0);
+    warn.mockRestore();
   });
 });

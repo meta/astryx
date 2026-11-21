@@ -32,6 +32,7 @@ import React, {
   useTransition,
   type ReactNode,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
@@ -77,13 +78,16 @@ import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {
+  resolveSearchTriggerRequired,
+  useResolvedOptionality,
+} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   useFieldInputStyling,
@@ -117,6 +121,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Selector/Selector.generated';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 registerEnglishFallback(english);
 
 /**
@@ -129,6 +137,12 @@ const MOST_ROWS_THAT_FIT = 12;
 
 // Private runtime state. No app or theme sets it.
 const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
+
+/**
+ * The trigger's own list is open. A press does not scale the box then, so the
+ * list anchors to the box at rest.
+ */
+const LAYER_OPEN: string = ':has([aria-expanded="true"])';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -276,17 +290,20 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   // Secondary is ghost's chrome with the resting fill of a secondary
@@ -309,15 +326,18 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   triggerGhostDisabled: {
@@ -432,9 +452,14 @@ const styles = stylex.create({
     transitionProperty: 'none',
   },
 
-  // Popover container (for anchor positioning)
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
 
   // Empty state
@@ -444,6 +469,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
 
   // Section heading. Plain secondary text, no rules — the same treatment
@@ -478,6 +504,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -1039,6 +1066,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
         // is the public SelectorOption content primitive, not this row.
         themeProps('selector-option-row', {
           size,
+          highlighted: isHighlighted ? 'highlighted' : null,
           selected: isSelected ? 'selected' : null,
           disabled: item.disabled ? 'disabled' : null,
         }),
@@ -1093,6 +1121,58 @@ function filterOptionsByQuery(
     return items;
   }
   return items.filter(item => optionMatchesQuery(item, query));
+}
+
+/**
+ * New option objects with the same values and enabled states give the same
+ * signature, so they do not move the highlight.
+ */
+function optionSignature(
+  items: ReadonlyArray<{value: string; disabled?: boolean}>,
+): string {
+  return items
+    .map(item => `${item.disabled === true ? '-' : '+'}${item.value}`)
+    .join('\u0000');
+}
+
+/**
+ * The index in `next` of the option highlighted at `index` in `previous`.
+ * When that option is gone or disabled, the highlight moves to the next
+ * remaining enabled option. With none after it, it moves to the previous
+ * one. -1 means none remains.
+ */
+function followHighlight(
+  previous: ReadonlyArray<{value: string; disabled?: boolean}>,
+  next: ReadonlyArray<{value: string; disabled?: boolean}>,
+  index: number,
+): number {
+  const enabledIndexOf = (value: string | undefined) =>
+    value == null
+      ? -1
+      : next.findIndex(item => item.value === value && item.disabled !== true);
+  const stayed = enabledIndexOf(previous[index]?.value);
+  if (stayed >= 0) {
+    return stayed;
+  }
+  for (let after = index + 1; after < previous.length; after++) {
+    const found = enabledIndexOf(previous[after]?.value);
+    if (found >= 0) {
+      return found;
+    }
+  }
+  // The highlight can sit past the end of the list it was set in: a hover
+  // applied after the list shrank. Start from the list's own last option.
+  for (
+    let before = Math.min(index, previous.length) - 1;
+    before >= 0;
+    before--
+  ) {
+    const found = enabledIndexOf(previous[before]?.value);
+    if (found >= 0) {
+      return found;
+    }
+  }
+  return -1;
 }
 
 /**
@@ -1162,6 +1242,13 @@ export function Selector<T extends SelectorOptionType>(
     id,
     ...restProps
   } = props as SelectorPropsClearable<T>;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'Selector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. Selector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -1170,7 +1257,10 @@ export function Selector<T extends SelectorOptionType>(
     containerClassName,
     containerStyle,
   });
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
+  const {
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+  } = useResolvedOptionality({isRequired, isOptional});
   const placeholder = placeholderFromProps ?? t('@astryx.selector.placeholder');
   const searchPlaceholder =
     searchPlaceholderFromProps ?? t('@astryx.selector.searchPlaceholder');
@@ -1199,6 +1289,7 @@ export function Selector<T extends SelectorOptionType>(
   const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
+  const requiredDescriptionId = useId();
   const searchId = useId();
   const valueTextId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
@@ -1354,6 +1445,11 @@ export function Selector<T extends SelectorOptionType>(
     }
   }, [hasSearch]);
 
+  // Explicit placement opts out of the selector-specific overlay behavior and
+  // uses the standard layer positioning API instead.
+  const shouldOverlaySelectedItem = placement == null && !hasSearch;
+  // Written below, once the overlay margin hook has run.
+  const remeasureOverlayRef = useRef<(() => void) | null>(null);
   const surface = useSelectorPresentation({
     presentation,
     onHide: handleLayerHide,
@@ -1373,6 +1469,14 @@ export function Selector<T extends SelectorOptionType>(
       // The entrance runs on the surface: an anchored layer lays out again on
       // each frame its own style animates.
       xstyle: layerAnimations[placement ?? 'below'],
+      // The overlay margin moves the list after the show, so the overlay
+      // writes the entrance's side once it has moved.
+      writesEntranceSide: shouldOverlaySelectedItem,
+      // A scroll stop can flip the list, and the overlay margin depends on
+      // the side.
+      onPlacedAfresh: shouldOverlaySelectedItem
+        ? () => remeasureOverlayRef.current?.()
+        : undefined,
     },
   });
   const {popover} = surface;
@@ -1382,7 +1486,7 @@ export function Selector<T extends SelectorOptionType>(
 
   // Open dropdown on mount when isDefaultOpen is true and interaction is allowed.
   useEffect(() => {
-    if (isDefaultOpen && !isEffectivelyReadOnly) {
+    if (isDefaultOpen && !isDisabled && !isEffectivelyReadOnly) {
       surface.show();
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
@@ -1455,18 +1559,18 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  // Calculate offset to position selected item over trigger. Explicit
-  // placement opts out of the selector-specific overlay behavior and uses the
-  // standard layer positioning API instead.
-  const shouldOverlaySelectedItem = placement == null && !hasSearch;
-  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
-    useSelectedItemOverlayMargin({
-      isOpen: popover.isOpen && shouldOverlaySelectedItem,
-      selectedItemIndex,
-      listboxId,
-      listboxRef,
-      anchorRef,
-    });
+  const {
+    marginBlockStart: rawMarginBlockStart,
+    isPositioned: rawIsPositioned,
+    remeasure: remeasureOverlay,
+  } = useSelectedItemOverlayMargin({
+    isOpen: popover.isOpen && shouldOverlaySelectedItem,
+    selectedItemIndex,
+    listboxId,
+    listboxRef,
+    anchorRef,
+  });
+  useCommittedRefInto(remeasureOverlayRef, remeasureOverlay);
 
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
@@ -1602,6 +1706,50 @@ export function Selector<T extends SelectorOptionType>(
     comboboxTriggerClick();
     noteHighlightMove();
   }, [comboboxTriggerClick, noteHighlightMove]);
+
+  // A new query is a new list: the old highlight's index would name another
+  // option, or one past the end. Adjusted during render rather than in an
+  // effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
+
+  // The highlight follows its option by value when the options move or
+  // reload, so it never names whatever option now sits at its old index.
+  // Adjusted during render, as the query reset above.
+  const highlightSignature = optionSignature(filteredItems);
+  const [highlightedList, setHighlightedList] = useState({
+    signature: highlightSignature,
+    items: filteredItems,
+  });
+  if (highlightedList.signature !== highlightSignature) {
+    setHighlightedList({signature: highlightSignature, items: filteredItems});
+    if (highlightedQuery === searchQuery && highlightedIndex >= 0) {
+      const followed = followHighlight(
+        highlightedList.items,
+        filteredItems,
+        highlightedIndex,
+      );
+      setHighlightedIndex(followed);
+      // The hovered row moves with its option too, so the ring keeps showing
+      // only a highlight that keyboard input set.
+      if (hoveredIndex != null) {
+        if (hoveredIndex === highlightedIndex) {
+          setHoveredIndex(followed >= 0 ? followed : null);
+        } else {
+          const hoveredValue = highlightedList.items[hoveredIndex]?.value;
+          const moved = filteredItems.findIndex(
+            item => item.value === hoveredValue,
+          );
+          // A follow that lands the keyboard highlight on the hovered option
+          // keeps it a keyboard highlight.
+          setHoveredIndex(moved >= 0 && moved !== followed ? moved : null);
+        }
+      }
+    }
+  }
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1749,6 +1897,7 @@ export function Selector<T extends SelectorOptionType>(
         // option via aria-activedescendant (comboboxes-4). A bare searchbox
         // left the highlight silent to screen readers.
         role="combobox"
+        aria-required={isEffectivelyRequired || undefined}
         aria-expanded={surface.isOpen}
         aria-controls={listboxId}
         aria-autocomplete="list"
@@ -1810,6 +1959,7 @@ export function Selector<T extends SelectorOptionType>(
   }, [
     hasSearch,
     searchId,
+    isEffectivelyRequired,
     listboxId,
     searchQuery,
     hasQuery,
@@ -2027,6 +2177,15 @@ export function Selector<T extends SelectorOptionType>(
     callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
+  const {ariaRequired, hasRequiredDescription} = resolveSearchTriggerRequired({
+    hasSearch,
+    isReadOnly: isEffectivelyReadOnly,
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+    isInInputGroup: inputGroup != null,
+    ariaLabel: callerAriaLabel,
+    ariaLabelledBy: ariaLabelledByProp,
+  });
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
@@ -2134,12 +2293,17 @@ export function Selector<T extends SelectorOptionType>(
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
-      undefined,
+      [
+        ariaDescribedByProp,
+        ariaDescribedBy,
+        hasRequiredDescription ? requiredDescriptionId : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined,
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
-    'aria-required': isEffectivelyRequired ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
@@ -2232,6 +2396,11 @@ export function Selector<T extends SelectorOptionType>(
         {isEffectivelyReadOnly && (
           <VisuallyHidden id={readOnlyDescriptionId}>
             {t('@astryx.input.readOnly')}
+          </VisuallyHidden>
+        )}
+        {hasRequiredDescription && (
+          <VisuallyHidden id={requiredDescriptionId}>
+            {t('@astryx.field.required')}
           </VisuallyHidden>
         )}
         <button

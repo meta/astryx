@@ -1,0 +1,368 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file Color-mode style blocks in component overrides
+ * @input defineTheme component maps with `@light`/`@dark` blocks
+ * @output Assertions on the generated theme CSS and on the merge rule
+ * @position packages/core/src/theme — unit evidence for color-mode blocks
+ */
+
+import {describe, expect, it} from 'vitest';
+import {defineTheme} from './defineTheme';
+import {generateAdaptationCSS, generateThemeCSS} from './generateThemeRules';
+import {deepMergeComponents} from './mergeComponents';
+
+const css = (components: Parameters<typeof defineTheme>[0]['components']) =>
+  generateThemeCSS(defineTheme({name: 'modes', components})).component;
+
+describe('color-mode blocks', () => {
+  it("writes no mode rules for a theme without them, beyond a flipped surface's dark-page rules", () => {
+    const plain = css({button: {base: {backgroundColor: 'red'}}});
+    // Only a flipping media surface's dark-page copy reads the page's mode.
+    const rules = plain
+      .split('\n')
+      .filter(line => line.includes('{') && !line.includes('-media-dark-page'));
+    expect(rules.join('\n')).not.toMatch(/data-theme=/);
+    expect(plain).not.toMatch(/astryx-button[^{]*data-theme=/);
+  });
+
+  it("applies a block only in its mode: the root's mode, the system preference, and the nearest surface", () => {
+    const out = css({
+      button: {
+        base: {backgroundColor: 'red', '@dark': {backgroundColor: 'blue'}},
+      },
+    });
+    const outsideSurfaces = ':where(:not(:scope [data-astryx-media] *))';
+    expect(out).toContain(
+      `:is(.astryx-button):where(:scope[data-theme="dark"] *)${outsideSurfaces} {`,
+    );
+    // A system root under no forced mode draws in the scheme the root Theme
+    // names on <html>, whatever the reader prefers; while none is named, the
+    // reader's preference decides.
+    const unforcedSystem = `:is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]):not(:is([data-theme="light"], [data-theme="dark"]) *) *)${outsideSurfaces}`;
+    expect(out).toContain(
+      `\n  ${unforcedSystem}:where(html[data-astryx-scheme="dark"] *) {`,
+    );
+    expect(out).not.toContain(
+      `@media (prefers-color-scheme: dark) {\n  ${unforcedSystem}:where(html[data-astryx-scheme="dark"] *)`,
+    );
+    expect(out).toContain(
+      `@media (prefers-color-scheme: dark) {\n  ${unforcedSystem}:where(html:not([data-astryx-scheme]) *) {`,
+    );
+    // Under a forced mode, a system root follows the reader's preference.
+    expect(out).toContain(
+      `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:is([data-theme="light"], [data-theme="dark"]) :scope:not([data-theme="light"], [data-theme="dark"]) *)${outsideSurfaces} {`,
+    );
+    // Inside media surfaces, the nearest surface decides, at the same weight
+    // as the root's rule: a dark surface, or a dark one inside a light one,
+    // never a light one inside a dark one.
+    const nearestDark = out
+      .split('\n')
+      .map(line => line.trim())
+      .find(line =>
+        line.startsWith(
+          ':is(.astryx-button):where(:scope [data-astryx-media="dark"] *:not(',
+        ),
+      );
+    expect(nearestDark).toBeDefined();
+    expect(nearestDark).toContain(
+      ':scope [data-astryx-media="dark"] *:not(:scope [data-astryx-media="dark"] [data-astryx-media="light"] *)',
+    );
+    expect(nearestDark).toContain(
+      ':scope [data-astryx-media="light"] [data-astryx-media="dark"] *:not(:scope [data-astryx-media="light"] [data-astryx-media="dark"] [data-astryx-media="light"] *)',
+    );
+    expect(out).not.toContain('@scope ([data-astryx-media');
+    // The mode rules are component rules, after the block's own rule.
+    // (A flipped surface's dark-page token rules start with the page's
+    // conditions; they are not mode rules.)
+    expect(
+      out
+        .split('\n')
+        .filter(line => !line.includes('media-dark-page'))
+        .join('\n'),
+    ).not.toMatch(/^\s*:where\(/m);
+    expect(out.indexOf('background-color: blue')).toBeGreaterThan(
+      out.indexOf('background-color: red'),
+    );
+  });
+
+  it('adds the mode conditions before a pseudo-class, a press, or a pseudo-element', () => {
+    const out = css({
+      button: {
+        'variant:primary': {
+          '@light': {
+            borderRadius: '2px',
+            ':hover': {backgroundColor: 'green'},
+            ':active': {backgroundColor: 'navy'},
+          },
+        },
+      },
+      'text-input': {
+        base: {'@dark': {'::placeholder': {color: 'gray'}}},
+      },
+    });
+    const light =
+      ':is(.astryx-button[data-variant="primary"]):where(:scope[data-theme="light"] *):where(:not(:scope [data-astryx-media] *))';
+    expect(out).toContain(
+      `${light}:hover:where(:not(:disabled,[aria-disabled="true"])) {`,
+    );
+    // A press keeps the press model: :active off a coarse pointer, the
+    // believed press under one, each after the mode conditions.
+    expect(out).toContain(
+      `@media not all and (pointer: coarse) {\n  ${light}:active {`,
+    );
+    expect(out).toMatch(
+      /@media \(pointer: coarse\) \{\n {2}:is\(\.astryx-button\[data-variant="primary"\]\):where\(:scope\[data-theme="light"\] \*\)[^{]*\[data-astryx-press/,
+    );
+    // A pseudo-element ends the selector.
+    expect(out).toContain(
+      ':is(.astryx-text-input):where(:scope[data-theme="dark"] *):where(:not(:scope [data-astryx-media] *))::placeholder {',
+    );
+    expect(out).not.toMatch(/:is\([^)]*::placeholder/);
+    expect(out).toMatch(/--_button-radius: 2px/);
+  });
+
+  it('reads the nearest of up to five nested surfaces, and writes nothing deeper', () => {
+    const out = css({
+      button: {base: {'@dark': {backgroundColor: 'blue'}}},
+    });
+    const rule = out
+      .split('\n')
+      .map(line => line.trim())
+      .find(line =>
+        line.startsWith(
+          ':is(.astryx-button):where(:scope [data-astryx-media="dark"] *:not(',
+        ),
+      );
+    const where = /^:is\(\.astryx-button\):where\((.*)\) \{$/.exec(
+      rule ?? '',
+    )?.[1];
+    expect(where).toBeDefined();
+    // Surfaces alternating in mode, outermost first, around a button.
+    const nest = (modes: string[]) => {
+      const root = document.createElement('div');
+      let at = root;
+      for (const mode of modes) {
+        const surface = document.createElement('div');
+        surface.setAttribute('data-astryx-media', mode);
+        at.appendChild(surface);
+        at = surface;
+      }
+      const button = document.createElement('button');
+      at.appendChild(button);
+      document.body.appendChild(root);
+      // The theme root stands in for :scope.
+      const matches = button.matches(
+        `:is(${String(where).replaceAll(':scope', ':where(body > div)')})`,
+      );
+      root.remove();
+      return matches;
+    };
+    const alternating = (n: number, last: string) =>
+      Array.from({length: n}, (_, i) =>
+        (n - 1 - i) % 2 === 0 ? last : last === 'dark' ? 'light' : 'dark',
+      );
+    for (let n = 1; n <= 5; n++) {
+      expect(nest(alternating(n, 'dark')), `${n} deep, dark nearest`).toBe(
+        true,
+      );
+      expect(nest(alternating(n, 'light')), `${n} deep, light nearest`).toBe(
+        false,
+      );
+    }
+    // Six alternating surfaces are past the limit: the block writes nothing.
+    expect(nest(alternating(6, 'dark'))).toBe(false);
+    expect(nest(alternating(6, 'light'))).toBe(false);
+    // Surfaces of one mode in a row count once.
+    expect(nest(['light', 'dark', 'dark', 'light', 'light', 'dark'])).toBe(
+      true,
+    );
+  });
+
+  it('writes the dark block before the light one, as the surface overrides go', () => {
+    const out = css({
+      button: {
+        base: {'@light': {color: 'black'}, '@dark': {color: 'white'}},
+      },
+    });
+    const surface = (mode: string) =>
+      out.indexOf(
+        `:is(.astryx-button):where(:scope [data-astryx-media="${mode}"] *:not(`,
+      );
+    expect(surface('dark')).toBeGreaterThan(-1);
+    expect(surface('light')).toBeGreaterThan(surface('dark'));
+  });
+
+  it('compiles the rest of the theme past a null value, as written', () => {
+    const out = css({
+      button: {
+        base: {color: null, backgroundColor: 'red'} as unknown as Record<
+          string,
+          string
+        >,
+      },
+    });
+    expect(out).toContain('background-color: red');
+  });
+
+  it('reports a nested key that is neither a pseudo-class nor a mode block', () => {
+    const warnings: string[] = [];
+    const out = generateThemeCSS(
+      defineTheme({
+        name: 'modes',
+        components: {
+          button: {
+            base: {backgroundColor: 'red', '@Dark': {color: 'white'}},
+          },
+        },
+      }),
+      warnings,
+    ).component;
+    expect(out).toContain('background-color: red');
+    expect(out).not.toContain('color: white');
+    expect(warnings.join('\n')).toMatch(/@Dark|@-dark/);
+  });
+
+  it('writes a block of a surface its own mode only', () => {
+    const theme = defineTheme({
+      name: 'modes',
+      onDark: {
+        components: {
+          button: {
+            base: {
+              '@dark': {color: 'white'},
+              '@light': {color: 'black'},
+            },
+          },
+        },
+      },
+    });
+    const out = generateThemeCSS(theme).component;
+    expect(out).toContain('color: white');
+    expect(out).not.toContain('color: black');
+  });
+
+  it('writes a number value as the style key always has, in a mode block too', () => {
+    // A theme written in JavaScript may give a number where the type says a
+    // string.
+    const out = css({
+      heading: {
+        'type:shared': {
+          fontWeight: 600,
+          '@dark': {lineHeight: 1},
+        } as unknown as Record<string, string>,
+      },
+    });
+    expect(out).toContain('font-weight: 600');
+    expect(out).toContain('line-height: 1');
+  });
+
+  it('composes a mode block over the generated type-scale rules', () => {
+    const theme = defineTheme({
+      name: 'modes',
+      typography: {scale: {base: 14, ratio: 1.2}},
+      components: {heading: {'level:1': {'@dark': {color: 'red'}}}},
+    });
+    const level1 = theme.components?.heading?.['level:1'];
+    // The generated rule keeps its properties beside the block.
+    expect(level1?.fontSize).toBe('var(--text-heading-1-size)');
+    expect(level1?.['@dark']).toEqual({color: 'red'});
+  });
+
+  it('merges a mode block by property in an inherited media surface', () => {
+    const base = defineTheme({
+      name: 'base',
+      onDark: {
+        components: {
+          button: {base: {'@dark': {color: 'red', backgroundColor: 'black'}}},
+        },
+      },
+    });
+    const child = defineTheme({
+      name: 'child',
+      extends: base,
+      onDark: {components: {button: {base: {'@dark': {color: 'blue'}}}}},
+    });
+    expect(child.__onDark?.components?.button?.base?.['@dark']).toEqual({
+      color: 'blue',
+      backgroundColor: 'black',
+    });
+  });
+
+  it('merges a mode block by property through extends', () => {
+    expect(
+      deepMergeComponents(
+        {button: {base: {'@dark': {color: 'red', backgroundColor: 'black'}}}},
+        {button: {base: {'@dark': {color: 'blue'}}}},
+      ),
+    ).toEqual({
+      button: {base: {'@dark': {color: 'blue', backgroundColor: 'black'}}},
+    });
+  });
+});
+
+describe('color-mode blocks inside a surface a dark page flips', () => {
+  // A theme whose inverted surface (a toast's card) is light on a dark page.
+  const FLIP_TOKENS = {
+    '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+    '--color-on-dark': ['#ffffff', '#ffffff'],
+    '--color-on-light': ['#111111', '#111111'],
+  } satisfies Record<string, [string, string]>;
+  const MODES = {
+    button: {
+      base: {'@light': {color: '#111111'}, '@dark': {color: '#ffffff'}},
+    },
+  };
+  const FLIPPED =
+    ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"]';
+  const NESTED_DARK = `${FLIPPED} [data-astryx-media="dark"] *`;
+  const rulesWith = (out: string, color: string) =>
+    out
+      .split('}')
+      .map(rule => rule.trim())
+      .filter(rule => rule.includes(`color: ${color}`));
+
+  it('leaves a nested surface of the other side its own block', () => {
+    const out = generateThemeCSS(
+      defineTheme({
+        name: 'flip-nested',
+        tokens: FLIP_TOKENS,
+        components: MODES,
+      }),
+    ).component;
+    // The light block reaches the flipped surface's content, but not the
+    // content of a dark surface nested in it...
+    expect(
+      rulesWith(out, '#111111').some(rule =>
+        rule.includes(`${FLIPPED} *:not(${NESTED_DARK})`),
+      ),
+    ).toBe(true);
+    // ...and the dark block's nearest-surface rule leaves out only the
+    // flipped surface's own content, so the nested dark surface keeps it.
+    expect(
+      rulesWith(out, '#ffffff').some(rule =>
+        rule.includes(`:where(:not(${FLIPPED} *:not(${NESTED_DARK})`),
+      ),
+    ).toBe(true);
+  });
+
+  it("draws an adaptation's blocks by the flipped side, as the root's", () => {
+    const out = generateAdaptationCSS(
+      defineTheme({
+        name: 'flip-adapt',
+        tokens: FLIP_TOKENS,
+        adaptations: {
+          rules: [{when: {motion: 'reduce'}, value: {components: MODES}}],
+        },
+      }),
+    ).component;
+    expect(
+      rulesWith(out, '#111111').some(rule => rule.includes(`${FLIPPED} *`)),
+    ).toBe(true);
+    expect(
+      rulesWith(out, '#ffffff').some(rule =>
+        rule.includes(`:where(:not(${FLIPPED} *`),
+      ),
+    ).toBe(true);
+  });
+});

@@ -79,9 +79,11 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
-    // Reset inherited width so nested Layouts without contentWidth keep their
-    // released padding. An explicit contentWidth overrides this on the same node.
-    '--layout-content-width': '100cqi',
+    // A Layout without contentWidth caps no region: `initial` makes every
+    // var(--layout-content-width, none) fall back to none. The alignment width
+    // is read only inside the middle row's query container, where 100cqi is
+    // its own width. An explicit contentWidth overrides both on this node.
+    '--layout-content-width': 'initial',
     '--layout-alignment-width': '100cqi',
     // A Layout's `padding` belongs to its own regions. Clear an ancestor
     // Layout's value so a nested Layout without `padding` takes the nearest

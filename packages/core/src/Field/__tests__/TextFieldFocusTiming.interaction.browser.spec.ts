@@ -14,11 +14,16 @@ import {
   expect,
   test,
   type Browser,
+  type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
+  type ArmedHold,
   openStory,
-  requireFrames,
+  releaseAnimations,
+  seekAnimations,
+  waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -33,6 +38,49 @@ const FIELDS = [
   'core-chatcomposer--simplest',
   'richtext-richtexteditor--default',
 ] as const;
+
+/**
+ * What each field fades under a mouse. `properties` names properties of its
+ * focus look; each border side fades as its own run. `clickFadeOn` names the
+ * input that shows the look on a click. ChatComposer's hover look is its focus
+ * look, so the pointer shows it before a click.
+ */
+const MOUSE_FADE: Record<
+  (typeof FIELDS)[number],
+  {
+    readonly properties: ReadonlyArray<string>;
+    readonly clickFadeOn: 'press' | 'hover';
+  }
+> = {
+  'core-textinput--default': {
+    properties: ['border-top-color', 'box-shadow'],
+    clickFadeOn: 'press',
+  },
+  'core-textarea--default': {
+    properties: ['border-top-color', 'box-shadow'],
+    clickFadeOn: 'press',
+  },
+  'core-numberinput--default': {
+    properties: ['border-top-color', 'box-shadow'],
+    clickFadeOn: 'press',
+  },
+  'core-tokenizer--default': {
+    properties: ['border-top-color', 'box-shadow'],
+    clickFadeOn: 'press',
+  },
+  'core-typeahead--default': {
+    properties: ['border-top-color', 'box-shadow'],
+    clickFadeOn: 'press',
+  },
+  'core-chatcomposer--simplest': {
+    properties: ['box-shadow'],
+    clickFadeOn: 'hover',
+  },
+  'richtext-richtexteditor--default': {
+    properties: ['border-top-color', 'box-shadow'],
+    clickFadeOn: 'press',
+  },
+};
 
 /** A text entry element, wherever it renders (a sheet's field included). */
 const TEXT_ENTRY =
@@ -159,6 +207,41 @@ async function restingLook(page: Page): Promise<string> {
     });
 }
 
+/**
+ * The element that fades the field's look: the text entry or its nearest
+ * ancestor whose transition names box-shadow or border-color.
+ */
+async function fadeOf(page: Page): Promise<Locator> {
+  const found = await page
+    .locator(ENTRY)
+    .first()
+    .evaluate(entry => {
+      let element = entry as HTMLElement | null;
+      while (
+        element != null &&
+        !/box-shadow|border-color/.test(
+          getComputedStyle(element).transitionProperty,
+        )
+      ) {
+        element = element.parentElement;
+      }
+      element?.setAttribute('data-focus-fade', '');
+      return element != null;
+    });
+  if (!found) {
+    throw new Error("no element fades the field's look");
+  }
+  return page.locator('[data-focus-fade]');
+}
+
+/** The box-shadow and border colour that `fade` presents now. */
+async function lookOf(fade: Locator): Promise<string> {
+  return fade.evaluate(element => {
+    const style = getComputedStyle(element);
+    return `${style.boxShadow} | ${style.borderColor}`;
+  });
+}
+
 /** A mouse page of the touch page's viewport and scale. */
 async function mousePage(browser: Browser, touch: Page): Promise<Page> {
   const viewport = touch.viewportSize() ?? {width: 390, height: 844};
@@ -251,48 +334,122 @@ for (const story of FIELDS) {
     page,
     browser,
   }) => {
+    const {properties, clickFadeOn} = MOUSE_FADE[story];
     for (const how of ['click', 'Tab'] as const) {
       const mouse = await mousePage(browser, page);
       await openStory(mouse, storybook(), story);
       const entry = mouse.locator(ENTRY).first();
       await expect(entry).toBeVisible();
-      const rest = await restingLook(mouse);
-      await recordFocusLook(mouse);
-      if (how === 'click') {
-        await entry.click();
-      } else {
-        // Tab from the top of the page until the text entry has focus.
+      const fade = await fadeOf(mouse);
+      const durationMs = await fade.evaluate(element => {
+        const duration = getComputedStyle(element)
+          .transitionDuration.split(',')[0]
+          .trim();
+        return duration.endsWith('ms')
+          ? Number.parseFloat(duration)
+          : Number.parseFloat(duration) * 1000;
+      });
+      expect(durationMs, 'the fade duration under a mouse').toBeGreaterThan(0);
+      await waitForRest(fade);
+      const rest = await lookOf(fade);
+      const judges = properties.map(property => ({target: fade, property}));
+      const isFocused = async () =>
+        entry.evaluate(node => node === document.activeElement);
+      const press = async () => {
+        await mouse.mouse.down();
+        await mouse.mouse.up();
+      };
+      let hold: ArmedHold;
+      if (how === 'Tab') {
         await mouse.evaluate(() =>
           (document.activeElement as HTMLElement | null)?.blur(),
         );
-        for (let i = 0; i < 12; i++) {
+        await waitForRest(fade);
+        hold = await armHold(mouse, fade, {judges});
+        // Tab from the top of the page until the text entry has focus.
+        for (let i = 0; i < 12 && !(await isFocused()); i++) {
           await mouse.keyboard.press('Tab');
-          if (await entry.evaluate(node => node === document.activeElement)) {
-            break;
-          }
         }
-        expect(
-          await entry.evaluate(node => node === document.activeElement),
-        ).toBe(true);
+        expect(await isFocused(), 'Tab reaches the text entry').toBe(true);
+      } else if (clickFadeOn === 'hover') {
+        // The pointer shows this field's focus look as it arrives, so the
+        // fade that a click shows is the hover run before it.
+        hold = await armHold(mouse, fade, {judges});
+        await entry.hover();
+      } else {
+        // A click hovers, then focuses, and the focus run cancels the hover
+        // run. So the field comes to rest under the pointer first.
+        await entry.hover();
+        await waitForRest(fade);
+        hold = await armHold(mouse, fade, {judges});
+        await press();
       }
-      const {samples, durationMs} = await focusLook(mouse);
-      const last = samples[samples.length - 1].look;
-      const looks = JSON.stringify({how, rest, durationMs, samples});
-      expect(last, looks).not.toBe(rest);
-      expect(durationMs, looks).toBeGreaterThan(0);
-      // Two frames inside the fade show it moving. Fewer means the page was
-      // starved of frames, and that fails by name.
-      const inFade = requireFrames(samples, {
-        min: 2,
-        during: `the ${durationMs} ms focus fade after a ${how}`,
-        where: sample => sample.t > 0 && sample.t < durationMs,
-      });
-      // The fade: a frame shows a look between rest and the focus look.
+      const held = await hold.held();
+      const runs = held.map(run => ({
+        name: run.name,
+        durationMs: run.durationMs,
+        delayMs: run.delayMs,
+      }));
+      // Each run on the field is held, so the reads below are its own.
+      const runsOnField = async () =>
+        fade.evaluate(element => {
+          const animations = element.getAnimations();
+          return {
+            unheld: animations
+              .filter(animation => animation.playState !== 'paused')
+              .map(animation => animation.constructor.name),
+            count: animations.length,
+          };
+        });
+      const before = await runsOnField();
       expect(
-        inFade.filter(sample => sample.look !== rest && sample.look !== last)
-          .length,
-        looks,
-      ).toBeGreaterThanOrEqual(1);
+        before.unheld,
+        'a run on the field that the hold did not take',
+      ).toEqual([]);
+      const lookAt = async (timeMs: number) => {
+        await seekAnimations(mouse, timeMs);
+        return lookOf(fade);
+      };
+      const start = await lookAt(0);
+      const mid = await lookAt(durationMs / 2);
+      const end = await lookAt(durationMs + 1);
+      const looks = JSON.stringify({how, rest, start, mid, end, runs});
+      // A seek skips a run that a retarget cancelled: the same held runs,
+      // and no other, are on the field after the reads.
+      expect(
+        await runsOnField(),
+        `the runs on the field after the reads; ${looks}`,
+      ).toEqual(before);
+      // Each run starts with no delay and lasts the fade duration.
+      for (const run of runs) {
+        expect(run.delayMs, `the ${run.name} fade's delay; ${looks}`).toBe(0);
+        expect(
+          run.durationMs,
+          `the ${run.name} fade's duration; ${looks}`,
+        ).toBe(durationMs);
+      }
+      // Halfway through, the look is between its start and its end.
+      expect(mid, `the look halfway through the fade; ${looks}`).not.toBe(
+        start,
+      );
+      expect(mid, `the look halfway through the fade; ${looks}`).not.toBe(end);
+      expect(end, `the look at the end of the fade; ${looks}`).not.toBe(rest);
+      await releaseAnimations(mouse, {finish: true});
+      // The focus look stays once the fade is over.
+      const focusLook = await lookOf(fade);
+      expect(focusLook, `the focus look after the fade; ${looks}`).not.toBe(
+        rest,
+      );
+      if (how === 'click' && clickFadeOn === 'hover') {
+        // The click itself shows no look beyond the hover look.
+        await press();
+        await waitForRest(fade);
+        expect(
+          await lookOf(fade),
+          `the look after a click on the hovered field; ${looks}`,
+        ).toBe(focusLook);
+      }
+      expect(await isFocused(), `the ${how} focuses the text entry`).toBe(true);
       await mouse.context().close();
     }
   });

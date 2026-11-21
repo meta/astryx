@@ -280,6 +280,42 @@ describe('Layout', () => {
       ).not.toHaveAttribute('data-divider');
     });
 
+    it('an explicit hasDivider={false} on a footer overrides the context default', () => {
+      const {container} = render(
+        <Layout
+          defaultHasDividers
+          footer={<LayoutFooter hasDivider={false}>F</LayoutFooter>}
+          content={<div>c</div>}
+        />,
+      );
+      expect(
+        container.querySelector('.astryx-layout-footer'),
+      ).not.toHaveAttribute('data-divider');
+    });
+
+    it('stops the footer default at a layer boundary', () => {
+      render(
+        <Layout
+          defaultHasDividers
+          content={
+            <Dialog
+              isOpen
+              isInline
+              aria-label="Settings"
+              onOpenChange={() => {}}>
+              <Layout
+                content={<div>c</div>}
+                footer={<LayoutFooter>In dialog</LayoutFooter>}
+              />
+            </Dialog>
+          }
+        />,
+      );
+      expect(
+        screen.getByText('In dialog').closest('.astryx-layout-footer'),
+      ).not.toHaveAttribute('data-divider');
+    });
+
     it('an explicit hasDivider={false} on a header overrides the context default', () => {
       const {container} = render(
         <Layout

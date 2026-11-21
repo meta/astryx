@@ -200,6 +200,51 @@ describe('SideNav', () => {
     expect(nav.children).toHaveLength(1);
   });
 
+  it('does not render an empty footer row when only footer is set', () => {
+    render(
+      <SideNav footer={<span data-testid="footer">Footer</span>}>
+        Content
+      </SideNav>,
+    );
+
+    // The sticky bottom spaces its children with a gap, so an empty row adds
+    // space below the footer. The footer must be its only child.
+    const stickyBottom = screen.getByTestId('footer').parentElement;
+    expect(stickyBottom?.children).toHaveLength(1);
+    expect(document.querySelector('[class*="footerRow"]')).toBeNull();
+  });
+
+  it('keeps the footer row for footerIcons beside a footer', () => {
+    render(
+      <SideNav
+        footer={<span data-testid="footer">Footer</span>}
+        footerIcons={<span data-testid="icons">Icons</span>}>
+        Content
+      </SideNav>,
+    );
+
+    const footerRow = document.querySelector('[class*="footerRow"]');
+    expect(footerRow).toContainElement(screen.getByTestId('icons'));
+    expect(screen.getByTestId('footer').parentElement?.children).toHaveLength(
+      2,
+    );
+  });
+
+  it('keeps the footer row for the built-in collapse button beside a footer', () => {
+    render(
+      <SideNav
+        collapsible={{}}
+        footer={<span data-testid="footer">Footer</span>}>
+        Content
+      </SideNav>,
+    );
+
+    const footerRow = document.querySelector('[class*="footerRow"]');
+    expect(footerRow).toContainElement(
+      screen.getByRole('button', {name: 'Collapse sidebar'}),
+    );
+  });
+
   it('centers footer content when collapsed, matching children alignment', () => {
     render(
       <SideNav
@@ -507,6 +552,31 @@ describe('SideNavHeading', () => {
       expectNativeLinkClicks(
         screen.getByRole('menuitem', {name: 'Docs', hidden: true}),
       );
+    });
+
+    it("holds a NavHeadingMenu's items in its own named menu, with no menu inside it", async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const menus = screen.getAllByRole('menu', {hidden: true});
+      expect(menus).toHaveLength(1);
+      expect(menus[0]).toHaveAccessibleName('My App');
+      for (const name of ['Docs', 'Status']) {
+        expect(menus[0]).toContainElement(
+          screen.getByRole('menuitem', {name, hidden: true}),
+        );
+      }
     });
 
     it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
@@ -2601,6 +2671,50 @@ describe('SideNavItem — mobile drawer close-on-activate', () => {
       <SideNavItem label="Home" href="/" data-testid="item" />,
     );
     await user.click(screen.getByTestId('item'));
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['ctrl', {ctrlKey: true}],
+    ['meta', {metaKey: true}],
+    ['shift', {shiftKey: true}],
+    ['alt', {altKey: true}],
+  ] as const)(
+    'leaves the drawer open on a %s-click of a link item',
+    (_name, modifier) => {
+      const onClick = vi.fn();
+      const {closeMobileNav} = renderInDrawer(
+        <SideNavItem
+          label="Home"
+          href="#home"
+          onClick={onClick}
+          data-testid="item"
+        />,
+      );
+      fireEvent.click(screen.getByTestId('item'), modifier);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(closeMobileNav).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still closes on a modified click that the item onClick cancels', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem
+        label="Home"
+        href="#home"
+        onClick={event => event.preventDefault()}
+        data-testid="item"
+      />,
+    );
+    fireEvent.click(screen.getByTestId('item'), {ctrlKey: true});
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('still closes on a modified click of an item with no href', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem label="Action" onClick={vi.fn()} data-testid="item" />,
+    );
+    fireEvent.click(screen.getByTestId('item'), {ctrlKey: true});
     expect(closeMobileNav).toHaveBeenCalledTimes(1);
   });
 

@@ -30,6 +30,7 @@ import {Lightbox} from '../Lightbox/Lightbox';
 import {MobileNav} from '../MobileNav/MobileNav';
 import {Popover} from '../Popover/Popover';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
+import {preloadMenuBottomSheetActionList} from '../DropdownMenu/lazyMenuBottomSheet';
 import {useBusyAnnouncement} from './useBusyAnnouncement';
 import {ModalAnnounceProvider} from './ModalAnnounceProvider';
 import {__resetLiveRegionsForTest, useAnnounce} from './useAnnounce';
@@ -198,6 +199,13 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
   });
 
   it("routes a caller inside a DropdownMenu's bottom-sheet presentation into that sheet", async () => {
+    // The sheet and its rows load as two lazy chunks. Load both first, so the
+    // dialog query below waits on the render and not on a cold module load,
+    // which a loaded machine can stretch past the query's budget.
+    await Promise.all([
+      import('../DropdownMenu/MenuBottomSheet'),
+      preloadMenuBottomSheetActionList(),
+    ]);
     render(
       <DropdownMenu
         button={{label: 'Project actions'}}
@@ -315,6 +323,24 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Say'}));
     await nextFrame();
     expect(regionIn(dialog)).toHaveTextContent('Added Design');
+    expect(shared()?.textContent ?? '').toBe('');
+  });
+
+  it("routes Lightbox's own position message into its open viewer", async () => {
+    render(
+      <Lightbox
+        isOpen
+        onOpenChange={() => {}}
+        media={[
+          {src: '/a.jpg', alt: 'Harbour'},
+          {src: '/b.jpg', alt: 'Lighthouse'},
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+    await nextFrame();
+    const dialog = screen.getByRole('dialog', {name: 'Lighthouse'});
+    expect(regionIn(dialog)).toHaveTextContent('Lighthouse, 2 of 2');
     expect(shared()?.textContent ?? '').toBe('');
   });
 

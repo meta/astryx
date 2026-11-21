@@ -241,6 +241,14 @@ describe('restingTime (restPastBound)', () => {
       at(12, 30),
     );
   });
+
+  it('keeps the bound when no whole minute lies inside the bounds', () => {
+    // A minimum inside the last minute of the day has no whole minute after it,
+    // so no row of a picker without a seconds column answers within the bounds.
+    // The bound itself does, and a rest goes on to it.
+    const min = {min: 23 * 3600 + 59 * 60 + 30, max: null};
+    expect(restingTime(at(12, 0), false, min)).toEqual(at(23, 59, 30));
+  });
 });
 
 describe('columnsToTurn', () => {

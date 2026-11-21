@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "new-project-dialog",
+  "source": "wd-5",
+  "title": "Modal dialog with focus management and validation",
+  "prompt": "Show a \"New project\" button. It opens a modal dialog titled \"Create project\" with a \"Project name\" field, a \"Cancel\" button and a \"Create\" button. The Project name field has focus when the dialog opens. While the dialog is open, Tab and Shift+Tab keep focus inside it. Create with an empty name shows the error \"Enter a project name\" and keeps the dialog open. Create with a name closes the dialog, adds the name to a list of projects on the page, and moves focus back to the \"New project\" button. Cancel or the Escape key closes the dialog without adding anything."
+}

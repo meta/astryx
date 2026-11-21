@@ -38,7 +38,11 @@ export const colorDefaults = {
 
   // Text
   '--color-text-primary': 'light-dark(#0A1317, #DFE2E5)',
-  '--color-text-secondary': 'light-dark(#4E606F, #AAAFB5)',
+  // Secondary text also sits on translucent fills: the stock palette tints
+  // (Card's `gray` variant, for one) and the `--color-neutral` fill (a
+  // SegmentedControl track, AvatarGroup's overflow). They lift the page under
+  // them, and these stops keep the text at 4.5:1 there.
+  '--color-text-secondary': 'light-dark(#445564, #B0B5BB)',
   '--color-text-disabled': 'light-dark(#A4B0BC, #6F747C)',
   '--color-text-accent': 'light-dark(#0064E0, #3E9EFB)',
   '--color-on-dark': 'light-dark(#FFFFFF, #FFFFFF)',
@@ -255,10 +259,8 @@ export const radiusDefaults = {
   '--radius-element': '8px',
   '--radius-container': '12px',
   '--radius-page': '28px',
-  // Chat surfaces (bubbles, composer, drawer) are intentionally rounder than
-  // cards in the same view. Tracks --radius-page's value by default but is a
-  // distinct token so chat rounding can be themed independently. See #2072.
-  '--radius-chat': '28px',
+  // A distinct token, so a theme can make chat rounder or squarer than its cards.
+  '--radius-chat': 'var(--radius-container)',
   '--radius-full': '9999px',
 } as const;
 

@@ -26,7 +26,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Turns typed and pasted URLs and email addresses into links. Render it in RichTextEditor's plugins slot; it reaches the editor through the editor's Lexical composer and uses AutoLinkNode, which the editor registers by default.",
+      "Turns typed and pasted URLs and email addresses into links. Text inside a code block stays code and is never linked. Render it in RichTextEditor's plugins slot; it reaches the editor through the editor's Lexical composer and uses AutoLinkNode, which the editor registers by default.",
     bestPractices: [
       {
         guidance: true,

@@ -29,16 +29,12 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  colorVars,
-  sizeVars,
-  typographyVars,
-  typeScaleVars,
-} from '../theme/tokens.stylex';
+import {colorVars, typographyVars, typeScaleVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import {InputClearButton} from '../Field/InputClearButton';
 import {
   inputWrapperStyles,
+  inputRowSizeStyles,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
@@ -50,6 +46,7 @@ import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {getInputARIA} from '../utils/inputAria';
 import {isImeKeyEvent} from '../utils/ime';
 import {
@@ -89,17 +86,7 @@ const styles = stylex.create({
   },
 });
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 export type TextInputSize = keyof typeof sizeStyles;
 
@@ -129,7 +116,9 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {setInputValue} from '../utils/setInputValue';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -311,6 +300,9 @@ export interface TextInputProps
   hasSpellCheck?: boolean;
 }
 
+const WARN_MESSAGELESS_ERROR =
+  'an error status has no message, so only colour and an icon show the error. Give status.message the text that says what is wrong.';
+
 /**
  * A text input component for collecting user input.
  *
@@ -385,6 +377,7 @@ export function TextInput({
   const descriptionID = useId();
   const statusMessageID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [, startTransition] = useTransition();
@@ -414,13 +407,21 @@ export function TextInput({
       isInGroup: !!inputGroup,
     });
 
+  // An error without a message gets hidden translated text in its place, so
+  // assistive technology hears the error (WCAG 2.2 3.3.1). Inside an
+  // InputGroup the group's own status carries the text.
+  const hasMessagelessError =
+    !inputGroup && status?.type === 'error' && !status.message;
+  useDevWarning('TextInput', WARN_MESSAGELESS_ERROR, hasMessagelessError);
+
   const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
       // The status message element is rendered by Field, which is skipped
       // inside an InputGroup — only reference it when it actually exists.
-      !inputGroup && statusVariant !== 'tooltip' && status?.message
+      !inputGroup &&
+      ((statusVariant !== 'tooltip' && status?.message) || hasMessagelessError)
         ? statusMessageID
         : null,
       // The tooltip variant renders no message box; describe the input by the
@@ -454,23 +455,25 @@ export function TextInput({
     }
   };
 
-  // Handle clear button click
-  const handleClear = useCallback(
-    (e?: React.MouseEvent<HTMLButtonElement>) => {
-      onChange?.('', null as unknown as ChangeEvent<HTMLInputElement>);
-      if (!e || e.detail === 0) {
-        inputRef.current?.focus();
-      } else {
-        // Focus inside the tap: iOS Safari brings up its keyboard only for a
-        // focus made while handling the touch, so a field the tap reaches
-        // unfocused gets its keyboard, as UIKit's clear button makes the
-        // field first responder. `preventScroll` keeps a scrolled page where
-        // it is.
-        inputRef.current?.focus({preventScroll: true});
-      }
-    },
-    [onChange],
-  );
+  // A native value set and an `input` event run the input's own change handler.
+  // So the clear gets a real change event and the same callback order and
+  // cancellation as typing.
+  const handleClear = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
+    const input = inputRef.current;
+    if (input != null && input.value !== '') {
+      setInputValue(input, '');
+    }
+    if (!e || e.detail === 0) {
+      inputRef.current?.focus();
+    } else {
+      // Focus inside the tap: iOS Safari brings up its keyboard only for a
+      // focus made while handling the touch, so a field the tap reaches
+      // unfocused gets its keyboard, as UIKit's clear button makes the
+      // field first responder. `preventScroll` keeps a scrolled page where
+      // it is.
+      inputRef.current?.focus({preventScroll: true});
+    }
+  }, []);
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)
   const {onClick: handleWrapperClick, onMouseUp: handleWrapperMouseUp} =
@@ -624,6 +627,11 @@ export function TextInput({
       labelTooltip={labelTooltip}
       width={width}>
       {inputWrapper}
+      {hasMessagelessError && (
+        <VisuallyHidden id={statusMessageID}>
+          {t('@astryx.field.errorFallback')}
+        </VisuallyHidden>
+      )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </Field>

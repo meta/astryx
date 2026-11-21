@@ -3,12 +3,16 @@
 /**
  * @file focusableSelector.ts
  * @input None (a plain CSS selector string constant)
- * @output Exports FOCUSABLE_SELECTOR, isDisabledWithin and preferTabStops
+ * @output Exports FOCUSABLE_SELECTOR, isDisabledWithin, preferTabStops,
+ *   isVisiblyFocusable and getFocusableElements
  * @position Internal utility; the canonical CSS selector for focusable
  *   elements, shared by focus-management hooks (e.g. useFocusTrap) so the
- *   selector isn't duplicated across components/hooks. Not exported from the
+ *   selector isn't duplicated across components/hooks. The focus trap and
+ *   focus return judge reachability with the same check. Not exported from the
  *   public barrel — internal implementation detail.
  */
+
+import {isDialogShown, isDisplayedWhileClosed} from '../utils/nodeType';
 
 /**
  * Canonical CSS selector for commonly focusable elements. Includes the
@@ -45,9 +49,67 @@ export function isDisabledWithin(
 export function preferTabStops<T extends Element>(
   elements: ReadonlyArray<T>,
 ): T[] {
+  // A browser's querySelectorAll returns document order. jsdom can group a
+  // selector list's matches by selector. Sort them here.
+  const inDocumentOrder = [...elements].sort((a, b) =>
+    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+  );
   const isTabStop = (element: T) => element.getAttribute('tabindex') !== '-1';
   return [
-    ...elements.filter(isTabStop),
-    ...elements.filter(element => !isTabStop(element)),
+    ...inDocumentOrder.filter(isTabStop),
+    ...inDocumentOrder.filter(element => !isTabStop(element)),
   ];
+}
+
+/**
+ * Whether an element is currently perceivable/focusable — excludes ones hidden
+ * via `display:none`/`visibility:hidden` or inside an `inert`/`hidden` subtree,
+ * which the browser skips for Tab, and ones inside an `aria-hidden="true"`
+ * subtree, which sighted-keyboard users could Tab to while AT skips them
+ * (WCAG 4.1.2 — focusable content must be exposed to assistive tech).
+ */
+export function isVisiblyFocusable(el: HTMLElement): boolean {
+  if (el.hasAttribute('inert') || el.closest('[inert]')) {
+    return false;
+  }
+  if (el.hidden || el.closest('[hidden]')) {
+    return false;
+  }
+  // A closed <dialog> that the page does not display renders nothing, so
+  // nothing inside it can take focus.
+  for (
+    let dialog = el.closest('dialog');
+    dialog != null;
+    dialog = dialog.parentElement?.closest('dialog') ?? null
+  ) {
+    if (!isDialogShown(dialog) && !isDisplayedWhileClosed(dialog)) {
+      return false;
+    }
+  }
+  // closest() matches the element itself as well as any ancestor.
+  if (el.closest('[aria-hidden="true"]')) {
+    return false;
+  }
+  // offsetParent is null for display:none (and fixed elements); pair with a
+  // visibility check via getComputedStyle when available.
+  if (typeof window !== 'undefined' && window.getComputedStyle) {
+    const style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none') {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Get all focusable elements within a container.
+ *
+ * Exported for menus that place their own Tab stops inside a trapped layer
+ * (DropdownMenu's header and footer), so they judge reachability exactly as
+ * the trap does. Not re-exported from the package's `hooks` entry.
+ */
+export function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter(isVisiblyFocusable);
 }

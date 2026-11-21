@@ -164,6 +164,36 @@ export {
   mailIcon,
   lockIcon,
   starterIcons,
+  WeightedSVGIcon,
+  WeightedIconSprite,
+  weightedIconSymbolId,
+  type WeightedSVGIconProps,
+  type WeightedIconSpriteProps,
+  buildWeightedIcon,
+  parseSVGPaths,
+  ICON_WEIGHTS,
+  type IconWeight,
+  type WeightedIconDef,
+  type WeightedIconLayer,
+  type WeightedIconPath,
+  type BuildWeightedIconOptions,
+  registerWeightProbe,
+  xWeightedIcon,
+  checkWeightedIcon,
+  bellWeightedIcon,
+  homeWeightedIcon,
+  settingsWeightedIcon,
+  calendarWeightedIcon,
+  menuWeightedIcon,
+  heartWeightedIcon,
+  eyeWeightedIcon,
+  starWeightedIcon,
+  folderWeightedIcon,
+  shieldWeightedIcon,
+  searchWeightedIcon,
+  mailWeightedIcon,
+  lockWeightedIcon,
+  weightedStarterIcons,
 } from './SVGIcon';
 
 // Chart components — composable d3-based data visualization
@@ -338,6 +368,47 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
+// MediaPlayer — video and audio players with themed controls over the native media element
+export {
+  AudioPlayer,
+  MediaCaptionsButton,
+  MediaFullscreenButton,
+  MediaPlayButton,
+  MediaPlaybackRate,
+  MediaPlayer,
+  MediaPlayerElement,
+  MediaSeekButton,
+  MediaTime,
+  MediaTimeSlider,
+  MediaVolume,
+  VideoPlayer,
+  useMediaPlaybackTime,
+  useMediaPlayer,
+  type AudioPlayerProps,
+  type MediaButtonPartProps,
+  type MediaControlSize,
+  type MediaPlayButtonProps,
+  type MediaPlaybackRateProps,
+  type MediaPlayerActions,
+  type MediaPlayerAudioElementProps,
+  type MediaPlayerElementProps,
+  type MediaPlayerError,
+  type MediaPlayerProps,
+  type MediaPlayerState,
+  type MediaPlayerVideoElementProps,
+  type MediaSeekButtonProps,
+  type MediaSliderPlacement,
+  type MediaTextTrackInfo,
+  type MediaTimeProps,
+  type MediaTimeSliderProps,
+  type MediaTimelineChapter,
+  type MediaTimelineMarker,
+  type MediaVolumeProps,
+  type UseMediaPlayerResult,
+  type VideoPlayerCaptionTrack,
+  type VideoPlayerProps,
+} from './MediaPlayer';
+
 // NavigationStack: push/pop drill-down navigation with UIKit's transitions
 // and back swipes.
 export {
@@ -359,6 +430,9 @@ export {
   type TabBarItemProps,
   type TabBarProps,
 } from './TabBar';
+
+// TabBarMoreList: the screen of TabBar's More tab (UIMoreListController).
+export {TabBarMoreList, type TabBarMoreListProps} from './TabBarMoreList';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:

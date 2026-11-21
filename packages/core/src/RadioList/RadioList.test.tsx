@@ -53,7 +53,93 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('RadioList', () => {
+  it("paints a primary mouse press on an option at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem label="Pro" value="pro" />
+      </RadioList>,
+    );
+    const target = screen.getByText('Pro');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
+  it('paints no row press for a mouse, pen or finger press on a select in end content, and one for a press on the label', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          endContent={
+            <select aria-label="Billing">
+              <option>Monthly</option>
+              <option>Yearly</option>
+            </select>
+          }
+        />
+      </RadioList>,
+    );
+    const select = screen.getByRole('combobox', {name: 'Billing'});
+    const row = select.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    for (const pointerType of ['mouse', 'pen', 'touch']) {
+      fireEvent.pointerDown(select, {pointerId: 1, pointerType, button: 0});
+      expect(row).not.toHaveAttribute('data-astryx-press');
+      fireEvent.pointerUp(select, {pointerId: 1, pointerType, button: 0});
+    }
+    const label = screen.getByText('Pro');
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
+  });
+
   it('renders with label', () => {
     render(
       <RadioList label="Preference" value="" onChange={() => {}}>
@@ -1044,6 +1130,181 @@ describe('RadioList', () => {
   });
 });
 
+describe('one Tab stop', () => {
+  it('takes the other radios out of the Tab order for one Tab press', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      expect(push.tabIndex).toBe(-1);
+      expect(email.tabIndex).toBe(0);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the original tab indexes when a second Tab press comes before the restore', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      fireEvent.keyDown(email, {key: 'Tab', shiftKey: true});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the tab indexes when focus leaves the group before the restore', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <>
+          <RadioList label="Notify" value="sms" onChange={() => {}}>
+            <RadioListItem label="Email" value="email" />
+            <RadioListItem label="SMS" value="sms" />
+          </RadioList>
+          <button type="button">Next</button>
+        </>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      screen.getByRole('button', {name: 'Next'}).focus();
+      expect(sms).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores a nested group's radios after a Tab press in it", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Plan" value="team" onChange={() => {}}>
+          <RadioListItem label="Solo" value="solo" />
+          <RadioListItem
+            label="Team"
+            value="team"
+            endContent={
+              <RadioList label="Seats" value="ten" onChange={() => {}}>
+                <RadioListItem label="Five" value="five" />
+                <RadioListItem label="Ten" value="ten" />
+              </RadioList>
+            }
+          />
+        </RadioList>,
+      );
+      const five = screen.getByRole('radio', {name: 'Five'});
+      const ten = screen.getByRole('radio', {name: 'Ten'});
+      const solo = screen.getByRole('radio', {name: 'Solo'});
+      five.focus();
+      fireEvent.keyDown(five, {key: 'Tab'});
+      expect(ten.tabIndex).toBe(-1);
+      expect(solo).not.toHaveAttribute('tabindex');
+      vi.runAllTimers();
+      expect(ten).not.toHaveAttribute('tabindex');
+      expect(solo).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('works for a group rendered in a same-origin iframe', () => {
+    vi.useFakeTimers();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    try {
+      const frameDocument = iframe.contentDocument!;
+      const container = frameDocument.body.appendChild(
+        frameDocument.createElement('div'),
+      );
+      const {unmount} = render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+        </RadioList>,
+        {container},
+      );
+      const email = container.querySelector<HTMLInputElement>(
+        'input[value="email"]',
+      )!;
+      const sms =
+        container.querySelector<HTMLInputElement>('input[value="sms"]')!;
+      expect(email instanceof HTMLInputElement).toBe(false);
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      unmount();
+    } finally {
+      iframe.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves the Tab order alone for other keys and for Ctrl+Tab', () => {
+    render(
+      <RadioList label="Notify" value="sms" onChange={() => {}}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    const email = screen.getByRole('radio', {name: 'Email'});
+    const sms = screen.getByRole('radio', {name: 'SMS'});
+    fireEvent.keyDown(email, {key: 'ArrowDown'});
+    fireEvent.keyDown(email, {key: 'Tab', ctrlKey: true});
+    expect(sms).not.toHaveAttribute('tabindex');
+  });
+
+  it("runs a caller's onKeyDown after its own handling", () => {
+    const onKeyDown = vi.fn();
+    render(
+      <RadioList
+        label="Notify"
+        value="sms"
+        onChange={() => {}}
+        onKeyDown={onKeyDown}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    fireEvent.keyDown(screen.getByRole('radio', {name: 'Email'}), {
+      key: 'Tab',
+    });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+});
+
 // jsdom cannot emulate forced-colors rendering, so this asserts that the
 // compiled output includes the forced-colors rule; visual behavior needs
 // manual verification under Windows High Contrast.
@@ -1069,14 +1330,14 @@ function readsRowPress(el: Element): boolean {
 
 /**
  * Does the row declare the mouse press's paint while pressed, but not while a
- * nested link or button is the pressed one?
+ * nested control is the pressed one?
  */
 function declaresRowPress(el: Element): boolean {
   return rulesWithSelector(el, ':active').some(
     rule =>
       rule.includes('--_radio-row-press:') &&
       rule.includes('var(--color-overlay-pressed)') &&
-      /:not\(:has\(a:active, ?button:active/.test(rule),
+      rule.includes(':not(:has(button:not([aria-readonly="true"]):active'),
   );
 }
 

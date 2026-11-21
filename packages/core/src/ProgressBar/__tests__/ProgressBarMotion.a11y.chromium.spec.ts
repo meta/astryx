@@ -62,11 +62,20 @@ const DPR = 2;
 
 test.use({viewport: {width: 402, height: 200}, deviceScaleFactor: DPR});
 
+/**
+ * Resolves once the story shows its first bar. Storybook renders the story
+ * after it loads the story's module, and a loaded runner can take longer than
+ * an assertion's 5 s for that. The test's timeout bounds the wait.
+ */
+async function barShown(page: Page) {
+  await page.getByRole('progressbar').first().waitFor();
+}
+
 async function open(page: Page, value: number, globals = '') {
   await page.goto(
     `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story${globals ? `&globals=${globals}` : ''}`,
   );
-  await expect(page.getByRole('progressbar')).toBeVisible();
+  await barShown(page);
   await setValue(page, value);
   // Let any transition from the story's own value finish.
   await settle(page);
@@ -581,7 +590,7 @@ for (const pointer of ['a mouse', 'a finger'] as const) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
       );
-      await expect(page.getByRole('progressbar').first()).toBeVisible();
+      await barShown(page);
       expect(
         await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
       ).toBe(pointer === 'a finger');
@@ -704,7 +713,7 @@ test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
   await page.goto(
     `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
   );
-  await expect(page.getByRole('progressbar').first()).toBeVisible();
+  await barShown(page);
   // On the bar itself: the story's theme root declares its own tempo.
   await page.addStyleTag({
     content: '[role="progressbar"] { --_astryx-motion-tempo: 1.5; }',
@@ -723,7 +732,7 @@ test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
   );
 });
 
-test('at the pulse floor every tone with 3:1 against the track keeps it, light and dark, on the body and the surface', async ({
+test('every tone reaches 3:1 against the track and keeps it at the pulse floor, light and dark, on the body and the surface', async ({
   page,
 }) => {
   // In the light and dark default themes: the base tokens, Storybook's "None"
@@ -746,7 +755,7 @@ test('at the pulse floor every tone with 3:1 against the track keeps it, light a
     await page.goto(
       `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story&globals=astryxTheme:none;colorMode:${mode}`,
     );
-    await expect(page.getByRole('progressbar').first()).toBeVisible();
+    await barShown(page);
     rows.push(
       ...(await page.evaluate(
         ({mode: m, opacities}) => {
@@ -822,16 +831,21 @@ test('at the pulse floor every tone with 3:1 against the track keeps it, light a
     );
   }
   expect(rows).toHaveLength(20);
-  const qualifying = rows.filter(row => row.full >= 3);
-  expect(qualifying.length).toBeGreaterThan(0);
-  for (const row of qualifying) {
+  // Every enabled tone reaches 3:1 at full opacity (FR4, AR1).
+  for (const row of rows) {
+    expect(
+      row.full,
+      `${row.tone}, ${row.mode}, ${row.surface}: ${row.full.toFixed(3)}:1`,
+    ).toBeGreaterThanOrEqual(3);
+  }
+  for (const row of rows) {
     expect(
       row.atFloor,
       `${row.tone}, ${row.mode}, ${row.surface}: ${row.atFloor.toFixed(3)}:1`,
     ).toBeGreaterThanOrEqual(3);
   }
   // The floor is the lowest that holds: one step below, some tone drops.
-  expect(qualifying.some(row => row.below < 3)).toBe(true);
+  expect(rows.some(row => row.below < 3)).toBe(true);
 });
 
 test('below one track height of fill, the leading end follows the track\u2019s curve', async ({

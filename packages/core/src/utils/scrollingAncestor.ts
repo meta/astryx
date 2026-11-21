@@ -3,8 +3,10 @@
 /**
  * @file scrollingAncestor.ts
  * @input An element, and an optional ancestor where the walk stops.
- * @output The element's nearest ancestor that scrolls on the block axis.
- * @position Shared by the keyboard module's reveals and Outline's scroll spy.
+ * @output The element's nearest ancestor that scrolls on the block axis, and
+ *   `nearestScroller`, which falls back to the document's scroller.
+ * @position Shared by the keyboard module's reveals, Outline's scroll spy
+ *   and the List reorder's edge autoscroll.
  */
 
 import {SCROLLABLE_OVERFLOW} from './scrollView';
@@ -39,4 +41,18 @@ export function scrollingAncestor(
     }
   }
   return null;
+}
+
+/**
+ * The element that scrolls `element` into view: its nearest ancestor that
+ * scrolls on the block axis, or else the document's scroller.
+ */
+export function nearestScroller(element: Element): Element {
+  const doc = element.ownerDocument;
+  const scroller = scrollingAncestor(element);
+  return scroller == null ||
+    scroller === doc.body ||
+    scroller === doc.documentElement
+    ? (doc.scrollingElement ?? doc.documentElement)
+    : scroller;
 }

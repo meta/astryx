@@ -25,6 +25,7 @@ import {
   restoreScrollOffsets,
 } from '../motion/transientCopy';
 import {settledBox} from './settledBox';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 /** A box in viewport px. */
 export interface LayerExitBox {
@@ -50,12 +51,36 @@ const PRESENTED_PROPERTIES = [
 /** Inline properties the copy must not keep from the live layer. */
 const LIVE_ONLY_PROPERTIES = [
   'position-anchor',
-  'position-area',
   'position-try-fallbacks',
   'inset',
   'right',
   'bottom',
   'transition',
+] as const;
+
+/**
+ * Properties the user agent's popover style sets on the copy, a popover. The
+ * copy takes them from the element it copies, which need not be a popover.
+ */
+const POPOVER_STYLE_PROPERTIES = [
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'border-top-width',
+  'border-right-width',
+  'border-bottom-width',
+  'border-left-width',
+  'border-top-style',
+  'border-right-style',
+  'border-bottom-style',
+  'border-left-style',
+  'border-top-color',
+  'border-right-color',
+  'border-bottom-color',
+  'border-left-color',
+  'color',
+  'background-color',
 ] as const;
 
 /**
@@ -109,7 +134,10 @@ function outermostLayer(element: HTMLElement): HTMLElement | null {
 }
 
 /** Each layer's copy: placing another for the same layer replaces it. */
-const copies = new WeakMap<HTMLElement, HTMLElement>();
+const copies = sharedWeakMap<HTMLElement, HTMLElement>(
+  'layer/layer-exit-copy/copies',
+  1,
+);
 
 /**
  * Shows the copies of layers inside `element` again, so they stay above the
@@ -168,7 +196,8 @@ function layoutBox(element: HTMLElement): LayerExitBox {
  * laid out on the layer's own box and carries the transform the layer was
  * drawn with. So a copy taken mid-entrance holds where it was drawn. It
  * keeps the layer's overflow and every scroll position, the layer's own
- * included.
+ * included. It keeps the padding, border and colors of the element it
+ * copies, which the user agent's popover style would replace.
  *
  * It is Core's shared inert copy (`inertCopy`). It has no ids, test ids, form
  * names or label targets, and no form owner. A cloned checked radio then
@@ -257,6 +286,12 @@ export function placeLayerExitCopy(
   // clip. A popover's user-agent style scrolls as well.
   style.setProperty('overflow-x', layerStyle.getPropertyValue('overflow-x'));
   style.setProperty('overflow-y', layerStyle.getPropertyValue('overflow-y'));
+  // The user agent pads, borders and paints a popover. An element with no
+  // padding of its own, a surface inside a layer, would draw its content
+  // inset in the copy.
+  for (const property of POPOVER_STYLE_PROPERTIES) {
+    style.setProperty(property, layerStyle.getPropertyValue(property));
+  }
   // A layer inside another layer that closes in the same step would leave its
   // copy inside a hidden box. The copy goes after the outermost one, with
   // what it inherited where it was.

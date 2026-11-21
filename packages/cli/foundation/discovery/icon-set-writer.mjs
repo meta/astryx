@@ -25,15 +25,24 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
 import {parseIconSetData} from '../../authoring/doctypes/icon-set/parse.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
 import {assertWithin} from '../fs/path-safety.mjs';
 import {findLocalIntegrationManifestOrNull} from '../integrations/manifest-writer.mjs';
 import {loadManifestObject} from '../integrations/integrations.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  currentDefinitionName,
+} from './icon-definition-discovery.mjs';
 import {generatedTypesPath} from './icon-set-paths.mjs';
+import {
+  lookExport,
+  THEME_MAP_NAME,
+  variantThemeMapName,
+  variantThemeMaps,
+} from './icon-set-theme-maps.mjs';
 
 export {generatedTypesPath};
 import {
@@ -48,10 +57,14 @@ import {
   exportValueKind,
   followedExportNames,
   moduleExportOrigin,
+  staticExportBindings,
 } from './module-exports.mjs';
+import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
+
+export {iconIdOf};
 
 /**
  * An authoring error with an ERR_* code and suggestions.
@@ -70,40 +83,20 @@ export class IconSetAuthoringError extends Error {
 }
 
 /**
- * `XMarkIcon` → `x-mark`; `Trash2` → `trash-2`; `ArrowUpDown` →
- * `arrow-up-down`; `Squares2X2Icon` and `Grid2x2` → `squares-2x2`,
- * `grid-2x2`: an icon id from an export name. A dimension (a digit, `x` or
- * `X`, a digit) stays one word.
- * @param {string} name
- */
-export function iconIdOf(name) {
-  return (
-    name
-      .replace(/Icon$/u, '')
-      // `2X2` and `2x2` are one word: lower the x first.
-      .replace(/([0-9])[xX](?=[0-9])/gu, '$1x')
-      // A one-letter word before a digit ends there: `CalendarX2` is
-      // `calendar-x-2`, as its library names it.
-      .replace(/([a-z][A-Z])(?=[0-9])/gu, '$1-')
-      // A lower-case letter before a capital or a digit ends a word, except
-      // the x inside a dimension.
-      .replace(/([a-z])(?=[A-Z0-9])/gu, (match, letter, offset, whole) =>
-        letter === 'x' && /[0-9]/u.test(whole[offset - 1] ?? '')
-          ? letter
-          : `${letter}-`,
-      )
-      .replace(/([0-9])([A-Z])/gu, '$1-$2')
-      .replace(/([A-Z])([A-Z][a-z])/gu, '$1-$2')
-      .toLowerCase()
-  );
-}
-
-/**
  * The name an icon set exports an icon as: PascalCase ending in `Icon`
- * (`Trash2` → `Trash2Icon`; `TrashIcon` stays).
+ * (`Trash2` → `Trash2Icon`; `TrashIcon` stays). A JavaScript name cannot
+ * start with a digit, so a name that starts with one is refused.
+ * {@link iconNaming} keeps a library prefix to prevent this (`fa0` →
+ * `Fa0Icon`).
  * @param {string} name
  */
 export function iconExportName(name) {
+  if (/^[0-9]/u.test(name)) {
+    throw new IconSetAuthoringError(
+      `The icon id "${iconIdOf(name)}" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.`,
+      'ERR_INVALID_ARGUMENT',
+    );
+  }
   const pascal = name[0].toUpperCase() + name.slice(1);
   return pascal.endsWith('Icon') ? pascal : `${pascal}Icon`;
 }
@@ -146,7 +139,11 @@ function packageDirOf(cwd) {
  * `selector` names, else the only set.
  * @param {string} cwd
  * @param {string} [selector] a set name
- * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[]}>}
+ * The set's `module` names the package as package.json names it now;
+ * `moduleRenamed` says the data file still names an old name, so a command
+ * writes the data file even when nothing else changes; `moduleUpdate` gives
+ * the old and the new name for the receipt, else null.
+ * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[], moduleRenamed: boolean, moduleUpdate: {previous: string, module: string} | null}>}
  */
 export async function findLocalIconSet(cwd, selector) {
   const packageDir = packageDirOf(cwd);
@@ -190,12 +187,20 @@ export async function findLocalIconSet(cwd, selector) {
     ? found.sets.filter(set => set.name === selector)
     : found.sets;
   if (named.length === 1) {
+    const set = {...named[0], packageDir};
+    const module = moduleInPackage(set.data.module, pkg.name);
+    const moduleUpdate =
+      module !== set.data.module ? {previous: set.data.module, module} : null;
+    const moduleRenamed = moduleUpdate != null;
+    if (moduleRenamed) set.data = {...set.data, module};
     return {
       packageDir,
       pkg,
       root,
-      set: {...named[0], packageDir},
+      set,
       sets: found.sets,
+      moduleRenamed,
+      moduleUpdate,
     };
   }
   const broken = selector
@@ -227,6 +232,22 @@ export async function findLocalIconSet(cwd, selector) {
       reason: 'an icon set in this package',
     })),
   );
+}
+
+/**
+ * The data file's `module` in the package as it is named now. The data file
+ * belongs to the CLI, so after a package rename the next write gives the new
+ * name (`@acme/old/solid` → `@acme/new/solid`). A ./ path, or a package
+ * with no name, is left as it is.
+ * @param {string} module
+ * @param {unknown} name the package.json `name`
+ */
+function moduleInPackage(module, name) {
+  if (typeof name !== 'string' || name === '' || module.startsWith('.')) {
+    return module;
+  }
+  const owner = iconModulePackage(module);
+  return owner === name ? module : `${name}${module.slice(owner.length)}`;
 }
 
 /** The data file's fields, in the order the file is written. */
@@ -599,7 +620,7 @@ const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
  * set declares an adapter, also data exports, camelCase included: objects,
  * and plain strings only in a library whose candidates are all strings.
  * Left out: `default`, `Icon`, `…Provider` and `…Context` components, SCREAMING_CASE constants, number and boolean
- * exports, and `exclude`.
+ * exports, packs of other exports ({@link isIconPack}), and `exclude`.
  * @param {string} file
  * @param {{adapter?: boolean, exclude?: string[]}} [options] `exclude`: export
  *   names that are not icons
@@ -609,7 +630,9 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
   const skipped = new Set(exclude);
   /** @type {Array<{name: string, adapt: boolean, scalar: string | null}>} */
   const out = [];
-  for (const name of followedExportNames(file)) {
+  const names = followedExportNames(file);
+  const exported = new Set(names);
+  for (const name of names) {
     if (name === 'default' || name === 'Icon' || skipped.has(name)) continue;
     // A context provider or context (`LucideProvider`) is a component that
     // draws nothing.
@@ -622,7 +645,8 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
     } else if (
       adapter &&
       kind === 'data' &&
-      /^[A-Za-z][A-Za-z0-9]*$/u.test(name)
+      /^[A-Za-z][A-Za-z0-9]*$/u.test(name) &&
+      !isIconPack(file, name, exported)
     ) {
       const scalar = exportScalarType(file, name);
       // A number or a boolean draws nothing; a string may be SVG markup.
@@ -635,6 +659,20 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
   return out.some(each => each.scalar == null)
     ? out.filter(each => each.scalar == null)
     : out;
+}
+
+/**
+ * Whether a data export is a pack: an object whose keys are all other
+ * exports of the module, such as `fas` in a library that also exports
+ * `faXmark` and `faHouse`. A pack holds icons but draws nothing.
+ * @param {string} file
+ * @param {string} name
+ * @param {Set<string>} exported every export name of the module
+ */
+function isIconPack(file, name, exported) {
+  const bindings = staticExportBindings(file, name);
+  if (bindings == null || bindings.size < 2) return false;
+  return [...bindings.keys()].every(key => key !== name && exported.has(key));
 }
 
 /**
@@ -690,7 +728,9 @@ export function libraryPrefix(names) {
 
 /**
  * An export's id and the name the set exports it as, with the library prefix
- * left out: `featherEye` with prefix `feather` is id `eye`, `EyeIcon`.
+ * left out: `featherEye` with prefix `feather` is id `eye`, `EyeIcon`. A
+ * name that would start with a digit keeps the prefix (`fa500px` is
+ * `fa-500px`, `Fa500pxIcon`).
  * @param {string} name
  * @param {string[]} prefix
  * @returns {{id: string, name: string}}
@@ -698,9 +738,12 @@ export function libraryPrefix(names) {
 export function iconNaming(name, prefix) {
   const all = iconIdOf(name).split('-');
   // Only a name that starts with the prefix, and has more after it, loses it.
+  // A name that would then start with a digit keeps the prefix: `fa0` is
+  // `fa-0`, `Fa0Icon`.
   const strip =
     all.length > prefix.length &&
-    prefix.every((word, index) => all[index] === word);
+    prefix.every((word, index) => all[index] === word) &&
+    !/^[0-9]/u.test(all[prefix.length]);
   if (!strip) prefix = [];
   const words = all.slice(prefix.length);
   const id = words.join('-');
@@ -1313,6 +1356,7 @@ const GENERATED_HEADER = [
   '// Edit with those commands; a statement added by hand is kept.',
   '// themeIcons has one entry per built-in icon definition in map (the names Core renders), not one per icon;',
   '// the import lines above it give it local names for the re-exported icons.',
+  '// themeIcons<Variant> draws the same names in that variant, for each variant an icon draws.',
 ];
 
 /**
@@ -1327,6 +1371,39 @@ const GENERATED_HEADER = [
  * @returns {string[]}
  */
 function generatedStatements(text, label) {
+  return statementTexts(text, label).map(normalizedStatement);
+}
+
+/**
+ * The marked form of each statement of a module that carries a pure mark of
+ * its own, keyed by its normalized (unmarked) form: written back as it was,
+ * with the mark spelled as the CLI writes it, so a mark written by hand
+ * survives the next rewrite.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {Map<string, string>}
+ */
+function markedStatements(text, label) {
+  /** @type {Map<string, string>} */
+  const marked = new Map();
+  for (const statement of statementTexts(text, label)) {
+    if (statement.search(PURE_MARK) === -1) continue;
+    marked.set(
+      normalizedStatement(statement),
+      collapsedStatement(statement.replace(PURE_MARK, PURE)),
+    );
+  }
+  return marked;
+}
+
+/**
+ * The text of each top-level statement of a module, as written, with a
+ * separator after each type member a formatter left without one.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {string[]}
+ */
+function statementTexts(text, label) {
   let ast;
   try {
     ast = parse(text, {sourceType: 'module', plugins: ['jsx', 'typescript']});
@@ -1349,7 +1426,7 @@ function generatedStatements(text, label) {
       const at = end - start;
       statement = `${statement.slice(0, at)};${statement.slice(at)}`;
     }
-    return normalizedStatement(statement);
+    return statement;
   });
 }
 
@@ -1359,6 +1436,15 @@ function generatedStatements(text, label) {
  * @param {string} statement
  */
 function normalizedStatement(statement) {
+  return collapsedStatement(statement.replace(PURE_MARK, ''));
+}
+
+/**
+ * A statement's text with whitespace, quotes, padding and trailing
+ * separators normalized, its comments as written.
+ * @param {string} statement
+ */
+function collapsedStatement(statement) {
   return statement
     .replace(/\s+/gu, ' ')
     .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
@@ -1423,10 +1509,39 @@ function terminated(statement) {
     : `${statement};`;
 }
 
+/** Syntax-tree fields that only say how a file is laid out. */
+const LAYOUT_KEYS = new Set([
+  'start',
+  'end',
+  'loc',
+  'range',
+  'extra',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+]);
+
+/**
+ * The top-level statements of a module as syntax trees without positions,
+ * comments, or raw text, one string each. A formatter changes line breaks,
+ * quotes, semicolons, trailing commas, and the wrapping of long type
+ * arguments; none of these change the tree.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function statementTrees(text) {
+  const ast = parse(text, {sourceType: 'module', plugins: ['typescript']});
+  return ast.program.body.map(node =>
+    JSON.stringify(node, (key, value) =>
+      LAYOUT_KEYS.has(key) ? undefined : value,
+    ),
+  );
+}
+
 /**
  * Whether a generated declaration file declares what its generated module
  * gives, statement by statement however a formatter left either file
- * ({@link generatedStatements}); the header comment is ignored.
+ * ({@link statementTrees}); the header comment is ignored.
  * @param {string} actual the declaration file as it is
  * @param {string} expected {@link generatedTypesText} for the module
  * @param {string} label the declaration file's path, for a parse error
@@ -1434,19 +1549,52 @@ function terminated(statement) {
 export function generatedTypesMatch(actual, expected, label) {
   let have;
   try {
-    have = generatedStatements(actual, label);
+    have = statementTrees(actual);
   } catch {
     return false;
   }
-  const want = generatedStatements(expected, label);
+  let want;
+  try {
+    want = statementTrees(expected);
+  } catch (error) {
+    throw new IconSetAuthoringError(
+      `The declarations written for ${label} do not parse (${error instanceof Error ? error.message : String(error)}).`,
+      'ERR_INVALID_ARGUMENT',
+    );
+  }
   return have.length === want.length && have.every((s, i) => s === want[i]);
 }
 
 /** The local name the generated module gives the set's adapter. */
 const ADAPTER_LOCAL = 'adaptIcon';
 
-/** The theme map the generated module writes. */
-export const THEME_MAP_NAME = 'themeIcons';
+/**
+ * A bundler's mark that a call has no side effects (`/* @__PURE__ *\/` or
+ * `/*#__PURE__*\/`), so an app that uses a few icons drops the rest. The
+ * module is written with the marks and read without them, so a module an
+ * older CLI wrote (no marks) reads the same.
+ */
+const PURE_MARK = /\/\*\s*[#@]__PURE__\s*\*\/\s*/gu;
+
+/** The mark the generated module writes before each top-level call. */
+const PURE = '/* @__PURE__ */ ';
+
+/**
+ * A normalized statement as the module writes it: an adapted icon's call
+ * marked pure, and any other statement with the marks it was read with.
+ * @param {string} statement
+ * @param {Map<string, string>} marked the module's statements that carried
+ *   their own marks, from {@link markedStatements}
+ */
+function writtenStatement(statement, marked) {
+  const adapted = `= ${ADAPTER_LOCAL}(`;
+  if (statement.startsWith('export const ') && statement.includes(adapted)) {
+    return statement.replace(adapted, `= ${PURE}${ADAPTER_LOCAL}(`);
+  }
+  return marked.get(statement) ?? statement;
+}
+
+export {THEME_MAP_NAME};
 
 /** How the generated module imports React for its theme map. */
 const REACT_IMPORT = "import {createElement} from 'react'";
@@ -1523,7 +1671,8 @@ export function generatedTypesText(statements) {
     const theme = /^export const (\w+) = \{(.*)\}$/u.exec(statement);
     if (
       theme &&
-      (theme[1] === THEME_MAP_NAME || statement.includes('createElement('))
+      (theme[1].startsWith(THEME_MAP_NAME) ||
+        statement.includes('createElement('))
     ) {
       react.add('ReactElement');
       const keys = [...theme[2].matchAll(/(\w+): createElement\(/gu)].map(
@@ -1590,7 +1739,17 @@ export function generatedModuleText(
     return relative.startsWith('.') ? relative : `./${relative}`;
   };
   const themeName = data.themeMap === THEME_MAP_NAME ? THEME_MAP_NAME : null;
+  // Every theme map the module may hold, one per declared look, so a look's
+  // map no icon draws any more is dropped as well.
+  const themeNames = [
+    THEME_MAP_NAME,
+    ...(data.variants ?? [])
+      .filter(variant => variant !== data.default?.variant)
+      .map(variantThemeMapName),
+  ];
   const lines = before == null ? [] : generatedStatements(before, generated);
+  const marked =
+    before == null ? new Map() : markedStatements(before, generated);
   const lineSet = new Set(lines);
   // Written once, below: the adapter's import, React's createElement, and
   // the theme map. Every lookup below is by name, so a library of twenty
@@ -1615,7 +1774,8 @@ export function generatedModuleText(
     return (
       line === REACT_IMPORT ||
       themeImport(line) ||
-      (themeName != null && line.startsWith(`export const ${themeName} = `))
+      (themeName != null &&
+        themeNames.some(name => line.startsWith(`export const ${name} = `)))
     );
   };
   const imports = new Set(
@@ -1680,22 +1840,42 @@ export function generatedModuleText(
   }
   /** @type {string[]} */
   const theme = [];
+  /** @type {Array<{name: string, entries: string[]}>} */
+  const looks = themeName
+    ? variantThemeMaps({...data, generated}).map(({name}) => ({
+        name,
+        entries: [],
+      }))
+    : [];
   /** @type {Set<string>} */
   const themeImports = new Set();
+  /**
+   * A theme-map entry for one built-in definition, and the import that
+   * gives a re-exported icon its local name.
+   * @param {string} name
+   * @param {string} exportName
+   */
+  const themeEntry = (name, exportName) => {
+    const line = exported.get(exportName);
+    const reexport =
+      line != null && line.startsWith('export {') ? line : undefined;
+    if (reexport) {
+      themeImports.add(`import${reexport.slice('export'.length)}`);
+    }
+    return `  ${name}: ${PURE}createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
+  };
   if (themeName) {
-    const byId = new Map(data.icons.map(icon => [icon.id, icon.export]));
+    const byId = new Map(data.icons.map(icon => [icon.id, icon]));
+    const lookVariants = variantThemeMaps({...data, generated});
     for (const name of Object.keys(data.map ?? {}).sort()) {
-      const exportName = byId.get(/** @type {string} */ (data.map?.[name]));
-      if (BUILT_IN.has(name) && exportName) {
-        theme.push(
-          `  ${name}: createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`,
-        );
-        const line = exported.get(exportName);
-        const reexport =
-          line != null && line.startsWith('export {') ? line : undefined;
-        if (reexport) {
-          themeImports.add(`import${reexport.slice('export'.length)}`);
-        }
+      const icon = byId.get(/** @type {string} */ (data.map?.[name]));
+      if (BUILT_IN.has(name) && icon) {
+        theme.push(themeEntry(name, icon.export));
+        lookVariants.forEach(({variant}, index) => {
+          looks[index].entries.push(
+            themeEntry(name, lookExport(icon, variant)),
+          );
+        });
       }
     }
   }
@@ -1711,13 +1891,18 @@ export function generatedModuleText(
       ...(themeName ? [REACT_IMPORT] : []),
       ...adapterLine,
       ...[...imports, ...themeImports].sort(),
-      ...[...exports].sort(),
+      ...[...exports].sort().map(line => writtenStatement(line, marked)),
     ].map(terminated),
     ...(themeName
       ? theme.length > 0
         ? [`export const ${themeName} = {`, ...theme, '};']
         : [`export const ${themeName} = {};`]
       : []),
+    ...looks.flatMap(({name, entries}) =>
+      entries.length > 0
+        ? [`export const ${name} = {`, ...entries, '};']
+        : [`export const ${name} = {};`],
+    ),
     '',
   ].join('\n');
   const typesPath = generatedTypesPath(generated);
@@ -1817,10 +2002,11 @@ export function generatedNamesOf(packageDir, generated, from, source) {
  * differently; and a refresh changes only the icons its module supplies.
  * @param {string} packageDir
  * @param {string} generated
- * @returns {Map<string, {module: string, source: string}>}
+ * @returns {Map<string, {module: string, source: string, adapt: boolean}>}
+ *   `adapt`: the set's adapter turns the export into a component
  */
 export function generatedOrigins(packageDir, generated) {
-  /** @type {Map<string, {module: string, source: string}>} */
+  /** @type {Map<string, {module: string, source: string, adapt: boolean}>} */
   const origins = new Map();
   const file = path.join(packageDir, generated);
   if (!fs.existsSync(file)) return origins;
@@ -1847,6 +2033,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(reexport[2] ?? reexport[1], {
         module: fromRoot(reexport[3]),
         source: reexport[1],
+        adapt: false,
       });
       continue;
     }
@@ -1857,6 +2044,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(adapted[2], {
         module: fromRoot(adapted[3]),
         source: adapted[1],
+        adapt: true,
       });
       continue;
     }
@@ -1867,6 +2055,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(adaptedDefault[1], {
         module: fromRoot(adaptedDefault[2]),
         source: 'default',
+        adapt: true,
       });
     }
   }
@@ -2222,15 +2411,21 @@ export function typecheckNote(pkg) {
 
 /**
  * A definition name as `map` keys it: camelCase. The docs list each
- * definition by its kebab id too (`eye-slash`), so that spelling resolves.
+ * definition by its kebab id too (`eye-slash`), so that spelling resolves,
+ * and a replaced definition's name resolves to the definition that replaced
+ * it.
  * @param {string} name
  * @param {Set<string>} known the definitions the set may map
+ * @param {Parameters<typeof currentDefinitionName>[1]} [set] the set whose
+ *   own replaced names count too
  * @returns {string}
  */
-export function definitionNameOf(name, known) {
+export function definitionNameOf(name, known, set) {
   if (known.has(name)) return name;
   const camel = name.replace(/-([a-z0-9])/gu, (_, c) => c.toUpperCase());
-  return known.has(camel) ? camel : name;
+  if (known.has(camel)) return camel;
+  const current = currentDefinitionName(camel, set);
+  return current != null && known.has(current) ? current : name;
 }
 
 /**

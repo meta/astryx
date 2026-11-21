@@ -13,6 +13,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./template.mjs')} */
@@ -32,7 +33,7 @@ let tmpDir;
 let originalCwd;
 
 function makeConsumer() {
-  const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-template-it-'));
+  const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-template-it-'));
   fs.writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify({name: 'consumer'}),
@@ -299,6 +300,47 @@ describe('integration template discovery', () => {
     expect(result.data.type).toBe('page');
   });
 
+  it('names no run-from-its-folder command for an integration template, which a folder outside the project cannot find', async () => {
+    const pkgDir = installWidgets(tmpDir);
+    writeTemplate(pkgDir, 'pricing', {kind: 'page'});
+    const outside = path.join(
+      path.dirname(tmpDir),
+      `astryx-no-such-folder-${path.basename(tmpDir)}`,
+      'pricing.tsx',
+    );
+
+    const err = await template('pricing', {
+      type: 'page',
+      targetPath: outside,
+      cwd: tmpDir,
+    }).catch(e => e);
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.suggestions.length).toBeGreaterThan(0);
+    expect(err.suggestions.some(s => s.name.startsWith('cd '))).toBe(false);
+    expect(fs.existsSync(path.dirname(outside))).toBe(false);
+  });
+
+  it('names no run-from-its-folder command for a Core template an integration replaces, even asked for by package', async () => {
+    const pkgDir = installWidgets(tmpDir);
+    writeTemplate(pkgDir, 'acme-app-shell', {kind: 'page'});
+    declareReplaces(pkgDir, {'acme-app-shell': 'shell-side-nav'});
+    const outside = path.join(
+      path.dirname(tmpDir),
+      `astryx-no-such-folder-${path.basename(tmpDir)}`,
+      'shell.tsx',
+    );
+    for (const options of [{}, {package: '@astryxdesign/core'}]) {
+      const err = await template('shell-side-nav', {
+        type: 'page',
+        ...options,
+        targetPath: outside,
+        cwd: tmpDir,
+      }).catch(e => e);
+      expect(err.code, JSON.stringify(options)).toBe('ERR_PATH_TRAVERSAL');
+      expect(err.suggestions.some(s => s.name.startsWith('cd '))).toBe(false);
+    }
+  });
+
   it('copies a page template into a directory as page.tsx', async () => {
     const pkgDir = installWidgets(tmpDir);
     writeTemplate(pkgDir, 'pricing', {kind: 'page'});
@@ -475,9 +517,8 @@ describe('integration template discovery', () => {
     const renderedBuild = await runCli(['build', 'shell-side-nav'], tmpDir);
     expect(renderedBuild.status).toBe(0);
     expect(renderedBuild.stdout).toContain(
-      'template shell-side-nav --type page <path>',
+      'template shell-side-nav --type page src/pages/shell-top-nav',
     );
-    expect(renderedBuild.stdout).not.toContain('template shell-top-nav <path>');
 
     const listed = await template(undefined, {list: true, cwd: tmpDir});
     expect(listed.data).toEqual(
@@ -636,7 +677,10 @@ describe('integration template discovery', () => {
         ]),
       );
     }
-    const selected = await template('shell-side-nav', {show: true, cwd: tmpDir});
+    const selected = await template('shell-side-nav', {
+      show: true,
+      cwd: tmpDir,
+    });
     expect(selected.data.template).toBe('shell-side-nav');
   });
 
@@ -662,7 +706,10 @@ describe('integration template discovery', () => {
         }),
       ]),
     );
-    const selected = await template('shell-side-nav', {show: true, cwd: tmpDir});
+    const selected = await template('shell-side-nav', {
+      show: true,
+      cwd: tmpDir,
+    });
     expect(selected.data.template).toBe('shell-side-nav');
   });
 
@@ -688,7 +735,10 @@ describe('integration template discovery', () => {
     const discovered = await discoverAllWithErrors(tmpDir);
     expect(discovered.errors).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({template: 'acme-shell', replacementTarget: 'dashboard'}),
+        expect.objectContaining({
+          template: 'acme-shell',
+          replacementTarget: 'dashboard',
+        }),
       ]),
     );
   });
@@ -1209,7 +1259,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'acme-app-shell',
-      command: 'astryx template shell-side-nav --type page <path>',
+      command:
+        'astryx template shell-side-nav --type page src/pages/acme-app-shell.tsx',
     });
     const selected = await template('shell-side-nav', {
       type: 'page',
@@ -1228,7 +1279,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'contact-form',
-      command: 'astryx template contact-form --type page <path>',
+      command:
+        'astryx template contact-form --type page src/pages/contact-form.tsx',
     });
     const selected = await template('contact-form', {
       type: 'page',
@@ -1277,5 +1329,4 @@ describe('build names a start its command selects', () => {
     });
     expect(secondTemplate.data.source).toContain('Final chain replacement');
   }, 30_000);
-
 });

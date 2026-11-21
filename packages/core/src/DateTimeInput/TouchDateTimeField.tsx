@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -172,17 +173,7 @@ function getDefaultTime(hasSeconds: boolean): ISOTimeString {
   );
 }
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
@@ -311,6 +302,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     cursor: {
       default: 'pointer',
@@ -352,7 +344,7 @@ const styles = stylex.create({
   },
   touchResetButton: {
     minBlockSize: {
-      default: sizeVars['--size-element-sm'],
+      default: null,
       '@media (pointer: coarse)': dateInputTouchSizes.daySize,
     },
   },
@@ -383,6 +375,7 @@ const styles = stylex.create({
   touchWeekday: {
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
   },

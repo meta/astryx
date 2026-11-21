@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 
 const require = createRequire(import.meta.url);
@@ -83,6 +84,46 @@ describe('spec-only change scope', () => {
     expect(readme.touchesKnowledgeRecords).toBe(true);
     expect(readme.specOnly).toBe(false);
   });
+
+  it('gives a change only to the recorded Node test times the knowledge lane: the leg plan check and the tests that read the times', () => {
+    for (const files of [
+      ['scripts/vitest-node-durations.json'],
+      [
+        'scripts/vitest-node-durations.json',
+        'scripts/vitest-node-durations.min-node.json',
+      ],
+    ]) {
+      const result = classifyChanges(
+        files.map(filename => ({filename, status: 'M'})),
+      );
+      expect(result.surfaces).toEqual(['node-times']);
+      expect(result.specOnly).toBe(true);
+      // Named apart, so the test join still requires every owner's outcome.
+      expect(result.timesOnly).toBe(true);
+      expect(result.fullSuite).toBe(false);
+      expect(result.vitestFullSuite).toBe(false);
+      expect(result.touchesKnowledgeRecords).toBe(false);
+    }
+  });
+
+  it.each([
+    'packages/core/src/Button/Button.tsx',
+    'docs/specs/AST-030/spec.md',
+    'scripts/vitest-node-legs.mjs',
+    '.github/workflows/ci.yml',
+  ])(
+    'runs the recorded Node test times beside %s as today: the full suite',
+    other => {
+      const result = classifyChanges([
+        {filename: 'scripts/vitest-node-durations.json', status: 'M'},
+        {filename: other, status: 'M'},
+      ]);
+      expect(result.specOnly).toBe(false);
+      expect(result.timesOnly).toBe(false);
+      expect(result.fullSuite).toBe(true);
+      expect(result.vitestFullSuite).toBe(true);
+    },
+  );
 
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
@@ -573,7 +614,7 @@ describe('shared infrastructure only the Vitest module graph reaches (spec:AST-0
     const result = spawnSync(
       'node',
       [
-        new URL('./change-scope.cjs', import.meta.url).pathname,
+        fileURLToPath(new URL('./change-scope.cjs', import.meta.url)),
         '--github-output',
       ],
       {

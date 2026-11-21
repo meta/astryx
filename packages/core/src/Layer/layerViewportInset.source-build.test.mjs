@@ -21,6 +21,7 @@ import {fileURLToPath} from 'node:url';
 import {transformAsync} from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
 import {describe, expect, it} from 'vitest';
+import {LAYER_LIFT_PROPERTY} from './layerSlideRules';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(__dirname, '..');
@@ -88,5 +89,23 @@ describe('layer viewport inset stylesheet (spec:AST-059)', () => {
     expect(inlineCaps).toContainEqual(
       expect.stringMatching(/^calc\(calc\(100vw - /),
     );
+  });
+
+  it('places anchored layers with anchor() insets that read the keyboard lift the runtime writes', async () => {
+    const css = await compileStylesheet();
+    // StyleX writes the block insets as `top` and `bottom`.
+    const readsLift = value =>
+      value.includes('anchor(outside)') &&
+      value.replace(/\s/g, '').includes(`var(${LAYER_LIFT_PROPERTY},0px)`);
+    expect(declarations(css, 'top').some(readsLift)).toBe(true);
+    expect(declarations(css, 'bottom').some(readsLift)).toBe(true);
+    // The aligned inset holds the resolved gutter, not a constant reference.
+    expect(
+      declarations(css, 'inset-inline-start').some(value =>
+        /^max\(calc\(max\(var\(--spacing-4\), env\(safe-area-inset-left/.test(
+          value,
+        ),
+      ),
+    ).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import {
   resolvePackageDir,
 } from './integrations.mjs';
 import {discover} from '../../api/discover/discover.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -34,7 +35,7 @@ function writeManifestPackage(
 beforeEach(() => {
   originalCwd = process.cwd();
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-test-'),
+    path.join(REPO_ROOT, '.astryx-integration-test-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
