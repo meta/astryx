@@ -74,6 +74,7 @@ describe('an ask that starts with "clear the ..."', () => {
       'clear the card outline',
       'clear the card shadow and clear the button border',
       'clear the card shadow, clear the button border',
+      'clear the card shadow, then make the radius 8px',
     ])
       expect(await commands(ask), ask).toMatch(REMOVAL);
     // (A second clear starts an ask of its own.)

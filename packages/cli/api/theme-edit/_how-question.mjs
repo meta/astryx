@@ -2252,7 +2252,9 @@ function askFrom(asked, at, isVerb, partWords) {
   let ask = asked.slice(at);
   const end = ask.search(/[.!?\n](?=\s|$)|\n/);
   if (end >= 0) ask = ask.slice(0, end);
-  for (const m of ask.matchAll(/(?:\s(?:and|then|but)|,)\s+([a-z']+)/g)) {
+  for (const m of ask.matchAll(
+    /(?:,\s*(?:(?:and|then|but)\s+)?|\s(?:and|then|but)\s+)([a-z']+)/g,
+  )) {
     if (m[1] !== 'clear' && !isVerb(m[1])) continue;
     const next = ` ${ask.slice((m.index ?? 0) + m[0].length)} `;
     const pointsBack = /\b(?:it|them|that|those|this|these)\b/.test(next);
