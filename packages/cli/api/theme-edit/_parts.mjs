@@ -1338,7 +1338,8 @@ export function declarations(css) {
       const i = d.indexOf(':');
       if (i < 0) continue;
       const prop = d.slice(0, i).trim();
-      const value = d.slice(i + 1).trim();
+      // (Core's focus rings read as they draw for the keyboard.)
+      const value = focusRingAtRest(d.slice(i + 1).trim());
       if (!prop) continue;
       const list = decls.get(cls) ?? [];
       list.push({prop, value, cond});
@@ -1390,6 +1391,28 @@ function resolvePrivate(v, env, tokens, depth = 0) {
     !tokens.has(name) && env[name] != null ? env[name] : m,
   );
   return out === v ? v : resolvePrivate(out, env, tokens, depth + 1);
+}
+
+/**
+ * A value as it shows with Core's focus-ring switch at rest. The switch
+ * (`--_focus-ring`) is 0 only after a pointer press, so its fallback of 1
+ * is what a theme reads. The arithmetic it feeds then folds away:
+ * `calc(2px * 1)` is `2px`, and a `color-mix()` that takes one color at
+ * 100% is that color.
+ * @param {string} v
+ * @returns {string}
+ */
+export function focusRingAtRest(v) {
+  const s = String(v);
+  if (!s.includes('--_focus-ring')) return s;
+  return s
+    .replace(/var\(\s*--_focus-ring\s*,\s*1\s*\)/g, '1')
+    .replace(/calc\(\s*1\s*\*\s*100%\s*\)/g, '100%')
+    .replace(/calc\(\s*((?:[^()*]|\([^()]*\))+?)\s*\*\s*1\s*\)/g, '$1')
+    .replace(
+      /color-mix\(\s*in\s+[a-z-]+\s*,\s*((?:[^(),]|\([^()]*\))+?)\s+100%\s*,\s*(?:[^(),]|\([^()]*\))+\)/g,
+      '$1',
+    );
 }
 
 /**

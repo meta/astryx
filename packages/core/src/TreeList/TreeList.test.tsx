@@ -444,7 +444,13 @@ describe('TreeList', () => {
 
     expect(
       getComputedStyle(second).getPropertyValue('--_focus-outline').trim(),
-    ).toBe(FOCUS_OUTLINE);
+    ).toBe(
+      // The width scales by the shared ring switch, 0 after a pointer press.
+      FOCUS_OUTLINE.replace(
+        'var(--focus-outline-width)',
+        'calc(var(--focus-outline-width) * var(--_focus-ring,1))',
+      ),
+    );
     // (Atomic classes only: a debug class names the file that made it.)
     const ringClasses = stylex
       .props(publishedRing.ring)
@@ -516,7 +522,13 @@ describe('TreeList', () => {
 
     expect(
       getComputedStyle(root).getPropertyValue('--_focus-outline').trim(),
-    ).toBe(FOCUS_OUTLINE);
+    ).toBe(
+      // The width scales by the shared ring switch, 0 after a pointer press.
+      FOCUS_OUTLINE.replace(
+        'var(--focus-outline-width)',
+        'calc(var(--focus-outline-width) * var(--_focus-ring,1))',
+      ),
+    );
     // Mid and Leaf are DOM descendants of Root's <li> (nested <ul role="group">
     // subtrees) — their own outline var must stay unset, not inherit Root's.
     expect(getComputedStyle(mid).getPropertyValue('--_focus-outline')).toBe(

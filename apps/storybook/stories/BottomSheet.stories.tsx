@@ -996,6 +996,44 @@ export const ModalAutofocus: Story = {
   },
 };
 
+/**
+ * A modal sheet whose first action row carries `data-autofocus`: the row is
+ * focused when the sheet opens. A tap or click that opened the sheet shows no
+ * focus ring on it; opening with the keyboard does.
+ */
+export const ModalAutofocusRow: Story = {
+  name: 'Modal with a data-autofocus row',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open actions" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Actions"
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={2}>
+              <Button
+                label="Copy link"
+                variant="ghost"
+                data-autofocus
+                onClick={() => setIsOpen(false)}
+              />
+              <Button
+                label="Share"
+                variant="ghost"
+                onClick={() => setIsOpen(false)}
+              />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
 type ExitFocusChange = 'remove' | 'disable';
 
 function ExitFocusChangeFixture({change}: {change: ExitFocusChange}) {
