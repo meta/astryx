@@ -485,6 +485,78 @@ describe('a theme family with a compiled registry, where the build writes nothin
   });
 });
 
+describe('--check on a theme family with a compiled registry', () => {
+  const args = [
+    'theme',
+    'build',
+    '--family',
+    'fam/ocean.ts',
+    'fam/ocean-calm.ts',
+    '--family-key',
+    'ocean-family',
+  ];
+  /** @param {string} registry the member's registry import and file */
+  const family = registry => {
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from '${registry}';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+  };
+
+  it('reports a .tsx family up to date right after its build', () => {
+    write(
+      'fam/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={16} />};\n`,
+    );
+    family('./icons.tsx');
+    expect(cli(args).status).toBe(0);
+    const checked = cli([...args, '--check']);
+    expect(checked.stderr).toBe('');
+    expect(checked.status).toBe(0);
+  });
+
+  it('reports a changed registry as stale, not as a registry it cannot import', () => {
+    write(
+      'fam/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={16} />};\n`,
+    );
+    family('./icons.tsx');
+    expect(cli(args).status).toBe(0);
+    write(
+      'fam/icons.tsx',
+      `import * as React from 'react';\nexport const calmIcons = {close: <svg width={24} />};\n`,
+    );
+    const checked = cli([...args, '--check']);
+    expect(checked.status).not.toBe(0);
+    expect(checked.stderr + checked.stdout).toContain(
+      'ocean-family.modules/icons.tsx.js',
+    );
+    expect(checked.stderr).not.toContain('Cannot import family registry');
+  });
+
+  it('fails when a dependency of the registry no longer exports what it imports', () => {
+    write(
+      'node_modules/calm-size/package.json',
+      '{"name":"calm-size","type":"module","exports":"./index.js"}\n',
+    );
+    write('node_modules/calm-size/index.js', `export const size = 16;\n`);
+    write(
+      'fam/icons.ts',
+      `import {size} from 'calm-size';\nexport const calmIcons = {close: \`calm-\${size}\`};\n`,
+    );
+    family('./icons.ts');
+    expect(cli(args).status).toBe(0);
+    write('node_modules/calm-size/index.js', `export const width = 16;\n`);
+    const checked = cli([...args, '--check']);
+    expect(checked.status).not.toBe(0);
+    expect(checked.stderr).toContain('Cannot import family registry');
+  });
+});
+
 describe('a family build over a file of yours at a compiled path', () => {
   it('keeps the file and the TypeScript import, and warns as a single build does', async () => {
     write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);
