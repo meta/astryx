@@ -286,9 +286,9 @@ const expansionStyles = stylex.create({
  * So the row gives up its border and the panel takes one. On a table with no
  * row dividers the suppression is a no-op (there was no border to remove) and
  * the panel's is never applied, so neither needs to consult the divider mode.
- * The row's cells give it up through TableCell's own divider style, which
- * drops it while a panel follows their row, so a toggle needs no render of
- * the row.
+ * The open panel marks its row (`data-expansion-panel-open`), and TableCell's
+ * own divider style drops the row's divider while the mark is there, so a
+ * toggle needs no render of the row.
  */
 const dividerStyles = stylex.create({
   // The row's divider, carried down: its row's themed or app-set border
@@ -699,11 +699,21 @@ function ExpansionPanelRow<T>({
   // own content does; while closed, nothing re-renders it.
   const read = () => (store.get().has(rowKey) ? store.version() : -1);
   const isOpen = useSyncExternalStore(store.subscribe, read, read) !== -1;
+  // Marks the row above while this panel is mounted, in the same commit.
+  const markRow = useCallback((panel: HTMLTableRowElement | null) => {
+    const row = panel?.previousElementSibling;
+    if (row == null) {
+      return;
+    }
+    row.setAttribute('data-expansion-panel-open', '');
+    return () => row.removeAttribute('data-expansion-panel-open');
+  }, []);
   if (!isOpen) {
     return null;
   }
   return (
     <tr
+      ref={markRow}
       // A panel is its row's continuation, not a row of its own. Striping
       // counts `:nth-child(even of :not([data-expansion-panel]))`, so this
       // attribute is what keeps an open panel from inverting the zebra of
@@ -807,6 +817,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
   latestRef.current = config;
   const [store] = useState(() => createExpansionStore(expandedKeys));
   useLayoutEffect(() => {
+    // Publishes the committed expanded keys to the store the chevrons, the
+    // panels and the glide's measurement read, after each commit.
     store.set(expandedKeys);
   });
   const toggle = useCallback(
