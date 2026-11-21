@@ -7115,16 +7115,22 @@ export function compileTheme(ctx, data, base) {
     /**
      * Writes Core's focus value of an outline property for a scope, unless
      * the theme sets that property for the focus state itself (for the
-     * whole part, or for that variant; '' for the whole). One the theme
-     * sets for one mode keeps that mode: the other mode alone takes Core's.
+     * whole part, for that variant, or for a scope the written one
+     * holds; '' for the whole). One the theme sets for one mode keeps that
+     * mode: the other mode alone takes Core's.
      * @param {string} p @param {string} variant
      * @param {string | undefined} when @param {string} x
      */
     const putFocus = (p, variant, when, x) => {
+      const held = String(when ?? '').split('+');
       const own = ownFocus.filter(
         y =>
           (kebab(y.thing) === 'outline' || kebab(y.thing) === p) &&
-          (y.when == null || (variant && y.when === `variant:${variant}`)),
+          (y.when == null ||
+            (variant && y.when === `variant:${variant}`) ||
+            String(y.when)
+              .split('+')
+              .every(piece => held.includes(piece))),
       );
       if (own.some(y => !y.mode)) return;
       const ownModes = new Set(own.map(y => y.mode));
@@ -7181,7 +7187,11 @@ export function compileTheme(ctx, data, base) {
     ]) {
       const vals = focusValues(p);
       if (!vals.size) continue;
-      const asked = /^variant:(.+)$/.exec(String(s.when ?? ''))?.[1];
+      // (The variant a combined scope names, "variant:ghost+size:sm".)
+      const asked = String(s.when ?? '')
+        .split('+')
+        .map(piece => /^variant:(.+)$/.exec(piece)?.[1])
+        .find(Boolean);
       const counts = new Map();
       for (const x of vals.values()) counts.set(x, (counts.get(x) ?? 0) + 1);
       const common = [...counts].sort((a, b) => b[1] - a[1])[0][0];

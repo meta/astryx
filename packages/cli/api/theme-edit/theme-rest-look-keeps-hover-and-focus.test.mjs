@@ -130,6 +130,35 @@ describe('a resting outline', () => {
     ).not.toMatch(/outline-color: var\(--color-error\)/);
   }, 240_000);
 
+  it("keeps a variant's own focus color under a resting outline for that variant and a size", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('vs', {cwd, like: 'neutral'});
+    await themeEditSet('vs', 'outline-color', '#ff0000', {
+      cwd,
+      on: 'button',
+      state: 'focus-visible',
+      when: 'variant:ghost',
+    });
+    await themeEditSet('vs', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const css = cssOf('vs');
+    const rules = (
+      css.match(/[^{}]*:focus-visible[^{]*\{[^}]*\}/g) ?? []
+    ).filter(
+      r =>
+        /data-variant="ghost"/.test(r) &&
+        /data-size="sm"/.test(r) &&
+        !/@/.test(r.split('{')[0]),
+    );
+    expect(rules.join('\n')).toMatch(
+      /outline-style: var\(--focus-outline-style\)/,
+    );
+    expect(rules.join('\n')).not.toMatch(/outline-color: var\(/);
+  }, 240_000);
+
   it('gives a large or raised button its hover back under a scoped resting background', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('lg', {cwd, like: 'neutral'});
