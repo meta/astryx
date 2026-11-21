@@ -698,6 +698,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      // A press before the first move ends that arrival too, so a later move
+      // over the pressed trigger opens nothing until the pointer leaves.
+      isArrivalUnmovedRef.current = false;
       trackTriggerPress();
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict. A show() in a capture handler of this

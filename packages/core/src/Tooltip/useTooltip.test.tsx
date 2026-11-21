@@ -207,6 +207,19 @@ describe('useTooltip — a pointer that does not move', () => {
     tick(1000);
     expect(onShow).toHaveBeenCalledTimes(1);
   });
+
+  it('a press on a trigger that appeared under a still mouse keeps it closed on the next move', () => {
+    const onShow = vi.fn();
+    render(<Harness onShow={onShow} />);
+
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger());
+    fireEvent.pointerDown(trigger(), {pointerType: 'mouse', button: 0});
+    fireEvent.pointerUp(trigger(), {pointerType: 'mouse', button: 0});
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(1000);
+    expect(onShow).not.toHaveBeenCalled();
+  });
 });
 
 describe('useTooltip — show delay', () => {
