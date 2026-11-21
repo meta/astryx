@@ -1125,6 +1125,12 @@ export function createResizableAs(
     const motions = pane == null ? [] : slideMotionsOf(pane);
     for (const motion of motions) {
       motion.pause();
+      // A slide that has not drawn its first frame holds a start time ahead
+      // of the timeline, so its time reads negative. Caught there, it starts
+      // from its first frame.
+      if (Number(motion.currentTime) < 0) {
+        motion.currentTime = 0;
+      }
     }
     const elapsed = Number(motions[0]?.currentTime ?? 0);
     const share = slide.remaining(Number.isFinite(elapsed) ? elapsed : 0);
@@ -1315,9 +1321,11 @@ export function createResizableAs(
       return 0;
     }
     // The slide's own motion on the pane tells how far it has run. A held
-    // slide keeps its time, and a landed one reads past its end. Without the
-    // animation API, the time since the lift tells it.
-    const elapsed =
+    // slide keeps its time, and a landed one reads past its end. One that has
+    // not drawn its first frame reads a negative time, and shows its start.
+    // Without the animation API, the time since the lift tells it.
+    const elapsed = Math.max(
+      0,
       typeof element.getAnimations === 'function'
         ? Number(
             element
@@ -1329,7 +1337,8 @@ export function createResizableAs(
                   isScriptMotion(motion),
               )?.currentTime ?? Infinity,
           )
-        : view.performance.now() - closingSlide.startedAt;
+        : view.performance.now() - closingSlide.startedAt,
+    );
     const share = closingSlide.remaining(elapsed);
     if (!(share > 0)) {
       return 0;
