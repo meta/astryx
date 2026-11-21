@@ -33247,6 +33247,9 @@ function fontIn(cl, question) {
       `(?:^|[\\s,;:])${NAME}\\s+(?:as|for|everywhere|throughout|across)\\b`,
       'g',
     ),
+    // ("MS Sans Serif-like pixel sans", "a Helvetica-style font"): the
+    // family a font is said to be like is the family.
+    new RegExp(`(?:^|[\\s,;:])${NAME}-(?:like|style|esque)\\b`, 'g'),
   ]) {
     for (const m of question.matchAll(re)) {
       const name = m[1].replace(/ (Font|Typeface)$/, '');

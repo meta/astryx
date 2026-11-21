@@ -4,7 +4,8 @@
  * @file A font asked for on a part is offered as its preset's whole stack:
  * "monospace numbers in tables" is ui-monospace, then the monospace fonts
  * other systems have, then monospace, never ui-monospace alone, which only
- * Apple systems draw.
+ * Apple systems draw. A family a font is said to be like ("MS Sans
+ * Serif-like") is that family.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -54,5 +55,17 @@ describe('a font on a part', () => {
     expect(await commandsFor('Inter, sans-serif font on buttons')).toContain(
       `font-family 'Inter, sans-serif' --on button`,
     );
+  }, 240_000);
+});
+
+describe('a family said as like another', () => {
+  it('is that family, never the generic stack the rest names', async () => {
+    const said = await commandsFor(
+      'Type: MS Sans Serif-like pixel sans 11px, tight leading',
+    );
+    expect(said).toContain(`font 'MS Sans Serif'`);
+    expect(said).not.toMatch(/ font system(\s|$)/);
+    // (A generic word alone stays the system stack.)
+    expect(await commandsFor('a sans font')).toMatch(/ font system(\s|$)/);
   }, 240_000);
 });
