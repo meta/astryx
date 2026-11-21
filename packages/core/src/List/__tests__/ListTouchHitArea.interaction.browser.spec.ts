@@ -626,7 +626,7 @@ test('under a finger, a tap in a link row’s own padding, outside its anchor, f
   await followed;
 });
 
-test('a mouse click in a link row’s padding does nothing, as before', async ({
+test('a mouse click in a link row’s padding, outside its anchor, follows its link', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -645,11 +645,19 @@ test('a mouse click in a link row’s padding does nothing, as before', async ({
     if (box == null) {
       throw new Error('no row');
     }
-    const url = page.url();
     // The row's leading padding: inside its box, outside its anchor.
-    await page.mouse.click(box.x + 2, box.y + box.height / 2);
-    await page.waitForTimeout(500);
-    expect(page.url()).toBe(url);
+    const x = box.x + 2;
+    const y = box.y + box.height / 2;
+    expect(
+      await page.evaluate(
+        ([px, py]) => document.elementFromPoint(px, py)?.closest('a') == null,
+        [x, y],
+      ),
+    ).toBe(true);
+    // The row is the Links story's "Documentation" (`href="/docs"`).
+    const followed = page.waitForURL(/\/docs$/, {timeout: 5000});
+    await page.mouse.click(x, y);
+    await followed;
   } finally {
     await context.close();
   }
