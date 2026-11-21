@@ -12,7 +12,7 @@ const anatomy = [
     name: 'Icon-resolved trigger icon',
     required: false,
     description:
-      'Default three-dot drawing from the active theme icons.',
+      'Default three-dot drawing (theme icons, else a registered or built-in drawing).',
   },
   {
     name: 'Caller-rendered trigger content',
