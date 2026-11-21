@@ -461,13 +461,28 @@ const ROWS = [
     },
   ],
   [
-    'an example said inside a sentence never frees another sentence\'s item',
+    "an example said inside a sentence never frees another sentence's item",
     {
       q: 'Header: navy, e.g. a dark blue. Cards: white background, gray header.',
       has: [
         "background-color '#1e3a8a' --on app-shell-header",
         "background-color '#ffffff' --on card --when variant:default --mode light",
       ],
+    },
+  ],
+  [
+    "an example inside the list's own sentence keeps the list's items",
+    {
+      q: 'Header: navy. Cards: white background (e.g. snow), gray header.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /light-dark\(#9e9e9e, #525252\)' --on app-shell-header/,
+    },
+  ],
+  [
+    'an example before the first colon keeps the subject',
+    {
+      q: 'Header, e.g. the top bar: navy. Cards: white background, gray header.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
     },
   ],
   [

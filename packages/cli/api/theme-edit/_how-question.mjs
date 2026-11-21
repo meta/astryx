@@ -3067,6 +3067,18 @@ function namedLists(q, partWords, isVariant) {
 
 /** A mark the clause split reads as no word, taken out of each clause. */
 const JOINED = '\u2060';
+/**
+ * The ask with each abbreviation's periods dropped ("e.g." is "eg",
+ * "i.e." is "ie"), so its period never ends a sentence: "Header: navy,
+ * e.g. a dark blue. Cards: …" is two sentences. "etc." keeps a period
+ * that ends its sentence ("cards white etc. Buttons blue").
+ * @param {string} text
+ */
+const dropAbbreviationDots = text =>
+  text
+    .replace(/\b([ei])\.([ge])\.?(?=\s|,|\)|$)/gi, '$1$2')
+    .replace(/\b(vs|cf)\.(?=\s)/gi, '$1')
+    .replace(/\betc\.(?=\s*(?:[a-z,)]|$))/g, 'etc');
 
 /**
  * The word every match of a made lexicon pattern holds: the first word of
@@ -3346,6 +3358,17 @@ function clausesOf(q, partWords, words = null) {
       }
       const text = piece.replaceAll(JOINED, '').trim();
       if (!text) continue;
+      // An example of the color just said ("navy, eg a dark blue") restates
+      // it: never a second color for the same part.
+      const prev = pieces.at(-1)?.text ?? '';
+      if (
+        /^(?:eg|ie|for example|such as)\b/i.test(text) &&
+        colorsIn(text).length &&
+        colorsIn(prev).length
+      ) {
+        joint = '';
+        continue;
+      }
       pieces.push({text, joint});
       joint = '';
     }
@@ -4521,6 +4544,14 @@ function clauseBefore(text, at) {
  * @returns {{parts: string[], aspects: string[], drafts: Draft[]}}
  */
 export function draftAnswer(ctx, env, question) {
+  // An abbreviation's period never ends a sentence, before any reader
+  // reads the words. (An example of the part named before a colon,
+  // "Header, eg the top bar: navy", restates that part: the list's
+  // subject stays the one part.)
+  question = dropAbbreviationDots(String(question)).replace(
+    /,\s*(?:eg|ie)\s+[^,:;.]*(?=:)/gi,
+    '',
+  );
   // The theme's own neutral, as its seed is set: what a near color off a
   // pure one is tinted with, so it reads as the theme's (none: a plain
   // near-black or near-white).
@@ -10646,7 +10677,9 @@ export function draftAnswer(ctx, env, question) {
       // repeats changes it. Where the ask's line breaks or marks end
       // sentences the splitter does not count, the sentence is the one
       // that holds the words a rewrite keeps.)
-      const sentences = asked0.split(/[;!?\n]|\.(?!\d)/).filter(x => x.trim());
+      const sentences = dropAbbreviationDots(asked0)
+        .split(/[;!?\n]|\.(?!\d)/)
+        .filter(x => x.trim());
       const breaksBefore = clauses
         .slice(0, clauses.indexOf(c) + 1)
         .filter(x => joinOf.get(x)?.sep === 'break').length;
