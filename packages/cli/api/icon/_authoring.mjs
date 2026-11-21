@@ -827,9 +827,9 @@ function lookNotes(summary, count, from, looks, name) {
     variant => variant !== looks?.default && styles.has(variant),
   );
   return [
-    `Found ${count} icons in ${from}, each drawn in several variants (${described}) by ${summary.exports} exports. The set wraps each icon once, in the ${taken} variant, named without the variant words (\`x\`, \`XIcon\`).`,
+    `Found ${count} icons in ${from}, each drawn in several styles, sizes and weights (${described}) by ${summary.exports} exports. The set wraps each icon once, as its ${taken} export, named without those words (\`x\`, \`XIcon\`).`,
     others.length > 0
-      ? `Add ${others.join(', ')} as variant${others.length > 1 ? 's' : ''}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
+      ? `Add ${others.join(', ')} as ${others.length > 1 ? 'variants' : 'a variant'}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
       : `To offer another variant, declare it with \`astryx experimental icon new-set ${name} --variants ${[...summary.preferred].reverse()[0]},<variant>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <variant> --from ${from} --all --set ${name}\`.`,
   ];
 }

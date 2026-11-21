@@ -248,9 +248,9 @@ describe('new-set --from a library of looks', () => {
     expect(data.map).toMatchObject({arrowDown: 'arrow-down', star: 'star'});
     const notes = body.data.notes.join('\n');
     expect(notes).toContain(
-      'Found 6 icons in @acme/vector-icons, each drawn in several variants (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
+      'Found 6 icons in @acme/vector-icons, each drawn in several styles, sizes and weights (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
     );
-    expect(notes).toContain('in the outline 24 wght400 variant');
+    expect(notes).toContain('as its outline 24 wght400 export');
     expect(body.data.suggestions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({definition: 'close', icon: 'x'}),
@@ -731,7 +731,7 @@ describe('reading a large library', () => {
       'Reading 1021 exports of @acme/vector-icons...',
     );
     expect(text.stderr).toContain(
-      'Found 170 icons in @acme/vector-icons, drawn by 1020 exports in their variants.',
+      'Found 170 icons in @acme/vector-icons, drawn by 1020 exports across its look words.',
     );
     const asJson = await runCli([...NEW_SET, '--dry-run', '--json'], pkg);
     expect(asJson.stderr).not.toContain('Reading');
@@ -1930,7 +1930,7 @@ describe('the default variant on every path', () => {
       case 'keep': {
         // No run moves the default; each printed command runs, the
         // module placeholder filled with the module that draws the look.
-        expect(res.body.error).toContain('export names name no variants');
+        expect(res.body.error).toContain('export names carry no look words');
         expect(suggestions.length).toBeGreaterThan(0);
         for (const command of suggestions) {
           expect(command).not.toMatch(/new-set brand --from /u);

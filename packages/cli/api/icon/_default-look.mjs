@@ -184,10 +184,10 @@ export function drawnLooks(set, packageDir, positionsOf, options = {}) {
  */
 function unknownLook(word, flag, module, positions) {
   return new AstryxError(
-    `"${word}" is no variant of ${module}: its exports name their variants with ${describedLooks(sortedWords(positions))}. Name one of these words, so each icon's export draws that variant.`,
+    `"${word}" is no look word of ${module}: its exports name their look words with ${describedLooks(sortedWords(positions))}. Name one of these words, so each icon's export draws that variant.`,
     styleWords(positions).map(each => ({
       name: `${flag} ${each}`,
-      reason: `a variant ${module} names`,
+      reason: `a look word ${module} names`,
     })),
     ERROR_CODES.ERR_INVALID_ARGUMENT,
   );
@@ -237,7 +237,7 @@ function inPlaceMove(name, count, now, looks, module, current) {
 function unencodedMove(name, count, current, looks) {
   const variants = [...new Set([current, ...looks.variants])];
   return new AstryxError(
-    `Icon set "${name}" can't move its default variant from "${current}" to "${looks.default}": its icons' export names name no variants, so each of its ${count} icons draws "${current}", the variant its icons' module draws. Keep "${current}" as the default, declare "${looks.default}" as a variant, and add it from the module that draws it (fill <module> with that module).`,
+    `Icon set "${name}" can't move its default variant from "${current}" to "${looks.default}": its icons' export names carry no look words, so each of its ${count} icons draws "${current}", the variant its icons' module draws. Keep "${current}" as the default, declare "${looks.default}" as a variant, and add it from the module that draws it (fill <module> with that module).`,
     [
       {
         name: `astryx experimental icon new-set ${name} --variants ${variants.join(',')} --default-variant ${current}`,
@@ -265,7 +265,7 @@ function unencodedMove(name, count, current, looks) {
 function droppedDefault(name, count, current, looks, from) {
   const others = looks.variants.filter(variant => variant !== current);
   return new AstryxError(
-    `--variants (${looks.variants.join(', ')}) leaves out "${current}", the default variant of icon set "${name}". Its icons' export names name no variants, so each of its ${count} icons still draws "${current}", the variant its icons' module draws. List "${current}" in --variants, and add each other variant from the module that draws it (fill <module> with that module).`,
+    `--variants (${looks.variants.join(', ')}) leaves out "${current}", the default variant of icon set "${name}". Its icons' export names carry no look words, so each of its ${count} icons still draws "${current}", the variant its icons' module draws. List "${current}" in --variants, and add each other variant from the module that draws it (fill <module> with that module).`,
     [
       {
         name: `astryx experimental icon new-set ${name}${from} --variants ${[current, ...others].join(',')}`,
