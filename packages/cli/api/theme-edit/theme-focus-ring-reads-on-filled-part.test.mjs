@@ -150,4 +150,34 @@ describe('a focus ring inside a part the theme fills', () => {
     expect(card.length).toBeGreaterThan(0);
     expect(card).not.toContain('#ffffff');
   }, 240_000);
+
+  it('gives any part inside that paints its own fill a ring that reads on it', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('sh', {cwd, like: 'neutral'});
+    await themeEditSet('sh', 'background-color', '#2d4373', {
+      cwd,
+      on: 'app-shell',
+      mode: 'light',
+    });
+    await themeEditSet('sh', 'background-color', '#ffffff', {
+      cwd,
+      on: 'app-shell-header',
+      mode: 'light',
+    });
+    expect(headerRings('sh', 'app-shell')).toContain('#ffffff');
+    const bar = headerRings('sh');
+    expect(bar.length).toBeGreaterThan(0);
+    expect(bar).not.toContain('#ffffff');
+  }, 240_000);
+
+  it('writes none on a part that draws its own ring, which lies on the page', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('fb', {cwd, like: 'neutral'});
+    await themeEditSet('fb', 'background-color', '#2d4373', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    expect(headerRings('fb', 'button')).toEqual([]);
+  }, 240_000);
 });
