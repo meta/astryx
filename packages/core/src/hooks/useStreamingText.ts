@@ -174,9 +174,9 @@ export function useStreamingText(
     }
   }
 
-  // Reduced motion skips the progressive reveal and shows the full text: the
-  // person's setting, followed live so a change mid-stream takes effect, or a
-  // theme's reducedMotion: 'always'.
+  // Reduced motion skips the progressive reveal and shows the full text. It is
+  // the person's setting, followed live so a change mid-stream takes effect,
+  // or a theme's reducedMotion: 'always'.
   const reducesMotion = useReducesMotion();
 
   // Syncs the revealed text with an animation-frame clock while the text
