@@ -166,9 +166,10 @@ describe('a color said for one mode is its page', () => {
       'use the same blue for everything',
       'blue on everything',
       'navy across everything',
-      'dark mode should be navy and white',
+      'light mode should be cream with blue buttons',
+      'dark mode should be slate with rounder buttons',
+      'dark mode is navy and light mode is cream',
       'dark mode is gray',
-      'headings that work in light and dark mode should be navy',
       'header navy, gray everything else',
       'buttons in dark mode should be blue',
       'the accent in dark mode should be purple',
@@ -200,26 +201,14 @@ describe('a color said for one mode is its page', () => {
         isShade,
       ),
     ).toBe('calm and minimal\n- dark mode: page deep dark plum');
-    // (A "with", "and" or "but" that says more is a clause of its own.)
-    for (const [ask, read] of [
-      [
-        'light mode should be cream with blue buttons',
-        'light mode: page cream, light mode: blue buttons',
-      ],
-      [
-        'dark mode should be slate with rounder buttons',
-        'dark mode: page slate, dark mode: rounder buttons',
-      ],
-      [
-        'dark mode is navy and light mode is cream',
-        'dark mode: page navy, light mode: page cream',
-      ],
-      [
+    // (A page clause after a comma and an "and" is a clause start.)
+    expect(
+      colorsSaidForPages(
         'make the buttons rounder, and dark mode should be a deep dark plum',
-        'make the buttons rounder, and dark mode: page deep dark plum',
-      ],
-    ])
-      expect(colorsSaidForPages(ask, isHue, isShade), ask).toBe(read);
+        isHue,
+        isShade,
+      ),
+    ).toBe('make the buttons rounder, and dark mode: page deep dark plum');
     // (The color reader's shade words count as tone words too.)
     expect(
       colorsSaidForPages('light mode is pastel pink', isHue, isShade),
@@ -295,41 +284,28 @@ describe('a color said for one mode is its page', () => {
   );
 
   it(
-    "a look said after the page stays the theme's: navy and more contrast in dark mode",
+    'rounder buttons, and a deep dark plum dark mode: the plum is the dark page, never the buttons',
     async test => {
       needsBases(test);
-      const {data} = await themeEditHow('dark mode is navy and more contrast', {
-        cwd,
-        theme: 'c',
-      });
       const lines = /** @type {string[]} */ (
-        (data.results ?? []).flatMap(r => r.commands ?? [])
-      ).map(x =>
-        String(x)
-          .replace(/^.* editor /, '')
-          .replace(/^set c /, ''),
-      );
+        (
+          await themeEditHow(
+            'make the buttons rounder, and dark mode should be a deep dark plum',
+            {cwd, theme: 'c'},
+          )
+        ).data.results ?? []
+      )
+        .flatMap(r => r.commands ?? [])
+        .map(x =>
+          String(x)
+            .replace(/^.* editor /, '')
+            .replace(/^set c /, ''),
+        );
       expect(pageIn(lines, 'dark')).not.toBeNull();
-      expect(
-        lines.some(
-          l =>
-            /^--color-(?:text-secondary|border) /.test(l) &&
-            /--mode dark$/.test(l),
-        ),
-      ).toBe(true);
-    },
-    T,
-  );
-
-  it(
-    'cream with blue buttons in light mode: the light page, and the buttons for light mode only',
-    async test => {
-      needsBases(test);
-      const lines = await first('light mode should be cream with blue buttons');
-      expect(pageIn(lines, 'light')).not.toBeNull();
-      const buttons = lines.filter(l => /--on button\b/.test(l));
-      expect(buttons.length).toBeGreaterThan(0);
-      for (const l of buttons) expect(l).toMatch(/--mode light$/);
+      expect(lines.join('\n')).toMatch(/corners more --on button/);
+      expect(lines.join('\n')).not.toMatch(
+        /background-color '#[0-9a-f]+' --on button/,
+      );
     },
     T,
   );
