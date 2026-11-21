@@ -425,11 +425,11 @@ export const ON_MUTED = officialStops('--color-on-info-muted');
  * neutral track (`--color-neutral`).
  */
 export const LIFT_PARTS: ReadonlyArray<[string, string, string]> =
-  OFFICIAL_NEUTRAL_LIFTED.map(([part, block]) => [
-    part,
-    block,
-    liftGround(part, block),
-  ]);
+  OFFICIAL_NEUTRAL_LIFTED.filter(
+    // A coloured card's own secondary text is that card's ink, which the
+    // base theme draws for its fill: a palette leaves it, never lifts it.
+    ([part, block]) => !(part === 'card' && block.startsWith('variant:')),
+  ).map(([part, block]) => [part, block, liftGround(part, block)]);
 /**
  * What a lifted block's secondary text sits on: a card's own fill for a
  * card colour (the card variant rule lifts it there), the translucent
