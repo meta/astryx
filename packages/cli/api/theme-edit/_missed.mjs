@@ -23,7 +23,7 @@ import {
 import {borderlessSurfaces} from './_check.mjs';
 import {hex, parseColor, ratio, splitTop} from './_color.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
-import {blurScaled} from './_how-question.mjs';
+import {blurScaled} from './_how-steps.mjs';
 
 /**
  * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
