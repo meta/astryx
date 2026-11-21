@@ -3,14 +3,22 @@
 /**
  * @file Which module paths and JSX elements name Core.
  * @input A module path, or a JSX element's name node and its Babel scope.
- * @output Whether the path is Core's package or one of its subpaths, and the
- *   Core component an element draws.
+ * @output Whether the path is Core's package or one of its subpaths, the
+ *   Core component an element draws, and whether a module's pragma compiles
+ *   its JSX with another runtime.
  * @position Shared by doctor's prop check (core-props.mjs), the reader of
  *   what augments Core (core-augmentation-points.mjs) and the page render
  *   worker (render/page-worker.mjs), so that they agree on what is Core.
  */
 
 const CORE_PACKAGE = '@astryxdesign/core';
+
+/**
+ * A module that compiles its JSX with a runtime other than React's (a
+ * `@jsxImportSource` or `@jsx` pragma), which can give every component props
+ * of its own.
+ */
+export const OTHER_JSX_RUNTIME = /@jsxImportSource\s+(?!react(?:\s|\*|$))\S|@jsx\s+(?!React\.createElement\b)[A-Za-z_$]/m;
 
 /**
  * Whether a module path names Core: the package or one of its subpaths.

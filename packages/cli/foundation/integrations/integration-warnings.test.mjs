@@ -227,7 +227,14 @@ describe('warnOnIntegrationIssues', () => {
     ];
     try {
       await warnOnIntegrationIssues(
-        {cwd: outside, issues: async () => issues},
+        {
+          cwd: outside,
+          // Installed for the computer: doctor names their other issues.
+          loadedIntegrations: ['@acme/nav', '@acme/pair', '@acme/odd'].map(
+            name => ({name, __computer: true}),
+          ),
+          issues: async () => issues,
+        },
         {json: false},
       );
     } finally {
@@ -287,5 +294,132 @@ describe('warnOnIntegrationIssues', () => {
       /^Warning: @acme\/nav has 1 integration issue\(s\)\. Run: .+ doctor$/,
     );
     expect(errLines[1]).toBe(`Warning: @acme/nav: ${issue.message}`);
+  });
+
+  it('outside a project, names its own check for an integration the folder loads itself, and prints a replacement finding that check does not show', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-warn-own-'));
+    const replacement = {
+      package: '@acme/own',
+      code: 'missing_template_replacement_target',
+      severity: 'error',
+      message:
+        'Template "acme-shell" replaces "no-such-template", which is not a Core template id.',
+      needsCatalog: true,
+    };
+    try {
+      await warnOnIntegrationIssues(
+        {
+          cwd: outside,
+          loadedIntegrations: [
+            {name: '@acme/own'},
+            {name: '@acme/global', __computer: true},
+          ],
+          issues: async () => [
+            {
+              package: '@acme/own',
+              code: 'source_without_component_doc',
+              severity: 'warning',
+              message: 'Component source "Odd.tsx" has no doc.',
+            },
+            replacement,
+            {
+              package: '@acme/global',
+              code: 'source_without_component_doc',
+              severity: 'warning',
+              message: 'Component source "Other.tsx" has no doc.',
+            },
+            {
+              package: '@acme/broken',
+              code: 'integration_error',
+              severity: 'error',
+              message: 'boom',
+            },
+          ],
+        },
+        {json: false},
+      );
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+
+    // Doctor checks the computer there, so it names the issues of the one
+    // installed for the computer that loads. The folder's own copy gets its
+    // own check, and so does one installed for the computer that cannot load
+    // because a package it imports is missing: it is not among the loaded
+    // integrations, and only its load error is listed.
+    expect(errLines).toHaveLength(4);
+    expect(errLines[0]).toBe(`Warning: @acme/own: ${replacement.message}`);
+    expect(errLines[1]).toMatch(
+      /^Warning: @acme\/own has 1 integration issue\(s\)\. Run: .+ doctor integration validate @acme\/own$/,
+    );
+    expect(errLines[2]).toMatch(
+      /^Warning: @acme\/global has 1 integration issue\(s\)\. Run: .+ doctor$/,
+    );
+    expect(errLines[3]).toMatch(
+      /^Warning: @acme\/broken has 1 integration issue\(s\)\. Run: .+ doctor integration validate @acme\/broken$/,
+    );
+  });
+
+  it('outside a project, names the check without a package for a local integration whose package.json has no name', async () => {
+    const outside = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-warn-nameless-'),
+    );
+    try {
+      await warnOnIntegrationIssues(
+        {
+          cwd: outside,
+          loadedIntegrations: [{name: '(local integration)', __local: true}],
+          issues: async () => [
+            {
+              package: '(local integration)',
+              code: 'source_without_component_doc',
+              severity: 'warning',
+              message: 'Component source "Odd.tsx" has no doc.',
+            },
+          ],
+        },
+        {json: false},
+      );
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+
+    // The label is no package name, and the shell would reject it: the
+    // command validates the package in the folder instead.
+    expect(errLines).toHaveLength(1);
+    expect(errLines[0]).toMatch(
+      /^Warning: \(local integration\) has 1 integration issue\(s\)\. Run: .+ doctor integration validate$/,
+    );
+  });
+
+  it('outside a project, keeps a configured entry that is not a bare package name in the command', async () => {
+    const outside = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-warn-entry-'),
+    );
+    try {
+      await warnOnIntegrationIssues(
+        {
+          cwd: outside,
+          loadedIntegrations: [{name: './widgets', __loadError: 'boom'}],
+          issues: async () => [
+            {
+              package: './widgets',
+              code: 'integration_error',
+              severity: 'error',
+              message: 'Invalid integration package name "./widgets".',
+            },
+          ],
+        },
+        {json: false},
+      );
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+
+    // validate reports what is wrong with the entry itself.
+    expect(errLines).toHaveLength(1);
+    expect(errLines[0]).toMatch(
+      /^Warning: \.\/widgets has 1 integration issue\(s\)\. Run: .+ doctor integration validate \.\/widgets$/,
+    );
   });
 });
