@@ -12319,7 +12319,21 @@ export function draftAnswer(ctx, env, question) {
       !c.except &&
       !c.parts.length &&
       !c.aspects.length &&
-      !c.colors.length
+      !c.colors.length &&
+      // ("make the accent red in light mode. undo the light mode accent
+      // change": an undo of a change said for that mode earlier in the ask
+      // takes it back; it rules no mode out.)
+      !(
+        c.neg &&
+        /\b(?:revert|undo|take back)\b/.test(c.text) &&
+        clauses
+          .slice(0, i)
+          .some(
+            o =>
+              o.mode === c.mode &&
+              (o.parts.length || o.aspects.length || o.colors.length),
+          )
+      )
     ) {
       // "don't touch dark mode, …": the other mode.
       const scope = c.neg ? (c.mode === 'dark' ? 'light' : 'dark') : c.mode;

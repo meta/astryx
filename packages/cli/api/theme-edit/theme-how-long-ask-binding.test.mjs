@@ -624,6 +624,14 @@ const ROWS = [
     },
   ],
   [
+    'an undo of a change said for one mode earlier in the ask takes it back',
+    {
+      q: 'make the accent red in light mode. undo the light mode accent change',
+      never: /--color-accent/,
+      says: /taken back by its undo/,
+    },
+  ],
+  [
     'a change said again after its undo is written',
     {
       q: 'Make the cards rounder. Undo the card change. Make the cards rounder.',
