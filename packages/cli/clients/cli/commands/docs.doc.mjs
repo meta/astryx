@@ -26,7 +26,9 @@ export const doc = {
     'one. A namespace plus a section prints that section from the one guide below it ' +
     'that has it (`{@command docs layout side-panels}`). `--depth` reads as far down the tree as you ask, from the doc alone (0) to ' +
     'everything below it (all), and with it `--detail` sets how much of each doc below ' +
-    'shows: one line (brief, the default), its sections (compact), or all of it (full).',
+    'shows: one line (brief, the default), its sections (compact), or all of it (full). ' +
+    '`skills` lists every Astryx skill (the project skill in a project, the computer-level skill, then each ' +
+    'skill an integration declares), and `skills/<name>` prints one, when no doc holds that name.',
   fn: 'docs',
   args: [
     {name: 'topic', param: 'topic', required: false, names: 'topic'},
@@ -41,7 +43,8 @@ export const doc = {
     {
       flag: '--index',
       param: 'options.index',
-      description: "List the topic's sections and their keys instead of printing the topic",
+      description:
+        "List the topic's sections and their keys instead of printing the topic",
     },
     {
       flag: '--full',
@@ -74,6 +77,8 @@ export const doc = {
     },
     {label: 'One API function', cli: 'astryx docs cli/api/functions/search'},
     {label: 'A guide', cli: 'astryx docs authoring/quick-start'},
+    {label: 'Every Astryx skill', cli: 'astryx docs skills'},
+    {label: 'One skill, as agents read it', cli: 'astryx docs skills/astryx'},
   ],
   outsideProject: 'same',
   exitCodes: [

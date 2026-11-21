@@ -22,6 +22,7 @@
  */
 
 import {devWarn} from '../utils/devWarning';
+import {dateTimeFormatFor} from '../utils/plainDate';
 import {formatInstant, formatZoneName} from './formatInstant';
 import type {InstantFormat} from './formatInstant';
 import type {Locale} from '../i18n/types';
@@ -139,8 +140,9 @@ export function resolveTimezoneID(
   // `value` is handled in Timestamp.tsx.
   try {
     // Locale does not affect time-zone identifier validity; pin one so this
-    // validation path stays explicit and deterministic.
-    new Intl.DateTimeFormat('en-US', {timeZone: timezoneID});
+    // validation path stays explicit and deterministic. A valid zone's
+    // formatter is kept, so a later render checks it without building one.
+    dateTimeFormatFor('en-US', {timeZone: timezoneID});
   } catch {
     const report = `${context}: ${timezoneID}`;
     if (!warnedTimezoneIDs.has(report)) {

@@ -15,7 +15,10 @@ import {
   reusedWhileUnchanged,
   unchangedSince,
 } from '../../foundation/fs/read-record.mjs';
-import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {
+  isOutsideAnyPackage,
+  isOutsideProject,
+} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
 import {Project} from '../../foundation/config/project.mjs';
 import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
@@ -179,8 +182,13 @@ async function gatherDomains(options) {
       coreSkipped,
       coreSkippedCode,
     };
-    fromStore.set(result, {pm: found.pm, domains: DOMAINS.filter(wants)});
-    return result;
+    const visible = shareGuidesFor(result, cwd);
+    // Only a catalog the store holds as it is is kept as a reference to the
+    // store: a filtered one is kept as its own candidates, so a later run
+    // reads back what this folder sees.
+    if (visible === result)
+      fromStore.set(visible, {pm: found.pm, domains: DOMAINS.filter(wants)});
+    return visible;
   }
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
     wants('component') ? gatherComponents(coreDir, cwd) : [],
@@ -194,14 +202,46 @@ async function gatherDomains(options) {
   // Outside a project a theme cannot be added to an app, so its command forks
   // the source instead (spec AST-081 FR3).
   const outside = themes.length > 0 && isOutsideProject(cwd);
-  return {
-    all,
-    components,
-    searchedComponents: wants('component'),
-    outside,
-    coreSkipped,
-    coreSkippedCode,
-  };
+  return shareGuidesFor(
+    {
+      all,
+      components,
+      searchedComponents: wants('component'),
+      outside,
+      coreSkipped,
+      coreSkippedCode,
+    },
+    cwd,
+  );
+}
+
+/**
+ * The gathered catalog without the experimental shareable-page guides; the
+ * same object when it holds none.
+ * @template {{all: Candidate[]}} T
+ * @param {T} gathered
+ * @returns {T}
+ */
+export function withoutShareGuides(gathered) {
+  const all = gathered.all.filter(c => c._experimentalGuide !== true);
+  return all.length === gathered.all.length ? gathered : {...gathered, all};
+}
+
+/**
+ * The gathered catalog as a folder sees it: the shareable-page guides answer
+ * in an Astryx project (one that installs or declares Core or the CLI) and
+ * outside any package, where the page is the Astryx page being made
+ * (spec:AST-017 FR27). In a package without Astryx, search gathers as if
+ * they were absent.
+ * @template {{all: Candidate[]}} T
+ * @param {T} gathered
+ * @param {string} cwd
+ * @returns {T}
+ */
+function shareGuidesFor(gathered, cwd) {
+  return !isOutsideProject(cwd) || isOutsideAnyPackage(cwd)
+    ? gathered
+    : withoutShareGuides(gathered);
 }
 
 /**

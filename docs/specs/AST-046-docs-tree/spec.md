@@ -225,7 +225,16 @@ and references from other packages are an open question (OQ2).
   adds one; the JSON read already names each section's package. A replaced
   topic or guide MUST name the package it replaced as `replacedPackage`,
   beside `replaces`. A `replaces` or `extends` that names no topic and no
-  guide, such as a namespace, changes nothing.
+  guide, such as a namespace, changes nothing. An extension's section MAY
+  replace a section of the doc it extends by an authored `id` that is that
+  section's key, by its exact title, or by a title whose key is that section's
+  `id`, and the last package configured wins it. It MUST NOT replace a section
+  another package added unless one of the two carries an authored `id` that is
+  the other's key or a title fragment of the other, so two packages that add
+  sections of one title both keep them. When a section one package added holds
+  the key that a section of another package, placed after it, derives from its
+  title, the later section MUST be read by the key its provider id derives, a
+  hyphen, and its title key, with a numeric suffix when that key is taken.
   When two providers claim one route, the CLI's own docs MUST keep it,
   including its flat topics' names and the generated topic levels, then integrations
   in configured order; between integrations a namespace keeps its route over a

@@ -103,7 +103,7 @@ export const docs = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip shows no message box and PowerSearch draws no status icon, so the message is not shown on screen (screen readers still announce it; the border still shows the status type).',
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip reveals the message in an info-tip button.',
       default: "'attached'",
     },
     {
@@ -130,7 +130,7 @@ export const docs = {
       name: 'menuWidth',
       type: 'number',
       description:
-        'Width in pixels for the main field/search menu. Does not affect field value editors.',
+        'Width in pixels for the main field/search menu; it never shrinks below the input width. Does not affect field value editors.',
     },
     {
       name: 'popoverSaveButtonLabel',
@@ -173,16 +173,10 @@ export const docs = {
       default: "'md'",
     },
     {
-      name: 'menuWidth',
-      type: 'number',
+      name: 'components',
+      type: 'PowerSearchComponents',
       description:
-        'Maximum width for the operator/value dropdown menu in pixels.',
-    },
-    {
-      name: 'maxOperatorMenuItems',
-      type: 'number',
-      description:
-        'Maximum number of items displayed in the operator dropdown.',
+        "Per-type overrides for the filter token and the filter editor. Keys are operator value types, such as 'string', 'enum' or 'date_absolute'. An entry's Token replaces the token for filters of that type, and its Editor replaces the editor content. PowerSearchToken and PowerSearchFilterEditor are the defaults.",
     },
     {
       name: 'tokenOverflowBehavior',
@@ -275,6 +269,50 @@ export const docs = {
   usage: {
     description:
       'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead. Host `data-*` attributes, `data-testid` included, reach the primary control: the combobox input in the popover presentation and the trigger button in the sheet presentation. The `components.Token` and `components.Editor` defaults, `PowerSearchToken` and `PowerSearchFilterEditor`, pass them to the token and the editor root.',
+    anatomy: [
+      {
+        name: 'Label',
+        required: false,
+        description:
+          "Names the search field for assistive technology. Defaults to the localized 'Search' and is visually hidden unless isLabelHidden is false.",
+      },
+      {
+        name: 'Filter tokens',
+        required: false,
+        description:
+          'One token per filter, reading field, operator and value. Activating a token opens its editor, except for an operator that takes no value. A remove button follows it unless the field is read-only or disabled, or the filter is read-only.',
+      },
+      {
+        name: 'Search input',
+        required: true,
+        description:
+          'The combobox after the tokens. Typing lists fields, field-and-operator pairs and value matches. Choosing a field opens the editor; a value match or an operator that takes no value adds the filter at once.',
+      },
+      {
+        name: 'Filter editor',
+        required: false,
+        description:
+          'A popover that picks the operator and the value and applies them. For a built-in token it opens as a dialog named by the token text.',
+      },
+      {
+        name: 'Clear all',
+        required: false,
+        description:
+          'Removes every editable filter and keeps read-only ones. Shows while hasClear is set, the field is neither read-only nor disabled, and an editable filter exists.',
+      },
+      {
+        name: 'End content',
+        required: false,
+        description:
+          'The result count, endContent and the status icon, at the end of the field.',
+      },
+      {
+        name: 'Sheet trigger and sheets',
+        required: false,
+        description:
+          'In the bottom-sheet presentation the field is one button with display-only tokens. It opens the Filters sheet when a filter exists or the field is read-only, otherwise the Add filter sheet; a value step opens above them.',
+      },
+    ],
     bestPractices: [
       {
         guidance: true,
@@ -412,7 +450,7 @@ export const docsZh = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 不显示消息框，且 PowerSearch 不绘制状态图标，因此消息不会显示在屏幕上（屏幕阅读器仍会播报；边框仍显示状态类型）。',
+        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 在状态图标的提示气泡中显示消息。',
       default: "'attached'",
     },
     {
@@ -438,7 +476,8 @@ export const docsZh = {
     {
       name: 'menuWidth',
       type: 'number',
-      description: '主字段/搜索菜单的像素宽度。不影响字段值编辑器。',
+      description:
+        '主字段/搜索菜单的像素宽度，不会小于输入框宽度。不影响字段值编辑器。',
     },
     {
       name: 'popoverSaveButtonLabel',
@@ -476,6 +515,28 @@ export const docsZh = {
       default: "'md'",
     },
     {
+      name: 'components',
+      type: 'PowerSearchComponents',
+      description:
+        "按值类型覆盖筛选标记和筛选编辑器。键为运算符的值类型，例如 'string'、'enum' 或 'date_absolute'。条目的 Token 替换该类型筛选的标记，Editor 替换编辑器内容。默认值为 PowerSearchToken 和 PowerSearchFilterEditor。",
+    },
+    {
+      name: 'tokenOverflowBehavior',
+      type: "'none' | 'unfocusedInline' | 'unfocusedLayer'",
+      description: '容器过窄时标记如何溢出。转发给 Tokenizer。',
+      default: "'none'",
+    },
+    {
+      name: 'onFocus',
+      type: '(e: React.FocusEvent) => void',
+      description: '焦点进入搜索输入框时触发。',
+    },
+    {
+      name: 'onBlur',
+      type: '(e: React.FocusEvent) => void',
+      description: '焦点离开搜索输入框时触发。',
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description: '用于布局自定义的 StyleX 样式。必须是 stylex.create() 值。',
@@ -491,6 +552,49 @@ export const docsZh = {
   usage: {
     description:
       'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead.',
+    anatomy: [
+      {
+        name: '标签',
+        required: false,
+        description:
+          '为辅助技术命名搜索字段。默认为本地化的「搜索」，除非 isLabelHidden 为 false，否则在视觉上隐藏。',
+      },
+      {
+        name: '筛选标记',
+        required: false,
+        description:
+          '每个筛选一个标记，显示字段、运算符和值。激活标记会打开其编辑器（不取值的运算符除外）。除非字段为只读或已禁用，或筛选为只读，标记后带有移除按钮。',
+      },
+      {
+        name: '搜索输入框',
+        required: true,
+        description:
+          '标记之后的组合框。输入时列出字段、字段与运算符组合以及值匹配。选择字段会打开编辑器；选择值匹配或不取值的运算符会直接添加筛选。',
+      },
+      {
+        name: '筛选编辑器',
+        required: false,
+        description:
+          '用于选择运算符和值并应用的弹出层。编辑内置标记时，它是以标记文本命名的对话框。',
+      },
+      {
+        name: '全部清除',
+        required: false,
+        description:
+          '移除所有可编辑筛选并保留只读筛选。设置 hasClear、字段既非只读也未禁用且存在可编辑筛选时显示。',
+      },
+      {
+        name: '末尾内容',
+        required: false,
+        description: '字段末尾的结果数量、endContent 和状态图标。',
+      },
+      {
+        name: '面板触发按钮和面板',
+        required: false,
+        description:
+          '在底部面板呈现中，字段是一个显示只读标记的按钮。存在筛选或字段为只读时它打开「筛选」面板，否则打开「添加筛选」面板；取值步骤在其上方打开。',
+      },
+    ],
     bestPractices: [
       {
         guidance: true,
@@ -523,6 +627,49 @@ export const docsDense = {
   usage: {
     description:
       'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead. Host data-* attrs (data-testid incl.) reach the primary control: combobox input (popover) or trigger button (sheet); PowerSearchToken/PowerSearchFilterEditor pass them to token/editor root.',
+    anatomy: [
+      {
+        name: 'Label',
+        required: false,
+        description:
+          "Field name for AT; default localized 'Search', visually hidden.",
+      },
+      {
+        name: 'Filter tokens',
+        required: false,
+        description:
+          'field+operator+value; opens editor (not for no-value operators); remove button unless field read-only/disabled or filter read-only.',
+      },
+      {
+        name: 'Search input',
+        required: true,
+        description:
+          'Combobox listing fields, field+operator pairs, value matches; a field opens the editor, a value match or no-value operator adds at once.',
+      },
+      {
+        name: 'Filter editor',
+        required: false,
+        description:
+          'Popover picking operator+value; a dialog named by token text when editing a built-in token.',
+      },
+      {
+        name: 'Clear all',
+        required: false,
+        description:
+          'hasClear on an editable field; removes editable filters, keeps read-only.',
+      },
+      {
+        name: 'End content',
+        required: false,
+        description: 'Result count, endContent, status icon.',
+      },
+      {
+        name: 'Sheet trigger and sheets',
+        required: false,
+        description:
+          'bottom-sheet: one button w/ display-only tokens; opens Filters (a filter exists or read-only) or Add filter; value step above.',
+      },
+    ],
     bestPractices: [
       {
         guidance: true,
@@ -563,13 +710,16 @@ export const docsDense = {
     startIcon:
       'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     statusVariant:
-      'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip: no box and no status icon, so the message is not shown (screen readers still announce it).',
+      'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip shows on status icon.',
     maxTokenLength: 'Max char length for filter value display in tokens.',
     maxOperatorMenuItems:
       'Max suggestions in string/entity value typeaheads; excludes main field search + enum menus.',
     maxSearchResults:
       'Max ranked results for a non-empty query; excludes value editors.',
-    menuWidth: 'Main field/search menu width in pixels.',
+    menuWidth:
+      'Main field/search menu width in pixels; never narrower than the input. Excludes value editors.',
+    components:
+      'Per-value-type Token/Editor overrides, e.g. {enum: {Token}}. Defaults: PowerSearchToken, PowerSearchFilterEditor.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
     timezoneID:
       'IANA zone a date-only value reads and writes in; unset, its UTC day. Dates show in the provider calendar.',
