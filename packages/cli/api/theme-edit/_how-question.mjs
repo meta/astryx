@@ -29917,13 +29917,16 @@ export function draftAnswer(ctx, env, question) {
       ctx,
       env,
       // (The ask is read again with its files as typed: that reading sets
-      // them aside and writes them back itself.)
-      named0
-        ? withUrls(followAsk).replace(
-            /\b(them|it|those|these)\b/i,
-            `${named0} ${asked === 'border-radius' ? 'corners' : asked.replace(/-color$/, '').replace('-', ' ')}`,
-          )
-        : withUrls(followAsk),
+      // them aside and writes them back itself. "Them" is read on the ask
+      // with its files still aside, so a word of a path is never swapped.)
+      withUrls(
+        named0
+          ? followAsk.replace(
+              /\b(them|it|those|these)\b/i,
+              `${named0} ${asked === 'border-radius' ? 'corners' : asked.replace(/-color$/, '').replace('-', ' ')}`,
+            )
+          : followAsk,
+      ),
     );
     return {
       parts: rest.parts,
