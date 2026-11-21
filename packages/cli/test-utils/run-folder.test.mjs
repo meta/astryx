@@ -68,6 +68,9 @@ describe('sweepTrash', () => {
       'astryx-cli-tarball-a.trash-1000',
       'astryx-cli-tarball-b.trash-3000',
       'astryx-cli-tarball-c',
+      'astryx-test-tmp-d.trash-1000',
+      'astryx-test-tmp-e',
+      'astryx-test-user-f.trash-1000',
       'another-tool.trash-1000',
     ]) {
       plant(path.join(parent, name), 3);
@@ -78,6 +81,7 @@ describe('sweepTrash', () => {
       'another-tool.trash-1000',
       'astryx-cli-tarball-b.trash-3000',
       'astryx-cli-tarball-c',
+      'astryx-test-tmp-e',
     ]);
   });
 });

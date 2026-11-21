@@ -72,6 +72,14 @@ import {
   printedEntry,
   readSavedStates,
   keyOf,
+  sharedControlHeight,
+  setsControlHeight,
+  narrowedGroupHeight,
+  CONTROL_SIZES,
+  partHasWhen,
+  isControlHeight,
+  growsWithContent,
+  notGrowingWhens,
   loadTheme,
   maskedSettings,
   modesOf,
@@ -117,6 +125,8 @@ import {
   refuseThemeParse,
   ownSourceTokens,
   ownSourceTokenValues,
+  baseTopTokens,
+  baseComponentReads,
   ownTokenEntries,
   fontOf,
   ownThemeInput,
@@ -153,9 +163,15 @@ import {
   baseRedraws,
   groupsOf,
   savedSetting,
+  membersOf,
+  controlHeightValue,
 } from './_settings.mjs';
 import {
+  BORDER_COLOR_PROP,
+  BORDER_TO_COLOR,
   borderFor,
+  broughtBorderAt,
+  turnsBorderOff,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -3203,11 +3219,30 @@ async function leaveOutStored(ctx, slug, data, cwd, skip) {
       .map(x => x.name)
       .filter(n => n.startsWith(`${P} `));
   }
-  const what = quiet
-    .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
-    .join('; ');
+  // (A top or bottom padding on a control that keeps Core's padding no
+  // longer builds: the note says so, never that it builds as before.)
+  const unbuilt = quiet.filter(b =>
+    /keeps Core's top and bottom padding/.test(b.why),
+  );
+  const built = quiet.filter(b => !unbuilt.includes(b));
+  const what = (/** @type {typeof quiet} */ list) =>
+    list
+      .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
+      .join('; ');
+  const clear = lines.length
+    ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}`
+    : '';
   return [
-    `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what}. ${quiet.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${quiet.length === 1 ? 'it' : 'them'}, so the theme opens as it was${lines.length ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}` : ''}`,
+    ...(built.length
+      ? [
+          `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what(built)}. ${built.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${built.length === 1 ? 'it' : 'them'}, so the theme opens as it was${unbuilt.length ? '' : clear}`,
+        ]
+      : []),
+    ...(unbuilt.length
+      ? [
+          `${slug}.settings.json holds what this editor no longer takes: ${what(unbuilt)}. ${unbuilt.length === 1 ? 'It is' : 'They are'} kept, but those top and bottom sides no longer build${clear}`,
+        ]
+      : []),
   ];
 }
 
@@ -5565,6 +5600,21 @@ async function change(sub, slug, thing, value, options) {
 }
 
 /**
+ * The parts a height setting reaches that are not controls (the text area
+ * of the inputs) and have the variant it is set for: the parts the
+ * controls' shared height does not reach.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting} x
+ * @returns {string[]}
+ */
+function notControlsReached(ctx, x) {
+  const controls = new Set(groupsOf(ctx).controls ?? []);
+  return partsOf(ctx, x).filter(
+    t => !controls.has(t) && partHasWhen(ctx, t, x.when),
+  );
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -6145,7 +6195,33 @@ async function changeOnce(
   // The sides this change writes or moves: the ones its undo takes back.
   /** @type {Set<import('./_settings.mjs').Setting>} */
   const sidesMoved = new Set();
+  // A height set on a control is the height every control takes at that
+  // size, so it is written as the size's token on the controls group.
+  const sharedHeight = sub === 'set' ? sharedControlHeight(ctx, s) : null;
+  const heightAsked = sharedHeight ? s : null;
+  if (sharedHeight) s = sharedHeight.setting;
+  // An undo of a control height named as it was set removes the size
+  // token set wrote for it.
+  if (sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))) {
+    const asSet = sharedControlHeight(ctx, {
+      ...s,
+      value: String(s.value ?? ''),
+    });
+    if (asSet && data.settings.some(x => keyOf(x) === keyOf(asSet.setting)))
+      s = {...asSet.setting, value: s.value};
+  }
   let k = keyOf(s);
+  // (The settings as the theme held them before this change: what a carried
+  // height read there.)
+  const settingsBefore = [...data.settings];
+  // (A saved control height the shared one gives way to is replaced below,
+  // with the sizes it keeps.)
+  if (
+    sharedHeight &&
+    rawIdx >= 0 &&
+    setsControlHeight(ctx, data.settings[rawIdx], sharedHeight.size)
+  )
+    rawIdx = -1;
   let prevIdx =
     rawIdx >= 0
       ? rawIdx
@@ -6301,7 +6377,25 @@ async function changeOnce(
       );
     }
   }
-  const compiledBefore = compileTheme(ctx, data, base);
+  // (Settings whose colors were changed by hand away from a palette kept
+  // as saved cannot be built: a change that brings them back is the way
+  // back, compared with nothing built before.)
+  let beforeUnbuilt = false;
+  const compiledBefore = (() => {
+    try {
+      return compileTheme(ctx, data, base);
+    } catch (e) {
+      if (
+        /** @type {any} */ (e)?.code !== E.ERR_PALETTE_GENERATION ||
+        !paletteRecipeUnknown(ctx.project.cwd, slug)
+      )
+        throw e;
+      beforeUnbuilt = true;
+      return /** @type {ReturnType<typeof compileTheme>} */ (
+        /** @type {unknown} */ ({tokens: {}, components: {}})
+      );
+    }
+  })();
   // The build notes the theme had before this change: only new ones are
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
@@ -6374,7 +6468,9 @@ async function changeOnce(
           exactTokens(data),
         ).lines,
         changedPartTokens: r.changedParts ?? [],
-        styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
+        styled: beforeUnbuilt
+          ? []
+          : styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
         leftOut: [],
@@ -6559,6 +6655,35 @@ async function changeOnce(
     // is named.
     alsoReplaced = data.settings.filter(x => keyOf(x) === k);
     data.settings = data.settings.filter(x => keyOf(x) !== k);
+    // A border the theme turned off, undone: a border color it hid on
+    // those parts brings the border it needs now, so it shows. (Only an
+    // undone none or zero: undoing the brought border itself, or a width
+    // or style that drew, leaves the colors as they are.)
+    if (
+      String(prev?.value ?? s.value).trim() !== BORDER_TO_COLOR &&
+      turnsBorderOff({thing: s.thing, value: prev?.value ?? s.value})
+    )
+      for (const x of [...data.settings]) {
+        if (
+          x.source !== 'property' ||
+          !BORDER_COLOR_PROP.test(x.thing) ||
+          !partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t))
+        )
+          continue;
+        const edge = borderFor(ctx, slug, data, x);
+        if (edge) {
+          // (Before the part's own border settings and the color both.)
+          data.settings.splice(
+            Math.min(
+              broughtBorderAt(ctx, data.settings, edge),
+              data.settings.indexOf(x),
+            ),
+            0,
+            edge,
+          );
+          borderAdded = edge;
+        }
+      }
     // Vibrancy needs a color: undoing the last one takes it along, so the
     // theme never holds a state `set` refuses.
     if (
@@ -6589,7 +6714,17 @@ async function changeOnce(
           partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)),
       )
   ) {
-    // The same setting again: nothing moves.
+    // The same setting again: nothing moves, unless it is a border color
+    // that has lost the border it needs (the none that hid it undone).
+    const edge = sub === 'set' ? borderFor(ctx, slug, data, s) : null;
+    if (edge) {
+      data.settings.splice(
+        Math.min(broughtBorderAt(ctx, data.settings, edge), prevIdx),
+        0,
+        edge,
+      );
+      borderAdded = edge;
+    }
   } else {
     // A changed setting goes last, so it wins over what came before it.
     if (prev) data.settings.splice(prevIdx, 1);
@@ -6597,7 +6732,12 @@ async function changeOnce(
     // needs, written before it in the same change.
     if (sub === 'set') {
       borderAdded = borderFor(ctx, slug, data, s);
-      if (borderAdded) data.settings.push(borderAdded);
+      if (borderAdded)
+        data.settings.splice(
+          broughtBorderAt(ctx, data.settings, borderAdded),
+          0,
+          borderAdded,
+        );
     }
     data.settings.push(s);
     sidesMoved.add(s);
@@ -6645,6 +6785,256 @@ async function changeOnce(
     alsoReplaced = data.settings.filter(replaced);
     data.settings = data.settings.filter((x, i) => !replaced(x, i));
   }
+  // The other heights that set controls at that size give way to it, so
+  // every control at that size takes the one height.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  // (The same setting set again is not replaced by itself. A height kept
+  // on one control replaces nothing.)
+  const heightsReplaced =
+    sharedHeight && !sharedHeight.own
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            keyOf(x) !== keyOf(s) &&
+            // (A height on a group that mixes controls with other parts
+            // reaches its controls too: it gives way there, and stays on
+            // the other parts.)
+            setsControlHeight(ctx, x, sharedHeight.size),
+        )
+      : [];
+  // A replaced height set for every size stays every control's height at
+  // the other sizes: those sizes' tokens on controls take its place, where
+  // no other control height is set at that size.
+  /** @type {string[]} */
+  const heightsKept = [];
+  // A replaced height also set on parts that are not controls (the text
+  // area of the inputs) stays on those parts: only the controls take the
+  // shared height.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const heightsLeftOn = [];
+  /** @param {import('./_settings.mjs').Setting} x */
+  const leftOnOthers = x => {
+    const kept = notControlsReached(ctx, x)
+      // (A size token stays where the part reads it, or where what the
+      // part reads is not known, as set saves it there.)
+      .filter(t => {
+        if (x.source !== 'token') return true;
+        if (baseComponentReads(ctx.project.cwd, data.like, t).has(x.thing))
+          return true;
+        const failure = ctx.C.checkTokenOn(
+          slug,
+          t,
+          x.thing,
+          String(x.value),
+          P,
+          x.when,
+          '',
+        );
+        return failure == null || !!failure.soft;
+      })
+      .map(
+        t =>
+          /** @type {import('./_settings.mjs').Setting} */ ({
+            ...x,
+            on: t,
+            ...(onlyMeans(t) === 'member' ? {only: true} : {}),
+          }),
+      );
+    heightsLeftOn.push(...kept);
+    return kept;
+  };
+  /**
+   * A carried height, as the build showed it: every control size token it
+   * reads is read as the theme held it before this change, since this
+   * change writes those tokens (one of them would read itself). Null when
+   * that is not known.
+   * @param {string} v
+   * @returns {string | null}
+   */
+  const carried = v => {
+    let known = true;
+    const out = v.replace(
+      /var\(\s*(--size-element-(?:sm|md|lg))\s*(?:,[^()]*)?\)/g,
+      (_, token) => {
+        const held = String(
+          settingsBefore
+            .filter(
+              y =>
+                y.source === 'token' &&
+                y.thing === token &&
+                (!y.on || y.on === 'controls') &&
+                !y.when &&
+                !y.state,
+            )
+            .at(-1)?.value ??
+            ownSourceTokenValues(ctx.project.cwd, slug)[token] ??
+            baseTopTokens(ctx.project.cwd, data.like).get(token) ??
+            ctx.project.core.tokenDefaults?.[token] ??
+            '',
+        ).trim();
+        if (!held || /var\(\s*--size-element-/.test(held)) known = false;
+        return held;
+      },
+    );
+    // (A word height is not a size: it is not carried as a size token.)
+    return known && controlHeightValue(out) ? out : null;
+  };
+  // (Of several, the last one is the one the build showed there.)
+  const lastEverySize = sharedHeight
+    ? heightsReplaced
+        .filter(x => x.source === 'property' && x.when == null)
+        .at(-1)
+    : undefined;
+  if (sharedHeight)
+    data.settings = data.settings.flatMap(x => {
+      if (!heightsReplaced.includes(x)) return [x];
+      const others =
+        x.source === 'property' || groupsOf(ctx)[String(x.on)]
+          ? leftOnOthers(x)
+          : [];
+      if (x !== lastEverySize) return others;
+      return [
+        ...others,
+        ...CONTROL_SIZES.filter(
+          size =>
+            size !== sharedHeight.size &&
+            !data.settings.some(
+              y =>
+                y !== x &&
+                !heightsReplaced.includes(y) &&
+                setsControlHeight(ctx, y, size),
+            ) &&
+            carried(String(x.value)) != null,
+        ).map(size => {
+          heightsKept.push(size);
+          return /** @type {import('./_settings.mjs').Setting} */ ({
+            thing: `--size-element-${size}`,
+            value: /** @type {string} */ (carried(String(x.value))),
+            source: 'token',
+            on: 'controls',
+            ...(x.mode ? {mode: x.mode} : {}),
+          });
+        }),
+      ];
+    });
+  // A shared height replaces the heights kept on one control at that size
+  // too (its own size token, or a height saved with --only): every control
+  // at that size takes the one height. One kept for every size stays that
+  // control's own height at the other sizes.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const ownHeightsReplaced =
+    sharedHeight && !sharedHeight.own
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            keyOf(x) !== keyOf(s) &&
+            !x.state &&
+            (groupsOf(ctx).controls ?? []).includes(String(x.on)) &&
+            ((x.source === 'token' &&
+              x.thing === sharedHeight.token &&
+              x.when == null) ||
+              (x.source === 'property' &&
+                x.only === true &&
+                !narrowedGroupHeight(x) &&
+                isControlHeight(ctx, x) &&
+                (x.when == null || x.when === `size:${sharedHeight.size}`))),
+        )
+      : [];
+  if (sharedHeight && ownHeightsReplaced.length)
+    data.settings = data.settings.flatMap(x => {
+      if (!ownHeightsReplaced.includes(x)) return [x];
+      const value =
+        x.source === 'property' && x.when == null
+          ? carried(String(x.value))
+          : null;
+      if (value == null) return [];
+      return CONTROL_SIZES.filter(
+        z =>
+          z !== sharedHeight.size &&
+          !data.settings.some(
+            y =>
+              y.source === 'token' &&
+              y.thing === `--size-element-${z}` &&
+              y.on === x.on,
+          ),
+      ).map(
+        z =>
+          /** @type {import('./_settings.mjs').Setting} */ ({
+            thing: `--size-element-${z}`,
+            value,
+            source: 'token',
+            on: String(x.on),
+            ...(onlyMeans(String(x.on)) === 'member' ? {only: true} : {}),
+            ...(x.mode ? {mode: x.mode} : {}),
+          }),
+      );
+    });
+  // A height kept on one control (--only) replaces the plain heights saved
+  // for that control at its size, which would beat its own size token. One
+  // set on the control alone goes; one set on a group (the inputs) stays on
+  // the group's other parts. One set for every size stays that control's
+  // height at the other sizes, as its own size tokens there.
+  const ownOn = sharedHeight?.own ? String(sharedHeight.setting.on) : null;
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const ownReplaced = ownOn
+    ? data.settings.filter(
+        x =>
+          x !== s &&
+          x.source === 'property' &&
+          !x.state &&
+          isControlHeight(ctx, x) &&
+          (x.when == null || x.when === `size:${sharedHeight?.size}`) &&
+          partsOf(ctx, x).includes(ownOn),
+      )
+    : [];
+  /** @type {string[]} */
+  const ownNarrowed = [];
+  if (ownOn && sharedHeight)
+    data.settings = data.settings.flatMap(x => {
+      if (!ownReplaced.includes(x)) return [x];
+      const others = partsOf(ctx, x)
+        .filter(t => t !== ownOn && partHasWhen(ctx, t, x.when))
+        .map(
+          t =>
+            /** @type {import('./_settings.mjs').Setting} */ ({
+              ...x,
+              on: t,
+              // (Marked as the group's height, never one kept on t.)
+              ...(onlyMeans(t) === 'member'
+                ? {only: true, narrowed: true}
+                : {}),
+            }),
+        );
+      ownNarrowed.push(...others.map(o => String(o.on)));
+      const value = x.when == null ? carried(String(x.value)) : null;
+      const sizes =
+        value == null
+          ? []
+          : CONTROL_SIZES.filter(
+              z =>
+                z !== sharedHeight.size &&
+                !data.settings.some(
+                  y =>
+                    y.source === 'token' &&
+                    y.thing === `--size-element-${z}` &&
+                    y.on === ownOn,
+                ),
+            );
+      return [
+        ...others,
+        ...sizes.map(
+          z =>
+            /** @type {import('./_settings.mjs').Setting} */ ({
+              thing: `--size-element-${z}`,
+              value: /** @type {string} */ (value),
+              source: 'token',
+              on: ownOn,
+              ...(onlyMeans(ownOn) === 'member' ? {only: true} : {}),
+              ...(x.mode ? {mode: x.mode} : {}),
+            }),
+        ),
+      ];
+    });
   // A setting for both modes replaces the ones made for one mode, which it
   // would otherwise sit under.
   /** @type {import('./_settings.mjs').Setting[]} */
@@ -6814,7 +7204,8 @@ async function changeOnce(
     !alsoReplaced.length &&
     !covered.length &&
     !longhands.length &&
-    !covers.length
+    !covers.length &&
+    !beforeUnbuilt
   ) {
     const trial = compileTheme(ctx, data, base);
     const raw = styledChanges(compiledBefore, trial, base);
@@ -6848,12 +7239,11 @@ async function changeOnce(
   const sizeNotes =
     /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
       .sizeNotes ?? [];
-  const styled = styledChanges(
-    compiledBefore,
-    compiledAfter,
-    base,
-    drawnAtRest,
-  );
+  // (Nothing built before a change from unbuildable settings: no styles
+  // are compared.)
+  const styled = beforeUnbuilt
+    ? []
+    : styledChanges(compiledBefore, compiledAfter, base, drawnAtRest);
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
@@ -7195,6 +7585,33 @@ async function changeOnce(
       ? [`replaces ${typedBefore.map(describe).join(', ')}`]
       : []),
     ...fieldNotes,
+    ...(sharedHeight && heightAsked && sharedHeight.own
+      ? [
+          `${describe(heightAsked)} is ${heightAsked.on}'s own height at ${sharedHeight.size}: written as ${sharedHeight.token} on ${heightAsked.on} alone, so the other controls keep the height they share there${ownReplaced.length ? `; it replaces ${ownReplaced.map(describe).join(', ')}${ownNarrowed.length ? `, which stays on ${[...new Set(ownNarrowed)].join(', ')}` : ''}` : ''}`,
+        ]
+      : []),
+    ...(sharedHeight && heightAsked && !sharedHeight.own
+      ? [
+          `${describe(heightAsked)} is the height every control takes at ${sharedHeight.size}: written as ${sharedHeight.token} on controls, so buttons, inputs, selectors and input groups at ${sharedHeight.size} are all ${s.value} (a selector, typeahead or tokenizer whose content is taller keeps its content's height; a complex selector keeps its own)${
+            heightAsked.when
+              ? ''
+              : (() => {
+                  const kept = new Set(heightsKept);
+                  const left = CONTROL_SIZES.filter(
+                    z => z !== sharedHeight.size && !kept.has(z),
+                  );
+                  return left.length
+                    ? `; at ${left.join(' and ')} the controls keep their own heights (set one with --when size:${left[0]})`
+                    : '';
+                })()
+          }${heightsReplaced.length ? `; it replaces ${heightsReplaced.map(describe).join(', ')} at ${sharedHeight.size}` : ''}${heightsKept.length && lastEverySize ? `; ${carried(String(lastEverySize.value)) ?? lastEverySize.value} stays every control's height at ${[...new Set(heightsKept)].join(' and ')}` : ''}${ownHeightsReplaced.length ? `; it replaces ${ownHeightsReplaced.map(x => `${x.source === 'token' ? 'height' : x.thing} = ${x.value} on ${x.on}, which was kept on ${x.on} alone`).join('; ')}` : ''}${heightsLeftOn.length ? `; ${heightsLeftOn.map(x => `${x.on} keeps ${x.value}`).join(', ')}, as ${heightsLeftOn.length === 1 ? 'it is not a control' : 'they are not controls'}` : ''}${(() => {
+            const notControls = notControlsReached(ctx, heightAsked);
+            return notControls.length
+              ? `; ${notControls.join(', ')} ${notControls.length === 1 ? 'is not a control and keeps its' : 'are not controls and keep their'} own height (for this height there too: ${notControls.map(t => `${P} set ${slug} height ${heightAsked.value} --on ${t}${heightAsked.when ? ` --when ${heightAsked.when}` : ''}`).join(', ')})`
+              : '';
+          })()}; to give one control alone another height: ${P} set ${slug} height ${s.value} --on ${groupsOf(ctx)[String(heightAsked.on)] ? (membersOf(ctx, String(heightAsked.on)).find(t => (groupsOf(ctx).controls ?? []).includes(t)) ?? 'button') : heightAsked.on} --only${heightAsked.when ? ` --when ${heightAsked.when}` : ''}`,
+        ]
+      : []),
     ...(borderAdded
       ? [
           `added a ${borderWidthOf(r.res, data)} border to ${borderAdded.on}${borderAdded.when ? ` when ${borderAdded.when}` : ''} so the color shows: ${borderAdded.on} drew none there; ${describe(borderAdded)}, see-through at rest, so ${borderAdded.on} keeps one size in every state; undo ${slug} takes back both`,
@@ -7591,12 +8008,36 @@ async function changeOnce(
     notes.push(
       `a ${data.mode} theme shows ${s.mode} mode only where Core draws a ${s.mode} region (a toast, a lightbox), so this value applies there`,
     );
+  // A padding with top or bottom sides reaches a control that grows with its
+  // content at its sides only: its height sets the rest.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^padding(-(top|bottom|block(-start|-end)?))?$/.test(s.thing)
+  ) {
+    const grows = partsOf(ctx, s).filter(t => growsWithContent(ctx, t, s.when));
+    if (grows.length)
+      notes.push(
+        `${grows.join(', ')} ${grows.length > 1 ? 'keep' : 'keeps'} Core's top and bottom padding, so a theme's padding never makes ${grows.length > 1 ? 'them' : 'it'} taller than the other controls: ${/^padding$/.test(s.thing) ? `only the sides of ${s.thing} reach ${grows.length > 1 ? 'them' : 'it'}` : `${s.thing} does not reach ${grows.length > 1 ? 'them' : 'it'}`}${grows
+          .map(t => [t, notGrowingWhens(ctx, t, s.when)])
+          .filter(([, w]) => w.length)
+          .map(
+            ([t, w]) =>
+              `; ${t} takes them when ${/** @type {string[]} */ (w).join(' or ')}, where it does not grow`,
+          )
+          .join('')}`,
+      );
+  }
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
   const family =
     s.on && s.only && onlyMeans(s.on) === 'member' ? familyOf(s.on) : null;
   if (
     family &&
+    !(
+      /^padding/.test(s.thing) && growsWithContent(ctx, String(s.on), s.when)
+    ) &&
     (s.thing === 'spacing' ||
       /^--size-element-/.test(s.thing) ||
       /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
@@ -9641,7 +10082,7 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
     let refused = false;
     for (const st0 of x.steps) {
       const st = {...st0, value: passingDialValue(ctx, slug, data, base, st0)};
-      const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}`;
+      const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}${/** @type {any} */ (st).only ? ' --only' : ''}`;
       const followed = await followChangeLine(
         'set',
         slug,

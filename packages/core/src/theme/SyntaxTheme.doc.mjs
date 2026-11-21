@@ -59,7 +59,7 @@ export const docs = {
   props: [
     {
       name: 'theme',
-      type: 'SyntaxTheme',
+      type: 'SyntaxThemeDefinition',
       required: true,
       description:
         'Syntax highlighting theme: a preset from @astryxdesign/core/theme/syntax or a custom theme created with defineSyntaxTheme().',
