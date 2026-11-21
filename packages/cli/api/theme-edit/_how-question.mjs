@@ -2080,6 +2080,17 @@ export function exactFactor(text) {
     const f = fraction(cut[2]);
     if (f != null) return by(f, !/^(increase|raise|grow)$/.test(cut[1]));
   }
+  // "drop the line height by 10%", "increase it by 50%": a change by a
+  // percent the verb says the way of.
+  const cutPct =
+    /\b(cut|reduce|lower|shrink|decrease|drop|lessen|compress|tighten|increase|raise|grow|loosen|expand)\b[^.]*?\bby (\d{1,3}(?:\.\d+)?)\s?%/.exec(
+      t,
+    );
+  if (cutPct && Number(cutPct[2]) > 0)
+    return by(
+      Number(cutPct[2]) / 100,
+      !/^(increase|raise|grow|loosen|expand)$/.test(cutPct[1]),
+    );
   // "+50%", "-25%", "50% bigger", "100% smaller".
   const signed = /(^|[\s(])([+-])\s?(\d{1,3}(?:\.\d+)?)\s?%/.exec(t);
   if (signed) return by(Number(signed[3]) / 100, signed[2] === '-');
@@ -22314,26 +22325,31 @@ export function draftAnswer(ctx, env, question) {
         // "half") scale the line height there now.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
         const pct = pctLeading ? Number(pctLeading[1]) / 100 : null;
-        const asChange =
-          /\b(?:by|increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
+        // ("150% of the font size" is that share of the text size too.)
+        const ofTextSize =
+          /\b\d{1,3}(?:\.\d+)?\s?%\s+of\s+(?:the\s+)?(?:font|text|type)(?:[- ]?size)?\b/i.test(
             c.text,
           );
-        const factorSaid = pxRatio != null ? null : exactFactor(c.text);
+        const byPct = /\bby\s+\d{1,3}(?:\.\d+)?\s?%/i.test(c.text);
+        const asChange =
+          byPct ||
+          /\b(?:increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
+            c.text,
+          );
+        const factorSaid =
+          pxRatio != null || ofTextSize ? null : exactFactor(c.text);
         const pctAbsolute =
-          pxRatio == null && factorSaid == null && pct != null && !asChange
+          pxRatio == null &&
+          factorSaid == null &&
+          pct != null &&
+          (ofTextSize || !asChange)
             ? String(Number(pct.toFixed(3)))
             : null;
+        // (A change "by N%" with no way said writes nothing.)
         const leadFactor =
           pxRatio != null || pctAbsolute != null
             ? null
-            : (factorSaid ??
-              (pct == null
-                ? null
-                : /\bby\b/i.test(c.text)
-                  ? c.dir === 'less'
-                    ? 1 - pct
-                    : 1 + pct
-                  : pct));
+            : (factorSaid ?? (pct == null || byPct ? null : pct));
         const n =
           pxRatio ??
           pctAbsolute ??
