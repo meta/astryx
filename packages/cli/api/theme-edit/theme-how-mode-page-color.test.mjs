@@ -176,6 +176,11 @@ describe('a color said for one mode is its page', () => {
       'rounder corners and blush pink everything',
       'warm beige everything',
       'cool blue everything',
+      'dark mode is cool navy',
+      'light mode is warm beige',
+      'dark mode is midnight navy',
+      'dark mode is a dusty plum',
+      'dark mode is bright red',
     ])
       expect(colorsSaidForPages(ask, isHue, isShade), ask).toBe(ask);
     expect(
@@ -187,7 +192,7 @@ describe('a color said for one mode is its page', () => {
         isHue,
         isShade,
       ),
-    ).toBe('page navy in dark mode. page cream in light mode');
+    ).toBe('dark mode: page navy. light mode: page cream');
     // (A line of the ask, or a list item, is a clause start.)
     expect(
       colorsSaidForPages(
@@ -195,12 +200,36 @@ describe('a color said for one mode is its page', () => {
         isHue,
         isShade,
       ),
-    ).toBe('calm and minimal\n- page deep dark plum in dark mode');
+    ).toBe('calm and minimal\n- dark mode: page deep dark plum');
     // (The color reader's shade words count as tone words too.)
     expect(
       colorsSaidForPages('light mode is pastel pink', isHue, isShade),
-    ).toBe('page pastel pink in light mode');
+    ).toBe('light mode: page pastel pink');
   });
+
+  it(
+    'keeps the mode on what follows the page: gold buttons and blue links in dark mode only',
+    async test => {
+      needsBases(test);
+      for (const ask of [
+        'dark mode is plum, gold buttons',
+        'dark mode is plum. gold buttons',
+        'dark mode is plum; gold buttons',
+        'light mode is pale blush, dark mode is plum, gold buttons',
+      ]) {
+        const lines = await first(ask);
+        const buttons = lines.filter(l => /--on button\b/.test(l));
+        expect(buttons.length, ask).toBeGreaterThan(0);
+        for (const l of buttons) expect(l, ask).toMatch(/--mode dark$/);
+        expect(pageIn(lines, 'dark'), ask).not.toBeNull();
+      }
+      const links = await first('dark mode is navy, with blue links');
+      const accent = links.filter(l => /--color-text-accent/.test(l));
+      expect(accent.length).toBeGreaterThan(0);
+      for (const l of accent) expect(l).toMatch(/--mode dark$/);
+    },
+    T,
+  );
 
   it(
     'reads "bluish" as bluish, never as the new blush',
@@ -213,13 +242,11 @@ describe('a color said for one mode is its page', () => {
   );
 
   it(
-    'keeps what read right: a beige page, a warm off-white and brown-black, a navy-blue background',
+    'reads a beige page, a warm off-white light page, a brown-black dark mode and a navy-blue background',
     async test => {
       needsBases(test);
       expect(pageIn(await first('beige page'), 'light')).toBe('#f5f5dc');
-      const warm = await first(
-        'warm off-white page. dark mode is warm brown-black',
-      );
+      const warm = await first('warm off-white page. dark mode is brown-black');
       expect(pageIn(warm, 'light')).toBe('#faf8f3');
       expect(pageIn(warm, 'dark')).not.toBeNull();
       const navy = await first(
