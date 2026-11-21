@@ -57,7 +57,7 @@ import {
 /**
  * One problem a person would see.
  * @typedef {object} LookProblem
- * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts'} kind
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts' | 'page-image'} kind
  * @property {Mode | 'both'} mode
  * @property {string} message
  * @property {string} [token] the token that draws it
@@ -82,7 +82,7 @@ import {
  * @property {TextPair[]} pairs every real text-on-background pair
  * @property {Record<string, import('./_parts.mjs').PartRecord>} map the part data
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
- * @property {{themed: boolean, pinned: Mode | null, painted: boolean, fonts: Set<string> | null, entry: string | null} | null} app what the app does with the theme, the font families it loads (as family keys) and the file that loads Core's stylesheet; null outside an app
+ * @property {{themed: boolean, pinned: Mode | null, modeByExpression?: boolean, painted: boolean, fonts: Set<string> | null, entry: string | null, pageImage: {file: string, value: string} | null} | null} app what the app does with the theme, the font families it loads (as family keys) and the file that loads Core's stylesheet; null outside an app
  * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
  * @property {(family: string) => string | null} fontPackage the package that installs a font family, or null
  * @property {string[]} unloadedFonts the font families the theme names that are neither generic nor installed with the system
@@ -101,6 +101,12 @@ const EDGE = '--color-border-emphasized';
 /** The category colors (Badge, Token and Card tints) and the chart colors. */
 const CATEGORY_OR_CHART =
   /^--color-(data-[a-z0-9-]+|(background|text|icon|border)-(red|orange|yellow|green|teal|cyan|blue|purple|pink|gray))$/;
+/** The pointer tints a bar can set for the parts it holds. */
+const BAR_TINTS = [
+  '--color-overlay-hover',
+  '--color-overlay-pressed',
+  '--color-neutral',
+];
 /** The surfaces Core's media parts paint and hold their on-colors on. */
 export const INVERTED_SURFACES = [
   '--color-background-inverted',
@@ -194,8 +200,17 @@ const fixed = r => Number(r.toFixed(2));
  * @returns {Set<string>}
  */
 function inside(map, part) {
-  return new Set(map[part]?.contains ?? []);
+  const within = new Set(map[part]?.contains ?? []);
+  // A menu opens in place inside the control that opens it, so it takes
+  // the text tokens of every part around that control.
+  if ([...within].some(q => MENU_OPENERS.includes(q)))
+    for (const {part: menu} of menuParts(map))
+      for (const q of [menu, ...(map[menu]?.contains ?? [])]) within.add(q);
+  return within;
 }
+
+/** Parts that open a menu where they stand. */
+const MENU_OPENERS = ['button', 'top-nav-item', 'selector', 'multi-selector'];
 
 /**
  * The record that would keep each text problem's pairs as designed, by
@@ -651,6 +666,36 @@ function hoverProblems(look) {
         const core = paints(base, {}, null);
         if (theme == null || core == null) continue;
         if (core < HOVER_SHOWS || theme >= HOVER_SAME) continue;
+        const name = `${part}${variant ? ` (${block})` : ''}`;
+        // Hover the theme's overlay token flattens, with no style of the
+        // part's own, is one problem per mode: one line to change.
+        const tok = /var\(\s*(--color-overlay-[\w-]+)\s*\)/.exec(value)?.[1];
+        // (A layer drawn over the fill shows over a fill the part sets.)
+        const ownStyle =
+          ownHover(components, part, m, block) != null ||
+          (!layer &&
+            partValue(
+              components,
+              part,
+              ['backgroundColor', 'background'],
+              m,
+              block,
+            ) != null);
+        if (tok && !ownStyle && look.own.has(tok)) {
+          const tk = `${tok}|${m}`;
+          const had = out.get(tk);
+          if (had) {
+            if (!had.parts?.includes(name)) had.parts?.push(name);
+          } else
+            out.set(tk, {
+              kind: 'hover',
+              mode: m,
+              token: tok,
+              parts: [name],
+              message: '',
+            });
+          continue;
+        }
         const k = `${part}|${block ?? ''}|${m}`;
         if (out.has(k)) continue;
         out.set(k, {
@@ -663,6 +708,9 @@ function hoverProblems(look) {
       }
     }
   }
+  for (const p of out.values())
+    if (p.token)
+      p.message = `nothing changes under the pointer in ${p.mode} on ${(p.parts ?? []).length} parts (${(p.parts ?? []).slice(0, 3).join(', ')}${(p.parts ?? []).length > 3 ? ', …' : ''}), where Core's own does: the theme sets ${p.token} to show nothing`;
   return [...out.values()];
 }
 
@@ -725,6 +773,29 @@ function coreGeneric(look, t) {
 }
 
 /**
+ * Whether a color the theme sets is Core's own, copied: in each mode, the
+ * value Core gives it in one of its modes (a dark look that copies Core's
+ * dark colors into both).
+ * @param {Look} look @param {string} t
+ */
+function coreCopy(look, t) {
+  const at = (
+    /** @type {Record<string, string>} */ tokens,
+    /** @type {Mode} */ m,
+  ) => {
+    const c = parseColor(colorIn(`var(${t})`, tokens, m));
+    return c ? hex(c) : null;
+  };
+  const core = new Set(
+    /** @type {Mode[]} */ (['light', 'dark']).map(m => at(look.base[m], m)),
+  );
+  return look.modes.every(m => {
+    const v = at(look.res[m], m);
+    return v != null && core.has(v);
+  });
+}
+
+/**
  * Chart colors left at Core's own while the theme sets its own page or
  * accent: the fill derives them from the theme's colors.
  * @param {Look} look
@@ -733,7 +804,7 @@ function coreGeneric(look, t) {
 function chartProblems(look) {
   const looks = (/** @type {string} */ t) => t.startsWith('--color-data-');
   if (![PAGE, SURFACE, '--color-accent'].some(t => look.own.has(t))) return [];
-  if ([...look.own].some(looks)) return [];
+  if ([...look.own].some(t => looks(t) && !coreCopy(look, t))) return [];
   const derived = Object.keys(filledColors(look)).filter(looks).sort();
   if (!derived.length) return [];
   return [
@@ -844,7 +915,15 @@ export function lookProblems(look) {
       colorIn(`var(${t})`, res.dark, 'dark'),
   );
   const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);
-  if (modes.length > 1 && same && app?.themed && !app.pinned && darkPage) {
+  // (A mode set by an expression may pin it: not said.)
+  if (
+    modes.length > 1 &&
+    same &&
+    app?.themed &&
+    !app.pinned &&
+    !app.modeByExpression &&
+    darkPage
+  ) {
     const lookSide = sideOf(darkPage);
     out.push({
       kind: 'one-look',
@@ -852,6 +931,14 @@ export function lookProblems(look) {
       message: `the theme has one ${lookSide} look for both modes, but the app does not pin the mode: in ${lookSide === 'dark' ? 'light' : 'dark'} mode Core's own colors mix in. Pin it with <Theme mode="${lookSide}">`,
     });
   }
+  // Text on an image the app paints its page with is not measured: said,
+  // never passed as clean.
+  if (app?.themed && app.pageImage)
+    out.push({
+      kind: 'page-image',
+      mode: 'both',
+      message: `${app.pageImage.file} paints the page with an image (${app.pageImage.value.slice(0, 60)}); text on it is not measured: give text on it a plain fill, or check it by eye`,
+    });
   if (app?.themed && own.has(PAGE) && !app.painted)
     out.push({
       kind: 'page',
@@ -946,6 +1033,9 @@ function filledColors(look) {
   if (!plan) return {};
   const candidate = generateTonalPalette(/** @type {any} */ (plan.config));
   const mapping = mapPalette(candidate, dials, plan.fills, context);
+  /** A chart color the theme copied from Core's. @param {string} t */
+  const copied = t =>
+    own.has(t) && t.startsWith('--color-data-') && coreCopy(look, t);
   // The category and chart colors, by the editor's own rules (Core's
   // context.editor): their hues grow with the look beside the theme's own
   // colors (grownFamilies), and the palette derives each one from them.
@@ -959,15 +1049,32 @@ function filledColors(look) {
     generateTonalPalette({...config, families: [...config.families, ...grown]}),
     dials,
     plan.fills,
-    {...context, editor: editorLook, defaults},
+    {
+      ...context,
+      editor: editorLook,
+      defaults,
+      setExactly: t => own.has(t) && !copied(t),
+    },
   ).tokens;
   /** @type {Record<string, Partial<Record<Mode, string>>>} */
   const out = {};
-  for (const [t, refs] of [
-    ...Object.entries(mapping.tokens),
-    ...Object.entries(looks).filter(([t]) => CATEGORY_OR_CHART.test(t)),
-  ]) {
-    if (own.has(t)) continue;
+  /** @typedef {(typeof mapping.tokens)[string]} TokenRefs */
+  /** @type {Array<[string, TokenRefs, boolean]>} */
+  const entries = [
+    ...Object.entries(mapping.tokens).map(
+      ([t, v]) => /** @type {[string, TokenRefs, boolean]} */ ([t, v, false]),
+    ),
+    ...Object.entries(looks)
+      .filter(([t]) => CATEGORY_OR_CHART.test(t))
+      // (A chart color the theme copied from Core's is Core's: it follows
+      // the theme too.)
+      .map(
+        ([t, v]) =>
+          /** @type {[string, TokenRefs, boolean]} */ ([t, v, copied(t)]),
+      ),
+  ];
+  for (const [t, refs, refill] of entries) {
+    if (own.has(t) && !refill) continue;
     for (const m of modes) {
       const color = refs[side[m]]?.color;
       if (color) (out[t] ??= {})[m] = color;
@@ -1162,7 +1269,7 @@ export function lookRepair(look, problems) {
   const components = {};
   /** @type {LookRepair['shared']} */
   const shared = {};
-  for (const p of problems) {
+  for (const p of now) {
     if (p.kind !== 'bar-text' || !p.token || !p.part) continue;
     const l = colorIn(`var(${p.token})`, res.light, 'light');
     const d = colorIn(`var(${p.token})`, res.dark, 'dark');
@@ -1170,6 +1277,17 @@ export function lookRepair(look, problems) {
     if (!value) continue;
     const name = `${p.part.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())}InsideText`;
     (shared[name] ??= {})[p.token] = value;
+    // The pointer tints the bar sets for what it holds reach the same
+    // parts: a menu row's hover would show the bar's tint on the menu's
+    // own fill. They take the theme's own tints from the same const.
+    for (const tint of BAR_TINTS) {
+      if (partValue(look.components, p.part, [tint], 'light') == null) continue;
+      const tl = colorIn(`var(${tint})`, res.light, 'light');
+      const td = colorIn(`var(${tint})`, res.dark, 'dark');
+      const own =
+        tl && td && tl !== td ? `light-dark(${tl}, ${td})` : (tl ?? td);
+      if (own) shared[name][tint] = own;
+    }
     // Only the style block whose text failed (a variant, else the plain
     // block) takes the text: the part elsewhere, and its other variants,
     // keep the bar's text.

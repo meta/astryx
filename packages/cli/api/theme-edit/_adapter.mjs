@@ -2148,8 +2148,16 @@ async function lookOf(ctx, root, file, built) {
   const look = {
     modes,
     res: {
-      light: core.resolveThemeTokens(theme, {mode: 'light'}),
-      dark: core.resolveThemeTokens(theme, {mode: 'dark'}),
+      light: withLocalTokens(
+        theme,
+        'light',
+        core.resolveThemeTokens(theme, {mode: 'light'}),
+      ),
+      dark: withLocalTokens(
+        theme,
+        'dark',
+        core.resolveThemeTokens(theme, {mode: 'dark'}),
+      ),
     },
     own: new Set(Object.keys(theme.tokens ?? {})),
     components: theme.components ?? {},
@@ -2180,13 +2188,33 @@ async function lookOf(ctx, root, file, built) {
       ? {
           themed: app.elements.length > 0,
           pinned: app.pinned,
+          modeByExpression: app.modeByExpression,
           painted: app.painted,
           fonts: app.fonts,
+          pageImage: app.pageImage,
           entry: app.entry ? path.relative(root, app.entry) : null,
         }
       : null,
   };
   return {look, exportName, app};
+}
+
+/**
+ * A mode's resolved tokens with the theme's own local tokens beside them
+ * (`localTokens`, which a style reads by `var()`), each as that mode
+ * draws it.
+ * @param {any} theme @param {'light' | 'dark'} mode
+ * @param {Record<string, string>} tokens
+ * @returns {Record<string, string>}
+ */
+function withLocalTokens(theme, mode, tokens) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [k, v] of Object.entries(theme.localTokens ?? {})) {
+    const value = Array.isArray(v) ? v[mode === 'light' ? 0 : 1] : v;
+    if (typeof value === 'string') out[k] = value;
+  }
+  return {...out, ...tokens};
 }
 
 /**

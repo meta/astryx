@@ -41,9 +41,11 @@ const PAGE_RULE =
  *   each `<Theme>` that wears the theme: `mode` is the mode it pins, null
  *   when written as an expression, undefined when it pins none
  * @property {'light' | 'dark' | null} pinned the mode every one of them pins, or null
+ * @property {boolean} modeByExpression whether one of them sets its mode by an expression the check cannot read
  * @property {boolean} painted whether a stylesheet of the app paints the page with the theme
  * @property {string | null} entry the file that loads Core's stylesheet
  * @property {Set<string> | null} fonts the font families the app loads, as family keys
+ * @property {{file: string, value: string} | null} pageImage the image the app paints its page with, and the stylesheet that does
  */
 
 /**
@@ -61,6 +63,35 @@ function paintsPage(css) {
           return;
         rule.walkDecls(/^background(-color)?$/, decl => {
           if (decl.value.includes('var(--color-background-body')) found = true;
+        });
+      });
+  } catch {
+    // A stylesheet that does not parse paints nothing the check can see.
+  }
+  return found;
+}
+
+/**
+ * The image a stylesheet paints the page with (a `url()` or a gradient on
+ * `html`, `body` or `:root`), or null.
+ * @param {string} css
+ * @returns {string | null}
+ */
+function pageImageOf(css) {
+  /** @type {string | null} */
+  let found = null;
+  try {
+    postcss()
+      .parse(css)
+      .walkRules(rule => {
+        if (!rule.selectors.some(s => /^(html|body|:root)$/.test(s.trim())))
+          return;
+        rule.walkDecls(/^background(-image)?$/, decl => {
+          if (
+            /url\(|gradient\(|var\(--/.test(decl.value) &&
+            !/^var\(--color-background-body\)$/.test(decl.value.trim())
+          )
+            found ??= decl.value.trim();
         });
       });
   } catch {
@@ -88,6 +119,34 @@ function importEnd(source, specifier = CORE_CSS) {
   } catch {
     return -1;
   }
+}
+
+/**
+ * Whether a module imports one of some files: a map of themes the app picks
+ * from (`themes[slug]`) wears each theme it imports.
+ * @param {string} file @param {Set<string>} files absolute paths
+ */
+function importsOneOf(file, files) {
+  let ast;
+  try {
+    ast = parseModule(fs.readFileSync(file, 'utf8'), {
+      sourceType: 'module',
+      plugins: ['typescript', 'jsx'],
+    });
+  } catch {
+    return false;
+  }
+  const dir = path.dirname(file);
+  const stems = new Set([...files].map(f => f.replace(/\.(m?[jt]sx?)$/, '')));
+  return ast.program.body.some(
+    (/** @type {any} */ n) =>
+      n.type === 'ImportDeclaration' &&
+      typeof n.source?.value === 'string' &&
+      n.source.value.startsWith('.') &&
+      stems.has(
+        path.resolve(dir, n.source.value).replace(/\.(m?[jt]sx?)$/, ''),
+      ),
+  );
 }
 
 /** Whether a file is inside a folder. @param {string} dir @param {string} file */
@@ -136,7 +195,10 @@ export async function appThemeUse(root, themeFiles) {
       name: 'Theme',
       prop: 'theme',
     }))
-      if (el.origin && wears.has(path.resolve(el.origin.file)))
+      if (
+        (el.origin && wears.has(path.resolve(el.origin.file))) ||
+        (el.memberOf && importsOneOf(el.memberOf.file, wears))
+      )
         elements.push({file, nameEnd: el.nameEnd, mode: el.attributes.mode});
   }
   const modes = new Set(elements.map(e => e.mode));
@@ -152,9 +214,23 @@ export async function appThemeUse(root, themeFiles) {
           paintsPage(fs.readFileSync(f, 'utf8')),
       )
     : false;
+  // An image the app paints its page with: text on it is not measured.
+  /** @type {{file: string, value: string} | null} */
+  let pageImage = null;
+  if (app)
+    for (const f of files) {
+      if (!f.endsWith('.css') || !isWithin(app, f)) continue;
+      const value = pageImageOf(fs.readFileSync(f, 'utf8'));
+      if (value) {
+        pageImage = {file: path.relative(root, f), value};
+        break;
+      }
+    }
   return {
     elements,
+    pageImage,
     pinned: one === 'light' || one === 'dark' ? one : null,
+    modeByExpression: elements.some(e => e.mode === null),
     painted,
     entry: app ? coreStylesheetLoad(app).file : null,
     fonts: app ? await appLoadedFonts(app, files) : null,
