@@ -61,7 +61,7 @@ describe('useTruncationHookUsage example', () => {
     expect(container.textContent).toContain('README.md');
   });
 
-  it('wraps no cell in a Tooltip, so no path is described a second time', async () => {
+  it('wraps no cell in its own Tooltip, so no path is described at load', async () => {
     root = createRoot(container);
     act(() => {
       root!.render(<UseTruncationHookUsage />);

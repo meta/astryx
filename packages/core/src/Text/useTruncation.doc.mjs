@@ -62,12 +62,12 @@ export const docs = {
   ],
   usage: {
     description:
-      "Detects whether an element's text is cut off — single-line overflow or clamped to several lines — and gives back the full text, updating when the size or the content changes. Built on a shared ResizeObserver and a shared MutationObserver, so hundreds of table cells create one observer of each kind, and a first measurement runs batched in a microtask after the commit instead of forcing a layout pass per text during mount. For a tooltip with the full text, use Text's or Heading's maxLines: their truncation tooltip, built on this hook, shows only while the text is cut off and adds no second description. Reach for the hook directly when composing other truncation feedback into your own component.",
+      "Detects whether an element's text is cut off — single-line overflow or clamped to several lines — and gives back the full text, updating when the size or the content changes. Built on a shared ResizeObserver and a shared MutationObserver, so hundreds of table cells create one observer of each kind, and a first measurement runs batched in a microtask after the commit instead of forcing a layout pass per text during mount. For a tooltip with the full text, use Text's or Heading's maxLines: their truncation tooltip, built on this hook, shows only while the text is cut off. Reach for the hook directly when composing other truncation feedback into your own component.",
     bestPractices: [
       {
         guidance: true,
         description:
-          "For a full-text tooltip, use Text's or Heading's maxLines (hasTruncateTooltip is on by default) rather than this hook: that tooltip adds no second description, so a screen reader reads the text once.",
+          "For a full-text tooltip, use Text's or Heading's maxLines (hasTruncateTooltip is on by default) rather than composing your own Tooltip with this hook: that tooltip shows only while the text is cut off.",
       },
       {
         guidance: true,
@@ -116,7 +116,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Truncation detection + full text. For a full-text tooltip use Text/Heading maxLines (no second description); use the hook directly for other truncation feedback. Shared observers; batched first measurement.',
+      'Truncation detection + full text. For a full-text tooltip use Text/Heading maxLines; use the hook directly for other truncation feedback. Shared observers; batched first measurement.',
     bestPractices: [
       {
         guidance: true,

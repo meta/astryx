@@ -37,8 +37,8 @@ const FILES: FileAsset[] = [
 ];
 
 // Text truncates the path to its line count and, built on useTruncation,
-// shows it in full in its own tooltip only while it is cut off. That tooltip
-// adds no second description, so a screen reader reads the path once.
+// shows it in full in its own tooltip only while it is cut off. Text's tooltip
+// describes the cell once it has first shown.
 function TruncatedCell({
   children,
   maxLines,
