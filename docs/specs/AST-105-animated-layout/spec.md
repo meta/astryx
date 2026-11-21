@@ -227,13 +227,16 @@ Out of coverage, each taking its final place at once:
 - Core gains the `useAnimatedLayout` export and its documentation (FR7).
 - `architecture:react-component-runtime` INV12 produces the glide.
 - A change made while none of INV12's motions runs holds each of its motions
-  at its first keyframe. They all start with the first frame drawn after the
-  change's task. So a long task after the change delays the glide and never
-  skips into it (`spec:AST-094` FR6). A change made while one of those
-  motions runs starts at the change, so a retargeted glide keeps the motion it
-  carries. FR3 gap: in such a change, content that starts from rest also
-  starts at the change, so a long task after it can show that content's glide
-  partway through.
+  at its first keyframe until the first frame drawn after the change's task.
+  So a glide from rest starts at its first drawn frame, and a long task before
+  that frame does not skip it (`spec:AST-094` FR6). A change made while one
+  of those motions runs starts at the change, so a retargeted glide keeps the
+  motion it carries. FR3 gap: in such a change, content that starts from rest
+  also starts at the change, so a long task after it can show that content's
+  glide partway through. FR3 gap: a main-thread stall after a glide's first
+  frame still lets WebKit draw the glide's end next, because no frames are
+  drawn during the stall. The long-table row expansion on WebKit can stall
+  about 11 s after its first frame.
 - `architecture:react-component-runtime` INV12 also gains the in-place swap
   (FR8); no component swaps yet.
 - INV12 also produces the edge reveal (FR9). SideNav's rail clip and ride move
