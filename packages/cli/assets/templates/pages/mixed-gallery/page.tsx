@@ -120,7 +120,7 @@ export default function MixedGalleryTemplate() {
       height="fill"
       contentWidth={1400}
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <style>{GALLERY_CSS}</style>
           <VStack gap={6} style={containerStyle}>
             {/* Header */}

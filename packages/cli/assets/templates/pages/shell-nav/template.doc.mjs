@@ -19,10 +19,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Shell - Top Nav + Left Sidebar',
-  icons: {
-    DocumentTextIcon: 'document',
-    FolderIcon: 'folder',
-    MagnifyingGlassIcon: 'search',
-    PlayIcon: 'play',
-  },
 };

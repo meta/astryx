@@ -32,7 +32,7 @@ import {
 import {cliError} from '../../lib/cli-error.mjs';
 import {
   editorMissingArgument,
-  setEditorFreeName,
+  setFreeArgument,
   setEditorThemeList,
   setUnknownOptionReader,
 } from '../../lib/json-shim.mjs';
@@ -52,6 +52,7 @@ import {
 import {
   builtInThemes,
   dialValueFits,
+  modeDialValue,
   newFlagList,
   editorCheckedLine,
   editorCheckedNewLines,
@@ -62,6 +63,8 @@ import {
   editorFollowCompile,
   editorThemesAt,
   editorFreeName,
+  editorNameOk,
+  editorFreeAppFolder,
   typoNear,
   typoOf,
   editorAfterBuild,
@@ -76,6 +79,9 @@ import {
   editorMissingSource,
   editorThemeTemplate,
   showSections,
+  describe,
+  namesSetting,
+  needsPart,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -108,6 +114,11 @@ import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewL
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
+import {
+  commandAvailable,
+  exampleAvailable,
+  helpBase,
+} from '../../lib/base-gate.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -349,14 +360,6 @@ async function run(program, call, render, answer) {
   return answered;
 }
 
-/** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditSetting} s */
-function describe(s) {
-  const where = s.on
-    ? ` on ${s.on}${s.only ? ' only' : ''}${s.when ? ` when ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}`
-    : ' (whole theme)';
-  return `${s.thing} = ${s.value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
-}
-
 /**
  * The flags of a change, from Commander's options.
  * @param {any} o
@@ -364,7 +367,9 @@ function describe(s) {
 const changeOptions = o => ({
   cwd: process.cwd(),
   on: o.on,
-  when: o.when,
+  // (--when given for several props, a ghost small button: all at once,
+  // joined as Core's own keys join them.)
+  when: flagValues('when').length > 1 ? flagValues('when').join('+') : o.when,
   state: o.state,
   mode: o.mode,
   only: o.only ?? false,
@@ -411,8 +416,17 @@ function newSettings(o, themeName = '<theme>') {
     const all = flagValues(flag);
     if (flag === 'headings' && all.length > 1) out[flag] = all;
     else if (new Set(all).size > 1) {
+      // Each value as the dial reads it (`--mode light` is light-only); a
+      // light and a dark mode together are both modes, the default.
+      const read = all.map(v =>
+        dialValueFits(flag, v) ? v : flag === 'mode' ? modeDialValue(v) : null,
+      );
+      const bothModes =
+        flag === 'mode' &&
+        read.includes('light-only') &&
+        read.includes('dark-only');
       // The suggestion keeps the first value the dial takes, or drops it.
-      const fits = all.find(v => dialValueFits(flag, v));
+      const fits = bothModes ? undefined : (read.find(Boolean) ?? undefined);
       throw new AstryxError(
         `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
         [
@@ -420,9 +434,11 @@ function newSettings(o, themeName = '<theme>') {
             name: cmd(
               `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
             ),
-            reason: fits
-              ? 'do this instead: the first value it takes'
-              : `do this instead: none of them is a value --${flag} takes`,
+            reason: bothModes
+              ? 'do this instead: a light and a dark mode together are both modes, the default'
+              : fits
+                ? 'do this instead: the first value it takes'
+                : `do this instead: none of them is a value --${flag} takes`,
           },
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
@@ -473,7 +489,7 @@ function newFlagLine(o) {
  * the command as meant. Commander reads a word that starts with a typed
  * dash as a word of the command, so it is read here. Null when every
  * option is written as the command takes it.
- * @param {string} command `add` under preview
+ * @param {string} command `add` or `app` under preview
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {null}
  */
@@ -536,6 +552,17 @@ function flagValues(name) {
 }
 
 /**
+ * The other values an undo removed with the one named, for a setting listed
+ * more than once by hand (` and red, listed twice`), or nothing.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeData} d
+ */
+function alsoRemovedText(d) {
+  const also = d.alsoRemoved ?? [];
+  if (!also.length) return '';
+  return ` and ${also.map(x => JSON.stringify(x.value)).join(', ')} (it was listed ${also.length === 1 ? 'twice' : `${also.length + 1} times`})`;
+}
+
+/**
  * The receipt of a change: a status line, then the change data.
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} r
  */
@@ -544,20 +571,59 @@ function changeBlocks(r) {
   // The status line names the value as saved, with a quote or space mark
   // the text output would fold written as its CSS escape (\201C), so the
   // text and the JSON name the same value.
+  // A value saved as no text (none at all) is named by describe as such.
   const s = {
     ...d.setting,
-    value: String(d.setting.value).replace(
-      /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
-      c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
-    ),
+    value:
+      typeof d.setting.value !== 'string'
+        ? d.setting.value
+        : d.setting.value.replace(
+            /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
+            c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
+          ),
   };
+  // A change that leaves the setting as it was says so, never "x -> x".
+  const unchanged = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) => n.startsWith('no change: '),
+  );
+  const drawnAlready = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) =>
+      n.startsWith('no change: ') && n.includes(' already draws '),
+  );
+  // A dial step on a part (`corners large --on card`) says what it drew
+  // there, when that is a value or two: a part's own scale can give a step
+  // another size than the dial's help names for the whole theme.
+  const stepOn = d.action === 'set' && s.source === 'dial' ? s.on : null;
+  const drawnOn = stepOn
+    ? /** @type {string[]} */ (/** @type {any} */ (d).styled ?? [])
+        .filter(x => x.startsWith(`${stepOn}: `))
+        .map(x => x.slice(stepOn.length + 2))
+    : [];
+  const drawnAs = drawnOn.length <= 2 ? drawnOn : [];
   const done =
-    d.was != null
-      ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+    unchanged && d.action === 'set'
+      ? drawnAlready
+        ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
+        : `[ok] ${d.theme}: ${d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} was already set; nothing changed`
+      : d.was != null
+        ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
+        : `[ok] ${d.theme}: ${d.action === 'set' ? (d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}`) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
-  const {newProblems = [], ...rest} = /** @type {any} */ (d);
+  // What a whole-theme change leaves out comes next, with the lines that
+  // reach it, before the rest a head-cut output drops.
+  const {
+    newProblems = [],
+    leftProblems = [],
+    leftOut = [],
+    fontNotLoaded = [],
+    missed: _missed,
+    missedParts: _missedParts,
+    missedOn: _missedOn,
+    missedWhere: _missedWhere,
+    missedNew: _missedNew,
+    ...rest
+  } = /** @type {any} */ (d);
   const status = newProblems.length
     ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
     : done;
@@ -566,7 +632,63 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    // Problems it moved but left failing: said under the new ones.
+    ...(leftProblems.length
+      ? [
+          `still failing after this change (${leftProblems.length}):`,
+          ...problemList(leftProblems),
+        ]
+      : []),
+    ...(fontNotLoaded.length
+      ? [
+          list(
+            fontNotLoaded.map(
+              (/** @type {{family: string, run: string[]}} */ x) => [
+                `${x.family} is not installed, so the pictures and the app draw the next font in the stack until it is`,
+                ...x.run,
+              ],
+            ),
+          ),
+        ]
+      : []),
+    ...(leftOut.length
+      ? [
+          list(
+            leftOut.map((/** @type {{note: string, run: string[]}} */ x) => [
+              x.note,
+              ...x.run,
+            ]),
+          ),
+        ]
+      : []),
+    ...missedLine(d),
     ...changeFields(rest),
+  ];
+}
+
+/**
+ * The parts the theme's own changes still do not reach, counted and
+ * named, near the top of a change or a new theme, so a head of the
+ * output keeps it; show names the first ones with their lines, and show
+ * --json lists each.
+ * A change says them only when it brought some (`missedNew`): the ones it
+ * found are show's to list, not every change's to repeat.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[], missedNew?: number}} d
+ */
+function missedLine(d) {
+  const {
+    missed = 0,
+    missedParts = missed,
+    missedOn = [],
+    missedWhere = [],
+    missedNew,
+  } = d;
+  const named = missedWhere.length ? missedWhere : missedOn;
+  if (!missed || missedNew === 0) return [];
+  return [
+    record({
+      missed: `${missedNew ? `this change left ${missedNew} new miss${missedNew > 1 ? 'es' : ''}; ` : ''}${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
+    }),
   ];
 }
 
@@ -624,13 +746,19 @@ function showBlocks(d) {
     colorNotes,
     colorFiles,
     unreached,
+    missed = [],
     // Every problem is in the open problems at the end, with its fix.
     problems: _problems,
     openProblems = [],
+    // The pictures to open: the first line and the last, so a head or a
+    // tail of the output keeps it.
+    look,
     ...rest
   } = d;
   const [head, ...others] = project(/** @type {any} */ (rest));
+  const lookLine = look ? record({look}) : [];
   return [
+    lookLine,
     head,
     // Each setting as named fields: its whole scope, the parts it reaches,
     // and what a stronger setting hides of it.
@@ -638,15 +766,6 @@ function showBlocks(d) {
       ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
-    // The parts the look leaves as the base has them, on one line: the
-    // most visible ten, and how many more (the JSON lists them all).
-    ...(unreached?.length
-      ? [
-          record({
-            unreached: `${unreached.slice(0, 10).join(', ')}${unreached.length > 10 ? `, and ${unreached.length - 10} more (show --json)` : ''} (their fill or text color is still the base's, and no setting is on them)`,
-          }),
-        ]
-      : []),
     ...(colors.length
       ? [
           section('colors:'),
@@ -657,6 +776,50 @@ function showBlocks(d) {
         ]
       : []),
     ...(colorNotes.length ? [section('colorNotes:'), list(colorNotes)] : []),
+    // What the theme's own changes did not reach, counted, six with the
+    // line that reaches each; the other parts on the base's look are
+    // counted, and listed in the JSON. Just before the generated files
+    // (which stay last, before the closing look line), so a tail of the
+    // output keeps them.
+    ...(missed.length
+      ? [
+          section(
+            `missed (${missed.length} miss${missed.length > 1 ? 'es' : ''} on ${new Set(missed.map(m => m.part)).size} part${new Set(missed.map(m => m.part)).size > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
+          ),
+          // Each part and why, then the line that reaches it.
+          missed
+            .slice(0, 6)
+            .map(
+              m =>
+                `- ${m.part}${m.state ? ` (${m.state})` : ''}: ${m.why}\n  line: ${cmd(m.line)}`,
+            )
+            .join('\n'),
+        ]
+      : []),
+    ...(() => {
+      // The rest, each said for what it is: the misses beyond the six shown
+      // (a border, a shadow, a pill, a state), and the parts with no miss
+      // whose fill or text color is still the base's (unreached).
+      const hidden = missed.slice(6);
+      const missedNames = new Set(missed.map(m => m.part));
+      const still = (unreached ?? []).filter(p => !missedNames.has(p)).length;
+      const hiddenParts = new Set(hidden.map(m => m.part)).size;
+      const said = [
+        hidden.length
+          ? `${hidden.length} more miss${hidden.length > 1 ? 'es' : ''} (on ${hiddenParts} part${hiddenParts > 1 ? 's' : ''})`
+          : '',
+        still
+          ? `${still} more part${still > 1 ? 's' : ''} whose fill or text color is still the base's`
+          : '',
+      ].filter(Boolean);
+      return said.length
+        ? [
+            record({
+              unreached: `${said.join(', and ')} (show --json lists each)`,
+            }),
+          ]
+        : [];
+    })(),
     colorFiles
       ? [section('colorFiles:'), record(colorFiles)]
       : record({colorFiles: 'none'}),
@@ -665,11 +828,21 @@ function showBlocks(d) {
     openProblems.length
       ? [
           section(
-            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+            `openProblems: ${openProblems.length} the theme has now${(() => {
+              const fixable = openProblems.filter(
+                (/** @type {any} */ p) => p.fix,
+              ).length;
+              return fixable === openProblems.length
+                ? '; each fix line fixes one'
+                : fixable
+                  ? `; ${fixable} with a fix line that fixes it, the rest with none (no one line fixes those alone)`
+                  : '; none has a fix line (no one line fixes these alone)';
+            })()}`,
           ),
           ...problemList(openProblems),
         ]
       : [],
+    lookLine,
   ].flat();
 }
 
@@ -771,8 +944,11 @@ function lookupBlocks(d) {
  */
 function strayOption(command, doc, rest) {
   // A scope flag given twice would keep only the last one without a word.
+  // (--when takes one value per prop: those are joined, all at once.)
   for (const flag of ['on', 'when', 'state', 'mode']) {
     const all = flagValues(flag);
+    const props = all.map(w => String(w).split(':')[0].trim().toLowerCase());
+    if (flag === 'when' && new Set(props).size === all.length) continue;
     if (new Set(all).size > 1)
       return cliError(
         `--${flag} was given twice (${all.join(', ')}); give it once.`,
@@ -926,6 +1102,11 @@ function optionsAsWritten(
     const near = all.filter(o => typoNear(w, o.slice(2)));
     return near.length === 1 ? near[0] : null;
   };
+  // Any run of up to three hyphens and dash-like characters (an en or em
+  // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
+  // option's dashes, as normalizeEntry reads a token's.
+  const optionShape =
+    /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/;
   const argv = process.argv;
   const at = argv.indexOf(command, argv.indexOf(where.group) + 1);
   if (at < 0) return null;
@@ -940,13 +1121,7 @@ function optionsAsWritten(
       words.push(...argv.slice(i));
       break;
     }
-    // Any run of up to three hyphens and dash-like characters (an en or em
-    // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
-    // option's dashes, as normalizeEntry reads a token's.
-    const m =
-      /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/.exec(
-        a,
-      );
+    const m = optionShape.exec(a);
     const flag = m ? meant(m[2]) : null;
     if (!m || !flag) {
       if (a !== '--json') words.push(a);
@@ -984,13 +1159,31 @@ function optionsAsWritten(
       }
       continue;
     }
-    // An option that takes a value, given none, is left out of the line.
-    if (m[3] == null && (next == null || /^-/.test(next))) {
-      if (valued.includes(flag)) why ??= `${flag} was given no value`;
+    // An option that takes a value, given none, is left out of the line. A
+    // next word that starts with a dash is its value unless it names an
+    // option the command takes (`--font -apple-system`, `--text-size -1`).
+    // A word written as a long option (`--path`, `--color-accent`) is never
+    // a value either: no value an option takes starts with two dashes.
+    const opt = next == null ? null : optionShape.exec(next);
+    const nextIsOption =
+      next === '--' ||
+      /^--[A-Za-z]/.test(next ?? '') ||
+      Boolean(opt && meant(opt[2]));
+    if (m[3] == null && (next == null || nextIsOption)) {
+      if (valued.includes(flag)) {
+        why ??= `${flag} was given no value`;
+        // Leaving out an option that narrows what the command acts on
+        // would widen it: that line is never offered.
+        if (NARROWING_OPTIONS.includes(flag.slice(2))) unread = true;
+      }
       continue;
     }
     words.push(flag);
     if (m[3] != null) words.push(m[3]);
+    else if (/^-/.test(next)) {
+      words.push(next);
+      i += 1;
+    }
   }
   if (!why) return null;
   return {
@@ -1326,6 +1519,22 @@ function previewExtraWords(sub, doc, head) {
  * @param {{png?: boolean, section?: string}} o the options read
  */
 function showStray(name, rest, o) {
+  // The theme typed as an option (`show --theme t`), as set and undo read
+  // it: the show on that theme, never its help alone.
+  const asOption = /^--?(?:theme|name)$/i.test(String(name));
+  if (asOption && rest.length) {
+    const theme = String(rest[0]);
+    return strayRefusal(
+      'show',
+      showDoc,
+      `${EDITOR} show`,
+      {
+        option: String(name),
+        note: "the theme is show's first word",
+      },
+      `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    );
+  }
   const stray = rest.map(String).find(w => w.startsWith('-'));
   if (stray == null) return null;
   // An option the one reader names never comes here (readOptions reads
@@ -1409,6 +1618,7 @@ function defineGroup(parent, doc) {
         const word = String(extras[0]).toLowerCase();
         const group = doc.name.split(' ').at(-1) ?? '';
         const ranked = (cmd.commands ?? [])
+          .filter(command => commandAvailable(command, helpBase()))
           .map(command => command.name())
           .sort(
             (a, b) =>
@@ -1448,10 +1658,12 @@ function defineGroup(parent, doc) {
             type: 'help',
             data: {
               command: words.join(' '),
-              commands: (cmd.commands ?? []).map(command => ({
-                name: command.name(),
-                summary: command.summary() || command.description(),
-              })),
+              commands: (cmd.commands ?? [])
+                .filter(command => commandAvailable(command, helpBase()))
+                .map(command => ({
+                  name: command.name(),
+                  summary: command.summary() || command.description(),
+                })),
             },
           }),
         );
@@ -1490,16 +1702,45 @@ function heldStop() {}
 export function registerExperimentalTheme(group, program) {
   // A command run with no theme names the app's only theme.
   setEditorThemeList(editorThemesAt);
-  setEditorFreeName(editorFreeName);
+  setFreeArgument((cwd, words) =>
+    words === 'experimental theme editor new'
+      ? {
+          word: editorFreeName(cwd, 'my-theme'),
+          reason: 'a name for the new theme',
+        }
+      : words === 'experimental theme preview app'
+        ? {
+            word: quoteCommandArgument(editorFreeAppFolder(cwd)),
+            reason: 'a folder for the new app, free here',
+          }
+        : null,
+  );
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
+  // The run's base may not serve a line's command; help then leaves it out.
+  const overrides = [
+    [
+      'experimental theme targets',
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`,
+    ],
+    [
+      'experimental theme editor how',
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    ],
+  ];
   theme.addHelpText(
     'after',
-    `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n` +
-      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    () =>
+      `\nComponent style overrides:\n` +
+      overrides
+        .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        .map(([, line]) => line)
+        .join(''),
   );
 
   const editor = defineGroup(theme, editorDoc);
@@ -1537,34 +1778,6 @@ export function registerExperimentalTheme(group, program) {
                 (/** @type {string} */ w) =>
                   /^-/.test(w) && !takes.has(w.split('=')[0]),
               );
-            // `--base` is the dial new takes as --like.
-            if (stray && stray.split('=')[0] === '--base') {
-              const args = (cmd?.args ?? []).slice(1).map(String);
-              const at = args.indexOf(stray);
-              const value = stray.includes('=')
-                ? stray.slice(stray.indexOf('=') + 1)
-                : args[at + 1];
-              // Thrown, as every refusal inside run is: run prints it once
-              // (a refusal printed here and then caught again by run would
-              // print twice where exit does not end the process).
-              throw new AstryxError(
-                `new takes the base theme as --like, not --base.`,
-                value
-                  ? [
-                      {
-                        name: `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                        reason: 'do this instead',
-                      },
-                    ]
-                  : [
-                      {
-                        name: `${EDITOR} new --help`,
-                        reason: 'every option it takes',
-                      },
-                    ],
-                ERROR_CODES.ERR_INVALID_OPTION,
-              );
-            }
             if (stray)
               throw new AstryxError(
                 `unknown option '${stray}'.`,
@@ -1578,6 +1791,51 @@ export function registerExperimentalTheme(group, program) {
               );
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
+            // The only word given straight after a dial's value (`new --font
+            // Open Sans`) is more of that value, and no name was given: the
+            // value whole, with a free name, checked as new checks it.
+            {
+              const argv = process.argv;
+              const from = argv.indexOf('new', argv.indexOf('editor') + 1);
+              const at = argv.indexOf(String(name), from + 1);
+              const before = argv[at - 2];
+              const dial = (newDoc.options ?? []).find(
+                opt =>
+                  opt.param === 'options.settings' &&
+                  String(opt.flag).split(' ')[0] === before,
+              );
+              const key = String(before ?? '')
+                .slice(2)
+                .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+              // Read so only when the word cannot be the name, or the value
+              // alone is no value of the dial (`--accent dark blue`).
+              if (
+                !extra.length &&
+                from >= 0 &&
+                at > from + 2 &&
+                dial &&
+                !argv.slice(from + 1, at).includes('--') &&
+                (!editorNameOk(String(name)) ||
+                  !dialValueFits(before.slice(2), String(o[key])))
+              ) {
+                const given = {...o, [key]: `${o[key]} ${name}`};
+                const free = editorFreeName(process.cwd(), 'my-theme');
+                throw new AstryxError(
+                  `new takes <theme>, and was given none: "${name}" is more of ${before}'s value. A value of more than one word goes in quotes. Nothing was changed.`,
+                  await editorCheckedNewLines(
+                    `${EDITOR} new ${free}${newFlagLine(given)}`,
+                    free,
+                    {
+                      cwd: process.cwd(),
+                      like: given.like,
+                      png: given.png ?? false,
+                      settings: newSettingsGiven(given),
+                    },
+                  ),
+                  ERROR_CODES.ERR_MISSING_ARGUMENT,
+                );
+              }
+            }
             if (extra.length) {
               // Words after `--` that are `--<option> <value>` pairs new
               // takes become options; the other words were most likely
@@ -1634,6 +1892,12 @@ export function registerExperimentalTheme(group, program) {
                 }
                 return false;
               };
+              /** Words typed straight after an option's value, past the name. @type {Set<string>} */
+              const afterValue = new Set();
+              /** An option's value before words that may be extra. @type {Record<string, string>} */
+              const extendedFrom = {};
+              /** The option the name was typed with (`--theme`), if any. @type {string | null} */
+              let nameOption = null;
               for (let i = from + 1; from >= 0 && i < argv.length; i++) {
                 const w = argv[i];
                 if (w === '--') {
@@ -1649,6 +1913,13 @@ export function registerExperimentalTheme(group, program) {
                 }
                 if (w.startsWith('-')) {
                   const flag = w.split('=')[0];
+                  // The name typed as an option (`--theme t2`, `--name t2`):
+                  // new takes it as its first word.
+                  if (/^--?(theme|name)$/i.test(flag)) {
+                    nameOption = flag;
+                    open = null;
+                    continue;
+                  }
                   if (valueFlags.has(flag) && !w.includes('=')) i += 1;
                   open = dialFlags.has(flag) ? camel(flag) : null;
                   continue;
@@ -1670,6 +1941,40 @@ export function registerExperimentalTheme(group, program) {
                   open = null;
                   continue;
                 }
+                // After the name, a word is more of an open value only for a
+                // dial whose values are words (a font family, a headings
+                // style) or a value not finished yet (`rgb(1,`, `Inter,`); a
+                // setting's word starts its own setting (`--accent red
+                // corners pill`, `--corners pill padding 8px`), read below,
+                // and any other word is extra (`--accent red foo`).
+                if (open) {
+                  const bare = w.toLowerCase().replace(/[:=]+$/, '');
+                  const had = String(
+                    Array.isArray(given[open])
+                      ? given[open].at(-1)
+                      : given[open],
+                  );
+                  const unfinished =
+                    (had.match(/\(/g) ?? []).length >
+                      (had.match(/\)/g) ?? []).length || /,\s*$/.test(had);
+                  if (
+                    dialFlags.has(`--${bare}`) ||
+                    /^(like|base)$/.test(bare) ||
+                    namesSetting(bare)
+                  ) {
+                    open = null;
+                    afterValue.add(w);
+                  } else if (!(
+                    unfinished || ['font', 'headings'].includes(open)
+                  )) {
+                    // A word that may be more of the value (`dark blue`)
+                    // or extra (`red foo`): the line with it, and if that
+                    // line leaves the option out, the value before it.
+                    const key = /** @type {string} */ (open);
+                    if (!(key in extendedFrom)) extendedFrom[key] = had;
+                    afterValue.add(w);
+                  }
+                }
                 if (open) {
                   const had = given[open];
                   given[open] = Array.isArray(had)
@@ -1679,6 +1984,245 @@ export function registerExperimentalTheme(group, program) {
                   continue;
                 }
                 words.push(w);
+              }
+              /** Settings set gives after the theme is made. @type {Array<[string, string]>} */
+              const later = [];
+              // Settings typed after the name, in any form set reads (`accent
+              // red`, `red accent`, `corners=pill`, `like: neutral`, `corners:
+              // pill; accent: red`, `'accent red, corners pill'`, a pasted
+              // JSON object): each is its option (`--accent red`, `--like
+              // neutral`), never part of the name. A dial's value runs to the
+              // next setting.
+              {
+                // A dial word as set reads it: with its colon or equals sign
+                // apart from the value (`accent:`), in other letters, or
+                // with a typo (`cornres`, the one typo limit); `like` and
+                // `base` are the base (--like).
+                const dialOf = (/** @type {string} */ w) => {
+                  const word = String(w)
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[:=]+$/, '')
+                    // A key in quotes (`"like"`, `'accent'`) is that key.
+                    .replace(/^(["'])(.*)\1$/, '$2');
+                  if (!/^[a-z][a-z-]*$/.test(word)) return null;
+                  if (word === 'like' || word === 'base') return 'like';
+                  if (dialFlags.has(`--${word}`)) return camel(`--${word}`);
+                  const near = [...dialFlags].filter(f =>
+                    typoOf(word, f.slice(2)),
+                  );
+                  return near.length === 1 ? camel(near[0]) : null;
+                };
+                /** The flag word a dial word reads as. @param {string} w */
+                const dialName = w =>
+                  String(dialOf(w)).replace(
+                    /[A-Z]/g,
+                    c => `-${c.toLowerCase()}`,
+                  );
+                /**
+                 * A key, a value or a word without the quotes around it
+                 * (`"accent"`, `'base neutral'`); a text that holds a quote
+                 * of its own (`"like": "neutral"`) keeps them, since its
+                 * ends are two quotes, not one pair.
+                 * @param {string} x
+                 */
+                const unquote = x => {
+                  const t = String(x).trim();
+                  const m = /^(["'])([\s\S]*)\1$/.exec(t);
+                  return m && !m[2].includes(m[1]) ? m[2] : t;
+                };
+                /**
+                 * The settings one typed word holds, each `[dial, value]`: a
+                 * JSON object, `key=value` or `key: value` pairs, or `dial
+                 * value` items, apart at `;` or `,`; null when it holds none.
+                 * @param {string} rawWord
+                 * @returns {Array<[string, string]> | null}
+                 */
+                const pairsIn = (/** @type {string} */ rawWord) => {
+                  // A word with its own quotes around it (`'base neutral'`,
+                  // `"accent"`) is that word, as the shell would have given
+                  // it: the quotes are no part of a name.
+                  const w = unquote(rawWord);
+                  /** @type {unknown} */
+                  let json;
+                  try {
+                    json = /^\s*\{/.test(w) ? JSON.parse(w) : undefined;
+                  } catch {
+                    json = undefined;
+                  }
+                  const entries =
+                    json && typeof json === 'object' && !Array.isArray(json)
+                      ? Object.entries(json)
+                      : [];
+                  if (entries.length)
+                    return entries.every(
+                      ([k]) => dialOf(k) || namesSetting(unquote(k)),
+                    )
+                      ? entries.map(([k, v]) => [k, String(v)])
+                      : null;
+                  // `key=value`, `key: value`, keys and values in quotes or
+                  // not (`"like": "neutral"`), in either order (`red=accent`,
+                  // `stone=like`), as set reads a pair swapped; `like` is
+                  // never a value (`neutral=like` is the base neutral).
+                  // Pairs apart at `;`, or at a comma when a key comes next
+                  // (`like: neutral, corners: pill`); a comma inside a value
+                  // (`font: Inter, Arial`) is the value's.
+                  const byColon = w
+                    .split(/\s*;\s*|\s*,\s*(?=["']?[a-z][a-z-]*["']?\s*[=:])/i)
+                    .map(x =>
+                      /^((["'])[a-z-]+\2|[a-z0-9#(][^=:]*?)\s*[=:]\s*(.+)$/i.exec(
+                        x.trim(),
+                      ),
+                    );
+                  /** @type {Array<[string, string]>} */
+                  const read = [];
+                  // (No pair at all: the `dial value` items below.)
+                  for (const m of byColon.some(Boolean) ? byColon : []) {
+                    if (!m) return null;
+                    const [k, v] = [unquote(m[1]), unquote(m[3])];
+                    if (dialOf(v) === 'like' && !dialOf(k)?.startsWith('like'))
+                      read.push([v, k]);
+                    else if (dialOf(k) || namesSetting(k)) read.push([k, v]);
+                    else if (dialOf(v) && !/\s/.test(v)) read.push([v, k]);
+                    else return null;
+                  }
+                  if (read.length) return read;
+                  // `'accent red'`, `'accent red, corners pill'`, `'base
+                  // neutral'`.
+                  if (!/\s/.test(w.trim())) return null;
+                  const items = w
+                    .split(/\s*[;,]\s*/)
+                    .map(x => x.trim().split(/\s+/))
+                    .filter(x => x[0]);
+                  return items.length &&
+                    items.every(
+                      x =>
+                        x.length > 1 &&
+                        (dialOf(x[0]) || namesSetting(unquote(x[0]))),
+                    )
+                    ? items.map(x => [unquote(x[0]), x.slice(1).join(' ')])
+                    : null;
+                };
+                /** @type {string[]} */
+                const kept = [];
+                /** @type {Array<[string, string]>} */
+                const pairs = [];
+                /** The pasted pair a later word continues, or -1. */
+                let pasted = -1;
+                for (const w of words) {
+                  const found = pairsIn(w);
+                  if (found) {
+                    pairs.push(...found);
+                    // A value typed on across words (`font=Inter, Arial`)
+                    // runs to the next setting, as `font Inter, Arial` does.
+                    pasted = /^\s*\{/.test(w) ? -1 : pairs.length - 1;
+                    continue;
+                  }
+                  if (pasted >= 0 && !dialOf(w) && !namesSetting(w)) {
+                    pairs[pasted][1] = `${pairs[pasted][1]} ${w}`;
+                    continue;
+                  }
+                  pasted = -1;
+                  // A word quoted on its own (`"accent"`) keeps no quotes.
+                  kept.push(unquote(w));
+                }
+                // `accent red`: a dial word, and its value up to the next
+                // setting; `red accent`: a value, then the dial it is for (as
+                // set reads the two swapped); a dial word with no value is
+                // never a word of the name.
+                /** @type {string[]} */
+                const rest = [];
+                /** @type {string[]} */
+                const bare = [];
+                const isSetting = (/** @type {string} */ w) =>
+                  Boolean(dialOf(w)) ||
+                  namesSetting(String(w).replace(/[:=]+$/, ''));
+                for (let i = 0; i < kept.length; i++) {
+                  // The base takes the one word after it (`like neutral`,
+                  // whose base shares its name with a dial).
+                  if (dialOf(kept[i]) === 'like' && kept[i + 1] != null) {
+                    pairs.push([kept[i], kept[i + 1]]);
+                    i += 1;
+                    continue;
+                  }
+                  const builtIn = (/** @type {string} */ w) =>
+                    builtInThemes().includes(String(w).toLowerCase());
+                  // A built-in theme's name is the base, whatever word is
+                  // beside it (`theme neutral`, `neutral stone`): the base
+                  // reader below takes it, never a dial of the same name.
+                  if (builtIn(kept[i])) {
+                    rest.push(kept[i]);
+                    continue;
+                  }
+                  if (dialOf(kept[i])) {
+                    const value = [];
+                    let j = i + 1;
+                    while (
+                      j < kept.length &&
+                      !isSetting(kept[j]) &&
+                      !builtIn(kept[j])
+                    )
+                      value.push(kept[j++]);
+                    if (value.length) pairs.push([kept[i], value.join(' ')]);
+                    else bare.push(kept[i]);
+                    i = j - 1;
+                    continue;
+                  }
+                  if (
+                    !isSetting(kept[i]) &&
+                    kept[i + 1] != null &&
+                    dialOf(kept[i + 1]) &&
+                    !builtIn(kept[i + 1]) &&
+                    (kept[i + 2] == null || isSetting(kept[i + 2]))
+                  ) {
+                    pairs.push([kept[i + 1], kept[i]]);
+                    i += 1;
+                    continue;
+                  }
+                  rest.push(kept[i]);
+                }
+                for (const [k, v] of pairs) {
+                  // A setting new has no option for (`padding: 8px`) is a
+                  // set after the theme is made, as the space form is.
+                  if (!dialOf(k)) {
+                    later.push([unquote(k), v]);
+                    intoValues.push(`${unquote(k)} ${v}`);
+                    continue;
+                  }
+                  const key = /** @type {string} */ (dialOf(k));
+                  if (given[key] == null) given[key] = v;
+                  intoValues.push(`${dialName(k)} ${v}`);
+                }
+                intoValues.push(...bare);
+                // A setting new takes no option for (`padding 8px`): set
+                // gives it after the theme is made, never a word of the name.
+                const named = [];
+                for (let i = 0; i < rest.length; i++) {
+                  const thing = rest[i].replace(/[:=]+$/, '');
+                  // (A built-in theme's name is the base, read below.)
+                  if (
+                    namesSetting(thing) &&
+                    !builtInThemes().includes(thing.toLowerCase()) &&
+                    rest[i + 1] != null
+                  ) {
+                    const value = [];
+                    let j = i + 1;
+                    while (j < rest.length && !isSetting(rest[j]))
+                      value.push(rest[j++]);
+                    later.push([thing, value.join(' ')]);
+                    intoValues.push(`${thing} ${value.join(' ')}`);
+                    i = j - 1;
+                    continue;
+                  }
+                  // A word typed after an option's value that no reading
+                  // takes is extra, never a word of the name.
+                  if (afterValue.has(rest[i])) {
+                    intoValues.push(rest[i]);
+                    continue;
+                  }
+                  named.push(rest[i]);
+                }
+                words.splice(0, words.length, ...named);
               }
               // A built-in theme among the words (after a `like` word, or
               // typed as the name with the real name after it) is the base,
@@ -1691,10 +2235,21 @@ export function registerExperimentalTheme(group, program) {
               );
               if (baseAt >= 0 && given.like == null)
                 given.like = all[baseAt].toLowerCase();
+              // (`base stone` and `theme stone` are the base as `like
+              // stone` is; a second base typed is no word of the name.)
               const nameWords = all.filter(
                 (w, i) =>
                   i !== baseAt &&
-                  !(baseAt >= 0 && /^like$/i.test(w) && i === baseAt - 1),
+                  !(
+                    baseAt >= 0 &&
+                    /^(like|base|theme)[:=]?$/i.test(w) &&
+                    i === baseAt - 1
+                  ) &&
+                  !(
+                    baseAt >= 0 &&
+                    i > baseAt &&
+                    builtInThemes().includes(w.toLowerCase())
+                  ),
               );
               const fixed = nameWords
                 .join('-')
@@ -1702,9 +2257,8 @@ export function registerExperimentalTheme(group, program) {
                 .replace(/[^a-z0-9-]+/g, '-');
               // The line is checked as every new line is offered.
               const read = Object.keys(given).some(k => given[k] !== o[k]);
-              throw new AstryxError(
-                `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
-                await editorCheckedNewLines(
+              const linesFor = () =>
+                editorCheckedNewLines(
                   `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
                   fixed,
                   {
@@ -1713,7 +2267,44 @@ export function registerExperimentalTheme(group, program) {
                     png: given.png ?? false,
                     settings: newSettingsGiven(given),
                   },
-                ),
+                );
+              let lines = await linesFor();
+              // A value a later word made one no reading takes (`--accent
+              // red foo`): the value before it, the word extra.
+              const lost = Object.keys(extendedFrom).filter(
+                k =>
+                  !lines.some(x =>
+                    x.name.includes(
+                      ` --${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)} `,
+                    ),
+                  ),
+              );
+              if (lost.length) {
+                for (const k of lost) given[k] = extendedFrom[k];
+                lines = await linesFor();
+              }
+              throw new AstryxError(
+                // (Only the name typed as an option, nothing extra: say that.)
+                nameOption &&
+                  !(nameWord ? [...intoValues, ...words] : extra).join('')
+                  ? `${nameOption} is no option of new: the theme name is new's first word. Nothing was changed.`
+                  : `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
+                [
+                  ...lines,
+                  // A CSS property is written on a part: the ask that
+                  // names the parts, never a set line set itself refuses.
+                  ...later.map(([thing, value]) =>
+                    needsPart(thing)
+                      ? {
+                          name: `${HOW} ${quoteCommandArgument(`${value} ${thing}`)}`,
+                          reason: `then this: new takes no ${thing}, and set writes it on a part (--on)`,
+                        }
+                      : {
+                          name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
+                          reason: `then this: new takes no ${thing}; set gives it`,
+                        },
+                  ),
+                ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
             }
@@ -1726,9 +2317,20 @@ export function registerExperimentalTheme(group, program) {
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
-            ...changeFields(/** @type {any} */ (r.data)),
+            ...missedLine(/** @type {any} */ (r.data)),
+            ...changeFields(
+              /** @type {any} */ (
+                (({
+                  missed: _m,
+                  missedParts: _p,
+                  missedOn: _o,
+                  missedWhere: _w,
+                  ...x
+                }) => x)(/** @type {any} */ (r.data))
+              ),
+            ),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
-            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (every menu, tooltip, popover and list, open) and sheet.png (every component) from real components; open preview.png and sheet-overlays.png and check them against the request`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and a picture of each family of components the theme sets a part of (sheet-actions.png, the buttons, while it sets none) from real components, and --section <family> --png pictures any other family (actions, inputs, selection, navigation, feedback, data, containers); open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
           ],
         ),
     }),
@@ -1752,6 +2354,14 @@ export function registerExperimentalTheme(group, program) {
         // A pasted JSON object of settings goes to the editor whole, which
         // gives one set line per entry.
         if (!value.length && /^\s*\{/.test(thing)) value = [''];
+        // Several pasted lines in one argument, each a declaration or the
+        // editor's own printed or change line, go to the editor whole: its
+        // entry reader reads each line.
+        if (!value.length) {
+          const lines = thing.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length > 1 && lines.every(l => /[:=]|->|\u2192/.test(l)))
+            value = [''];
+        }
         if (!value.length) {
           // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
           // `--color-accent=#e11d48`).
@@ -1854,21 +2464,43 @@ export function registerExperimentalTheme(group, program) {
           const words = [thing, which, ...(c?.args ?? []).slice(3)].filter(
             w => typeof w === 'string',
           );
+          // Three or more bare words that each name a setting are a list
+          // too (`undo t accent corners spacing`); a setting with a value of
+          // several words (`font Inter Tight`) is not.
+          // Commas or "and" make a list only when each item starts with a
+          // setting's name: a value with commas typed unquoted, as set takes
+          // it (`border-color rgb(1, 2, 3)`, `font Inter, Arial`), is that
+          // setting's value.
+          const items = words
+            .map(String)
+            .join(' ')
+            .split(/\s*,\s*|\s+and\s+/)
+            .filter(Boolean);
           const listed =
             words.length > 1 &&
-            words.some(
+            ((words.some(
               (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
             ) &&
+              items.length > 1 &&
+              items.every(item => namesSetting(item.split(/\s+/)[0]))) ||
+              (words.length > 2 &&
+                words.every(w => namesSetting(String(w))))) &&
             !words.some(w => String(w).startsWith('-'));
           const list = listed ? words.join(' ') : null;
+          // Otherwise the words after the thing are its value, typed
+          // unquoted as set takes it (`undo t padding 4px 8px --on card`).
+          const value =
+            which == null
+              ? undefined
+              : [which, ...(c?.args ?? []).slice(3)].map(String).join(' ');
           return (
             (await readOptionsChecked('undo', undoDoc)) ??
             (list
               ? null
-              : (strayOption('undo', undoDoc, [
+              : strayOption('undo', undoDoc, [
                   which,
                   ...(c?.args ?? []).slice(3),
-                ]) ?? extraWords('undo', undoDoc, (c?.args ?? []).slice(3)))) ??
+                ])) ??
             run(
               program,
               () =>
@@ -1878,7 +2510,7 @@ export function registerExperimentalTheme(group, program) {
                     ? {thing: list}
                     : thing == null
                       ? {}
-                      : {thing, value: which}),
+                      : {thing, value}),
                 }),
               r =>
                 r.data.action === 'step'
@@ -1975,6 +2607,7 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('app', ['theme']) ??
+            previewOptionsRead('app', previewAppDoc) ??
             resultStands(
               themeEditPreviewApp(dir, {
                 cwd: process.cwd(),
@@ -2046,9 +2679,17 @@ export function registerExperimentalTheme(group, program) {
               themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
             ),
           r => [
-            r.data.pages.length
-              ? `[ok] removed ${page} from the theme preview`
-              : `[ok] removed the theme preview in ${r.data.folder}`,
+            // The headline says what happened: a page still listed, or a
+            // preview nothing was removed from, was not removed.
+            r.data.pages.some(
+              p => p.toLowerCase() === String(page ?? '').toLowerCase(),
+            )
+              ? `[ok] nothing was removed: ${page} stays in the theme preview`
+              : r.data.pages.length
+                ? `[ok] removed ${page} from the theme preview`
+                : r.data.removed.length
+                  ? `[ok] removed the theme preview in ${r.data.folder}`
+                  : `[ok] nothing was removed: the theme preview in ${r.data.folder} stays`,
             ...project(/** @type {any} */ (r.data)),
           ],
         ),

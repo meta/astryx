@@ -2,6 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
+import type {CSSProperties} from 'react';
 import {OverflowList} from '@astryxdesign/core/OverflowList';
 import type {OverflowItem} from '@astryxdesign/core/OverflowList';
 import {Button} from '@astryxdesign/core/Button';
@@ -452,6 +453,255 @@ export const StandingAnchor: Story = {
               {label: 'Delete session'},
             ]}
           />
+        </div>
+      </div>
+    );
+  },
+};
+
+/** A shrink-to-fit parent sizes to the list's items, and a one-item list keeps its own width. Contributed in #11996. */
+export const ContentSizedParent: Story = {
+  render: () => (
+    <div style={{width: 700, padding: 8}}>
+      <div
+        data-testid="content-sized"
+        style={{display: 'inline-block', verticalAlign: 'top'}}>
+        <OverflowList
+          gap={2}
+          overflowRenderer={overflowItems => (
+            <Button
+              label={`+${overflowItems.length}`}
+              variant="ghost"
+              size="sm"
+            />
+          )}>
+          <Button label="Save" size="sm" />
+          <Button label="Edit" size="sm" />
+          <Button label="Duplicate" size="sm" />
+          <Button label="Share" size="sm" />
+          <Button label="Archive" size="sm" />
+          <Button label="Delete" size="sm" />
+        </OverflowList>
+      </div>
+      <div data-testid="one-item" style={{display: 'flex', marginTop: 8}}>
+        <OverflowList
+          gap={2}
+          overflowRenderer={overflowItems => (
+            <Button
+              label={`+${overflowItems.length} more`}
+              variant="ghost"
+              size="sm"
+            />
+          )}>
+          <Button label="Go" size="sm" />
+        </OverflowList>
+      </div>
+    </div>
+  ),
+};
+
+/** In a wide flex row, a list whose width the caller sets or caps (in pixels, with `calc()`, or with a flex basis) folds within that width and keeps its trigger; one set narrower than its folded width holds its folded width. A list capped at three items is as wide as those items and its trigger. */
+export const CallerLimitedWidth: Story = {
+  render: () => {
+    const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
+    const list = (style: CSSProperties) => (
+      <OverflowList
+        gap={2}
+        style={style}
+        overflowRenderer={overflowItems => (
+          <Button
+            label={`+${overflowItems.length}`}
+            variant="ghost"
+            size="sm"
+          />
+        )}>
+        {items.map(label => (
+          <Button key={label} label={label} size="sm" />
+        ))}
+      </OverflowList>
+    );
+    return (
+      <div style={{width: 700, padding: 8}}>
+        <div data-testid="width-set" style={{display: 'flex'}}>
+          {list({width: 200})}
+        </div>
+        <div data-testid="width-capped" style={{display: 'flex', marginTop: 8}}>
+          {list({maxWidth: 200})}
+        </div>
+        <div data-testid="width-calc" style={{display: 'flex', marginTop: 8}}>
+          {list({maxWidth: 'calc(25% + 30px)'})}
+        </div>
+        <div data-testid="basis-narrow" style={{display: 'flex', marginTop: 8}}>
+          {list({flex: '0 0 30px'})}
+        </div>
+        <div data-testid="width-narrow" style={{display: 'flex', marginTop: 8}}>
+          {list({width: 30})}
+        </div>
+        <div data-testid="count-capped" style={{display: 'flex', marginTop: 8}}>
+          <OverflowList
+            gap={2}
+            maxVisibleItems={3}
+            overflowRenderer={overflowItems => (
+              <Button
+                label={`+${overflowItems.length}`}
+                variant="ghost"
+                size="sm"
+              />
+            )}>
+            {items.map(label => (
+              <Button key={label} label={label} size="sm" />
+            ))}
+          </OverflowList>
+        </div>
+      </div>
+    );
+  },
+};
+
+/** In a flex row that narrows and widens again, a list that folds from the start, one that keeps one item, and one whose indicator is plain text unfold again as the row widens. */
+export const RowWidensAfterFold: Story = {
+  render: () => {
+    const items = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'];
+    const list = (props: {
+      collapseFrom?: 'start' | 'end';
+      minVisibleItems?: number;
+      textIndicator?: boolean;
+    }) => (
+      <OverflowList
+        gap={2}
+        collapseFrom={props.collapseFrom}
+        minVisibleItems={props.minVisibleItems}
+        overflowRenderer={overflowItems =>
+          props.textIndicator === true ? (
+            `+${overflowItems.length}`
+          ) : (
+            <Button
+              label={`+${overflowItems.length}`}
+              variant="ghost"
+              size="sm"
+            />
+          )
+        }>
+        {items.map(label => (
+          <Button key={label} label={label} size="sm" />
+        ))}
+      </OverflowList>
+    );
+    return (
+      <div data-testid="widen-frame" style={{width: 900, padding: 8}}>
+        <div data-testid="from-start" style={{display: 'flex'}}>
+          {list({collapseFrom: 'start'})}
+        </div>
+        <div data-testid="one-kept" style={{display: 'flex', marginTop: 8}}>
+          {list({minVisibleItems: 1})}
+        </div>
+        <div
+          data-testid="text-indicator"
+          style={{display: 'flex', marginTop: 8}}>
+          {list({textIndicator: true})}
+        </div>
+      </div>
+    );
+  },
+};
+
+/** A list followed by a button in a flex row: a folded list keeps the width the row gives it, up to its unfolded width, and the button sits after that width. Below it, a list in a block parent fills the line, as before. */
+export const FollowedBySibling: Story = {
+  render: () => {
+    const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
+    return (
+      <div
+        data-testid="sibling-frame"
+        style={{
+          width: 900,
+          maxWidth: '100%',
+          resize: 'horizontal',
+          overflow: 'auto',
+          padding: 8,
+        }}>
+        <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+          <OverflowList
+            gap={2}
+            overflowRenderer={overflowItems => (
+              <Button
+                label={`+${overflowItems.length}`}
+                variant="ghost"
+                size="sm"
+              />
+            )}>
+            {items.map(label => (
+              <Button key={label} label={label} size="sm" />
+            ))}
+          </OverflowList>
+          <Button label="After" size="sm" variant="secondary" />
+        </div>
+        <div data-testid="block-parent" style={{marginTop: 8}}>
+          <OverflowList gap={2}>
+            <Button label="Save" size="sm" />
+            <Button label="Edit" size="sm" />
+          </OverflowList>
+        </div>
+      </div>
+    );
+  },
+};
+
+/** Lists in flex rows under an ancestor scaled to one half: one with room shows every item, one in a 30 px parent keeps its trigger whole. */
+export const ScaledRow: Story = {
+  render: () => {
+    const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
+    const list = () => (
+      <OverflowList
+        gap={2}
+        overflowRenderer={overflowItems => (
+          <Button
+            label={`+${overflowItems.length}`}
+            variant="ghost"
+            size="sm"
+          />
+        )}>
+        {items.map(label => (
+          <Button key={label} label={label} size="sm" />
+        ))}
+      </OverflowList>
+    );
+    return (
+      <div
+        data-testid="scaled-frame"
+        style={{width: 700, transform: 'scale(0.5)', transformOrigin: '0 0'}}>
+        <div data-testid="scaled-wide" style={{display: 'flex'}}>
+          {list()}
+        </div>
+        <div
+          data-testid="scaled-narrow"
+          style={{display: 'flex', width: 30, marginTop: 8}}>
+          {list()}
+        </div>
+      </div>
+    );
+  },
+};
+
+/** A list wider than 1000 px in a flex row with room: it shows every item and holds its width across frames. */
+export const WideRow: Story = {
+  render: () => {
+    const items = Array.from({length: 14}, (_, index) => `Action ${index + 1}`);
+    return (
+      <div data-testid="wide-frame" style={{width: 1400, padding: 8}}>
+        <div data-testid="wide-row" style={{display: 'flex'}}>
+          <OverflowList
+            gap={2}
+            overflowRenderer={overflowItems => (
+              <Button
+                label={`+${overflowItems.length}`}
+                variant="ghost"
+                size="sm"
+              />
+            )}>
+            {items.map(label => (
+              <Button key={label} label={label} size="sm" />
+            ))}
+          </OverflowList>
         </div>
       </div>
     );

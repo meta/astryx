@@ -52,6 +52,7 @@
 
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
+import {isModalDialog} from '../utils/nodeType';
 import {realmValue} from '../utils/sharedRealm';
 
 export interface BottomSheetStackView {
@@ -872,7 +873,7 @@ function openModalsOutside(element: Element): HTMLDialogElement[] {
     ) {
       continue;
     }
-    if (isModalDialog(dialog)) {
+    if (isModalHost(dialog)) {
       blockers.push(dialog);
     }
   }
@@ -1007,19 +1008,10 @@ function releaseDeferralWatchers(entry: DeferredTopLayer): void {
   entry.stopListeningForClose = null;
 }
 
-function isModalDialog(dialog: HTMLDialogElement): boolean {
-  // `:modal` is the browser's own answer (every browser with the Popover
-  // API has it). jsdom answers false to it for every dialog, so the modal
-  // hosts' own `aria-modal="true"` (Dialog, a scrim BottomSheet) decides
-  // there.
-  try {
-    if (dialog.matches(':modal')) {
-      return true;
-    }
-  } catch {
-    // An engine without :modal; fall through to the attribute.
-  }
-  return dialog.getAttribute('aria-modal') === 'true';
+function isModalHost(dialog: HTMLDialogElement): boolean {
+  // jsdom answers false to `:modal` for every dialog, so the modal hosts' own
+  // `aria-modal="true"` (Dialog, a scrim BottomSheet) decides there.
+  return isModalDialog(dialog) || dialog.getAttribute('aria-modal') === 'true';
 }
 
 /**

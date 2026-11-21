@@ -55,7 +55,7 @@ const GENERIC_KEYWORDS = new Set([
  * The fonts the systems ship, by the platform that ships them, as their
  * own font lists name them, by lowercase name: `everywhere` for a family
  * macOS and Windows both ship (a theme may name it as its font), else the
- * one platform that has it. The one table: the build's font notice, the
+ * one platform (or family of platforms) that has it. The one table: the build's font notice, the
  * editor's "ships only on" notes and its install lines all read it. A
  * family both a system ships and Fontsource publishes (Roboto, Cascadia
  * Code) stays where the editor's open-font table names its package.
@@ -76,17 +76,14 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     'impact',
     'comic sans ms',
   ],
-  macOS: [
-    'arial narrow',
-    'andale mono',
+  // The families Apple ships with macOS, iOS and iPadOS alike (Safari's
+  // -apple-system is the interface font on each).
+  'Apple platforms (macOS, iOS and iPadOS)': [
     '-apple-system',
-    'blinkmacsystemfont',
     'helvetica neue',
     'apple color emoji',
-    'monaco',
     'menlo',
     'palatino',
-    'lucida grande',
     'gill sans',
     'snell roundhand',
     'avenir',
@@ -94,41 +91,50 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     'avenir next condensed',
     'optima',
     'futura',
-    'geneva',
     'didot',
     'baskerville',
-    'big caslon',
     'bodoni 72',
     'hoefler text',
-    'iowan old style',
     'american typewriter',
     'cochin',
     'copperplate',
-    'athelas',
-    'seravek',
-    'skia',
-    'superclarendon',
     'rockwell',
     'marker felt',
     'noteworthy',
-    'chalkboard',
     'chalkboard se',
     'chalkduster',
-    'apple chancery',
     'zapfino',
     'papyrus',
-    'herculanum',
-    'phosphate',
-    'trattatello',
     'arial rounded mt bold',
     'pingfang sc',
     'pingfang tc',
     'pingfang hk',
     'hiragino sans',
-    'hiragino sans gb',
-    'hiragino kaku gothic pron',
     'hiragino mincho pron',
     'apple sd gothic neo',
+  ],
+  // The families only the Mac has (BlinkMacSystemFont is Chrome's name for
+  // the Mac interface font; Chrome on iOS reads only -apple-system).
+  macOS: [
+    'arial narrow',
+    'andale mono',
+    'blinkmacsystemfont',
+    'monaco',
+    'lucida grande',
+    'geneva',
+    'big caslon',
+    'iowan old style',
+    'athelas',
+    'seravek',
+    'skia',
+    'superclarendon',
+    'chalkboard',
+    'apple chancery',
+    'herculanum',
+    'phosphate',
+    'trattatello',
+    'hiragino sans gb',
+    'hiragino kaku gothic pron',
   ],
   Windows: [
     'segoe ui',
@@ -204,14 +210,21 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     '黑体',
   ],
   'Android and ChromeOS': ['roboto', 'noto color emoji'],
+  // Noto is the interface font of Android and ChromeOS and the default of
+  // most Linux desktops (system stacks name Noto Sans for them).
+  'Android, ChromeOS and Linux': ['noto sans', 'noto serif', 'noto sans mono'],
   // Linux staples — the shipped themes' fallback stacks name these on
-  // purpose (e.g. neutral's code stack ends in Liberation Mono).
+  // purpose (e.g. neutral's code stack ends in Liberation Mono) — and the
+  // interface fonts of the GNOME and Ubuntu desktops.
   Linux: [
     'liberation mono',
     'liberation sans',
     'liberation serif',
     'dejavu sans',
     'dejavu sans mono',
+    'cantarell',
+    'ubuntu',
+    'ubuntu mono',
   ],
 };
 
@@ -241,10 +254,11 @@ export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
  * @returns {string | null}
  */
 export function appleFaceGeneric(family) {
-  return (
-    APPLE_FACE_GENERICS[family.trim().replace(/\s+/g, ' ').toLowerCase()] ??
-    null
-  );
+  const key = family.trim().replace(/\s+/g, ' ').toLowerCase();
+  // Only the table's own names: a word such as constructor is no face.
+  return Object.hasOwn(APPLE_FACE_GENERICS, key)
+    ? APPLE_FACE_GENERICS[key]
+    : null;
 }
 
 /**
@@ -309,6 +323,19 @@ export function namedFontFamilies(value) {
 }
 
 /**
+ * Whether a CSS font-family value ends in a generic family (`serif`,
+ * `sans-serif`, `system-ui`, ...): the family the browser shows when none
+ * of the named ones is there.
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function hasGenericFamily(value) {
+  return splitFamilies(value).some(family =>
+    GENERIC_KEYWORDS.has(family.toLowerCase()),
+  );
+}
+
+/**
  * The family list of a CSS `font` shorthand: what follows its size (and
  * line height), as the shorthand's grammar puts it last. A system font
  * keyword (`caption`, `menu`, ...) or a value with no size names none.
@@ -323,6 +350,46 @@ export function fontShorthandFamilyList(value) {
   // The first size: a family name after it may hold anything.
   const m = size.exec(String(value));
   return m ? String(value).slice(m.index + m[0].length) : '';
+}
+
+/**
+ * The weight a CSS `font` shorthand gives, as its grammar puts it before
+ * the size (`300 16px Inter`, `italic bold 1rem/1.2 Inter`): a number from
+ * 1 to 1000 or a weight keyword; null when it gives none (400 then).
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function fontShorthandWeight(value) {
+  const text = String(value);
+  const family = fontShorthandFamilyList(text);
+  if (!family) return null;
+  const head = text.slice(0, text.length - family.length);
+  // The words before the size: style, variant, weight and stretch.
+  for (const word of head.split(/\s+/)) {
+    if (/^(normal|bold|bolder|lighter)$/i.test(word)) return word.toLowerCase();
+    const n = Number(word);
+    if (/^\d+(\.\d+)?$/.test(word) && n >= 1 && n <= 1000) return word;
+  }
+  return null;
+}
+
+/**
+ * The style a CSS `font` shorthand gives, as its grammar puts it before
+ * the size (`italic bold 1rem Inter`): italic or oblique, or null when it
+ * gives none (normal then).
+ * @param {string} value
+ * @returns {'italic' | 'oblique' | null}
+ */
+export function fontShorthandStyle(value) {
+  const text = String(value);
+  const family = fontShorthandFamilyList(text);
+  if (!family) return null;
+  const head = text.slice(0, text.length - family.length);
+  const word = head
+    .split(/\s+/)
+    .map(w => w.toLowerCase())
+    .find(w => w === 'italic' || w === 'oblique');
+  return /** @type {'italic' | 'oblique' | undefined} */ (word) ?? null;
 }
 
 /**

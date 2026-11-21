@@ -557,7 +557,7 @@ const TEXT_LAYOUT_PATTERNS = [
 /** @type {Map<string, Set<string>>} known gaps recorded in AST-042;
  *  remove an entry when the file is fixed; do not add entries */
 const INV23_KNOWN_GAPS = new Map([
-  ['docs.mjs', new Set(['padEnd', 'repeat'])],
+  ['docs.mjs', new Set(['repeat'])],
 ]);
 
 let inv23Count = 0;

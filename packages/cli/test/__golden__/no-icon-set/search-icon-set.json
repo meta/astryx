@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon set",
-    "matchCount": 398,
+    "matchCount": 402,
     "results": [
       {
         "domain": "doc",
@@ -60,6 +60,17 @@
         "mentions": []
       },
       {
+        "domain": "component",
+        "name": "Icon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx component Icon",
+        "mentions": []
+      },
+      {
         "domain": "template",
         "name": "ToolbarTableFilter",
         "package": "@astryxdesign/core",
@@ -69,17 +80,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ToolbarTableFilter --type block",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Icon",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Icon",
-        "command": "astryx component Icon",
+        "isReady": true,
         "mentions": []
       },
       {

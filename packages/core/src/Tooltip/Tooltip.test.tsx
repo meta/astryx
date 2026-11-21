@@ -239,6 +239,28 @@ describe('Tooltip', () => {
     });
   });
 
+  describe('invoker', () => {
+    // A popover takes its invoker's place in the focus order. A tooltip has
+    // nothing to focus, and a popover its trigger opens needs that place.
+    it('shows an HTML trigger tooltip with no invoker source', async () => {
+      const showSpy = vi.mocked(HTMLElement.prototype.showPopover);
+      showSpy.mockClear();
+
+      render(
+        <Tooltip content="Save the file" isDefaultOpen>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+
+      await waitFor(() => {
+        expect(showSpy).toHaveBeenCalled();
+      });
+
+      const [options] = showSpy.mock.calls[0];
+      expect(options?.source).toBeUndefined();
+    });
+  });
+
   describe('WCAG 1.4.13 — content on hover or focus', () => {
     it('dismisses on Escape while visible (dismissible)', async () => {
       const onOpenChange = vi.fn();
@@ -1028,6 +1050,70 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     // Unmounting detaches: the aria-describedby the tooltip added is removed.
     unmount();
     expect(anchor.getAttribute('aria-describedby')).toBe(null);
+  });
+});
+
+describe('script focus after a pointer press that focused nothing', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  // Script focus matches `:focus-visible` in a real browser after a press on
+  // page text; jsdom does not model it, so the case stands it up.
+  function focusByScript(element: HTMLElement) {
+    const realMatches = element.matches.bind(element);
+    vi.spyOn(element, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+    fireEvent.focusIn(element);
+  }
+
+  it.each([
+    ['mouse', 'mouse'],
+    ['finger', 'touch'],
+  ])(
+    'opens nothing on a button trigger after a %s press on the page',
+    async (_label, pointerType) => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Save" onOpenChange={onOpenChange} delay={0}>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      fireEvent.pointerDown(document.body, {pointerType});
+      focusByScript(screen.getByRole('button', {name: 'Save'}));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(true);
+    },
+  );
+
+  it('still opens on a text-field trigger, which a pointer press leaves focus-visible', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Tooltip content="Amount in euros" onOpenChange={onOpenChange} delay={0}>
+        <input type="text" aria-label="Amount" />
+      </Tooltip>,
+    );
+    fireEvent.pointerDown(document.body, {pointerType: 'mouse'});
+    focusByScript(screen.getByLabelText('Amount'));
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(true);
+    });
+  });
+
+  it('still opens on a button trigger when a key press came after the pointer press', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Tooltip content="Save" onOpenChange={onOpenChange} delay={0}>
+        <button type="button">Save</button>
+      </Tooltip>,
+    );
+    fireEvent.pointerDown(document.body, {pointerType: 'mouse'});
+    fireEvent.keyDown(document, {key: 'Tab'});
+    focusByScript(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(true);
+    });
   });
 });
 

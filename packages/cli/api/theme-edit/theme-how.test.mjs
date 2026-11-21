@@ -52,6 +52,16 @@ afterAll(() => {
 });
 
 /** A command without the CLI prefix: `set q corners more --on button`. @param {string} c */
+/**
+ * A page answer carries the frame and main panel lines after the page
+ * token: these questions read the page token itself.
+ * @param {string[]} cmds
+ */
+const pageToken = cmds =>
+  cmds.some(x => / --color-background-body /.test(x))
+    ? cmds.filter(c => !/ --on (?:app-shell|layout-content)(?: |$)/.test(c))
+    : cmds;
+
 const bare = c => c.replace(/^.*? experimental theme (editor )?/, '');
 
 /** The words of a command, as a shell splits them. @param {string} c */
@@ -169,16 +179,19 @@ const QUESTIONS = [
   [
     'make the page background white',
     {
-      top: /^set q --color-background-body '#ffffff'$/,
-      adds: /--color-background-body=#ffffff/,
+      // (A light page color on a theme that draws both modes is the light
+      // mode's; the dark page keeps its own.)
+      top: /^set q --color-background-body '#ffffff' --mode light$/,
+      adds: /--color-background-body/,
     },
   ],
   [
     'card background light gray',
     {
       parts: ['card'],
-      top: /^set q background-color '#e5e7eb' --on card$/,
-      adds: /card\.base\.backgroundColor=#e5e7eb/,
+      // (A plain fill reaches the neutral cards; colored ones keep theirs.)
+      top: /^set q background-color '#e5e7eb' --on card --when variant:default --mode light$/,
+      adds: /card\b.*@light.*#e5e7eb|card\b.*#e5e7eb.*light/,
     },
   ],
   [
@@ -194,9 +207,10 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      // The title and items inside read the text tokens themselves.
-      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
-      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
+      // The title and items inside read the text tokens themselves; white
+      // reads on the header in dark mode only (it is light in light mode).
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header --mode dark/,
+      adds: /app-shell-header\.base\.@dark\.--color-text-primary=#ffffff/,
     },
   ],
   [
@@ -221,9 +235,10 @@ const QUESTIONS = [
     },
   ],
   [
+    // (Every focus ring: the inputs draw theirs in their box-shadow.)
     'change the focus ring color to orange',
     {
-      top: /^set q --focus-outline-color '#f97316'$/,
+      top: /^set q --focus-outline-color '#f97316' && set q box-shadow 'inset 0 0 0 2px #f97316' --on inputs --state focus-within/,
       adds: /--focus-outline-color=#f97316/,
     },
   ],
@@ -254,8 +269,8 @@ const QUESTIONS = [
   [
     'progress bar fill should be green',
     {
-      top: /--on progress-bar-fill$/,
-      adds: /progress-bar-fill\.base\.backgroundColor=#16a34a/,
+      top: /--on progress-bar-fill --when variant:accent/,
+      adds: /progress-bar-fill\.variant:accent\.backgroundColor=#16a34a/,
     },
   ],
   [
@@ -285,8 +300,9 @@ const QUESTIONS = [
   [
     'disabled buttons look too faded',
     {
-      top: /^set q opacity 0\.8 --on button --state disabled$/,
-      adds: /aria-disabled.*opacity=0\.8/,
+      // (Less faded from the 0.5 Core draws disabled: halfway to 1.)
+      top: /^set q opacity 0\.75 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.75/,
     },
   ],
   [
@@ -296,7 +312,49 @@ const QUESTIONS = [
       adds: /button\.variant:\w+\.@(light|dark)\.:hover\./,
     },
   ],
-  ['table rows striped', {parts: ['table-row'], top: null}],
+  // Table rows carry their stripe (parity) in Core: a stripe ask sets it.
+  [
+    'table rows striped',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+      adds: /table-row\.parity:even\.backgroundColor=var\(--color-background-muted\)/,
+    },
+  ],
+  [
+    'odd rows light gray #f9f9f9',
+    {
+      parts: ['table-row'],
+      // (The odd stripe, and Core's own even stripe of a striped table
+      // cleared, run in order.)
+      top: /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
+      adds: /table-row\.parity:odd\.@light\.backgroundColor=#f9f9f9/,
+    },
+  ],
+  // The stripes' plain names come from the doc of the prop that turns them
+  // on (Table's isStriped).
+  [
+    'alternate row shading',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
+    'shade every other row',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
+    'no stripes on even rows',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color transparent --on table-row --when parity:even$/,
+      adds: /table-row\.parity:even\.backgroundColor=transparent/,
+    },
+  ],
   [
     'table header gray background',
     {
@@ -342,8 +400,10 @@ const QUESTIONS = [
   [
     'border color of inputs should be gray',
     {
-      top: /^set q border-color '#9ca3af' --on inputs$/,
-      adds: /text-input\.base\.borderColor=#9ca3af/,
+      // (Gray is the theme's own grays: neutral's shade nearest the
+      // usual gray.)
+      top: /^set q border-color '#9e9e9e' --on inputs$/,
+      adds: /text-input\.base\.borderColor=#9e9e9e/,
     },
   ],
   [
@@ -358,10 +418,12 @@ const QUESTIONS = [
     {top: /^set q border none --on button$/, adds: /button\.base\.border=none/},
   ],
   [
+    // (The dialog draws no border now: a width alone shows nothing, so the
+    // whole line.)
     '2px border on the dialog',
     {
-      top: /^set q border-width 2px --on dialog$/,
-      adds: /dialog\.base\.borderWidth=2px/,
+      top: /^set q border '2px solid var\(--color-border\)' --on dialog$/,
+      adds: /dialog\.base\.border=2px solid var\(--color-border\)/,
     },
   ],
   [
@@ -465,7 +527,8 @@ const QUESTIONS = [
   [
     'square corners everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      // (The dial squares the pills that are a styling choice itself.)
+      top: /^set q corners square$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -633,8 +696,10 @@ const QUESTIONS = [
     {
       parts: ['table-row'],
       // Core paints the selected wash inline from this token.
-      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected$/,
-      adds: /table-row\.selected\.--color-accent-muted=#/,
+      // (A light wash the dark mode's light text would not read on: the
+      // light mode's.)
+      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected --mode light$/,
+      adds: /table-row\.selected.*--color-accent-muted/,
     },
   ],
   ['dark mode only', {top: /^set q mode dark-only$/, adds: /mode=dark-only/}],
@@ -728,7 +793,6 @@ const QUESTIONS = [
     'кнопки синие',
     {
       top: /^set q background-color '#2563eb' --on button$/,
-      adds: /button\.base\.backgroundColor=#2563eb/,
     },
   ],
   [
@@ -752,6 +816,123 @@ const QUESTIONS = [
   ['modern', {top: null}],
 ];
 
+describe("a stripe is only a table row's", () => {
+  // "even", "odd" and the stripes' plain names ("alternate") mean a stripe
+  // only on a part whose rows carry one.
+  it.each([
+    'make the card background even lighter',
+    'card background an even gray',
+    'alternate button background',
+  ])('%s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    );
+    expect(commands.join('\n')).not.toMatch(/--on table-row|--when parity:/);
+  });
+});
+
+describe('stripe answers keep to the stripe', () => {
+  /** @param {string} question */
+  const commandsFor = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    return (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+  };
+  // A hover cleared beside a one-mode fill clears in every mode: only a
+  // stripe's other stripe follows the stripe's mode.
+  it.each([
+    'white cards, transparent on hover',
+    'white cards, hover background none',
+  ])('%s', async question => {
+    expect(await commandsFor(question)).toMatch(
+      /--on card --state hover(?! --mode)/,
+    );
+  });
+  it('keeps a stripe removal the ask says in every mode', async () => {
+    const commands = await commandsFor(
+      'odd rows #f9f9f9 and no stripes on even rows',
+    );
+    expect(commands).toMatch(
+      /--when parity:even(?! --state)(?! --mode)(?:\s|$)/,
+    );
+  });
+  // A stripe name beside another ask of the rows is that ask's.
+  it.each([
+    'alternate table row text color red',
+    'table rows alternate text color',
+  ])('writes no stripe for %s', async question => {
+    expect(await commandsFor(question)).not.toMatch(
+      /parity:|--color-background-muted|background/,
+    );
+  });
+  // A stripe removal names the hover it takes away, as a stripe does.
+  it.each(['no stripes on even rows', 'odd rows light gray #f9f9f9'])(
+    'names the hover cost for %s',
+    async question => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      expect(data.results[0].text).toMatch(/hover/);
+    },
+  );
+  it("reads a stripe ask that names no part as a table row's", async () => {
+    expect(await commandsFor('zebra stripes')).toMatch(
+      /--on table-row --when parity:even/,
+    );
+  });
+  it('reads "odd table rows" as the odd stripe', async () => {
+    expect(await commandsFor('odd table rows #fafafa')).toMatch(
+      /'#fafafa' --on table-row --when parity:odd/,
+    );
+  });
+  it('never darkens the even stripe for "odd rows darker"', async () => {
+    expect(await commandsFor('odd rows darker background')).not.toMatch(
+      /parity:even|--color-background-muted/,
+    );
+  });
+});
+
+describe("the stripes' names in any form", () => {
+  /** @param {string} question */
+  const topSet = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const top = (data.results ?? []).find(
+      (/** @type {{commands: string[]}} */ r) =>
+        r.commands.some(c => / editor set /.test(c)),
+    );
+    return bare(top?.commands[0] ?? '');
+  };
+  // Another form of a name ("alternating"), or the component named before
+  // its last word ("every other table row"), still names the stripes.
+  it.each([
+    'shade every other table row',
+    'alternating row colors',
+    'alternating rows',
+    'alternately shaded rows',
+  ])('stripes the even rows for %s', async question => {
+    expect(await topSet(question)).toMatch(
+      /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    );
+  });
+  // A word that only starts like a name is not one: "strip" is a removal,
+  // "alternatively" a way of saying.
+  it('reads "strip the background from table rows" as a removal', async () => {
+    expect(await topSet('strip the background from table rows')).toBe(
+      await topSet('remove the background from table rows'),
+    );
+  });
+  it('writes no stripe for "alternatively make the table rows light gray"', async () => {
+    expect(
+      await topSet('alternatively make the table rows light gray'),
+    ).not.toMatch(/parity:|--color-background-muted/);
+  });
+  it('colors the stripe, not every row, for every other table row light gray', async () => {
+    expect(await topSet('every other table row light gray')).toMatch(
+      /^set q --color-background-muted '#e5e7eb' --on table-row --mode light$/,
+    );
+  });
+});
+
 describe('how answers plain-words questions', () => {
   for (const [question, want] of QUESTIONS)
     it(question, async () => {
@@ -774,8 +955,12 @@ describe('how answers plain-words questions', () => {
       }
       const top = changes[0];
       expect(top).toBeTruthy();
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1054,7 +1239,7 @@ const QUESTIONS_2 = [
     {
       // The danger variant keeps the fill (and the text on it) the base
       // theme gives it.
-      top: /--on button && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?$/,
+      top: /--on button(?: && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?)?$/,
       adds: /variant:destructive\.backgroundColor=var\(--color-error(-muted)?\)/,
     },
   ],
@@ -1168,7 +1353,7 @@ const QUESTIONS_2 = [
   [
     'in dark mode, cards should be #1c1c1e',
     {
-      top: /^set q background-color '#1c1c1e' --on card --mode dark$/,
+      top: /^set q background-color '#1c1c1e' --on card --when variant:default --mode dark$/,
       adds: /card\.variant:default\.@dark\.backgroundColor=/,
     },
   ],
@@ -1355,7 +1540,6 @@ const QUESTIONS_2 = [
     'ボタンを青く',
     {
       top: /^set q background-color '#2563eb' --on button$/,
-      adds: /button\.base\.backgroundColor=#2563eb/,
     },
   ],
   // contradictions and repeats
@@ -1399,8 +1583,12 @@ describe('how answers pass-2 questions', () => {
       // The change comes before any lookup.
       expect(results[0]).toBe(changes[0]);
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1501,7 +1689,9 @@ describe('how answers pass-2 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -1577,15 +1767,15 @@ const QUESTIONS_3 = [
   [
     'colors: bg=#fff text=#000 accent=#ff0080',
     {
-      top: /^set q --color-background-body '#fff' && set q --color-text-primary '#000' && set q accent '#ff0080'$/,
-      adds: /--color-background-body=#fff/,
+      top: /^set q --color-background-body '#fff' --mode light && set q --color-text-primary '#000' --mode light && set q accent '#ff0080'$/,
+      adds: /--color-background-body/,
     },
   ],
   [
     'hex values in the mock: #FAFAFA bg, #171717 text, #E5E5E5 border, #0070F3 accent',
     {
-      top: /^set q --color-background-body '#fafafa' && set q --color-text-primary '#171717' && set q --color-border '#e5e5e5' && set q accent '#0070f3'$/,
-      adds: /--color-border=#e5e5e5/,
+      top: /^set q --color-background-body '#fafafa' --mode light && set q --color-text-primary '#171717' --mode light && set q --color-border '#e5e5e5' --mode light && set q accent '#0070f3'$/,
+      adds: /--color-border.*#e5e5e5/,
     },
   ],
   [
@@ -1681,7 +1871,8 @@ const QUESTIONS_3 = [
   ],
   [
     'make the switch green',
-    {top: /^set q background-color '#16a34a' --on switch$/},
+    // (Its on look: an off switch keeps its own.)
+    {top: /^set q background-color '#16a34a' --on switch --state checked$/},
   ],
   [
     'all radius values are 0, it is very sharp',
@@ -1704,14 +1895,20 @@ const QUESTIONS_3 = [
     },
   ],
   [
-    'Can you please make the context menu darker? Thanks!',
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    'Can you please make the trigger menu darker? Thanks!',
     // A part Core draws only once a press opens it has no fill read: the
     // answer asks for a color.
-    {top: null, text: /has not read the fill of context-menu/},
+    {top: null, text: /has not read the fill of trigger-menu/},
   ],
   [
     'make inputs taller (44px)',
-    {top: /^set q min-height 44px --on inputs$/, adds: /minHeight=44px/},
+    // (The control heights the inputs read, so they can shrink and a text
+    // area keeps its rows.)
+    {
+      top: /^set q --size-element-md 44px --on inputs && set q --size-element-sm 40px --on inputs$/,
+      adds: /--size-element-md=44px/,
+    },
   ],
   [
     'stakeholders think the grays are too warm',
@@ -1749,7 +1946,7 @@ const QUESTIONS_3 = [
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
     {
-      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background-color '#f3f4f6' --on table-header-cell$/,
+      top: /^set q --color-background-muted '#f9fafb' --on table-row --mode light && set q background-color '#f3f4f6' --on table-header-cell --mode light$/,
     },
   ],
   [
@@ -1758,7 +1955,13 @@ const QUESTIONS_3 = [
       top: /^set q background-color '#fef2f2' --on banner --when status:error && set q color '#991b1b' --on banner --when status:error$/,
     },
   ],
-  ['button color #fff', {top: /^set q color '#fff' --on button$/}],
+  // (A ghost button, drawn on the page, keeps its own text.)
+  [
+    'button color #fff',
+    {
+      top: /^set q color '#fff' --on button --when variant:primary(?!.*variant:ghost)/,
+    },
+  ],
   [
     'accent #ff0000 */ body{display:none} /*',
     {top: /^set q accent '#ff0000'$/},
@@ -1799,8 +2002,12 @@ describe('how answers pass-3 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       // A step is given once.
       expect(new Set(commands).size).toBe(commands.length);
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
@@ -1873,7 +2080,9 @@ describe('how answers pass-3 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -1922,8 +2131,11 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    // The avatar keeps the corner token it reads, so its own corners stay.
-    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
+    // The avatar keeps every corner token it reads (each shape it draws),
+    // so its own corners stay.
+    {
+      top: /^set q corners square && set q --radius-full 9999px --on avatar( && set q --radius-[a-z]+ \S+ --on avatar)*$/,
+    },
   ],
   [
     'the shadows are too strong',
@@ -1952,7 +2164,9 @@ const QUESTIONS_F = [
   ['Source Sans 3 font', {top: /^set q font 'Source Sans 3'$/}],
   [
     'boutons sans-serif font',
-    {top: /^set q font-family system-ui --on button$/},
+    {
+      top: /^set q font-family 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' --on button$/,
+    },
   ],
   [
     'IBM Carbon: square corners, IBM Plex Sans, accent #0f62fe',
@@ -1969,7 +2183,8 @@ const QUESTIONS_F = [
   ],
   [
     'page should be off-white',
-    {top: /^set q --color-background-body '#fafafa'$/},
+    // (Off-white is a warm off-white.)
+    {top: /^set q --color-background-body '#faf8f3' --mode light$/},
   ],
   ['headings are way too big', {top: /^set q type compact$/}],
   [
@@ -2132,8 +2347,12 @@ describe('how answers final-pass questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2233,7 +2452,9 @@ describe('how answers final-pass questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2276,8 +2497,12 @@ const QUESTIONS_G = [
   ['modal rounder', {top: /^set q corners more --on dialog$/}],
   ['carrd rounder', {top: /^set q corners more --on card$/}],
   [
+    // (Each variant's line: the strong divider draws with its own token.)
     'divider lines #e5e7eb',
-    {top: /^set q --color-border '#e5e7eb' --on divider$/},
+    {
+      // (A light line, the light mode's: on the dark page a glaring edge.)
+      top: /^set q --color-border '#e5e7eb' --on divider --mode light && set q --color-border-emphasized '#e5e7eb' --on divider --mode light$/,
+    },
   ],
   // a CSS property named in the question is set as named
   [
@@ -2290,7 +2515,7 @@ const QUESTIONS_G = [
   [
     'card background color-mix(in srgb, #2563eb 10%, white)',
     {
-      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card$/,
+      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card --mode light$/,
     },
   ],
   [
@@ -2357,7 +2582,7 @@ const QUESTIONS_G = [
   // gray stops and named grays
   [
     'page background gray-50',
-    {top: /^set q --color-background-body '#f[0-9a-f]{5}'$/},
+    {top: /^set q --color-background-body '#f[0-9a-f]{5}' --mode light$/},
   ],
   [
     'text zinc-900',
@@ -2382,7 +2607,7 @@ const QUESTIONS_G = [
     'Times New Roman for headings, lol',
     {top: /^set q font 'Times New Roman' --on heading$/},
   ],
-  // Code blocks are Core's code-block part (hunt68).
+  // Code blocks are Core's code-block part.
   [
     'code blocks should use Menlo',
     {top: /^set q font-family Menlo --on code-block$/},
@@ -2459,8 +2684,12 @@ describe('how answers final-2 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2557,7 +2786,9 @@ describe('how answers final-2 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2661,7 +2892,7 @@ const QUESTIONS_H = [
   ['halve the spacing', {top: /^set q spacing less$/}],
   [
     'cut the border radius in half on inputs',
-    // Half the radius inputs have now (hunt61), not a dial step.
+    // Half the radius inputs have now, not a dial step.
     {top: /^set q border-radius \d*\.?\d+(px|rem) --on inputs$/},
   ],
   [
@@ -2727,12 +2958,17 @@ const QUESTIONS_H = [
     {top: null, text: /button has no loading state/},
   ],
   [
+    // (Unchecked is the box at rest: the checked look kept.)
     'unchecked checkboxes: thicker border',
-    {top: null, text: /checkbox-indicator has no unchecked state/},
+    {
+      top: /^set q border-width 2px --on checkbox-indicator --only && set q border-width 1px --on checkbox-indicator --state checked --only/,
+    },
   ],
   [
     'heading color red',
-    {top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/},
+    {
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on alert-dialog-title && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
+    },
   ],
   // CSS named colors
   ['accent tomato', {top: /^set q accent '#ff6347'$/}],
@@ -2756,8 +2992,12 @@ describe('how answers final-3 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2822,7 +3062,9 @@ describe('how answers final-3 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2864,7 +3106,10 @@ const QUESTIONS_I = [
   ],
   [
     'card border 2px #e5e7eb',
-    {top: /^set q border '2px solid #e5e7eb' --on card$/},
+    // (A light line keeps the dark mode's own border color.)
+    {
+      top: /^set q border '2px solid light-dark\(#e5e7eb, var\(--color-border\)\)' --on card$/,
+    },
   ],
   ['card border width 2px', {top: /^set q border-width 2px --on card$/}],
   ['card outline width 2px', {top: /^set q outline-width 2px --on card$/}],
@@ -2921,7 +3166,8 @@ const QUESTIONS_I = [
   [
     'cards get a 1px border instead of a shadow',
     {
-      top: /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none && set q border-width 1px --on card$/,
+      // (The shadow taken away is the cards', never every shadow.)
+      top: /^set q border-width 1px --on card && set q box-shadow none --on card$/,
     },
   ],
   ['turn off all animations', {top: /^set q --duration-[a-z-]+ 0ms/}],
@@ -2940,17 +3186,25 @@ const QUESTIONS_I = [
   [
     'heading color red',
     {
-      top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/,
+      // (Every heading element takes a heading's color.)
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on alert-dialog-title && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
       adds: /heading\.base\.--color-text-primary=#dc2626/,
     },
   ],
   [
     'headings red',
-    {top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/},
+    {
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on alert-dialog-title && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
+    },
   ],
   // the divider
   ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],
-  ['divider color red', {top: /^set q --color-border '#dc2626' --on divider$/}],
+  [
+    'divider color red',
+    {
+      top: /^set q --color-border '#dc2626' --on divider && set q --color-border-emphasized '#dc2626' --on divider$/,
+    },
+  ],
   ['make the divider 2px', {top: /^set q --border-width 2px --on divider$/}],
   // typography and complaints
   [
@@ -2995,8 +3249,12 @@ describe('how answers final-4 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3077,7 +3335,9 @@ describe('how answers final-4 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -3112,7 +3372,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: /^set q corners square$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -3176,7 +3436,7 @@ const QUESTIONS_J = [
   ],
   [
     'buttons twice as round as inputs',
-    // Twice the inputs' radius, on buttons only (hunt68).
+    // Twice the inputs' radius, on buttons only.
     {top: /^set q border-radius \d*\.?\d+(px|rem) --on button$/},
   ],
   [
@@ -3224,8 +3484,12 @@ describe('how answers final-5 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3247,7 +3511,9 @@ describe('how answers final-5 questions', () => {
 const QUESTIONS_K = [
   [
     'in dark mode only, cards #111111',
-    {top: /^set q background-color '#111111' --on card --mode dark$/},
+    {
+      top: /^set q background-color '#111111' --on card --when variant:default --mode dark$/,
+    },
   ],
   ['only dark mode please', {top: /^set q mode dark-only$/}],
   [
@@ -3284,8 +3550,15 @@ const QUESTIONS_K = [
     },
   ],
   ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
-  ['error text red', {top: null, text: /error text belong to the parts/}],
+  // (The error text has a token of its own, as success and warning text
+  // do: a color for it sets that token; without one, the parts are named.)
+  ['error text red', {top: /^set q --color-text-error '#[0-9a-f]{6}'/}],
+  [
+    'error messages bigger',
+    {top: null, text: /error text belong to the parts/},
+  ],
   ['labels smaller', {top: /--on field-label$/}],
+  ['form labels smaller', {top: /--on field-label$/}],
 ];
 
 describe('how answers final-6 questions', () => {
@@ -3304,8 +3577,12 @@ describe('how answers final-6 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
     });
 });
 
@@ -3346,7 +3623,9 @@ describe('how answers final-6 lows', () => {
         ),
       );
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         /** @type {RegExp} */ (want),
       );
@@ -3375,9 +3654,16 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
       'I look at it all day, please make the cards rounder',
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'q'});
-      expect(JSON.stringify(data.results), q).not.toMatch(
-        /--mode light|light mode only/,
-      );
+      // (The readable-text line beside a fill is measured per mode.)
+      expect(
+        JSON.stringify(
+          data.results.filter(
+            (/** @type {any} */ r) =>
+              !/^readable text on that fill/.test(r.text),
+          ),
+        ),
+        q,
+      ).not.toMatch(/--mode light|light mode only/);
     }
     const {data} = await themeEditHow(
       'in daytime mode use a cream background',
@@ -3467,7 +3753,9 @@ describe('how answers final-7 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3528,7 +3816,9 @@ describe('how answers final-8 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -3548,7 +3838,7 @@ describe('how answers final-8 questions', () => {
 });
 
 /**
- * Chaos-10 R10-C and O11: an amount with a comparative is a change from
+ * Chaos-10 -C and O11: an amount with a comparative is a change from
  * the value now, and "all corners like the buttons" copies their radius.
  * @type {Array<[string, RegExp | null, RegExp?]>}
  */
@@ -3602,7 +3892,9 @@ describe('how answers amounts with comparatives, and corners copied from a part'
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3682,7 +3974,9 @@ describe('how answers final-9 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3766,16 +4060,17 @@ const QUESTIONS_R = [
   ['darkmode accent teal', /^set q --color-accent '#0d9488' --mode dark$/],
   [
     'html.dark .card { background: #111 }',
-    /^set q background-color '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --when variant:default --mode dark$/,
   ],
   [
     '@media (prefers-color-scheme: dark) { .card { background: #111 } }',
-    /^set q background-color '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --when variant:default --mode dark$/,
   ],
   ['take back the shadow change', null, /sets nothing for shadow/],
   ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],
   ['squre corners', /^set q corners square$/],
-  ['eckiger corners', /^set q corners square$/],
+  // ("eckiger", more angular: one step sharper, never all the way.)
+  ['eckiger corners', /^set q corners less$/],
   ['cards look flat', /^set q box-shadow 'var\(--shadow-[a-z]+\)' --on card$/],
   [
     'buttons darker while being clicked',
@@ -3798,7 +4093,9 @@ describe('how answers final-10 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -3906,7 +4203,9 @@ describe('how answers final-11 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -4036,7 +4335,9 @@ describe('how writes only for a direct ask', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4152,7 +4453,9 @@ describe('how writes only for a clause that reads as an ask', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4164,7 +4467,10 @@ describe('how writes only for a clause that reads as an ask', () => {
  */
 const QUESTIONS_Y = [
   // A description of the look wanted writes.
-  ['the page is white', /^set q --color-background-body '#ffffff'$/],
+  [
+    'the page is white',
+    /^set q --color-background-body '#ffffff' --mode light$/,
+  ],
   ['show me the card shadow', null],
   ['give me the border width on inputs', null],
   ['give buttons 8px corners', /^set q border-radius 8px --on button$/],
@@ -4220,30 +4526,39 @@ describe('how answers final-14 fixes', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
 
 describe('how lookups', () => {
   it('names the same states for a state a part lacks as set and how <part> do', async () => {
+    // "checked rows" are the rows selected: how reads the selection word
+    // as the row's one selection state; set, given the state a row lacks,
+    // names the states how <part> lists.
     const {data} = await themeEditHow('checked rows in the table tinted blue', {
       cwd,
       theme: 'q',
     });
-    const said = /its states: ([^)]*)\)/.exec(
-      (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n'),
-    )?.[1];
+    expect(
+      (data.results ?? []).some((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) =>
+          / --on table-row --state selected\b/.test(c),
+        ),
+      ),
+    ).toBe(true);
     const part = (await themeEditHow('table-row', {cwd, theme: 'q'})).data;
     const r = await refusal(() =>
       themeEditSet('q', 'background', '#dbeafe', {
         cwd,
         on: 'table-row',
-        state: 'checked',
+        // (A state with no other word for one of the row's.)
+        state: 'indeterminate',
       }),
     );
-    expect(said).toBe(part.states.join(', '));
-    expect(r.message).toContain(`States: ${said}.`);
+    expect(r.message).toContain(`States: ${part.states.join(', ')}.`);
   });
 
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
@@ -4266,13 +4581,14 @@ describe('how lookups', () => {
   });
 
   it('a part the part data does not have says so, with commands that apply', async () => {
-    const {data} = await themeEditHow('context-menu', {cwd, theme: 'q'});
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    const {data} = await themeEditHow('trigger-menu', {cwd, theme: 'q'});
     expect(data.recorded).toBe(false);
     expect(data.unrecorded.reason).toMatch(
-      /what context-menu reads is unknown/,
+      /what trigger-menu reads is unknown/,
     );
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background-color '#f3f4f6' --on context-menu",
+      "set q background-color '#f3f4f6' --on trigger-menu",
     );
   });
 
@@ -4375,7 +4691,8 @@ describe('how lookups', () => {
   }, 60_000);
 
   it('an empty answer carries the hint and the next commands in JSON too', async () => {
-    const {data} = await themeEditHow('make it look like Apple', {cwd});
+    // ("make it look like Apple" names a brand, and asks for its colors.)
+    const {data} = await themeEditHow('flibber the wobbles', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
     // The help that lists the asks it understands comes first.

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'expand',
+  group: 'resize',
   description: 'Make something larger or full screen.',
   words: ['maximize', 'fullscreen', 'enlarge', 'arrows pointing out'],
 };
