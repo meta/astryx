@@ -984,6 +984,7 @@ export function Popover({
     button: HTMLElement | null;
     attach: typeof attachTrigger;
     detach: () => void;
+    text: string;
   } | null>(null);
   const detachTrigger = useCallback(() => {
     const attached = attachedTriggerRef.current;
@@ -996,13 +997,13 @@ export function Popover({
     attached.detach();
   }, [setPopoverTrigger]);
 
-  // Sibling mode attaches to the element `anchorRef` holds; children mode
-  // anchors to the wrapper, which takes no pressed-state transform, and
-  // attaches to the button inside it. The check runs after every commit, so a
-  // trigger the caller replaces (a swapped or remounted button) is attached
-  // too. The attach runs again only when the anchor, the button or
-  // `attachTrigger` changed, so a render that changes none of them does no
-  // work and sets no state.
+  // Sibling mode attaches to the element `anchorRef` holds. Children mode
+  // anchors to the wrapper, which takes no pressed-state transform. It
+  // attaches to the button inside the wrapper. The check runs after every
+  // commit, so a trigger the caller replaces is attached too. It attaches
+  // again only when the anchor, the button or `attachTrigger` changed.
+  // Otherwise it reads the trigger's text, which names a sheet that has no
+  // `label`, and sets it only when it changed.
   useIsomorphicLayoutEffect(() => {
     let anchor: HTMLElement | null = null;
     if (anchorRef) {
@@ -1018,6 +1019,14 @@ export function Popover({
       attached.button === button &&
       attached.attach === attachTrigger
     ) {
+      if (button != null) {
+        const text = readTriggerText(button);
+        if (text !== attached.text) {
+          attached.text = text;
+          // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the caller-rendered trigger's text, which only the DOM holds
+          setTriggerText(text);
+        }
+      }
       return;
     }
     detachTrigger();
@@ -1040,6 +1049,7 @@ export function Popover({
           button,
           attach: attachTrigger,
           detach: () => {},
+          text: '',
         };
         return;
       }
@@ -1051,6 +1061,7 @@ export function Popover({
       button,
       attach: attachTrigger,
       detach: button == null ? () => {} : attachTrigger(button),
+      text: button == null ? '' : readTriggerText(button),
     };
   });
   useIsomorphicLayoutEffect(() => detachTrigger, [detachTrigger]);
