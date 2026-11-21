@@ -329,6 +329,15 @@ const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
       {...probe}
     />
   ),
+  Tour: probe => (
+    <Core.Tour
+      steps={[{id: 'first', title: 'First'}]}
+      activeId="first"
+      onActiveIdChange={noop}
+      onEnd={noop}
+      {...probe}
+    />
+  ),
   TopNavMenu: probe => (
     <Core.TopNavMenu
       label="Menu"

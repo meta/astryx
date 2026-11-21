@@ -270,14 +270,6 @@
         },
         {
           "kind": "component",
-          "name": "Tour"
-        },
-        {
-          "kind": "component",
-          "name": "TourStep"
-        },
-        {
-          "kind": "component",
           "name": "TransferList"
         },
         {

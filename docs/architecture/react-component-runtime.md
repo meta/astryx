@@ -380,8 +380,7 @@ those contracts, and one user-facing rule that no component owns: how a
   subpath too: it marks a group's member so press feedback leaves its press to
   the group's tracker.
   `prepareFocusReturnOnRemoval` is on that subpath too: it returns focus when
-  a removal loses it, so a Lab Tour step that ends sends focus to its target
-  or the opener.
+  a removal loses it.
 - **INV15 — The animator animates a number.** The animator has a value mode:
   it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns

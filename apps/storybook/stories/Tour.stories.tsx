@@ -1,238 +1,401 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import type {Meta, StoryObj} from '@storybook/react';
 import {useRef, useState} from 'react';
-import {Tour, TourStep} from '@astryxdesign/lab';
-import type {LayerAlignment, LayerPlacement} from '@astryxdesign/core/Layer';
+import type {Meta, StoryObj} from '@storybook/react';
+import {Tour, type TourProps, type TourStep} from '@astryxdesign/core/Tour';
 import {Button} from '@astryxdesign/core/Button';
-import {Card} from '@astryxdesign/core/Card';
-import {Heading} from '@astryxdesign/core/Heading';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
+import {Popover} from '@astryxdesign/core/Popover';
+import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
-import {Theme, defineTheme} from '@astryxdesign/core/theme';
 
 const meta: Meta<typeof Tour> = {
-  title: 'Lab/Tour',
+  title: 'Core/Tour',
   component: Tour,
   tags: ['autodocs'],
-  parameters: {
-    layout: 'fullscreen',
-  },
-  decorators: [
-    Story => (
-      <div style={{minHeight: 480, padding: 32}}>
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;
 type Story = StoryObj<typeof Tour>;
 
-export const Showcase: Story = {
-  render: () => {
-    const [isActive, setIsActive] = useState(false);
-    const saveRef = useRef<HTMLButtonElement>(null);
-    const shareRef = useRef<HTMLButtonElement>(null);
-    const settingsRef = useRef<HTMLButtonElement>(null);
-
-    return (
-      <VStack gap={4}>
-        <HStack gap={2}>
-          <Button ref={saveRef} variant="secondary" label="Save" />
-          <Button ref={shareRef} variant="secondary" label="Share" />
-          <Button ref={settingsRef} variant="secondary" label="Settings" />
-        </HStack>
-
-        <Button label="Start tour" onClick={() => setIsActive(true)} />
-
-        <Tour
-          isActive={isActive}
-          hasBackdrop
-          isStepCountShown
-          onDismiss={() => setIsActive(false)}>
-          <TourStep targetRef={saveRef} heading="Save your work">
-            Changes save automatically to the cloud as you go.
-          </TourStep>
-          <TourStep targetRef={shareRef} heading="Share with your team">
-            Invite teammates and manage access from here.
-          </TourStep>
-          <TourStep targetRef={settingsRef} heading="Tune your setup">
-            Adjust preferences and defaults in Settings.
-          </TourStep>
-        </Tour>
-      </VStack>
-    );
-  },
+type DemoProps = Partial<TourProps> & {
+  /** Leaves the Share control out of the page; its step stays in the array. */
+  hasShareControl?: boolean;
+  /** Starts with a step that has no anchor. */
+  hasWelcomeStep?: boolean;
+  /** Puts the Export control far down a scrolling panel. */
+  isExportScrolledAway?: boolean;
+  /** Puts the Export control far down the page. */
+  isExportBelowFold?: boolean;
+  /** Starts on the first step. */
+  startsOpen?: boolean;
+  /** Gives each step a long title and a long body. */
+  hasLongText?: boolean;
+  /** The Share step waits this many milliseconds before it shows. */
+  sharePreparationMs?: number;
+  /** Lays the page out in a column this wide, in pixels. */
+  containerWidth?: number;
+  /** The Save control, the first step's anchor, has a tooltip. */
+  hasSaveTooltip?: boolean;
 };
 
-export const WithoutBackdrop: Story = {
-  render: () => {
-    const [isActive, setIsActive] = useState(false);
-    const targetRef = useRef<HTMLButtonElement>(null);
+function Demo({
+  hasShareControl = true,
+  hasWelcomeStep = false,
+  isExportScrolledAway = false,
+  isExportBelowFold = false,
+  startsOpen = false,
+  hasLongText = false,
+  sharePreparationMs,
+  containerWidth,
+  hasSaveTooltip = false,
+  ...props
+}: DemoProps) {
+  const saveRef = useRef<HTMLButtonElement>(null);
+  const shareRef = useRef<HTMLButtonElement>(null);
+  const exportRef = useRef<HTMLButtonElement>(null);
+  const [activeId, setActiveId] = useState<string | null>(
+    startsOpen ? (hasWelcomeStep ? 'welcome' : 'save') : null,
+  );
+  const [lastEnd, setLastEnd] = useState('none');
+  const [saves, setSaves] = useState(0);
+  const [hasSave, setHasSave] = useState(true);
 
-    return (
-      <VStack gap={4}>
-        <Heading level={3}>Feature callout</Heading>
-        <Text type="body">
-          A single-step tour with no dimmed background — a lightweight
-          coachmark.
-        </Text>
-        <Button ref={targetRef} variant="secondary" label="New feature" />
-        <Button label="Highlight it" onClick={() => setIsActive(true)} />
+  const steps: TourStep[] = [
+    ...(hasWelcomeStep
+      ? [
+          {
+            id: 'welcome',
+            title: 'Welcome',
+            body: 'Three controls are new on this page.',
+          },
+        ]
+      : []),
+    {
+      id: 'save',
+      anchorRef: saveRef,
+      title: hasLongText
+        ? 'Save your work to the cloud and to this device at the same time'
+        : 'Save your work',
+      body: hasLongText
+        ? 'Changes save to the cloud as you type. A copy stays on this device, so you can keep working without a connection, and the two copies merge the next time you are online.'
+        : 'Changes save to the cloud.',
+    },
+    {
+      id: 'share',
+      anchorRef: shareRef,
+      title: 'Share it',
+      body: 'Invite people from here.',
+      showAction:
+        sharePreparationMs == null
+          ? undefined
+          : async () =>
+              new Promise<void>(resolve => {
+                setTimeout(resolve, sharePreparationMs);
+              }),
+    },
+    {
+      id: 'export',
+      anchorRef: exportRef,
+      title: 'Export',
+      body: 'Download a copy.',
+      placement: 'above',
+    },
+  ];
 
-        <Tour isActive={isActive} onDismiss={() => setIsActive(false)}>
-          <TourStep
-            targetRef={targetRef}
-            heading="Try the new feature"
-            placement="below">
-            We just shipped this — click to explore.
-          </TourStep>
-        </Tour>
-      </VStack>
-    );
-  },
-};
+  const exportButton = <Button ref={exportRef} label="Export" />;
 
-// A step can point at any element, such as a card, and the page stays usable
-// while a step shows: Tab reaches the page, and pressing the control a step
-// introduces keeps the tour running.
-export const CardTarget: Story = {
-  render: () => {
-    const [isActive, setIsActive] = useState(false);
-    const [refreshCount, setRefreshCount] = useState(0);
-    const cardRef = useRef<HTMLDivElement>(null);
-    const refreshRef = useRef<HTMLButtonElement>(null);
-
-    return (
-      <VStack gap={4}>
-        <Card ref={cardRef} padding={4}>
-          <VStack gap={1}>
-            <Heading level={4}>Revenue</Heading>
-            <Text type="body">$1.2M this quarter</Text>
-          </VStack>
-        </Card>
-        <HStack gap={2}>
+  return (
+    <VStack gap={4} style={{width: containerWidth}}>
+      <HStack gap={2} wrap="wrap">
+        <Button
+          label="Start tour"
+          variant="primary"
+          onClick={() => setActiveId(steps[0].id)}
+        />
+        {hasSave && (
           <Button
-            ref={refreshRef}
-            variant="secondary"
-            label="Refresh"
-            onClick={() => setRefreshCount(count => count + 1)}
+            ref={saveRef}
+            label="Save"
+            tooltip={hasSaveTooltip ? 'Saves your work' : undefined}
+            onClick={() => setSaves(count => count + 1)}
           />
-          <Text type="supporting" color="secondary">
-            {`Refreshed ${refreshCount} times`}
-          </Text>
-        </HStack>
-        <Button label="Start tour" onClick={() => setIsActive(true)} />
+        )}
+        {hasShareControl && <Button ref={shareRef} label="Share" />}
+        {!isExportScrolledAway && !isExportBelowFold && exportButton}
+        <Button
+          label={hasSave ? 'Remove Save' : 'Restore Save'}
+          variant="ghost"
+          onClick={() => setHasSave(value => !value)}
+        />
+      </HStack>
+      {isExportScrolledAway && (
+        <div
+          data-testid="panel"
+          style={{height: 160, overflow: 'auto', border: '1px solid gray'}}>
+          <div style={{height: 600}} />
+          {exportButton}
+          <div style={{height: 200}} />
+        </div>
+      )}
+      <Text type="supporting">
+        <span data-testid="tour-state">
+          {`active: ${activeId ?? 'none'}; ended: ${lastEnd}; saves: ${saves}`}
+        </span>
+      </Text>
+      <Button label="After the tour" variant="ghost" />
+      {isExportBelowFold && (
+        <>
+          <div style={{height: 1600}} />
+          {exportButton}
+          <div style={{height: 400}} />
+        </>
+      )}
+      <Tour
+        steps={steps}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        onEnd={reason => {
+          setLastEnd(reason);
+          setActiveId(null);
+        }}
+        hasStepCount
+        {...props}
+      />
+    </VStack>
+  );
+}
 
-        <Tour
-          isActive={isActive}
-          isStepCountShown
-          onDismiss={() => setIsActive(false)}>
-          <TourStep targetRef={cardRef} heading="Your revenue">
-            Totals for the quarter, updated daily.
-          </TourStep>
-          <TourStep targetRef={refreshRef} heading="Refresh it">
-            Press Refresh to try it. The tour stays open.
-          </TourStep>
-        </Tour>
-      </VStack>
-    );
-  },
+/** A tour whose steps leave the page usable. */
+export const Default: Story = {
+  render: () => <Demo hasSkipButton />,
 };
 
-// A scoped theme with a vivid magenta accent. Because the highlight is promoted
-// into the top layer IN PLACE (not portaled out of the tree), it stays inside
-// this <Theme> subtree and the ring inherits the scoped accent — verifying the
-// tour is themeable, not just under the root theme.
-const magentaTheme = defineTheme({
-  name: 'tour-magenta-demo',
+/** The first step's anchor has a tooltip, and the callout still follows it. */
+export const AnchorWithTooltip: Story = {
+  render: () => <Demo hasSkipButton hasSaveTooltip />,
+};
+
+/** A backdrop dims the page and makes each step modal. */
+export const WithBackdrop: Story = {
+  render: () => <Demo hasBackdrop />,
+};
+
+/** A step with no anchor shows in the center of the viewport. */
+export const CenteredStep: Story = {
+  render: () => <Demo hasWelcomeStep />,
+};
+
+/** A step whose anchor is not on the page shows centered by default. */
+export const MissingAnchor: Story = {
+  render: () => <Demo hasShareControl={false} />,
+};
+
+/** A step whose anchor is not on the page can be skipped instead. */
+export const MissingAnchorSkipped: Story = {
+  render: () => (
+    <Demo hasShareControl={false} missingAnchorBehavior="skipStep" />
+  ),
+};
+
+/** An anchor out of view scrolls into view when its step shows. */
+export const ScrolledAnchor: Story = {
+  render: () => <Demo isExportScrolledAway />,
+};
+
+/** A backdrop step whose anchor is in a scrolling panel. */
+export const ScrolledAnchorWithBackdrop: Story = {
+  render: () => <Demo isExportScrolledAway hasBackdrop />,
+};
+
+/** An anchor far down the page scrolls into view too. */
+export const AnchorBelowFold: Story = {
+  render: () => <Demo isExportBelowFold />,
+};
+
+/** A tour that is on its first step as the page loads. */
+export const Open: Story = {
+  render: () => <Demo startsOpen hasSkipButton />,
+};
+
+/** Long titles and bodies wrap inside the callout. */
+export const LongText: Story = {
+  render: () => (
+    <Demo
+      hasLongText
+      hasSkipButton
+      nextLabel="Continue to the next step"
+      skipLabel="Skip the rest"
+    />
+  ),
+};
+
+/**
+ * A narrow page: the controls sit in a column 288 pixels wide. In a
+ * 320-pixel viewport the callout stays inside the page.
+ */
+export const NarrowContainer: Story = {
+  render: () => <Demo hasLongText hasSkipButton containerWidth={288} />,
+};
+
+/** A step that prepares shows no callout until its `showAction` settles. */
+export const PreparedStep: Story = {
+  render: () => <Demo sharePreparationMs={1500} />,
+};
+
+/** A missing anchor can end the tour. */
+export const MissingAnchorEndsTour: Story = {
+  render: () => (
+    <Demo hasShareControl={false} missingAnchorBehavior="endTour" />
+  ),
+};
+
+/** Settles after the next render is on the page. */
+async function afterRender(): Promise<void> {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function LayersDemo({hasBackdrop = false}: {hasBackdrop?: boolean}) {
+  const openRef = useRef<HTMLButtonElement>(null);
+  const fieldRef = useRef<HTMLButtonElement>(null);
+  const filterRef = useRef<HTMLButtonElement>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [applied, setApplied] = useState(0);
+  const [lastEnd, setLastEnd] = useState('none');
+
+  const steps: TourStep[] = [
+    {
+      id: 'open',
+      anchorRef: openRef,
+      title: 'Settings moved',
+      body: 'They open in a dialog now.',
+      showAction: async () => {
+        setIsDialogOpen(false);
+        setIsPopoverOpen(false);
+        await afterRender();
+      },
+    },
+    {
+      id: 'field',
+      anchorRef: fieldRef,
+      title: 'Apply your changes',
+      body: 'This control is inside the dialog.',
+      showAction: async () => {
+        setIsPopoverOpen(false);
+        setIsDialogOpen(true);
+        await afterRender();
+      },
+    },
+    {
+      id: 'filter',
+      anchorRef: filterRef,
+      title: 'Filter the list',
+      body: 'This control is inside a popover.',
+      showAction: async () => {
+        setIsDialogOpen(false);
+        setIsPopoverOpen(true);
+        await afterRender();
+      },
+    },
+  ];
+
+  return (
+    <VStack gap={4}>
+      <HStack gap={2}>
+        <Button
+          label="Start tour"
+          variant="primary"
+          onClick={() => setActiveId('open')}
+        />
+        <Button
+          ref={openRef}
+          label="Open settings"
+          onClick={() => setIsDialogOpen(true)}
+        />
+        <Popover
+          label="Filters"
+          isOpen={isPopoverOpen}
+          onOpenChange={setIsPopoverOpen}
+          hasLightDismiss={false}
+          content={
+            <Button
+              ref={filterRef}
+              label="Status"
+              onClick={() => setApplied(count => count + 1)}
+            />
+          }>
+          <Button label="Filters" />
+        </Popover>
+      </HStack>
+      <Text type="supporting">
+        <span data-testid="tour-state">
+          {`active: ${activeId ?? 'none'}; ended: ${lastEnd}; applied: ${applied}`}
+        </span>
+      </Text>
+      <Dialog isOpen={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Layout
+          header={
+            <DialogHeader title="Settings" onOpenChange={setIsDialogOpen} />
+          }
+          content={
+            <LayoutContent>
+              <Button
+                ref={fieldRef}
+                label="Apply"
+                onClick={() => setApplied(count => count + 1)}
+              />
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+      <Tour
+        steps={steps}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        onEnd={reason => {
+          setLastEnd(reason);
+          setActiveId(null);
+        }}
+        hasStepCount
+        hasBackdrop={hasBackdrop}
+      />
+    </VStack>
+  );
+}
+
+/**
+ * Steps whose anchors are inside a dialog and a popover that open after the
+ * tour started. The callout shows above each one and stays usable.
+ */
+export const InsideLayers: Story = {
+  render: () => <LayersDemo />,
+};
+
+/** The same steps with a backdrop. */
+export const InsideLayersWithBackdrop: Story = {
+  render: () => <LayersDemo hasBackdrop />,
+};
+
+const violetTheme = defineTheme({
+  name: 'tour-violet-demo',
   tokens: {
-    '--color-accent': ['#D6006E', '#FF4FA3'],
+    '--color-accent': ['#6D28D9', '#C4B5FD'],
   },
 });
 
+/** The ring and the callout take the tokens of the theme around the tour. */
 export const ScopedTheme: Story = {
-  name: 'Themed ring (scoped theme)',
-  render: () => {
-    const [isActive, setIsActive] = useState(false);
-    const targetRef = useRef<HTMLButtonElement>(null);
-
-    return (
-      <Theme theme={magentaTheme} mode="light">
-        <VStack gap={4}>
-          <Heading level={3}>Scoped theme</Heading>
-          <Text type="body">
-            This subtree uses a scoped theme with a magenta accent. The
-            highlight ring picks it up because the overlay is promoted in place,
-            inside the Theme — not portaled to the body.
-          </Text>
-          <Button ref={targetRef} variant="secondary" label="New feature" />
-          <Button label="Highlight it" onClick={() => setIsActive(true)} />
-
-          <Tour
-            isActive={isActive}
-            hasBackdrop
-            onDismiss={() => setIsActive(false)}>
-            <TourStep targetRef={targetRef} heading="Themed highlight">
-              The ring uses this theme&apos;s accent color.
-            </TourStep>
-          </Tour>
-        </VStack>
-      </Theme>
-    );
-  },
-};
-
-// Interactive placement + alignment. Use the Controls panel to move the callout
-// to any side of the centered target and align it start / center / end along
-// that side. Args here drive the TourStep (not the Tour controller), so this
-// story is typed against its own arg shape.
-interface PlacementArgs {
-  placement: LayerPlacement;
-  alignment: LayerAlignment;
-}
-
-export const Placement: StoryObj<PlacementArgs> = {
-  name: 'Placement & alignment',
-  argTypes: {
-    placement: {
-      control: 'select',
-      options: ['above', 'below', 'start', 'end'],
-      description: 'Which side of the target the callout sits on',
-    },
-    alignment: {
-      control: 'select',
-      options: ['start', 'center', 'end'],
-      description: 'How the callout aligns along the placement side',
-    },
-  },
-  args: {
-    placement: 'below',
-    alignment: 'center',
-  },
-  render: ({placement, alignment}: PlacementArgs) => {
-    const [isActive, setIsActive] = useState(true);
-    const targetRef = useRef<HTMLButtonElement>(null);
-
-    return (
-      <VStack gap={4} align="center" justify="center" style={{minHeight: 460}}>
-        <Button ref={targetRef} variant="secondary" label="Target" />
-        {!isActive && (
-          <Button label="Show step" onClick={() => setIsActive(true)} />
-        )}
-        <Tour isActive={isActive} onDismiss={() => setIsActive(false)}>
-          <TourStep
-            targetRef={targetRef}
-            heading="Positioned callout"
-            placement={placement}
-            alignment={alignment}>
-            placement=&quot;{placement}&quot; · alignment=&quot;{alignment}
-            &quot;
-          </TourStep>
-        </Tour>
-      </VStack>
-    );
-  },
+  render: () => (
+    <Theme theme={violetTheme} mode="light">
+      <Demo startsOpen />
+    </Theme>
+  ),
 };
