@@ -181,6 +181,14 @@ describe('one joined strip', () => {
         expect(whole, q).toContain('gap 0 --on pagination-list');
         expect(whole.join('\n'), q).toMatch(/box-shadow/);
       }
+      // (A width said with the strip is a border of its own on the row: it
+      // clashes with the strip's, and the answer offers the choice.)
+      const wide = await everything(
+        'pagination pages in one bordered strip with 2px lines',
+      );
+      expect(wide.results[0]?.text).toMatch(
+        /border 1px solid var\(--color-border\) and border \S+ solid var\(--color-border\) on pagination-list/,
+      );
       const {results} = await everything(
         'pagination pages in one bordered strip with thick borders and 3px corners',
       );
@@ -214,14 +222,19 @@ describe('one joined strip', () => {
         /--color-border '#dddddd' --on pagination-list/,
       );
     }, 240_000);
-
-    it('reads "pagination cells" as the pagination\'s controls', async test => {
-      if (unbuilt) {
-        console.warn(`skipped: ${unbuilt}`);
-        test.skip();
-      }
-      const [r] = await answer('pagination cells in one bordered strip');
-      expect(r.sets).toContain('gap 0 --on pagination-list');
-    }, 240_000);
   });
+
+  it('leaves a strip said with its own color or width to the answer it had before, on the row', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    for (const q of [
+      'pagination pages in one red bordered strip',
+      'pagination pages in one 2px bordered strip',
+    ]) {
+      const sets = (await answer(q)).flatMap(r => r.sets).join('\n');
+      expect(sets, q).not.toMatch(/--on pagination-item\b/);
+    }
+  }, 240_000);
 });

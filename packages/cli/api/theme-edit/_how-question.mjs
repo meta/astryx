@@ -2422,16 +2422,6 @@ export function partLexicon(ctx) {
         real ? {on: real} : {on: key, missing: `${key} ${sub}`},
       ]);
     }
-    // A part's items said by what each one is ("pagination pages",
-    // "pagination cells"): its `-item` part.
-    if (keys.has(`${key}-item`))
-      subParts.push([
-        needing(
-          `\\b${key}s?(?:'s)?\\s+(?:cells?|pages?|page (?:buttons?|numbers?))\\b`,
-          key,
-        ),
-        {on: `${key}-item`},
-      ]);
   }
   // A part's own piece said after a name of the part ("the empty state
   // icon", "the popover arrow", "sheet titles", "the alert title", "the
