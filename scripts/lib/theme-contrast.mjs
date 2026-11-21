@@ -43,7 +43,7 @@ export const MODES = ['light', 'dark'];
 export const AA_NORMAL = 4.5;
 
 /** Split a CSS argument list at top-level commas. */
-function splitArgs(input) {
+export function splitArgs(input) {
   const out = [];
   let depth = 0;
   let current = '';

@@ -74,6 +74,7 @@ import {ButtonHitAreaContext} from './buttonHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
+import {filledStatePaintVars} from '../theme/filledStatePaint.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -314,6 +315,10 @@ const elevationStyles = stylex.create({
 });
 
 /**
+ * Each filled variant paints hover and press with the paint filledStatePaint.ts
+ * derives: the shared overlay where it keeps the label at 4.5:1, else a tint
+ * that does. A theme's own button rule for these tokens wins.
+ *
  * Variant styles using backgroundImage for layered colors
  * Pseudo-classes are nested within properties per StyleX recommendation
  * Overlay is stacked on top of base color using multiple linear-gradients
@@ -327,10 +332,18 @@ const variants = stylex.create({
     color: colorVars['--color-on-accent'],
     '--_button-fill': colorVars['--color-accent'],
     '--_button-on-fill': colorVars['--color-on-accent'],
+    [colorVars['--color-overlay-hover'] as string]:
+      filledStatePaintVars['--_button-primary-hover'],
+    [colorVars['--color-overlay-pressed'] as string]:
+      filledStatePaintVars['--_button-primary-pressed'],
   },
   secondary: {
     backgroundColor: colorVars['--color-neutral'],
     color: colorVars['--color-text-primary'],
+    [colorVars['--color-overlay-hover'] as string]:
+      filledStatePaintVars['--_button-secondary-hover'],
+    [colorVars['--color-overlay-pressed'] as string]:
+      filledStatePaintVars['--_button-secondary-pressed'],
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -341,6 +354,10 @@ const variants = stylex.create({
     color: colorVars['--color-on-error'],
     '--_button-fill': colorVars['--color-error'],
     '--_button-on-fill': colorVars['--color-on-error'],
+    [colorVars['--color-overlay-hover'] as string]:
+      filledStatePaintVars['--_button-destructive-hover'],
+    [colorVars['--color-overlay-pressed'] as string]:
+      filledStatePaintVars['--_button-destructive-pressed'],
     // Forced colors replace the fill with ButtonFace; the solid-variant edge
     // (`forcedColorsEdge`) keeps the destructive fill's shape visible
     // (architecture:theme-tokens INV11), in this color. A border, not an
