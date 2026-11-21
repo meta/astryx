@@ -7160,6 +7160,8 @@ export function compileTheme(ctx, data, base) {
     }
   };
   /** The focus dial's look for the whole theme, if any. */
+  /** The ring color before the focus dial's glow, per mode. @type {{light?: string, dark?: string} | null} */
+  let ringBeforeGlow = null;
   const focusLook =
     [...data.settings]
       .reverse()
@@ -7664,6 +7666,9 @@ export function compileTheme(ctx, data, base) {
         if (s.value === 'glow') {
           putTok('--focus-outline-width', '0.25rem');
           putTok('--focus-outline-offset', '0px');
+          // (The ring color the theme had before, the palette's readable
+          // shade, stays at hand for a mode where no glow reads.)
+          ringBeforeGlow = {...(tok['--focus-outline-color'] ?? {})};
           putTok(
             '--focus-outline-color',
             'color-mix(in srgb, var(--color-accent) 25%, transparent)',
@@ -8567,8 +8572,11 @@ export function compileTheme(ctx, data, base) {
           `color-mix(in srgb, var(--color-accent) ${share}%, transparent)`,
           m,
         );
-      else if (tok['--focus-outline-color'])
-        delete tok['--focus-outline-color'][m];
+      else if (tok['--focus-outline-color']) {
+        const before = ringBeforeGlow?.[m];
+        if (before != null) tok['--focus-outline-color'][m] = before;
+        else delete tok['--focus-outline-color'][m];
+      }
     }
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? shownHalf(k, 'light');
