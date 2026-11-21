@@ -57,7 +57,6 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
-import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -67,6 +66,7 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedPress,
   PRESSABLE_CONTAINER_ATTRIBUTE,
+  useClickableContainer,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -79,7 +79,6 @@ import {
 } from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
-import {isCoarsePointer} from '../utils/coarsePointer';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
@@ -241,7 +240,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   /**
    * Link URL. Makes the item a link via an invisible anchor element. A row
    * whose root is already a link component (see `as`) carries the address on
-   * that root instead, and no invisible anchor is rendered.
+   * that root instead, and no invisible anchor is rendered. A press anywhere
+   * on the row that is not a nested control or a text selection follows the
+   * link, as a press on the label does.
    */
   href?: string;
 
@@ -659,7 +660,6 @@ export function Item({
 }: ItemProps) {
   const pressable = usePressFeedback();
   const columnMarker = use(ItemMarkerColumnsContext);
-  const isListRow = use(ItemListRowContext);
   const LinkComponent = useLinkComponent();
   // A disabled row's anchor has no destination, so no activation path (a
   // screen reader's click, Enter, a link context menu) can navigate
@@ -687,6 +687,21 @@ export function Item({
       interactiveRef: interactiveRef ?? actionLinkRef,
       disabled: isDisabled,
     });
+  // A link row is the enlarged target of its own anchor. A press on the row
+  // outside a nested control goes to the anchor with its modifier keys, so
+  // the anchor decides where it goes. A middle press fires no click, so the
+  // row opens the destination in a new tab on mouse up.
+  const isLinkRow =
+    !isDelegate &&
+    role == null &&
+    onClick == null &&
+    href != null &&
+    typeof Component === 'string';
+  const {onMouseUp: linkRowOnMouseUp} = useClickableContainer({
+    containerRef,
+    href: isLinkRow ? href : undefined,
+    disabled: isDisabled,
+  });
 
   useDevWarning(
     'Item',
@@ -888,33 +903,12 @@ export function Item({
     </>
   );
 
-  const isLinkRow = isListRow && onClick == null && href != null && !isLinkRoot;
-
   const handleContainerClick = (e: React.MouseEvent) => {
     if (isDisabled) {
       return;
     }
     const target = e.target as HTMLElement;
     if (target.closest('button, a, input, select, textarea')) {
-      return;
-    }
-    if (isLinkRow) {
-      // Under a coarse primary pointer, a tap in the row's padding or band
-      // follows its link, with the click's modifier keys. The primary pointer
-      // decides, as it decides the band, not the pointer that made the click.
-      const row = e.currentTarget as HTMLElement;
-      const box = row.getBoundingClientRect();
-      const isInBand =
-        e.clientX < box.left ||
-        e.clientX > box.right ||
-        e.clientY < box.top ||
-        e.clientY > box.bottom;
-      if (
-        e.detail > 0 &&
-        (isInBand || isCoarsePointer(row.ownerDocument.defaultView))
-      ) {
-        containerOnClick(e as React.MouseEvent<HTMLElement>);
-      }
       return;
     }
     onClick?.(e);
@@ -1011,13 +1005,14 @@ export function Item({
 
   // The row's own primary. The click the browser synthesizes after a swipe
   // never reaches it: the gesture system swallows it.
-  const primaryOnClick = isDelegate
-    ? containerOnClick
-    : hasParentRole
-      ? onClick
-      : isInteractive
-        ? handleContainerClick
-        : undefined;
+  const primaryOnClick =
+    isDelegate || isLinkRow
+      ? containerOnClick
+      : hasParentRole
+        ? onClick
+        : isInteractive
+          ? handleContainerClick
+          : undefined;
   // The root forwards its key events into the bridge the swipe layer fills, on
   // both paths, as released. Until the layer has mounted the forwarder does
   // nothing.
@@ -1108,29 +1103,35 @@ export function Item({
         style,
       )}
       role={role}
-      onClick={primaryOnClick}>
+      onClick={primaryOnClick}
+      onMouseUp={
+        isLinkRow
+          ? (event: React.MouseEvent<HTMLElement>) => {
+              restProps.onMouseUp?.(event);
+              linkRowOnMouseUp(event);
+            }
+          : restProps.onMouseUp
+      }>
       <ItemTrailingContext value={null}>
         <ItemDescriptionContext
           value={hasRenderableDescription ? descriptionID : null}>
           <ItemLabelContext value={publishedLabelID}>
             <ItemLabelNeededContext value={false}>
-              <ItemListRowContext value={false}>
-                {isRenderable(marker) && marker}
-                {isRenderable(marker) && columnMarker === marker ? (
-                  <span
-                    // The row's own button or link sits in this cell, so the
-                    // row's ring reaches it here.
-                    {...focusOwnerGroupProps}
-                    {...stylex.props(
-                      styles.markerContent,
-                      align === 'first-line' && styles.markerContentFirstLine,
-                    )}>
-                    {content}
-                  </span>
-                ) : (
-                  content
-                )}
-              </ItemListRowContext>
+              {isRenderable(marker) && marker}
+              {isRenderable(marker) && columnMarker === marker ? (
+                <span
+                  // The row's own button or link sits in this cell, so the
+                  // row's ring reaches it here.
+                  {...focusOwnerGroupProps}
+                  {...stylex.props(
+                    styles.markerContent,
+                    align === 'first-line' && styles.markerContentFirstLine,
+                  )}>
+                  {content}
+                </span>
+              ) : (
+                content
+              )}
             </ItemLabelNeededContext>
           </ItemLabelContext>
         </ItemDescriptionContext>
