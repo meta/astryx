@@ -22,7 +22,10 @@ interface TopNavSlotProps {
 // TopNav adds itself when its module loads, so a TopNav element can only
 // exist once its type is here. Every copy of Core shares the set, so an
 // AppShell from one copy knows a TopNav from another.
-const topNavTypes = sharedWeakSet<object>('top-nav-types', 1);
+const topNavTypes = sharedWeakSet<object>(
+  'TopNav/topNavDrawerItems/topNavTypes',
+  1,
+);
 
 /** Records `type` as the TopNav component. Called once, by TopNav's module. */
 export function markTopNavType(type: object): void {

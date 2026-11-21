@@ -571,7 +571,7 @@ function isInertUnderModalDialog(element: Element): boolean {
 }
 
 /** Whether returned focus may land on `element`. */
-function canTakeReturnedFocus(element: Element | null): element is HTMLElement {
+export function canTakeReturnedFocus(element: Element | null): element is HTMLElement {
   return (
     isHTMLElement(element) &&
     element.isConnected &&

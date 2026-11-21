@@ -138,6 +138,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   top nav is hidden. AppShell and TopNav both pause content with it, and
   React's Activity is absent before React 19.2, so one module gives both the
   same fallback.
+- `TopNav/topNavDrawerItems.ts`, which TopNav registers its type in and
+  AppShell reads: whether a top nav slot brings drawer items of its own
+  (FR19), read from its props during render. AppShell cannot import TopNav
+  for this without loading TopNav on every AppShell page, and the type set is
+  shared by every copy of Core.
 - Hiding the top nav and the side nav while keeping their state, the focus
   handoff and the one motion it plays (FR19–FR21); the scroll restore runs
   through `motion/scrollOffsets.ts`.

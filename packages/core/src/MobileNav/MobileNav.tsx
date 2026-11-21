@@ -72,7 +72,7 @@ import {
   type AppShellDrawerFocus,
 } from '../AppShell/appShellDrawerFocus';
 import {useCommittedRef} from '../hooks/useCommittedRef';
-import {focusForLastInputTemporarily} from '../utils/focusReturn';
+import {canTakeReturnedFocus, focusForLastInputTemporarily} from '../utils/focusReturn';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -406,11 +406,7 @@ function closeAndRestoreFocus(
   // a navigation region the app hid, cannot take focus. Inside AppShell, a
   // menu button removed because the drawer has nothing left to show is gone
   // for the same reason. In both cases focus goes to main.
-  const isHidden =
-    opener.isConnected &&
-    (opener.closest('[inert]') != null ||
-      (typeof opener.checkVisibility === 'function' &&
-        !opener.checkVisibility()));
+  const isHidden = opener.isConnected && !canTakeReturnedFocus(opener);
   const isRemovedByHiding =
     !opener.isConnected && shellFocus?.isDrawerEmpty() === true;
   if (isHidden || isRemovedByHiding) {

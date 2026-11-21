@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import {isValidElement, use, useMemo, type ReactNode} from 'react';
+import {use, useMemo, type ReactNode} from 'react';
 import {
   AppShellDrawerFocusContext,
   type AppShellDrawerFocus,
