@@ -4327,6 +4327,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     expect(layer).toHaveTextContent('Analytics (Coming Soon)');
 
     fireEvent.mouseEnter(row);
+    fireEvent.pointerMove(row);
     act(() => {
       vi.advanceTimersByTime(200);
     });
@@ -4453,6 +4454,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     const layer = railTooltipFor(link);
     expect(layer).toHaveTextContent('Dashboard');
     fireEvent.mouseEnter(link);
+    fireEvent.pointerMove(link);
     act(() => {
       vi.advanceTimersByTime(200);
     });
@@ -4515,6 +4517,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     const {rerender} = render(rail(true));
     const link = screen.getByRole('link', {name: 'Dashboard'});
     fireEvent.mouseEnter(link);
+    fireEvent.pointerMove(link);
     act(() => {
       vi.advanceTimersByTime(200);
     });

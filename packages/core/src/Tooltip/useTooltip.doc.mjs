@@ -24,7 +24,8 @@ export const docs = {
     {
       name: 'delay',
       type: 'number',
-      description: 'Delay before showing on hover, in milliseconds.',
+      description:
+        'Delay before showing on hover, in milliseconds. It starts when a mouse or pen first moves over the trigger, so a trigger that appears under a still pointer does not open.',
       default: '200',
     },
     {
@@ -165,7 +166,7 @@ export const docsDense = {
       "position relative to trigger. logical: start/end follow the popover's inherited direction (RTL mirrors).",
     alignment:
       "alignment along placement axis. logical: start/end follow the popover's inherited direction (RTL mirrors).",
-    delay: 'show delay in ms.',
+    delay: 'show delay in ms, from the first pointer move over the trigger.',
     hideDelay: 'hide delay after mouse/focus leave in ms.',
     focusTrigger:
       'when focus opens tooltip; auto = focus on the trigger, or inside a trigger focusable when focus arrives.',

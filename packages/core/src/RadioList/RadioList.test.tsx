@@ -544,6 +544,7 @@ describe('RadioList', () => {
       expect(tooltip).toHaveTextContent('Upgrade your account to change plans');
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
+      fireEvent.pointerMove(group);
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));

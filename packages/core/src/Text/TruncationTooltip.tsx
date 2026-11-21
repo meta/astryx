@@ -53,7 +53,7 @@ export interface TruncationTooltipInterest {
   readonly tooltip: TooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
-  readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
+  readonly onPointerMove: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
   readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
@@ -117,15 +117,28 @@ export function useTruncationTooltipInterest(
       state.interest = null;
     }
   }, []);
-  const onPointerEnter = useCallback(
+  // Set by a mouse press until the pointer leaves: the press ends the hover,
+  // so a later move does not start it again.
+  const isHoverEndedRef = useRef(false);
+  // A hover counts once a mouse or pen moves over the element. The element
+  // also gets a `pointerenter` when it appears or moves under a still
+  // pointer, and the user did not point at it then.
+  const onPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (event.pointerType !== 'touch') {
+      if (
+        event.pointerType !== 'touch' &&
+        !isHoverEndedRef.current &&
+        interestRef.current.interest !== 'hover'
+      ) {
         want('hover');
       }
     },
     [want],
   );
-  const onPointerLeave = useCallback(() => forget('hover'), [forget]);
+  const onPointerLeave = useCallback(() => {
+    isHoverEndedRef.current = false;
+    forget('hover');
+  }, [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (!isEnabled || interestRef.current.isRead) {
@@ -140,6 +153,7 @@ export function useTruncationTooltipInterest(
       // A mouse press cancels a hover show, as a mounted tooltip does. A pen
       // press waits for its tap.
       if (!isTouch) {
+        isHoverEndedRef.current = true;
         forget('hover');
       }
     },
@@ -165,7 +179,7 @@ export function useTruncationTooltipInterest(
     isWanted,
     tooltip,
     interestRef,
-    onPointerEnter,
+    onPointerMove,
     onPointerLeave,
     onPointerDown,
     onFocus,
