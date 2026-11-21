@@ -220,6 +220,12 @@ export const docs = {
         'Custom link component to use when href is provided (e.g. Next.js Link).',
     },
     {
+      name: 'ref',
+      type: 'Ref<HTMLButtonElement>',
+      description:
+        'In link mode (with `href` and not disabled) the ref receives the link element, the anchor or the link component\'s element, although the type names `HTMLButtonElement`; otherwise it receives the button.',
+    },
+    {
       name: 'target',
       type: 'string',
       description: 'HTML target attribute when rendered as a link (e.g. "_blank").',

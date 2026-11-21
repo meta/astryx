@@ -51,6 +51,7 @@ const styles = stylex.create({
   index: {
     fontFamily: 'var(--font-family-code)',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontVariantNumeric: 'tabular-nums',
     color: colorVars['--color-text-secondary'],
   },

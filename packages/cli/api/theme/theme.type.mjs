@@ -36,8 +36,9 @@
  * from, a requirement of the outputs (null for a local base), and `export` the
  * name the root imports it by (null for a theme the root's file defines).
  * `settingIssues` lists each component setting of the page rules the browser
- * does not show as written (also among `warnings`), with the rule that wins
- * and the fix; onDark, onLight and adaptation rules are not read.
+ * does not show as written (also among `warnings`, except one a generated
+ * file writes: that file gets one entry in `notices`), with the rule that
+ * wins and the fix; onDark, onLight and adaptation rules are not read.
  * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], settingIssues: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, base?: {theme: string, package: string | null, export: string | null}}} data
  */
 
@@ -46,8 +47,9 @@
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
  * `settingIssues`, present when there are any, is the build receipt's
- * list of settings the browser does not show as written.
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>}} data
+ * list of settings the browser does not show as written; `notices`, one per
+ * generated file whose settings do not show.
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[]}} data
  *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
@@ -152,9 +154,14 @@
  * `.tgz` archive, or an https URL to one) instead of a slug: `from` as it
  * was given, `folder` where the theme sat in it, `outputDir` and `files`
  * the copy in the app's local themes root, `installed` the Astryx package
- * specs installed for what the theme imports, `installCommand` the command
+ * specs installed for what the theme imports, `installRan` false when the
+ * package manager was not run for them because an integration's install
+ * guidance leaves the step to the builder, named in `installRetryCommand`
+ * (absent otherwise), `installCommand` the command
  * that installs the other packages it imports that the app lacks (never run
- * for the theme; null when there are none), `installError` why the Astryx
+ * for the theme; null when there are none), `installGuidance` the line a
+ * loaded integration gives for adding them, shown instead of
+ * `installCommand`, `installError` why the Astryx
  * install did not run or failed and `installRetryCommand` the command that
  * installs those Astryx packages, `previousDefault` the app's default before
  * the add (`theme use` it before `theme remove` undoes the add), `written` every file the add wrote (the
@@ -167,7 +174,7 @@
  * the add installed that no theme still in the record is owned by or
  * imports, and `uninstallError`
  * why that uninstall failed.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installCommand: string | null, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**

@@ -93,6 +93,8 @@ function singulars(w) {
  */
 export function sameWord(a, b) {
   if (a === b) return true;
+  // Every form of a word keeps its first letter (see someForm).
+  if (a.charCodeAt(0) !== b.charCodeAt(0)) return false;
   const forms = wordForms(a);
   return someForm(b, form => forms.has(form));
 }
@@ -125,7 +127,11 @@ export function termWords(term) {
  * @returns {boolean}
  */
 export function sameTermWord(t, w) {
-  return w === t.term || someForm(w, form => t.forms.has(form));
+  if (w === t.term) return true;
+  // Every form of a word keeps its first letter (see someForm), so a word
+  // that starts with another letter shares no form with the term.
+  if (w.charCodeAt(0) !== t.term.charCodeAt(0)) return false;
+  return someForm(w, form => t.forms.has(form));
 }
 
 /**

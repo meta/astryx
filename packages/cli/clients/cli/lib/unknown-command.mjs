@@ -112,7 +112,7 @@ const NAMED_EXPERIMENTAL = [
       'standalone',
     ],
     reason:
-      'the command is experimental export (experimental): a page as one shareable HTML file',
+      'the command is experimental export (experimental): one self-contained HTML file from a page built with Astryx components',
   },
   {
     words: ['experimental', 'import'],

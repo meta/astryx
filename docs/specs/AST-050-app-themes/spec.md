@@ -185,7 +185,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   stylesheet at `./themes/<slug>.css`. A package that owns exactly one theme MAY
   instead export `./built` and `./theme.css`. When a theme needs fonts that are
   not system fonts, the package SHOULD export a font stylesheet at
-  `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. The font
+  `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. Beside each
+  theme, the package exports `colorModes`, the modes the theme draws:
+  `['light', 'dark']`, or `['light']` or `['dark']` for a theme that draws
+  one mode on every page. In an app, a theme that exports none draws both; a
+  rendered file can still keep such a theme in one mode by its root colors
+  (`architecture:cli-surface` DEC-19). The font
   stylesheet owns loading its fonts: it may ship the font files with
   `@font-face` rules or import them from a font service. An import MUST fail,
   naming what is missing, when a theme has no resolvable built module and
@@ -232,7 +237,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   beside the source and another `--out`.
   `--check` on stale outputs exits 1, and its result carries
   `code: ERR_THEME_STALE`. `--check` names every output the build writes as
-  checked. A missing `.css.d.ts` stylesheet type stub alone is not stale: the
+  checked. `--check` compares each output with what the build writes from the
+  theme's inputs now, the header's `Core:` line included. An output's header
+  also names the CLI release that built it, and a built module's comment names
+  the command that built it. Those two lines alone never make an output stale:
+  an output that another CLI release or another command built checks clean
+  when everything else matches. A missing `.css.d.ts` stylesheet type stub alone is not stale: the
   check warns once in text mode, naming the missing stubs, and its exit code
   and result stay as the other outputs decide; `--json` stays silent. Any other
   missing output, the module's `.d.ts` and `.variants.d.ts` included, is
@@ -282,15 +292,19 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      font stylesheet the module imports, with an `@font-face` rule or a font
      service URL that names the family (a warning that names the family when
      this cannot be shown, as when the stylesheet imports a font service URL
-     that does not name it);
+     that does not name it); a Google Fonts or Bunny Fonts stylesheet `<link>` in
+     the app's page head (its HTML page, or a framework root layout or
+     document) that names the family also loads it;
   10. no two added themes write different rules outside their own theme scope
       for the same selector, because every added stylesheet loads at once;
   11. every setting of an added local theme shows as written, as its build
       check reports it (`theme build --check`, `settingIssues`): a setting
       another rule of the theme layer beats where it reaches is a warning,
       never a failure, naming the theme, the setting with its line, and its
-      fix; the check passes only when every local theme's build check ran,
-      and names a local theme whose check did not run (info).
+      fix; the settings a file writes that says a tool generates it are one
+      note (info) per file instead, with their count and that tool; the
+      check passes only when every local theme's build check ran, and names
+      a local theme whose check did not run (info).
 
   Each failure names the exact command that fixes it.
 
@@ -389,6 +403,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   the app lacks, with the app's package manager at the version of the app's
   installed Core and with install scripts off, and MUST NOT install any other
   package: it names the other packages with the command that installs them.
+  In a project whose loaded integration gives `installGuidance`, it runs no
+  package manager: its receipt says the install did not run and names that
+  integration's step, read the way `theme eject` and `init` read it
+  (`spec:AST-039`), for the Astryx packages and the others.
   It reports every file it writes, the lockfile the install rewrites
   included, and the record and dependency it changes. A
   bare word is always a slug, and a URL MUST be https, redirects included. It
@@ -658,7 +676,14 @@ browser does not show as written (`theme build` reads it from the rules Core
 generates) as a warning with its fix, never a failure: such a theme still
 builds and renders, so the check never fails an app, and a saved theme with
 such a setting still opens. The check passes only when every local theme's
-build check ran.
+build check ran. A file that says a tool generates it (a marker in its
+leading comments) is not where such a fix goes: its settings are one note
+per file, with their count and the tool, in `theme build` and in this check
+alike, and `settingIssues` still lists each. A saved `only` on a part styled
+on its own (one no group spreads to) is read as absent, with one note, by the
+one rule `set --only` follows, so a theme saved with one still opens; read so,
+an entry at the same place as a later entry of the same setting gives way to
+the later one, the one the build shows.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 
@@ -675,7 +700,8 @@ by the app (`maintained: false`). `theme add` makes that copy when it is given
 the shared theme instead of a slug, so receiving a theme is one command, and
 it makes the theme the default so an app wired once (DEC-2) shows it at once.
 It installs only Astryx packages for the theme, at the app's Core version and
-with install scripts off, because those are the theme's base; a package from
+with install scripts off, because those are the theme's base (a project whose
+integration says how it adds packages gets that line instead); a package from
 anywhere else is the builder's call, so it is named, never installed. Nothing
 of the theme runs while it is added, so a theme arrives built, and the add is
 a copy the builder can see in full and undo with `theme remove`.
@@ -683,6 +709,23 @@ a copy the builder can see in full and undo with `theme remove`.
 Rejected: routing the shared copy through `theme eject`, the author's fork verb.
 Rejected: installing every imported package, which runs scripts the builder never chose.
 Rejected: building or renaming a shared theme, which runs its code during an add.
+
+### DEC-13 — An editor-made theme's corners move its chat corners with its containers
+
+**Reference:** `spec:AST-050/DEC-13`
+**Decider:** `josephfarina`, `2026-11-18`
+
+Core's chat radius (`--radius-chat`, read by a chat composer, its drawer, and
+message bubbles) defaults to the container radius, and the bundled themes pin
+a chat radius of their own. When a theme the editor makes moves its corners
+with the whole-theme corners dial, it sets the chat radius to
+`var(--radius-container)`, Core's own default, so its chat corners follow its
+container corners, including an exact container radius set after the dial. A
+corners rung set on one part that reads the chat radius gives that part the
+container step.
+
+Rejected: the page radius; Core's chat default is the container radius.
+Rejected: a copied pixel value, which drifts from a container radius set later.
 
 ## Open questions
 

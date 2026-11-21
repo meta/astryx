@@ -42,6 +42,7 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {TreeListBranches} from './TreeListBranches';
 import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
+import {useThemeIndicator} from '../Indicator/useThemeIndicator';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {
   registerEnglishFallback,
@@ -576,7 +577,14 @@ export function TreeListItem({
   // astryx-icon target — so the rotation rides on that same element instead of
   // an extra wrapper: a theme can still restyle the mark and its open/closed
   // transform through one selector.
-  const chevronIcon = (
+  const ThemeDisclosure = useThemeIndicator('tree-disclosure');
+  // A theme's disclosure mark draws each state itself, so it is not rotated.
+  const chevronIcon = ThemeDisclosure ? (
+    <ThemeDisclosure
+      state={isExpanded ? 'expanded' : 'collapsed'}
+      xstyle={styles.chevronSvg}
+    />
+  ) : (
     <Icon
       icon="chevronRight"
       // Nearest size to the 16px chevron column; `chevronSvg` re-pins the exact

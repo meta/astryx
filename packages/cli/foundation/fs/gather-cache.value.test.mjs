@@ -6,14 +6,19 @@
  * read back as the text that was checked, key order included. It is missed
  * when its entry was changed, under another CLI build, and for a value that
  * does not read back exactly. A computation that throws keeps nothing, so it
- * throws the same way on every run. The store is used only by an installed
- * CLI with a build id, so the CLI's root is an installed-looking folder.
+ * throws the same way on every run. A run that keeps many values lists the
+ * folder once, to trim it, when it ends; a folder a run left over its limit
+ * is trimmed by the next run that keeps a value, or by doctor's summary. The
+ * store is used only by an installed CLI with a build id, so the CLI's root
+ * is an installed-looking folder.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {readKept, writeKept} from '../../test-utils/kept-entry.mjs';
+import {CACHE_LIMIT_BYTES} from './cache-eviction.mjs';
 import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 import * as fs from 'node:fs';
+import {createRequire, syncBuiltinESMExports} from 'node:module';
 import * as path from 'node:path';
 
 const {TEMP_ROOT} = await vi.hoisted(async () => {
@@ -122,6 +127,83 @@ describe('a value kept by its key', () => {
       expect(keptFiles('kept')).toHaveLength(1);
     },
   );
+
+  it.skipIf(!hasModuleHooks)(
+    'lists the catalogs folder once for a run that keeps many values, when the run ends',
+    async () => {
+      const nodeFs = createRequire(import.meta.url)('node:fs');
+      const list = nodeFs.readdirSync;
+      /** @type {string[]} */
+      const listings = [];
+      nodeFs.readdirSync = (/** @type {any[]} */ ...args) => {
+        if (args[0] === STORE) listings.push(args[0]);
+        return list.apply(nodeFs, args);
+      };
+      syncBuiltinESMExports();
+      let during = -1;
+      try {
+        await cache.recordRun(async () => {
+          for (let i = 0; i < 20; i++) {
+            cache.persistedValue(
+              ['value-test', `many-${i}`],
+              () => ({i}),
+              identity,
+            );
+          }
+          during = listings.length;
+        });
+      } finally {
+        nodeFs.readdirSync = list;
+        syncBuiltinESMExports();
+      }
+      // Trimmed once, when the run ends, not once per kept value.
+      expect(during).toBe(0);
+      expect(listings).toHaveLength(1);
+      for (let i = 0; i < 20; i++) {
+        expect(keptFiles(`many-${i}`)).toHaveLength(1);
+      }
+    },
+  );
+
+  /**
+   * An entry made long ago that alone holds more than the folder's limit, as
+   * a run that stopped before its trim can leave the folder (a sparse file,
+   * so it takes no space).
+   * @returns {string}
+   */
+  const leftOverLimit = () => {
+    const file = path.join(STORE, 'gather-left-by-a-stopped-run.json');
+    fs.writeFileSync(file, '');
+    fs.truncateSync(file, CACHE_LIMIT_BYTES + 1024 * 1024);
+    const old = new Date(Date.now() - 3600_000);
+    fs.utimesSync(file, old, old);
+    return file;
+  };
+
+  it.skipIf(!hasModuleHooks)(
+    'trims a folder a stopped run left over its limit when the next run that keeps a value ends',
+    async () => {
+      const left = leftOverLimit();
+      try {
+        await keptRun('after-a-stopped-run', () => ({kept: true}));
+        expect(fs.existsSync(left)).toBe(false);
+        expect(keptFiles('after-a-stopped-run')).toHaveLength(1);
+      } finally {
+        fs.rmSync(left, {force: true});
+      }
+    },
+  );
+
+  it("trims a folder over its limit in doctor's summary, which reports the trimmed size", () => {
+    const left = leftOverLimit();
+    try {
+      const summary = cache.gatherCacheSummary();
+      expect(fs.existsSync(left)).toBe(false);
+      expect(summary?.bytes).toBeLessThanOrEqual(CACHE_LIMIT_BYTES);
+    } finally {
+      fs.rmSync(left, {force: true});
+    }
+  });
 
   it('is worked out, and nothing is kept, outside a run that keeps catalogs', () => {
     let made = 0;

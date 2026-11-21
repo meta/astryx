@@ -22,7 +22,7 @@ export const doc = {
     {label: 'List the experiments', cli: 'astryx experimental'},
     {label: 'Find an icon by meaning', cli: 'astryx experimental icon delete'},
     {
-      label: 'Export a page as one HTML file',
+      label: 'Export an Astryx page as one HTML file',
       cli: 'astryx experimental export page.tsx',
     },
     {

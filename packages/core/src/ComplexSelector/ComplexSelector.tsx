@@ -72,6 +72,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/ComplexSelector/ComplexSelector.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -244,8 +249,14 @@ const styles = stylex.create({
   triggerIconOpen: {
     transform: 'rotate(180deg)',
   },
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
   content: {
     boxSizing: 'border-box',
@@ -603,6 +614,13 @@ export function ComplexSelector<Value>({
   'aria-describedby': ariaDescribedByProp,
   ...restProps
 }: ComplexSelectorProps<Value>) {
+  if (process.env.NODE_ENV !== 'production' && typeof children !== 'function') {
+    throw devPropError(
+      'ComplexSelector',
+      'children',
+      'must be a function that renders the picker, for example {(value, onChange, close) => <MyPicker value={value} onChange={onChange} />}.',
+    );
+  }
   const {rest, container} = useFieldInputStyling('ComplexSelector', restProps, {
     containerXstyle,
     containerClassName,

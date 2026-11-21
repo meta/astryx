@@ -33,7 +33,7 @@ export const docs = {
       {className: 'astryx-trigger-menu'},
     ],
     vars: [
-      {name: '--_chat-composer-radius', description: 'Border radius of the composer body. Inner elements derive their radius concentrically.', default: 'var(--radius-chat)', private: true},
+      {name: '--_chat-composer-radius', description: 'Corner radius of the composer body. The drawer, the status bar and the buttons inside follow it.', default: 'var(--radius-chat)', private: true},
       {name: '--_chat-composer-padding', description: 'Padding of the composer body. Used in the concentric radius calculation.', default: 'var(--spacing-3)', private: true},
       {name: '--_chat-avatar-offset', description: 'Top offset of a message avatar: the name row spacing when a bubble in the message shows a name, else 0px. Each message sets it from its own content. Not a theming lever.', default: '0px', private: true},
       {name: '--_button-radius', description: 'Concentric button radius inside the composer.', default: 'max(var(--radius-element), calc(var(--_chat-composer-radius) - var(--_chat-composer-padding)))', private: true, derived: true, formula: 'max(var(--radius-element), calc(var(--_chat-composer-radius) - var(--_chat-composer-padding)))'},
