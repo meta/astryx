@@ -709,4 +709,53 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'names the card looks that draw no border, with the line that gives one',
+    async () => {
+      if (unbuilt) return;
+      // (A run read per side, not a light one: a light run is one border on
+      // every look.)
+      const ask = 'cards with a #999999 #999999 #777777 border';
+      const lines = await first(ask);
+      // (No border brought: the default card draws one.)
+      expect(lines.join('\n')).not.toMatch(/border-width|border-style/);
+      const text = await said(ask);
+      expect(text).toMatch(
+        /card looks .*draw no border, so the colors show on the others; to give one a border: `[^`]*experimental theme editor set \S+ border 'var\(--border-width\) solid #999999' --on card --when variant:[a-z-]+`/,
+      );
+      // (The line is closed by its own quotes: pasted, it runs as written.)
+      const line =
+        /`([^`]*experimental theme editor set [^`]+)`/.exec(text)?.[1] ?? '';
+      expect(line).toMatch(/ --when variant:[a-z-]+$/);
+      // (A light run: one border, drawn on every card look, no note.)
+      expect(await said('cards with a #eee #eee #ddd border')).not.toMatch(
+        /draw no border/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'moves a shorthand before its side only within one list',
+    async () => {
+      if (unbuilt) return;
+      // (Across a sentence or a "then", the later one is the next step.)
+      expect(
+        await first(
+          'Give cards a red top border. Then give cards a 1px solid gray border.',
+        ),
+      ).toEqual([
+        "border-top '1px solid #dc2626' --on card",
+        "border '1px solid #9e9e9e' --on card",
+      ]);
+      expect(
+        await first('tabs: a 2px bottom border, then a 1px gray border'),
+      ).toEqual([
+        "border-bottom '2px solid var(--color-border)' --on tab",
+        "border '1px solid #9e9e9e' --on tab",
+      ]);
+    },
+    T,
+  );
 });
