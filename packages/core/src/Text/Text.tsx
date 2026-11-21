@@ -116,7 +116,7 @@ export interface TextProps extends Omit<BaseProps, 'children'> {
 
   /**
    * Word break behavior for truncated text.
-   * @default 'break-all' for maxLines=1, 'break-word' otherwise
+   * @default 'break-word'
    */
   wordBreak?: WordBreak;
 
@@ -255,9 +255,9 @@ export function Text({
   // class (see themeProps below).
   const styleColor = resolveStyleColor(resolvedColor);
 
-  // Resolve wordBreak with smart default
-  const resolvedWordBreak =
-    wordBreak ?? (maxLines === 1 ? 'break-all' : 'break-word');
+  // A single-line clamp already prevents wrapping. Keep the default word
+  // boundary behavior consistent if a caller later allows the line to wrap.
+  const resolvedWordBreak = wordBreak ?? 'break-word';
 
   // Resolve display - force block when maxLines > 0 or hasCapsize
   const resolvedDisplay = maxLines > 0 || hasCapsize ? 'block' : display;
