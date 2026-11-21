@@ -517,6 +517,29 @@ describe('show --on: what one part of a theme shows', () => {
     expect(valueOf(r, 'border-radius')).toMatchObject({via: 'dial'});
   }, 120_000);
 
+  it('credits a token the part’s rule sets by hand to the token, beside a part dial', async () => {
+    await themeEditNew('handpart', {cwd, like: 'neutral'});
+    await themeEditSet('handpart', 'spacing', 'roomy', {cwd, on: 'card'});
+    const file = path.join(cwd, 'themes', 'handpart', 'handpart.theme.ts');
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          "name: 'handpart',",
+          "name: 'handpart',\n  components: {card: {base: {'--color-background-card': '#123456'}}},",
+        ),
+    );
+    const r = /** @type {any} */ (
+      await themeEditShow('handpart', {cwd, on: 'card'})
+    );
+    expect(valueOf(r, 'background-color')).toMatchObject({
+      value: '#123456',
+      source: 'theme',
+      via: 'token',
+    });
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})

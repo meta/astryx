@@ -14,7 +14,6 @@
  * @position api/theme-edit — `show <theme> --on <part>` (_edit.mjs)
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
@@ -29,6 +28,7 @@ import {
   controlOf,
   editedThemes,
   loadTheme,
+  ownThemeInput,
   stateSlot,
 } from './_settings.mjs';
 import {censusStatesOf} from './_parts.mjs';
@@ -290,10 +290,8 @@ async function loadNamedTheme(ctx, cwd, name) {
       base.components,
       compiled.components ?? {},
     );
-    const file = path.join(cwd, 'themes', name, `${name}.theme.ts`);
-    if (fs.existsSync(file)) {
-      const {loadThemeInput} = await import('../theme/build/build.mjs');
-      const loaded = await loadThemeInput(file, {cwd, name});
+    {
+      const loaded = await ownThemeInput(ctx, name, data.like ?? null);
       if (loaded?.theme) {
         tokens = {
           light: core.resolveThemeTokens(loaded.theme, {mode: 'light'}),
@@ -324,7 +322,9 @@ async function loadNamedTheme(ctx, cwd, name) {
       coreTokens: {light: coreDefaults.light, dark: coreDefaults.dark},
       settingsComponents,
       tokenVia: (token, part, onPart) => {
-        if (handTokens.has(token)) return 'token';
+        // (A whole-theme token the theme file sets by hand; a token the
+        // part's own rule sets is told apart by the rule.)
+        if (!onPart && handTokens.has(token)) return 'token';
         const mine = data.settings.filter(st =>
           onPart ? reaches(st, part) : st.on == null,
         );
@@ -649,12 +649,18 @@ export async function themePartValues(cwd, name, part) {
       [when, 'base'].some(w => own.has(`${w}||${t}`)),
     );
     const mine = changed(at.theme, at.parent);
+    // A token the part's own rule sets by hand in the theme file, at rest
+    // or under this condition: the token's, whatever dial the theme has.
+    const handOnPart = (/** @type {string | undefined} */ tk) =>
+      tk != null && [when, 'base'].some(w => byHand(`${w}||${tk}`));
     /** @type {PartValue['via']} */
-    const tokenVia = theme.tokenVia
-      ? theme.tokenVia(mine[0], key, onPart)
-      : onPart
-        ? 'part'
-        : 'token';
+    const tokenVia = handOnPart(mine[0])
+      ? 'token'
+      : theme.tokenVia
+        ? theme.tokenVia(mine[0], key, onPart)
+        : onPart
+          ? 'part'
+          : 'token';
     /** @type {PartValue['source']} */
     let source = 'core';
     /** @type {PartValue['via']} */
@@ -667,17 +673,19 @@ export async function themePartValues(cwd, name, part) {
         [source, via] = [
           'theme',
           // A token the part's rule sets, as the setting that wrote it.
-          property.startsWith('--') && theme.tokenVia
-            ? theme.tokenVia(property, key, true)
-            : byHand(ruleKey)
-              ? 'part'
-              : theme.propertyVia
-                ? // A variant row with no rule of its own shows the rest rule:
-                  // ask with the condition of the rule the value comes from.
-                  ruleKey === k
-                  ? theme.propertyVia(property, key, when, state)
-                  : theme.propertyVia(property, key, 'base', '')
-                : 'part',
+          property.startsWith('--') && byHand(ruleKey)
+            ? 'token'
+            : property.startsWith('--') && theme.tokenVia
+              ? theme.tokenVia(property, key, true)
+              : byHand(ruleKey)
+                ? 'part'
+                : theme.propertyVia
+                  ? // A variant row with no rule of its own shows the rest rule:
+                    // ask with the condition of the rule the value comes from.
+                    ruleKey === k
+                    ? theme.propertyVia(property, key, when, state)
+                    : theme.propertyVia(property, key, 'base', '')
+                  : 'part',
         ];
       else if (mine.length) [source, via] = ['theme', tokenVia];
       else [source, via] = ['base', 'part'];
