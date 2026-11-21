@@ -15,10 +15,7 @@ import {render, renderHook, screen, fireEvent} from '@testing-library/react';
 import {createPortal} from 'react-dom';
 import {Table} from '../../Table';
 import {useTableActivation} from './useTableActivation';
-import {
-  getActiveWashClassNames,
-  getClickableRowClassNames,
-} from './useTableActivation';
+import {getClickableRowClassNames} from './useTableActivation';
 import {selectionEndsIntersectRow} from '../../rowPressGuard';
 import {useTableSelection} from '../selection/useTableSelection';
 import type {
@@ -1231,41 +1228,6 @@ describe('row eligibility', () => {
     );
     expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
   });
-
-  it('keeps an imperatively written tab stop across exclusion without a row update', () => {
-    // A later plugin's imperative roving update (written outside React, so
-    // no row re-render follows) must survive exclusion: the subscriber
-    // adopts observed writes before deciding, so the owned value is
-    // restored rather than removed.
-    const predicate = {eligible: true};
-    function Harness() {
-      const plugin = useTableActivation<Member>({
-        activeKey: '1',
-        onActivate: () => {},
-        getIsItemActivatable: () => predicate.eligible,
-      });
-      // Stable plugin identity: flipping `predicate` re-renders the table
-      // without re-rendering the row, so only the subscriber observes it.
-      const plugins = useMemo(() => ({activation: plugin}), [plugin]);
-      return (
-        <Table
-          data={members}
-          columns={memberColumns}
-          idKey="id"
-          plugins={plugins}
-        />
-      );
-    }
-    const {rerender} = render(<Harness />);
-    const row = bodyRows()[0];
-    expect(row.getAttribute('tabindex')).toBe('0');
-    // Imperative write outside React, as a roving plugin would: no record
-    // of ownership exists except the observed write itself.
-    row.setAttribute('tabindex', '-1');
-    predicate.eligible = false;
-    rerender(<Harness />);
-    expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
-  });
 });
 
 // =============================================================================
@@ -1273,43 +1235,7 @@ describe('row eligibility', () => {
 // =============================================================================
 
 describe('paint ownership and cleanup', () => {
-  it('paints the active wash through a stylesheet class, never an inline style', () => {
-    function Harness() {
-      const plugin = useTableActivation<Member>({
-        activeKey: '2',
-        onActivate: () => {},
-      });
-      return (
-        <Table
-          data={members}
-          columns={memberColumns}
-          idKey="id"
-          plugins={{activation: plugin}}
-        />
-      );
-    }
-    render(<Harness />);
-    const rows = bodyRows();
-    // The wash must not be inline: selection writes its fill inline, so an
-    // inline active wash would race it. A stylesheet class always loses to
-    // inline, making selection precedence deterministic.
-    expect(rows[1].style.backgroundColor).toBe('');
-    // The wash classes ride every transformed row; only the live
-    // `data-active` attribute paints them, so a className rewrite from
-    // stale transform props can neither strand nor steal the wash.
-    const washClasses = getActiveWashClassNames();
-    expect(washClasses.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      for (const cls of washClasses) {
-        expect(row.classList.contains(cls)).toBe(true);
-      }
-    }
-    expect(rows[1].getAttribute('data-active')).toBe('true');
-    expect(rows[0].hasAttribute('data-active')).toBe(false);
-    expect(rows[2].hasAttribute('data-active')).toBe(false);
-  });
-
-  it('keeps paint on the live active row across TableContext re-renders', () => {
+  it('keeps the active marker on the live active row across TableContext re-renders', () => {
     function Harness({
       striped,
       dividers,
@@ -1347,13 +1273,10 @@ describe('paint ownership and cleanup', () => {
     expect(rows[0].getAttribute('data-active')).toBe('true');
     expect(rows[1].hasAttribute('data-active')).toBe(false);
     expect(rows[2].hasAttribute('data-active')).toBe(false);
-    // The styling hook is unconditional on every row, so no rewrite drops
-    // it; the attribute gates the paint.
-    const washClasses = getActiveWashClassNames();
+    // The marker follows the live active row; activation writes no fill.
+    expect(rows[0].cells[0].style.boxShadow).not.toBe('');
+    expect(rows[1].cells[0].style.boxShadow).toBe('');
     for (const row of rows) {
-      for (const cls of washClasses) {
-        expect(row.classList.contains(cls)).toBe(true);
-      }
       expect(row.style.backgroundColor).toBe('');
     }
   });
@@ -2019,112 +1942,6 @@ describe('review follow-ups, round three', () => {
 // =============================================================================
 
 describe('review follow-ups, round four', () => {
-  it('keeps a later plugin tab stop and shortcuts instead of overwriting them', () => {
-    const onActivate = vi.fn();
-    function lateRovingPlugin(): TablePlugin<Member> {
-      return {
-        rowModel: 'flat',
-        transformBodyRow: props => ({
-          ...props,
-          htmlProps: {
-            ...props.htmlProps,
-            tabIndex: -1,
-            'aria-keyshortcuts': 'Alt+A',
-          },
-        }),
-      };
-    }
-    function Harness({allowAll}: {allowAll: boolean}) {
-      const plugin = useTableActivation<Member>({
-        activeKey: null,
-        onActivate,
-        getIsItemActivatable: item => allowAll || item.id !== '1',
-      });
-      const plugins = useMemo(
-        () => ({activation: plugin, lateRoving: lateRovingPlugin()}),
-        [plugin],
-      );
-      return (
-        <Table
-          data={members}
-          columns={memberColumns}
-          idKey="id"
-          plugins={plugins}
-        />
-      );
-    }
-    const {rerender} = render(<Harness allowAll={true} />);
-    const rows = bodyRows();
-    // Eligible: the later owner's -1 survives and activation composes its keys.
-    expect(rows[0].getAttribute('tabindex')).toBe('-1');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Alt+A');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Enter');
-    expect(rows[0].style.getPropertyValue('--_table-activation-cursor')).toBe(
-      'pointer',
-    );
-    fireEvent.click(rows[0]);
-    expect(onActivate).toHaveBeenCalledTimes(1);
-    // Excluded after a flip: the later owner's values come back, with no
-    // activation tokens stranded on the row.
-    rerender(<Harness allowAll={false} />);
-    expect(rows[0].getAttribute('tabindex')).toBe('-1');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toBe('Alt+A');
-    expect(rows[0].style.getPropertyValue('--_table-activation-cursor')).toBe(
-      '',
-    );
-    fireEvent.click(rows[0]);
-    expect(onActivate).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps a later explicit zero tab stop instead of inferring it is the default', () => {
-    const onActivate = vi.fn();
-    function lateZeroPlugin(): TablePlugin<Member> {
-      return {
-        rowModel: 'flat',
-        transformBodyRow: props => ({
-          ...props,
-          htmlProps: {
-            ...props.htmlProps,
-            tabIndex: 0,
-            'aria-keyshortcuts': 'Alt+Z',
-          },
-        }),
-      };
-    }
-    function Harness({allowAll}: {allowAll: boolean}) {
-      const plugin = useTableActivation<Member>({
-        activeKey: null,
-        onActivate,
-        getIsItemActivatable: item => allowAll || item.id !== '1',
-      });
-      const plugins = useMemo(
-        () => ({activation: plugin, lateZero: lateZeroPlugin()}),
-        [plugin],
-      );
-      return (
-        <Table
-          data={members}
-          columns={memberColumns}
-          idKey="id"
-          plugins={plugins}
-        />
-      );
-    }
-    const {rerender} = render(<Harness allowAll={true} />);
-    const rows = bodyRows();
-    // Eligible: the later owner's zero survives and activation composes its keys.
-    expect(rows[0].getAttribute('tabindex')).toBe('0');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Alt+Z');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Enter');
-    // Excluded after a flip: the later owner's zero comes back rather than
-    // being removed as if it were this module's default.
-    rerender(<Harness allowAll={false} />);
-    expect(rows[0].getAttribute('tabindex')).toBe('0');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toBe('Alt+Z');
-    fireEvent.click(rows[0]);
-    expect(onActivate).not.toHaveBeenCalled();
-  });
-
   it('stays inert with a diagnostic on non-product row models', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     __resetDevWarnings();
@@ -2289,7 +2106,7 @@ describe('review follow-ups, round five', () => {
     const rows = bodyRows();
     // The bar cell reserves its edge so the pinned overlay starts past the
     // marker instead of covering it; other cells carry no reservation.
-    const barCell = rows[1].cells[0] as HTMLTableCellElement;
+    const barCell = rows[1].cells[0];
     expect(barCell).not.toBeNull();
     expect(barCell.style.getPropertyValue('--_table-row-overlay-inset')).toBe(
       '3px',
@@ -2381,68 +2198,5 @@ describe('review follow-ups, round five', () => {
     } finally {
       warn.mockRestore();
     }
-  });
-
-  it('keeps a late zero tab stop declared in the same commit as a row re-render', () => {
-    const onActivate = vi.fn();
-    function lateZeroPlugin({zero}: {zero: boolean}): TablePlugin<Member> {
-      return {
-        rowModel: 'flat',
-        transformBodyRow: props => ({
-          ...props,
-          htmlProps: {
-            ...props.htmlProps,
-            ...(zero ? {tabIndex: 0, 'aria-keyshortcuts': 'Alt+Z'} : null),
-          },
-        }),
-      };
-    }
-    function Harness({
-      zeroLate,
-      allowAll,
-    }: {
-      zeroLate: boolean;
-      allowAll: boolean;
-    }) {
-      const plugin = useTableActivation<Member>({
-        activeKey: null,
-        onActivate,
-        getIsItemActivatable: item => allowAll || item.id !== '1',
-      });
-      // A new plugins identity re-renders every row, so flipping `zeroLate`
-      // commits the late declaration in the same commit as the ref handoff.
-      const plugins = useMemo(
-        () => ({
-          activation: plugin,
-          lateZero: lateZeroPlugin({zero: zeroLate}),
-        }),
-        [plugin, zeroLate],
-      );
-      return (
-        <Table
-          data={members}
-          columns={memberColumns}
-          idKey="id"
-          plugins={plugins}
-        />
-      );
-    }
-    const {rerender} = render(<Harness zeroLate={false} allowAll={true} />);
-    const rows = bodyRows();
-    // Activation default while no other plugin declares a tab stop.
-    expect(rows[0].getAttribute('tabindex')).toBe('0');
-    // The late plugin starts declaring zero in a commit that re-renders the
-    // row: the declaration is adopted, not mistaken for the default.
-    rerender(<Harness zeroLate={true} allowAll={true} />);
-    expect(rows[0].getAttribute('tabindex')).toBe('0');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Alt+Z');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Enter');
-    // Excluded after a flip: the late owner's zero comes back rather than
-    // being removed as if it were this module's default.
-    rerender(<Harness zeroLate={true} allowAll={false} />);
-    expect(rows[0].getAttribute('tabindex')).toBe('0');
-    expect(rows[0].getAttribute('aria-keyshortcuts')).toBe('Alt+Z');
-    fireEvent.click(rows[0]);
-    expect(onActivate).not.toHaveBeenCalled();
   });
 });

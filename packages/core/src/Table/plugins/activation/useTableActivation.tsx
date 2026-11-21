@@ -19,10 +19,6 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../../../theme/tokens.stylex';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {mergeRefs} from '../../../utils/mergeRefs';
-import {
-  flushMutations,
-  observeMutations,
-} from '../../../utils/sharedMutationObserver';
 import {warnOnce} from '../../../utils/devWarning';
 import {isRtlElement} from '../../../hooks/isRtlElement';
 import {shouldSuppressRowPress} from '../../rowPressGuard';
@@ -154,23 +150,10 @@ function createActivationStore<T extends Record<string, unknown>>(
 // =============================================================================
 
 /**
- * The row's active fill, republished for pinned cells to read. The same
- * `--table-row-overlay` contract useTableSelection and TableRow honour for
- * striping, hover, and selection: a pinned column paints its own opaque
- * background over the row, and replays this variable so the active state
- * reads on through the freeze line.
+ * The active marker's colour. Table's one row-paint path owns the active
+ * fill, so this module writes no background or row overlay.
  */
-const activeWash = colorVars['--color-accent-muted'];
 const activeBarColor = colorVars['--color-accent'];
-
-/**
- * Attribute gate for the active wash. `data-active` is maintained
- * imperatively by the store subscriber (and seeded declaratively below), so
- * it survives a `className` rewrite from stale transform props; `:where`
- * keeps the specificity of the plain class it replaces, so the settled
- * stripe/hover/selection precedence is unchanged.
- */
-const ACTIVE_ROW: string = ':where([data-active="true"])';
 
 /**
  * Press-taking gate, carried as a private custom property instead of an
@@ -179,14 +162,6 @@ const ACTIVE_ROW: string = ':where([data-active="true"])';
  * name is needed to carry press-taking liveness into CSS.
  */
 const ELIGIBLE_CURSOR_VAR = '--_table-activation-cursor';
-
-/**
- * Active-plus-hover gate. The plain active gate above intentionally keeps
- * `:where` specificity so the settled stripe/selection precedence is
- * unchanged; this one drops it so the active fill keeps dominating while
- * hovered (selection still wins through its inline wash either way).
- */
-const ACTIVE_HOVER_ROW: string = '[data-active="true"]:hover';
 
 /** Width of the leading-edge active bar, the non-colour active cue. */
 const ACTIVE_BAR_WIDTH_PX = 3;
@@ -207,47 +182,11 @@ const rowsWithModuleCurrentState = new WeakSet<HTMLTableRowElement>();
  * a deactivated row needs the cell without a public marker attribute. */
 const barCells = new WeakMap<HTMLTableRowElement, HTMLTableCellElement>();
 
-/**
- * What another plugin declared on a mounted row: the owned tab stop and key
- * announcements to restore on exclusion, plus this module's outstanding
- * writes, which tell self writes apart at snapshot time.
- */
-interface RowOwnershipBaseline {
-  rowKey: string | number | undefined;
-  ownedTabIndex: string | null;
-  ownedShortcuts: string | null;
-  writtenTabIndex: string | null | undefined;
-  writtenShortcuts: string | null | undefined;
-}
-
-/**
- * A baseline and its live registration, handed from an old ref cleanup to
- * the next attach in the same commit. Claiming them preserves ownership
- * across the handoff, so a tab-stop write committed with the new props is
- * adopted instead of missed. An entry no attach claims belongs to a real
- * unmount and is retired and pruned by a microtask.
- */
-interface OwnershipHandoff {
-  baseline: RowOwnershipBaseline;
-  unsubscribe: () => void;
-}
-
-/**
- * Ownership-watch options, shared by every mounted row. One observer serves
- * all registrations with these options, so mounted rows share it instead of
- * each creating one.
- */
-const OWNERSHIP_OBSERVER_OPTIONS: MutationObserverInit = {
-  attributes: true,
-  attributeFilter: ['tabindex', 'aria-keyshortcuts'],
-};
-
 /** Whether a row already exposes current state this module must not overwrite. */
 function hasCompetingCurrentOwner(row: Element | null): boolean {
   const current = row?.getAttribute('aria-current');
   // `aria-current="false"` states no current state, so only a real state
-  // value competes; FR3's incompatible owner is a state this module would
-  // otherwise overwrite.
+  // value competes: one this module would otherwise overwrite.
   return current != null && current !== 'true' && current !== 'false';
 }
 
@@ -263,27 +202,11 @@ function withActivationShortcuts(live: string | null): string {
 }
 
 /**
- * Remove this module's own tokens, so restoring a row that stopped taking
- * presses never strands Enter/Space announcements on it. Null when nothing
- * remains, so the caller removes the attribute instead of blanking it.
- */
-function stripActivationTokens(live: string | null): string | null {
-  const tokens = (live ?? '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter(token => token !== 'Enter' && token !== 'Space');
-  return tokens.length > 0 ? tokens.join(' ') : null;
-}
-
-/**
  * Apply or remove active styling on a `<tr>` element.
  *
- * Active state is a `data-active` attribute, `aria-current="true"`, plus
- * paint on the existing row anatomy: an accent wash and a leading-edge accent
- * bar on the first cell. The wash rides the shared row-overlay variable so
- * pinned cells replay it through the freeze line; its stylesheet rule keys
- * off `data-active`, so no class toggling is needed here. The bar is an
- * inset shadow on the first cell in default mode; under forced colors the
+ * Active state is a `data-active` attribute, `aria-current="true"`, plus the
+ * non-colour marker: a leading-edge accent bar on the first cell. Table's
+ * row-paint path owns the fill. The bar is an inset shadow on the first cell in default mode; under forced colors the
  * shadow maps to nothing, so the stylesheet rule below paints an outline
  * there instead, which draws over the cell in a system color and follows
  * mode changes without a store update. No selection
@@ -345,7 +268,7 @@ function applyRowActivationStyle(
 /**
  * Remove everything this module wrote on a `<tr>`: the active attribute and
  * current-state exposure, the press-taking cursor gate, plus the bar from
- * whichever cell carries it. The wash and cursor classes stay: they are
+ * whichever cell carries it. The cursor and marker classes stay: they are
  * stamped on every transformed row and their rules key off the attributes
  * and variables the subscriber maintains. Cleanup paths call this rather
  * than only unsubscribing, so a row that becomes ineligible, loses its
@@ -421,33 +344,6 @@ const activationStyles = stylex.create({
     },
   },
   /**
-   * Active-row wash as a stylesheet rule rather than an inline style.
-   * Selection writes its wash inline, so a selected row deterministically
-   * keeps the selection fill however the two plugins interleave; an
-   * unselected active row shows this wash, including while hovered (the
-   * hover-combined rule below outranks the row hover rule the way the
-   * plain gate cannot). The overlay variable rides along
-   * so pinned cells replay the active state through the freeze line, under
-   * the same contract striping, hover, and selection honour. Gated on the
-   * active attribute for the same staleness reason as the cursor above.
-   */
-  activeWash: {
-    backgroundColor: {
-      default: null,
-      [ACTIVE_ROW]: activeWash,
-      [ACTIVE_HOVER_ROW]: {
-        '@media (hover: hover)': activeWash,
-      },
-    },
-    '--table-row-overlay': {
-      default: null,
-      [ACTIVE_ROW]: activeWash,
-      [ACTIVE_HOVER_ROW]: {
-        '@media (hover: hover)': activeWash,
-      },
-    },
-  },
-  /**
    * Forced-colors bar. The inline shadow below maps to nothing under forced
    * colors, so the marker needs a rule that follows the mode by itself: an
    * outline branch that only matches `forced-colors: active`, keyed off the
@@ -468,20 +364,6 @@ const activationStyles = stylex.create({
     },
   },
 });
-
-/** Stylesheet classes for the active wash, resolved once and stamped on every transformed row. */
-let activeWashClassNames: ReadonlyArray<string> | null = null;
-
-export function getActiveWashClassNames(): ReadonlyArray<string> {
-  if (activeWashClassNames == null) {
-    activeWashClassNames = Object.freeze(
-      (stylex.props(activationStyles.activeWash).className ?? '')
-        .split(/\s+/)
-        .filter(Boolean),
-    );
-  }
-  return activeWashClassNames;
-}
 
 /** Stylesheet classes for the pointer cursor, resolved once and stamped on every transformed row. */
 let clickableRowClassNames: ReadonlyArray<string> | null = null;
@@ -552,25 +434,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
     storeRef.current = createActivationStore(configRef);
   }
   const store = storeRef.current;
-
-  // Affordance baselines by mounted row. The row ref below re-attaches
-  // whenever the transform re-renders the row, so a snapshot taken there
-  // can hold this module's own writes; the record lets a re-attach tell
-  // those apart from another plugin's values.
-  const rowBaselines = useMemo(
-    () => new WeakMap<HTMLTableRowElement, RowOwnershipBaseline>(),
-    [],
-  );
-
-  // Baselines handed from an old ref cleanup to the next attach in the same
-  // commit. The next attach claims its row's entry, so ownership survives
-  // the handoff even when the new props commit a tab-stop write in between;
-  // an entry no attach claims belongs to a real unmount and is pruned by a
-  // microtask.
-  const pendingHandoffs = useMemo(
-    () => new WeakMap<HTMLTableRowElement, OwnershipHandoff>(),
-    [],
-  );
 
   // Notify subscribers on every render — row ref subscribers re-apply
   // imperative styling only where their snapshot changed. Callback and key
@@ -653,14 +516,14 @@ export function useTableActivation<T extends Record<string, unknown>>(
         const priorOnClick = props.htmlProps.onClick;
         const priorOnKeyDown = props.htmlProps.onKeyDown;
 
-        // Fallback tab stop. The subscriber writes it only when the mounted
-        // row has none; an earlier plugin's explicit tabIndex (including -1
-        // for roving focus) stays authoritative.
-        const tabIndex = props.htmlProps.tabIndex ?? 0;
-        // An earlier plugin's declared tab stop, read here because the
-        // transform runs in plugin order: it seeds ownership at attach even
-        // when it equals the default below.
-        const declaredTabIndex = props.htmlProps.tabIndex;
+        // The keyboard affordances an eligible row takes: a tab stop only
+        // when earlier props declare none, so an explicit -1 (roving
+        // focus) or another owner's tab stop survives, and Enter/Space
+        // beside the key announcements earlier props declare.
+        const earlierTabIndex = props.htmlProps.tabIndex;
+        const earlierShortcuts = props.htmlProps['aria-keyshortcuts'] ?? null;
+        const ownTabIndex = earlierTabIndex ?? 0;
+        const ownShortcuts = withActivationShortcuts(earlierShortcuts);
 
         // Imperative active-state reflection, subscribed to the store: a
         // controlled-key change reaches mounted rows without re-rendering
@@ -670,238 +533,58 @@ export function useTableActivation<T extends Record<string, unknown>>(
         // the render-time value below only decides the static affordances.
         const isEligibleNow = () =>
           store.getConfig().getIsItemActivatable?.(item) ?? true;
+        // Declarative snapshot for this render; the subscriber below keeps
+        // it fresh between renders.
+        const activeNow = eligible && key === store.getConfig().activeKey;
         const activationRef: React.RefCallback<HTMLTableRowElement> = row => {
           if (!row) {
             return;
           }
-          // Mount-time affordances belong to the subscriber, not the
-          // declarative props: the transform above seeds no tab stop and no
-          // key announcements, so the mounted values are exactly what earlier
-          // and later plugins declared. That snapshot is the owned baseline —
-          // restoring it later never strands or steals another plugin's focus
-          // ownership, whichever side of activation declared it.
-          //
-          // The shared observer adopts every write it delivers. The cleanup
-          // hands the baseline to the next attach in the same commit. A late
-          // `tabIndex={0}` is then another owner's, even when it equals this
-          // module's last write. A declaration read in the transform seeds
-          // ownership too.
-          //
-          // The ref re-attaches whenever the transform re-renders the row. A
-          // re-attach in the same commit claims the handed-off baseline, so
-          // no new snapshot is taken; a row the record does not know (or one
-          // recycled for another key) snapshots fresh.
-          // The press-taking cursor variable is exempt: only this module's
-          // subscriber writes it, so no other plugin's value needs tracking.
-          const liveTabIndex = row.getAttribute('tabindex');
-          const liveShortcuts = row.getAttribute('aria-keyshortcuts');
-          const handoff = pendingHandoffs.get(row);
-          let baseline: RowOwnershipBaseline;
-          if (handoff != null && handoff.baseline.rowKey === key) {
-            // Same-commit re-attach: the cleanup already drained pending
-            // writes into this baseline, so it is current; claiming it also
-            // cancels its prune.
-            pendingHandoffs.delete(row);
-            baseline = handoff.baseline;
-            rowBaselines.set(row, baseline);
-          } else {
-            const previousBaseline = rowBaselines.get(row);
-            let ownedTabIndex: string | null;
-            let ownedShortcuts: string | null;
-            let writtenTabIndex: string | null | undefined;
-            let writtenShortcuts: string | null | undefined;
-            if (previousBaseline != null && previousBaseline.rowKey === key) {
-              if (liveTabIndex === previousBaseline.writtenTabIndex) {
-                ownedTabIndex = previousBaseline.ownedTabIndex;
-                writtenTabIndex = previousBaseline.writtenTabIndex;
-              } else {
-                ownedTabIndex = liveTabIndex;
-                writtenTabIndex = undefined;
-              }
-              if (liveShortcuts === previousBaseline.writtenShortcuts) {
-                ownedShortcuts = previousBaseline.ownedShortcuts;
-                writtenShortcuts = previousBaseline.writtenShortcuts;
-              } else {
-                ownedShortcuts = liveShortcuts;
-                writtenShortcuts = undefined;
-              }
-            } else {
-              // The live row is ground truth: it carries every plugin's
-              // committed values. The transform's declaration only fills a
-              // gap the commit has not reached.
-              ownedTabIndex =
-                liveTabIndex ??
-                (declaredTabIndex != null ? String(declaredTabIndex) : null);
-              ownedShortcuts = liveShortcuts;
-              writtenTabIndex = undefined;
-              writtenShortcuts = undefined;
-            }
-            baseline = {
-              rowKey: key,
-              ownedTabIndex,
-              ownedShortcuts,
-              writtenTabIndex,
-              writtenShortcuts,
-            };
-            rowBaselines.set(row, baseline);
-          }
-          // Last applied reflection for this row: a store broadcast over
-          // an unchanged row stays a DOM no-op, so key-only updates keep
-          // the at-most-two-rows bound even with an inline `onActivate`.
-          let lastInteractive: boolean | null = null;
-          let lastActive = false;
-          // The observer adopts tab-stop writes made while it is connected.
-          // Self writes are purged synchronously after every batch below,
-          // so a delivered record is always external. Every apply syncs
-          // first, so adoption never waits on task timing; the callback only
-          // re-resolves rows whose baseline just changed.
-          const adoptOwnershipRecords = (
-            records: ReadonlyArray<MutationRecord>,
-          ): boolean => {
-            let changed = false;
-            for (const record of records) {
-              if (record.attributeName === 'tabindex') {
-                baseline.ownedTabIndex = row.getAttribute('tabindex');
-                baseline.writtenTabIndex = undefined;
-                changed = true;
-              } else if (record.attributeName === 'aria-keyshortcuts') {
-                baseline.ownedShortcuts = stripActivationTokens(
-                  row.getAttribute('aria-keyshortcuts'),
-                );
-                baseline.writtenShortcuts = undefined;
-                changed = true;
-              }
-            }
-            return changed;
-          };
-          // While set, the registration callback drops delivered records: the
-          // apply below just wrote them, so adopting them would mistake this
-          // module's own writes for another owner's.
-          let purgingSelfWrites = false;
-          const handleOwnershipMutations = (
-            records: ReadonlyArray<MutationRecord>,
-          ): void => {
-            if (purgingSelfWrites) {
-              return;
-            }
-            if (adoptOwnershipRecords(records)) {
-              lastInteractive = null;
-              applyStyle(isEligibleNow());
-            }
-          };
-          // One shared registration, not one observer per row. The old
-          // registration is retired after the new one subscribes below, so
-          // the shared observer never empties (and disconnects) inside the
-          // commit window; records accumulate on it and route at delivery
-          // time, so the first apply below still sees writes committed with
-          // the new props.
-          const unsubscribeOwnership = observeMutations(
-            row,
-            OWNERSHIP_OBSERVER_OPTIONS,
-            handleOwnershipMutations,
-          );
-          if (handoff != null) {
-            // Retire the previous attach's registration now that the new one
-            // exists. Never the reverse order: unsubscribing first could
-            // empty the shared observer, which disconnects and drops the
-            // records committed with these props.
-            handoff.unsubscribe();
-          }
-          const syncOwnership = (): void => {
-            flushMutations(OWNERSHIP_OBSERVER_OPTIONS);
-          };
-          const purgeSelfWrites = (): void => {
-            purgingSelfWrites = true;
-            try {
-              flushMutations(OWNERSHIP_OBSERVER_OPTIONS);
-            } finally {
-              purgingSelfWrites = false;
-            }
-          };
+          // The render above already declared this row's affordances for its
+          // render-time eligibility. The subscriber changes them only when
+          // liveness flips between renders: the caller predicate changed, or
+          // a later plugin marked the row current.
+          let lastInteractive: boolean = eligible;
+          let lastActive: boolean | null = null;
           const applyStyle = (eligibleNow: boolean) => {
-            // External writes land here before any decision, so the exclusion
-            // path below restores the current owner, not a stale snapshot.
-            syncOwnership();
-            // Keyboard affordances and the pointer cursor follow the same
-            // liveness as paint and presses: a row a later plugin marked
-            // current, or one the caller predicate now excludes, is not a
-            // tab stop, shows no pointer, and announces no key affordances.
-            // The transform runs before later plugins, so this converges
-            // imperatively wherever the store reaches the row; full
-            // order-independence waits on the parent admission protocol.
             const interactive = eligibleNow && !hasCompetingCurrentOwner(row);
             const active = eligibleNow && key === store.getConfig().activeKey;
-            if (interactive === lastInteractive && active === lastActive) {
+            if (active !== lastActive) {
+              lastActive = active;
+              applyRowActivationStyle(row, active);
+            }
+            // Press-taking liveness rides the private cursor variable.
+            // Clearing the active paint above also clears it, so it is set
+            // again here whenever the row takes presses.
+            const cursor = interactive ? 'pointer' : '';
+            if (row.style.getPropertyValue(ELIGIBLE_CURSOR_VAR) !== cursor) {
+              if (interactive) {
+                row.style.setProperty(ELIGIBLE_CURSOR_VAR, cursor);
+              } else {
+                row.style.removeProperty(ELIGIBLE_CURSOR_VAR);
+              }
+            }
+            if (interactive === lastInteractive) {
               return;
             }
             lastInteractive = interactive;
-            lastActive = active;
-            // Paint first: clearing inactive paint also clears the cursor
-            // gate, which the liveness update below re-applies for rows that
-            // keep it.
-            applyRowActivationStyle(row, active);
-            // Press-taking liveness rides the private cursor variable, and
-            // the tab stop and key announcements follow it: a row a later
-            // plugin marked current, or one the caller predicate now
-            // excludes, is not a tab stop, shows no pointer, and announces
-            // no key affordances. Classes stay untouched: the wash and cursor
-            // rules key off the live variable, so a `className` rewrite from
-            // stale transform props cannot strand or steal them.
+            // The tab stop and key announcements follow liveness. A row that
+            // stops taking presses gets back what earlier props declared.
             if (interactive) {
-              if (
-                row.style.getPropertyValue(ELIGIBLE_CURSOR_VAR) !== 'pointer'
-              ) {
-                row.style.setProperty(ELIGIBLE_CURSOR_VAR, 'pointer');
-              }
-              // The owned tab stop stays untouched; only a row with none
-              // takes this module's default. A live value this module did
-              // not write is adopted, so a later plugin's imperative update
-              // (roving focus) survives the next exclusion.
-              const liveTabIndex = row.getAttribute('tabindex');
-              if (liveTabIndex == null) {
-                const next = baseline.ownedTabIndex ?? String(tabIndex);
-                row.setAttribute('tabindex', next);
-                baseline.writtenTabIndex = next;
-              } else if (liveTabIndex !== baseline.writtenTabIndex) {
-                baseline.ownedTabIndex = liveTabIndex;
-                baseline.writtenTabIndex = undefined;
-              }
-              const liveShortcuts = row.getAttribute('aria-keyshortcuts');
-              if (liveShortcuts !== baseline.writtenShortcuts) {
-                // A live value this module did not write is adopted (minus
-                // this module's own tokens, which the merge below re-adds),
-                // so a later plugin's announcement update survives.
-                baseline.ownedShortcuts = stripActivationTokens(liveShortcuts);
-                const next = withActivationShortcuts(baseline.ownedShortcuts);
-                row.setAttribute('aria-keyshortcuts', next);
-                baseline.writtenShortcuts = next;
-              }
-            } else {
-              if (row.style.getPropertyValue(ELIGIBLE_CURSOR_VAR) !== '') {
-                row.style.removeProperty(ELIGIBLE_CURSOR_VAR);
-              }
-              // Restore the owned baseline, never blank it: a row the
-              // predicate excludes keeps its owner's tab stop and key
-              // announcements, whichever side of activation declared them.
-              if (baseline.ownedTabIndex == null) {
-                row.removeAttribute('tabindex');
-              } else {
-                row.setAttribute('tabindex', baseline.ownedTabIndex);
-              }
-              // The next apply re-establishes this module's affordances from
-              // the baseline above, so its writes are never mistaken for
-              // another plugin's.
-              baseline.writtenTabIndex = undefined;
-              if (baseline.ownedShortcuts == null) {
-                row.removeAttribute('aria-keyshortcuts');
-              } else {
-                row.setAttribute('aria-keyshortcuts', baseline.ownedShortcuts);
-              }
-              baseline.writtenShortcuts = undefined;
+              row.setAttribute('tabindex', String(ownTabIndex));
+              row.setAttribute('aria-keyshortcuts', ownShortcuts);
+              return;
             }
-            // Self writes never reach adoption: the purge drops the records
-            // this apply just wrote, so a delivered record is always external.
-            purgeSelfWrites();
+            if (earlierTabIndex == null) {
+              row.removeAttribute('tabindex');
+            } else {
+              row.setAttribute('tabindex', String(earlierTabIndex));
+            }
+            if (earlierShortcuts == null) {
+              row.removeAttribute('aria-keyshortcuts');
+            } else {
+              row.setAttribute('aria-keyshortcuts', earlierShortcuts);
+            }
           };
           // The first apply reuses the render-time eligibility above, so the
           // caller predicate runs once per row on mount; later notifies
@@ -909,7 +592,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
           applyStyle(eligible);
           const unsubscribe = store.subscribe(key, () => {
             if (!row.isConnected) {
-              unsubscribeOwnership();
               clearRowActivationStyle(row);
               unsubscribe();
               return;
@@ -917,53 +599,24 @@ export function useTableActivation<T extends Record<string, unknown>>(
             applyStyle(isEligibleNow());
           });
           return () => {
-            // Drain first, so a declaration committed with an earlier render
-            // is adopted into the baseline before it is handed off below.
-            syncOwnership();
-            // Hand the baseline and the live registration to the next attach
-            // in this commit instead of dropping them: the attach subscribes
-            // first and retires this registration after, so the shared
-            // observer stays connected across the handoff and the attach
-            // claims the baseline, which preserves ownership. No attach
-            // claims a real unmount, so a microtask retires the registration
-            // and prunes the entry then.
-            pendingHandoffs.get(row)?.unsubscribe();
-            const handoff: OwnershipHandoff = {
-              baseline,
-              unsubscribe: unsubscribeOwnership,
-            };
-            pendingHandoffs.set(row, handoff);
-            queueMicrotask(() => {
-              if (pendingHandoffs.get(row) === handoff) {
-                pendingHandoffs.delete(row);
-                handoff.unsubscribe();
-              }
-            });
             clearRowActivationStyle(row);
             unsubscribe();
           };
         };
 
-        // Declarative snapshot for this render; the subscriber above keeps
-        // it fresh between renders. Ineligible rows keep the press handlers.
-        // The handlers check eligibility live, so a later flip needs no
-        // row update.
-        const activeNow = eligible && key === store.getConfig().activeKey;
-
         return {
           ...props,
           htmlProps: {
             ...props.htmlProps,
-            // The wash, cursor, and forced-colors classes ride every
+            // The cursor and forced-colors marker classes ride every
             // transformed row, unconditionally: their rules key off the
             // `data-active` attribute and the cursor variable the subscriber
             // maintains, so a row re-render (a TableContext change rewrites
             // the className React owns without re-running this transform)
-            // keeps paint and cursor from the live row state instead of
+            // keeps the cursor and marker from the live row state instead of
             // stale render-time values.
             className: [
               props.htmlProps.className,
-              ...getActiveWashClassNames(),
               ...getClickableRowClassNames(),
               ...getForcedColorsBarClassNames(),
             ]
@@ -981,10 +634,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
                   } as React.CSSProperties,
                 }
               : null),
-            // No declarative tab stop or key announcements: the subscriber
-            // owns the mounted values from the plugins' baseline (above), so
-            // server markup never bakes this module's default over a later
-            // plugin's explicit ownership.
+            ...(eligible
+              ? {tabIndex: ownTabIndex, 'aria-keyshortcuts': ownShortcuts}
+              : null),
             onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
               const row = event.currentTarget;
               // Earlier accumulated handlers run first and may cancel the
@@ -1045,6 +697,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
         };
       },
     }),
-    [store, rowBaselines, pendingHandoffs],
+    [store],
   );
 }
