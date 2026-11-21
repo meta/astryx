@@ -203,6 +203,72 @@ describe('useTooltip — a trigger that detaches and attaches again', () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
+  it('shows on hover after an Escape that follows a detached-while-hovered reattach', async () => {
+    const onShow = vi.fn();
+    const {rerender} = render(<DetachableHarness isAttached onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    // The menu opens: the caller removes the wiring and disables the tooltip.
+    rerender(<DetachableHarness isAttached={false} onShow={onShow} />);
+    await act(async () => {});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // The pointer leaves while detached: no mouseleave reaches the hook.
+    fireEvent.mouseLeave(trigger());
+
+    // The menu closes on Escape and focus returns to the trigger, so the
+    // tooltip shows again on reattach.
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    rerender(<DetachableHarness isAttached onShow={onShow} />);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    // Escape dismisses it with the pointer nowhere near the trigger now.
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // This is a first real hover: it shows.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(3);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
+  it('shows on hover after an Escape and a detached-while-hovered menu pick', async () => {
+    const onShow = vi.fn();
+    const {rerender} = render(<DetachableHarness isAttached onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    // Escape dismisses it while the pointer is still over the trigger.
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // The menu opens: the caller removes the wiring and disables the tooltip.
+    rerender(<DetachableHarness isAttached={false} onShow={onShow} />);
+    await act(async () => {});
+
+    // The pointer leaves while detached, and the menu item is picked with
+    // the mouse: neither leave is seen by the hook.
+    fireEvent.mouseLeave(trigger());
+
+    // The menu closes and the wiring comes back.
+    rerender(<DetachableHarness isAttached onShow={onShow} />);
+    await act(async () => {});
+
+    // This is a first real hover: it shows.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
   it('shows on attach for keyboard focus that arrived while detached', async () => {
     const {rerender} = render(<DetachableHarness isAttached />);
     rerender(<DetachableHarness isAttached={false} />);
@@ -565,6 +631,75 @@ describe('useTooltip — Escape dismissal', () => {
 
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('stays closed on a fresh mouseenter while the pointer never left after Escape', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(0);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // The pointer never moved: the surface closing hands the trigger a fresh
+    // mouseenter, and that enter must not reopen the tooltip.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // Leaving and entering again is a genuine re-entry: it shows.
+    fireEvent.mouseLeave(trigger());
+    fireEvent.mouseEnter(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
+  it('shows again after focus leaves and returns following an Escape dismissal', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // Focus leaves and comes back: a new entry, so the tooltip shows.
+    act(() => trigger().blur());
+    act(() => trigger().focus());
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
+  it('shows on hover after a keyboard-focus Escape', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    // Keyboard focus opens the tooltip with the pointer nowhere near it.
+    act(() => trigger().focus());
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // The pointer was never over the trigger, so this is a first real hover:
+    // it shows, unlike the no-move mouseenter after a hover dismissal.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
   });
 
   it('ignores an Escape that carries the IME keyCode 229', () => {
