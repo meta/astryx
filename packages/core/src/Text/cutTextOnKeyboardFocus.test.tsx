@@ -48,13 +48,32 @@ describe('useCutTextOnKeyboardFocus', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
     expect(imports.count).toBe(0);
-    // The frame runs. The load waits for the task after it.
+    // The frame runs. The test holds the tasks that the frame queues.
+    const tasks: (() => void)[] = [];
     act(() => {
+      const timeout = vi.spyOn(window, 'setTimeout').mockImplementation(((
+        task: () => void,
+      ) => {
+        tasks.push(task);
+        return 0;
+      }) as typeof setTimeout);
       for (const frame of frames.splice(0)) {
         frame(performance.now());
       }
+      timeout.mockRestore();
+    });
+    // Microtasks and other tasks run, but the held task does not: the module
+    // does not load.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
     });
     expect(imports.count).toBe(0);
+    // The held task runs. Then the module loads.
+    act(() => {
+      for (const task of tasks.splice(0)) {
+        task();
+      }
+    });
     await waitFor(() => {
       expect(imports.count).toBe(1);
     });
