@@ -3387,6 +3387,13 @@ const QUESTIONS_J = [
     'one and a half line height for body',
     {top: /^set q --text-body-leading 1\.5$/},
   ],
+  // a leading in pixels is a ratio of the text size the question says, else
+  // of the body text size now
+  [
+    '13px text, 18px leading',
+    {top: /^set q text-size 13 && set q --text-body-leading 1\.385$/},
+  ],
+  ['18px leading', {top: /^set q --text-body-leading 1\.286$/}],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],

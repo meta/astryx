@@ -12667,6 +12667,22 @@ export function draftAnswer(ctx, env, question) {
   const seenAspect = (/** @type {string} */ a) => {
     if (!aspectsSeen.includes(a)) aspectsSeen.push(a);
   };
+  /**
+   * The text size in pixels another clause of the question says ("13px
+   * text", "font size 13px"), for a leading said in pixels beside it.
+   * Null when no clause says one.
+   * @param {Clause} c the leading's own clause
+   * @returns {number | null}
+   */
+  const saidTextPx = c => {
+    const re =
+      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b|\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b/i;
+    for (const o of [c, ...clauses.filter(x => x !== c)]) {
+      const m = re.exec(o.text);
+      if (m) return Number(m[1] ?? m[2]);
+    }
+    return null;
+  };
   // The theme's own value (its settings applied), else the base theme's.
   /** @param {string} token @param {'light' | 'dark'} [mode] @param {number} [depth] @returns {string} */
   const current = (token, mode = 'light', depth = 0) => {
@@ -22212,19 +22228,48 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'leading': {
+        // A leading in pixels ("18px leading") is that many pixels over the
+        // text size: the size the question says for the text ("13px text,
+        // 18px leading" is 1.385), else the size the text has now.
+        const pxLeading =
+          /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)|\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/.exec(
+            c.text,
+          );
+        const leadPx = pxLeading ? Number(pxLeading[1] ?? pxLeading[2]) : null;
+        const textPxSaid = leadPx == null ? null : saidTextPx(c);
+        const textPx =
+          textPxSaid ??
+          (leadPx == null
+            ? null
+            : lengthPx(
+                String(
+                  (on && on !== 'body' && p?.role !== 'body'
+                    ? nowIn(on, 'font-size')
+                    : null) ||
+                    resolvedValue('--text-body-size') ||
+                    current('--text-body-size'),
+                ),
+              ));
+        const pxRatio =
+          leadPx != null && textPx
+            ? String(Number((leadPx / textPx).toFixed(3)))
+            : null;
         // An amount ("1.5x", "half") or a percent ("150%": of the line
         // height there now) is a factor, never a typed number.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
         const leadFactor =
-          exactFactor(c.text) ??
-          (pctLeading ? Number(pctLeading[1]) / 100 : null);
+          pxRatio != null
+            ? null
+            : (exactFactor(c.text) ??
+              (pctLeading ? Number(pctLeading[1]) / 100 : null));
         const n =
-          leadFactor != null
+          pxRatio ??
+          (leadFactor != null
             ? null
             : (/\b(normal)\b/.exec(c.text)?.[1] ??
               /(?:^|\s)(\d(?:\.\d+)?)(?![\d.]|\s*(px|rem|em|%|x\b|times\b))/.exec(
                 c.text,
-              )?.[1]);
+              )?.[1]));
         const tok =
           !on || on === 'body' || p?.role === 'body'
             ? '--text-body-leading'
