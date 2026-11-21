@@ -46,13 +46,14 @@ const component = (name, rest = {}) => ({
  * @param {string} name
  * @param {string[]} uses
  * @param {string} description
+ * @param {string[]} [own] - the block's own keywords
  * @returns {Candidate}
  */
-const block = (name, uses, description) =>
+const block = (name, uses, description, own = []) =>
   /** @type {Candidate} */ ({
     domain: 'template',
     name,
-    keywords: [...uses],
+    keywords: [...uses, ...own],
     _uses: [...uses],
     description,
     prose: [],
@@ -79,9 +80,14 @@ const scoreOf = (response, name) =>
 const first = response => response.data.results[0]?.name;
 
 describe('a component a block uses', () => {
-  const Quiver = component('Quiver', {description: 'Holds a spool.'});
+  const Quiver = component('Quiver', {
+    description: 'Holds a spool.',
+    keywords: ['spool'],
+  });
   const Spool = component('Spool', {keywords: ['reel']});
-  const rack = block('SpoolRack', ['Spool', 'Quiver'], 'A rack of shelves.');
+  const rack = block('SpoolRack', ['Spool', 'Quiver'], 'A rack of shelves.', [
+    'rack',
+  ]);
   const both = block(
     'ReelTray',
     ['Spool', 'Quiver'],
@@ -127,7 +133,9 @@ describe('a component a block uses', () => {
 
   it('keeps its own answer when a used component wins on a synonym', () => {
     const Gallery = component('Gallery');
-    const strip = block('ZorbStrip', ['Gallery'], 'A zorb strip of photos.');
+    const strip = block('ZorbStrip', ['Gallery'], 'A zorb strip of photos.', [
+      'zorb',
+    ]);
     const view = rankLexical(
       'photos zorb',
       {},
@@ -161,7 +169,7 @@ describe('a component a block uses', () => {
 
   it('leaves the gathered candidate as it is', () => {
     searchView(catalog(all));
-    expect(rack.keywords).toEqual(['Spool', 'Quiver']);
+    expect(rack.keywords).toEqual(['Spool', 'Quiver', 'rack']);
   });
 });
 

@@ -12,8 +12,10 @@ import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {
   projectAugmentations,
+  propValueKinds,
   propWideningInterfaces,
   resolveAugmentationTarget,
+  unacceptedKind,
 } from './core-augmentation-points.mjs';
 
 const CORE_ROOT = path.resolve(
@@ -39,6 +41,68 @@ describe('propWideningInterfaces', () => {
 
   it('cannot follow a prop without a Core', async () => {
     expect(await propWideningInterfaces(null, 'Button', 'variant')).toBeNull();
+  });
+});
+
+describe('propValueKinds', () => {
+  it('reads the kinds of value a prop takes, and nothing for a type it cannot follow', () => {
+    /** @param {string} component @param {string} prop */
+    const kinds = (component, prop) => {
+      const found = propValueKinds(CORE_ROOT, component, prop);
+      return found ? {kinds: [...found.kinds], fields: found.fields} : null;
+    };
+    expect(kinds('TextInput', 'status')).toEqual({
+      kinds: ['object'],
+      fields: ['type', 'message'],
+    });
+    expect(kinds('DateInput', 'value')).toEqual({
+      kinds: ['string'],
+      fields: null,
+    });
+    expect(kinds('Grid', 'columns')).toEqual({
+      kinds: ['number', 'object'],
+      fields: ['minWidth', 'max', 'repeat'],
+    });
+    expect(kinds('Button', 'variant')).toEqual({
+      kinds: ['string'],
+      fields: null,
+    });
+    expect(kinds('Skeleton', 'radius')).toBeNull();
+    // Brand members (typed `never`, or keyed by a module path) are not fields to write.
+    expect(kinds('Collapsible', 'animatedLayout')?.fields ?? null).toBeNull();
+    expect(kinds('Item', 'swipe')?.fields ?? null).toBeNull();
+    // `Omit<ButtonProps, 'onClick'>` names no fields: Button's own include the omitted one.
+    expect(kinds('DropdownMenu', 'button')).toEqual({
+      kinds: ['object'],
+      fields: null,
+    });
+    // An interface's fields include those of the interfaces it extends.
+    expect(kinds('Dialog', 'position')).toEqual({
+      kinds: ['object'],
+      fields: ['start', 'end', 'top', 'bottom'],
+    });
+    // Shapes that differ (a discriminated union) name no fields.
+    expect(kinds('PowerSearchToken', 'operator')).toEqual({
+      kinds: ['object'],
+      fields: null,
+    });
+    expect(kinds('Button', 'onClick')).toBeNull();
+    expect(propValueKinds(null, 'Button', 'size')).toBeNull();
+  });
+});
+
+describe('unacceptedKind', () => {
+  it('names the first written kind the prop does not take', () => {
+    const declared = {
+      kinds: new Set(/** @type {const} */ (['object'])),
+      fields: null,
+      numbers: new Set(),
+      anyNumber: false,
+    };
+    expect(unacceptedKind(['string'], declared)).toBe('string');
+    expect(
+      unacceptedKind(['object', 'array', 'Date', 'function'], declared),
+    ).toBeNull();
   });
 });
 

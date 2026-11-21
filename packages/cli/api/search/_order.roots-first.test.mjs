@@ -23,7 +23,7 @@ const {searchView} = require('./_named-keywords.mjs');
 /** @type {typeof import('./_entries.mjs')} */
 const {entryTable} = require('./_entries.mjs');
 /** @type {typeof import('./_result.mjs')} */
-const {rootLeadsOf} = require('./_result.mjs');
+const {rootLeadsOf, weakRootsOf} = require('./_result.mjs');
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -148,7 +148,80 @@ describe('which roots lead their parts (rankLexical)', () => {
     expect(leadsOf('zorbitem glow')).toEqual([]);
     // Misspelled as the scorer reads a misspelled name.
     expect(leadsOf('glimmerstonetb')).toEqual([]);
-    expect(leadsOf('glimmerstone gem')).toEqual([]);
+    // The root's own name typed is no misspelled part.
+    expect(leadsOf('glimmerstone gem')).toEqual([
+      'GlimmerstoneTab<Glimmerstone',
+    ]);
+  });
+});
+
+describe("which roots lead their parts, by the root's own evidence", () => {
+  /** @type {Candidate[]} */
+  const more = [
+    {
+      domain: 'component',
+      name: 'Plinth',
+      keywords: ['base'],
+      description: 'A base that can glide.',
+    },
+    {
+      domain: 'component',
+      name: 'PlinthWarden',
+      _family: 'Plinth',
+      keywords: ['glide'],
+      description: 'Keeps a plinth in step.',
+    },
+    {
+      domain: 'component',
+      name: 'Plume',
+      keywords: ['feather'],
+      description: 'A plume.',
+    },
+    {
+      domain: 'component',
+      name: 'VPlume',
+      _family: 'Plume',
+      keywords: ['column'],
+      description: 'A vertical plume.',
+    },
+  ];
+  /** @param {string} query */
+  const marksOf = query =>
+    [
+      ...(rootLeadsOf.get(
+        rankLexical(
+          query,
+          {limit: Number.MAX_SAFE_INTEGER},
+          searchView({all: more, components: more, searchedComponents: false}),
+        ),
+      ) ?? []),
+    ].map(
+      ([part, root]) =>
+        `${/** @type {any} */ (part).name}<${/** @type {any} */ (root).name}`,
+    );
+
+  it('a root that answers only in its text leads only inside the run', () => {
+    const lexical = rankLexical(
+      'glide',
+      {limit: Number.MAX_SAFE_INTEGER},
+      searchView({all: more, components: more, searchedComponents: false}),
+    );
+    const weak = [...(weakRootsOf.get(lexical) ?? [])].map(
+      r => /** @type {any} */ (r).name,
+    );
+    expect(weak).toEqual(['PlinthWarden']);
+    const order = orderMatches(
+      entryTable(more, {}),
+      more.map((_, i) => i),
+      lexical,
+      'glide',
+      10,
+    ).data.results.map(r => r.name);
+    expect(order.indexOf('PlinthWarden')).toBeLessThan(order.indexOf('Plinth'));
+  });
+
+  it("a typed word that is the root's own name is no misspelled part", () => {
+    expect(marksOf('plume feather')).toContain('VPlume<Plume');
   });
 });
 
@@ -320,6 +393,27 @@ describe('rootsFirst', () => {
     expect([...moved].map(([part, root]) => [part.name, root.name])).toEqual([
       ['Zorb', 'ZorbList'],
     ]);
+  });
+
+  it("moves a weakly marked root only inside its part's run", () => {
+    const rows = items([
+      ['Zorb', 0],
+      ['Fizz', 0],
+      ['ZorbList', 1],
+    ]);
+    const roots = new Map([[rows[0].res, rows[2].res]]);
+    expect(
+      names(rootsFirst(rows, roots, undefined, new Set([rows[0].res]))),
+    ).toEqual(['Zorb', 'Fizz', 'ZorbList']);
+    const same = items([
+      ['Zorb', 0],
+      ['Fizz', 0],
+      ['ZorbList', 0],
+    ]);
+    const inRun = new Map([[same[0].res, same[2].res]]);
+    expect(
+      names(rootsFirst(same, inRun, undefined, new Set([same[0].res]))),
+    ).toEqual(['ZorbList', 'Zorb', 'Fizz']);
   });
 
   it('leaves a root already ahead of its part in place', () => {
