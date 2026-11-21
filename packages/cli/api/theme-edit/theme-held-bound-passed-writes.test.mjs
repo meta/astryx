@@ -111,7 +111,7 @@ describe('a bound already passed the way asked writes nothing', () => {
       'set ne corners 20px',
       'set ne --radius-container 20px',
       'set ne --radius-page 20px',
-      'set ne --radius-chat 20px',
+      "set ne --radius-chat 'min(calc(var(--radius-container) * 28 / 12), 20px)'",
     ]);
   }, 120_000);
 });

@@ -66,7 +66,7 @@ describe('the corners dial and chat surfaces', () => {
         await themeEditSet('c', 'corners', value, {cwd});
         expect(builtToken('c', '--radius-container'), value).toBeTruthy();
         expect(builtToken('c', '--radius-chat'), value).toBe(
-          'calc(var(--radius-container) * 28 / 12)',
+          'min(calc(var(--radius-container) * 28 / 12), 42px)',
         );
       }
       await themeEditSet('c', 'corners', 'small', {cwd});
@@ -88,14 +88,14 @@ describe('the corners dial and chat surfaces', () => {
       await themeEditSet('e', '--radius-container', '5px', {cwd});
       expect(builtToken('e', '--radius-container')).toBe('5px');
       expect(builtToken('e', '--radius-chat')).toBe(
-        'calc(var(--radius-container) * 28 / 12)',
+        'min(calc(var(--radius-container) * 28 / 12), 42px)',
       );
       // (An unrelated change rebuilds with the radii it keeps: chat still
       // reads the one container radius.)
       await themeEditSet('e', 'corners', 'small', {cwd, on: 'button'});
       expect(builtToken('e', '--radius-container')).toBe('5px');
       expect(builtToken('e', '--radius-chat')).toBe(
-        'calc(var(--radius-container) * 28 / 12)',
+        'min(calc(var(--radius-container) * 28 / 12), 42px)',
       );
     },
     T,
@@ -113,7 +113,10 @@ describe('the corners dial and chat surfaces', () => {
     };
     for (const value of ['small', 'round', '3px'])
       expect(radiusAt(base, value, '--radius-chat')).toBe(
-        Math.round((radiusAt(base, value, '--radius-container') * 28) / 12),
+        Math.min(
+          Math.round((radiusAt(base, value, '--radius-container') * 28) / 12),
+          42,
+        ),
       );
     // A base that pins no chat radius, or square containers, follows the
     // container radius.
@@ -146,4 +149,41 @@ describe('the corners dial and chat surfaces', () => {
       if (container < 12) expect(c, v).toBeLessThan(28);
     }
   });
+
+  it('is never rounder than one and a half times the base chat radius', () => {
+    const base = {
+      light: {
+        '--radius-element': '0.625rem',
+        '--radius-container': '0.75rem',
+        '--radius-page': '1.75rem',
+        '--radius-chat': '28px',
+      },
+    };
+    for (const v of ['round', 'pill', '24px'])
+      expect(radiusAt(base, v, '--radius-chat'), v).toBeLessThanOrEqual(42);
+  });
+
+  it(
+    'a corner bound holds the chat radius and still follows a container radius set later',
+    async ctx => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        ctx.skip();
+        return;
+      }
+      await themeEditNew('b', {cwd, like: 'butter'});
+      await themeEditSet('b', 'corners', '8px', {cwd});
+      await themeEditSet(
+        'b',
+        '--radius-chat',
+        'min(calc(var(--radius-container) * 28 / 12), 8px)',
+        {cwd},
+      );
+      await themeEditSet('b', '--radius-container', '2px', {cwd});
+      expect(builtToken('b', '--radius-chat')).toContain(
+        'var(--radius-container)',
+      );
+    },
+    T,
+  );
 });

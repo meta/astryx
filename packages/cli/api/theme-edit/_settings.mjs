@@ -8206,13 +8206,7 @@ export function compileTheme(ctx, data, base) {
           // it follows whatever container radius the theme ends up with (the
           // dial's, or an exact one set after it) and moves the way the
           // corners move.
-          const chat = chatRatio(base);
-          putTok(
-            '--radius-chat',
-            chat == null
-              ? 'var(--radius-container)'
-              : `calc(var(--radius-container) * ${chat.chat} / ${chat.container})`,
-          );
+          putTok('--radius-chat', chatRadiusValue(base));
         }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
@@ -16610,7 +16604,10 @@ export function radiusAt(base, value, token) {
     const chat = chatRatio(base);
     return chat == null
       ? container
-      : Math.round((container * chat.chat) / chat.container);
+      : Math.min(
+          Math.round((container * chat.chat) / chat.container),
+          chat.cap,
+        );
   }
   return pill ? 9999 : px;
 }
@@ -16622,13 +16619,38 @@ export function radiusAt(base, value, token) {
  * then the chat radius is the container radius. (The two stay a fraction,
  * so the base's own corners give its chat radius exactly.)
  * @param {{light: Record<string, string>}} base
- * @returns {{chat: number, container: number} | null}
+ * @returns {{chat: number, container: number, cap: number} | null}
  */
 export function chatRatio(base) {
   const chat = lengthPx(base.light?.['--radius-chat'] ?? '');
   const container = lengthPx(base.light?.['--radius-container'] ?? '');
   if (chat == null || container == null || container <= 0) return null;
-  return chat === container ? null : {chat, container};
+  // (A chat surface is never rounder than one and a half times the base's
+  // own chat radius: a composer one line tall has room for no more, and
+  // its drawer tucks under it by that radius.)
+  return chat === container
+    ? null
+    : {chat, container, cap: Math.round(chat * 1.5)};
+}
+
+/**
+ * The chat radius the corners dial writes: the container radius at the
+ * base's ratio of the two, up to the cap {@link chatRatio} names, or the
+ * container radius when the base pins no other. A bound (`at most 8px`)
+ * holds it there too, still read from the container radius.
+ * @param {{light: Record<string, string>}} base
+ * @param {{limit: number, up: boolean} | null} [bound]
+ */
+export function chatRadiusValue(base, bound = null) {
+  const chat = chatRatio(base);
+  const follow =
+    chat == null
+      ? 'var(--radius-container)'
+      : `min(calc(var(--radius-container) * ${chat.chat} / ${chat.container}), ${chat.cap}px)`;
+  if (!bound) return follow;
+  if (!bound.up && chat)
+    return `min(calc(var(--radius-container) * ${chat.chat} / ${chat.container}), ${Math.min(chat.cap, bound.limit)}px)`;
+  return `${bound.up ? 'max' : 'min'}(${follow}, ${bound.limit}px)`;
 }
 
 /**

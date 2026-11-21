@@ -753,9 +753,11 @@ with the whole-theme corners dial, it sets the chat radius to
 container corners, including an exact container radius set after the dial. A
 corners rung set on one part that reads the chat radius gives that part the
 container step. On a base that pins a chat radius other than its container
-radius, both keep the base's ratio of the two (`calc(var(--radius-container) *
-28 / 12)` on a base with 12px containers and 28px chat corners), so rounder
-corners never make the chat corners less round.
+radius, the dial and such a rung write the chat radius at the base's ratio of
+the two, up to one and a half times the base's chat radius
+(`min(calc(var(--radius-container) * 28 / 12), 42px)` on a base with 12px
+containers and 28px chat corners), so rounder corners never make the chat
+corners less round.
 
 Rejected: the page radius; Core's chat default is the container radius.
 Rejected: a copied pixel value, which drifts from a container radius set later.

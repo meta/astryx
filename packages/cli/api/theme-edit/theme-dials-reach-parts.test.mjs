@@ -60,7 +60,9 @@ describe('whole-theme dials', () => {
     await themeEditSet('z', 'font', 'Georgia', {cwd, on: 'heading'});
     await themeEditSet('z', 'border', 'none', {cwd, on: 'inputs'});
     const css = fs.readFileSync(path.join(cwd, 'themes', 'z', 'z.css'), 'utf8');
-    expect(css).toMatch(/--radius-chat: var\(--radius-container\)/);
+    expect(css).toContain(
+      '--radius-chat: min(calc(var(--radius-container) * 28 / 12), 42px)',
+    );
     expect(css).toMatch(
       /\.astryx-empty-state-title \{\s*font-weight: 800;\s*font-family: var\(--font-family-heading\);/,
     );

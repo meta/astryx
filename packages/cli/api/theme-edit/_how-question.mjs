@@ -95,6 +95,7 @@ import {
   positionalCornerToken,
   radiusAt,
   chatRatio,
+  chatRadiusValue,
   partState,
   baseBlocksFor,
   partsOf,
@@ -29830,7 +29831,20 @@ export function draftAnswer(ctx, env, question) {
                 : px > lb.limit;
           });
           if (!over.length) continue;
-          o.splice(at + 1, 0, ...over.map(t => set(t, `${lb.limit}px`)));
+          // (The chat radius stays read from the container radius, so a
+          // container radius set later still moves it: held at the bound.)
+          o.splice(
+            at + 1,
+            0,
+            ...over.map(t =>
+              set(
+                t,
+                t === '--radius-chat'
+                  ? chatRadiusValue(/** @type {any} */ (env.base), lb)
+                  : `${lb.limit}px`,
+              ),
+            ),
+          );
           d.text = `${d.text} (${lb.said}: ${over.join(', ')}, which the dial would make ${lb.up ? 'smaller' : 'larger'}, held at ${lb.limit}px)`;
           d.sequence = true;
         }
