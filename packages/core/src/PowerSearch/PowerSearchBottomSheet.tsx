@@ -72,6 +72,7 @@ import {Text} from '../Text/Text';
 import {TextInput} from '../TextInput/TextInput';
 import type {SearchSource} from '../Typeahead/types';
 import {useAnnounce, type AnnounceFn} from '../hooks/useAnnounce';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {SheetConfirmation} from '../internal/SheetConfirmation';
@@ -928,9 +929,8 @@ export function PowerSearchBottomSheet({
   );
   const managerRowsRef = useRef(new Map<number, HTMLLIElement>());
   const fieldRowsRef = useRef(new Map<string, HTMLLIElement>());
-  const latestFiltersRef = useRef(filters);
+  const latestFiltersRef = useCommittedRef(filters);
   const pendingSheetFocusRef = useRef<PendingSheetFocus | null>(null);
-  const pendingMutationFocusRef = useRef(false);
 
   // The step an open starts on: Add filter directly when an interactive field
   // has nothing to manage yet, otherwise Filters. Neither search field takes
@@ -968,9 +968,9 @@ export function PowerSearchBottomSheet({
   // caller, and this component renders above the
   // sheets, so it cannot call the hook itself. Each step's body renders a
   // `SheetAnnouncer` inside its BottomSheet, which publishes the dialog's own
-  // `announce` here while that step is the active one; the effects below
-  // speak through it, so every message about a sheet's content is delivered
-  // in that sheet's dialog.
+  // `announce` here while that step is the active one; the handlers speak
+  // through it, so every message about a sheet's content is delivered in
+  // that sheet's dialog.
   const announceRef = useRef<AnnounceFn | null>(null);
   const handleAnnounceChange = useCallback((next: AnnounceFn | null) => {
     announceRef.current = next;
@@ -978,7 +978,6 @@ export function PowerSearchBottomSheet({
   const announce = useCallback((message: string) => {
     announceRef.current?.(message);
   }, []);
-  const pendingAnnouncementRef = useRef<string | null>(null);
 
   // The controlled `isOpen` opens and closes the flow; the step follows it in
   // the render that sees the change, not an effect, so the entry step's sheet
@@ -1009,6 +1008,7 @@ export function PowerSearchBottomSheet({
 
   const closeFlow = useCallback(() => {
     pendingSheetFocusRef.current = null;
+    stepReturnTargetRef.current = null;
     setStep(null);
     onOpenChange(false);
   }, [onOpenChange]);
@@ -1063,7 +1063,8 @@ export function PowerSearchBottomSheet({
   const stepFinalFocusRef = useMemo<React.RefObject<HTMLElement | null>>(
     () => ({
       get current() {
-        return stepReturnTargetRef.current ?? finalFocusRef.current;
+        const named = stepReturnTargetRef.current;
+        return named?.isConnected === true ? named : finalFocusRef.current;
       },
     }),
     [finalFocusRef],
@@ -1136,15 +1137,53 @@ export function PowerSearchBottomSheet({
           row?.querySelector<HTMLButtonElement>('button'))
         : row?.querySelector<HTMLButtonElement>('button');
     placeFocus(rowButton ?? managerAddButtonRef.current);
-  }, [isRowButton]);
+  }, [isRowButton, latestFiltersRef]);
+
+  // Every step change goes through this, from the handler of the action that
+  // caused it, so its words are spoken once and focus moves once. The update
+  // is flushed, so the entering sheet is open, and then focus moves to the
+  // control the change named. A step that opens starts with no named return
+  // target; a return to Filters keeps the one it names.
+  const changeStep = useCallback(
+    (
+      next: SheetStep,
+      {
+        focus = null,
+        announcement,
+        update,
+      }: {
+        focus?: PendingSheetFocus | null;
+        announcement?: string;
+        update?: () => void;
+      } = {},
+    ) => {
+      pendingSheetFocusRef.current = focus;
+      if (next !== 'manage') {
+        stepReturnTargetRef.current = null;
+      }
+      // The words go to the dialog of the step the person acted in. When
+      // that step leaves, its dialog hands words not yet heard to the
+      // dialog that shows next; when it stays, they are spoken in it.
+      if (announcement != null) {
+        announce(announcement);
+      }
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the entering sheet must be open before focus moves into it
+      flushSync(() => {
+        update?.();
+        setStep(next);
+      });
+      focusPendingSheetTarget();
+    },
+    [announce, focusPendingSheetTarget],
+  );
 
   // A controlled update that unmounts the focused control of the Filters or
   // Add filter sheet leaves focus on the page body inside the open modal.
   // Read before paint on every commit of an open step: when focus is no
   // longer inside the sheet's dialog, the nearest remaining row by the last
   // focused index takes it, else the sheet's first control, else its panel.
-  // The pending-target effects below run after and win when a step
-  // change named a control.
+  // A step change's handler moves focus after its flushed commit, so the
+  // control it names wins over this repair.
   useLayoutEffect(() => {
     const last = lastSheetFocusRef.current;
     if (step !== 'manage' && step !== 'fields') {
@@ -1182,49 +1221,6 @@ export function PowerSearchBottomSheet({
       (focusable ?? dialog).focus({preventScroll: true});
     }
   });
-
-  // Both Effects move focus inside the entering sheet — the external system
-  // is the document's focus — to the control the step named. They run after
-  // the entering sheet's own
-  // panel focus (child effects commit first), so the intended control wins,
-  // and they acquire nothing, so they need no cleanup. The filters effect is
-  // declared first so a mutation that lands in the same commit as the step
-  // change resolves its row against the new filters.
-  useEffect(() => {
-    latestFiltersRef.current = filters;
-    if (step === 'manage' && pendingMutationFocusRef.current) {
-      pendingMutationFocusRef.current = false;
-      focusPendingSheetTarget();
-    }
-  }, [filters, focusPendingSheetTarget, step]);
-
-  // A target still pending when the flow closes, such as a commit that
-  // disabled the field, never carries into the next open.
-  useEffect(() => {
-    if (step == null) {
-      stepReturnTargetRef.current = null;
-      pendingSheetFocusRef.current = null;
-      return;
-    }
-    // A step that opens starts with no named return target; a return to
-    // Filters keeps the one its commit, or its removal, has just named.
-    if (step !== 'manage') {
-      stepReturnTargetRef.current = null;
-    }
-    focusPendingSheetTarget();
-  }, [focusPendingSheetTarget, step]);
-
-  // An announcement queued by a step change — a suggestion or a removal that
-  // changed the filters — is spoken in the commit that shows the next step,
-  // so it lands in that step's dialog region rather than the one about to
-  // close. It synchronizes the live region named above and acquires nothing.
-  useEffect(() => {
-    const message = pendingAnnouncementRef.current;
-    if (step != null && message != null) {
-      pendingAnnouncementRef.current = null;
-      announce(message);
-    }
-  }, [announce, step]);
 
   // ----------------------------------------------------------------- fields --
 
@@ -1392,22 +1388,19 @@ export function PowerSearchBottomSheet({
     if (!isInteractive) {
       return;
     }
-    setFieldPickerOrigin('manage');
-    setFieldQuery('');
-    setContentQuery('');
-    pendingSheetFocusRef.current = null;
-    setStep('fields');
-  }, [isInteractive]);
-
-  const queueManagerAddFocus = useCallback(() => {
-    pendingSheetFocusRef.current = {type: 'manager-add'};
-  }, []);
+    changeStep('fields', {
+      update: () => {
+        setFieldPickerOrigin('manage');
+        setFieldQuery('');
+        setContentQuery('');
+      },
+    });
+  }, [changeStep, isInteractive]);
 
   const commitSavedFilter = useCallback(
     (next: FilterDraft, filter: PowerSearchFilter) => {
       if (!isInteractive) {
-        queueManagerAddFocus();
-        setStep('manage');
+        changeStep('manage', {focus: {type: 'manager-add'}});
         return;
       }
       if (next.mode === 'edit') {
@@ -1423,36 +1416,40 @@ export function PowerSearchBottomSheet({
           // could be, or made it read-only: nothing is written, and focus
           // returns to the nearest row that is a button around where it was,
           // else Add filter.
-          pendingSheetFocusRef.current =
-            next.sourceFilter != null &&
-            next.sourceSignature != null &&
-            next.filterIndex != null
-              ? {
-                  type: 'manager-filter',
-                  sourceFilter: next.sourceFilter,
-                  sourceSignature: next.sourceSignature,
-                  preferredIndex: next.filterIndex,
-                }
-              : {type: 'manager-add'};
-          setStep('manage');
+          changeStep('manage', {
+            focus:
+              next.sourceFilter != null &&
+              next.sourceSignature != null &&
+              next.filterIndex != null
+                ? {
+                    type: 'manager-filter',
+                    sourceFilter: next.sourceFilter,
+                    sourceSignature: next.sourceSignature,
+                    preferredIndex: next.filterIndex,
+                  }
+                : {type: 'manager-add'},
+          });
           return;
         }
-        pendingSheetFocusRef.current = {
-          type: 'manager-filter',
-          sourceFilter: filter,
-          sourceSignature: filterSignature(filter),
-          preferredIndex: filterIndex,
-        };
         const updated = [...filters];
         updated[filterIndex] = filter;
-        onChange(updated, 'edit', filterIndex);
+        changeStep('manage', {
+          focus: {
+            type: 'manager-filter',
+            sourceFilter: filter,
+            sourceSignature: filterSignature(filter),
+            preferredIndex: filterIndex,
+          },
+          update: () => onChange(updated, 'edit', filterIndex),
+        });
       } else {
-        queueManagerAddFocus();
-        onChange([...filters, filter], 'add', filters.length);
+        changeStep('manage', {
+          focus: {type: 'manager-add'},
+          update: () => onChange([...filters, filter], 'add', filters.length),
+        });
       }
-      setStep('manage');
     },
-    [filters, isInteractive, onChange, queueManagerAddFocus],
+    [changeStep, filters, isInteractive, onChange],
   );
 
   // Opening a new filter can come from a field row or a content-search
@@ -1464,18 +1461,17 @@ export function PowerSearchBottomSheet({
       operator: PowerSearchOperator,
       returnFocus: 'field' | 'content-search' = 'field',
     ) => {
-      setDraft({
+      const nextDraft: FilterDraft = {
         mode: 'create',
         generation: nextDraftGeneration(),
         returnFocus,
         field: field.key,
         operator: operator.key,
         value: operator.value.type === 'empty' ? {type: 'empty'} : undefined,
-      });
-      pendingSheetFocusRef.current = null;
-      setStep('value');
+      };
+      changeStep('value', {update: () => setDraft(nextDraft)});
     },
-    [nextDraftGeneration],
+    [changeStep, nextDraftGeneration],
   );
 
   const handleFieldSelect = useCallback(
@@ -1492,18 +1488,19 @@ export function PowerSearchBottomSheet({
           operator: operator.key,
           value: {type: 'empty'},
         };
-        pendingSheetFocusRef.current = {
-          type: 'manager-filter',
-          sourceFilter: nextFilter,
-          sourceSignature: filterSignature(nextFilter),
-          preferredIndex: filters.length,
-        };
-        pendingMutationFocusRef.current = true;
-        onChange([...filters, nextFilter], 'add', filters.length);
-        pendingAnnouncementRef.current = t('@astryx.tokenizer.tokenAdded', {
-          label: describeFilter(nextFilter),
+        changeStep('manage', {
+          focus: {
+            type: 'manager-filter',
+            sourceFilter: nextFilter,
+            sourceSignature: filterSignature(nextFilter),
+            preferredIndex: filters.length,
+          },
+          announcement: t('@astryx.tokenizer.tokenAdded', {
+            label: describeFilter(nextFilter),
+          }),
+          update: () =>
+            onChange([...filters, nextFilter], 'add', filters.length),
         });
-        setStep('manage');
         return;
       }
       const operator =
@@ -1514,6 +1511,7 @@ export function PowerSearchBottomSheet({
       openCreateEditor(field, operator);
     },
     [
+      changeStep,
       config,
       describeFilter,
       filters,
@@ -1546,26 +1544,27 @@ export function PowerSearchBottomSheet({
           operator: operator.key,
           value: filterValue,
         };
-        pendingSheetFocusRef.current = {
-          type: 'manager-filter',
-          sourceFilter: nextFilter,
-          sourceSignature: filterSignature(nextFilter),
-          preferredIndex: filters.length,
-        };
-        pendingMutationFocusRef.current = true;
-        onChange([...filters, nextFilter], 'add', filters.length);
         // The same announcement the popover presentation's typeahead add
         // makes, so assistive technology hears one phrase for one outcome;
         // spoken once the Filters sheet is the open dialog.
-        pendingAnnouncementRef.current = t('@astryx.tokenizer.tokenAdded', {
-          label: item.label,
+        changeStep('manage', {
+          focus: {
+            type: 'manager-filter',
+            sourceFilter: nextFilter,
+            sourceSignature: filterSignature(nextFilter),
+            preferredIndex: filters.length,
+          },
+          announcement: t('@astryx.tokenizer.tokenAdded', {
+            label: item.label,
+          }),
+          update: () =>
+            onChange([...filters, nextFilter], 'add', filters.length),
         });
-        setStep('manage');
         return;
       }
       openCreateEditor(field, operator, 'content-search');
     },
-    [config, filters, isInteractive, onChange, openCreateEditor, t],
+    [changeStep, config, filters, isInteractive, onChange, openCreateEditor, t],
   );
 
   const handleFilterEdit = useCallback(
@@ -1574,7 +1573,7 @@ export function PowerSearchBottomSheet({
       if (!isInteractive || filter == null || filter.isReadOnly) {
         return;
       }
-      setDraft({
+      const nextDraft: FilterDraft = {
         mode: 'edit',
         generation: nextDraftGeneration(),
         filterIndex: index,
@@ -1583,13 +1582,17 @@ export function PowerSearchBottomSheet({
         field: filter.field,
         operator: filter.operator,
         value: filter.value,
-      });
-      pendingSheetFocusRef.current = null;
-      setStep('value');
+      };
+      changeStep('value', {update: () => setDraft(nextDraft)});
     },
-    [filters, isInteractive, nextDraftGeneration],
+    [changeStep, filters, isInteractive, nextDraftGeneration],
   );
 
+  // Removes the filter at `index` and shows Filters, with focus on the next
+  // editable row's remove action, else Add filter. The popover
+  // presentation's token × announces the same phrase. A removal from a
+  // Filters row stays in that sheet; a caller's Editor that removes returns
+  // to it; either way the words are spoken in the Filters sheet's dialog.
   const handleRemoveFilter = useCallback(
     (index: number) => {
       const filter = filters[index];
@@ -1598,35 +1601,26 @@ export function PowerSearchBottomSheet({
       }
       const nextFilters = filters.filter((_, i) => i !== index);
       const nextIndex = nearestEditableIndex(nextFilters, index, isRowButton);
-      if (nextIndex == null) {
-        pendingSheetFocusRef.current = {type: 'manager-add'};
-      } else {
-        const nextFilter = nextFilters[nextIndex];
-        pendingSheetFocusRef.current = {
-          type: 'manager-filter',
-          sourceFilter: nextFilter,
-          sourceSignature: filterSignature(nextFilter),
-          preferredIndex: nextIndex,
-          part: 'remove',
-        };
-      }
-      pendingMutationFocusRef.current = true;
-      onChange(nextFilters, 'remove', index);
-      // The popover presentation's token × announces the same phrase. A
-      // removal from a Filters row stays in that sheet and speaks at once; a
-      // caller's Editor that removes while returning to Filters speaks once
-      // the Filters sheet is the open dialog.
-      const message = t('@astryx.tokenizer.tokenRemoved', {
-        label: describeFilter(filter),
+      const nextFilter = nextIndex == null ? undefined : nextFilters[nextIndex];
+      changeStep('manage', {
+        focus:
+          nextIndex == null || nextFilter == null
+            ? {type: 'manager-add'}
+            : {
+                type: 'manager-filter',
+                sourceFilter: nextFilter,
+                sourceSignature: filterSignature(nextFilter),
+                preferredIndex: nextIndex,
+                part: 'remove',
+              },
+        announcement: t('@astryx.tokenizer.tokenRemoved', {
+          label: describeFilter(filter),
+        }),
+        update: () => onChange(nextFilters, 'remove', index),
       });
-      if (stepRef.current === 'manage') {
-        announce(message);
-      } else {
-        pendingAnnouncementRef.current = message;
-      }
     },
     [
-      announce,
+      changeStep,
       describeFilter,
       filters,
       isInteractive,
@@ -1716,8 +1710,7 @@ export function PowerSearchBottomSheet({
 
   const returnFromValue = useCallback(() => {
     if (draft == null) {
-      queueManagerAddFocus();
-      setStep('manage');
+      changeStep('manage', {focus: {type: 'manager-add'}});
       return;
     }
     if (
@@ -1726,24 +1719,24 @@ export function PowerSearchBottomSheet({
       draft.sourceSignature != null &&
       draft.filterIndex != null
     ) {
-      pendingSheetFocusRef.current = {
-        type: 'manager-filter',
-        sourceFilter: draft.sourceFilter,
-        sourceSignature: draft.sourceSignature,
-        preferredIndex:
-          resolveDraftFilterIndex(filters, draft) ?? draft.filterIndex,
-      };
-      setStep('manage');
+      changeStep('manage', {
+        focus: {
+          type: 'manager-filter',
+          sourceFilter: draft.sourceFilter,
+          sourceSignature: draft.sourceSignature,
+          preferredIndex:
+            resolveDraftFilterIndex(filters, draft) ?? draft.filterIndex,
+        },
+      });
       return;
     }
-    if (draft.returnFocus === 'content-search') {
-      pendingSheetFocusRef.current = {type: 'content-search'};
-      setStep('fields');
-      return;
-    }
-    pendingSheetFocusRef.current = {type: 'field', fieldKey: draft.field};
-    setStep('fields');
-  }, [draft, filters, queueManagerAddFocus]);
+    changeStep('fields', {
+      focus:
+        draft.returnFocus === 'content-search'
+          ? {type: 'content-search'}
+          : {type: 'field', fieldKey: draft.field},
+    });
+  }, [changeStep, draft, filters]);
 
   const handleRemove = useCallback(() => {
     if (draft?.mode !== 'edit') {
@@ -1751,13 +1744,11 @@ export function PowerSearchBottomSheet({
     }
     const filterIndex = resolveDraftFilterIndex(filters, draft);
     if (filterIndex == null || filters[filterIndex]?.isReadOnly) {
-      queueManagerAddFocus();
-      setStep('manage');
+      changeStep('manage', {focus: {type: 'manager-add'}});
       return;
     }
     handleRemoveFilter(filterIndex);
-    setStep('manage');
-  }, [draft, filters, handleRemoveFilter, queueManagerAddFocus]);
+  }, [changeStep, draft, filters, handleRemoveFilter]);
 
   // Each step sheet is controlled by `step`; a sheet only ever asks to close
   // (a dismissal its `purpose` allows: Escape, the scrim, a swipe, a platform
@@ -1782,10 +1773,9 @@ export function PowerSearchBottomSheet({
         requestDismiss();
         return;
       }
-      queueManagerAddFocus();
-      setStep('manage');
+      changeStep('manage', {focus: {type: 'manager-add'}});
     },
-    [fieldPickerOrigin, queueManagerAddFocus, requestDismiss],
+    [changeStep, fieldPickerOrigin, requestDismiss],
   );
   const handleValueOpenChange = useCallback(
     (isSheetOpen: boolean) => {
@@ -2415,8 +2405,7 @@ export function PowerSearchBottomSheet({
                     if (draft.mode === 'edit') {
                       handleRemove();
                     } else {
-                      queueManagerAddFocus();
-                      setStep('manage');
+                      changeStep('manage', {focus: {type: 'manager-add'}});
                     }
                     return;
                   }
