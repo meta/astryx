@@ -2172,17 +2172,70 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(farthest).toBeLessThan(TRAVEL_PX - 1);
     // ...from where it was: no frame moves it more than a few px. Each step is
     // measured against the time its frames span. So a frame read late, two
-    // vsyncs of motion in one sample, is not a jump.
+    // vsyncs of motion in one sample, is not a jump. One more case is motion,
+    // not a jump: a moving thumb that a frame stall (more than three frames)
+    // painted where it was. The step after the stall shows motion that ran
+    // during the stall, so it spans the stall too.
     const FRAME_MS = 1000 / 60;
-    const perFrame = read
-      .slice(1)
-      .map(
-        ([time, x], i) =>
-          (Math.abs(x - read[i][1]) * FRAME_MS) /
-          Math.max(time - read[i][0], FRAME_MS),
-      );
+    const STALL_MS = 3 * FRAME_MS;
+    const HELD_PX = 0.5;
+    const perFrame = read.slice(1).map(([time, x], i) => {
+      const before = read[i - 1];
+      const stall = before == null ? 0 : read[i][0] - before[0];
+      const wasMoving =
+        i > 1 && Math.abs(read[i - 1][1] - read[i - 2][1]) > HELD_PX;
+      const heldThrough =
+        before != null && Math.abs(read[i][1] - before[1]) <= HELD_PX;
+      const span =
+        time -
+        read[i][0] +
+        (stall > STALL_MS && wasMoving && heldThrough ? stall : 0);
+      return (Math.abs(x - read[i][1]) * FRAME_MS) / Math.max(span, FRAME_MS);
+    });
     expect(Math.max(...perFrame), JSON.stringify(read)).toBeLessThan(4);
   }
+
+  // The jump check on recorded samples, with no page. A frame stall that
+  // holds a moving thumb still, then the frame that catches up, is motion.
+  // A jump between ordinary frames, a snap back after the frozen catch's
+  // gap, and a jump after a frame read just over three frames late still
+  // fail.
+  test('P14 · the jump check reads the catch-up after a frame stall as motion, not a jump', () => {
+    const steps: [number, number][] = [];
+    for (let i = 0; i < 12; i++) {
+      const previous = steps[i - 1]?.[1] ?? 98;
+      steps.push([(i * 1000) / 60, previous + (i <= 5 ? 2.7 : -2.7)]);
+    }
+    const [lastTime, lastX] = steps[11];
+    // The recorded failure: a 302 ms stall paints the thumb where it was,
+    // and 2.8 ms later the frame catches up 8 px.
+    expectCaughtWithoutAJump([
+      ...steps,
+      [lastTime + 302, lastX],
+      [lastTime + 304.8, lastX - 8],
+    ]);
+    // 8 px in one ordinary frame.
+    expect(() =>
+      expectCaughtWithoutAJump([...steps, [lastTime + 1000 / 60, lastX - 8]]),
+    ).toThrow();
+    // The frozen catch: a 60 ms gap in which the thumb moved, then a 5.7 px
+    // snap in one frame.
+    expect(() =>
+      expectCaughtWithoutAJump([
+        ...steps,
+        [lastTime + 60, lastX - 2.7],
+        [lastTime + 60 + 1000 / 60, lastX + 3],
+      ]),
+    ).toThrow();
+    // One frame in three, read 1 ms late, then 13 px in one frame.
+    expect(() =>
+      expectCaughtWithoutAJump([
+        [0, 100],
+        [51, 104],
+        [51 + 1000 / 60, 91],
+      ]),
+    ).toThrow();
+  });
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({
     page,

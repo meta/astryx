@@ -633,6 +633,49 @@ async function drawCharts(markup, Page) {
 }
 
 /**
+ * The markup of a part's open layers. A layer opened from inside another
+ * (its opener, the control naming it in aria-controls, sits in that layer:
+ * a submenu's flyout) is drawn once, beside the layer it opens from, in a
+ * row with it, as a browser places it; never again inside that layer, where
+ * the document holds it too.
+ * @param {any[]} open the open layers, in the order they opened
+ * @returns {string}
+ */
+function nestedLayers(open) {
+  /** @param {any} layer */
+  const parentOf = layer => {
+    const ids = new Set(
+      [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean),
+    );
+    return (
+      open.find(
+        other =>
+          other !== layer &&
+          !layer.contains(other) &&
+          [...other.querySelectorAll('[aria-controls]')].some(c =>
+            ids.has(c.getAttribute('aria-controls')),
+          ),
+      ) ?? null
+    );
+  };
+  const parents = new Map(open.map(layer => [layer, parentOf(layer)]));
+  /** @param {any} layer @returns {string} */
+  const draw = layer => {
+    const kids = open.filter(o => parents.get(o) === layer);
+    if (!kids.length) return layer.outerHTML;
+    const own = layer.cloneNode(true);
+    for (const inner of own.querySelectorAll('[data-astryx-layer-root]'))
+      inner.remove();
+    return `<div data-astryx-layer-nest="">${own.outerHTML}${kids.map(draw).join('')}</div>`;
+  };
+  return open
+    .filter(layer => !parents.get(layer))
+    .map(draw)
+    .join('');
+}
+
+
+/**
  * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
  * as nothing when nothing opens), or `mounted`, as the browser shows the part
  * once it runs, nothing opened.
@@ -736,10 +779,12 @@ async function drawLayers(markup, server) {
           );
           if (open.length) {
             // The part as drawn, then each overlay open now, after it; never a
-            // closed one, nor the markers that place them.
+            // closed one, nor the markers that place them. A layer opened from
+            // inside another (a submenu's flyout) is drawn beside the layer it
+            // opens from, as a browser places it.
             const part = host.cloneNode(true);
             for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
-            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + nestedLayers(open);
           }
         }
       } catch {
@@ -809,7 +854,11 @@ async function drawOpenLayers(elements, React) {
       flushSync(() => root.render(createElement(Alone, null, element)));
       // (A part that opens nothing on a press and holds a layer, a context
       // menu's area, is right-clicked, as one drawn in its own place is.)
-      layers.push(...(await openLayerMarkup(host, flushSync)));
+      // A layer opened from inside another is drawn beside it (nestedLayers).
+      const box = g.document.createElement('div');
+      box.innerHTML = (await openLayerMarkup(host, flushSync)).join('');
+      const drawn = nestedLayers([...box.children]);
+      if (drawn) layers.push(drawn);
     } catch {
       // A part that cannot be drawn there adds no overlays.
     }
@@ -1595,12 +1644,19 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
-// Imports between the files of an installed package resolve by path (a
-// Node without in-thread hooks resolves them itself). The hook answers only
-// relative imports inside a package, and single-copy-hooks.mjs answers only
-// package names, so neither changes what the other resolves.
+// Imports between the files of an installed or a linked package resolve by
+// path (a Node without in-thread hooks resolves them itself). The hook
+// answers only relative imports inside a package, and single-copy-hooks.mjs
+// answers only package names, so neither changes what the other resolves.
+// The page's own folders, and a folder that holds the page, are never a
+// linked package's: the page's modules compile as its own.
 const registerHooks = /** @type {any} */ (Module).registerHooks;
-if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
+if (typeof registerHooks === 'function')
+  registerHooks(
+    packageResolveHooks(undefined, {
+      skip: folder => isLocal(folder) || entry.startsWith(folder),
+    }),
+  );
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;

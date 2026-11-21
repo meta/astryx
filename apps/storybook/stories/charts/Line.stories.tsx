@@ -115,16 +115,16 @@ export const MultiSeries: StoryObj = {
 };
 
 const CURVES = [
-  {curve: 'linear', note: 'Straight segments between points'},
-  {curve: 'monotone', note: 'Default. Smooth, with no overshoot'},
+  {curve: 'linear', note: 'Default. Straight segments between points'},
+  {curve: 'monotone', note: 'Smooth, with no overshoot'},
   {curve: 'natural', note: 'Smooth, can overshoot the data'},
   {curve: 'step', note: 'Changes value halfway between points'},
 ] as const;
 
 /**
  * Each chart draws the same series with a different `curve`. Straight
- * segments (`linear`) show the data most accurately. `monotone` is the
- * default. Check: all four lines pass through the same 12 points; between the
+ * segments (`linear`) show the data most accurately and are the default.
+ * Check: all four lines pass through the same 12 points; between the
  * March spike and the May drop, `natural` overshoots and `step` jumps
  * halfway between months.
  */
