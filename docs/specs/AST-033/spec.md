@@ -104,8 +104,10 @@ for each bug.
 - **FR2a — Icon search has a stored index too.** `exportIconIndex()` and
   `rankIconIndex()` in `@astryxdesign/cli/api` are experimental, the icon
   counterpart of the search index pair. `exportIconIndex()` returns the icon
-  sets `icon()` searches in a folder as plain JSON, `{version, sets,
-withdrawn}`, where `version` is the CLI version that made it.
+  sets `icon()` searches in a folder as plain JSON,
+  `{version, sets, withdrawn, components}`, where `version` is the CLI
+  version that made it and `components` names the folder's Core components,
+  which `icon()` reads to rank a query's place words (`spec:AST-084` FR6).
   `rankIconIndex()` ranks only indexes made by its own CLI version and refuses
   any other with an error that names both versions. It ranks the sets of every
   index as one list with `icon()`'s own ranking, and equal scores keep the
