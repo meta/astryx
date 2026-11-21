@@ -750,8 +750,8 @@ export interface DerivedStatus {
   /** The roles derived and written. */
   roles: Record<string, 'derived'>;
   /** What the roles gave up to stay written (a fill that cannot meet every
-   * limit, a border under 3:1), and each role that keeps the base theme's
-   * colors because its text or icon reads at no shade. */
+   * limit), and each role that keeps the base theme's colors because its
+   * text, icon or border reads at no shade. */
   why: string[];
   /** The roles `why` names, by dial id. */
   short: string[];
@@ -827,7 +827,7 @@ export function deriveStatusColors({
         fail(
           m,
           `${token} reads at only ${ratioDown(best.r)}:1 in ${m} at its most readable shade (needs ${needs}:1)`,
-          !token.startsWith('--color-border-'),
+          true,
         );
       return at(m, best.stop);
     };
