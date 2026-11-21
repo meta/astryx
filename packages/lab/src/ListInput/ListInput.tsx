@@ -192,8 +192,14 @@ interface PendingMutationMotion<T> {
   matchesValue: (nextValue: T[]) => boolean;
 }
 
-// Core List's reorder handle is 28 px wide for every pointer.
-const REORDER_HANDLE_SIZE = 28;
+// Core List's reorder handle is its grip alone, a 1rem box whatever icon size
+// the theme gives the grip. A record has no inset. So the handle stays clear
+// of the record's end by its target's reach: at least 4 px, or a finger's
+// reach under a coarse pointer. SYNC: the GRIP, EDGE_GUARD and
+// TOUCH_EDGE_GUARD of core List's handle.
+const GRIP = '1rem';
+const HANDLE_ROOM = `calc(${GRIP} + max(4px, (24px - ${GRIP}) / 2))`;
+const TOUCH_HANDLE_ROOM = `calc(${GRIP} + (44px - ${GRIP}) / 2)`;
 
 const styles = stylex.create({
   group: {
@@ -246,7 +252,10 @@ const styles = stylex.create({
   // cell's track is fixed, so the Add row, which has no controls, keeps the
   // fields' width.
   rowWithRemoveAndHandle: {
-    gridTemplateColumns: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${REORDER_HANDLE_SIZE}px)`,
+    gridTemplateColumns: {
+      default: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${HANDLE_ROOM})`,
+      '@media (pointer: coarse)': `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${TOUCH_HANDLE_ROOM})`,
+    },
   },
   fields: {
     display: {

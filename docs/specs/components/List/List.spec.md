@@ -212,6 +212,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ListItem row paint | Stops at the content (`flush`), reaches past it by the row inset (`padded`, `outset`), or reaches the host edge (`bleed`).                                                              | `component:List/DEC-3`   | Supporting surface | FR3–FR6            |
 | Row content        | The row's first content (its marker, start content, or label) sits inside the row inset (`padded`) or on the host content line when the host inset allows (`flush`, `outset`, `bleed`). | `component:List/DEC-3`   | Prominent          | FR2–FR5            |
 
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision                                                                                                                                                                                                                                                                                                                                                                                                                          | Intent or reason                                                                                                               | Applies to                                                   | Allowed variation                                                                                                                                        |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DD1 | The reorder handle is its grip alone: the `list-reorder-handle` icon, `drag` at the `sm` size by default, in the secondary icon color, with no hover fill. An invisible square target of at least 24 px surrounds the grip; the focus ring's outer edge is the target's edge, and reorder mode fills the target with rounded corners. The handle's box is 1rem, and a theme's icon size never changes it, its target or its ring. | The handle reads as a quiet grip beside the row's content, not as a button, and its target still meets the WCAG 2.5.8 minimum. | The reorder handle of a reorderable row (`spec:AST-103` FR5) | A theme replaces the grip and its icon size through its icon slot, and its color through the icon color tokens. A coarse pointer keeps its 44 px target. |
+
 ## Family and system relationships
 
 - `architecture:container-padding` owns host publication, eligibility,
@@ -231,6 +239,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   model to list rows, and FR12's motion plays an FR4 role.
 - `spec:AST-105` owns the animated layout handle and its shared motion; List
   adopts it for row updates (FR12).
+- Additive theme surface: a theme maps the reorder handle's grip through
+  `componentIcons['list-reorder-handle']`; with no entry, the grip is the
+  `drag` icon at the `sm` size (`spec:AST-103` DEC-7). The slot's size
+  changes only the icon.
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
@@ -344,6 +356,22 @@ where it is free. An interactive ListItem row's `::after` is its touch hit area
 
 Rejected: leaving a caller's `::before` intact through a press, because the
 row then needs a second element or a main-thread paint for its press.
+
+### DEC-7 — A reorder handle's grip adds its icon's elements to the row
+
+**Reference:** `component:List/DEC-7`
+
+**Decider:** `cixzhang`, `2026-11-13 18:40 PT`
+
+A reorderable row's handle draws its grip as the theme's icon
+(`spec:AST-103` DEC-7). That icon's own elements join the row, inside the
+handle: the default `drag` adds eight, a wrapper and an SVG of six dots.
+This is the list-row exception to the surface budget of
+`architecture:component-style-authoring` INV7. The handle's `::before` holds
+its target, so no pseudo-element is free for the grip, and a theme cannot
+replace a pseudo-element's drawing. The Reorderable story's six handles add
+48 elements: 177 at rest, against 129 with three lines drawn as a
+pseudo-element, under a fine and a coarse pointer alike.
 
 ## Open questions
 

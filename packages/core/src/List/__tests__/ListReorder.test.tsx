@@ -44,6 +44,11 @@ import {ContextMenu} from '../../ContextMenu';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {INSERTION_LINE_THICKNESS} from '../ListReorderHandle';
+import {Icon} from '../../Icon/Icon';
+import {registerIcons, resetIcons} from '../../Icon/globalIconRegistry';
+import type {ComponentIconMap} from '../../Icon/index';
+import {defineTheme} from '../../theme/defineTheme';
+import {Theme} from '../../theme/Theme';
 import {MOUSE_DRAG_SLOP} from '../listReorderEngine';
 import {
   createReorderable,
@@ -161,6 +166,10 @@ const labels = () =>
 
 const handleOf = (label: string) =>
   screen.getByRole('button', {name: `Reorder ${label}`});
+
+/** The elements in `row`, not counting the ones inside its `handle`. */
+const outsideHandle = (row: HTMLElement, handle: HTMLElement) =>
+  row.querySelectorAll('*').length - handle.querySelectorAll('*').length;
 
 /**
  * A button of reorder mode's hint. jsdom never opens a popover, so the hint
@@ -401,14 +410,14 @@ describe('List reorderable', () => {
     const sent = screen.getByText('Sent').closest('li') as HTMLElement;
     const before = [inbox, sent].map(row => row.querySelectorAll('*').length);
     rerender(rows(createReorderable({onReorder: () => {}})));
-    expect(inbox.querySelectorAll('*').length).toBe(before[0] + 1);
-    expect(sent.querySelectorAll('*').length).toBe(before[1] + 1);
+    expect(outsideHandle(inbox, handleOf('Inbox'))).toBe(before[0] + 1);
+    expect(outsideHandle(sent, handleOf('Sent'))).toBe(before[1] + 1);
     // The handle is the row's own child, after the label.
     expect(handleOf('Inbox').parentElement).toBe(inbox);
     expect(handleOf('Sent').parentElement).toBe(sent);
   });
 
-  it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
+  it('adds one element to a row, the handle, whose grip is the drag icon', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
         <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
@@ -418,10 +427,103 @@ describe('List reorderable', () => {
     const row = screen.getByText('Inbox').closest('li') as HTMLElement;
     const before = row.querySelectorAll('*').length;
     rerender(rows(createReorderable({onReorder: () => {}})));
-    expect(row.querySelectorAll('*').length).toBe(before + 1);
     const handle = handleOf('Inbox');
-    expect(handle.children).toHaveLength(0);
+    expect(outsideHandle(row, handle)).toBe(before + 1);
+    // The grip is the handle's only content: an icon, hidden from assistive
+    // technology.
+    expect(handle.children).toHaveLength(1);
+    expect(handle.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+    expect(handle.querySelector('svg')).not.toBeNull();
     expect(handle.textContent).toBe('');
+  });
+
+  it("draws the icon registry's drag icon as its grip", () => {
+    registerIcons({drag: <svg data-testid="brand-drag" />});
+    try {
+      render(
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+        </List>,
+      );
+      expect(handleOf('Inbox')).toContainElement(
+        screen.getByTestId('brand-drag'),
+      );
+    } finally {
+      resetIcons();
+    }
+  });
+
+  it("draws the theme's list-reorder-handle icon as its grip; null draws none and keeps the handle", () => {
+    let themes = 0;
+    const draw = (componentIcons: ComponentIconMap<never>) =>
+      render(
+        <Theme
+          theme={defineTheme({
+            name: `list-reorder-handle-slot-${themes++}`,
+            icons: {menu: <svg data-testid="slot-menu" />},
+            componentIcons,
+          })}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+          </List>
+        </Theme>,
+      );
+    const {unmount} = draw({'list-reorder-handle': 'menu'});
+    expect(handleOf('Inbox')).toContainElement(screen.getByTestId('slot-menu'));
+    unmount();
+    draw({'list-reorder-handle': null});
+    expect(handleOf('Inbox').querySelector('svg')).toBeNull();
+    expect(handleOf('Inbox')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('draws the drag icon at the sm size when the theme maps nothing to the slot', () => {
+    render(
+      <>
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+        </List>
+        <span data-testid="drag-sm">
+          <Icon icon="drag" size="sm" />
+        </span>
+      </>,
+    );
+    const grip = handleOf('Inbox').querySelector('svg');
+    expect(grip).not.toBeNull();
+    expect(grip?.outerHTML).toBe(
+      screen.getByTestId('drag-sm').querySelector('svg')?.outerHTML,
+    );
+  });
+
+  it("changes only the icon for a theme's slot size: the handle keeps its box and its classes", () => {
+    const handleWith = (componentIcons?: ComponentIconMap<never>) => {
+      const {unmount} = render(
+        <Theme
+          theme={defineTheme({
+            name: `list-reorder-grip-${componentIcons == null ? 'default' : 'lg'}`,
+            componentIcons,
+          })}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+          </List>
+        </Theme>,
+      );
+      const handle = handleOf('Inbox');
+      const result = {
+        className: handle.getAttribute('class'),
+        style: handle.getAttribute('style'),
+        iconSize: handle
+          .querySelector('[data-size]')
+          ?.getAttribute('data-size'),
+      };
+      unmount();
+      return result;
+    };
+    const standard = handleWith();
+    const large = handleWith({'list-reorder-handle': {size: 'lg'}});
+    expect(standard.iconSize).toBe('sm');
+    expect(large.iconSize).toBe('lg');
+    expect(large.className).toBe(standard.className);
+    expect(large.style).toBe(standard.style);
   });
 
   it('keeps a row the object rejects in place: no handle, and nothing added to it', () => {

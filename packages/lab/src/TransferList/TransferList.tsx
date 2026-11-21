@@ -155,13 +155,21 @@ export interface TransferListProps<T extends string = string> extends Omit<
   noResultsText?: string;
 }
 
+// Core List's handle is its grip alone, a 1rem box whatever icon size the
+// theme gives the grip. SYNC: core List/ListReorderHandle.tsx GRIP.
+const GRIP = '1rem';
+
 const styles = stylex.create({
-  // Core List's reorder handle is a small control, 28 px for every pointer,
-  // overlapping the row's end padding by 8 px. A finger's 44 px target is its
-  // invisible hit layer. A row without one keeps its end content clear of
-  // it, so every Remove sits in one column.
+  // Core List's reorder handle is its grip alone, against Remove. It stays
+  // clear of the row's end by its target's reach, less the row's inset, and
+  // further under a coarse pointer. A row without one keeps its Remove clear
+  // of where a handle sits, so every Remove sits in one column. SYNC: core
+  // List/ListReorderHandle.tsx EDGE_GUARD and TOUCH_EDGE_GUARD.
   clearsHandle: {
-    marginInlineEnd: 20,
+    marginInlineEnd: {
+      default: `calc(${GRIP} + max(0px, calc(max(4px, (24px - ${GRIP}) / 2) - var(--_item-inset-inline, 0px))))`,
+      '@media (pointer: coarse)': `calc(${GRIP} + max(0px, calc((44px - ${GRIP}) / 2 - var(--_item-inset-inline, 0px))))`,
+    },
   },
   root: {
     display: 'flex',
