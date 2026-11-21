@@ -117,34 +117,85 @@ export function lowContrastText() {
         if (r.width < 2 || r.height < 2 || cs.visibility !== 'visible')
           return null;
       }
-      if (cs.backgroundImage && cs.backgroundImage !== 'none') return null;
+      // (A flat tint drawn as an image, a hover or pressed state's
+      // one-color gradient, is a fill like any other, drawn over the
+      // box's color; any other image leaves no one color behind.)
+      const tints = flatLayers(cs.backgroundImage);
+      if (!tints) return null;
       const f = rgba(cs.backgroundColor);
-      if (f && f[3] > 0) fills.push(f);
-      if (f && f[3] >= 1) break;
+      // (Drawn bottom first: the box's color, then its layers, the last
+      // listed lowest; fills are gathered top first.)
+      const own = [...(f && f[3] > 0 ? [f] : []), ...[...tints].reverse()];
+      fills.push(...own.reverse());
+      if (own.some(x => x[3] >= 1)) break;
     }
     let under = [255, 255, 255];
     for (const f of fills.reverse()) under = over(f, under);
     return under;
   };
   /**
+   * A box's image layers when each is one flat color (a gradient whose
+   * stops are all the same color), top layer first; [] for none; null for
+   * any other image (a picture, a gradient between colors).
+   * @param {string} bgi the computed background-image
+   * @returns {Array<[number, number, number, number]> | null}
+   */
+  const flatLayers = bgi => {
+    if (!bgi || bgi === 'none') return [];
+    /** @type {string[]} */
+    const layers = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < bgi.length; i++) {
+      if (bgi[i] === '(') depth++;
+      else if (bgi[i] === ')') depth--;
+      else if (bgi[i] === ',' && depth === 0) {
+        layers.push(bgi.slice(start, i));
+        start = i + 1;
+      }
+    }
+    layers.push(bgi.slice(start));
+    /** @type {Array<[number, number, number, number]>} */
+    const out = [];
+    for (const layer of layers) {
+      if (!/^\s*(?:linear|radial)-gradient\(/.test(layer)) return null;
+      const colors = (layer.match(/(?:rgba?|color)\([^()]*\)/g) ?? []).map(
+        rgba,
+      );
+      if (!colors.length || colors.some(c => c == null)) return null;
+      const [first] = /** @type {Array<[number, number, number, number]>} */ (
+        colors
+      );
+      if (
+        colors.some(c =>
+          /** @type {number[]} */ (c).some(
+            (v, i) => Math.abs(v - first[i]) > 0.5 / (i === 3 ? 255 : 1),
+          ),
+        )
+      )
+        return null;
+      out.push(first);
+    }
+    return out;
+  };
+  /**
+   * The page's images, pictures and gradients between colors with their
+   * boxes, read once when first asked: a page has many texts and few of
+   * them fail.
+   * @type {Array<[Element, DOMRect]> | null}
+   */
+  let media = null;
+  /**
    * Whether an image, a picture or a gradient is drawn under an element's
    * text from a box beside it (media under an overlay's scrim): then no one
    * color is behind the text.
    * @param {Element} el
    */
-  /**
-   * The page's images, pictures and gradients with their boxes, read once
-   * when first asked: a page has many texts and few of them fail.
-   * @type {Array<[Element, DOMRect]> | null}
-   */
-  let media = null;
-  /** @param {Element} el */
   const overImage = el => {
     media ??= [...document.querySelectorAll('body *')]
       .filter(m => {
         if (m.matches('img, picture, video, canvas, svg image')) return true;
-        const bgi = getComputedStyle(m).backgroundImage;
-        return Boolean(bgi) && bgi !== 'none';
+        return flatLayers(getComputedStyle(m).backgroundImage) == null;
       })
       .map(
         m => /** @type {[Element, DOMRect]} */ ([m, m.getBoundingClientRect()]),
