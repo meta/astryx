@@ -32949,7 +32949,8 @@ export function draftAnswer(ctx, env, question) {
       t.toLowerCase().match(/[a-z]{3,}|#[0-9a-f]{3,8}|\d+/g) ?? [];
     /** @param {Clause} c */
     const asTyped = c => {
-      const t = c.text.trim();
+      // (An ask's files are compared as typed.)
+      const t = withUrls(c.text).trim();
       const at = raw0.toLowerCase().indexOf(t.toLowerCase());
       if (at >= 0) return [raw0.slice(at, at + t.length)];
       const others = new Set(
