@@ -33247,8 +33247,9 @@ function fontIn(cl, question) {
       `(?:^|[\\s,;:])${NAME}\\s+(?:as|for|everywhere|throughout|across)\\b`,
       'g',
     ),
-    // ("MS Sans Serif-like pixel sans", "a Helvetica-style font"): the
-    // family a font is said to be like is the family.
+    // ("MS Sans Serif-like pixel sans"): a family said as like another,
+    // with no font word after it, is that family. (Before a font word the
+    // question already drops the suffix.)
     new RegExp(`(?:^|[\\s,;:])${NAME}-(?:like|style|esque)\\b`, 'g'),
     // ("MS Sans Serif type", what "MS Sans Serif-like type" reads as): a
     // name of two words or more before "type" is a family; one word
@@ -33259,6 +33260,21 @@ function fontIn(cl, question) {
       const name = m[1].replace(/ (Font|Typeface)$/, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
       if (/\stype\b/.test(m[0]) && !/\s/.test(name)) continue;
+      // ("NYT-style serif headings"): a name said as like another, or
+      // before "type", whose own kind is not the kind the clause names is
+      // a look, never the family: the kind said wins.
+      if (/-(?:like|style|esque)\b|\stype\b/.test(m[0])) {
+        const kindOf = (/** @type {string} */ t) =>
+          /\b(?:mono(?:space)?|code)\b/i.test(t)
+            ? 'mono'
+            : /\bserif\b/i.test(t) && !/\bsans\b/i.test(t)
+              ? 'serif'
+              : /\bsans\b/i.test(t)
+                ? 'sans'
+                : null;
+        const said = kindOf(c.replace(name.toLowerCase(), ''));
+        if (said && said !== (kindOf(name) ?? 'sans')) continue;
+      }
       // ("titles in All Caps", "body text in Sentence Case": a casing said
       // in words is the text's case, never a family.)
       if (

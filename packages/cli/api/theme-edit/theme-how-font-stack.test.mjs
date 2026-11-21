@@ -70,7 +70,13 @@ describe('a family said as like another', () => {
     );
     // (A generic word alone, or one look word before "type", stays as it
     // was.)
-    expect(await commandsFor('Large type')).not.toMatch(/ font 'Large'/);
+    const large = await commandsFor('Large type in a serif');
+    expect(large).not.toMatch(/ font '?Large'?(\s|$)/);
+    expect(large).toMatch(/ font serif(\s|$)/);
+    // (A name whose kind is not the kind said is a look: the kind wins.)
+    const nyt = await commandsFor('NYT-style serif headings');
+    expect(nyt).not.toMatch(/ font '?NYT'?/);
+    expect(nyt).toMatch(/ font serif --on heading/);
     expect(await commandsFor('a sans font')).toMatch(/ font system(\s|$)/);
   }, 240_000);
 });
