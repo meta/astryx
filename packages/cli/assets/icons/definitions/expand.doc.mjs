@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'expand',
   group: 'resize',
-  description: 'Make something larger or full screen.',
-  words: ['maximize', 'fullscreen', 'enlarge', 'arrows pointing out'],
+  description: 'Make something larger.',
+  words: ['maximize', 'enlarge', 'arrows pointing out'],
 };
