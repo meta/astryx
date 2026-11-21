@@ -4436,25 +4436,17 @@ describe('show() anchor readiness (#5398)', () => {
     animations = [];
     vi.stubGlobal('KeyframeEffect', FakeKeyframeEffect);
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number =>
-      // The frame that writes the entrance side before the first paint is
-      // not a wait for the trigger's box.
-      cb.name === 'writeEntranceSideOnFrame' ? 0 : frames.push(cb),
+      frames.push(cb),
     );
     vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
-      if (handle > 0) {
-        frames[handle - 1] = null;
-      }
+      frames[handle - 1] = null;
     });
     vi.stubGlobal(
       'ResizeObserver',
       class {
         state = {disconnected: false};
-        constructor(callback?: {name?: string}) {
-          // The observer that writes the entrance side before the first
-          // paint is not a wait for the trigger's box.
-          if (callback?.name !== 'writeEntranceSideOnResize') {
-            observers.push(this.state);
-          }
+        constructor() {
+          observers.push(this.state);
         }
         observe() {}
         unobserve() {}

@@ -791,69 +791,28 @@ function keepAnchorClear(
 
 /**
  * Gives a shown layer's entrance its side. The boxes `keepAnchorClear` read
- * stand when it left the layer in place; otherwise the side is read after
- * the placement. Only an anchored layer has a side.
+ * stand when it left the layer in place; otherwise the side is read here,
+ * after the placement. Only an anchored layer has a side.
  *
- * The write waits for the layer's next animation frame or its first resize
- * observation, whichever comes first. Both run before that frame's paint;
- * the resize observation also covers a show inside an animation frame
- * callback. So the entrance starts from its side. A write in the show's own
- * task would leave style dirty for the reads that follow it there (moving
- * focus in, measuring touch targets), and each would restyle the layer once
- * more.
- *
- * `observeResizeAfterLayout` cannot serve here, for two reasons. It answers
- * an element its shared observer already watches in a microtask, inside the
- * show's task, which is the write this function must avoid. And it uses the
- * main window's observer, while a layer can live in another window, whose
- * own observer must watch it. So the function observes the layer once with
- * the layer's own window's `ResizeObserver`.
+ * The write runs in the show's own task, before the entrance starts. WebKit
+ * resolves an entrance's keyframes when it starts and does not update them
+ * for a later change of the side.
  */
 function writeEntranceSide(
   layer: HTMLElement,
   trigger: HTMLElement | null,
   boxes: AnchorBoxes | null,
 ): void {
-  const anchor =
-    trigger != null && layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)
-      ? trigger
-      : null;
-  const known =
-    anchor != null && boxes != null
-      ? layerEntranceSide(boxes.layer, boxes.anchor)
-      : null;
-  const write = () => {
-    writeLayerEntranceSide(
-      layer,
-      anchor == null ? null : (known ?? readLayerEntranceSide(layer, anchor)),
-    );
-  };
-  const view = layer.ownerDocument.defaultView;
-  const Observer = view?.ResizeObserver;
-  if (view == null || Observer == null) {
-    write();
+  if (trigger == null || !layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
+    writeLayerEntranceSide(layer, null);
     return;
   }
-  let isWritten = false;
-  const writeOnce = () => {
-    if (isWritten) {
-      return;
-    }
-    isWritten = true;
-    observer.disconnect();
-    view.cancelAnimationFrame(frame);
-    write();
-  };
-  // WebKit can deliver the first resize observation after a slow first
-  // frame's paint. The next animation frame runs before that paint, so the
-  // side reaches the first frame of a show from a press in every engine.
-  const frame = view.requestAnimationFrame(function writeEntranceSideOnFrame() {
-    writeOnce();
-  });
-  const observer = new Observer(function writeEntranceSideOnResize() {
-    writeOnce();
-  });
-  observer.observe(layer);
+  writeLayerEntranceSide(
+    layer,
+    boxes == null
+      ? readLayerEntranceSide(layer, trigger)
+      : layerEntranceSide(boxes.layer, boxes.anchor),
+  );
 }
 
 /**

@@ -522,22 +522,12 @@ describe('Popover', () => {
     const mutationDisconnected = vi.fn();
 
     class ResizeObserverMock {
-      // The layer's one-shot entrance-side observer is not the overflow
-      // watch this test counts.
-      private readonly counted: boolean;
-      constructor(callback?: {name?: string}) {
-        this.counted = callback?.name !== 'writeEntranceSideOnResize';
-        if (this.counted) {
-          resizeConstructed();
-        }
+      constructor() {
+        resizeConstructed();
       }
       observe = vi.fn();
       unobserve = vi.fn();
-      disconnect = () => {
-        if (this.counted) {
-          resizeDisconnected();
-        }
-      };
+      disconnect = resizeDisconnected;
     }
 
     class MutationObserverMock {
