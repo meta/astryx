@@ -3105,8 +3105,9 @@ function lexCopy(re, flags) {
 }
 
 /**
- * The patterns the every-word gate runs on each clause, made once for each
- * lexicon: its part patterns made global, and the state words with no flags.
+ * The patterns the every-word gate runs on each clause, listed once for each
+ * lexicon: its part patterns made global, and the state words without the
+ * global flag.
  * @type {WeakMap<object, {parts: RegExp[], states: Array<[RegExp, string]>}>}
  */
 const gatePatterns = new WeakMap();
@@ -3120,11 +3121,9 @@ export function gatePatternsOf(lex) {
   let made = gatePatterns.get(lex);
   if (!made) {
     made = {
-      parts: lex.parts.map(([re]) =>
-        lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
-      ),
+      parts: lex.parts.map(([re]) => globalOf(re)),
       states: STATE_WORDS.map(
-        ([re, st]) => /** @type {[RegExp, string]} */ ([lexCopy(re, ''), st]),
+        ([re, st]) => /** @type {[RegExp, string]} */ ([plainOf(re), st]),
       ),
     };
     gatePatterns.set(lex, made);

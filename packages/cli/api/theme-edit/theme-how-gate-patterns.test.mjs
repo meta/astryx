@@ -66,10 +66,10 @@ describe("the every-word gate's patterns", () => {
         expect(blankParts(text, parts), text).toBe(blankedFresh(text, lex));
   });
 
-  it('keep each state word with no flags', () => {
+  it('keep each state word without the global flag', () => {
     const {states} = gatePatternsOf(lexicon());
     expect(states.map(([re, st]) => [re.source, re.flags, st])).toEqual(
-      STATE_WORDS.map(([re, st]) => [re.source, '', st]),
+      STATE_WORDS.map(([re, st]) => [re.source, re.flags.replace('g', ''), st]),
     );
   });
 });
