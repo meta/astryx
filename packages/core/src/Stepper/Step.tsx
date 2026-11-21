@@ -1438,7 +1438,13 @@ export function Step({
             {...mergeProps(stepThemeProps, stylex.props(styles.summaryRoot))}>
             {iconLabelNode}
             {isRenderable(description) ? (
-              <span {...stylex.props(styles.description)}>{description}</span>
+              <span
+                {...mergeProps(
+                  descriptionThemeProps,
+                  stylex.props(styles.description),
+                )}>
+                {description}
+              </span>
             ) : null}
           </div>,
           summarySlot,

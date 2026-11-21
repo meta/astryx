@@ -2,9 +2,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Writes the official package list that `astryx discover` reads after
- * every other source (spec:AST-051 FR11 and DEC-5) to
- * `packages/cli/assets/discover/official-packages.json`.
+ * @file Writes `assets/discover/official-packages.json` at `prepack`: the
+ * official package list that `astryx discover` reads after every other source
+ * (spec:AST-051 FR11 and DEC-5). The file is not committed; a checkout without
+ * it gets the same list from `--print`, which the CLI's reader runs
+ * (foundation/discovery/official-list.mjs). `--clean` (at `postpack`) removes
+ * it, and `--root <dir>` reads another repository.
  *
  * A package is official when the release workflow publishes it and it adds at
  * least one item discover lists. The publish rule is the workflow's own: an
@@ -14,30 +17,21 @@
  * an integration, and the theme descriptor reader for a theme package. The list
  * holds no versions: when discover reads it, each entry lists the CLI's own
  * version and the project's installed Core version, and pins the project's
- * Core version, else the Core range it declares, else the latest release. Run
- * from the repo root and commit the result; `--check` exits 1 when the
- * committed list is stale.
+ * Core version, else the Core range it declares, else the latest release.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseTheme} from '../packages/cli/authoring/doctypes/theme/parse.mjs';
-import {readThemeDescriptorValue} from '../packages/cli/foundation/discovery/theme-discovery.mjs';
-import {collectIdentities} from '../packages/cli/foundation/integrations/contribution-inventory.mjs';
-import {loadLocalIntegration} from '../packages/cli/foundation/integrations/integrations.mjs';
+import {parseTheme} from '../authoring/doctypes/theme/parse.mjs';
+import {OFFICIAL_LIST_FILE} from '../foundation/discovery/official-list.mjs';
+import {readThemeDescriptorValue} from '../foundation/discovery/theme-discovery.mjs';
+import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {collectIdentities} from '../foundation/integrations/contribution-inventory.mjs';
+import {loadLocalIntegration} from '../foundation/integrations/integrations.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
-
-/** Where the list lives, relative to a repository root. */
-export const OFFICIAL_LIST_PATH = path.join(
-  'packages',
-  'cli',
-  'assets',
-  'discover',
-  'official-packages.json',
-);
+/** The repository the CLI package sits in. */
+const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 
 /** The folders the release workflow publishes from, in its order. */
 const PACKAGE_FOLDERS = ['packages', path.join('packages', 'themes')];
@@ -47,7 +41,7 @@ const THEMES_FOLDER = path.join('packages', 'themes');
 
 /**
  * @typedef {object} OfficialContribution
- * @property {import('../packages/cli/authoring/discover/type').DiscoverKind} kind
+ * @property {import('../authoring/discover/type').DiscoverKind} kind
  * @property {string} name
  * @property {string} [title]
  * @property {string} [summary]
@@ -113,7 +107,7 @@ function byName(items) {
 /**
  * What an integration package adds, through the same discovery a project
  * that installs it runs.
- * @param {import('../packages/cli/foundation/integrations/integrations.mjs').LoadedIntegration} integration
+ * @param {import('../foundation/integrations/integrations.mjs').LoadedIntegration} integration
  * @param {string} name
  * @returns {Promise<OfficialContribution[]>}
  */
@@ -233,37 +227,31 @@ export function serializeOfficialList(list) {
 }
 
 async function main() {
-  const check = process.argv.includes('--check');
-  const out = path.join(REPO_ROOT, OFFICIAL_LIST_PATH);
+  const args = process.argv.slice(2);
+  if (args.includes('--clean')) {
+    fs.rmSync(OFFICIAL_LIST_FILE, {force: true});
+    return;
+  }
+  const at = args.indexOf('--root');
+  const root = at === -1 ? REPO_ROOT : path.resolve(args[at + 1] ?? '');
   let text;
   try {
-    text = serializeOfficialList(await buildOfficialList());
+    text = serializeOfficialList(await buildOfficialList(root));
   } catch (error) {
     console.error(
-      `generate-cli-official-packages: ${error instanceof Error ? error.message : error}`,
+      `generate-official-packages: ${error instanceof Error ? error.message : error}`,
     );
     process.exitCode = 1;
     return;
   }
-  if (check) {
-    const current = fs.existsSync(out) ? fs.readFileSync(out, 'utf-8') : '';
-    if (current !== text) {
-      console.error(
-        `generate-cli-official-packages: ${OFFICIAL_LIST_PATH} is stale. Run \`pnpm bundle:cli-official-packages\` and commit the result.`,
-      );
-      process.exitCode = 1;
-      return;
-    }
-    console.log(
-      `generate-cli-official-packages: ${OFFICIAL_LIST_PATH} is current.`,
-    );
+  if (args.includes('--print')) {
+    process.stdout.write(text);
     return;
   }
-  fs.mkdirSync(path.dirname(out), {recursive: true});
-  fs.writeFileSync(out, text);
-  const count = JSON.parse(text).packages.length;
+  fs.mkdirSync(path.dirname(OFFICIAL_LIST_FILE), {recursive: true});
+  fs.writeFileSync(OFFICIAL_LIST_FILE, text);
   console.log(
-    `generate-cli-official-packages: wrote ${count} official packages to ${OFFICIAL_LIST_PATH}`,
+    `generate-official-packages: wrote ${JSON.parse(text).packages.length} official packages to ${path.relative(CLI_ROOT, OFFICIAL_LIST_FILE)}`,
   );
 }
 
