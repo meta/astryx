@@ -126,11 +126,9 @@ const animationBase = {
   // The origin is a plain style, not a keyframe: a keyframe that animates it
   // would keep the entrance off the compositor.
   transformOrigin: `var(${ENTER_ORIGIN}, 50% 50%)`,
-  // The side properties do not inherit (layerEntranceSide.ts registers them),
-  // so a write restyles only the layer, not its content. The element that
-  // runs the entrance takes them from its parent: the layer itself, or a
-  // surface directly inside it (usePopover). On the layer, the runtime's
-  // inline value wins.
+  // The side properties do not inherit (layerEntranceSide.ts registers them).
+  // The runtime writes them on the layer and its direct children. This
+  // inherit serves an entrance element the runtime did not write.
   [ENTER_X]: 'inherit',
   [ENTER_Y]: 'inherit',
   [ENTER_ORIGIN]: 'inherit',
@@ -141,8 +139,8 @@ const animationBase = {
  * Shared entry animation styles for layer-based components.
  *
  * Apply them to the layer element or its direct child: the side the layer
- * lands on reaches only those, and a deeper element plays its placement's
- * default side.
+ * lands on is written on those, and a deeper element is not guaranteed the
+ * side.
  *
  * Keyed by LayerPlacement ('above' | 'below' | 'start' | 'end')
  * for easy lookup: `layerAnimations[placement]`.

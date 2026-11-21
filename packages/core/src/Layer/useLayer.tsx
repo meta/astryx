@@ -84,8 +84,8 @@ import {
 } from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
-// The entrance side properties restyle only the layer when they change
-// (layerEntranceSide.ts). The package lists only style files as side
+// The entrance side properties restyle only the elements they are written on
+// when they change (layerEntranceSide.ts). The package lists only style files as side
 // effects. A call in a module imported only for its values can be dropped.
 // Every layer runs this module, so it registers them here.
 registerLayerEntranceProperties();

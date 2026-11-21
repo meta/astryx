@@ -144,10 +144,11 @@ export function readLayerEntranceSide(
 }
 
 /**
- * Registers the side properties as not inherited, so a write restyles the
- * layer alone and not every element inside it. Each element that runs the
- * entrance inherits them from its parent explicitly (layerAnimations).
- * useLayer calls it as its module loads, before any layer shows. Without
+ * Registers the side properties as not inherited. A write then restyles
+ * only the elements it writes, the layer and its direct children, and not
+ * the content inside them. The registration belongs to the document that
+ * loads Astryx. useLayer calls it as its module loads, before any layer
+ * shows. Without
  * `CSS.registerProperty` (a server, an older browser) the properties
  * inherit, and the entrance is the same. It never throws: a name another
  * copy registered first is expected, and any other failure costs only the
