@@ -5680,15 +5680,12 @@ export function draftAnswer(ctx, env, question) {
           ? `${what}${hex}`
           : m,
     )
-    // ("less contrast", "a softer dark mode", "big type", "thin borders",
-    // "lots of white space": the readers' own words for them.)
+    // ("less contrast", "big type", "thin borders", "lots of white space":
+    // the readers' own words for them. A mood word for the dark mode, "a
+    // gentle dark mode", names no color, so it writes no page color.)
     .replace(
       /\b(?:less|lower|softer|gentler|reduced)\s+contrast\b/gi,
       'softer text',
-    )
-    .replace(
-      /\b(?:soft|softer|gentle|gentler|easy|easier)\s+dark\s+mode\b/gi,
-      'softer text in dark mode, lighter page in dark mode',
     )
     .replace(
       /\b(?:big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
