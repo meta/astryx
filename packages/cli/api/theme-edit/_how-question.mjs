@@ -4633,6 +4633,20 @@ function clauseBefore(text, at) {
 const UNTINTED_CHROMA = 0.004;
 
 /**
+ * The most OKLab chroma a color may have and still read as a tinted gray
+ * (a warm paper text at about 0.02 does; a blue link at 0.25 does not): a
+ * part's strong color is no tinted gray.
+ */
+const GRAY_CHROMA = 0.05;
+
+/**
+ * The most OKLab chroma a background may have and still read as a tinted
+ * ground (a cream card at about 0.06 does; a blue button fill at 0.2 does
+ * not): a strong fill is a color, never a tint of the grays.
+ */
+const GROUND_CHROMA = 0.1;
+
+/**
  * A color's OKLab chroma (0 for a value that is no opaque color).
  * @param {string} value
  */
@@ -5456,37 +5470,6 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\b([a-z]+)[- ]tinted\s+(?:gr[ae]ys|neutrals?)\b/gi, (m, color) =>
       colorsIn(String(color).toLowerCase()).length ? `neutral ${color}` : m,
     );
-  // (Only a bare neutral-grays clause is read, beside clauses that each
-  // name a part, a dial or a value, and only on a theme that
-  // sets no color in a part rule, no page, surface or card color of its
-  // own, and whose base keeps no tinted gray in a part rule: every other
-  // ask keeps its old reading.)
-  /** @param {string} v */
-  const hasTint = v =>
-    (
-      String(v).match(
-        /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch|oklab)a?\([^)]*\)/gi,
-      ) ?? []
-    ).some(h => chromaOf(h) > UNTINTED_CHROMA);
-  const setsColors =
-    env.data.settings.some(
-      st =>
-        (st.on &&
-          (parseColor(String(st.value)) != null ||
-            /#[0-9a-f]{3,8}\b|var\(\s*--color-/i.test(String(st.value)))) ||
-        (!st.on && /^--color-background-(?:body|surface|card)$/.test(st.thing)),
-    ) ||
-    Object.values(
-      /** @type {{components?: Record<string, Record<string, Record<string, unknown>>>}} */ (
-        /** @type {unknown} */ (env.base)
-      ).components ?? {},
-    ).some(rules =>
-      Object.values(rules ?? {}).some(decls =>
-        Object.entries(decls ?? {}).some(
-          ([k, v]) => paletteDialOf(k) === 'neutral' && hasTint(String(v)),
-        ),
-      ),
-    );
   // (The clause is flagged, never rewritten: words a person types, even
   // the ones a rewrite would write, keep their own reading. A clause beside
   // it counts only when it names a thing whose own look is no tint of the
@@ -5537,13 +5520,11 @@ export function draftAnswer(ctx, env, question) {
       Object.keys(DIALS).some(d => new RegExp(`\\b${d}s?\\b`).test(t))
     );
   };
-  const untintedAsk =
-    !setsColors &&
-    bareNeutralGrays(
-      question,
-      text => !graysLook(text) && (/[\d#]/.test(text) || namesPart(text)),
-      text => !graysLook(text) && namesPart(text),
-    );
+  const untintedAsk = bareNeutralGrays(
+    question,
+    text => !graysLook(text) && (/[\d#]/.test(text) || namesPart(text)),
+    text => !graysLook(text) && namesPart(text),
+  );
   question = question
     // ("mint green for positive numbers", "red for destructive actions"):
     // a color for a thing a status role names, in the words its own dial
@@ -28491,7 +28472,67 @@ export function draftAnswer(ctx, env, question) {
           modes.some(m => chroma(read(k, m)) > UNTINTED_CHROMA),
         );
       const tintedNow = tintedBy((k, m) => String(current(k, m) ?? ''));
-      const kept = tintedBy(seeded);
+      // (A gray a part rule sets, the base theme's or the theme's own, keeps
+      // its tint when the seed does not reach it: "card variant muted". A
+      // value is a gray by its color, never by its token's name: a strong
+      // color a part sets is no gray.)
+      const partsKept = [
+        ...new Set(
+          (env.partTokensAfter([set('neutral', SEED)]) ?? [])
+            .filter(
+              x =>
+                paletteDialOf(x.token) === 'neutral' &&
+                !/inverted|^--color-on-|overlay/.test(x.token) &&
+                modes.some(m => {
+                  const c = chroma(x[m]);
+                  return c > UNTINTED_CHROMA && c < GRAY_CHROMA;
+                }),
+            )
+            .map(x =>
+              x.rule === 'base'
+                ? x.part
+                : `${x.part} ${x.rule.replace(':', ' ')}`,
+            ),
+        ),
+      ];
+      // (A fill or a page, surface or card color the theme sets on a part
+      // itself, "cream cards", keeps its color whatever the seed is, and so
+      // do a text or border color it sets there: each is named, by its color
+      // (a strong fill or text color is a color, never a tint of the
+      // grays).)
+      /** @param {string} value @param {number} most */
+      const tintedWithin = (value, most) =>
+        (
+          String(value).match(
+            /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch|oklab)a?\([^)]*\)/gi,
+          ) ?? [String(value)]
+        ).some(v => {
+          const c = chroma(v);
+          return c > UNTINTED_CHROMA && c < most;
+        });
+      const fillsKept = [
+        ...new Set(
+          env.data.settings
+            .filter(
+              st =>
+                st.on &&
+                (/^background(?:-color)?$/.test(st.thing) ||
+                /^--color-background-(?:body|surface|card)$/.test(st.thing)
+                  ? tintedWithin(String(st.value), GROUND_CHROMA)
+                  : /^(?:color|border(?:-color)?|--color-text-[a-z-]+|--color-border(?:-[a-z]+)?)$/.test(
+                      st.thing,
+                    ) && tintedWithin(String(st.value), GRAY_CHROMA)),
+            )
+            .map(st => `${st.on} ${st.thing}`),
+        ),
+      ];
+      const kept = [
+        ...tintedBy(seeded),
+        ...fillsKept,
+        ...(partsKept.length > 4
+          ? [...partsKept.slice(0, 4), `${partsKept.length - 4} more parts`]
+          : partsKept),
+      ];
       const inModes = modes.length > 1 ? 'in both modes' : 'in its one mode';
       const keptSaid = kept.length
         ? `; ${kept.join(', ')} ${kept.length > 1 ? 'keep their' : 'keeps its'} tint whatever the seed is: set ${kept.length > 1 ? 'them' : 'it'} to a plain gray to lose it`

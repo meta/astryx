@@ -76,6 +76,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
  * @property {(steps: Step[]) => {light: Record<string, string>, dark: Record<string, string>} | null} tokensAfter the theme's own token values after the steps, built in memory, or null when a step does not apply
+ * @property {(steps: Step[]) => Array<{part: string, rule: string, token: string, light: string, dark: string}> | null} partTokensAfter the color tokens each built part rule sets (the base theme's and the theme's own) after the steps, in each mode, or null when a step does not apply
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -276,6 +277,69 @@ export async function howTheme(ctx, cwd, name) {
             ? 'dark'
             : null;
       return measureFit(ctx, base, was, now, intent, steps, visible);
+    },
+    /**
+     * The color tokens each part rule sets after the steps (the base
+     * theme's part rules, then the theme's own), each value written out
+     * for both modes. Built in memory; nothing is written.
+     * @param {Step[]} steps
+     */
+    partTokensAfter(steps) {
+      const d = JSON.parse(JSON.stringify(theme));
+      const checkCtx = /** @type {any} */ ({...ctx, base});
+      try {
+        for (const st of steps) apply(checkCtx, slug, d, st);
+      } catch {
+        return null;
+      }
+      const now = compileTheme(ctx, d, base);
+      const toks = ownTokens(now, base, ctx.project?.core);
+      /** @type {Record<string, Record<string, Record<string, unknown>>>} */
+      const parts = {};
+      for (const comps of [base.components ?? {}, now.components ?? {}])
+        for (const [part, rules] of Object.entries(comps ?? {}))
+          for (const [rule, decls] of Object.entries(rules ?? {}))
+            if (decls && typeof decls === 'object')
+              Object.assign(
+                ((parts[part] ??= {})[rule] ??= {}),
+                /** @type {Record<string, unknown>} */ (decls),
+              );
+      // (A color set for one mode sits in the rule's `@light` or `@dark`
+      // block: it is that mode's value, the other mode keeping the rule's
+      // own.)
+      return Object.entries(parts).flatMap(([part, rules]) =>
+        Object.entries(rules).flatMap(([rule, decls]) => {
+          /** @param {unknown} block */
+          const colors = block =>
+            Object.fromEntries(
+              Object.entries(
+                block && typeof block === 'object'
+                  ? /** @type {Record<string, unknown>} */ (block)
+                  : {},
+              ).filter(
+                ([k, v]) => k.startsWith('--color-') && typeof v === 'string',
+              ),
+            );
+          const both = colors(decls);
+          const light = {...both, ...colors(decls['@light'])};
+          const dark = {...both, ...colors(decls['@dark'])};
+          return [
+            ...new Set([...Object.keys(light), ...Object.keys(dark)]),
+          ].map(token => ({
+            part,
+            rule,
+            token,
+            light:
+              token in light
+                ? resolveIn(String(light[token]), toks.light, 'light')
+                : '',
+            dark:
+              token in dark
+                ? resolveIn(String(dark[token]), toks.dark, 'dark')
+                : '',
+          }));
+        }),
+      );
     },
     /**
      * The theme's own token values after the steps, built in memory with

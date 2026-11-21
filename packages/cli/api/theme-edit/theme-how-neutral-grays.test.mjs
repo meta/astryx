@@ -2,8 +2,7 @@
 
 /**
  * @file A bare neutral-grays clause ("neutral grays", "use neutral grays",
- * "neutral greys"), on a theme that sets no part colors, reads as grays
- * with no hue of their own. On a theme whose grays already have none, how
+ * "neutral greys") reads as grays with no hue of their own. On a theme whose grays already have none, how
  * says so and writes nothing; on a tinted one (a warm gray), it gives the
  * neutral color as Neutral's mid gray, and the page, surfaces and
  * secondary text lose their tint in every mode. Every other ask keeps
@@ -208,7 +207,7 @@ describe('neutral grays', () => {
   );
 
   it(
-    "keeps main's reading for every ask but a bare neutral-grays clause on a theme that sets no part colors",
+    "keeps main's reading for every ask but a bare neutral-grays clause",
     async test => {
       needsBases(test);
       // (Main's answers for these asks: the start of each result's text
