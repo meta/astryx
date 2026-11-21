@@ -81,6 +81,19 @@ describe('a whole-theme border said once', () => {
       expect(bordered(part), part).toBe(true);
     for (const part of ['badge', 'layout-header', 'avatar', 'collapsible'])
       expect(bordered(part), part).toBe(false);
+    // Flat surfaces said with it: the cards keep a border too.
+    expect(
+      (
+        await themeEditHow(
+          'Surface: flat, subtle shadow only on overlays. Edges: 6px corners, 1px #d0d7de borders.',
+          {cwd, theme: 'br'},
+        )
+      ).data.results
+        .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+        .some((/** @type {string} */ x) =>
+          /border '1px solid .* --on card$/.test(x),
+        ),
+    ).toBe(true);
     // A role word leading the ask narrows it: overlays get no button border.
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
     expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);

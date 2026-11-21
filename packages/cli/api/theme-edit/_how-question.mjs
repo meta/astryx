@@ -23769,9 +23769,21 @@ export function draftAnswer(ctx, env, question) {
             const edgeParts = role
               ? (EDGE_ROLES[role.replace(/s?$/, 's')] ?? EDGE_PARTS)
               : EDGE_PARTS;
+            // (Flat surfaces said in the same ask take the panels' border
+            // away; a border said there too puts it back on them, as a
+            // part's own setting wins over the dial.)
+            const flatToo =
+              /\bsurfaces?\s*:?\s*flat\b|\bflat\s+surfaces?\b/i.test(
+                question,
+              ) && edgeParts.includes('containers');
             const edged = everywhere
               ? []
               : [
+                  ...(flatToo
+                    ? (FAMILIES.containers ?? []).filter(
+                        pt => C.MAP[pt] && !borderless.includes(pt),
+                      )
+                    : []),
                   ...borderless.filter(pt =>
                     edgeParts.some(f => (FAMILIES[f] ?? [f]).includes(pt)),
                   ),
