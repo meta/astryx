@@ -18,6 +18,7 @@
  */
 
 import {useCallback, useState, type ReactNode} from 'react';
+import {flushSync} from 'react-dom';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
@@ -365,7 +366,9 @@ export function Toolbar({
   // A bottom divider drops a tab's indicator onto its rail through the block
   // padding. That is right only while the lanes share one line, so a wrapped
   // row keeps the indicator on its tab. The row reports a wrap after layout,
-  // in a resize observation, so mounting the toolbar reads no lane box.
+  // in a resize observation, so mounting the toolbar reads no lane box. The
+  // observation comes before paint, and its update renders at once, so the
+  // first frame already shows a wrapped row's indicator on its tab.
   const canWrap =
     hasCenterContent ||
     (hasStartContent && hasEndContent && orientation !== 'vertical');
@@ -378,7 +381,10 @@ export function Toolbar({
         return () => {};
       }
       const measure = () => setIsWrapped(lanesHaveWrapped(row));
-      const stop = observeResizeAfterLayout(row, measure);
+      const stop = observeResizeAfterLayout(row, () => {
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the indicator must move before the frame paints
+        flushSync(measure);
+      });
       if (stop == null) {
         measure();
         return () => {};
