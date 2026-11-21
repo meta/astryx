@@ -474,7 +474,7 @@ function VideoControlBar({
   chapters?: readonly MediaTimelineChapter[];
   markers?: readonly MediaTimelineMarker[];
 }) {
-  const {isControlsVisible} = useMediaPlayerContext('VideoPlayer');
+  const {isControlsVisible, isLayerOpen} = useMediaPlayerContext('VideoPlayer');
   // After the end, the bar stays available beside the replay control, so the
   // timeline stays in reach.
   const isBeforePlayback = useMediaSelector(
@@ -493,7 +493,9 @@ function VideoControlBar({
           styles.frosted,
           styles.bar,
           !isControlsVisible && styles.barHidden,
-          isBeforePlayback && styles.barBeforePlayback,
+          // A menu or marker popover the bar opened keeps the bar drawn, as
+          // keyboard focus inside it does, though the layer sits outside it.
+          isBeforePlayback && !isLayerOpen && styles.barBeforePlayback,
         )}>
         <MediaPlayButton className={compactControl} />
         <MediaTimeSlider chapters={chapters} markers={markers} />

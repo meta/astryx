@@ -3,11 +3,12 @@
 /**
  * @file VideoPlayerBar.a11y.chromium.spec.ts
  * @input The built Lab/MediaPlayer stories in real Chromium: a 240px video
- *   player, a 720px one, and an audio player
+ *   player, a 720px one, an audio player, and a video with comment markers
  * @output Measured proof of the video control bar's inset, height, button
  *   size, and hide distance in a compact and a wide player, of the size a
- *   tooltip from the compact bar keeps, and of the timeline's track color on
- *   the bar and in the audio player
+ *   tooltip from the compact bar keeps, of the timeline's track color on the
+ *   bar and in the audio player, and that the bar stays drawn before
+ *   playback while a marker popover opened from the keyboard is open
  * @position Run with `pnpm test:a11y-contract`. jsdom lays out nothing and
  *   matches no container query, so only a browser can measure the bar.
  */
@@ -211,4 +212,30 @@ test("the audio player's empty track keeps the theme's track color", async ({
   await open(page, 'audio');
   const track = await readTrack(page, PLAYER, 'var(--color-track)');
   expect(track.painted).toBe(track.expected);
+});
+
+test('before playback, the bar stays drawn while a marker popover opened from the keyboard is open', async ({
+  page,
+}) => {
+  await open(page, 'comment-markers');
+  // The sample media stays pending, so give the element a duration: the
+  // timeline draws its marker buttons once the media can seek.
+  await page.locator('#storybook-root video').evaluate(video => {
+    Object.defineProperty(video, 'duration', {configurable: true, value: 60});
+    video.dispatchEvent(new Event('durationchange'));
+  });
+  const marker = page.locator('#storybook-root [data-media-marker]').first();
+  await expect(marker).toBeAttached();
+  // Keyboard focus inside the bar shows it before playback.
+  await page.keyboard.press('Tab');
+  await marker.focus();
+  await expect(page.locator(BAR)).toHaveCSS('opacity', '1');
+  await page.keyboard.press('Enter');
+  await expect(marker).toHaveAttribute('aria-expanded', 'true');
+  const content = page.locator('[data-media-marker-content]').first();
+  await expect(content).toBeVisible();
+  // Focus moves into the popover, which sits outside the bar's DOM.
+  await content.locator('button, input, textarea, [tabindex]').first().focus();
+  await page.waitForTimeout(400);
+  await expect(page.locator(BAR)).toHaveCSS('opacity', '1');
 });

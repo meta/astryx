@@ -34,6 +34,8 @@ export const DEFAULT_PLAYBACK_RATES: readonly number[] = [
 export interface MediaPlayerContextValue {
   store: MediaStore;
   isControlsVisible: boolean;
+  /** Whether a menu or marker popover that the player opened is open. */
+  isLayerOpen: boolean;
   /** Shows the controls and restarts the idle timer. */
   wakeControls: () => void;
   /** Keeps the controls visible until the same hold is released. */

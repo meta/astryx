@@ -150,6 +150,9 @@ function useControlsVisibility(store: MediaStore) {
     () => false,
   );
   const [isIdle, setIsIdle] = useState(false);
+  // A menu or marker popover the player opened. Its focus sits outside the
+  // player's DOM, but it counts as inside the player.
+  const [isLayerOpen, setIsLayerOpen] = useState(false);
   const holdsRef = useRef(new Set<MediaControlsHold>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTouchRef = useRef(false);
@@ -187,6 +190,9 @@ function useControlsVisibility(store: MediaStore) {
 
   const holdControls = useCallback(
     (hold: MediaControlsHold, isHeld: boolean) => {
+      if (hold === 'menu') {
+        setIsLayerOpen(isHeld);
+      }
       if (isHeld) {
         holdsRef.current.add(hold);
         clearTimer();
@@ -228,6 +234,7 @@ function useControlsVisibility(store: MediaStore) {
 
   return {
     isControlsVisible: !isPlaying || !isIdle,
+    isLayerOpen,
     wakeControls,
     markTouch,
     holdControls,
@@ -329,6 +336,7 @@ export function MediaPlayer({
     () => ({
       store,
       isControlsVisible: visibility.isControlsVisible,
+      isLayerOpen: visibility.isLayerOpen,
       wakeControls,
       holdControls,
       toggleControls,
@@ -339,6 +347,7 @@ export function MediaPlayer({
     [
       store,
       visibility.isControlsVisible,
+      visibility.isLayerOpen,
       wakeControls,
       holdControls,
       toggleControls,
