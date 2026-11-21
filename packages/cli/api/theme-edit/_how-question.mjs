@@ -2794,13 +2794,16 @@ const REMOVABLE =
 /**
  * "Clear" that leads an ask, before a determiner and a removable thing
  * later in that ask, with no word that asks for a reset (changes, edits,
- * overrides, settings, tweaks and the like, a color, what someone added).
+ * overrides, settings, tweaks and the like, a color, an edit someone made
+ * to it, a way back to the base).
  */
 const CLEAR_TAKES_AWAY = (() => {
   // (One ask: up to a punctuation mark, or an "and" or "then" that starts
   // another ask.)
   const ask = String.raw`(?:(?!\b(?:and|then)\s+(?:make|set|give|reset|undo|revert|turn|add|use|change|put|remove|clear)\b)[^,;.!?])*?`;
-  const reset = String.raw`\b(?:changes?|edits?|overrides?|settings?|tweaks?|adjustments?|modifications?|customi[sz]ations?|colou?rs?|(?:i|we|you|they|someone)\s+(?:added|set|put|made|changed|gave)|(?:was|were)\s+(?:added|set|put|made))\b`;
+  // (A reset word: the person's edits named as a noun, a color, an edit
+  // verb said as done to the thing by anyone, or a way back to the base.)
+  const reset = String.raw`\b(?:changes?|edits?|overrides?|settings?|tweaks?|adjustments?|modifications?|customi[sz]ations?|colou?rs?|added|applied|chosen|chose|picked|tweaked|changed|made|gave|given|put|set|used|wrote|written|back|defaults?|original|base\s+value)\b`;
   return new RegExp(
     String.raw`(?<=(?:^|[.;:!?,]|\b(?:please|and|then))\s*)clear(?=\s+(?:all\s+the|the|my|its|their|our|all|any|this|that|these|those)\b(?!${ask}${reset})${ask}\b${REMOVABLE}\b)`,
     'gi',
