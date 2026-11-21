@@ -835,6 +835,7 @@
     "/templates/useLinkifyHookUsage/",
     "/templates/useListFocusHookUsage/",
     "/templates/useLocaleHookUsage/",
+    "/templates/useLongPressHookUsage/",
     "/templates/useMergedRefsHookUsage/",
     "/templates/useMultiComboboxHookUsage/",
     "/templates/useOutlineFromDOMHookUsage/",
