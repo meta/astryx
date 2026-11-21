@@ -189,6 +189,14 @@ const ROWS = [
     },
   ],
   [
+    "a part's fill keeps one readable-text line, for the look it fills",
+    {
+      q: 'badges: red',
+      has: ["background-color '#dc2626' --on badge --when variant:neutral"],
+      says: /^(?![\s\S]*variant warning in light mode)/,
+    },
+  ],
+  [
     'a color after a part is its text; the next color before accents is the accent',
     {
       q: 'bold headings, red #c8102e and blue #003da5 accents',
@@ -197,6 +205,14 @@ const ROWS = [
         "color '#c8102e' --on heading",
         "accent '#003da5'",
       ],
+    },
+  ],
+  [
+    'two colors said before accents: the last one is the accent, as on main',
+    {
+      q: '#ff0000 and #00ff00 accents',
+      has: ["accent '#00ff00'"],
+      never: /^accent '#ff0000'/,
     },
   ],
   [

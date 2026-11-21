@@ -4,6 +4,8 @@
 
 [experimental] `astryx experimental theme editor` answers faster: each contrast check reads a pair's drawn state once, a property's aspect group is a lookup, the part data's states are read once while the part data is unchanged, and a Core component's import path is found once for each installed Core.
 
+- `astryx experimental theme editor set … surfaces flat` (and the other surface looks): the colored and status variants of a surface keep their own fill; the look's fill goes on the variants that draw the plain surface, so a blue card stays blue.
+
 - `astryx experimental theme editor how`: when an ask such as "darker … for contrast" makes one mode's text lighter to gain contrast, the answer now says so in one line ("in dark mode, more contrast means lighter").
 
 - In `astryx experimental theme editor how`, "controls 4px corners, overlays 8px corners" sets the two corner sizes Core keeps apart: `--radius-element` for controls (buttons, inputs, selectors), and `--radius-container` for surfaces and overlays (cards, dialogs, popovers, menus). Before, they were offered as two answers that contradict each other. On a light-only theme, a line that sets a color token for its one mode now says that dark mode keeps its own value for that token, with the value, because the dark media surfaces (the lightbox, and what sits on the overlay scrim) draw it. Tokens those surfaces replace (the main text color, icons and the accent, drawn there in the on-dark color) are not named.
