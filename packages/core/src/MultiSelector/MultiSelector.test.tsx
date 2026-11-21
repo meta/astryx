@@ -638,9 +638,9 @@ describe('MultiSelector', () => {
         />
       </div>,
     );
-    const label = [...screen.getByRole('combobox').querySelectorAll('span')].find(
-      span => span.textContent === 'iPhone חדש',
-    );
+    const label = [
+      ...screen.getByRole('combobox').querySelectorAll('span'),
+    ].find(span => span.textContent === 'iPhone חדש');
     // No `dir="auto"`: the first strong letter is Latin, which would lay the
     // Hebrew label out left to right.
     expect(label).not.toHaveAttribute('dir');
@@ -658,7 +658,9 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    const spans = [...screen.getByRole('combobox').querySelectorAll('span')].filter(span =>
+    const spans = [
+      ...screen.getByRole('combobox').querySelectorAll('span'),
+    ].filter(span =>
       ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
     );
     expect(spans.map(span => span.getAttribute('dir'))).toEqual([

@@ -41,10 +41,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
-import {
-  textDirectionProps,
-  truncatedTextStyles,
-} from '../utils/textDirection';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -231,7 +228,10 @@ export function TableHeaderCell({
     ) : (
       <span
         dir={cutDirection}
-        {...stylex.props(cutHeadingStyles.label, truncatedTextStyles.pageAlign)}>
+        {...stylex.props(
+          cutHeadingStyles.label,
+          truncatedTextStyles.pageAlign,
+        )}>
         {children}
       </span>
     );

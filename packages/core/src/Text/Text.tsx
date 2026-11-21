@@ -58,10 +58,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {TextClampContext} from './textClampContext';
-import {
-  textDirectionProps,
-  truncatedTextStyles,
-} from '../utils/textDirection';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 export type {TextType, TextSize};
 

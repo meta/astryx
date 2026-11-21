@@ -21,7 +21,9 @@ async function readTrigger(page: Page) {
   // The trigger text is one span holding an isolated span for each item.
   const items = page
     .getByRole('combobox')
-    .locator('xpath=.//span[span and contains(., ", ") and not(span/span)]/span');
+    .locator(
+      'xpath=.//span[span and contains(., ", ") and not(span/span)]/span',
+    );
   await expect(items).toHaveText(['Design', 'עיצוב', 'שיווק', '+2']);
   return items.evaluateAll(spans =>
     spans.map(span => {

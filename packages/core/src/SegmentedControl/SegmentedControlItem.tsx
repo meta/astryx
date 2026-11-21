@@ -43,10 +43,7 @@ import {isRenderable} from '../utils/isRenderable';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
-import {
-  textDirectionProps,
-  truncatedTextStyles,
-} from '../utils/textDirection';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;

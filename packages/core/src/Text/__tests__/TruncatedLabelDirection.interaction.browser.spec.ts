@@ -37,7 +37,9 @@ async function readCutLabels(page: Page, selector: string) {
           range.setStart(text, offset);
           range.setEnd(text, offset + 1);
           const letter = range.getBoundingClientRect();
-          return letter.left >= box.left - 0.5 && letter.right <= box.right + 0.5;
+          return (
+            letter.left >= box.left - 0.5 && letter.right <= box.right + 0.5
+          );
         };
         const content = text.data;
         return {
