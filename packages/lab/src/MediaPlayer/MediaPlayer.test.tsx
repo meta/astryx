@@ -366,12 +366,15 @@ describe('VideoPlayer', () => {
 
   it('keeps the bar behind the large play control until playback starts, in reach of the keyboard', async () => {
     const user = userEvent.setup();
-    const {video} = renderVideoPlayer();
+    const {video, player} = renderVideoPlayer();
     fakePlayback(video);
     const barPlay = screen.getByRole('button', {name: 'Play'});
     await expect(user.click(barPlay)).rejects.toThrow(/pointer-events/);
     act(() => barPlay.focus());
     await user.keyboard('{Enter}');
+    // A person moves the pointer to the bar before clicking, which shows it
+    // again if a slow run has passed the 2 s idle hide.
+    fireEvent.pointerMove(player, {pointerType: 'mouse'});
     await user.click(screen.getByRole('button', {name: 'Pause'}));
     expect(screen.getByRole('button', {name: 'Play'})).toBeInTheDocument();
   });
