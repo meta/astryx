@@ -160,6 +160,8 @@ const dividerRowStyles = stylex.create({
     '--_table-row-divider-width': {
       default: borderVars['--border-width'],
       [stylex.when.ancestor(':last-child', tableRowMarker)]: '0px',
+      [stylex.when.ancestor(':has(+ [data-expansion-panel])', tableRowMarker)]:
+        '0px',
     },
     borderBottomWidth: {
       default: borderVars['--border-width'],
@@ -173,6 +175,10 @@ const dividerRowStyles = stylex.create({
         tableRowMarker,
       )]: '0',
       [stylex.when.ancestor('[data-table-final-row="true"]', tableRowMarker)]:
+        '0',
+      // A row expansion's open panel carries the divider below its row
+      // (plugins/rowExpansion), so the row and its panel read as one unit.
+      [stylex.when.ancestor(':has(+ [data-expansion-panel])', tableRowMarker)]:
         '0',
     },
     borderBottomStyle: 'solid',
