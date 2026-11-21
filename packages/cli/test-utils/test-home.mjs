@@ -6,7 +6,8 @@
  * @input The run's home and temp folders, and the environment to change.
  * @output `moveUserHome` moves them; `foldersOutside` names a per-user folder
  *   outside the run's home; `playwrightBrowsersFolder` and `gitGlobalConfig`
- *   name what keeps being read in place.
+ *   name what keeps being read in place; `folderState` and `changedSince`
+ *   read what changed under the real cache and configuration folders.
  * @position Used by vitest.global-setup.node.mjs (before the workers fork)
  *   and vitest.setup.node.mjs (refuses a worker outside the run's home).
  */
@@ -129,4 +130,60 @@ export function foldersOutside(home) {
   return [os.homedir(), userCacheDir(), userConfigDir()].filter(
     folder => !inside(folder, home),
   );
+}
+
+/** The most entries `folderState` reads in one folder tree. */
+const MOST_ENTRIES = 50_000;
+
+/**
+ * Every file and folder under `folders`, each with its size and last change
+ * time. A folder that does not exist is recorded as absent, so a test that
+ * creates it shows as a change.
+ * @param {string[]} folders
+ * @returns {Map<string, string>}
+ */
+export function folderState(folders) {
+  /** @type {Map<string, string>} */
+  const state = new Map();
+  for (const folder of folders) {
+    let read = 0;
+    const visit = (/** @type {string} */ entry) => {
+      if (read++ >= MOST_ENTRIES) return;
+      let stat;
+      try {
+        stat = fs.lstatSync(entry);
+      } catch {
+        if (entry === folder) state.set(entry, 'absent');
+        return;
+      }
+      state.set(entry, `${stat.size}:${stat.mtimeMs}`);
+      if (!stat.isDirectory()) return;
+      let names;
+      try {
+        names = fs.readdirSync(entry);
+      } catch {
+        return;
+      }
+      for (const name of names) visit(path.join(entry, name));
+    };
+    visit(folder);
+  }
+  return state;
+}
+
+/**
+ * The entries added, removed or changed between two `folderState` reads.
+ * @param {Map<string, string>} before
+ * @param {Map<string, string>} after
+ * @returns {string[]}
+ */
+export function changedSince(before, after) {
+  const changed = [];
+  for (const [entry, value] of after) {
+    if (before.get(entry) !== value) changed.push(entry);
+  }
+  for (const entry of before.keys()) {
+    if (!after.has(entry)) changed.push(entry);
+  }
+  return changed.sort();
 }
