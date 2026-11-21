@@ -64,6 +64,7 @@ describe('getLocaleDirection without Intl.Locale text info', () => {
     expect(getLocaleDirection('he')).toBe('rtl');
     expect(getLocaleDirection('fa')).toBe('rtl');
     expect(getLocaleDirection('ur')).toBe('rtl');
+    expect(getLocaleDirection('hu-Hung')).toBe('rtl');
   });
 
   test('reads left-to-right locales from their likely script', () => {
