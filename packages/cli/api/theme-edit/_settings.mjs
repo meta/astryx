@@ -8361,7 +8361,7 @@ export function compileTheme(ctx, data, base) {
         putTok(edge.token, shade, m);
         if (shade.toLowerCase() !== String(border).toLowerCase())
           (ctx.compileNotes ??= []).push(
-            `fields kept at 3:1: their edge (${edge.token}) is ${shade} in ${m} mode, the nearest shade of ${border} that reads on their fill; for the exact color: \`set ${data.name} ${edge.token} ${border}${data.mode === 'both' ? ` --mode ${m}` : ''}\``,
+            `fields kept at 3:1: their edge (${edge.token}) is ${shade} in ${m} mode, the nearest shade of ${border} that reads on their fill; for the exact color: \`${P} set ${data.name} ${edge.token} ${quoteCommandArgument(String(border))}${data.mode === 'both' ? ` --mode ${m}` : ''}\``,
           );
       }
   }

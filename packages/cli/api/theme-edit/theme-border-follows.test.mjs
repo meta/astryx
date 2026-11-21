@@ -68,6 +68,11 @@ describe('the emphasized border', () => {
     expect(faint.notes.join('\n')).toMatch(
       /fields kept at 3:1: their edge \(--color-border-emphasized\) is #[0-9a-f]{6} in light mode, the nearest shade of #e3e8ee/,
     );
+    // (The exact-color command runs as pasted: the editor's own command,
+    // the color quoted so a shell keeps its #.)
+    expect(faint.notes.join('\n')).toMatch(
+      /for the exact color: `\S*astryx experimental theme editor set \S+ --color-border-emphasized '#e3e8ee'/,
+    );
   });
 
   it('follows a stronger border, and the result says so', () => {
