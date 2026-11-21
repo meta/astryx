@@ -99,4 +99,78 @@ describe('one joined strip', () => {
     expect(results[0]?.text).toContain('"a soft shadow"');
     expect(results[0]?.text).toContain('"#dddddd lines"');
   }, 300_000);
+
+  describe('the strip takes only what it writes', () => {
+    it('keeps its shape in both modes when a mode is said, and scopes only the line color', async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        test.skip();
+      }
+      // With no line color, nothing of the strip is one mode's: answered as
+      // before, never an empty strip.
+      const plain = await answer(
+        'dark mode: pagination pages in one bordered strip',
+      );
+      expect(plain.some(r => /as one strip/.test(r.text))).toBe(false);
+      expect(plain.flatMap(r => r.sets).length).toBeGreaterThan(0);
+      const [lined] = await answer(
+        'pagination pages in one bordered strip with #333333 lines in dark mode',
+      );
+      expect(lined.sets).toContain(
+        "--color-border '#333333' --on pagination-list --mode dark",
+      );
+      expect(lined.sets).toContain('gap 0 --on pagination-list');
+      expect(lined.text).toMatch(
+        /same in light and dark, and its line color is for dark mode/,
+      );
+    }, 240_000);
+
+    it('writes a line width or a dashed style said of the lines', async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        test.skip();
+      }
+      const [wide] = await answer(
+        'pagination pages in one bordered strip with 2px lines',
+      );
+      expect(wide.sets).toContain(
+        "border '2px solid var(--color-border)' --on pagination-list",
+      );
+      const [dashed] = await answer(
+        'pagination pages in one bordered strip with dashed lines',
+      );
+      expect(dashed.sets).toContain(
+        "border '1px dashed var(--color-border)' --on pagination-list",
+      );
+    }, 240_000);
+
+    it('leaves a look it does not write to its own answer, and takes a color after ", and"', async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        test.skip();
+      }
+      const results = await answer(
+        'pagination pages in one bordered strip with a large shadow',
+      );
+      const strip = results.find(r => /as one strip/.test(r.text));
+      expect(strip?.sets.join('\n')).not.toMatch(/box-shadow/);
+      expect(strip?.text).not.toMatch(/large shadow/);
+      const [joined] = await answer(
+        'pagination pages in one bordered strip with 3px corners, a soft shadow, and #dddddd lines',
+      );
+      expect(joined.sets).toContain(
+        "--color-border '#dddddd' --on pagination-list --mode light",
+      );
+      expect(joined.sets.join('\n')).not.toMatch(/--color-border-emphasized/);
+    }, 240_000);
+
+    it('reads "pagination cells" as the pagination\'s controls', async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        test.skip();
+      }
+      const [r] = await answer('pagination cells in one bordered strip');
+      expect(r.sets).toContain('gap 0 --on pagination-list');
+    }, 240_000);
+  });
 });

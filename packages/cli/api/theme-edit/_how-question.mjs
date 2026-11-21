@@ -2422,12 +2422,13 @@ export function partLexicon(ctx) {
         real ? {on: real} : {on: key, missing: `${key} ${sub}`},
       ]);
     }
-    // A part's items said by what each one is ("pagination pages", "the
-    // pagination's page buttons", "pager cells"): its `-item` part.
+    // A part's items said by what each one is ("pagination pages",
+    // "pagination cells"): its `-item` part.
     if (keys.has(`${key}-item`))
       subParts.push([
-        new RegExp(
+        needing(
           `\\b${key}s?(?:'s)?\\s+(?:cells?|pages?|page (?:buttons?|numbers?))\\b`,
+          key,
         ),
         {on: `${key}-item`},
       ]);
@@ -13197,8 +13198,10 @@ export function draftAnswer(ctx, env, question) {
       };
     }
     // A value that already holds the mode's change in its light-dark()
-    // halves (a shadow's colors in one mode) needs no --mode.
+    // halves (a shadow's colors in one mode) needs no --mode, nor a draft
+    // whose steps carry their own modes (a strip's line color).
     if (/** @type {any} */ (d).modeInValue) return d;
+    if (/** @type {any} */ (d).modesKept) return d;
     /**
      * A shared shadow token taken away in one mode ("no shadows in dark
      * mode"): its colors in that mode go transparent, the other mode's stay
@@ -15533,12 +15536,17 @@ export function draftAnswer(ctx, env, question) {
    * @param {Clause} c
    * @returns {Draft | null}
    */
+  // (Looks the strip does not write: said with it, they are answered on
+  // their own, after it.)
+  const STRIP_UNSAID =
+    /\b(?:thick|thin|heavy|bold|hairline|double|groove|ridge|inset|outset|large|big|huge|deep|strong|subtle|faint|glow(?:ing)?)\b/;
   const joinedStrip = c => {
     if (
       !/\b(?:(?:one|a single|single)\s+(?:[a-z]+\s+)?(?:strip|bar|block)|joined|connected)\b/.test(
         noMode(c.text),
       ) ||
-      c.neg
+      c.neg ||
+      STRIP_UNSAID.test(noMode(c.text))
     )
       return null;
     const targets = [...TARGET.values()];
@@ -15568,10 +15576,11 @@ export function draftAnswer(ctx, env, question) {
         if (
           x.neg ||
           x.parts.some(p => TARGET.get(one(p.on))?.component !== component) ||
-          !/^(?:with|and|,)?$/.test(String(x.joint ?? '').trim()) ||
+          !/^(?:with|and|,|,\s*and)?$/.test(String(x.joint ?? '').trim()) ||
           !/\b(?:shadows?|lines?|borders?|separators?|dividers?|corners?|radius|rounded|edges?)\b/.test(
             x.text,
-          )
+          ) ||
+          STRIP_UNSAID.test(noMode(x.text))
         )
           break;
         after.push(x);
@@ -15589,7 +15598,24 @@ export function draftAnswer(ctx, env, question) {
       // Every line is the border token, so a line color said is that
       // token on the row, reaching its cells, in the mode it is said for.
       const lineColor = said.flatMap(x => x.colors)[0];
-      const line = '1px solid var(--color-border)';
+      // A width or a dashed or dotted style said of the lines is every
+      // line's.
+      const lineClauses = said.filter(
+        x =>
+          /\b(?:lines?|borders?|separators?|dividers?|edges?)\b/.test(x.text) &&
+          !/\b(?:corners?|radius|rounded)\b/.test(x.text),
+      );
+      const lineWidth =
+        lineClauses.flatMap(x => x.lengths)[0] ??
+        lineClauses
+          .map(x => /\b\d*\.?\d+px\b/.exec(x.text)?.[0])
+          .find(Boolean) ??
+        '1px';
+      const lineStyle =
+        lineClauses
+          .map(x => /\b(dashed|dotted)\b/.exec(x.text)?.[1])
+          .find(Boolean) ?? 'solid';
+      const line = `${lineWidth} ${lineStyle} var(--color-border)`;
       // A length said with corners is the strip's radius; the end cells'
       // corners sit just inside its border.
       const cornerLength = said.find(x =>
@@ -15600,7 +15626,12 @@ export function draftAnswer(ctx, env, question) {
       const inner = px
         ? `${Math.max(0, Number(px[1]) - 1)}px`
         : `calc(${outer} - 1px)`;
-      const mode = modeOf(c);
+      // (Said for one mode, only the line color takes it: the strip's shape
+      // is the same in light and dark. With no line color said, nothing of
+      // the strip is that mode's own, so the ask is answered as before.)
+      const mode =
+        said.map(x => modeOf(x)).find(m => Object.keys(m).length) ?? {};
+      if (Object.keys(mode).length && !lineColor) return null;
       const steps = [
         ...(lineColor
           ? [set('--color-border', lineColor, {on: row, ...mode})]
@@ -15634,9 +15665,11 @@ export function draftAnswer(ctx, env, question) {
           typed: said.flatMap(x => [...x.colors, ...x.lengths]),
           families: [...new Set(drawn.flatMap(a => ASPECT_FAMILIES[a]))],
         },
-        text: `${component} as one strip: ${row} draws the border and corners with no gap between its controls; each ${item} draws a separator after it${cells.length ? ` (and ${cells.join(', ')}, a cell of the row too)` : ''}, and the first and last take the row's corners, the last with no separator${after.length ? ` (with ${after.map(x => `"${x.text.trim()}"`).join(', ')})` : ''}`,
+        text: `${component} as one strip: ${row} draws the border and corners with no gap between its controls; each ${item} draws a separator after it${cells.length ? ` (and ${cells.join(', ')}, a cell of the row too)` : ''}, and the first and last take the row's corners, the last with no separator${after.length ? ` (with ${after.map(x => `"${x.text.trim()}"`).join(', ')})` : ''}${said.some(x => x.mode) ? `; the strip's shape is the same in light and dark${lineColor ? `, and its line color is for ${said.find(x => x.mode)?.mode} mode` : ''}` : ''}`,
         options: [steps],
         sequence: true,
+        // (Each step carries its own mode: only the line color has one.)
+        modesKept: true,
       };
     }
     return null;
