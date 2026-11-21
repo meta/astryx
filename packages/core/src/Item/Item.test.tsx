@@ -814,6 +814,7 @@ describe('Item', () => {
           <Item
             label="Ada Lovelace"
             href="/candidates/1"
+            startContent={<span>AL</span>}
             endContent={createPortal(
               <span data-testid="portaled">Portaled</span>,
               document.body,
@@ -821,7 +822,7 @@ describe('Item', () => {
           />,
         );
         // Present first: a middle press on the row opens the link.
-        fireEvent.mouseUp(screen.getByText('Ada Lovelace'), {button: 1});
+        fireEvent.mouseUp(screen.getByText('AL'), {button: 1});
         expect(open).toHaveBeenCalledTimes(1);
         fireEvent.mouseUp(screen.getByTestId('portaled'), {button: 1});
         expect(open).toHaveBeenCalledTimes(1);
