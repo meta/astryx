@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Primary text and icons of a gray map as `themePalette()` maps them: the
- * ramp's black and white ends, for a tinted gray and a pure gray alike.
+ * A tinted gray carries its tint into primary text and icons: the darkest
+ * shade inside its ramp in light, the lightest in dark, never pure black or
+ * white. A pure gray keeps black and white.
  */
 
 import fs from 'node:fs';
@@ -15,6 +16,8 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {parseColor, ratio} from './_color.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -49,12 +52,25 @@ afterAll(() => {
 });
 
 describe('primary ink of a gray', () => {
-  it('a slate gray keeps black and white primary text and icons', async () => {
+  it('a slate gray tints primary text and icons in both modes', async () => {
     await themeEditNew('slate', {cwd, like: 'neutral'});
     await themeEditSet('slate', 'neutral', '#64748b', {cwd});
-    for (const token of ['--color-text-primary', '--color-icon-primary']) {
-      expect(halves('slate', token), token).toEqual(['#000000', '#ffffff']);
+    const [light, dark] = halves('slate', '--color-text-primary');
+    expect(light).not.toBe('#000000');
+    expect(dark).not.toBe('#ffffff');
+    const slate = hexToOklch('#64748b').H;
+    for (const c of [light, dark]) {
+      const gap = Math.abs(((hexToOklch(c).H - slate + 540) % 360) - 180);
+      expect(gap, c).toBeLessThan(25);
     }
+    const [page] = halves('slate', '--color-background-body');
+    expect(
+      ratio(
+        /** @type {[number, number, number]} */ (parseColor(light)),
+        /** @type {[number, number, number]} */ (parseColor(page)),
+      ),
+    ).toBeGreaterThanOrEqual(12);
+    expect(halves('slate', '--color-icon-primary')[0]).not.toBe('#000000');
   }, 240_000);
 
   it('a pure gray keeps black and white', async () => {
@@ -66,9 +82,10 @@ describe('primary ink of a gray', () => {
     ]);
   }, 240_000);
 
-  it('a slate gray draws the text on a dark surface as a pure gray does', () => {
-    expect(halves('slate', '--color-on-dark')).toEqual(
-      halves('gray', '--color-on-dark'),
-    );
+  it('a slate gray tints the text a dark surface reads too', () => {
+    // Its dark surfaces take the tint, so the text on them does.
+    for (const token of ['--color-on-dark'])
+      for (const c of halves('slate', token))
+        expect(c, token).not.toMatch(/^#(?:000000|ffffff)$/);
   });
 });
