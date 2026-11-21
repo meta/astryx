@@ -540,6 +540,27 @@ const ROWS = [
     },
   ],
   [
+    "a brief's state look led by a label is the part the brief named, as main reads it",
+    {
+      q: 'Surface: filled fields. Feel: 8% tint on hover.',
+      has: [
+        "background-color '#f2f2f2' --on inputs --state hover --mode light",
+        "background-color '#242424' --on inputs --state hover --mode dark",
+      ],
+    },
+  ],
+  [
+    'a whole brief keeps its labelled hover look on the fields it named',
+    {
+      q: 'Material (M2 web) — Type: Roboto 14px, 1.43 leading. Density: comfortable. Surface: raised (elevation shadows on buttons and cards), filled fields. Edges: 4px corners. Feel: 8% tint on hover, 12% on press. Color: purple #6200ee primary, teal #03dac6 secondary.',
+      has: [
+        "background-color '#f2f2f2' --on inputs --state hover --mode light",
+        "background-color '#242424' --on inputs --state hover --mode dark",
+        'corners 4px',
+      ],
+    },
+  ],
+  [
     "a part a colon list's head does not hold is its own, as main reads it",
     {
       q: 'navigation rail: #fef7ff background, rounder cards, compact tables, 80px wide; the selected item gets a #e8def8 pill',

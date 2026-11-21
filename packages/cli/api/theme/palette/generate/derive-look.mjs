@@ -107,7 +107,7 @@ import {perceptualDelta} from './generator.mjs';
  * @typedef {object} DerivedStatus
  * @property {Record<string, DerivedToken>} tokens
  * @property {Record<string, 'derived'>} roles The roles derived and written.
- * @property {string[]} why What the roles gave up to stay written (a fill that cannot meet every limit, a border under 3:1), and each role that keeps the base theme's colors because its text or icon reads at no shade.
+ * @property {string[]} why What the roles gave up to stay written (a fill that cannot meet every limit), and each role that keeps the base theme's colors because its text, icon or border reads at no shade.
  * @property {string[]} short The roles `why` names, by dial id.
  */
 
@@ -980,7 +980,7 @@ export function deriveStatusColors({
           fail(
             m,
             `${token} reads at only ${ratioDown(best.r)}:1 in ${m} at its most readable shade (needs ${needs}:1)`,
-            !token.startsWith('--color-border-'),
+            true,
           );
         return at(m, best.stop);
       };
