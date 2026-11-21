@@ -490,3 +490,27 @@ it(
   },
   T,
 );
+
+it(
+  "reads a part said with the bar by 'with' as before, and counts a run's color read once",
+  async test => {
+    needsBases(test);
+    for (const q of [
+      'top bar navy with blue buttons',
+      'top nav navy with blue buttons',
+      'a navy header with rounded buttons',
+    ]) {
+      const {sets} = await answer(q);
+      expect(
+        sets.some(c => /top-nav-item/.test(c)),
+        q,
+      ).toBe(false);
+    }
+    const two = await answer(
+      'tabs with bold 13px #3b5998 text and selected tabs with bold 13px #ffffff text',
+    );
+    expect(two.sets).toContain("color '#3b5998' --on tab");
+    expect(two.texts.some(t => /but not "#3b5998"/.test(t))).toBe(false);
+  },
+  T,
+);

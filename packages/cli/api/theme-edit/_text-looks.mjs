@@ -190,6 +190,21 @@ export function addRunLooks(clauses, hues) {
     for (const x of [...group, ...copies]) RUN_READ.add(x);
     clauses.splice(end + 1, 0, ...copies);
   }
+  // ("… and selected tabs with …": a clause the reader gives a run's words
+  // it read elsewhere holds no color it failed to read.)
+  const hex = /#[0-9a-f]{3,8}\b/gi;
+  const read = new Set(
+    clauses
+      .filter(x => RUN_READ.has(x))
+      .flatMap(x => (ownRun(x, hues) ?? '').toLowerCase().match(hex) ?? []),
+  );
+  for (const x of clauses) {
+    if (RUN_READ.has(x)) continue;
+    const said = lookRun(hues).exec(String(x.text ?? ''))?.[0] ?? '';
+    const hexes = said.toLowerCase().match(hex) ?? [];
+    if (x.state && hexes.length && hexes.every(h => read.has(h)))
+      RUN_READ.add(x);
+  }
 }
 
 /**
@@ -260,10 +275,13 @@ export function barLinksAreNavItems(clauses, namesBar, release) {
     const navBefore = lastBar;
     const barOf = (/** @type {typeof clauses} */ xs) =>
       xs.flatMap(x => x.parts).find(bar)?.on ?? null;
+    // ("top bar navy with blue buttons": only links said with the bar are
+    // its nav items.)
     const joined =
-      (says && inBar) ||
-      (/^[\s;]*with\s*$/.test(c.joint ?? '') &&
-        Boolean(before && barOf([before])));
+      says &&
+      (inBar ||
+        (/^[\s;]*with\s*$/.test(c.joint ?? '') &&
+          Boolean(before && barOf([before]))));
     // ("… with white links in light mode and gray links in dark mode": more
     // links said in the bar's list for a mode or a state of their own are
     // its nav items too.)
