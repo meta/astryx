@@ -514,7 +514,9 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   installed, or has more source files than `doctor` reads, the check does not
   run and says why, whatever props the pages give. When there is a candidate
   and Core's types or the files that augment Core cannot be read, it reports
-  no prop and says why. The warning names up to eight props, each with its
+  no prop and says why. Where installing a package fixes the reason (no
+  installed Core, no TypeScript it can use, React's types unread), the reason
+  names what to install. The warning names up to eight props, each with its
   file, line and component and the documented prop that has the same words
   when there is one, and counts the rest. It never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
@@ -968,11 +970,23 @@ non-interactive guarantee.
   `unknown-prop` warning of `astryx experimental export`: each prop name the
   page's own files give a Core component, read and judged as INV42 reads and
   judges it: with the docs and types of the Core the page finds installed,
-  read with the project's own TypeScript and React types; a page that finds
-  no installed Core, or a project without them, gets no judgment. Each
-  element gets one warning, and React's console line for a prop it names is
-  not printed as page output. Only the docs are read while every prop is
-  documented.
+  read with the project's own TypeScript and React types. When a prop the
+  docs leave out is a candidate and INV42 would say why it was not judged
+  (no installed Core, no TypeScript it can use, React's or Core's types or
+  the files that augment Core unread, another JSX runtime or a `css` prop,
+  more source files than are read), one `props-not-checked` warning gives
+  that reason and, where an install fixes it, what to install; outside a
+  project (`spec:AST-081` FR3) it gives the reason alone. A candidate
+  INV42 leaves unjudged without a reason (a `paths` mapping, a generic or
+  unreadable component, a file that finds no installed Core while the
+  page's other files do) gets no line. Each element gets one warning, and a
+  cut list of props names the command that lists the rest, with the command
+  name `spec:AST-081` FR5 picks for the folder and
+  `--package @astryxdesign/core` (`spec:AST-035` FR12), so an integration
+  that replaces the component does not answer it. React's console
+  line for a prop a warning names is dropped from the page output before it
+  is cut to its first lines, so it never hides a line the page printed
+  itself. Only the docs are read while every prop is documented.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
