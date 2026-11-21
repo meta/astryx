@@ -56,9 +56,10 @@ and FR11 adds only the last column to what it commits and reports.
   under a hover-capable pointer, and `no` for boundary presence on a coarse-primary
   device that has another input — a keyboard-driven tablet gains a tab stop it did
   not have. `yes` for public API, keyboard behavior on hover-capable pointers, and every width
-  outcome except FR11's. `no` for the last column's width after a person resizes it
-  and for the last column's key in what `onColumnResizeEnd` reports (FR11), and for DOM shape when the filler track
-  renders (`component:Table` FR27).
+  outcome except FR11's. `no` for the last column's width once `columnWidths` holds it, for the last
+  column's key in what `onColumnResizeEnd` reports (FR11), and for how leftover
+  space shows (the filler track, `component:Table` FR27) in the three cases FR11's
+  compatibility class lists.
 - Compatibility class: presentation-only change to one transient state, plus one
   accessibility correction that adds a control where keyboard resize was already
   promised. No public API, prop, export, or target is added or changed. One
@@ -67,14 +68,21 @@ and FR11 adds only the last column to what it commits and reports.
   where it announced no maximum, so assistive technology fell back to a
   maximum of 100. A boundary's value is its column's rendered width (AR8),
   where it was the column's minimum until the first resize.
-- FR11 compatibility class: a correction of the last column's snap-back
-  (`spec:AST-017` FR5), shipped as `[fix]` (`architecture:public-component-api`
-  INV9). A drag commits and reports the last column's width with the others,
-  so the last column keeps its width instead of taking the remaining width;
-  untouched columns keep the rendered widths a drag already commits, and only
-  space a narrowed last column gives up shows as the filler track. Before any
-  drag, and in a Table whose `columnWidths` holds no width for the last column,
-  sizing is unchanged.
+- FR11 compatibility class: an intentional layout change shipped as `[feat]`
+  (`spec:AST-017` FR5, FR7; `architecture:public-component-api` INV9), with no
+  source change for any caller. A drag commits and reports the last column's
+  width with the others, so the last column keeps its width instead of taking
+  the remaining width, and untouched columns keep the rendered widths a drag
+  already commits. A Table whose `columnWidths` holds no width for the last
+  column sizes its columns as released. Once `columnWidths` holds it, space the
+  columns do not fill shows as the filler track (`component:Table` FR27) in
+  three cases:
+  1. narrowing any column leaves the space it gives up as filler instead of
+     growing the last column;
+  2. a Table whose box widens after a drag shows the added space as filler
+     instead of stretching the columns;
+  3. a Table that mounts with a stored last-column width shows it, and any
+     filler, before any drag.
 - Migration decision: none. No consumer edit and no codemod. A caller that stores
   the widths `onColumnResizeEnd` reports receives one more key, the last
   column's, and storing it keeps that column's width after a remount (DEC-8).
