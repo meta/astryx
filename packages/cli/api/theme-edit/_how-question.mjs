@@ -4676,11 +4676,26 @@ export function draftAnswer(ctx, env, question) {
       ];
       const last = looks[looks.length - 1];
       const look = last[1];
+      const at = /** @type {number} */ (last.index);
       const word = look.toLowerCase().replace(/s$/, '');
       // (Only an ask said on its own: one joined to another by "and",
       // "but" or "then" keeps the reading it has without the pronoun.)
-      if (/\b(?:and|but|then)\b/i.test(said)) return m;
-      const own = String(said);
+      // ("make the buttons blue and the card border is ugly, hide it": an
+      // ask of its own joined before the look, one with a verb, stays as
+      // said; the look is read from the words after the join.)
+      const joins = [...said.matchAll(/\b(?:and|but|then)\s+/gi)];
+      const j = joins[0];
+      const joinedAsk =
+        joins.length === 1 &&
+        at > /** @type {number} */ (j.index) &&
+        /\b(?:make|set|use|give|add|change|turn|want|need)\b/i.test(
+          said.slice(0, j.index),
+        );
+      if (joins.length && !joinedAsk) return m;
+      const kept = joinedAsk
+        ? said.slice(0, /** @type {number} */ (j.index) + j[0].length)
+        : '';
+      const own = said.slice(kept.length);
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
         .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
@@ -4709,7 +4724,7 @@ export function draftAnswer(ctx, env, question) {
         return m;
       // (A "!" or "?" before it ends the ask before, as a full stop does.)
       const stop = String(lead).replace(/[!?]/, '.');
-      return `${stop}no ${word} on ${part}`;
+      return `${stop}${kept}no ${word} on ${part}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
