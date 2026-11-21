@@ -117,6 +117,14 @@ describe('a light neutral', () => {
       "set q0 --color-background-card '#c0c0c0' --mode light",
     ]);
     expect(silver.text).toMatch(/dark mode keeps the dark shades/);
+    // (Text a part draws straight on the silver surfaces, a code block's
+    // title, takes the nearest shade that reads there.)
+    const silverAll = (await how('q0', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(silverAll).toContain(
+      "set q0 --color-syntax-comment '#4e4e4e' --mode light",
+    );
     const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
     expect(slate).toContain("set q0 neutral '#64748b'");
     expect(slate.join('\n')).not.toMatch(/--color-background-/);

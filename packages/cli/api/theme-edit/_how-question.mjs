@@ -32478,7 +32478,43 @@ export function draftAnswer(ctx, env, question) {
   // is measured against the theme's text in that mode, as the fill of a
   // part is; a text token that would not read (under 4.5:1) there takes a
   // color that does, in its own line: primary text white or black,
-  // secondary text the farthest shade toward the page that still reads.
+  // secondary text the farthest shade toward the page that still reads,
+  // and any other color a part draws its text with straight on the page
+  // or a surface (a code block's title) the nearest shade that reads.
+  /** @type {string[] | null} */
+  let onPageText = null;
+  const pageTextTokens = () => {
+    if (onPageText) return onPageText;
+    const GROUND = new Set([
+      '--color-background-body',
+      '--color-background-surface',
+      '--color-background-card',
+    ]);
+    /** @type {Set<string>} */
+    const fills = new Set();
+    /** @type {Set<string>} */
+    const texts = new Set();
+    for (const part of Object.keys(C.MAP)) {
+      const bg = C.partReads(part, 'background') ?? [];
+      for (const r of bg) fills.add(r.token);
+      for (const r of C.partReads(part, 'border') ?? []) fills.add(r.token);
+      // (A part with a fill of its own, in any look, draws its text on
+      // that fill.)
+      if (bg.some(r => !GROUND.has(r.token))) continue;
+      for (const r of C.partReads(part, 'text') ?? [])
+        if (/^--color-/.test(r.token)) texts.add(r.token);
+    }
+    // (Only colors no part fills or edges with: changing one moves text
+    // alone. Disabled text is meant to read faintly, and an icon needs
+    // 3:1, not the 4.5:1 text needs.)
+    onPageText = [...texts].filter(
+      t =>
+        !fills.has(t) &&
+        !/^--color-text-(?:primary|secondary)$/.test(t) &&
+        !/^--color-on-|disabled|overlay|tint|icon/.test(t),
+    );
+    return onPageText;
+  };
   for (const [di, d] of [...result.entries()].reverse()) {
     // (A page answer's own second line, the frame and the main panel, is
     // part of the same answer.)
@@ -32520,7 +32556,11 @@ export function draftAnswer(ctx, env, question) {
             : [env.data.mode === 'dark-only' ? 'dark' : 'light']
       );
       for (const m of modes)
-        for (const tok of ['--color-text-primary', '--color-text-secondary']) {
+        for (const tok of [
+          '--color-text-primary',
+          '--color-text-secondary',
+          ...pageTextTokens(),
+        ]) {
           // (A text color the ask itself writes for this mode, in any of
           // its lines, is the asker's: "page #ffffff in dark mode, text
           // #111111 in dark mode" keeps the typed text.)
@@ -32542,7 +32582,17 @@ export function draftAnswer(ctx, env, question) {
               ? [255, 255, 255]
               : [0, 0, 0];
           let to = best;
-          if (tok === '--color-text-secondary')
+          if (!/^--color-text-(?:primary|secondary)$/.test(tok))
+            for (let k = 0.05; k <= 1; k += 0.05) {
+              const mix = ink
+                .slice(0, 3)
+                .map((v, i) => Math.round(v + (best[i] - v) * k));
+              if (ratio(mix, ground) >= 4.5) {
+                to = mix;
+                break;
+              }
+            }
+          else if (tok === '--color-text-secondary')
             for (let k = 0.6; k > 0; k -= 0.05) {
               const mix = best.map((v, i) =>
                 Math.round(v + (ground[i] - v) * k),
