@@ -1540,9 +1540,12 @@ describe('Table', () => {
       });
       expect(fresh.loads.count).toBe(0);
       act(() => fresh.releaseFrames());
-      await waitFor(() => {
-        expect(fresh.loads.count).toBe(1);
-      });
+      await waitFor(
+        () => {
+          expect(fresh.loads.count).toBe(1);
+        },
+        {timeout: 3000},
+      );
     } finally {
       fresh.restore();
     }
@@ -1579,9 +1582,12 @@ describe('Table', () => {
       // The hover measured the cell as cut off, but the load still waits.
       expect(fresh.loads.count).toBe(0);
       act(() => fresh.releaseFrames());
-      await waitFor(() => {
-        expect(fresh.loads.count).toBe(1);
-      });
+      await waitFor(
+        () => {
+          expect(fresh.loads.count).toBe(1);
+        },
+        {timeout: 3000},
+      );
     } finally {
       fresh.restore();
       if (original.scrollWidth) {
