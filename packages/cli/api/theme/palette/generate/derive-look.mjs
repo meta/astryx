@@ -15,9 +15,13 @@
  * token starts at the stop the official neutral theme maps it to: a card
  * tint pale enough that the theme's text and secondary text read on it,
  * text on it and on the page at 4.5:1, icons at 3:1 (WCAG 2.2 SC 1.4.3,
- * 1.4.11), and chart series at 3:1 on the page. A set that draws two hues
- * alike (fill and text, or series, under ΔE 2), or holds a color that
- * cannot reach its contrast, is refused: the theme keeps its base's.
+ * 1.4.11), and chart series at 3:1 on the page. Every set is written. A
+ * chart series drawn like an earlier one takes the nearest shade apart
+ * that still reads. A card tint drawn like an earlier one, or like the
+ * page, takes the nearest quieter tint apart, else the nearest stronger
+ * one. A status fill stays apart from the accent where a shade does. A
+ * status role whose text reads at no shade keeps the base theme's colors.
+ * A limit no shade meets is a note.
  */
 import {
   compositeOver,
@@ -51,27 +55,17 @@ import {perceptualDelta} from './generator.mjs';
  * @property {Stop} dark
  */
 
-/** Whether a derived set is written, and why not. */
-/** @typedef {'derived' | 'merged' | 'unreadable' | 'none'} DerivedState */
-
 /**
- * A derived color that cannot reach its contrast.
- * @typedef {object} UnreadableColor
- * @property {string} token
- * @property {Mode} mode
- * @property {number} stop
- * @property {number} ratio
- * @property {number} needs
- */
-
-/**
- * The category and chart colors a palette derives.
+ * The category and chart colors a palette derives. Each set is always
+ * written when the palette has its hues.
  * @typedef {object} DerivedLook
  * @property {Record<string, DerivedToken>} tokens
- * @property {DerivedState} badges
- * @property {DerivedState} chart
- * @property {string[]} merged
- * @property {UnreadableColor[]} unreadable
+ * @property {'derived' | 'none'} badges
+ * @property {'derived' | 'none'} chart
+ * @property {string[]} limits Each limit no shade meets: a color still drawn alike, or one under its contrast at its most readable shade.
+ * @property {string[]} moved Each color moved apart from an earlier one (a tint also from the page).
+ * @property {boolean} alike Whether a color is still drawn like an earlier one.
+ * @property {boolean} unread Whether a color is under its contrast at its most readable shade.
  */
 
 /**
@@ -84,6 +78,14 @@ import {perceptualDelta} from './generator.mjs';
  * @property {string | null} [accent] The look's accent seed: how deep its card tints sit (tintStops).
  * @property {(m: Mode) => string[]} grounds The surfaces text sits on in a mode: page, surface, card (opaque hex).
  * @property {(token: string) => boolean} [wanted] Whether a token is written (Core has it and the theme does not set it by hand).
+ * @property {ReadonlyArray<Mode>} [shown] The modes the theme shows: notes name only these. Every mode by default.
+ */
+
+/**
+ * @typedef {object} Badge
+ * @property {Stop} fill
+ * @property {{stop: Stop; r: number}} ink
+ * @property {{stop: Stop; r: number}} icon
  */
 
 /**
@@ -97,14 +99,16 @@ import {perceptualDelta} from './generator.mjs';
  * @property {(m: Mode, role: string) => (Stop & {family: string})[]} inks The text the theme draws on a role's fill in a mode, preferred first (white or near-black).
  * @property {(m: Mode) => string | null} accent The accent fill in a mode, kept apart from.
  * @property {(token: string) => boolean} [wanted]
+ * @property {ReadonlyArray<Mode>} [shown] The modes the theme shows: notes name only these. Every mode by default.
  */
 
 /**
  * The status colors a palette derives, and each role's state. A token's stop may name its own family (the text on a fill is the neutral color's, or white or black).
  * @typedef {object} DerivedStatus
  * @property {Record<string, DerivedToken>} tokens
- * @property {Record<string, 'derived' | 'unreadable' | 'alike'>} roles
- * @property {string[]} why
+ * @property {Record<string, 'derived'>} roles The roles derived and written.
+ * @property {string[]} why What the roles gave up to stay written (a fill that cannot meet every limit, a border under 3:1), and each role that keeps the base theme's colors because its text or icon reads at no shade.
+ * @property {string[]} short The roles `why` names, by dial id.
  */
 
 /**
@@ -207,6 +211,11 @@ const TEXT = 4.5;
 const NON_TEXT = 3;
 /** Two colors under this ΔE (×100) read as one. */
 const ALIKE = 2;
+/**
+ * How close a card tint can be to another tint, or to a page, before they
+ * read as one. Core's own red and orange tints sit about ΔE 2 apart.
+ */
+const TINT_ALIKE = 1.5;
 /** Below this chroma a seed is a gray. */
 const GRAY_CHROMA = 0.02;
 /**
@@ -365,6 +374,7 @@ export function deriveLookColors({
   text,
   grounds,
   wanted = () => true,
+  shown = modes,
 }) {
   /**
    * @type {Record<string, DerivedToken>}
@@ -372,13 +382,13 @@ export function deriveLookColors({
   const tokens = {};
   const tint = tintStops(accent);
   /**
-   * @type {UnreadableColor[]}
+   * @type {string[]}
    */
-  const unreadable = [];
+  const limits = [];
   /**
    * @type {string[]}
    */
-  const merged = [];
+  const moved = [];
   /**
    * @type {DerivedLook}
    */
@@ -386,9 +396,28 @@ export function deriveLookColors({
     tokens,
     badges: 'none',
     chart: 'none',
-    merged,
-    unreadable,
+    limits,
+    moved,
+    alike: false,
+    unread: false,
   };
+  /** A limit no shade meets in a mode the theme shows: one note, however many times it is met. */
+  const unmet =
+    /**
+     * @param {string} line
+     * @param {'alike' | 'unread'} kind
+     * @param {Mode} m
+     * @returns {void}
+     */
+    (line, kind, m) => {
+      if (!shown.includes(m)) {
+        return;
+      }
+      out[kind] = true;
+      if (!limits.includes(line)) {
+        limits.push(line);
+      }
+    };
   const sorted = [...stops].sort((a, b) => a - b);
   const near =
     /**
@@ -411,11 +440,70 @@ export function deriveLookColors({
       stop,
       color: palette[id][m][stop],
     });
+  /** Stops by distance from `s0`. Ties go darker first in light and
+   * lighter first in dark. */
+  const outward =
+    /**
+     * @param {Mode} m
+     * @param {number} s0
+     * @returns {number[]}
+     */
+    (m, s0) =>
+      [...sorted].sort(
+        (a, b) =>
+          Math.abs(a - s0) - Math.abs(b - s0) ||
+          (m === 'light' ? a - b : b - a),
+      );
+  const lowest =
+    /**
+     * @param {string} color
+     * @param {string[]} on
+     * @returns {number}
+     */
+    (color, on) => Math.min(...on.map(bg => contrastRatio(color, bg)));
   /**
    * The stop nearest `start` that reads at `needs` on every ground,
-   * searched both ways (darker first in light, lighter first in dark); the
-   * most contrasting one, noted, when none does.
+   * searched both ways, or the most contrasting one when none does; and
+   * the ratio it reads at.
    */
+  const nearest =
+    /**
+     * @param {string} id
+     * @param {Mode} m
+     * @param {number} start
+     * @param {string[]} on
+     * @param {number} needs
+     * @returns {{stop: Stop; r: number}}
+     */
+    (id, m, start, on, needs) => {
+      const scored = outward(m, near(start)).map(stop => ({
+        stop,
+        r: lowest(at(id, m, stop).color, on),
+      }));
+      const best =
+        scored.find(x => x.r >= needs) ??
+        scored.reduce((x, y) => (y.r > x.r ? y : x));
+      return {stop: at(id, m, best.stop), r: best.r};
+    };
+  /** A color under its contrast at its most readable shade is a note. */
+  const noteShort =
+    /**
+     * @param {string} token
+     * @param {Mode} m
+     * @param {number} r
+     * @param {number} needs
+     * @returns {void}
+     */
+    (token, m, r, needs) => {
+      if (r < needs) {
+        unmet(
+          `${token} reads at only ${ratioDown(r)}:1 in ${m} at its most readable shade (needs ${needs}:1)`,
+          'unread',
+          m,
+        );
+      }
+    };
+  /** The nearest stop that reads, noted when none does. */
   const pick =
     /**
      * @param {string} token
@@ -427,29 +515,9 @@ export function deriveLookColors({
      * @returns {Stop}
      */
     (token, id, m, start, on, needs) => {
-      const s0 = near(start);
-      const order = [...sorted].sort(
-        (a, b) =>
-          Math.abs(a - s0) - Math.abs(b - s0) ||
-          (m === 'light' ? a - b : b - a),
-      );
-      const scored = order.map(stop => ({
-        stop,
-        r: Math.min(...on.map(bg => contrastRatio(at(id, m, stop).color, bg))),
-      }));
-      const best =
-        scored.find(x => x.r >= needs) ??
-        scored.reduce((x, y) => (y.r > x.r ? y : x));
-      if (best.r < needs) {
-        unreadable.push({
-          token,
-          mode: m,
-          stop: best.stop,
-          ratio: ratioDown(best.r),
-          needs,
-        });
-      }
-      return at(id, m, best.stop);
+      const {stop, r} = nearest(id, m, start, on, needs);
+      noteShort(token, m, r, needs);
+      return stop;
     };
   const each =
     /**
@@ -463,36 +531,19 @@ export function deriveLookColors({
       }
       return v;
     };
-  /**
-   * The pairs of hues drawn alike: every color given for both under ΔE 2
-   * in some mode.
-   */
-  const alike =
+  const shift =
     /**
-     * @param {Record<string, Record<Mode, string[]>>} drawn
-     * @returns {string[]}
+     * @param {number} from
+     * @param {number} to
+     * @returns {string}
      */
-    drawn => {
-      const names = Object.keys(drawn);
-      /**
-       * @type {string[]}
-       */
-      const found = [];
-      for (let i = 0; i < names.length; i++) {
-        for (let j = i + 1; j < names.length; j++) {
-          for (const m of modes) {
-            const a = drawn[names[i]][m];
-            const b = drawn[names[j]][m];
-            if (a.every((c, k) => perceptualDelta(c, b[k]) < ALIKE)) {
-              found.push(`${names[i]} and ${names[j]} (${m})`);
-              break;
-            }
-          }
-        }
-      }
-      return found;
-    };
-  // Category colors: Badge and Token fill and text, Card tints.
+    (from, to) => (to < from ? 'deeper' : 'paler');
+  // Category colors: Badge and Token fill and text, Card tints. A hue is
+  // drawn alike when its fill and text are both under ΔE 2 from an earlier
+  // hue's, or its tint is under TINT_ALIKE from an earlier tint or a
+  // page. A Card shows only its tint behind the theme's text. Such a hue
+  // takes another tint that carries the text. A limit no tint meets
+  // becomes a note.
   const hues = CATEGORY_HUES.filter(h => h !== 'gray' || palette.neutral);
   const famOf =
     /**
@@ -501,26 +552,16 @@ export function deriveLookColors({
      */
     h => (h === 'gray' ? 'neutral' : h);
   if (hues.every(h => palette[famOf(h)])) {
-    /**
-     * @type {Record<string, DerivedToken>}
-     */
-    const badge = {};
-    /**
-     * @type {Record<string, Record<Mode, string[]>>}
-     */
-    const drawn = {};
-    const first = unreadable.length;
-    for (const h of hues) {
-      const id = famOf(h);
-      const gray = h === 'gray';
-      const start =
-        /**
-         * @param {'background' | 'border' | 'icon' | 'text'} role
-         * @param {Mode} m
-         * @returns {number}
-         */
-        (role, m) => {
-          const pair = gray
+    const start =
+      /**
+       * @param {string} h
+       * @param {'background' | 'border' | 'icon' | 'text'} role
+       * @param {Mode} m
+       * @returns {number}
+       */
+      (h, role, m) => {
+        const pair =
+          h === 'gray'
             ? {
                 background: CATEGORY_STOPS.grayBackground,
                 border: CATEGORY_STOPS.grayBorder,
@@ -528,106 +569,223 @@ export function deriveLookColors({
                 text: CATEGORY_STOPS.grayText,
               }[role]
             : CATEGORY_STOPS[role];
-          return pair[m === 'light' ? 0 : 1];
+        return pair[m === 'light' ? 0 : 1];
+      };
+    const badgeOn =
+      /**
+       * @param {string} h
+       * @param {Mode} m
+       * @param {number} fillStop
+       * @returns {Badge}
+       */
+      (h, m, fillStop) => {
+        const id = famOf(h);
+        const fill = at(id, m, fillStop);
+        const on = [fill.color, ...grounds(m)];
+        return {
+          fill,
+          ink: nearest(id, m, start(h, 'text', m), on, TEXT),
+          icon: nearest(id, m, start(h, 'icon', m), on, NON_TEXT),
         };
-      const fill = each(m => {
+      };
+    /**
+     * @type {Record< string, Partial<Record<Mode, Badge>> >}
+     */
+    const drawn = Object.fromEntries(hues.map(h => [h, {}]));
+    for (const m of modes) {
+      /**
+       * @type {{hue: string; fill: string; ink: string}[]}
+       */
+      const placed = [];
+      for (const h of hues) {
+        const id = famOf(h);
         const s0 = near(
-          h === 'gray' ? start('background', m) : tint[m === 'light' ? 0 : 1],
+          h === 'gray'
+            ? start(h, 'background', m)
+            : tint[m === 'light' ? 0 : 1],
         );
-        // Paler first in light, darker first in dark: a tint, never a solid
-        // fill, since it is also the card's tint.
-        const order = [...sorted].sort(
-          (a, b) =>
-            Math.abs(a - s0) - Math.abs(b - s0) ||
-            (m === 'light' ? b - a : a - b),
-        );
-        // It stays a tint: a text color it cannot carry within the tint's
-        // stops leaves the hue unreadable, never a white or black fill.
+        // Paler first in light, darker first in dark, inside the tint's
+        // stops: a tint, never a solid fill, since it is also the card's.
         const [lo, hi] = TINT_STOPS[m];
-        const reads = text(m);
-        const s = order
+        const carrying = [...sorted]
           .filter(x => x >= lo && x <= hi)
-          .find(x =>
-            reads.every(c => contrastRatio(c, at(id, m, x).color) >= TEXT),
+          .sort(
+            (a, b) =>
+              Math.abs(a - s0) - Math.abs(b - s0) ||
+              (m === 'light' ? b - a : a - b),
+          )
+          .filter(x =>
+            text(m).every(c => contrastRatio(c, at(id, m, x).color) >= TEXT),
           );
-        if (s == null) {
+        if (!carrying.length) {
           const worst = Math.min(
-            ...reads.map(c => contrastRatio(c, at(id, m, s0).color)),
+            ...text(m).map(c => contrastRatio(c, at(id, m, s0).color)),
           );
-          unreadable.push({
-            token: `--color-background-${h}`,
-            mode: m,
-            stop: s0,
-            ratio: ratioDown(worst),
-            needs: TEXT,
-          });
-          return at(id, m, s0);
+          unmet(
+            `--color-background-${h} carries the theme's text at only ${ratioDown(worst)}:1 in ${m} (needs ${TEXT}:1)`,
+            'unread',
+            m,
+          );
         }
-        return at(id, m, s);
-      });
-      const on =
+        const like =
+          /**
+           * @param {Badge} b
+           * @returns {{hue: string} | undefined}
+           */
+          b =>
+            placed.find(p => {
+              const fill = perceptualDelta(p.fill, b.fill.color);
+              return (
+                fill < TINT_ALIKE ||
+                (fill < ALIKE &&
+                  perceptualDelta(p.ink, b.ink.stop.color) < ALIKE)
+              );
+            }) ??
+            (grounds(m).some(g => perceptualDelta(g, b.fill.color) < TINT_ALIKE)
+              ? {hue: 'the page'}
+              : undefined);
+        let badge = badgeOn(h, m, carrying[0] ?? s0);
+        const twin = like(badge);
+        if (twin !== undefined) {
+          /**
+           * @type {Badge | undefined}
+           */
+          let apart;
+          // Paler first in light, darker first in dark: a moved tint stays
+          // as quiet as the look; a stronger one only when no quieter one
+          // stands apart.
+          const first = carrying[0] ?? s0;
+          const quieter =
+            /**
+             * @param {number} x
+             */
+            x => (m === 'light' ? x > first : x < first);
+          const tries = [
+            ...carrying.filter(quieter),
+            ...carrying.slice(1).filter(x => !quieter(x)),
+          ];
+          for (const s of tries) {
+            const b = badgeOn(h, m, s);
+            if (like(b) === undefined) {
+              apart = b;
+              break;
+            }
+          }
+          if (apart === undefined) {
+            unmet(
+              `--color-background-${h} is drawn like ${twin.hue} in ${m}: no tint of it that carries the text stands apart`,
+              'alike',
+              m,
+            );
+          } else {
+            if (shown.includes(m))
+              moved.push(
+                `--color-background-${h} takes a ${shift(badge.fill.stop, apart.fill.stop)} tint in ${m}, apart from ${twin.hue}`,
+              );
+            badge = apart;
+          }
+        }
+        noteShort(`--color-text-${h}`, m, badge.ink.r, TEXT);
+        noteShort(`--color-icon-${h}`, m, badge.icon.r, NON_TEXT);
+        placed.push({
+          hue: h,
+          fill: badge.fill.color,
+          ink: badge.ink.stop.color,
+        });
+        drawn[h][m] = badge;
+      }
+    }
+    for (const h of hues) {
+      const id = famOf(h);
+      const of =
         /**
          * @param {Mode} m
-         * @returns {string[]}
+         * @returns {Badge}
          */
-        m => [fill[m].color, ...grounds(m)];
-      const ink = each(m =>
-        pick(`--color-text-${h}`, id, m, start('text', m), on(m), TEXT),
-      );
-      badge[`--color-background-${h}`] = {family: id, ...fill};
-      badge[`--color-text-${h}`] = {family: id, ...ink};
-      badge[`--color-icon-${h}`] = {
-        family: id,
-        ...each(m =>
-          pick(`--color-icon-${h}`, id, m, start('icon', m), on(m), NON_TEXT),
+        m => /** @type {Badge} */ (drawn[h][m]);
+      /**
+       * @type {Record<string, Record<Mode, Stop>>}
+       */
+      const set = {
+        [`--color-background-${h}`]: each(m => of(m).fill),
+        [`--color-text-${h}`]: each(m => of(m).ink.stop),
+        [`--color-icon-${h}`]: each(m => of(m).icon.stop),
+        [`--color-border-${h}`]: each(m =>
+          at(id, m, near(start(h, 'border', m))),
         ),
       };
-      badge[`--color-border-${h}`] = {
-        family: id,
-        ...each(m => at(id, m, near(start('border', m)))),
-      };
-      drawn[h] = {
-        light: [fill.light.color, ink.light.color],
-        dark: [fill.dark.color, ink.dark.color],
-      };
-    }
-    const pairs = alike(drawn);
-    if (pairs.length) {
-      merged.push(...pairs);
-      unreadable.length = first;
-      out.badges = 'merged';
-    } else if (unreadable.length > first) {
-      // A color that cannot reach its contrast is not written either: the
-      // base theme's stay, and `unreadable` says which.
-      out.badges = 'unreadable';
-    } else {
-      for (const [k, v] of Object.entries(badge)) {
+      for (const [k, v] of Object.entries(set)) {
         if (wanted(k)) {
-          tokens[k] = v;
+          tokens[k] = {family: id, ...v};
         }
       }
-      out.badges = 'derived';
     }
+    out.badges = 'derived';
   }
   // Chart colors: series at 3:1 on the page (graphics), a gray, and the
-  // five-step scales.
+  // five-step scales. A series drawn like an earlier one takes the nearest
+  // shade that reads at 3:1 and stands apart from every earlier series. A
+  // limit the palette cannot meet becomes a note.
   if (CHART_SERIES.every(h => palette[h])) {
     /**
      * @type {Record<string, DerivedToken>}
      */
     const chart = {};
     /**
-     * @type {Record<string, Record<Mode, string[]>>}
+     * @type {Record<string, Record<Mode, Stop>>}
      */
-    const series = {};
-    const first = unreadable.length;
+    const picked = {};
     for (const h of CHART_SERIES) {
-      const k = `--color-data-categorical-${h}`;
-      const refs = each(m =>
-        pick(k, h, m, m === 'light' ? 50 : 60, grounds(m), NON_TEXT),
+      picked[h] = each(m =>
+        pick(
+          `--color-data-categorical-${h}`,
+          h,
+          m,
+          m === 'light' ? 50 : 60,
+          grounds(m),
+          NON_TEXT,
+        ),
       );
-      chart[k] = {family: h, ...refs};
-      series[h] = {light: [refs.light.color], dark: [refs.dark.color]};
+    }
+    for (const m of modes) {
+      /**
+       * @type {{hue: string; color: string}[]}
+       */
+      const placed = [];
+      for (const h of CHART_SERIES) {
+        const own = picked[h][m];
+        const like = placed.find(
+          p => perceptualDelta(p.color, own.color) < ALIKE,
+        );
+        if (like !== undefined) {
+          const apart = outward(m, own.stop).find(stop => {
+            const c = at(h, m, stop).color;
+            return (
+              lowest(c, grounds(m)) >= NON_TEXT &&
+              placed.every(p => perceptualDelta(p.color, c) >= ALIKE)
+            );
+          });
+          if (apart === undefined) {
+            unmet(
+              `--color-data-categorical-${h} is drawn like ${like.hue} in ${m}: no shade of it that reads at ${NON_TEXT}:1 stands apart`,
+              'alike',
+              m,
+            );
+          } else {
+            picked[h][m] = at(h, m, apart);
+            if (shown.includes(m))
+              moved.push(
+                `--color-data-categorical-${h} takes a ${shift(own.stop, apart)} shade in ${m}, apart from ${like.hue}`,
+              );
+          }
+        }
+        placed.push({hue: h, color: picked[h][m].color});
+      }
+    }
+    for (const h of CHART_SERIES) {
+      // A one-mode theme writes its mode on both sides.
+      const refs = each(m => picked[h][m]);
+      chart[`--color-data-categorical-${h}`] = {family: h, ...refs};
     }
     if (palette.neutral) {
       chart['--color-data-neutral'] = {
@@ -647,21 +805,12 @@ export function deriveLookColors({
         });
       }
     }
-    const pairs = alike(series);
-    if (pairs.length) {
-      merged.push(...pairs.map(x => `chart ${x}`));
-      unreadable.length = first;
-      out.chart = 'merged';
-    } else if (unreadable.length > first) {
-      out.chart = 'unreadable';
-    } else {
-      for (const [k, v] of Object.entries(chart)) {
-        if (wanted(k)) {
-          tokens[k] = v;
-        }
+    for (const [k, v] of Object.entries(chart)) {
+      if (wanted(k)) {
+        tokens[k] = v;
       }
-      out.chart = 'derived';
     }
+    out.chart = 'derived';
   }
   return out;
 }
@@ -686,7 +835,8 @@ const APART_FROM_ACCENT = 10;
  * lightness (the base theme's color for it) at the accent's strength. A
  * role keeps its hue whatever the accent: an error stays the base's red,
  * info its blue. Only its strength follows the look; a role that would
- * then read as the accent keeps the base theme's colors (deriveStatusColors).
+ * then read as the accent takes the nearest shade apart from it
+ * (deriveStatusColors).
  * `base` holds each role's base color by dial id (info, success, warning,
  * danger).
  * @param {Record<string, string>} base
@@ -733,19 +883,24 @@ export function deriveStatusColors({
   inks,
   accent,
   wanted = () => true,
+  shown = modes,
 }) {
   /**
    * @type {Record<string, DerivedToken>}
    */
   const tokens = {};
   /**
-   * @type {Record<string, 'derived' | 'unreadable' | 'alike'>}
+   * @type {Record<string, 'derived'>}
    */
   const state = {};
   /**
    * @type {string[]}
    */
   const why = [];
+  /**
+   * @type {string[]}
+   */
+  const short = [];
   const sorted = [...stops].filter(s => s > 0 && s < 100).sort((a, b) => a - b);
   const near =
     /**
@@ -780,6 +935,21 @@ export function deriveStatusColors({
      * @type {string[]}
      */
     const fails = [];
+    // Text or an icon that reads at no shade: the role keeps the base
+    // theme's colors, which read.
+    let unread = false;
+    /** A note for a mode the theme shows. */
+    const fail =
+      /**
+       * @param {Mode} m
+       * @param {string} line
+       * @returns {void}
+       */
+      (m, line, text = false) => {
+        if (!shown.includes(m)) return;
+        fails.push(line);
+        if (text) unread = true;
+      };
     /**
      * The stop nearest `start` that reads at `needs` on every color in `bg`.
      */
@@ -807,8 +977,10 @@ export function deriveStatusColors({
           scored.find(x => x.r >= needs) ??
           scored.reduce((x, y) => (y.r > x.r ? y : x));
         if (best.r < needs)
-          fails.push(
-            `${token} reads at only ${ratioDown(best.r)}:1 in ${m} (needs ${needs}:1)`,
+          fail(
+            m,
+            `${token} reads at only ${ratioDown(best.r)}:1 in ${m} at its most readable shade (needs ${needs}:1)`,
+            !token.startsWith('--color-border-'),
           );
         return at(m, best.stop);
       };
@@ -830,32 +1002,70 @@ export function deriveStatusColors({
         (a, b) => Math.abs(a - s0) - Math.abs(b - s0) || b - a,
       );
       const choices = inks(m, id);
-      // The role's usual text first: the nearest stop it reads on, before
-      // the other text on a nearer stop.
-      for (const ink of choices)
-        for (const s of order) {
+      const a = accent(m);
+      const standsOut =
+        /**
+         * @param {string} c
+         */
+        c =>
+          bright ||
+          Math.min(...grounds(m).map(g => contrastRatio(c, g))) >= NON_TEXT;
+      const apart =
+        /**
+         * @param {string} c
+         */
+        c => !a || perceptualDelta(c, a) >= APART_FROM_ACCENT;
+      // (A bright fill already starts at the palest stop that reads as a
+      // fill on a light page: one kept apart from the accent moves deeper,
+      // never paler toward the page.)
+      const allowed = order.filter(s => !(bright && m === 'light' && s > s0));
+      /** The fill at a stop, with a note for each limit it gives up. */
+      const take =
+        /**
+         * @param {number} s
+         * @param {Stop & {family: string}} ink
+         * @returns {Stop}
+         */
+        (s, ink) => {
           const c = at(m, s).color;
-          if (
-            !bright &&
-            Math.min(...grounds(m).map(g => contrastRatio(c, g))) < NON_TEXT
-          )
-            continue;
-          // (A bright fill already starts at the palest stop that reads as
-          // a fill on a light page: one kept apart from the accent moves
-          // deeper, never paler toward the page.)
-          if (bright && m === 'light' && s > s0) continue;
-          const a = accent(m);
-          if (a && perceptualDelta(c, a) < APART_FROM_ACCENT) continue;
-          if (contrastRatio(ink.color, c) >= TEXT) {
-            onFill[m] = ink;
-            return at(m, s);
+          if (!standsOut(c))
+            fail(
+              m,
+              `--color-${w} stands out from the page at under ${NON_TEXT}:1 in ${m}`,
+            );
+          if (!apart(c))
+            fail(m, `--color-${w} is drawn like your accent in ${m}`);
+          const r = contrastRatio(ink.color, c);
+          if (r < TEXT)
+            fail(
+              m,
+              `--color-on-${w} reads at only ${ratioDown(r)}:1 on --color-${w} in ${m} at its most readable shade (needs ${TEXT}:1)`,
+              true,
+            );
+          onFill[m] = ink;
+          return at(m, s);
+        };
+      // The limits, dropped one at a time when no stop meets them all:
+      // standing out from the page first, then standing apart from the
+      // accent. Text that reads on no stop keeps the role at the base
+      // theme's colors.
+      for (const keep of [[standsOut, apart], [apart], []])
+        // The role's usual text first: the nearest stop it reads on, before
+        // the other text on a nearer stop.
+        for (const ink of choices)
+          for (const s of allowed) {
+            const c = at(m, s).color;
+            if (keep.every(ok => ok(c)) && contrastRatio(ink.color, c) >= TEXT)
+              return take(s, ink);
           }
-        }
-      fails.push(
-        `--color-${w} cannot carry readable text and stand out from the page in ${m}`,
+      // No stop carries readable text: the one that carries it best.
+      const best = allowed.reduce((x, y) =>
+        contrastRatio(choices[0].color, at(m, y).color) >
+        contrastRatio(choices[0].color, at(m, x).color)
+          ? y
+          : x,
       );
-      onFill[m] = choices[0];
-      return at(m, s0);
+      return take(best, choices[0]);
     });
     const muted = each(m => {
       let stop = near(STATUS_STOPS.muted[m === 'light' ? 0 : 1]);
@@ -923,22 +1133,16 @@ export function deriveStatusColors({
         pick(`--color-border-${w}`, m, fill[m].stop, grounds(m), NON_TEXT),
       ),
     };
-    // Apart from the accent: a role whose fill is drawn like the accent's
-    // would not tell a status from an action.
-    const alike = modes.some(m => {
-      const a = accent(m);
-      return a ? perceptualDelta(fill[m].color, a) < APART_FROM_ACCENT : false;
-    });
-    if (fails.length) {
-      state[id] = 'unreadable';
-      why.push(...fails);
+    if (unread) {
+      why.push(
+        `${id} keeps the base theme's colors: no shade of its family reads`,
+      );
+      short.push(id);
       continue;
     }
-    if (alike) {
-      state[id] = 'alike';
-      why.push(`${id} would be drawn like the accent`);
-      continue;
-    }
+    // A one-mode theme measures its mode for both sides: one note each.
+    for (const line of fails) if (!why.includes(line)) why.push(line);
+    if (fails.length) short.push(id);
     state[id] = 'derived';
     for (const [k, v] of Object.entries(set))
       if (wanted(k)) tokens[k] = {family: id, ...v};
@@ -950,7 +1154,7 @@ export function deriveStatusColors({
         dark: onFill.dark,
       };
   }
-  return {tokens, roles: state, why};
+  return {tokens, roles: state, why, short};
 }
 /**
  * Code colors, `[family, light stop, dark stop]` by syntax role, as the
