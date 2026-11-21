@@ -63,6 +63,7 @@ export async function iconSection(
   const {data} = rankIconSets(sets, withdrawn, query, {
     limit: Math.min(ICON_SECTION_LIMIT, limit),
     looks: projectLooks(choice),
+    componentNames: () => declaredNames,
   });
   if (data.matchCount === 0) return null;
   return {

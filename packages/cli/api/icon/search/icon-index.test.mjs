@@ -80,6 +80,8 @@ function queries() {
     'bin',
     'trash can',
     'home page',
+    'trash icon dialog list',
+    'search icon in a table link',
     'zebra',
     'x',
     '  search  ',

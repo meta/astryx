@@ -771,6 +771,49 @@ describe('a word matches whole words (FR6)', () => {
     ).toEqual(['brand', 'backup']);
   });
 
+  it('counts the words after the icon word that name a component only to break a tie', () => {
+    const set = setOf([
+      {id: 'info', words: ['info', 'information']},
+      {id: 'link'},
+      {id: 'table'},
+    ]);
+    const componentNames = () => ['Popover', 'Link', 'Table'];
+    /** @param {string} query @param {object} [options] */
+    const first = (query, options = {componentNames}) =>
+      answeringMatches(rankIcons([set], query, {words: true, ...options}))[0]
+        ?.id;
+    // `popover links` say where the icon goes, so `information` leads.
+    expect(first('information icon popover links')).toBe('info');
+    expect(first('information icon popover links', {})).toBe('link');
+    // With nothing named before the icon word, or `of` or `for` after it,
+    // every word says what the icon shows.
+    expect(first('icon popover links information')).toBe('link');
+    expect(first('information icon of popover links')).toBe('link');
+    // Only the words after the last icon word count as places.
+    expect(first('information icon links icon')).toBe('link');
+  });
+
+  it("reads the names of the project's Core components for the words after the icon word", async () => {
+    const app = writeIconSetProject(path.join(tmp, 'places'), {
+      packages: [
+        {
+          data: {
+            ...glyphsData(),
+            icons: [
+              {id: 'info', export: 'InfoIcon', words: ['info', 'information']},
+              {id: 'link', export: 'LinkIcon', words: ['link']},
+            ],
+            map: {},
+          },
+        },
+      ],
+    });
+    const found = await icon('information icon popover links', {cwd: app});
+    expect(
+      found.type === 'icon.search' && found.data.matches.map(m => m.id),
+    ).toEqual(['info', 'link']);
+  });
+
   it('answers with word matches only when asked for them', () => {
     const set = setOf([{id: 'copy'}, {id: 'clipboard-copy'}]);
     expect(rankIcons([set], 'copy button clipboard')).toEqual([]);

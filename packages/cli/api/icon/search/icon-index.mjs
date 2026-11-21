@@ -14,7 +14,11 @@
 import {cliVersion} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
-import {loadIconSets, ownReplacedDefinitions} from '../_adapter.mjs';
+import {
+  coreComponentNames,
+  loadIconSets,
+  ownReplacedDefinitions,
+} from '../_adapter.mjs';
 import {
   REFERENCE_RE,
   checkIconLimit,
@@ -80,6 +84,7 @@ export async function exportIconIndex(options = {}) {
     withdrawn: withdrawn
       .filter(kept)
       .map(({name, package: pkg, reason}) => ({name, package: pkg, reason})),
+    components: coreComponentNames(cwd),
   };
 }
 
@@ -121,6 +126,8 @@ export async function rankIconIndex(query, indexes, options = {}) {
   const sets = [];
   /** @type {Array<{name: string, package: string, reason: string}>} */
   const withdrawn = [];
+  /** @type {Set<string>} */
+  const components = new Set();
   for (const index of list) {
     if (index == null || !Array.isArray(index.sets)) {
       throw new AstryxError(
@@ -138,6 +145,7 @@ export async function rankIconIndex(query, indexes, options = {}) {
     }
     sets.push(...index.sets);
     withdrawn.push(...(index.withdrawn ?? []));
+    for (const name of index.components ?? []) components.add(name);
   }
   // A stored set holds exactly the fields the ranking reads.
   const ranked = /** @type {Parameters<typeof rankIconSets>[0]} */ (
@@ -148,5 +156,10 @@ export async function rankIconIndex(query, indexes, options = {}) {
   for (const each of sets) {
     if (each.look) looks[`${each.package}/${each.name}`] = each.look;
   }
-  return rankIconSets(ranked, withdrawn, term, {set, limit, looks});
+  return rankIconSets(ranked, withdrawn, term, {
+    set,
+    limit,
+    looks,
+    componentNames: () => components,
+  });
 }
