@@ -123,7 +123,7 @@ describe('authoring receipts name the template meanings a set leaves unmapped', 
     );
     expect(last).not.toMatch(/\bshare \(/u);
     expect(last).toContain(
-      'experimental icon map <meaning> <icon id> --set glyphs`.',
+      'experimental icon map <definition> <icon id> --set glyphs`.',
     );
   });
 

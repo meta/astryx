@@ -127,7 +127,7 @@ export async function templateIconUndeclaredNotes(loaded, packageDir) {
   return {
     notes: undeclared.map(({id, key, module}) => ({
       code: TEMPLATE_ICON_UNDECLARED,
-      message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<meaning>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the meanings).`,
+      message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<definition>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the meanings).`,
     })),
     unchecked: unchecked.map(({id, key, module, why}) => ({
       file: id,
