@@ -661,6 +661,22 @@ describe('theme add with a shared theme', () => {
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
   });
 
+  it('copies editor state made with a newer Astryx palette recipe, which this editor opens', async () => {
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'palette.config.json'),
+      JSON.stringify({recipe: 'astryx-oklch-v99'}),
+    );
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor?.notCopied).toBeUndefined();
+    expect(result.data.copy?.editor?.files).toContain('palette.config.json');
+  });
+
   it.each([
     ['not JSON', 'not json', null, /is not JSON/],
     [
@@ -668,12 +684,6 @@ describe('theme add with a shared theme', () => {
       JSON.stringify({name: 'ocean', settings: 'all of them'}),
       null,
       /is not settings this CLI reads/,
-    ],
-    [
-      'made with a palette recipe this CLI does not know',
-      null,
-      JSON.stringify({recipe: 'astryx-oklch-v99'}),
-      /palette recipe astryx-oklch-v99, which a newer CLI than this one \(\S+\) makes; update the CLI/,
     ],
     [
       'made with a palette recipe no Astryx CLI makes',

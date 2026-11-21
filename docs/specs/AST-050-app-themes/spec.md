@@ -425,11 +425,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   configuration (`spec:AST-017/FR19`) (DEC-12). When the shared theme also
   carries the theme editor's saved state for that theme (a folder holding
   `<name>.settings.json`), the add copies it to the editor's folder for the
-  theme, `themes/<name>/`, so the theme editor opens it. That state is read
-  as data and never run: a settings file the editor's own checks refuse, or
-  a palette made with a recipe this CLI does not know (named with the CLI
-  update when a newer CLI makes it), or more than one folder of it, is not
-  copied and is
+  theme, `themes/<name>/`, so the theme editor opens it. The add reads that
+  state as data and runs none of it; the editor builds the theme's source,
+  `<name>.theme.ts`, when it opens the theme. A settings file the editor's
+  own checks refuse, or a palette made with a recipe no Astryx CLI makes
+  (a newer Astryx recipe is copied, as DEC-11 opens it), or more than one
+  folder of it, is not copied and is
   named, and the theme is still added; nor is it
   copied into a folder that already holds editor state the add did not
   write, which is left in place and named. With that state copied, the app

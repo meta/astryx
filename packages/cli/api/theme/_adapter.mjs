@@ -18,7 +18,6 @@ import {copyTree, stageSharedTheme} from './_shared-source.mjs';
 import {appCopyDescriptor} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {newerRecipe} from './palette/generate/newer-recipe.mjs';
-import {cliVersion} from '../../foundation/release/run-context.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -1907,10 +1906,14 @@ async function sharedEditorProblem(dir, slug) {
       return 'its palette.config.json is not JSON';
     }
     const recipe = palette?.recipe;
-    if (recipe != null && !PALETTE_RECIPES.includes(recipe))
-      return newerRecipe(recipe)
-        ? `it was made with the palette recipe ${String(recipe)}, which a newer CLI than this one (${cliVersion()}) makes; update the CLI, then add the theme again to keep its working files`
-        : `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
+    // (A newer Astryx recipe is copied: this CLI's editor opens it, keeping
+    // the palette as saved.)
+    if (
+      recipe != null &&
+      !PALETTE_RECIPES.includes(recipe) &&
+      !newerRecipe(recipe)
+    )
+      return `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
   }
   return null;
 }

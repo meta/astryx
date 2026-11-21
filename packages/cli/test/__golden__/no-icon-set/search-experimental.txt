@@ -1,4 +1,4 @@
-Results for "experimental" (16)
+Results for "experimental" (18)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
@@ -34,10 +34,20 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/field-reference template-doc
 parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        cli/api/functions/theme-add
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/api/functions/theme-add
+parent:      pnpm exec astryx docs cli/api/functions
 name:        cli/commands/theme
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs cli/commands/theme
+parent:      pnpm exec astryx docs cli/commands
+name:        cli/commands/theme-add
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/commands/theme-add
 parent:      pnpm exec astryx docs cli/commands
 name:        cli/experimental/export-pages
 domain:      doc
