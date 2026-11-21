@@ -3842,6 +3842,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-message-list-virtualization-long-conversation",
+      "path": "examples/use-chat-message-list-virtualization/long-conversation",
+      "aliases": []
+    },
+    {
       "name": "example-use-chat-paste-as-token-long-paste",
       "path": "examples/use-chat-paste-as-token/long-paste",
       "aliases": []
@@ -4264,6 +4269,11 @@
     {
       "name": "hook-use-chat-dictation",
       "path": "hooks/use-chat-dictation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-message-list-virtualization",
+      "path": "hooks/use-chat-message-list-virtualization",
       "aliases": []
     },
     {

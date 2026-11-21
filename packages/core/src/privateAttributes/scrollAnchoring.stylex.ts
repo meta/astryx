@@ -6,10 +6,11 @@
  * @output setScrollAnchoringOff, which turns the browser's scroll anchoring
  *   off on an element and back on
  * @position Owner module of the private scroll-anchoring attribute: the only
- *   file that writes its name or its rule. Core's useChatStreamScroll calls
- *   it while it follows the end; Lab reaches the writer through
- *   `@astryxdesign/core/internal/scroll-anchoring`. No public entry exports
- *   it.
+ *   file that writes its name or its rule. Core's Chat stream scroll calls
+ *   it, through chatStreamScrollChannel, while it follows the end, and the
+ *   measured list window calls it on the element that holds its rows; Lab
+ *   reaches the writer through `@astryxdesign/core/internal/scroll-anchoring`.
+ *   No public entry exports it.
  */
 
 const SCROLL_ANCHORING = 'data-astryx-scroll-anchoring';

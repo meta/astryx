@@ -33,7 +33,15 @@ export {ChatTokenizedText} from './ChatTokenizedText';
 export type {ChatTokenizedTextProps} from './ChatTokenizedText';
 
 export {ChatMessageList} from './ChatMessageList';
-export type {ChatMessageListProps} from './ChatMessageList';
+export type {
+  ChatMessageListProps,
+  ChatMessageListItemsProps,
+  ChatMessageListHandle,
+  ChatMessageListItemAlign,
+  ChatMessageListScrollToItemOptions,
+  ChatMessageListVirtualizationCapability,
+} from './ChatMessageList';
+export {useChatMessageListVirtualization} from './useChatMessageListVirtualization';
 
 export {ChatMessage} from './ChatMessage';
 export type {ChatMessageProps} from './ChatMessage';

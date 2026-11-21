@@ -220,6 +220,50 @@ function lowerBound(
 }
 
 /**
+ * The last item that starts at or before `position`, clamped to the items.
+ * `offsets` holds each item's start and then the total extent.
+ */
+export function itemAtOffset(
+  offsets: ReadonlyArray<number>,
+  position: number,
+): number {
+  const count = Math.max(0, offsets.length - 1);
+  return Math.max(
+    0,
+    Math.min(count - 1, lowerBound(offsets, position, count, true) - 1),
+  );
+}
+
+/**
+ * Where the item at `previousIndex` of `previousKeys` is in `indices`; when
+ * its key is gone, its first surviving successor, then its nearest surviving
+ * predecessor. Undefined when no key survives.
+ */
+export function findSurvivingIndex(
+  previousKeys: ReadonlyArray<string | number>,
+  previousIndex: number,
+  indices: ReadonlyMap<string | number, number>,
+): number | undefined {
+  const own = indices.get(previousKeys[previousIndex]);
+  if (own !== undefined) {
+    return own;
+  }
+  for (let i = previousIndex + 1; i < previousKeys.length; i++) {
+    const index = indices.get(previousKeys[i]);
+    if (index !== undefined) {
+      return index;
+    }
+  }
+  for (let i = Math.min(previousIndex, previousKeys.length) - 1; i >= 0; i--) {
+    const index = indices.get(previousKeys[i]);
+    if (index !== undefined) {
+      return index;
+    }
+  }
+  return undefined;
+}
+
+/**
  * The half-open item range for items of varying size. Before measurement it
  * holds the items that start inside the viewport, plus overscan after them.
  */
@@ -248,11 +292,7 @@ export function calculateVariableListRange({
     Math.max(0, total - visibleSize),
     Math.max(0, scrollOffset),
   );
-  // The last item that starts at or before the scroll offset.
-  const first = Math.max(
-    0,
-    Math.min(count - 1, lowerBound(offsets, scroll, count, true) - 1),
-  );
+  const first = itemAtOffset(offsets, scroll);
   const last = Math.max(
     first + 1,
     lowerBound(offsets, scroll + visibleSize, count),
@@ -297,27 +337,7 @@ export function reconcileListAnchor(options: ListAnchorOptions): number {
   } = options;
   const indices =
     options.keyIndices ?? new Map(keys.map((key, index) => [key, index]));
-  let index = indices.get(previousKeys[firstVisibleIndex]);
-  if (index === undefined) {
-    for (let i = firstVisibleIndex + 1; i < previousKeys.length; i++) {
-      index = indices.get(previousKeys[i]);
-      if (index !== undefined) {
-        break;
-      }
-    }
-  }
-  if (index === undefined) {
-    for (
-      let i = Math.min(firstVisibleIndex - 1, previousKeys.length - 1);
-      i >= 0;
-      i--
-    ) {
-      index = indices.get(previousKeys[i]);
-      if (index !== undefined) {
-        break;
-      }
-    }
-  }
+  const index = findSurvivingIndex(previousKeys, firstVisibleIndex, indices);
   const {offsets} = options;
   const maximumScroll = Math.max(
     0,

@@ -3,7 +3,7 @@
 /**
  * @file listWindow.test.ts
  * @input The fixed-pitch range and anchor calculation, and the range for items of varying size
- * @output Range, gap, guard and anchor assertions
+ * @output Range, gap, guard, anchor, item-at-offset and survivor assertions
  * @position Colocated tests for the private list-windowing module
  */
 import {describe, it} from 'vitest';
@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import {
   calculateListWindow,
   calculateVariableListRange,
+  findSurvivingIndex,
+  itemAtOffset,
   reconcileListAnchor,
 } from './listWindow';
 
@@ -458,5 +460,28 @@ describe('reconcileListAnchor with item offsets', () => {
 
   it('clamps to the end of the new extent', () => {
     assert.equal(anchor({viewportHeight: 200}), 100);
+  });
+});
+
+describe('the searches list windows share', () => {
+  it('finds the item that holds a position, and the first item above the list', () => {
+    // Items of 100, 50, 200, 80, 120 and 60.
+    const offsets = [0, 100, 150, 350, 430, 550, 610];
+    assert.equal(itemAtOffset(offsets, -40), 0);
+    assert.equal(itemAtOffset(offsets, 0), 0);
+    assert.equal(itemAtOffset(offsets, 149), 1);
+    assert.equal(itemAtOffset(offsets, 150), 2);
+    assert.equal(itemAtOffset(offsets, 10_000), 5);
+    assert.equal(itemAtOffset([0], 50), 0);
+  });
+
+  it('resolves a removed anchor to its first surviving successor, then its predecessor', () => {
+    const previous = ['a', 'b', 'c', 'd'];
+    const map = (keys: string[]) =>
+      new Map(keys.map((key, index) => [key, index]));
+    assert.equal(findSurvivingIndex(previous, 1, map(['x', 'a', 'b', 'c'])), 2);
+    assert.equal(findSurvivingIndex(previous, 1, map(['a', 'c', 'd'])), 1);
+    assert.equal(findSurvivingIndex(previous, 3, map(['a', 'b'])), 1);
+    assert.equal(findSurvivingIndex(previous, 1, map(['x', 'y'])), undefined);
   });
 });
