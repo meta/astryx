@@ -23,6 +23,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 const T = 240_000;
 const ED = ['experimental', 'theme', 'editor'];
@@ -97,7 +102,7 @@ describe('what a change says', () => {
       expect(see).toMatch(/show t --png writes themes\/t\/preview\.png/);
       expect(see).toContain('themes/t/sheet-overlays.png');
       const at = lines.findIndex(l =>
-        /^missed: +\d+ miss(es)? on \d+ parts? the theme's changes did not reach/.test(
+        /^missed: +this change left \d+ new miss(es)?; \d+ miss(es)? on \d+ parts? the theme's changes did not reach \(/.test(
           l,
         ),
       );

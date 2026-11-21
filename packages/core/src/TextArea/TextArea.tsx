@@ -72,11 +72,14 @@ import {
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TextArea/TextArea.generated';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {useDevWarning} from '../hooks/useDevWarning';
 
 registerEnglishFallback(english);
 const COUNTER_WARNING_THRESHOLD = 0.8;
@@ -394,6 +397,9 @@ export interface TextAreaProps
   autoComplete?: React.TextareaHTMLAttributes<HTMLTextAreaElement>['autoComplete'];
 }
 
+const WARN_MESSAGELESS_ERROR =
+  'an error status has no message, so only colour and an icon show the error. Give status.message the text that says what is wrong.';
+
 /**
  * A multi-line text input component for collecting longer user input.
  *
@@ -468,6 +474,7 @@ export function TextArea({
   const statusMessageID = useId();
   const counterID = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useMobileKeyboard(textareaRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Tracks the counter "zone" last announced (under / near / over) so we only
   // announce on a zone change, not on every keystroke.
@@ -502,10 +509,17 @@ export function TextArea({
       statusVariant,
     });
 
+  // An error without a message gets hidden translated text in its place, so
+  // assistive technology hears the error (WCAG 2.2 3.3.1).
+  const hasMessagelessError = status?.type === 'error' && !status.message;
+  useDevWarning('TextArea', WARN_MESSAGELESS_ERROR, hasMessagelessError);
+
   const ariaDescribedBy =
     [
       description ? descriptionID : null,
-      statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
+      (statusVariant !== 'tooltip' && status?.message) || hasMessagelessError
+        ? statusMessageID
+        : null,
       // The tooltip variant renders no message box; describe the input by the
       // tooltip's content instead so the status is still announced.
       statusTooltipDescribedBy,
@@ -748,6 +762,11 @@ export function TextArea({
           </div>
         )}
       </div>
+      {hasMessagelessError && (
+        <VisuallyHidden id={statusMessageID}>
+          {t('@astryx.field.errorFallback')}
+        </VisuallyHidden>
+      )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </Field>

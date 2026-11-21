@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'search',
+  group: 'search',
   description: 'Search or find something.',
   words: ['find', 'lookup', 'magnifier', 'magnifying glass'],
   builtIn: true,

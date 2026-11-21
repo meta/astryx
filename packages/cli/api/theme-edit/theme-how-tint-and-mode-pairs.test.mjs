@@ -1,0 +1,173 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file `editor how`: a text color asked with a fill given for one mode is
+ * that mode's on every variant the fill reaches; a text color asked with a
+ * see-through fill deepens it until the text reads, or is kept to the modes
+ * it reads in; a color said for one part is that part's alone.
+ *
+ * @position api/theme-edit — tests
+ */
+
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../test-utils/linked-fixture.mjs';
+import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
+
+/** @type {string} */
+let cwd;
+/** Why a bundled base could not be installed here, when one could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
+  cwd = makeLinkedFixture('astryx-theme-how-tint-mode-', FIXTURE_PACKAGES);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+  if (unbuilt) return;
+  await themeEditNew('n', {cwd, like: 'neutral'});
+}, 600_000);
+
+afterAll(() => {
+  removeLinkedFixture(cwd);
+});
+
+/** Every set command an answer gives, after the theme name. @param {string} q */
+const sets = async q => {
+  const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+  return (data.results ?? [])
+    .flatMap(r => r.commands)
+    .filter(c => / editor set /.test(c))
+    .map(c => c.replace(/^.* editor set \S+ /, ''));
+};
+
+/** @param {import('vitest').TestContext} test */
+const needsBases = test => {
+  if (unbuilt) {
+    console.warn(`skipped: ${unbuilt}`);
+    test.skip();
+  }
+};
+
+const T = 300_000;
+
+describe('a text color asked with a fill for one mode', () => {
+  it(
+    'is that mode only, on every variant the fill reaches',
+    async test => {
+      needsBases(test);
+      const all = await sets(
+        'buttons with a navy background in dark mode and white text',
+      );
+      // (On the variants the dark fill reaches, the white is dark mode's;
+      // light mode keeps the secondary and ghost text that reads on their
+      // light fills.)
+      const white = all.filter(c =>
+        /^color '#ffffff' .*variant:(?:secondary|ghost)/.test(c),
+      );
+      expect(white.length).toBeGreaterThan(0);
+      for (const c of white) expect(c).toMatch(/ --mode dark$/);
+    },
+    T,
+  );
+});
+
+describe('a color said for one part', () => {
+  it(
+    'fills the cards blue and the header navy, on every answer',
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow(
+        'cards tinted blue with a navy header',
+        {
+          cwd,
+          theme: 'n',
+        },
+      );
+      const fills = (data.results ?? [])
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.* editor set \S+ /, ''))
+        .filter(c => /^background(?:-color)? /.test(c));
+      const cards = fills.filter(c => / --on card\b/.test(c));
+      expect(cards.length).toBeGreaterThan(0);
+      for (const c of cards) expect(c).toMatch(/'#2563eb' --on card/);
+      // (A header line, where the answer writes one, is the navy.)
+      for (const c of fills.filter(c => /header\b/.test(c)))
+        expect(c).toMatch(/'#1e3a8a' --on \S*header/);
+    },
+    T,
+  );
+});
+
+describe('text asked with a see-through fill', () => {
+  /** The answer that runs the whole ask, its set lines and its text. @param {string} q */
+  const whole = async q => {
+    const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+    const r = (data.results ?? []).find(x => /^all of it/.test(x.text));
+    return {
+      text: r?.text ?? '',
+      all: (r?.commands ?? [])
+        .filter((/** @type {string} */ c) => / editor set /.test(c))
+        .map((/** @type {string} */ c) => c.replace(/^.* editor set \S+ /, '')),
+    };
+  };
+
+  it(
+    'deepens a see-through fill until the text asked with it reads in every mode',
+    async test => {
+      needsBases(test);
+      // (White on a 15% blue over the light page is 1.4:1.)
+      const {text, all} = await whole('buttons 15% blue with white text');
+      expect(all.some(c => / 15%/.test(c))).toBe(false);
+      expect(text).toMatch(
+        /the blue tint is deepened to (?:\d+%|solid) so #ffffff text reads at \d+\.\d:1/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'keeps a text color no strength of the fill reads on to the modes it reads in, and names a readable ink',
+    async test => {
+      needsBases(test);
+      // (Yellow at any strength never takes white text to 4.5:1 on the
+      // light page; over the dark page a light mix of it does.)
+      const {text, all} = await whole('buttons 15% #facc15 with white text');
+      const white = all.filter(c =>
+        c.startsWith("color '#ffffff' --on button"),
+      );
+      expect(white.length).toBeGreaterThan(0);
+      for (const c of white) expect(c).toMatch(/--mode dark/);
+      expect(text).toMatch(
+        /#ffffff text on the (?:\S+ )?button would not read on color-mix\(in srgb, #facc15 15%, transparent\) in light mode: \d\.\d\d:1, under the 4\.5:1 text needs, so it is kept to dark mode; #111827 reads there/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'names an ink that reads at 4.5:1, never one just short of it',
+    async test => {
+      needsBases(test);
+      // (#111827 reads at only 4.49:1 on #808080, white at 3.95:1: black,
+      // at 5.32:1, is the ink that reads.)
+      const {data} = await themeEditHow('buttons #808080 with white text', {
+        cwd,
+        theme: 'n',
+      });
+      const said = JSON.stringify(data.results ?? []);
+      expect(said).toMatch(/#000000 reads there at 5\.31:1/);
+      expect(said).not.toMatch(/#111827 reads there/);
+    },
+    T,
+  );
+});

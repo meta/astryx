@@ -52,6 +52,22 @@ export const doc = {
       required: false,
     },
     {
+      name: 'group',
+      type: 'string',
+      description:
+        "camelCase name of the family the definition belongs to, such as `notifications` for `notification`, `notificationActive`, and `notificationOff`. The icon finder and the definition's docs page name the other members of its group, so a reader picks the one that fits. A set's own definition may join an Astryx group or name its own. It never changes ranking.",
+      required: false,
+      example: "'notifications'",
+    },
+    {
+      name: 'replaces',
+      type: 'string',
+      description:
+        "The name of an older definition this one takes the place of. The old name keeps answering: a set's `map` key, a template's `icons` value, and `astryx experimental icon <old name>` resolve to this definition, through every later replacement too, and `integration check` warns with each `map` key to rename (`icon_definition_replaced`). The replaced definition's file may stay, so the old names it carries keep answering; it is not a current definition any more. Replacements stay within one folder: a set's own definition never replaces an Astryx definition. Two definitions cannot replace one name, and a built-in definition is never replaced.",
+      required: false,
+      example: "'trash'",
+    },
+    {
       name: 'stability',
       type: "'experimental'",
       description:
@@ -75,7 +91,7 @@ export default {
   notes: [
     {
       type: 'prose',
-      text: "A set's own definitions sit in a `definitions` folder in the set's directory, one file per definition. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every definition: Astryx's, and, in a project that sets `experimental.iconSet`, those of each installed set. A definition file refuses a field it does not know.",
+      text: "A set's own definitions sit in a `definitions` folder in the set's directory, one file per definition. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every definition: Astryx's and, where icon features are on (an installed icon-set package or `experimental.iconSet`), each installed icon set's own. A definition file refuses a field it does not know.",
     },
     {
       type: 'prose',

@@ -8,7 +8,8 @@
  *        source.
  * @output inputFieldsFrom(): the fields; sourceFieldProblems(): each
  *         misspelled field a source writes, with its line and the field it
- *         is near; sourceTypography(): the typography values it writes.
+ *         is near; sourceTypography() and sourceInputField(): the values it
+ *         writes in its typography (or another input field).
  * @position Shared by the editor, which refuses a misspelled field, and by
  *           theme build, which warns it: defineTheme() drops a field it does
  *           not take, so only the source shows it.
@@ -17,6 +18,7 @@
 import {babelParse as parseModule} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {sourcePlugins} from './source-syntax.mjs';
+import {entriesNotRead} from './written-values.mjs';
 import {UNREAD} from './typography-values.mjs';
 
 /**
@@ -210,6 +212,16 @@ function readModule({file, source}) {
           consts.set(d.id.name, d.init);
           if (decl !== st) exported.set(d.id.name, d.init);
         }
+    // A top-level assignment gives a name its value from there on: the
+    // last one is the value the module ends with.
+    const assigned =
+      st.type === 'ExpressionStatement' &&
+      st.expression?.type === 'AssignmentExpression' &&
+      st.expression.operator === '=' &&
+      st.expression.left?.type === 'Identifier'
+        ? st.expression
+        : null;
+    if (assigned) consts.set(assigned.left.name, assigned.right);
     if (st.type === 'ImportDeclaration' && st.importKind !== 'type') {
       const specifier = String(st.source.value);
       for (const x of st.specifiers) {
@@ -286,17 +298,113 @@ function themeInputs(entry, load) {
    * @param {any} node @param {any} mod @param {number} [depth]
    * @returns {{node: any, mod: any} | null}
    */
-  const objectOf = (node, mod, depth = 0) => {
+  const objectOf = (node, mod, depth = 0) =>
+    objectsOf(node, mod, depth)[0] ?? null;
+  /**
+   * Every object literal a value can be, following consts and relative
+   * imports, with the module that writes each: a member of an object or an
+   * element of an array the source writes (`all.a`, `list[0]`), each branch
+   * of a ternary or a `||`/`??`, and each object `Object.assign` merges.
+   * Empty when the source shows none.
+   * @param {any} node @param {any} mod @param {number} [depth]
+   * @returns {Array<{node: any, mod: any}>}
+   */
+  const objectsOf = (node, mod, depth = 0) => {
+    const value = unwrap(node);
+    if (!value || depth > 8) return [];
+    if (value.type === 'ObjectExpression') return [{node: value, mod}];
+    if (value.type === 'ConditionalExpression')
+      return [
+        ...objectsOf(value.consequent, mod, depth + 1),
+        ...objectsOf(value.alternate, mod, depth + 1),
+      ];
+    if (value.type === 'LogicalExpression')
+      return [
+        ...objectsOf(value.left, mod, depth + 1),
+        ...objectsOf(value.right, mod, depth + 1),
+      ];
+    if (
+      value.type === 'CallExpression' &&
+      value.callee?.type === 'MemberExpression' &&
+      !value.callee.computed &&
+      value.callee.object?.type === 'Identifier' &&
+      value.callee.object.name === 'Object' &&
+      value.callee.property?.name === 'assign'
+    )
+      return value.arguments.flatMap((/** @type {any} */ a) =>
+        objectsOf(a, mod, depth + 1),
+      );
+    if (value.type === 'MemberExpression') {
+      const key = value.computed
+        ? value.property?.type === 'StringLiteral' ||
+          value.property?.type === 'NumericLiteral'
+          ? String(value.property.value)
+          : null
+        : value.property?.name;
+      if (key == null) return [];
+      // A member of a module a dynamic import loads is that module's export.
+      const ns = namespaceOf(value.object, mod, depth + 1);
+      if (ns) {
+        const found = exportOf(ns, key, depth + 1);
+        return found ? [found] : [];
+      }
+      const list = arrayOf(value.object, mod, depth + 1);
+      if (list && /^\d+$/.test(key)) {
+        const element = list.node.elements[Number(key)];
+        return element ? objectsOf(element, list.mod, depth + 1) : [];
+      }
+      return objectsOf(value.object, mod, depth + 1).flatMap(holder => {
+        const p = holder.node.properties.find(
+          (/** @type {any} */ x) =>
+            x.type === 'ObjectProperty' && keyOf(x) === key,
+        );
+        return p ? objectsOf(p.value, holder.mod, depth + 1) : [];
+      });
+    }
+    if (value.type !== 'Identifier') return [];
+    if (mod.consts.has(value.name))
+      return objectsOf(mod.consts.get(value.name), mod, depth + 1);
+    const from = mod.imports.get(value.name);
+    if (!from) return [];
+    const other = imported(mod, from.specifier);
+    const found = other ? exportOf(other, from.imported, depth + 1) : null;
+    return found ? [found] : [];
+  };
+  /**
+   * The module a value is, when it is what a dynamic import of a relative
+   * module gives (`await import('./in')`), following the consts of its
+   * module; null otherwise.
+   * @param {any} node @param {any} mod @param {number} depth
+   * @returns {any}
+   */
+  const namespaceOf = (node, mod, depth) => {
+    let value = unwrap(node);
+    if (value?.type === 'AwaitExpression') value = unwrap(value.argument);
+    if (!value || depth > 8) return null;
+    const source =
+      value.type === 'ImportExpression'
+        ? value.source
+        : value.type === 'CallExpression' && value.callee?.type === 'Import'
+          ? value.arguments?.[0]
+          : null;
+    if (source?.type === 'StringLiteral')
+      return imported(mod, String(source.value));
+    return value.type === 'Identifier' && mod.consts.has(value.name)
+      ? namespaceOf(mod.consts.get(value.name), mod, depth + 1)
+      : null;
+  };
+  /**
+   * The array literal a value is, following the consts of its module.
+   * @param {any} node @param {any} mod @param {number} depth
+   * @returns {{node: any, mod: any} | null}
+   */
+  const arrayOf = (node, mod, depth) => {
     const value = unwrap(node);
     if (!value || depth > 8) return null;
-    if (value.type === 'ObjectExpression') return {node: value, mod};
-    if (value.type !== 'Identifier') return null;
-    if (mod.consts.has(value.name))
-      return objectOf(mod.consts.get(value.name), mod, depth + 1);
-    const from = mod.imports.get(value.name);
-    if (!from) return null;
-    const other = imported(mod, from.specifier);
-    return other ? exportOf(other, from.imported, depth + 1) : null;
+    if (value.type === 'ArrayExpression') return {node: value, mod};
+    return value.type === 'Identifier' && mod.consts.has(value.name)
+      ? arrayOf(mod.consts.get(value.name), mod, depth + 1)
+      : null;
   };
   /**
    * The object literal a module exports under a name.
@@ -349,17 +457,21 @@ function themeInputs(entry, load) {
           : callee?.type === 'MemberExpression' && !callee.computed
             ? callee.property?.name
             : null;
-      if (name === 'defineTheme') add(objectOf(node.arguments?.[0], mod));
-      // A plain object exported as the default is a theme when it has its
-      // name (one that holds themes by name is no theme input).
+      if (name === 'defineTheme')
+        for (const value of objectsOf(node.arguments?.[0], mod)) add(value);
+      // A plain object exported as the default is a theme when it, or an
+      // object merged into it, has its name (one that holds themes by name
+      // is no theme input).
       if (node.type === 'ExportDefaultDeclaration') {
-        const value = objectOf(node.declaration, mod);
+        const values = objectsOf(node.declaration, mod);
         if (
-          value?.node.properties.some(
-            (/** @type {any} */ p) => keyOf(p) === 'name',
+          values.some(value =>
+            value.node.properties.some(
+              (/** @type {any} */ p) => keyOf(p) === 'name',
+            ),
           )
         )
-          add(value);
+          for (const value of values) add(value);
       }
       for (const [k, v] of Object.entries(node))
         if (
@@ -458,6 +570,21 @@ export function sourceFieldProblems(entry, fields, load) {
       if (k == null) continue;
       const literal =
         p.type === 'ObjectProperty' ? literalOf(p.value, object.mod) : null;
+      // A Map or a Set: defineTheme reads an object's own keys.
+      if (
+        takes.includes(k) &&
+        literal?.type === 'NewExpression' &&
+        literal.callee?.type === 'Identifier' &&
+        ['Map', 'Set', 'WeakMap', 'WeakSet'].includes(literal.callee.name)
+      ) {
+        out.push({
+          path: [...at, k],
+          file: object.mod.file,
+          line: p.loc?.start?.line ?? null,
+          why: entriesNotRead(k, literal.callee.name),
+        });
+        continue;
+      }
       if (values_ && takes.includes(k) && literal?.type === 'BigIntLiteral') {
         out.push({
           path: [...at, k],
@@ -615,6 +742,18 @@ export function inputFieldProblems(input, fields) {
  * @returns {unknown}
  */
 export function sourceTypography(source, file = '') {
+  return sourceInputField(source, file, 'typography');
+}
+
+/**
+ * One field of a theme source's input (`typography`, `radius`) as the plain
+ * values it writes, read as sourceTypography() reads typography.
+ * @param {string} source
+ * @param {string} file the source's file name
+ * @param {string} field
+ * @returns {unknown}
+ */
+export function sourceInputField(source, file, field) {
   const {inputs, objectOf} = themeInputs({file, source}, () => null);
   /** @param {any} node @param {any} mod @returns {any} */
   const plain = (node, mod) => {
@@ -658,7 +797,7 @@ export function sourceTypography(source, file = '') {
   for (const input of inputs) {
     const p = input.node.properties.find(
       (/** @type {any} */ x) =>
-        x.type === 'ObjectProperty' && keyOf(x) === 'typography',
+        x.type === 'ObjectProperty' && keyOf(x) === field,
     );
     const v = p ? plain(p.value, input.mod) : UNREAD;
     if (v !== UNREAD) return v;

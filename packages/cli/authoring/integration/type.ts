@@ -87,6 +87,20 @@ export interface AstryxIntegration {
    *  `astryx doctor` warns. An invalid value is ignored with a warning; the
    *  rest of the manifest still loads. JSON output keeps commands bare. */
   cliCommand?: string;
+  /** How an app that uses this package adds a dependency, when its package
+   *  manager's add command is the wrong step there: one line, such as `Add
+   *  {packages} to package.json, commit, then run the repository's relock
+   *  script`. `{packages}` stands for the packages to add. The CLI prints it
+   *  in place of the package-manager command wherever it prints a step that
+   *  adds packages the app lacks (template readiness, `astryx init`'s theme
+   *  step, `astryx doctor` fixes, theme hints and errors, `astryx theme
+   *  eject`, the theme editor's notes, `astryx discover` add commands). A
+   *  step that moves Astryx's own packages to another release, or adds
+   *  `@astryxdesign/cli` at the release of the project's Core, keeps the
+   *  package-manager command. When two loaded integrations give different
+   *  guidance, neither is used and `astryx doctor` warns. An invalid value
+   *  is ignored with a warning; the rest of the manifest still loads. */
+  installGuidance?: string;
   /** Makes this package a base: a component library that stands in for
    *  Core in a project that uses it. `adapters` maps a capability to the
    *  module, relative to the package, that performs its platform steps; the

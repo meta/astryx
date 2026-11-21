@@ -94,10 +94,11 @@ describe('a part matched to the theme', () => {
     expect(again[0].text).toContain("follows mt's changes already");
   }, 240_000);
 
-  it('a full pill the corners left, as missed has it', async () => {
-    expect(writes(await how('mt', 'make the badge match the theme'))).toEqual([
-      "set mt border-radius 'var(--radius-element)' --on badge",
-    ]);
+  it('a pill square corners already squared, missed has nothing for', async () => {
+    // (Square corners square a badge, a pill as a styling choice, themselves.)
+    const rs = await how('mt', 'make the badge match the theme');
+    expect(writes(rs)).toEqual([]);
+    expect(rs[0].text).toContain("show's missed list has nothing for it");
   }, 120_000);
 
   it('a part nothing missed says so, and writes nothing', async () => {
@@ -131,8 +132,13 @@ describe("a color named like another part's", () => {
 });
 
 describe("a color word in the theme's own family", () => {
-  /** The shade a theme's family has nearest a sample, as a set value. @param {string} theme @param {string} family @param {string} sample */
-  const shadeOf = async (theme, family, sample) => {
+  /**
+   * The shade a theme's family has nearest a sample, as a set value; on a
+   * surface (a card) a gray takes the light step and its mirror in dark.
+   * @param {string} theme @param {string} family @param {string} sample
+   * @param {boolean} [surface]
+   */
+  const shadeOf = async (theme, family, sample, surface = false) => {
     const project = await openProject(cwd);
     const data = loadTheme(cwd, theme);
     const ramp = /** @type {any} */ (
@@ -144,16 +150,17 @@ describe("a color word in the theme's own family", () => {
         family,
       )
     );
-    const l =
-      ramp.light[/** @type {string} */ (nearestShade(ramp.light, sample))];
-    const d =
-      ramp.dark[/** @type {string} */ (nearestShade(ramp.dark, sample))];
+    const step = /** @type {string} */ (nearestShade(ramp.light, sample));
+    const l = ramp.light[step];
+    const d = surface
+      ? ramp.dark[String(100 - Number(step))]
+      : ramp.dark[/** @type {string} */ (nearestShade(ramp.dark, sample))];
     return l.toLowerCase() === d.toLowerCase() ? l : `light-dark(${l}, ${d})`;
   };
 
   it("grey is the theme's own grays, never the fixed sample", async () => {
     const line = writes(await how('ne', 'make cards grey'))[0];
-    const shade = await shadeOf('ne', 'neutral', '#9ca3af');
+    const shade = await shadeOf('ne', 'neutral', '#9ca3af', true);
     expect(line).toBe(`set ne background-color '${shade}' --on card`);
     expect(line).not.toContain('#9ca3af');
     await follow([line]);
@@ -164,17 +171,18 @@ describe("a color word in the theme's own family", () => {
     await themeEditSet('w98', 'neutral', '#c0c0c0', {cwd});
     const line = writes(await how('w98', 'make cards grey'))[0];
     expect(line).toBe(
-      `set w98 background-color '${await shadeOf('w98', 'neutral', '#9ca3af')}' --on card`,
+      `set w98 background-color '${await shadeOf('w98', 'neutral', '#9ca3af', true)}' --on card`,
     );
     await follow([line]);
   }, 120_000);
 
   it('a hue the theme has no family for keeps its sample; a shaded word is the color it names', async () => {
+    // (The neutral badge takes a plain fill; each status keeps its own.)
     expect(writes(await how('ne', 'make the badge blue'))[0]).toBe(
-      "set ne background-color '#2563eb' --on badge",
+      "set ne background-color '#2563eb' --on badge --when variant:neutral",
     );
     expect(writes(await how('ne', 'make cards light grey'))[0]).toBe(
-      "set ne background-color '#e5e7eb' --on card --mode light",
+      "set ne background-color '#e5e7eb' --on card --when variant:default --mode light",
     );
   }, 120_000);
 });

@@ -27,6 +27,7 @@ import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/pars
 import {
   mergeTopic,
   problemsInTopic,
+  sectionContributor,
   withoutPosition,
 } from '../discovery/docs-discovery.mjs';
 import {
@@ -170,13 +171,10 @@ export function lowerReferenceTopic(input) {
     input.providerId ?? input.provider,
   );
   for (const extension of input.extensions) {
-    doc = mergeTopic(
-      doc,
-      markProvider(
-        readAuthoredFile(extension),
-        extension.providerId ?? extension.provider,
-      ),
-    );
+    const provider = extension.providerId ?? extension.provider;
+    doc = mergeTopic(doc, markProvider(readAuthoredFile(extension), provider), {
+      contributor: provider,
+    });
     // Explicit authored IDs remain strict. Legacy title-derived collisions are
     // assigned deterministic compatibility keys after every extension merges.
     const problems = sectionKeyErrors(doc.sections);
@@ -190,7 +188,7 @@ export function lowerReferenceTopic(input) {
   // read carries them, whether or not the doc extends anything.
   doc = {...doc, sections: doc.sections.map(withoutPosition)};
   // Derived keys are stamped only now, so they never take part in merging.
-  const keyed = withSectionKeys(doc);
+  const keyed = withSectionKeys(doc, {providerOf: sectionContributor});
   /** @type {Record<string, string>} */
   const sourceTitles = {};
   /** @type {Record<string, string>} */

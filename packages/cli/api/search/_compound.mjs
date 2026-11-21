@@ -11,6 +11,13 @@ import {pluralOf} from './_query.mjs';
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
 /**
+ * How much of a component's or hook's joined name a run cut short must
+ * cover to name it (the 95 tier below). The runs a candidate visits are
+ * found with the same share (see runsToVisit).
+ */
+const SPELLED_SHARE = 0.75;
+
+/**
  * The strongest hit a run of two or more adjacent query words has when it is
  * read as one joined word, and the query words it covers. Readers type a
  * compound name as separate words (`table header cell` is TableHeaderCell,
@@ -55,7 +62,7 @@ export function compoundHit(words, candidate) {
   );
   /** @type {{score: number, reason: string, covered: Set<string>, alias?: 'partial' | 'keyword', aliasWords?: number} | null} */
   let best = null;
-  for (const {run, word} of queryRuns(words)) {
+  for (const {run, word} of runsToVisit(words, names, partial, keywords)) {
     let score = 0;
     let reason = '';
     /** @type {'partial' | 'keyword' | null} */
@@ -72,7 +79,7 @@ export function compoundHit(words, candidate) {
         continue;
       } else if (
         nameJoined.startsWith(word) &&
-        word.length / nameJoined.length >= 0.75
+        word.length / nameJoined.length >= SPELLED_SHARE
       ) {
         // Most of the name, cut short: `dropdown menu radio` is
         // DropdownMenuRadioItem.
@@ -160,6 +167,90 @@ function queryRuns(words) {
   }
   runsOf.set(words, runs);
   return runs;
+}
+
+/**
+ * Where each joined word stands among a query's runs (queryRuns), by word.
+ * Computed once per query.
+ * @type {WeakMap<string[], Map<string, number[]>>}
+ */
+const runsAtOf = new WeakMap();
+
+/**
+ * @param {string[]} words
+ * @returns {Map<string, number[]>}
+ */
+function runsAt(words) {
+  let at = runsAtOf.get(words);
+  if (at) return at;
+  at = new Map();
+  const runs = queryRuns(words);
+  for (let i = 0; i < runs.length; i++) {
+    const list = at.get(runs[i].word);
+    if (list) list.push(i);
+    else at.set(runs[i].word, [i]);
+  }
+  runsAtOf.set(words, at);
+  return at;
+}
+
+/**
+ * The query's runs that can score against a candidate, in their order. A run
+ * scores in compoundHit only when its joined word is one of these:
+ * - a joined name, its plural (with `s` or `es`), or a hook's name without
+ *   its leading `use`;
+ * - for a component or hook, a start of a joined name that covers at least
+ *   SPELLED_SHARE of it, or the joined words of a stretch of a name's words
+ *   (its leading words, or words it holds);
+ * - a one-word keyword.
+ * Each is a lowercase string of letters and digits, compared whole. Every
+ * other run leaves the score at 0, so it is not visited. When there are no
+ * more runs than words to look up, every run is visited.
+ * @param {string[]} words
+ * @param {Array<{nameJoined: string, nameWords: readonly string[]}>} names
+ * @param {boolean} partial - whether part of a name counts (a component or hook)
+ * @param {string[]} keywords - the one-word lowercase keywords
+ * @returns {{run: string[], word: string}[]}
+ */
+function runsToVisit(words, names, partial, keywords) {
+  const runs = queryRuns(words);
+  /** @param {string} nameJoined */
+  const shortest = nameJoined => Math.floor(SPELLED_SHARE * nameJoined.length);
+  let lookups = keywords.length;
+  for (const {nameJoined, nameWords} of names) {
+    lookups += 4;
+    if (partial) {
+      const n = nameWords.length;
+      lookups += nameJoined.length - shortest(nameJoined) + (n * (n + 1)) / 2;
+    }
+  }
+  if (lookups >= runs.length) return runs;
+  const at = runsAt(words);
+  /** @type {Set<number>} */
+  const visit = new Set();
+  /** @param {string} word */
+  const look = word => {
+    for (const i of at.get(word) ?? []) visit.add(i);
+  };
+  for (const {nameJoined, nameWords} of names) {
+    look(nameJoined);
+    look(`${nameJoined}s`);
+    look(`${nameJoined}es`);
+    if (nameJoined.startsWith('use')) look(nameJoined.slice(3));
+    if (!partial) continue;
+    for (let len = shortest(nameJoined); len < nameJoined.length; len++) {
+      look(nameJoined.slice(0, len));
+    }
+    for (let a = 0; a < nameWords.length; a++) {
+      let stretch = '';
+      for (let b = a; b < nameWords.length; b++) {
+        stretch += nameWords[b];
+        look(stretch);
+      }
+    }
+  }
+  for (const keyword of keywords) look(keyword);
+  return [...visit].sort((x, y) => x - y).map(i => runs[i]);
 }
 
 /**

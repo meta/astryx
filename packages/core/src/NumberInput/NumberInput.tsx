@@ -38,7 +38,6 @@ import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
-  sizeVars,
   spacingVars,
   typographyVars,
   typeScaleVars,
@@ -63,6 +62,10 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {
+  inputRowSizeStyles,
+  inputRowStepperSizeStyles,
+} from '../Field/inputStyles.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -208,17 +211,7 @@ const styles = stylex.create({
   },
 });
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 export type NumberInputSize = keyof typeof sizeStyles;
 
@@ -254,6 +247,7 @@ import {
 } from '../Field/useEntryErrorReport';
 import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -495,7 +489,8 @@ interface NumberInputPropsBase extends Omit<
   step?: number | null;
   /**
    * Formats the committed value while the input is not being edited.
-   * The raw numeric value is shown on focus so it remains editable.
+   * The plain number, with the locale's decimal separator, is shown on focus
+   * so it remains editable.
    */
   formatValue?: (value: number) => string;
   /**
@@ -550,7 +545,8 @@ type NumberInputPropsNonClearable = NumberInputPropsBase & {
 
 type NumberInputPropsClearable = NumberInputPropsBase & {
   /**
-   * Whether to show a clear button when a value is set.
+   * Whether to show a clear button when a value is set and the field is
+   * editable (not disabled or read-only).
    * When clicked, resets the value to null and returns focus to the input.
    *
    * When enabled, the `onChange` callback type widens to also accept `null`,
@@ -753,6 +749,7 @@ export function NumberInput({
   const statusMessageID = useId();
   const unitsID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
@@ -896,7 +893,8 @@ export function NumberInput({
   }, [formatValue, value]);
 
   // Preserve pending text while editing. Otherwise show the formatted value
-  // at rest and the raw numeric value while focused so it remains editable.
+  // at rest and, while focused, the plain number with the locale's decimal
+  // separator so it remains editable.
   const displayValue = useMemo(() => {
     if (holdDraft !== null) {
       return formatEditableNumber(holdDraft, locale);
@@ -1390,6 +1388,7 @@ export function NumberInput({
           styles.wrapper,
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],
+          hasNumberSteppers && inputRowStepperSizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
           fieldStatus && inputStatusBorderStyles[fieldStatus.type],
@@ -1513,11 +1512,14 @@ export function NumberInput({
               inputRef.current?.focus();
               stepValue(1);
             }}
-            {...stylex.props(
-              styles.numberStepperButton,
-              interactionOverlayStyles.backgroundImage,
-              (isDisabled || isReadOnly || !canIncrement) &&
-                styles.numberStepperButtonDisabled,
+            {...mergeProps(
+              themeProps('number-input-stepper', {direction: 'increment'}),
+              stylex.props(
+                styles.numberStepperButton,
+                interactionOverlayStyles.backgroundImage,
+                (isDisabled || isReadOnly || !canIncrement) &&
+                  styles.numberStepperButtonDisabled,
+              ),
             )}>
             <Icon
               icon="numberInput:stepperDown"
@@ -1561,12 +1563,15 @@ export function NumberInput({
               inputRef.current?.focus();
               stepValue(-1);
             }}
-            {...stylex.props(
-              styles.numberStepperButton,
-              interactionOverlayStyles.backgroundImage,
-              styles.decrementButton,
-              (isDisabled || isReadOnly || !canDecrement) &&
-                styles.numberStepperButtonDisabled,
+            {...mergeProps(
+              themeProps('number-input-stepper', {direction: 'decrement'}),
+              stylex.props(
+                styles.numberStepperButton,
+                interactionOverlayStyles.backgroundImage,
+                styles.decrementButton,
+                (isDisabled || isReadOnly || !canDecrement) &&
+                  styles.numberStepperButtonDisabled,
+              ),
             )}>
             <Icon icon="numberInput:stepperDown" size="xsm" color="inherit" />
           </button>

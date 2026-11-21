@@ -114,15 +114,16 @@ export async function exportSearchIndex(options = {}) {
 }
 
 /**
- * Resolves each component description's inline tokens as `search` does for
- * the results it prints, and keeps the printed text beside the scored one.
+ * Resolves each component and template description's inline tokens as
+ * `search` does for the results it prints, and keeps the printed text beside
+ * the scored one.
  * @param {Record<string, unknown>[]} candidates
  * @param {string} cwd
  */
 async function addDisplayDescriptions(candidates, cwd) {
   const linkable = candidates.filter(
     candidate =>
-      candidate.domain === 'component' &&
+      (candidate.domain === 'component' || candidate.domain === 'template') &&
       typeof candidate.description === 'string' &&
       candidate.description.includes('{@'),
   );
@@ -132,7 +133,7 @@ async function addDisplayDescriptions(candidates, cwd) {
       type: 'search',
       data: {
         results: linkable.map(candidate => ({
-          domain: 'component',
+          domain: candidate.domain,
           package: candidate._package,
           description: candidate.description,
         })),
@@ -194,10 +195,11 @@ export async function rankSearchIndex(query, indexes, options = {}) {
   const {type} = options;
   // Keywords read as search() reads them (_named-keywords.mjs). The names
   // come from every stored entry, before the `type` cut.
-  const view = searchView({
+  const viewed = searchView({
     all,
     components: all.filter(candidate => candidate.domain === 'component'),
-  }).all;
+  });
+  const view = viewed.all;
   const wanted =
     type == null ? view : view.filter(candidate => candidate.domain === type);
   const {searchedComponents, coreSkipped} = coreFlags(list, type);
@@ -214,6 +216,8 @@ export async function rankSearchIndex(query, indexes, options = {}) {
         outside: false,
         coreSkipped,
         coreSkippedCode: null,
+        // Search's reading of other entries' names, as the view marks it.
+        ownEvidence: viewed.ownEvidence,
         data: loadSearchData(),
       },
     )
@@ -249,22 +253,28 @@ function coreFlags(list, type) {
 }
 
 /**
- * The response with each component result's description as `search` prints
- * it, from the text the index stored when it was made.
+ * The response with each component and template result's description as
+ * `search` prints it, from the text the index stored when it was made.
  * @param {import('./search.type.mjs').SearchResponse} response
  * @param {any[]} candidates
  * @returns {import('./search.type.mjs').SearchResponse}
  */
 function withDisplayDescriptions(response, candidates) {
+  /** @param {string} domain @param {unknown} pkg @param {unknown} name */
+  const key = (domain, pkg, name) => `${domain}\u0000${pkg}\u0000${name}`;
   /** @type {Map<string, string>} */
   const display = new Map();
   for (const candidate of candidates) {
     if (
-      candidate.domain === 'component' &&
+      (candidate.domain === 'component' || candidate.domain === 'template') &&
       typeof candidate[DISPLAY_FIELD] === 'string'
     )
       display.set(
-        `${candidate._package}\u0000${candidate._resultName ?? candidate.name}`,
+        key(
+          candidate.domain,
+          candidate._package,
+          candidate._resultName ?? candidate.name,
+        ),
         candidate[DISPLAY_FIELD],
       );
   }
@@ -274,8 +284,9 @@ function withDisplayDescriptions(response, candidates) {
     data: {
       ...response.data,
       results: response.data.results.map(result => {
-        if (result.domain !== 'component') return result;
-        const text = display.get(`${result.package}\u0000${result.name}`);
+        const text = display.get(
+          key(result.domain, result.package, result.name),
+        );
         return text == null ? result : {...result, description: text};
       }),
     },

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'lock',
+  group: 'locks',
   description: 'Locked, private or secure.',
   words: ['secure', 'private', 'locked'],
 };

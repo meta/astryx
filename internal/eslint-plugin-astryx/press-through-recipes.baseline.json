@@ -1,0 +1,37 @@
+{
+  "packages/core/src/Button/Button.tsx": [":active", ":active"],
+  "packages/core/src/ClickableCard/ClickableCard.tsx": [":active", ":active"],
+  "packages/core/src/ComplexSelector/ComplexSelector.tsx": [":active"],
+  "packages/core/src/DropdownMenu/DropdownMenuItem.tsx": [":active"],
+  "packages/core/src/Lightbox/Lightbox.tsx": [
+    "import:gestures/usePressTracker"
+  ],
+  "packages/core/src/MultiSelector/MultiSelector.tsx": [":active", ":active"],
+  "packages/core/src/NavItem/navItemStyles.stylex.ts": [":active"],
+  "packages/core/src/SegmentedControl/useSegmentedTouchTracking.ts": [
+    "import:gestures/usePressTracker",
+    "import:hooks/actionGroupTracker"
+  ],
+  "packages/core/src/SelectableCard/SelectableCard.tsx": [":active", ":active"],
+  "packages/core/src/Selector/Selector.tsx": [":active", ":active"],
+  "packages/core/src/Slider/sliderTouchController.ts": [
+    "import:gestures/PressTracker"
+  ],
+  "packages/core/src/Switch/Switch.tsx": [":active", ":active"],
+  "packages/core/src/Switch/useSwitchTouch.ts": [
+    "import:gestures/PressTracker"
+  ],
+  "packages/core/src/TabList/Tab.tsx": [":active"],
+  "packages/core/src/Thumbnail/Thumbnail.tsx": [":active", ":active"],
+  "packages/core/src/TopNav/TopNavItem.tsx": [":active"],
+  "packages/core/src/gestures/GestureHost.ts": ["import:gestures/PressTracker"],
+  "packages/core/src/gestures/index.ts": [
+    "import:gestures/PressTracker",
+    "import:gestures/PressTracker",
+    "import:gestures/usePressTracker",
+    "import:gestures/usePressTracker"
+  ],
+  "packages/lab/src/CircleCheckIndicator/CircleCheckIndicator.tsx": [":active"],
+  "packages/lab/src/TabBar/useTabBarLens.ts": ["data-tab-bar-pressed"],
+  "packages/lab/src/TransferList/TransferList.tsx": [":active"]
+}

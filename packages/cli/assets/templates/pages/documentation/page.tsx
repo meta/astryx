@@ -11,6 +11,7 @@ import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
 
 const previewCard: CSSProperties = {
   borderRadius: 'var(--radius-element)',
@@ -209,18 +210,24 @@ const COMPONENT_CATEGORIES = [
 
 export default function DocumentationOverviewPage() {
   const showToast = useToast();
+  // On a phone, the spacer's gap squeezes the title until a word breaks. A
+  // phone drops the spacer and narrows the card inset. Mobile first, so a page
+  // that runs no script gets the phone layout.
+  const isNarrow = useMediaQuery('(max-width: 640px)', true);
   return (
     <Layout
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={8}>
+        <LayoutContent role="main" padding={8}>
           <VStack gap={10}>
-            <Card variant="gray" padding={10}>
+            <Card variant="gray" padding={isNarrow ? 6 : 10}>
               <HStack gap={8} vAlign="center">
                 <StackItem size="fill">
                   <VStack gap={4}>
-                    <Text type="display-1">Web overview</Text>
+                    <Text as="h1" type="display-1">
+                      Web overview
+                    </Text>
                     <Text type="large" weight="normal" color="secondary">
                       An open-source UI library to help developers quickly build
                       beautiful, accessible products.
@@ -235,7 +242,7 @@ export default function DocumentationOverviewPage() {
                     </HStack>
                   </VStack>
                 </StackItem>
-                <StackItem size="fill" />
+                {!isNarrow && <StackItem size="fill" />}
               </HStack>
             </Card>
 

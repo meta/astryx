@@ -191,7 +191,7 @@ describe('init() — receipts + side effects', () => {
     expect(exists('AGENTS.md')).toBe(true);
     const res = await init({removeAgents: true}, {cwd: tmpDir});
     expect(res.type).toBe('init.remove');
-    expect(res.data).toEqual({removed: true});
+    expect(res.data).toEqual({removed: true, from: ['agents-md'], skills: [], user: null});
     expect(exists('AGENTS.md')).toBe(false);
   });
 });
@@ -449,13 +449,116 @@ describe('init() — what changed in each agent-doc file', () => {
       templatePath: null,
       nextSteps: false,
     });
-    // docsChanges is the only new field, and it lines up with docsWritten.
+    // New fields are only added: docsChanges, which lines up with
+    // docsWritten, agentDocsStatus, and the skill places (to, skills, user).
     expect(Object.keys(receipt.data).sort()).toEqual(
       [
-        'mode', 'features', 'docsWritten', 'docsChanges', 'docsError', 'theme',
+        'mode', 'features', 'docsWritten', 'agentDocsStatus', 'docsChanges', 'docsError', 'theme',
         'themeTemplate', 'themeTemplatePath', 'template', 'templatePath', 'nextSteps',
+        'to', 'once', 'skills', 'user',
       ].sort(),
     );
+    expect(receipt.data).toMatchObject({to: ['agents-md'], once: false, skills: [], user: null});
     expect(receipt.data.docsChanges.map(c => c.path)).toEqual(receipt.data.docsWritten);
+  });
+});
+
+describe('init() — an app that is already set up', () => {
+  it('prints the build and search commands on a re-run, not the install steps', async () => {
+    asProject();
+    await init({}, {cwd: tmpDir});
+    /** @type {string[]} */
+    const lines = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...a) => lines.push(a.join(' ')));
+    logger.setSilent(false);
+    let receipt;
+    try {
+      receipt = await init({}, {cwd: tmpDir});
+    } finally {
+      logger.setSilent(true);
+      logSpy.mockRestore();
+    }
+    const text = lines.join('\n');
+    expect(receipt.data.nextSteps).toBe(false);
+    expect(receipt.data.agentDocsStatus).toBe('current');
+    expect(text).toContain('Astryx is already set up here. To build UI:');
+    expect(text).not.toContain('Next steps:');
+  });
+
+  it('refreshes an outdated block and still prints the install steps', async () => {
+    asProject();
+    await init({}, {cwd: tmpDir});
+    const agents = read('AGENTS.md');
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), agents.replace(/Astryx v\S+/u, 'Astryx v0.0.1'));
+    const receipt = await init({}, {cwd: tmpDir});
+    expect(receipt.data.agentDocsStatus).toBe('stale');
+    expect(receipt.data.nextSteps).toBe(true);
+    expect(read('AGENTS.md')).not.toContain('Astryx v0.0.1');
+  });
+
+  it('runs explicit features in a set-up app as before', async () => {
+    asProject();
+    await init({}, {cwd: tmpDir});
+    const receipt = await init({features: 'agents'}, {cwd: tmpDir});
+    expect(receipt.data.mode).toBe('features');
+    expect(receipt.data.agentDocsStatus).toBe('current');
+    expect(receipt.data.nextSteps).toBe(false);
+  });
+
+  it('judges --agent-docs-path runs by the files they name', async () => {
+    asProject();
+    await init({}, {cwd: tmpDir});
+    // AGENTS.md is current, but AI.md does not exist yet.
+    const first = await init({agentDocsPath: ['AI.md']}, {cwd: tmpDir});
+    expect(first.data.agentDocsStatus).toBe('missing');
+    expect(first.data.nextSteps).toBe(true);
+    const again = await init({agentDocsPath: ['AI.md']}, {cwd: tmpDir});
+    expect(again.data.agentDocsStatus).toBe('current');
+    expect(again.data.nextSteps).toBe(false);
+  });
+
+  it("judges an --agent run by the preset's own files", async () => {
+    asProject();
+    await init({}, {cwd: tmpDir});
+    await init({agent: 'claude'}, {cwd: tmpDir});
+    // A stale file the claude preset never writes does not matter to it.
+    fs.writeFileSync(
+      path.join(tmpDir, '.cursorrules'),
+      read('AGENTS.md').replace(/Astryx v\S+/u, 'Astryx v0.0.1'),
+    );
+    const first = await init({agent: 'claude'}, {cwd: tmpDir});
+    expect(first.data.agentDocsStatus).toBe('current');
+    expect(first.data.nextSteps).toBe(false);
+    // The cursor preset writes .cursorrules, which is stale.
+    const cursor = await init({agent: 'cursor'}, {cwd: tmpDir});
+    expect(cursor.data.agentDocsStatus).toBe('stale');
+    expect(cursor.data.nextSteps).toBe(true);
+    const again = await init({agent: 'cursor'}, {cwd: tmpDir});
+    expect(again.data.agentDocsStatus).toBe('current');
+    expect(again.data.nextSteps).toBe(false);
+  });
+
+  it('says a claude run that creates its file is not set up yet', async () => {
+    asProject();
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '# AGENTS.md\n');
+    const first = await init({agent: 'claude'}, {cwd: tmpDir});
+    expect(first.data.agentDocsStatus).toBe('missing');
+    expect(first.data.nextSteps).toBe(true);
+  });
+
+  it('reports no status when the write fails', async () => {
+    asProject();
+    await init({}, {cwd: tmpDir});
+    const failed = await init({agentDocsPath: ['../outside.md']}, {cwd: tmpDir});
+    expect(failed.data.docsError?.kind).toBe('path-safety');
+    expect(failed.data.agentDocsStatus).toBeNull();
+    expect(failed.data.nextSteps).toBe(true);
+  });
+
+  it('still prints the install steps the first time', async () => {
+    asProject();
+    const receipt = await init({}, {cwd: tmpDir});
+    expect(receipt.data.nextSteps).toBe(true);
+    expect(receipt.data.agentDocsStatus).toBe('missing');
   });
 });

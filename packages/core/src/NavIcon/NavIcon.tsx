@@ -4,7 +4,7 @@
  * @file NavIcon.tsx
  * @input Uses React, HTMLAttributes, ReactNode
  * @output Exports NavIcon component and NavIconProps
- * @position Shared circular icon container for navigation headers (TopNav, PageNav)
+ * @position Shared circular icon container for navigation headings (TopNavHeading, SideNavHeading)
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NavIcon/NavIcon.doc.mjs
@@ -29,6 +29,7 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    // The mark stays a circle in every theme, as the radio indicator does.
     borderRadius: '50%',
     backgroundColor: colorVars['--color-accent'],
     color: colorVars['--color-on-accent'],
@@ -61,7 +62,7 @@ export interface NavIconProps extends BaseProps<HTMLSpanElement> {
  *   heading="Dashboard"
  *   logo={<NavIcon icon={<HomeIcon style={{width: 16, height: 16}} />} />}
  * />
- * <PageNavHeader
+ * <SideNavHeading
  *   icon={<NavIcon icon={<HomeIcon style={{width: 16, height: 16}} />} />}
  *   heading="My App"
  * />

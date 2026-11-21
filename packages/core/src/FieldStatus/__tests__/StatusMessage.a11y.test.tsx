@@ -133,12 +133,12 @@ describe('Core status-message binding inventory', () => {
       'ProgressBar',
       'Spinner announcement channel',
       'Toast announcement channel',
-      'Toast card',
     ]);
   });
 
   it('records every adjacent non-status or separately owned surface explicitly', () => {
     expect(CORE_STATUS_MESSAGE_EXCLUSIONS.map(entry => entry.part)).toEqual([
+      'toast card',
       'visible validation text',
       'aria-hidden decorative spinner',
       'chat notice or date separator',

@@ -2,7 +2,7 @@
 
 /**
  * @file The page source a rendered file carries, so `astryx experimental
- * render --reverse` can give it back byte for byte. It is one
+ * export --reverse` can give it back byte for byte. It is one
  * `<script type="application/x-astryx-source">` data block: browsers never run
  * it, and its JSON holds each file base64-encoded with its SHA-256, so no text
  * in the source (`</script>` included) can end the block early.
@@ -17,14 +17,17 @@
  */
 
 import {createHash} from 'node:crypto';
+import * as path from 'node:path';
 import {isValidSemver} from '../env/semver.mjs';
+import {importSpecifiers} from './embedded-imports.mjs';
+import {typeScriptSourcesOf} from './ts-paths.mjs';
 import {decode, readTag, scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
 
 /** The newest render format this CLI reads, and the newest it writes. */
-export const RENDER_FORMAT = 2;
+export const RENDER_FORMAT = 3;
 
 /**
  * What a format 1 reader refuses besides the page, as a kind no render
@@ -32,10 +35,11 @@ export const RENDER_FORMAT = 2;
  * whose name holds `config`, ends in `rc` or `lock`, or names a manifest;
  * and a module named `config.*` or with a stem that ends in `rc`. A file
  * that carries one says format 2, so a CLI that reads render formats names
- * the CLI that reads it instead of calling the file damaged; every other
- * file says format 1, which every CLI that reads render files opens. The
- * rules stay as format 1 readers have them: a kind a later CLI adds needs a
- * format of its own.
+ * the CLI that reads it instead of calling the file damaged. A file whose
+ * modules import a TypeScript file by its JavaScript name, which format 1
+ * and 2 readers cannot follow, says format 3. Every other file says format
+ * 1, which every CLI that reads render files opens. The rules stay as format
+ * 1 readers have them: a kind a later CLI adds needs a format of its own.
  */
 const FORMAT_1_REFUSED_MODULE = /\.(?:mts|cts|cjs)$/i;
 const FORMAT_1_CONFIG_JSON =
@@ -56,11 +60,38 @@ function format1Refuses(p) {
 }
 
 /**
- * The render format a file that carries these files says, the page first.
- * @param {{path: string}[]} files
+ * Whether a carried module imports another carried module by the JavaScript
+ * name of its TypeScript source (`./fmt.js` for fmt.ts) with no carried file
+ * under the name as written. Format 1 and 2 readers cannot follow such an
+ * import, so they would call the file damaged; a file that holds one says
+ * format 3.
+ * @param {{path: string, bytes?: Buffer}[]} files
+ */
+function importsTypeScriptByJsName(files) {
+  const paths = new Set(files.map(f => f.path));
+  for (const f of files) {
+    if (!f.bytes || !/\.[cm]?[jt]sx?$/i.test(f.path)) continue;
+    const dir = path.posix.dirname(f.path);
+    for (const spec of importSpecifiers(f.bytes.toString('utf8'), f.path)) {
+      const raw = spec.split('?')[0];
+      if (!raw.startsWith('.')) continue;
+      const named = path.posix.normalize(path.posix.join(dir, raw));
+      if (paths.has(named)) continue;
+      if (typeScriptSourcesOf(named).some(source => paths.has(source))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The render format a file that carries these files says, the page first:
+ * 3 when a carried module is reached only by a TypeScript-style `.js` name,
+ * else 2 when it carries a kind a format 1 reader refuses, else 1.
+ * @param {{path: string, bytes?: Buffer}[]} files
  * @returns {number}
  */
 export function formatFor(files) {
+  if (importsTypeScriptByJsName(files)) return 3;
   return files.slice(1).some(f => format1Refuses(f.path)) ? 2 : 1;
 }
 
@@ -80,6 +111,8 @@ export function formatFor(files) {
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
  * @property {Record<string, string>} [aliases] - Each path-alias import a carried module makes that cannot be a package name (`@/…`, `~/…`), as written (without a query), with the embedded path of the carried file it names, so a reverse where no alias names it still finds the file.
+ * @property {string[]} [notCarried] - The files the page uses that the render could not carry, by their paths from the folder that holds the carried files, so a reverse names each one as missing.
+ * @property {string} [publicDir] - The embedded path of the `public/` folder the render read paths from the site's root (`/pics/a.png`) from, when the file carries files from it, so a reverse expects those files there.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
 
@@ -115,6 +148,8 @@ export function sourceBlock(entry, files, record = {}) {
     ...(record.title === undefined ? {} : {title: record.title}),
     ...(record.packages ? {packages: record.packages} : {}),
     ...(record.aliases ? {aliases: record.aliases} : {}),
+    ...(record.notCarried?.length ? {notCarried: record.notCarried} : {}),
+    ...(record.publicDir ? {publicDir: record.publicDir} : {}),
     files: files.map(f => ({
       path: f.path,
       sha256: sha256(f.bytes),
@@ -164,7 +199,7 @@ function pageParts(html) {
 /**
  * Whether a script tag's attributes give it the source type. A MIME type is
  * matched without regard to letter case.
- * @param {Array<[string, string]>} attrs
+ * @param {ReadonlyArray<readonly [string, string, ...number[]]>} attrs
  */
 const isSourceType = attrs => {
   const type = attrs.find(([name]) => name === 'type')?.[1];

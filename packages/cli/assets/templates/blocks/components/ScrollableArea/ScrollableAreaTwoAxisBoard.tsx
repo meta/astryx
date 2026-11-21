@@ -52,7 +52,7 @@ const COLUMNS = [
 
 export default function ScrollableAreaTwoAxisBoard() {
   return (
-    <Card width={420} padding={0}>
+    <Card width={420} maxWidth="100%" padding={0}>
       {/* axis="both" gives the content box max-content inline sizing, so the
           board is free to be wider than the viewport on both axes. The
           heading is inside that box and travels with it. */}
