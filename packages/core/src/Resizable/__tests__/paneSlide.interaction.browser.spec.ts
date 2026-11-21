@@ -1365,3 +1365,28 @@ test('under Reduce Motion the pane does not travel, and focus still leaves it', 
   expect(travelling(opening.frames)).toBe(0);
   expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
 });
+
+test("under a theme's reducedMotion: 'always' mark, with the setting off, the edge past the maximum returns at the lift with no spring-back", async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  // The root theme's mark on <html>; Theme writes it for 'always'.
+  await page.evaluate(() => {
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+  });
+  const at = await pressHandle(page);
+  const rest = at.x + 120;
+  // 200 px plus 260 px of pull would be 460 px against a 320 px maximum.
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  await page.waitForTimeout(100);
+  // Only the frames after the lift.
+  await recordEdgeFrames(page);
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  expect(frames.length).toBeGreaterThan(0);
+  // No frame stands past the limit: the edge is back at once.
+  expect(frames.filter(frame => frame.handle > rest + 1)).toEqual([]);
+  expect(frames.at(-1)?.handle).toBeCloseTo(rest, 0);
+});

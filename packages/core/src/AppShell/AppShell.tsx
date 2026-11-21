@@ -86,7 +86,6 @@ import {
 } from '../utils/focusOutline.stylex';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -105,6 +104,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 const HasActivity = typeof React.Activity !== 'undefined';
@@ -671,23 +671,23 @@ export function AppShell({
   if (isMobileNavOpen && !isMobileNavCloseHeld) {
     setIsMobileNavCloseHeld(true);
   }
+  // Under reduced motion (the setting, or a theme's reducedMotion: 'always')
+  // the drawer closes at once, so the hold ends at once.
+  const reducedMotion = useReducesMotion();
   // Syncs the mobile-nav close hold with a timer. The hold ends after the
   // slide-out delay.
   useEffect(() => {
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = matchesMediaQuery(
-      window,
-      '(prefers-reduced-motion: reduce)',
-    )
+    const delayMs = reducedMotion
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {
       setIsMobileNavCloseHeld(false);
     }, delayMs);
     return () => clearTimeout(timeout);
-  }, [isMobileNavOpen]);
+  }, [isMobileNavOpen, reducedMotion]);
   const isMobileNavActivityVisible = isMobileNavOpen || isMobileNavCloseHeld;
 
   const mobileNavOnOpenChange = mobileNavConfig?.onOpenChange;
