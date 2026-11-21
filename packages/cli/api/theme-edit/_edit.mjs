@@ -155,7 +155,11 @@ import {
   savedSetting,
 } from './_settings.mjs';
 import {
+  BORDER_COLOR_PROP,
+  BORDER_TO_COLOR,
   borderFor,
+  broughtBorderAt,
+  turnsBorderOff,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -6579,6 +6583,35 @@ async function changeOnce(
     // is named.
     alsoReplaced = data.settings.filter(x => keyOf(x) === k);
     data.settings = data.settings.filter(x => keyOf(x) !== k);
+    // A border the theme turned off, undone: a border color it hid on
+    // those parts brings the border it needs now, so it shows. (Only an
+    // undone none or zero: undoing the brought border itself, or a width
+    // or style that drew, leaves the colors as they are.)
+    if (
+      String(prev?.value ?? s.value).trim() !== BORDER_TO_COLOR &&
+      turnsBorderOff({thing: s.thing, value: prev?.value ?? s.value})
+    )
+      for (const x of [...data.settings]) {
+        if (
+          x.source !== 'property' ||
+          !BORDER_COLOR_PROP.test(x.thing) ||
+          !partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t))
+        )
+          continue;
+        const edge = borderFor(ctx, slug, data, x);
+        if (edge) {
+          // (Before the part's own border settings and the color both.)
+          data.settings.splice(
+            Math.min(
+              broughtBorderAt(ctx, data.settings, edge),
+              data.settings.indexOf(x),
+            ),
+            0,
+            edge,
+          );
+          borderAdded = edge;
+        }
+      }
     // Vibrancy needs a color: undoing the last one takes it along, so the
     // theme never holds a state `set` refuses.
     if (
@@ -6609,7 +6642,17 @@ async function changeOnce(
           partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)),
       )
   ) {
-    // The same setting again: nothing moves.
+    // The same setting again: nothing moves, unless it is a border color
+    // that has lost the border it needs (the none that hid it undone).
+    const edge = sub === 'set' ? borderFor(ctx, slug, data, s) : null;
+    if (edge) {
+      data.settings.splice(
+        Math.min(broughtBorderAt(ctx, data.settings, edge), prevIdx),
+        0,
+        edge,
+      );
+      borderAdded = edge;
+    }
   } else {
     // A changed setting goes last, so it wins over what came before it.
     if (prev) data.settings.splice(prevIdx, 1);
@@ -6617,7 +6660,12 @@ async function changeOnce(
     // needs, written before it in the same change.
     if (sub === 'set') {
       borderAdded = borderFor(ctx, slug, data, s);
-      if (borderAdded) data.settings.push(borderAdded);
+      if (borderAdded)
+        data.settings.splice(
+          broughtBorderAt(ctx, data.settings, borderAdded),
+          0,
+          borderAdded,
+        );
     }
     data.settings.push(s);
     sidesMoved.add(s);
