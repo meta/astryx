@@ -4694,9 +4694,15 @@ export function draftAnswer(ctx, env, question) {
       // ugly", "the shadow on the cards is too strong". Any other word, a
       // side, a state, a variant, a mode or a second part, keeps the
       // earlier reading.)
-      const others = own
-        .toLowerCase()
-        .replace(longest[0].trim(), ' ')
+      // (A side said with a border, "the bottom border on the cards", "the
+      // card border-top", takes that side away only.)
+      const besidePart = own.toLowerCase().replace(longest[0].trim(), ' ');
+      const side =
+        word === 'border'
+          ? /\b(top|bottom|left|right)\b/.exec(besidePart)?.[1]
+          : undefined;
+      const others = besidePart
+        .replace(side ? new RegExp(`\\b${side}\\b`) : /$^/, ' ')
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
@@ -4709,7 +4715,8 @@ export function draftAnswer(ctx, env, question) {
         return m;
       // (A "!" or "?" before it ends the ask before, as a full stop does.)
       const stop = String(lead).replace(/[!?]/, '.');
-      return `${stop}no ${word} on ${part}`;
+      const which = side ? `${side} ` : '';
+      return `${stop}no ${which}${word} on ${part}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
