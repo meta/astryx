@@ -10655,9 +10655,18 @@ export function draftAnswer(ctx, env, question) {
       // does not change it; a part said after that colon, "cards: white
       // background, header: navy", or inside a longer name, "icon
       // buttons: … blue icon", stays an item.)
-      // (The sentence is found by words a reader's rewrite keeps: the look
-      // after the clause's own colon, else the clause from the part on.)
-      const lowered = c.text.toLowerCase();
+      // (The clause's own sentence, by position: the sentence breaks the
+      // clause splitter found before it pick that sentence of the ask as
+      // typed, so neither a reader's rewrite nor a word another sentence
+      // repeats changes it. Where the ask's line breaks or marks end
+      // sentences the splitter does not count, the sentence is the one
+      // that holds the words a rewrite keeps.)
+      const sentences = asked0.split(/[;!?\n]|\.(?!\d)/).filter(x => x.trim());
+      const breaksBefore = clauses
+        .slice(0, clauses.indexOf(c) + 1)
+        .filter(x => joinOf.get(x)?.sep === 'break').length;
+      const breaks = clauses.filter(x => joinOf.get(x)?.sep === 'break').length;
+      const lowered = c.text.toLowerCase().trim();
       const ownColon = lowered.search(/:(?!\d)/);
       const keptWords = (
         ownColon >= 0
@@ -10666,25 +10675,32 @@ export function draftAnswer(ctx, env, question) {
             ? lowered.slice(Math.max(0, lowered.indexOf(said.toLowerCase())))
             : lowered
       ).trim();
+      // (A rewrite can move a clause, "don't change the sidebar" read after
+      // the ask: the sentence by position counts only when it holds the
+      // words the rewrite keeps.)
+      const byPosition =
+        sentences.length === breaks + 1 ? sentences[breaksBefore] : undefined;
+      const ownSentences =
+        byPosition && (!keptWords || byPosition.includes(keptWords))
+          ? [byPosition]
+          : keptWords
+            ? sentences.filter(x => x.includes(keptWords))
+            : [];
       const subjectOfColon =
         !!said &&
-        !!keptWords &&
-        asked0
-          .split(/[;!?\n]|\.(?!\d)/)
-          .filter(sentence => sentence.includes(keptWords))
-          .some(sentence => {
-            const colon = sentence.search(/:(?!\d)/);
-            if (colon < 0) return false;
-            return sentence
-              .slice(0, colon)
-              .split(/,|&|\band\b/)
-              .map(item =>
-                item
-                  .trim()
-                  .replace(/^(?:the|all|every|each|our|my|your|any)\s+/, ''),
-              )
-              .includes(said.toLowerCase());
-          });
+        ownSentences.some(sentence => {
+          const colon = sentence.search(/:(?!\d)/);
+          if (colon < 0) return false;
+          return sentence
+            .slice(0, colon)
+            .split(/,|&|\band\b/)
+            .map(item =>
+              item
+                .trim()
+                .replace(/^(?:the|all|every|each|our|my|your|any)\s+/, ''),
+            )
+            .includes(said.toLowerCase());
+        });
       if (
         holder &&
         head !== c &&
