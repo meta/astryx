@@ -12,7 +12,12 @@
 import {readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
+import {
+  themeEditHow,
+  themeEditNew,
+  themeEditSet,
+  themeEditUndo,
+} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -455,6 +460,28 @@ describe('a padding of several lengths where only one works', () => {
       expect(notes).not.toMatch(/undo t/);
       expect(notes).toMatch(/no undo step was added/);
       await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'is what how offers for such a padding, never its first length alone',
+    async () => {
+      for (const ask of [
+        'dropdown menu padding 5px 0',
+        'give the dropdown menu 4px 8px padding',
+      ]) {
+        const out = JSON.stringify(
+          (await themeEditHow(ask, {cwd, theme: 't'})).data,
+        );
+        expect(out, ask).toMatch(
+          /set t padding '(5px 0|4px 8px)' --on dropdown-menu/,
+        );
+        expect(out, ask).not.toMatch(
+          /set t padding (5px|4px) --on dropdown-menu/,
+        );
+      }
       expect(saved()).toEqual([]);
     },
     T,

@@ -7133,7 +7133,6 @@ async function changeOnce(
     n =>
       n.includes('could not be read') || n.includes('there was no last build'),
   );
-  /** @type {string[]} */
   // A sides change that moved no side and removed nothing (a repeat over a
   // stale build) adds no undo step, so its note claims none.
   const sidesStep = Boolean(
@@ -7142,6 +7141,7 @@ async function changeOnce(
     longhands.length ||
     alsoReplaced.length,
   );
+  /** @type {string[]} */
   const notes = [
     ...(shorthand && !r.unchanged && sidesStep
       ? [
