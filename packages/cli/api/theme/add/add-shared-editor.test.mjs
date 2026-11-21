@@ -11,6 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, expect, it, vi} from 'vitest';
 import {themeAdd} from './add.mjs';
+import {themeRemove} from '../remove/remove.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {themeEditNew, themeEditSet} from '../../theme-edit/theme-edit.mjs';
 import {
@@ -95,6 +96,21 @@ it('an editor set after the add updates the app copy the add wrote', async () =>
       'utf8',
     ),
   ).not.toBe(before);
+}, 300_000);
+
+it('a remove after an editor build keeps the copy whole, and a re-add names the files to clear first', async () => {
+  // (The previous test's editor build rewrote the receiver's copy.)
+  const removed = await themeRemove('sunset', {cwd: receiver});
+  expect(removed.data.undo?.kept).toEqual(
+    expect.arrayContaining(['sunset.css']),
+  );
+  expect(removed.data.undo?.removed).toEqual([]);
+  expect(
+    fs.existsSync(path.join(receiver, 'src/themes/sunset/.astryx-shared.json')),
+  ).toBe(true);
+  await expect(themeAdd(bundle, {cwd: receiver})).rejects.toThrow(
+    /sunset\.css.*changed since.*delete/s,
+  );
 }, 300_000);
 
 it('the stable add names no experimental command when it keeps editor state', async () => {

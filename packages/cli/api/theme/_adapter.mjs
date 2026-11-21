@@ -2076,7 +2076,7 @@ export async function addSharedThemeToApp(source, options) {
       if (!previous || changed.length > 0) {
         throw new AstryxError(
           previous
-            ? `The ${name} theme is already in this app (${relFrom(cwd, target)}), added from a shared theme, and ${changed.join(', ')} changed since; adding it again would replace those changes, so nothing was written.`
+            ? `The ${name} theme is already in this app (${relFrom(cwd, target)}), added from a shared theme, and ${changed.join(', ')} changed since; adding it again would replace those changes, so nothing was written. To take the shared theme's files again, delete ${changed.length > 1 ? 'those files' : 'that file'} (or move your changes out of ${changed.length > 1 ? 'them' : 'it'}), then add it again.`
             : `A theme named "${name}" is already in this app (${relFrom(cwd, target)}), and theme add did not write it; adding this one would replace it, so nothing was written.`,
           previous
             ? undefined
@@ -2518,9 +2518,10 @@ function scriptsOff(pm, action, projectDir) {
 /**
  * Undo what `theme add` did for a shared theme whose record was just
  * removed: delete each file its copy wrote that still holds what it wrote,
- * keep (and name) any the builder changed, and uninstall the packages it
- * installed that no theme still in the record is owned by or imports. A
- * local theme with no
+ * and uninstall the packages it installed that no theme still in the record
+ * is owned by or imports. When a file of the copy changed, the whole copy
+ * stays instead, with its receipt and packages, and the changed files are
+ * named. A local theme with no
  * receipt (one the app wrote or ejected itself) is left as it is.
  * @param {string} projectDir
  * @param {string} slug
@@ -2537,13 +2538,17 @@ function undoSharedTheme(projectDir, slug, remaining) {
   const removed = [];
   /** @type {string[]} */
   const keptWorkingFiles = [];
-  for (const file of Object.keys(receipt.files)) {
-    if (kept.includes(file) || !fs.existsSync(path.join(dir, file))) continue;
-    fs.rmSync(path.join(dir, file), {force: true});
-    removed.push(relFrom(projectDir, path.join(dir, file)));
+  // (A copy with a file kept stays whole, its receipt too, so the folder is
+  // a copy a re-add of the same theme recognizes, never a part of one.)
+  if (!kept.length) {
+    for (const file of Object.keys(receipt.files)) {
+      if (!fs.existsSync(path.join(dir, file))) continue;
+      fs.rmSync(path.join(dir, file), {force: true});
+      removed.push(relFrom(projectDir, path.join(dir, file)));
+    }
+    fs.rmSync(path.join(dir, SHARED_RECEIPT), {force: true});
+    removeEmptyFolder(dir, {deep: true});
   }
-  fs.rmSync(path.join(dir, SHARED_RECEIPT), {force: true});
-  removeEmptyFolder(dir, {deep: true});
   const root = path.join(projectDir, LOCAL_THEME_ROOT);
   if (receipt.madeRoot) removeEmptyFolder(root);
   // The working files the add kept: its unchanged files go. When the folder
@@ -2561,7 +2566,8 @@ function undoSharedTheme(projectDir, slug, remaining) {
     for (const file of Object.keys(editorFiles)) {
       const at = path.join(editorDir, file);
       if (!fs.existsSync(at)) continue;
-      if (builtSince || changedEditor.includes(file))
+      // (A copy kept whole keeps the working files that go with it.)
+      if (kept.length || builtSince || changedEditor.includes(file))
         keptWorkingFiles.push(relFrom(projectDir, at));
       else {
         fs.rmSync(at, {force: true});
@@ -2605,7 +2611,10 @@ function undoSharedTheme(projectDir, slug, remaining) {
         importsOf(path.join(otherDir, file));
   }
   for (const file of themeModuleCandidates(projectDir)) importsOf(file);
-  const uninstall = receipt.installed.filter(name => !stillUsed.has(name));
+  // (A copy kept whole still imports what the add installed: those stay.)
+  const uninstall = kept.length
+    ? []
+    : receipt.installed.filter(name => !stillUsed.has(name));
   const more = keptWorkingFiles.length ? {keptWorkingFiles} : {};
   if (uninstall.length === 0) return {removed, kept, ...more, uninstalled: []};
   const run = runPackageManager(projectDir, 'remove', uninstall);

@@ -863,13 +863,15 @@ function printThemeApp(result) {
     if (undo.kept.length > 0)
       emit(
         text(
-          `[note] Kept ${undo.kept.join(', ')}: changed since theme add wrote them.`,
+          `[note] Kept the copy of ${change.slug} whole, with its receipt: ${undo.kept.join(', ')} changed since theme add wrote them.`,
         ),
       );
     if (undo.keptWorkingFiles?.length)
       emit(
         text(
-          `[note] Kept ${undo.keptWorkingFiles.join(', ')}: changed since theme add wrote them, or the theme has been built there since.`,
+          undo.kept.length > 0
+            ? `[note] Kept ${undo.keptWorkingFiles.join(', ')} with the copy.`
+            : `[note] Kept ${undo.keptWorkingFiles.join(', ')}: changed since theme add wrote them, or the theme has been built there since.`,
         ),
       );
     if (undo.uninstalled.length > 0)
