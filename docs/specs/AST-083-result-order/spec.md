@@ -137,10 +137,10 @@ owns response fields and compatibility.
   name, in any case); folded (the whole name without spaces and hyphens, and a
   hook with or without `use`); segment (only the last segment of a path name,
   exact or folded); word cover (the name carries every word of the argument).
-  For `astryx docs`, a component or hook also matches at segment when its
-  name, without spaces and hyphens, is the argument's last path segment, as
-  typed or with each of its words singular; no component or hook matches this
-  way when a docs route or topic has one of those names.
+  For `astryx docs`, a Core component or hook also matches at segment when
+  its folded name is the argument's last path segment, folded or with each of
+  its words singular; none matches this way when a docs route or topic name,
+  folded or with each of its words singular, is one of those names.
   When the argument matches an entry another of the four commands reads at one
   of the first three tiers, the command that reads that entry, by its full id
   (`astryx hook useHotkeys`), joins the list. When no entry matches at those

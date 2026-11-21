@@ -7,10 +7,11 @@
  * command (`astryx hook useHotkeys`). A name matches at one of six tiers,
  * best first: exact (the whole name, any case), folded (without spaces and
  * hyphens, a hook with or without `use`), last segment (of a path name, exact
- * or folded; for a docs miss, also a component or hook that the typed name's
- * last path segment names, as typed or with its words singular), near hook (a `use…` name a slip or two from a hook's name, or
- * one whose every word the hook's name carries), hook keyword (two or more words that are a keyword
- * one hook's doc declares), and word cover (every word of the name); word
+ * or folded; for a docs miss, also a Core component or hook that the typed
+ * name's last path segment names, as typed or with its words singular), near
+ * hook (a `use…` name a slip or two from a hook's name, or one whose every
+ * word the hook's name carries), hook keyword (two or more words that are a
+ * keyword one hook's doc declares), and word cover (every word of the name); word
  * cover gives no hint. The near hook tier gives one when a component or
  * template lookup misses and no better tier matches; the hook keyword tier
  * only for a component lookup, the one lookup that knows its suggestions'
@@ -164,7 +165,12 @@ function nameTier(command, name, typed, tail = []) {
     const last = name.slice(at + 1);
     if (last.toLowerCase() === lower || folds(last)) return MATCH_TIER.segment;
   }
-  if (tail.includes(foldEntryName(name))) return MATCH_TIER.segment;
+  if (
+    (command === 'component' || command === 'hook') &&
+    tail.includes(foldEntryName(name))
+  ) {
+    return MATCH_TIER.segment;
+  }
   return MATCH_TIER.none;
 }
 
@@ -389,8 +395,10 @@ export async function findOtherCommand(
   const integrationsOnce = async () =>
     (loaded ??= await projectIntegrations(cwd));
   /** @param {string} name */
+  const isWantedWhole = name => foldEntryName(name) === wanted;
+  /** @param {string} name */
   const isWanted = name =>
-    foldEntryName(name) === wanted || tail.includes(foldEntryName(name));
+    isWantedWhole(name) || tail.includes(foldEntryName(name));
   /** @param {string} name */
   const isWantedHook = name =>
     isWanted(name) || foldEntryName(name) === `use${wanted}`;
@@ -437,12 +445,15 @@ export async function findOtherCommand(
     [
       'component',
       async () => ({
-        components: await integrationComponentNames(
-          await integrationsOnce(),
-          (await indexOnce()).components,
-          wanted,
-          isWanted,
-        ),
+        // `tail` reaches Core components only.
+        components: isPath
+          ? []
+          : await integrationComponentNames(
+              await integrationsOnce(),
+              (await indexOnce()).components,
+              wanted,
+              isWantedWhole,
+            ),
       }),
     ],
     [

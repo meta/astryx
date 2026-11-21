@@ -292,14 +292,15 @@ describe('docs() for a name another command reads', () => {
   it(
     'lets a doc keep a last segment that also names a component',
     async () => {
-      // `icons` is a topic, though Core has an Icon component.
-      const error = await docs('guides/icons', undefined, {cwd: tmpDir}).catch(
-        e => e,
-      );
-      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
-      expect(error.suggestions.some(s => s.name.startsWith('astryx '))).toBe(
-        false,
-      );
+      // `icons` is a topic, though Core has an Icon component; a singular
+      // last segment meets the topic's name read as singular.
+      for (const typed of ['guides/icons', 'guides/icon']) {
+        const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);
+        expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+        expect(error.suggestions.some(s => s.name.startsWith('astryx '))).toBe(
+          false,
+        );
+      }
     },
     SLOW,
   );
