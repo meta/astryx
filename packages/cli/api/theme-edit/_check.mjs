@@ -157,7 +157,7 @@ import {
   groupsOf,
   onlyFits,
   growsWithContent,
-  variantsNotGrowing,
+  notGrowingWhens,
   sharedControlHeight,
   controlHeightValue,
 } from './_settings.mjs';
@@ -5432,7 +5432,7 @@ function checkOne(
       reached.every(
         t =>
           growsWithContent(ctx, t, s.when) &&
-          (s.when != null || !variantsNotGrowing(ctx, t).length),
+          !notGrowingWhens(ctx, t, s.when).length,
       )
     )
       refuse(

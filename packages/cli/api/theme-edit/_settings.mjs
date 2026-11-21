@@ -4679,6 +4679,28 @@ export function variantsNotGrowing(ctx, part) {
 }
 
 /**
+ * The `--when` values under which a padding set with `when` reaches a part
+ * drawn without growing: each variant `variantsNotGrowing` names, joined to
+ * `when` when it names another axis (`status:error+mode:dropzone`).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string} [when]
+ * @returns {string[]}
+ */
+export function notGrowingWhens(ctx, part, when = undefined) {
+  if (when != null && String(when).includes(',')) return [];
+  const axes =
+    when == null
+      ? []
+      : String(when)
+          .split('+')
+          .map(t => t.trim().split(':')[0]);
+  return variantsNotGrowing(ctx, part)
+    .filter(v => !axes.includes(v.split(':')[0]))
+    .map(v => (when == null ? v : `${when}+${v}`));
+}
+
+/**
  * Whether a setting's property is the height of the controls it is set on:
  * a height or a block size, or a least height on controls that grow with
  * their content, whose least height is their height. A least height on a
@@ -8393,11 +8415,10 @@ export function compileTheme(ctx, data, base) {
               putComp(s, t, camel(`padding-${x}`), v);
           // (Where it is drawn without growing, a padding on the whole part
           // keeps its top and bottom sides.)
-          if (s.when == null)
-            for (const when of variantsNotGrowing(ctx, t))
-              for (const [x, v] of Object.entries(sides))
-                if (!/^(left|right|inline-(start|end))$/.test(x))
-                  putComp({...s, when}, t, camel(`padding-${x}`), v);
+          for (const when of notGrowingWhens(ctx, t, s.when))
+            for (const [x, v] of Object.entries(sides))
+              if (!/^(left|right|inline-(start|end))$/.test(x))
+                putComp({...s, when}, t, camel(`padding-${x}`), v);
           continue;
         }
         // A padding on a part whose box reads Core's padding variables is

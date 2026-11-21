@@ -78,7 +78,7 @@ import {
   partHasWhen,
   isControlHeight,
   growsWithContent,
-  variantsNotGrowing,
+  notGrowingWhens,
   loadTheme,
   maskedSettings,
   modesOf,
@@ -7966,18 +7966,14 @@ async function changeOnce(
     const grows = partsOf(ctx, s).filter(t => growsWithContent(ctx, t, s.when));
     if (grows.length)
       notes.push(
-        `${grows.join(', ')} ${grows.length > 1 ? 'keep' : 'keeps'} Core's top and bottom padding, so a theme's padding never makes ${grows.length > 1 ? 'them' : 'it'} taller than the other controls: ${/^padding$/.test(s.thing) ? `only the sides of ${s.thing} reach ${grows.length > 1 ? 'them' : 'it'}` : `${s.thing} does not reach ${grows.length > 1 ? 'them' : 'it'}`}${
-          s.when == null
-            ? grows
-                .map(t => [t, variantsNotGrowing(ctx, t)])
-                .filter(([, w]) => w.length)
-                .map(
-                  ([t, w]) =>
-                    `; ${t} takes them when ${/** @type {string[]} */ (w).join(' or ')}, where it does not grow`,
-                )
-                .join('')
-            : ''
-        }`,
+        `${grows.join(', ')} ${grows.length > 1 ? 'keep' : 'keeps'} Core's top and bottom padding, so a theme's padding never makes ${grows.length > 1 ? 'them' : 'it'} taller than the other controls: ${/^padding$/.test(s.thing) ? `only the sides of ${s.thing} reach ${grows.length > 1 ? 'them' : 'it'}` : `${s.thing} does not reach ${grows.length > 1 ? 'them' : 'it'}`}${grows
+          .map(t => [t, notGrowingWhens(ctx, t, s.when)])
+          .filter(([, w]) => w.length)
+          .map(
+            ([t, w]) =>
+              `; ${t} takes them when ${/** @type {string[]} */ (w).join(' or ')}, where it does not grow`,
+          )
+          .join('')}`,
       );
   }
   // A group kept alike (inputs share one height) loses that when one member

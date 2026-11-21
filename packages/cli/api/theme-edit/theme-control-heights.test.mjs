@@ -1034,4 +1034,33 @@ describe('one control height per size', () => {
     expect(first.commands.join(' ;; ')).not.toMatch(/padding-block/);
     expect(first.text).not.toMatch(/second line/);
   }, 120_000);
+
+  it('a padding on the file input under another condition still reaches its drop zone there', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('dropwhen', {cwd, like: 'neutral'});
+    const r = /** @type {any} */ (
+      await themeEditSet('dropwhen', 'padding', '20px', {
+        cwd,
+        on: 'file-input',
+        when: 'status:error',
+      })
+    );
+    const css = fs.readFileSync(
+      path.join(cwd, 'themes', 'dropwhen', 'dropwhen.css'),
+      'utf8',
+    );
+    const zone = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(
+        m =>
+          /\.astryx-file-input/.test(m[1]) &&
+          /data-mode="dropzone"/.test(m[1]) &&
+          /data-status="error"/.test(m[1]),
+      )
+      .map(m => m[2])
+      .join(';');
+    expect(zone).toMatch(/padding-top:\s*20px/);
+    expect(r.data.notes.join('\n')).toMatch(
+      /file-input takes them when status:error\+mode:dropzone/,
+    );
+  }, 240_000);
 });
