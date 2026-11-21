@@ -179,11 +179,14 @@ export function TruncationTooltip({
   content,
   placement,
   interest,
+  focusTrigger,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
   placement: LayerPlacement;
   interest: TruncationTooltipInterest;
+  /** How the tooltip listens for focus on the anchor (Tooltip's `focusTrigger`). */
+  focusTrigger?: 'always' | 'auto';
 }): ReactNode {
   // A first interaction before the module loads mounts the tooltip once it
   // has: the interaction is held until the tooltip reads it.
@@ -193,7 +196,12 @@ export function TruncationTooltip({
   }
   return (
     <TooltipPresentInterestContext value={interest.interestRef}>
-      <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
+      <Tooltip
+        anchorRef={anchorRef}
+        content={content}
+        placement={placement}
+        focusTrigger={focusTrigger}
+      />
     </TooltipPresentInterestContext>
   );
 }
