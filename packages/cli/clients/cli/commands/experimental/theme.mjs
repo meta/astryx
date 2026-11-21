@@ -590,25 +590,38 @@ function changeBlocks(r) {
     (/** @type {string} */ n) =>
       n.startsWith('no change: ') && n.includes(' already draws '),
   );
+  // A dial step on a part (`corners large --on card`) says what it drew
+  // there, when that is a value or two: a part's own scale can give a step
+  // another size than the dial's help names for the whole theme.
+  const stepOn = d.action === 'set' && s.source === 'dial' ? s.on : null;
+  const drawnOn = stepOn
+    ? /** @type {string[]} */ (/** @type {any} */ (d).styled ?? [])
+        .filter(x => x.startsWith(`${stepOn}: `))
+        .map(x => x.slice(stepOn.length + 2))
+    : [];
+  const drawnAs = drawnOn.length <= 2 ? drawnOn : [];
   const done =
     unchanged && d.action === 'set'
       ? drawnAlready
         ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
-        : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
+        : `[ok] ${d.theme}: ${d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-        : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+        : `[ok] ${d.theme}: ${d.action === 'set' ? (d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}`) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
   // reach it, before the rest a head-cut output drops.
   const {
     newProblems = [],
+    leftProblems = [],
     leftOut = [],
+    fontNotLoaded = [],
     missed: _missed,
     missedParts: _missedParts,
     missedOn: _missedOn,
     missedWhere: _missedWhere,
+    missedNew: _missedNew,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -619,6 +632,25 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    // Problems it moved but left failing: said under the new ones.
+    ...(leftProblems.length
+      ? [
+          `still failing after this change (${leftProblems.length}):`,
+          ...problemList(leftProblems),
+        ]
+      : []),
+    ...(fontNotLoaded.length
+      ? [
+          list(
+            fontNotLoaded.map(
+              (/** @type {{family: string, run: string[]}} */ x) => [
+                `${x.family} is not installed, so the pictures and the app draw the next font in the stack until it is`,
+                ...x.run,
+              ],
+            ),
+          ),
+        ]
+      : []),
     ...(leftOut.length
       ? [
           list(
@@ -639,15 +671,23 @@ function changeBlocks(r) {
  * named, near the top of a change or a new theme, so a head of the
  * output keeps it; show names the first ones with their lines, and show
  * --json lists each.
- * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[]}} d
+ * A change says them only when it brought some (`missedNew`): the ones it
+ * found are show's to list, not every change's to repeat.
+ * @param {{missed?: number, missedParts?: number, missedOn?: string[], missedWhere?: string[], missedNew?: number}} d
  */
 function missedLine(d) {
-  const {missed = 0, missedParts = missed, missedOn = [], missedWhere = []} = d;
+  const {
+    missed = 0,
+    missedParts = missed,
+    missedOn = [],
+    missedWhere = [],
+    missedNew,
+  } = d;
   const named = missedWhere.length ? missedWhere : missedOn;
-  if (!missed) return [];
+  if (!missed || missedNew === 0) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
+      missed: `${missedNew ? `this change left ${missedNew} new miss${missedNew > 1 ? 'es' : ''}; ` : ''}${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
     }),
   ];
 }

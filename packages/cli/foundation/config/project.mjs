@@ -364,8 +364,10 @@ function readPackageJson(dir) {
  * {@link import('../integrations/issue').AstryxIntegrationIssue} fields plus the
  * `package` that produced it, which Project tracks for routing/dedup.
  * `needsCore` marks one that compares a component with Core's components,
- * which needs a Core to be judged.
- * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string, needsCore?: boolean}} ProjectIntegrationIssue
+ * which needs a Core to be judged. `needsCatalog` marks one found by
+ * resolving replacements against Core and the other packages the folder
+ * loads, which `doctor integration validate` does not do.
+ * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string, needsCore?: boolean, needsCatalog?: boolean}} ProjectIntegrationIssue
  */
 
 /** Default issue tracker used when neither config nor integration routes one. */
@@ -800,7 +802,7 @@ export class Project {
   /**
    * Record a single integration issue, deduped by (package, code, message).
    * @param {string} pkg
-   * @param {import('../integrations/issue').AstryxIntegrationIssue & {needsCore?: boolean}} issue
+   * @param {import('../integrations/issue').AstryxIntegrationIssue & {needsCore?: boolean, needsCatalog?: boolean}} issue
    */
   #pushIssue(pkg, issue) {
     const code = issue?.code ?? 'unknown';
@@ -815,6 +817,7 @@ export class Project {
       severity: issue?.severity ?? 'error',
       message,
       ...(issue?.needsCore ? {needsCore: true} : {}),
+      ...(issue?.needsCatalog ? {needsCatalog: true} : {}),
     });
   }
 
@@ -968,6 +971,7 @@ export class Project {
           severity: finding.severity,
           message: finding.message,
           ...(finding.needsCore ? {needsCore: true} : {}),
+          needsCatalog: true,
         });
       }
       return replacements;
@@ -1043,6 +1047,7 @@ export class Project {
           code: error.code,
           severity: error.severity,
           message: error.message,
+          needsCatalog: true,
         });
       }
       return effectiveTemplateDiscovery(resolved.templates);
