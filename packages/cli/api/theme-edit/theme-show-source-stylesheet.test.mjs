@@ -9,6 +9,7 @@
  */
 
 import fs from 'node:fs';
+import nodeModule from 'node:module';
 import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditShow} from './theme-edit.mjs';
@@ -23,6 +24,12 @@ vi.mock('./_preview.mjs', async importOriginal =>
     await importOriginal(),
   ),
 );
+
+// Node runs module hooks in the loading thread from 22.15; before that,
+// loading a theme that imports a stylesheet is refused with the version it
+// needs.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 /** @type {string} */
 let cwd;
@@ -43,6 +50,12 @@ describe('show of a theme whose source imports a stylesheet', () => {
       source,
       `import './brand.css';\n${fs.readFileSync(source, 'utf8')}`,
     );
+    if (!hasModuleHooks) {
+      await expect(themeEditShow('t', {cwd})).rejects.toThrow(
+        'it imports themes/t/brand.css, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later',
+      );
+      return;
+    }
     const result = await themeEditShow('t', {cwd});
     expect(JSON.stringify(result.data)).toContain(
       'themes/t/t.theme.ts imports themes/t/brand.css, which the built outputs do not carry',
