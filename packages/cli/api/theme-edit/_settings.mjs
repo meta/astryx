@@ -16334,7 +16334,10 @@ export function innerPropTokens(C, part, prop) {
  */
 export function mainTextSizeToken(C, part, tokens) {
   const rec = C.MAP[part];
-  if (!rec || rec.own?.['font-size']) return null;
+  // (A part that holds other parts, a popover's buttons and fields, has no
+  // one main text: a size said of it is refused as before.)
+  if (!rec || rec.own?.['font-size'] || (rec.contains ?? []).length)
+    return null;
   const toks = Object.entries(rec.inside ?? {})
     .filter(([, props]) =>
       /** @type {string[]} */ (props).includes('font-size'),

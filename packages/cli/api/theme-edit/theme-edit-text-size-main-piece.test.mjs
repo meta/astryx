@@ -111,6 +111,13 @@ describe('a text size for a part whose text sits in pieces', () => {
       await expect(
         themeEditSet('x', 'font-size', '20px', {cwd, on: 'nav-icon'}),
       ).rejects.toThrow(/never reaches it/);
+      // (A part that holds other parts: its buttons and fields keep their
+      // own sizes.)
+      for (const on of ['popover', 'calendar'])
+        await expect(
+          themeEditSet('x', 'font-size', '20px', {cwd, on}),
+          on,
+        ).rejects.toThrow();
     },
     T,
   );
