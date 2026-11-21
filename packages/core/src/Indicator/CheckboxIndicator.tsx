@@ -22,6 +22,11 @@ import {themeProps} from '../utils/themeProps';
 import {indicatorScope} from './indicator.markers.stylex';
 import type {IndicatorProps} from './types';
 
+// The unchecked edge mixes the emphasized border halfway to secondary text,
+// so the empty control reads at 3:1 against its surface (WCAG 1.4.11).
+// SYNC: the same edge in Indicator/RadioIndicator.tsx and the off track of Switch/Switch.tsx.
+const controlEdge = `color-mix(in srgb, ${colorVars['--color-border-emphasized']}, ${colorVars['--color-text-secondary']} 50%)`;
+
 const styles = stylex.create({
   box: {
     boxSizing: 'border-box',
@@ -45,9 +50,9 @@ const styles = stylex.create({
     // brand accent on the light surface fill.
     color: colorVars['--color-accent'],
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: controlEdge,
       [stylex.when.ancestor(':hover', indicatorScope)]: {
-        '@media (hover: hover)': `color-mix(in srgb, ${colorVars['--color-border-emphasized']}, ${colorVars['--color-tint-hover']} 20%)`,
+        '@media (hover: hover)': `color-mix(in srgb, ${controlEdge}, ${colorVars['--color-tint-hover']} 20%)`,
       },
     },
     backgroundColor: {

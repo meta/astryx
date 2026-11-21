@@ -276,6 +276,10 @@ const labelWrapperSizeStyles = stylex.create({
   },
 });
 
+// SYNC: the unchecked edge in Indicator/RadioIndicator.tsx and
+// Indicator/CheckboxIndicator.tsx.
+const controlEdge = `color-mix(in srgb, ${colorVars['--color-border-emphasized']}, ${colorVars['--color-text-secondary']} 50%)`;
+
 const styles = stylex.create({
   container: {
     display: 'flex',
@@ -524,6 +528,14 @@ const styles = stylex.create({
   },
   // State-dependent colors with ancestor hover behavior
   trackOff: {
+    // The off track's edge: a 1px inset ring in the unchecked indicators'
+    // edge color, so the empty track reads at 3:1 against its surface
+    // (WCAG 1.4.11). Inset, so the track's box and the thumb's travel do not
+    // change. Forced colors draws its own system-color border instead.
+    boxShadow: {
+      default: `inset 0 0 0 1px ${controlEdge}`,
+      '@media (forced-colors: active)': 'none',
+    },
     backgroundColor: {
       default: colorVars['--color-background-gray'],
       // Off = empty (Canvas) track; on = Highlight track, so the two states
