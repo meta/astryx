@@ -225,6 +225,20 @@ describe('a lone color after a piece', () => {
   }, 240_000);
 });
 
+describe('a typed color after a part', () => {
+  it('is not used, as main reads it', async () => {
+    for (const ask of [
+      'bigger buttons, #2563eb',
+      'bold headings, #333333',
+      'rounder cards, #ffffff',
+      'rounded inputs, #2563eb',
+    ]) {
+      const lines = writes(await how('q0', ask)).join('\n');
+      expect(lines, ask).not.toMatch(/(?:background-color|color) '#/);
+    }
+  }, 240_000);
+});
+
 describe('a color led by another piece of the part before', () => {
   it('goes to that piece, never the piece said before', async () => {
     const rs = await how(

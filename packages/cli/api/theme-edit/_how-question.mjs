@@ -8602,10 +8602,11 @@ export function draftAnswer(ctx, env, question) {
       // a piece, whatever part follows.)
       !(next?.parts.length && next.colors.length) &&
       !c.aspects.length &&
-      // (Only a piece that is a color and nothing more: "frosted blue
-      // glass" is a look, its blue the glass's tint. A word that names
-      // another piece of the part before, "description dark gray" after a
-      // banner's title, still counts: the color is that piece's.)
+      // (Only a piece that is a named color and nothing more: "frosted blue
+      // glass" is a look, and a typed value, "#2563eb", is not used, as
+      // main reads them. A word that names another piece of the part
+      // before, "description dark gray" after a banner's title, still
+      // counts: the color is that piece's.)
       c.text
         .toLowerCase()
         .replace(/[.!,;]/g, ' ')
@@ -8613,7 +8614,7 @@ export function draftAnswer(ctx, env, question) {
         .filter(Boolean)
         .every(
           w =>
-            colorsIn(w).length > 0 ||
+            (colorsIn(w).length > 0 && !/^#|\(/.test(w)) ||
             new RegExp(`^(?:${SHADE_WORDS})$`).test(w) ||
             /^(?:an?|the|and|its|their)$/.test(w) ||
             prevParts.some(
