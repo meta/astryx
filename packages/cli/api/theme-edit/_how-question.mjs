@@ -4685,9 +4685,12 @@ export function draftAnswer(ctx, env, question) {
       // cards and buttons": parts listed with "and", before the look or
       // after it, each lose the look.)
       if (/\band\b/i.test(said) && !/\b(?:but|then)\b/i.test(said)) {
-        let rest = ` ${said.toLowerCase()} `;
+        const text = ` ${said.toLowerCase()} `;
+        let rest = text;
         /** @type {string[]} */
         const listed = [];
+        /** @type {Array<[number, number]>} */
+        const spans = [];
         for (;;) {
           const hit = partLexicon(ctx)
             .parts.map(([re]) => re.exec(rest))
@@ -4699,14 +4702,35 @@ export function draftAnswer(ctx, env, question) {
             )[0];
           if (!hit) break;
           listed.push(hit[0].trim());
-          rest = `${rest.slice(0, hit.index)} ${rest.slice(hit.index + hit[0].length)}`;
+          spans.push([hit.index, hit.index + hit[0].length]);
+          rest = `${rest.slice(0, hit.index)}${' '.repeat(hit[0].length)}${rest.slice(hit.index + hit[0].length)}`;
         }
         const left = rest
           .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
           .split(/[^a-z]+/)
           .filter(w => w && w !== 'and');
+        // (The listed parts sit together, joined only by "and": "I like the
+        // cards and the dialog border is ugly" and "cards and buttons in the
+        // dialog" are no list.)
+        spans.sort((x, y) => x[0] - y[0]);
+        const together = spans.every(
+          (sp, i) =>
+            i === 0 ||
+            /^\s*,?\s*(?:and\s+)?(?:the\s+)?$/.test(
+              text.slice(spans[i - 1][1], sp[0]),
+            ),
+        );
+        // (A list said before the look opens the ask, "the card and dialog
+        // border": "I like the cards and …" names no list.)
+        const lookAt = text.search(new RegExp(`\\b${look}\\b`, 'i'));
+        const opens =
+          !spans.length ||
+          spans[0][0] > lookAt ||
+          /^\s*(?:the\s+)?$/.test(text.slice(0, spans[0][0]));
         if (
           listed.length > 1 &&
+          together &&
+          opens &&
           left.every(w => JUDGING.test(w)) &&
           (/\bthem\b\s*[.!]?$/i.test(m) || /\bit\b\s*[.!]?$/i.test(m))
         )

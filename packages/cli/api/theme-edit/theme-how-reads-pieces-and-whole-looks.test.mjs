@@ -467,6 +467,20 @@ describe('a look taken away by a pronoun over listed parts', () => {
     },
     T,
   );
+
+  it(
+    'reads a list only when the parts sit together and open the ask or follow the look',
+    async () => {
+      for (const q of [
+        'I like the cards and the dialog border is ugly, hide it',
+        'the cards and buttons in the dialog have a shadow, remove it',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on card\b/);
+      }
+    },
+    T,
+  );
 });
 
 describe('a nav said as a bar', () => {
