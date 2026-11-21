@@ -5,9 +5,8 @@
  * @input The Popover and DropdownMenu default stories, each placed above,
  *   below, at the start and at the end of its trigger, on a slow CPU
  * @output Proves the style the browser paints in the entrance's first frame
- *   already carries the side the layer lands on: it is read by a resize
- *   observer made after the layer's own, which runs after the layer's side
- *   write and before that frame's paint
+ *   already carries the side the layer lands on: a resize observer reads it
+ *   in the frame after the show, before that frame's paint
  * @position Interaction proof for the entrance side write in useLayer.tsx
  *   (layerEntranceSide.ts, layerAnimations.stylex.ts)
  */
@@ -48,9 +47,9 @@ async function armFirstPaintRead(page: Page): Promise<void> {
   await page.evaluate(() => {
     const win = window as unknown as {__firstPaint?: unknown};
     // A menu opens on the press itself, a popover on the click. In the
-    // frame after it, a resize observer made after the layer's own reads
-    // the style that frame paints: observers run after the frame's
-    // animation frame callbacks and before its paint.
+    // frame after it, a resize observer reads the style that frame paints:
+    // observers run after the frame's animation frame callbacks and before
+    // its paint.
     const read = () => {
       requestAnimationFrame(() => {
         const layer = [
