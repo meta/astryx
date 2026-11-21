@@ -14,6 +14,7 @@
  * @position api/theme-edit — `show <theme> --on <part>` (_edit.mjs)
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
@@ -276,10 +277,30 @@ async function loadNamedTheme(ctx, cwd, name) {
         ? {when: null, state: copied.state ?? null, exact: false}
         : null;
     };
+    // What the app draws: the theme file as `theme build` loads it, with
+    // what is added below the settings in it; the editor's own compile when
+    // the file does not load.
+    let tokens = ownTokens(compiled, base, core);
+    let components = mergeComponents(
+      base.components,
+      compiled.components ?? {},
+    );
+    const file = path.join(cwd, 'themes', name, `${name}.theme.ts`);
+    if (fs.existsSync(file)) {
+      const {loadThemeInput} = await import('../theme/build/build.mjs');
+      const loaded = await loadThemeInput(file, {cwd, name});
+      if (loaded?.theme) {
+        tokens = {
+          light: core.resolveThemeTokens(loaded.theme, {mode: 'light'}),
+          dark: core.resolveThemeTokens(loaded.theme, {mode: 'dark'}),
+        };
+        components = loaded.theme.components ?? {};
+      }
+    }
     return {
       kind: 'editor',
-      tokens: ownTokens(compiled, base, core),
-      components: mergeComponents(base.components, compiled.components ?? {}),
+      tokens,
+      components,
       parentTokens: {light: base.light, dark: base.dark},
       parentComponents: base.components ?? {},
       coreTokens: {light: coreDefaults.light, dark: coreDefaults.dark},
@@ -466,13 +487,39 @@ export async function themePartValues(cwd, name, part) {
       },
     };
   };
-  // The tokens a rule's mode block sets on the part, which a value reading
-  // them shows in that mode.
-  const blockTokens = new Set(
-    folded.modeSets
-      .filter(m => m.property.startsWith('--'))
-      .map(m => m.property),
-  );
+  /**
+   * Whether a mode block is the theme's own: not taken unchanged from the
+   * theme it extends.
+   * @param {(typeof folded.modeSets)[number]} m
+   */
+  const ownBlock = m =>
+    !parentFolded.modeSets.some(
+      p =>
+        p.mode === m.mode &&
+        p.property === m.property &&
+        p.state === m.state &&
+        p.value === m.value &&
+        sameWhen(p.when, m.when),
+    );
+  /**
+   * The tokens the theme's own mode blocks set inside the part under a
+   * condition: the ones a value there reads in that mode (a block at rest,
+   * or under the same condition, with no state).
+   * @param {string} when
+   * @param {boolean} [any] the theme's and the base's blocks alike
+   */
+  const blockTokensAt = (when, any = false) =>
+    new Set(
+      folded.modeSets
+        .filter(
+          m =>
+            m.property.startsWith('--') &&
+            !m.state &&
+            ['base', when].some(w => sameWhen(m.when, w)) &&
+            (any || ownBlock(m)),
+        )
+        .map(m => m.property),
+    );
   /** @type {PartValue[]} */
   const values = [];
   /** @type {WeakMap<PartValue, {when: string, state: string, own: boolean}>} */
@@ -611,6 +658,7 @@ export async function themePartValues(cwd, name, part) {
     }
     // A value that reads a token a mode block sets on the part is the
     // theme's, through that token.
+    const blockTokens = blockTokensAt(when);
     if ([...light, ...dark].some(t => blockTokens.has(t))) {
       source = 'theme';
       via = theme.tokenVia
@@ -627,7 +675,7 @@ export async function themePartValues(cwd, name, part) {
       ...cond,
       value: pairOf(
         .../** @type {[string, string]} */ (
-          [...light, ...dark].some(t => blockTokens.has(t))
+          [...light, ...dark].some(t => blockTokensAt(when, true).has(t))
             ? [
                 resolveIn(v.raw, at.theme.light, 'light'),
                 resolveIn(v.raw, at.theme.dark, 'dark'),
@@ -722,14 +770,7 @@ export async function themePartValues(cwd, name, part) {
     target.tokens = pair(chain, half(target.tokens, other));
     // (A block the theme takes as it is from the theme it extends is the
     // base's.)
-    const inherited = parentFolded.modeSets.some(
-      p =>
-        p.mode === m.mode &&
-        p.property === m.property &&
-        p.state === m.state &&
-        p.value === m.value &&
-        sameWhen(p.when, m.when),
-    );
+    const inherited = !ownBlock(m);
     target.source = inherited ? 'base' : 'theme';
     target.via = inherited ? 'part' : via;
   }

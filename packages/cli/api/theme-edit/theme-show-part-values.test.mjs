@@ -451,6 +451,42 @@ describe('show --on: what one part of a theme shows', () => {
     expect(fill.value.dark).not.toBe('#abcdef');
   }, 120_000);
 
+  it('credits a variant-scoped token block only where it shows, and reads what the theme file adds below the settings', async () => {
+    await themeEditNew('scoped', {cwd, like: 'neutral'});
+    await themeEditSet('scoped', '--color-background-muted', '#ff0000', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+      mode: 'light',
+    });
+    const r = /** @type {any} */ (
+      await themeEditShow('scoped', {cwd, on: 'card'})
+    );
+    // At rest the card's own fill shows, not the theme's block.
+    const rest = valueOf(r, 'background-color');
+    expect(rest.source).not.toBe('theme');
+    expect(JSON.stringify(rest.value)).not.toMatch(/#ff0000/);
+    const muted = valueOf(r, 'background-color', 'variant:muted');
+    expect(muted).toMatchObject({source: 'theme'});
+    expect(muted.value.light).toBe('#ff0000');
+    // A token the theme file sets below the settings wins over them, as
+    // the app draws it.
+    const file = path.join(cwd, 'themes', 'scoped', 'scoped.theme.ts');
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          "name: 'scoped',",
+          "name: 'scoped',\n  tokens: {'--color-background-card': '#0a0b0c'},",
+        ),
+    );
+    const own = /** @type {any} */ (
+      await themeEditShow('scoped', {cwd, on: 'card'})
+    );
+    expect(valueOf(own, 'background-color').value).toBe('#0a0b0c');
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})
