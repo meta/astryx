@@ -146,9 +146,6 @@ describe('a whole-theme border said once', () => {
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
     expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);
     expect(overlays.some(x => / --on button$/.test(x))).toBe(false);
-    const withForm = await commands('overlays with a 1px #4d4d4d border', 'br');
-    expect(withForm.some(x => / --on popover$/.test(x))).toBe(true);
-    expect(withForm.some(x => / --on button$/.test(x))).toBe(false);
   }, 240_000);
 });
 

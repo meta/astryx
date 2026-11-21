@@ -23800,14 +23800,9 @@ export function draftAnswer(ctx, env, question) {
             // frame: those take a border said for them by name.
             // (A role word leading the ask, "overlays: …", narrows it to
             // that role's share.)
-            // ("overlays with a 1px border": the role word sits before the
-            // "with" the clauses split at, so the ask's own start counts.)
-            const roleWord =
-              /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(controls?|overlays?|surfaces?|containers?)\b/;
             const role =
-              roleWord.exec(c.text.trim())?.[1] ??
-              new RegExp(`${roleWord.source}\\s+with\\b`, 'i').exec(
-                question.trim(),
+              /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(controls?|overlays?|surfaces?|containers?)\b/.exec(
+                c.text.trim(),
               )?.[1];
             const edgeParts = role
               ? (EDGE_ROLES[role.replace(/s?$/, 's')] ?? EDGE_PARTS)
