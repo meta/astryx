@@ -353,7 +353,7 @@ const PLURAL_BOTH_MODES =
  * A plural part said to work in both modes, read as "in both modes".
  * After a modal ("must", "could", "needs to") the verb says nothing of
  * number, so only a plural part before it ("headings that could work") is
- * read so; "text that must work …" is left as said.
+ * read so; "text that must work …" is left as said ("modes" as "mode").
  * @param {string} m @param {number} at @param {string} whole
  */
 const pluralBothModesAt = (m, at, whole) => {
@@ -367,7 +367,10 @@ const pluralBothModesAt = (m, at, whole) => {
   const part = /\b([a-z]+)\s+(?:that|which)\s+(?:[a-z]+\s+){1,2}$/i.exec(
     before,
   )?.[1];
-  return part && /[^s]s$/i.test(part) ? ' in both modes ' : m;
+  // (A singular part keeps the base reading: "modes" reads as "mode".)
+  return part && /[^s]s$/i.test(part)
+    ? ' in both modes '
+    : m.replace(/\bmodes\b/i, 'mode');
 };
 /**
  * The palette names among the hues (terracotta, sage, slate…): read when

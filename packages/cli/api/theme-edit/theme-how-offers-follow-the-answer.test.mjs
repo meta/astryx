@@ -248,6 +248,14 @@ describe('light and dark said as what the theme must work in', () => {
       )
     ).flatMap(r => r.commands);
     expect(modes.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
+    // (A singular part after a modal keeps the base reading, "modes" too.)
+    const would = (
+      await results(
+        'fresh',
+        'text that would work in light and dark modes should be #111111',
+      )
+    ).flatMap(r => r.commands);
+    expect(would.join('\n')).toMatch(/#111111/);
     // (Text on a part's own fill, a button's, is not measured against the
     // page.)
     const buttons = await results(
