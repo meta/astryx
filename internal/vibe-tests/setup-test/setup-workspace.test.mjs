@@ -86,10 +86,21 @@ function write(root, relativePath, content, mode) {
   if (mode !== undefined) fs.chmodSync(file, mode);
 }
 
+/** A proxy list that keeps the stand-in registry on this machine direct. */
+function noProxyList() {
+  const existing = process.env.no_proxy ?? process.env.NO_PROXY ?? '';
+  return [existing, '127.0.0.1', 'localhost'].filter(Boolean).join(',');
+}
+
 function pnpmEnv(registry) {
+  const noProxy = noProxyList();
   return {
     ...process.env,
     CI: 'true',
+    // A proxy in the environment must not carry the local registry's requests.
+    no_proxy: noProxy,
+    NO_PROXY: noProxy,
+    pnpm_config_noproxy: noProxy,
     // pnpm 11 reads the pnpm_config_ names; older pnpm reads npm_config_.
     npm_config_registry: registry,
     pnpm_config_registry: registry,
