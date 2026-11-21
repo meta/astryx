@@ -67,6 +67,7 @@ import {
   radiusTokenOf,
   acceptedContrast,
   contrastPlace,
+  officialThemePackage,
   drawnPair,
   contrastProblems,
   describe,
@@ -2262,21 +2263,8 @@ async function acceptContrast(slug, reason, options) {
   const ctx = await context(cwd);
   // An official theme (a package Astryx ships, @astryxdesign/theme-*) is
   // the reference others copy: it keeps no contrast miss, by any reason.
-  const ownName = (() => {
-    try {
-      return String(
-        JSON.parse(
-          fs.readFileSync(path.join(ctx.project.cwd, 'package.json'), 'utf8'),
-        ).name ?? '',
-      );
-    } catch {
-      return '';
-    }
-  })();
-  if (
-    /^@astryxdesign\/theme-/.test(ownName) &&
-    reason.trim().toLowerCase() !== 'none'
-  )
+  const ownName = officialThemePackage(ctx.project.cwd);
+  if (ownName && reason.trim().toLowerCase() !== 'none')
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${ownName} is an official Astryx theme, and an official theme keeps no contrast problem as designed: follow the problem's fix line instead.`,
