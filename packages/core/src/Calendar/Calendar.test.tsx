@@ -2211,6 +2211,20 @@ describe('Calendar', () => {
     expect(nextButton).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('a month button that reaches the bound keeps focus and stays focusable', async () => {
+    const user = userEvent.setup();
+    render(<Calendar focusDate="2026-01-01" max="2026-02-15" />);
+    const next = getButton('Next month');
+    await user.click(next);
+    // February holds max: the button is aria-disabled, focusable, and focused.
+    expect(next).toHaveAttribute('aria-disabled', 'true');
+    expect(next).not.toHaveAttribute('disabled');
+    expect(document.activeElement).toBe(next);
+    await user.keyboard('{Enter}');
+    expect(screen.getByText(/February 2026/)).toBeInTheDocument();
+    expect(document.activeElement).toBe(next);
+  });
+
   it('outside days are not clickable when hasOutsideDays is true', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();

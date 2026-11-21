@@ -856,16 +856,21 @@ export function ToastViewport({
   const insetStyle: React.CSSProperties = {
     ...layerInsetProperties(layerInset),
   };
-  if (inset?.top) {
-    insetStyle.top = inset.top;
+  // A zero on the stack's own block edge replaces the provider's value. On
+  // the opposite edge a zero writes nothing, so it cannot move the stack.
+  const isTopStack = position === 'topEnd' || position === 'topStart';
+  const insetTop = inset?.top;
+  if (insetTop != null && (isTopStack || insetTop !== 0)) {
+    insetStyle.top = insetTop;
   }
-  if (inset?.bottom) {
-    insetStyle.bottom = inset.bottom;
+  const insetBottom = inset?.bottom;
+  if (insetBottom != null && (!isTopStack || insetBottom !== 0)) {
+    insetStyle.bottom = insetBottom;
   }
-  if (inset?.start) {
+  if (inset?.start != null) {
     insetStyle.insetInlineStart = inset.start;
   }
-  if (inset?.end) {
+  if (inset?.end != null) {
     insetStyle.insetInlineEnd = inset.end;
   }
 
