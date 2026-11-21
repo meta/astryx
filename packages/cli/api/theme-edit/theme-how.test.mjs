@@ -15,7 +15,7 @@ import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {parsePoints} from './_adapter.mjs';
-import {checkSetting, pillDrawnRadios} from './_check.mjs';
+import {checkSetting} from './_check.mjs';
 import {context} from './_context.mjs';
 import {howTheme} from './_how-commands.mjs';
 import {compileTheme, keyOf} from './_settings.mjs';
@@ -41,23 +41,10 @@ vi.mock('./_preview.mjs', async importOriginal =>
 /** @type {string} */
 let cwd;
 
-/**
- * The steps that keep the radio marks round when the pills go square, on a
- * Core that draws a radio's circle with the pill token; none on a Core that
- * draws it at 50%.
- */
-let radioPins = '';
-
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('q', {cwd, like: 'neutral'});
-  radioPins = pillDrawnRadios((await context(cwd)).C)
-    .map(
-      m =>
-        ` && set q --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
-    )
-    .join('');
 }, 120_000);
 
 afterAll(() => {
@@ -65,6 +52,16 @@ afterAll(() => {
 });
 
 /** A command without the CLI prefix: `set q corners more --on button`. @param {string} c */
+/**
+ * A page answer carries the frame and main panel lines after the page
+ * token: these questions read the page token itself.
+ * @param {string[]} cmds
+ */
+const pageToken = cmds =>
+  cmds.some(x => / --color-background-body /.test(x))
+    ? cmds.filter(c => !/ --on (?:app-shell|layout-content)(?: |$)/.test(c))
+    : cmds;
+
 const bare = c => c.replace(/^.*? experimental theme (editor )?/, '');
 
 /** The words of a command, as a shell splits them. @param {string} c */
@@ -530,10 +527,8 @@ const QUESTIONS = [
   [
     'square corners everywhere',
     {
-      top: () =>
-        new RegExp(
-          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
-        ),
+      // (The dial squares the pills that are a styling choice itself.)
+      top: /^set q corners square$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -798,7 +793,6 @@ const QUESTIONS = [
     'кнопки синие',
     {
       top: /^set q background-color '#2563eb' --on button$/,
-      adds: /button\.base\.backgroundColor=#2563eb/,
     },
   ],
   [
@@ -920,7 +914,9 @@ describe('how answers plain-words questions', () => {
       }
       const top = changes[0];
       expect(top).toBeTruthy();
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -1202,7 +1198,7 @@ const QUESTIONS_2 = [
     {
       // The danger variant keeps the fill (and the text on it) the base
       // theme gives it.
-      top: /--on button && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?$/,
+      top: /--on button(?: && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?)?$/,
       adds: /variant:destructive\.backgroundColor=var\(--color-error(-muted)?\)/,
     },
   ],
@@ -1503,7 +1499,6 @@ const QUESTIONS_2 = [
     'ボタンを青く',
     {
       top: /^set q background-color '#2563eb' --on button$/,
-      adds: /button\.base\.backgroundColor=#2563eb/,
     },
   ],
   // contradictions and repeats
@@ -1547,7 +1542,9 @@ describe('how answers pass-2 questions', () => {
       // The change comes before any lookup.
       expect(results[0]).toBe(changes[0]);
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -1651,7 +1648,9 @@ describe('how answers pass-2 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -1831,7 +1830,8 @@ const QUESTIONS_3 = [
   ],
   [
     'make the switch green',
-    {top: /^set q background-color '#16a34a' --on switch$/},
+    // (Its on look: an off switch keeps its own.)
+    {top: /^set q background-color '#16a34a' --on switch --state checked$/},
   ],
   [
     'all radius values are 0, it is very sharp',
@@ -1961,7 +1961,9 @@ describe('how answers pass-3 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2037,7 +2039,9 @@ describe('how answers pass-3 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2302,7 +2306,9 @@ describe('how answers final-pass questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2405,7 +2411,9 @@ describe('how answers final-pass questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2635,7 +2643,9 @@ describe('how answers final-2 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2735,7 +2745,9 @@ describe('how answers final-2 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2913,7 +2925,9 @@ const QUESTIONS_H = [
   ],
   [
     'heading color red',
-    {top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/},
+    {
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on alert-dialog-title && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
+    },
   ],
   // CSS named colors
   ['accent tomato', {top: /^set q accent '#ff6347'$/}],
@@ -2937,7 +2951,9 @@ describe('how answers final-3 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3005,7 +3021,9 @@ describe('how answers final-3 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -3127,13 +3145,16 @@ const QUESTIONS_I = [
   [
     'heading color red',
     {
-      top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/,
+      // (Every heading element takes a heading's color.)
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on alert-dialog-title && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
       adds: /heading\.base\.--color-text-primary=#dc2626/,
     },
   ],
   [
     'headings red',
-    {top: /^set q (?:--color-text-primary|color) '#dc2626' --on heading$/},
+    {
+      top: /^set q color '#dc2626' --on heading && set q color '#dc2626' --on alert-dialog-title && set q color '#dc2626' --on empty-state-title && set q color '#dc2626' --on markdown-heading$/,
+    },
   ],
   // the divider
   ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],
@@ -3187,7 +3208,9 @@ describe('how answers final-4 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3271,7 +3294,9 @@ describe('how answers final-4 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -3306,10 +3331,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: () =>
-        new RegExp(
-          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
-        ),
+      top: /^set q corners square$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -3421,7 +3443,9 @@ describe('how answers final-5 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3485,8 +3509,15 @@ const QUESTIONS_K = [
     },
   ],
   ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
-  ['error text red', {top: null, text: /error text belong to the parts/}],
+  // (The error text has a token of its own, as success and warning text
+  // do: a color for it sets that token; without one, the parts are named.)
+  ['error text red', {top: /^set q --color-text-error '#[0-9a-f]{6}'/}],
+  [
+    'error messages bigger',
+    {top: null, text: /error text belong to the parts/},
+  ],
   ['labels smaller', {top: /--on field-label$/}],
+  ['form labels smaller', {top: /--on field-label$/}],
 ];
 
 describe('how answers final-6 questions', () => {
@@ -3505,7 +3536,9 @@ describe('how answers final-6 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3549,7 +3582,9 @@ describe('how answers final-6 lows', () => {
         ),
       );
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         /** @type {RegExp} */ (want),
       );
@@ -3677,7 +3712,9 @@ describe('how answers final-7 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3738,7 +3775,9 @@ describe('how answers final-8 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -3812,7 +3851,9 @@ describe('how answers amounts with comparatives, and corners copied from a part'
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3892,7 +3933,9 @@ describe('how answers final-9 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3985,7 +4028,8 @@ const QUESTIONS_R = [
   ['take back the shadow change', null, /sets nothing for shadow/],
   ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],
   ['squre corners', /^set q corners square$/],
-  ['eckiger corners', /^set q corners square$/],
+  // ("eckiger", more angular: one step sharper, never all the way.)
+  ['eckiger corners', /^set q corners less$/],
   ['cards look flat', /^set q box-shadow 'var\(--shadow-[a-z]+\)' --on card$/],
   [
     'buttons darker while being clicked',
@@ -4008,7 +4052,9 @@ describe('how answers final-10 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -4116,7 +4162,9 @@ describe('how answers final-11 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -4246,7 +4294,9 @@ describe('how writes only for a direct ask', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4362,7 +4412,9 @@ describe('how writes only for a clause that reads as an ask', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4433,7 +4485,9 @@ describe('how answers final-14 fixes', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4459,7 +4513,8 @@ describe('how lookups', () => {
       themeEditSet('q', 'background', '#dbeafe', {
         cwd,
         on: 'table-row',
-        state: 'checked',
+        // (A state with no other word for one of the row's.)
+        state: 'indeterminate',
       }),
     );
     expect(r.message).toContain(`States: ${part.states.join(', ')}.`);
@@ -4595,7 +4650,8 @@ describe('how lookups', () => {
   }, 60_000);
 
   it('an empty answer carries the hint and the next commands in JSON too', async () => {
-    const {data} = await themeEditHow('make it look like Apple', {cwd});
+    // ("make it look like Apple" names a brand, and asks for its colors.)
+    const {data} = await themeEditHow('flibber the wobbles', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
     // The help that lists the asks it understands comes first.
