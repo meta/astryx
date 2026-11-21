@@ -352,4 +352,49 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
       /\.astryx-pagination-list\s*\{[^}]*border: 1px solid #dddddd/,
     );
   }, 240_000);
+
+  it('counts an opaque color that ends in 0 as a fill, and puts an undone scoped fill back with its scope', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    // rgb(0, 0, 0) is opaque black: the bar is filled, so its border and
+    // radius stay on it.
+    await themeEditNew('k', {cwd, like: 'neutral'});
+    await themeEditSet('k', 'background-color', 'rgb(0, 0, 0)', {
+      cwd,
+      on: 'pagination',
+    });
+    const border = await themeEditSet('k', 'border', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(border.data.parts).toEqual(['pagination']);
+    const radius = await themeEditSet('k', 'border-radius', '4px', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(radius.data.parts).toEqual(['pagination']);
+    // Undoing a fill set for one variant offers it back for that variant.
+    await themeEditNew('w', {cwd, like: 'neutral'});
+    await themeEditSet('w', 'background-color', '#f8f9fa', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:dots',
+    });
+    await themeEditSet('w', 'border', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:dots',
+    });
+    const undone = await themeEditUndo('w', {
+      cwd,
+      thing: 'background-color',
+      on: 'pagination',
+      when: 'variant:dots',
+    });
+    expect(undone.data.notes.join('\n')).toMatch(
+      /border on pagination draws on pagination-list now, not on pagination[^\n]*to put it back: [^\n]* set w background-color '?#f8f9fa'? --on pagination --when '?variant:dots'?/,
+    );
+  }, 240_000);
 });

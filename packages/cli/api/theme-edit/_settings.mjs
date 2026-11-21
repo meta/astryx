@@ -15681,9 +15681,10 @@ export function givesEdge(x, state) {
     /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
       kebab(String(x.thing ?? '')),
     ) &&
-    !/^(?:none|hidden|initial|unset|0(?:px)?|transparent|rgba?\([^)]*[,/]\s*0(?:\.0+)?%?\s*\)|#[0-9a-f]{3}0|#[0-9a-f]{6}00)$/i.test(
+    !/^(?:none|hidden|initial|unset|0(?:px)?|transparent)$/i.test(
       String(x.value ?? '').trim(),
-    )
+    ) &&
+    alphaOf(x.value) !== 0
   );
 }
 

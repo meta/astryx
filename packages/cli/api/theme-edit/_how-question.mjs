@@ -29315,7 +29315,12 @@ export function draftAnswer(ctx, env, question) {
         continue;
       let edge = -1;
       for (let j = i + 1; j < all.length; j++)
-        if (all[j].on === st.on && givesEdge(all[j], st.state)) edge = j;
+        if (
+          all[j].on === st.on &&
+          all[j].verb === 'set' &&
+          givesEdge(all[j], st.state)
+        )
+          edge = j;
       if (edge < 0) continue;
       all.splice(i, 1);
       all.splice(edge, 0, st);
