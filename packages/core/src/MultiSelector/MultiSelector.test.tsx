@@ -83,6 +83,8 @@ function politeRegion(): HTMLElement | null {
 // resolves from the module cache and every sheet test waits only on the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('../Selector/SelectorBottomSheet');
+  await import('../Selector/SelectorBottomSheetFrame');
 });
 
 beforeEach(() => {
@@ -153,6 +155,8 @@ function expectSilentBusySpinner() {
 // here, and each test's open waits only for the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('../Selector/SelectorBottomSheet');
+  await import('../Selector/SelectorBottomSheetFrame');
 });
 
 describe('MultiSelector', () => {

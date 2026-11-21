@@ -160,7 +160,7 @@ describe('Core in esbuild bundles', () => {
       });
       const {outputs} = result.metafile;
       const entry = Object.keys(outputs).find(
-        file => outputs[file].entryPoint != null,
+        file => outputs[file].entryPoint?.endsWith('main.jsx'),
       );
       const startup = new Set([entry]);
       const queue = [entry];
