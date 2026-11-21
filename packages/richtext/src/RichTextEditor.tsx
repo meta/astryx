@@ -429,6 +429,17 @@ export interface RichTextEditorProps extends Omit<
    */
   plugins?: ReactNode;
   /**
+   * Whether the editor keeps its own undo and redo history (Lexical's
+   * `HistoryPlugin`). Turn it off when a plugin passed in `plugins` brings its
+   * own history, such as a `HistoryPlugin` with its own delay or history
+   * state, so that only one history records edits and answers undo and redo.
+   * The toolbar's Undo and Redo follow whichever history dispatches
+   * `CAN_UNDO_COMMAND` and `CAN_REDO_COMMAND`. Read once, when the editor
+   * mounts, as `defaultValue` is.
+   * @default true
+   */
+  hasHistory?: boolean;
+  /**
    * Whether to enable Markdown shortcut typing (e.g. `# ` for a heading,
    * `- ` for a list). Uses the `transformers` prop (defaults to the standard
    * `@lexical/markdown` transformers plus GFM tables). At the start of a list
@@ -544,6 +555,7 @@ export const RichTextEditor = function RichTextEditor({
   nodes,
   toolbar,
   plugins,
+  hasHistory = true,
   hasMarkdownShortcuts = true,
   transformers = DEFAULT_TRANSFORMERS,
   markdownExtensions,
@@ -573,6 +585,9 @@ export const RichTextEditor = function RichTextEditor({
   // Plain-text character count, tracked from inside the composer via
   // CharCountPlugin. Only used when maxLength is set.
   const [charCount, setCharCount] = useState(0);
+  // Read once at mount: removing the built-in history later would leave the
+  // toolbar's Undo enabled with nothing to answer it.
+  const [hasBuiltInHistory] = useState(hasHistory);
 
   // Theme is stable per render; build once.
   const themeRef = useRef<EditorThemeClasses | null>(null);
@@ -724,7 +739,7 @@ export const RichTextEditor = function RichTextEditor({
                 placeholder={null}
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              <HistoryPlugin />
+              {hasBuiltInHistory && <HistoryPlugin />}
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
