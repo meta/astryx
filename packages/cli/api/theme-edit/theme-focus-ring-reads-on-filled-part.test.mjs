@@ -179,6 +179,8 @@ describe('a focus ring inside a part the theme fills', () => {
       mode: 'light',
     });
     expect(headerRings('sw', 'switch')).toEqual([]);
+    // (So does the box a checkbox draws under its native input.)
+    expect(headerRings('sw', 'checkbox-indicator')).toEqual([]);
     expect(headerRings('sw', 'checkbox')).toEqual([]);
   }, 240_000);
 
