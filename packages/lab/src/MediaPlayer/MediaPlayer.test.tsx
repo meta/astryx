@@ -372,10 +372,11 @@ describe('VideoPlayer', () => {
     await expect(user.click(barPlay)).rejects.toThrow(/pointer-events/);
     act(() => barPlay.focus());
     await user.keyboard('{Enter}');
+    const pause = screen.getByRole('button', {name: 'Pause'});
     // A person moves the pointer to the bar before clicking, which shows it
     // again if a slow run has passed the 2 s idle hide.
     fireEvent.pointerMove(player, {pointerType: 'mouse'});
-    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    await user.click(pause);
     expect(screen.getByRole('button', {name: 'Play'})).toBeInTheDocument();
   });
 
@@ -446,7 +447,11 @@ describe('VideoPlayer', () => {
       void video.play();
     });
     const bar = () => container.querySelector('[data-visible]');
-    await user.click(screen.getByRole('slider', {name: 'Seek'}));
+    const seek = screen.getByRole('slider', {name: 'Seek'});
+    // The pointer reaches the timeline before the click, which shows the bar
+    // again if a slow run has passed the 2 s idle hide.
+    fireEvent.pointerMove(player, {pointerType: 'mouse'});
+    await user.click(seek);
     expect(screen.getByRole('slider', {name: 'Seek'})).toHaveFocus();
     fireEvent.pointerLeave(player, {pointerType: 'mouse'});
     expect(bar()).toHaveAttribute('data-visible', 'false');
