@@ -2172,17 +2172,40 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(farthest).toBeLessThan(TRAVEL_PX - 1);
     // ...from where it was: no frame moves it more than a few px. Each step is
     // measured against the time its frames span. So a frame read late, two
-    // vsyncs of motion in one sample, is not a jump.
+    // vsyncs of motion in one sample, is not a jump. A step right after a
+    // frame stall (more than three frames with no paint) also spans the
+    // stall, since the motion it shows ran during the stall.
     const FRAME_MS = 1000 / 60;
-    const perFrame = read
-      .slice(1)
-      .map(
-        ([time, x], i) =>
-          (Math.abs(x - read[i][1]) * FRAME_MS) /
-          Math.max(time - read[i][0], FRAME_MS),
-      );
+    const STALL_MS = 3 * FRAME_MS;
+    const perFrame = read.slice(1).map(([time, x], i) => {
+      const stall = i > 0 ? read[i][0] - read[i - 1][0] : 0;
+      const span = time - read[i][0] + (stall > STALL_MS ? stall : 0);
+      return (Math.abs(x - read[i][1]) * FRAME_MS) / Math.max(span, FRAME_MS);
+    });
     expect(Math.max(...perFrame), JSON.stringify(read)).toBeLessThan(4);
   }
+
+  // The jump check on recorded samples, with no page: a frame stall that
+  // holds the thumb still, then the frame that catches up, is not a jump; a
+  // jump between ordinary frames still is.
+  test('P14 · the jump check reads the catch-up after a frame stall as motion, not a jump', () => {
+    const steps: [number, number][] = [];
+    let time = 0;
+    let x = 100;
+    for (let i = 0; i < 12; i++) {
+      steps.push([time, x]);
+      time += 1000 / 60;
+      x += i < 5 ? 2.7 : -2.7;
+    }
+    // A 302 ms stall paints the thumb where it was, and 2.8 ms later the
+    // frame catches up 8 px.
+    steps.push([time + 302, x]);
+    steps.push([time + 304.8, x - 8]);
+    expectCaughtWithoutAJump(steps);
+    const jumped = steps.slice(0, 12);
+    jumped.push([time, x - 8]);
+    expect(() => expectCaughtWithoutAJump(jumped)).toThrow();
+  });
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({
     page,
