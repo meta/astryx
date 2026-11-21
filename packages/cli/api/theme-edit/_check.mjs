@@ -129,6 +129,8 @@ import {
   colorPropTokens,
   innerPropTokens,
   columnLineTokens,
+  mainTextSizeToken,
+  namesToken,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -8147,15 +8149,27 @@ function checkOne(
       const column = (/** @type {string} */ t, /** @type {string[]} */ toks) =>
         toks.length > 1 &&
         columnLineTokens(ctx.C, t, prop).join() === toks.join();
+      // (A text size whose pieces each read a text size token, said of one
+      // part, a top nav heading's title and supporting line: the main
+      // text's, the largest.)
+      const main = (/** @type {string} */ t) => {
+        if (prop !== 'font-size' || partsOf(ctx, s).length !== 1) return null;
+        const m = mainTextSizeToken(ctx.C, t, TOKENS);
+        return m && !namesToken(v, m) ? m : null;
+      };
       const oneEach =
         prop !== 'color' &&
-        inner.every(([t, toks]) => toks.length === 1 || column(t, toks));
+        inner.every(
+          ([t, toks]) => toks.length === 1 || column(t, toks) || main(t),
+        );
       if (inner.length && inner.length === partsOf(ctx, s).length && oneEach) {
         const said = inner
           .map(([part, toks]) =>
             toks.length === 1
               ? `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks[0]}, so the value goes into ${toks[0]} on ${part}`
-              : `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`,
+              : column(part, toks)
+                ? `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`
+                : `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into ${main(part)} on ${part}, the size of its main text`,
           )
           .join('; ');
         s.note = s.note ? `${s.note}; ${said}` : said;
