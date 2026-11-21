@@ -73,7 +73,7 @@ export const docs = {
       name: 'value',
       type: 'string',
       description:
-        'Controlled input value. Pair with onChange for two-way binding.',
+        'Controlled input value. Pair with onChange for two-way binding. Recent exact values can restore default paste-badge layouts, including for a different draft with the same string. This memory is bounded and lasts only for the current mount; the string itself stores no badge metadata.',
     },
     {
       name: 'onChange',
@@ -176,7 +176,8 @@ export const docsZh = {
   propDescriptions: {
     handleRef:
       '命令式句柄，用于编程式控制：insertToken、expandToken、insertText、focus 和 getValue。',
-    value: '受控输入值。与 onChange 配对实现双向绑定。',
+    value:
+      '受控输入值。与 onChange 配对实现双向绑定。最近保存的完整字符串可恢复默认粘贴徽章布局；另一个内容完全相同的草稿也可能复用该布局。记录有容量限制，且仅在当前挂载期间保留；字符串本身不包含徽章元数据。',
     onChange: '输入值变更时调用。序列化字符串包含标记占位符。',
     placeholder: '输入为空时显示的占位文本。',
     maxRows: '滚动前的最大可见行数。紧凑布局中使用较小值。',
@@ -208,7 +209,8 @@ export const docsDense = {
   propDescriptions: {
     handleRef:
       'imperative handle (insertToken/expandToken/insertText/focus/getValue)',
-    value: 'controlled value; pair w/ onChange for two-way binding',
+    value:
+      'controlled value + onChange; exact strings can reuse recent default-paste layouts, even across different drafts; bounded mount-local memory, no metadata in saved strings',
     onChange:
       'value change handler; serialized string includes token placeholders',
     placeholder: 'placeholder when empty',

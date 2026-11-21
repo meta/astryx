@@ -60,7 +60,10 @@ export interface UseChatPasteAsTokenReturn {
 // Default token factory
 // =============================================================================
 
-function defaultToToken(text: string, t: TranslatorFn): ChatComposerToken {
+export function defaultToToken(
+  text: string,
+  t: TranslatorFn,
+): ChatComposerToken {
   return {
     value: text,
     label: formatPastedTextLabel(text, t),

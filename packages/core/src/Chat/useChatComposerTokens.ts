@@ -20,7 +20,9 @@
  * - /packages/core/src/Chat/ChatComposerInput.tsx (consumer)
  */
 
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
+import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import {defaultToToken} from './useChatPasteAsToken';
 import {
   ensureCaretInside,
   insertTextAtCursor,
@@ -29,11 +31,17 @@ import {
 import type {
   ChatComposerToken,
   ChatComposerTokenCustom,
+  ChatComposerTrigger,
 } from './ChatComposerInput';
 
 // =============================================================================
 // Types
 // =============================================================================
+
+export interface PastedTextRange {
+  start: number;
+  end: number;
+}
 
 export interface TokenPortal {
   id: string;
@@ -89,6 +97,20 @@ function isInsideToken(node: Node): HTMLElement | null {
   return null;
 }
 
+function createTokenPortal(token: ChatComposerToken): TokenPortal {
+  const span = document.createElement('span');
+  const id = `token-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  span.setAttribute('data-astryx-token', '');
+  span.setAttribute('data-astryx-token-value', token.value);
+  span.setAttribute('data-astryx-token-id', id);
+  span.contentEditable = 'false';
+  span.style.display = 'inline-flex';
+  span.style.alignItems = 'center';
+  span.style.height = '1lh';
+  span.style.verticalAlign = 'top';
+  return {id, span, token};
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -97,11 +119,33 @@ export function useChatComposerTokens({
   editableRef,
   onEmitChange,
 }: UseChatComposerTokensOptions): UseChatComposerTokensReturn {
+  const {
+    restoreValue: _restoreValue,
+    isDefaultPasteToken: _isDefaultPasteToken,
+    ...tokens
+  } = useChatComposerTokensInternal({
+    editableRef,
+    onEmitChange,
+  });
+  return tokens;
+}
+
+// Draft restoration stays internal so the public token handle is unchanged.
+export function useChatComposerTokensInternal({
+  editableRef,
+  onEmitChange,
+}: UseChatComposerTokensOptions) {
+  const t = useComponentTranslator();
   const [tokenPortals, setTokenPortals] = useState<TokenPortal[]>([]);
+  const defaultPasteSpansRef = useRef(new WeakSet<HTMLElement>());
+  const isDefaultPasteToken = useCallback(
+    (span: HTMLElement) => defaultPasteSpansRef.current.has(span),
+    [],
+  );
 
   // --- Insert token at cursor ---
   const insertToken = useCallback(
-    (token: ChatComposerToken): string | undefined => {
+    (token: ChatComposerToken, isDefaultPaste = false): string | undefined => {
       const editable = editableRef.current;
       if (!editable) {
         return;
@@ -117,16 +161,11 @@ export function useChatComposerTokens({
       const range = selection.getRangeAt(0);
 
       // Create a non-editable container — React will portal the Badge into it
-      const span = document.createElement('span');
-      const id = `token-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      span.setAttribute('data-astryx-token', '');
-      span.setAttribute('data-astryx-token-value', token.value);
-      span.setAttribute('data-astryx-token-id', id);
-      span.contentEditable = 'false';
-      span.style.display = 'inline-flex';
-      span.style.alignItems = 'center';
-      span.style.height = '1lh';
-      span.style.verticalAlign = 'top';
+      const portal = createTokenPortal(token);
+      const {id, span} = portal;
+      if (isDefaultPaste) {
+        defaultPasteSpansRef.current.add(span);
+      }
 
       range.deleteContents();
       range.insertNode(span);
@@ -142,10 +181,84 @@ export function useChatComposerTokens({
       selection.addRange(newRange);
 
       // Register for portal rendering
-      setTokenPortals(prev => [...prev, {id, span, token}]);
+      setTokenPortals(prev => [...prev, portal]);
       return id;
     },
     [editableRef],
+  );
+
+  const restoreValue = useCallback(
+    (
+      value: string,
+      triggers: ChatComposerTrigger[] = [],
+      pastedTextRanges: PastedTextRange[] = [],
+    ) => {
+      const editable = editableRef.current;
+      if (!editable) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      const portals: TokenPortal[] = [];
+      let text = '';
+      function appendToken(token: ChatComposerToken, isDefaultPaste = false) {
+        if (text) {
+          fragment.append(text);
+          text = '';
+        }
+        const portal = createTokenPortal(token);
+        if (isDefaultPaste) {
+          defaultPasteSpansRef.current.add(portal.span);
+        }
+        fragment.append(portal.span);
+        portals.push(portal);
+      }
+      function appendText(segment: string, offset: number) {
+        for (const part of segment.split(/(\s+)/)) {
+          if (!part) {
+            continue;
+          }
+          const end = offset + part.length;
+          let token: ChatComposerToken | null = null;
+          // A paste boundary must not turn part of a word into a trigger token.
+          if (
+            !/^\s+$/.test(part) &&
+            (offset === 0 || /\s/.test(value[offset - 1])) &&
+            (end === value.length || /\s/.test(value[end]))
+          ) {
+            for (const trigger of triggers) {
+              const parsed = trigger.deserialize?.(part);
+              // Restoration must not change the serialized draft.
+              if (parsed?.value === part) {
+                token = parsed;
+                break;
+              }
+            }
+          }
+          if (token) {
+            appendToken(token);
+          } else {
+            text += part;
+          }
+          offset = end;
+        }
+      }
+      let offset = 0;
+      for (const {start, end} of pastedTextRanges) {
+        appendText(value.slice(offset, start), offset);
+        appendToken(defaultToToken(value.slice(start, end), t), true);
+        offset = end;
+      }
+      appendText(value.slice(offset), offset);
+      if (text) {
+        fragment.append(text);
+      }
+
+      // Unlike insertion, restoration adds no trailing no-break space and does not place the caret.
+      editable.replaceChildren(fragment);
+      setTokenPortals(portals);
+    },
+    [editableRef, t],
   );
 
   // --- Backspace near tokens ---
@@ -305,5 +418,7 @@ export function useChatComposerTokens({
     handleKeyDown,
     handlePaste,
     cleanupPortals,
+    restoreValue,
+    isDefaultPasteToken,
   };
 }
