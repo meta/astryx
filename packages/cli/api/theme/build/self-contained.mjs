@@ -45,7 +45,7 @@ import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
  */
 
 /** Module files that only a TypeScript or JSX compiler can load. */
-const COMPILED_SOURCE = /\.(?:ts|tsx|mts|cts|jsx)$/i;
+export const COMPILED_SOURCE = /\.(?:ts|tsx|mts|cts|jsx)$/i;
 /** Module files a bundler and Node both load. */
 const PLAIN_SOURCE = /\.(?:js|mjs|cjs)$/i;
 /** The extensions a local import may leave out, as a bundler resolves them. */

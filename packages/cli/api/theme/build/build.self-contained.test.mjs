@@ -287,6 +287,56 @@ describe('a theme family whose member’s registry is TypeScript', () => {
   });
 });
 
+describe('a theme family whose member’s registry is TSX, built by the CLI in its own process', () => {
+  // The CLI process runs in plain Node, outside this runner's loader, which
+  // would load `.tsx` itself.
+  for (const ext of ['ts', 'tsx']) {
+    it(`compiles a .${ext} registry beside the family outputs, and the family module loads in plain Node`, () => {
+      // The helper import leaves out its extension, as a single build allows.
+      write('fam/size.ts', `export const size: number = 16;\n`);
+      write(
+        `fam/icons.${ext}`,
+        ext === 'tsx'
+          ? `import * as React from 'react';\nimport {size} from './size';\nexport const calmIcons = {close: <svg width={size} />};\n`
+          : `import * as React from 'react';\nimport {size} from './size';\nexport const calmIcons = {close: React.createElement('svg', {width: size})};\n`,
+      );
+      write(
+        'fam/ocean.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+      );
+      write(
+        'fam/ocean-calm.ts',
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from './icons.${ext}';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+      );
+      const run = cli([
+        'theme',
+        'build',
+        '--family',
+        'fam/ocean.ts',
+        'fam/ocean-calm.ts',
+        '--family-key',
+        'ocean-family',
+      ]);
+      expect(run.stderr).not.toContain('Cannot import family registry');
+      expect(run.status).toBe(0);
+      expect(read('fam/ocean-family.js')).toContain(
+        `"./ocean-family.modules/icons.${ext}.js"`,
+      );
+      const loaded = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `const m = await import(${JSON.stringify(path.join(dir, 'fam/ocean-family.js'))}); console.log(m.oceanCalmTheme.icons.close.props.width);`,
+        ],
+        {cwd: dir, encoding: 'utf8', timeout: 60_000},
+      );
+      expect(loaded.stderr).toBe('');
+      expect(loaded.stdout.trim()).toBe('16');
+    });
+  }
+});
+
 describe('a family build over a file of yours at a compiled path', () => {
   it('keeps the file and the TypeScript import, and warns as a single build does', async () => {
     write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);

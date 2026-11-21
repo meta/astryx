@@ -165,7 +165,7 @@ import {
 } from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
-import {selfContainedImports} from './self-contained.mjs';
+import {COMPILED_SOURCE, selfContainedImports} from './self-contained.mjs';
 import {importSpecifier} from './import-specifier.mjs';
 import {THEME_BUILD_MARKER} from '../../../foundation/config/theme-build-header.mjs';
 import {generatedMark} from '../../theme-edit/_marks.mjs';
@@ -2672,7 +2672,7 @@ function hasNamedExport(/** @type {string} */ file, /** @type {string} */ name, 
   return esm ? unknown ? null : false : null;
 }
 // prettier-ignore
-async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string}>} */ registries, /** @type {string} */ aggregatePath) {
+async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string}>} */ registries, /** @type {string} */ aggregatePath, /** @type {{import: (id: string) => Promise<any>}} */ sourceLoader) {
   /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string}}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root}));
   /** @type {Array<{file: string, exportName: string}>} */ const runtimeChecks = []; const seen = new Set();
   while (pending.length > 0) {
@@ -2687,7 +2687,12 @@ async function validateRegistryGraphs(/** @type {Array<{specifier: string, expor
     if (/\.[cm]?[jt]sx?$/i.test(file)) for (const edge of moduleDependencies(fs.readFileSync(file, 'utf8'), file)) pending.push({...edge, parent: file});
   }
   for (const [index, root] of runtimeChecks.entries()) {
-    let exports; try { exports = await import(`${pathToFileURL(root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
+    // The built module imports a local TypeScript or JSX registry from its
+    // compiled copy, so its source loads through the build's own loader, as
+    // the member did: Node cannot import `.tsx` or `.jsx`, imports `.ts` only
+    // from 22.18, and does not resolve an import without its extension.
+    const local = COMPILED_SOURCE.test(root.file) && !root.file.split(path.sep).includes('node_modules');
+    let exports; try { exports = local ? await sourceLoader.import(root.file) : await import(`${pathToFileURL(root.file).href}?astryx-family-check=${Date.now()}-${index}`); }
     catch (error) { throw registryGraphError(`Cannot import family registry ${root.file}: ${error instanceof Error ? error.message : String(error)}`); }
     if (!(root.exportName in exports)) throw registryGraphError(`Family registry ${root.file} does not export "${root.exportName}".`);
   }
@@ -7077,7 +7082,7 @@ async function buildFamily(
       );
     })
     .join('\n');
-  await validateRegistryGraphs(registryImports, jsPath);
+  await validateRegistryGraphs(registryImports, jsPath, familyLoader);
   const declarations = members
     .map((member, index) =>
       generateBuiltTypes(member.theme, member.iconInfo, null, {
