@@ -604,9 +604,27 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     expect(document.body.children.length).toBe(1);
   });
 
-  it('puts nothing in a container that is itself a dialog or a theme scope', () => {
+  it('keeps its own elements in a container that is itself a dialog, so a modal one leaves them usable', () => {
+    const container = document.createElement('dialog');
+    const row = document.createElement('li');
+    row.textContent = 'Milk';
+    const grip = document.createElement('button');
+    row.append(grip);
+    container.append(row);
+    document.body.append(container);
+    const attachment = createReorderable({onReorder: () => {}}).attach(
+      container,
+      {items: () => [{key: 'milk', element: row, handle: grip}]},
+    );
+    act(() => grip.click());
+    expect(container.children.length).toBe(3);
+    expect(document.body.children.length).toBe(1);
+    attachment.detach();
+    container.remove();
+  });
+
+  it('puts nothing in a container that is itself a theme scope', () => {
     for (const make of [
-      () => document.createElement('dialog'),
       () => {
         const scope = document.createElement('ul');
         scope.setAttribute('data-astryx-theme', '');
