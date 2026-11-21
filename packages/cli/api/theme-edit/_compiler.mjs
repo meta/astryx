@@ -736,13 +736,23 @@ export function makeCompiler(project, parts) {
      * the part sits in, else the page).
      * @param {unknown} fg @param {unknown} bg @param {string} m
      * @param {unknown} [beneath]
+     * @param {boolean} [onPage] whether a see-through region sits on the page
      */
-    const drawn = (fg, bg, m, beneath = page(m)) => {
+    const drawn = (fg, bg, m, beneath = page(m), onPage = true) => {
       /** @type {[number, number, number]} */
-      const ground =
-        parseColor(beneath) ??
-        parseColor(page(m)) ??
-        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const pageColor =
+        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      // (A see-through region, a translucent top bar, is drawn over the
+      // page itself. A surface Core draws in its own scheme, a lightbox,
+      // sits over its media and a blurred page, not a bare one: its color
+      // is the ground as it is.)
+      const region = parseColor(beneath);
+      /** @type {[number, number, number]} */
+      const ground = !region
+        ? pageColor
+        : onPage
+          ? compositeOver(region, alphaOf(beneath), pageColor)
+          : region;
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
@@ -811,6 +821,14 @@ export function makeCompiler(project, parts) {
     const replaced = new Set(
       extra.map((/** @type {any} */ x) => x.replaces).filter(Boolean),
     );
+    // Text on a see-through fill that the part data also records inside a
+    // region (a top nav item in the top bar) is drawn over that region: it
+    // is measured there (the region's pair), never over the bare page.
+    const inRegion = new Set(
+      [...parts.pairs, ...extra]
+        .filter(p => p.over)
+        .map(p => `${p.fg.target}\0${p.bg.target}\0${p.bg.tokens[0] ?? ''}`),
+    );
     for (const p of [...parts.pairs, ...extra]) {
       if (replaced.has(p)) continue;
       // Text drawn in a disabled color marks an inactive control, which
@@ -833,6 +851,15 @@ export function makeCompiler(project, parts) {
         const region = p.over ? {...p, bg: p.over} : null;
         const beneath = region ? value(region, 'bg', m) : page(m);
         const baseBeneath = region ? baseValue(region, 'bg', m) : page(m);
+        if (
+          !p.over &&
+          inRegion.has(
+            `${p.fg.target}\0${p.bg.target}\0${p.bg.tokens[0] ?? ''}`,
+          ) &&
+          alphaOf(whole) < 1 &&
+          !/gradient|url\(/.test(String(whole))
+        )
+          continue;
         // Over a region, only a see-through background shows it: an opaque
         // one is measured as the pair itself already is.
         if (
@@ -861,7 +888,7 @@ export function makeCompiler(project, parts) {
         }
         const measured = stops.map(stop => ({
           stop,
-          pair: drawn(fg, stop, m, beneath),
+          pair: drawn(fg, stop, m, beneath, !(/** @type {any} */ (p).mediaOf)),
         }));
         if (stops.length > 1 && measured.some(x => !x.pair)) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
