@@ -370,6 +370,14 @@
         },
         {
           "kind": "template",
+          "name": "SelectableCardGroupShippingSpeed"
+        },
+        {
+          "kind": "template",
+          "name": "SelectableCardGroupShowcase"
+        },
+        {
+          "kind": "template",
           "name": "VideoPlayerAutoplayLoop"
         },
         {
