@@ -3,14 +3,65 @@
 /**
  * @file The `template` subject's adapter for icon mapping (AST-084 FR9),
  * which reads the project's icon sets through the `Project` seam, for the
- * project's component list, and for the not-found hint that names another
- * lookup command.
+ * project's component list, for the not-found hint that names another
+ * lookup command, for the links and doc tokens in a template's
+ * description, and for the nearest folder a refused destination's command
+ * runs from.
  *
  * @position api/template — adapter read by the template dispatcher
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
+import {linkOwnedTexts} from '../docs/_adapter.mjs';
 import {NO_ICON_SETS} from '../../foundation/discovery/template-icons.mjs';
+
+/**
+ * A template response with each description's links and doc tokens rendered,
+ * the way `astryx docs` renders a doc's text: JSON readers get the bare
+ * `astryx` command, never token syntax. The list renders every entry's.
+ * @template {{type: string, package?: string, data: any}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkTemplateDescriptions(response, cwd) {
+  const entries = Array.isArray(response.data)
+    ? response.data
+    : [{...response.data, package: response.package}];
+  const owned = entries.filter(
+    (/** @type {any} */ entry) =>
+      typeof entry?.description === 'string' &&
+      entry.description.includes('{@'),
+  );
+  if (owned.length === 0) return response;
+  const texts = await linkOwnedTexts(
+    owned.map((/** @type {any} */ entry) => ({
+      text: entry.description,
+      package: entry.package,
+    })),
+    cwd,
+  );
+  const shown = new Map(
+    owned.map((/** @type {any} */ entry, /** @type {number} */ i) => [
+      entry,
+      texts[i],
+    ]),
+  );
+  if (Array.isArray(response.data)) {
+    return {
+      ...response,
+      data: response.data.map((/** @type {any} */ entry) =>
+        shown.has(entry) ? {...entry, description: shown.get(entry)} : entry,
+      ),
+    };
+  }
+  return {
+    ...response,
+    data: {...response.data, description: shown.get(entries[0])},
+  };
+}
 
 /**
  * The installed icon sets and the project's choice. A project the CLI cannot
@@ -49,12 +100,15 @@ export async function loadTemplateIconSets(cwd) {
  * bare name may read another package's component (a replacement, or a second
  * package with that name), so each name is read as `<package>/<Name>`. A
  * project whose components cannot be read answers no name, so no component
- * is named.
+ * is named. `documents` answers whether a package documents a name, as
+ * `ownersOf` does: yes when the list holds the name under Core or a
+ * configured integration, which a lookup of the name finds as an owner; no
+ * for a package that cannot own a component; else by `ownersOf`.
  * @param {string} cwd
- * @returns {Promise<{ownersOf: (name: string) => readonly string[], qualified: boolean}>}
+ * @returns {Promise<{ownersOf: (name: string) => readonly string[], qualified: boolean, documents: (pkg: string, name: string) => boolean}>}
  */
 export async function loadComponentLookup(cwd) {
-  const none = {ownersOf: () => [], qualified: false};
+  const none = {ownersOf: () => [], qualified: false, documents: () => false};
   try {
     const [adapter, {componentList}, {discoverExternalPackages}] =
       await Promise.all([
@@ -75,6 +129,8 @@ export async function loadComponentLookup(cwd) {
     ]);
     /** @type {Map<string, string[]>} */
     const owners = new Map();
+    /** @type {Map<string, Set<string>>} */
+    const listedBy = new Map();
     for (const entries of Object.values(list.data.components)) {
       for (const entry of /** @type {Array<{name: string, package: string}>} */ (
         entries
@@ -82,6 +138,9 @@ export async function loadComponentLookup(cwd) {
         const known = owners.get(entry.name);
         if (!known) owners.set(entry.name, [entry.package]);
         else if (!known.includes(entry.package)) known.push(entry.package);
+        const names = listedBy.get(entry.package) ?? new Set();
+        names.add(entry.name);
+        listedBy.set(entry.package, names);
       }
     }
     /** @type {ReturnType<typeof discoverExternalPackages> | undefined} */
@@ -114,7 +173,35 @@ export async function loadComponentLookup(cwd) {
       (listed ? owners : looked).set(name, found);
       return found;
     };
-    return {ownersOf, qualified: !listed};
+    /**
+     * @param {string} pkg
+     * @param {string} name
+     */
+    const documents = (pkg, name) => {
+      // Core and the configured integrations are the owners a lookup finds
+      // first, so the list naming one of them for a name answers yes. A
+      // package with component docs of the older kind is an owner only when
+      // neither Core nor an integration documents the name, so it is looked
+      // up.
+      const owner =
+        pkg === adapter.CORE_PACKAGE ||
+        integrations.some(integration => integration.name === pkg);
+      if (owner && listedBy.get(pkg)?.has(name)) return true;
+      if (!owner) {
+        // Only those packages can own a name, so a package that is none of
+        // them (a chart library) documents none, and no lookup is needed.
+        let canOwn = true;
+        try {
+          externals ??= discoverExternalPackages(cwd);
+          canOwn = externals.some(ext => ext.name === pkg);
+        } catch {
+          // Looked up as before.
+        }
+        if (!canOwn) return false;
+      }
+      return ownersOf(name).includes(pkg);
+    };
+    return {ownersOf, qualified: !listed, documents};
   } catch {
     return none;
   }
@@ -153,5 +240,30 @@ export async function withOtherCommandHint(name, suggestions, cwd, namesOf) {
     });
   } catch {
     return suggestions;
+  }
+}
+
+/**
+ * The nearest folder that exists at or above `dir`: where a command that
+ * writes a path below it runs from. The disk's root when no other folder on
+ * the path exists.
+ * @param {string} dir absolute
+ * @returns {string}
+ */
+export function nearestFolder(dir) {
+  let at = dir;
+  while (!isFolder(at) && path.dirname(at) !== at) at = path.dirname(at);
+  return at;
+}
+
+/**
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function isFolder(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
   }
 }

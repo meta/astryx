@@ -202,6 +202,7 @@ describe('words for and, comparisons and prohibitions', () => {
   it(
     'black on secondary buttons is their text',
     async () => {
+      // (Written as said, as main writes it.)
       expect((await answer('black on secondary buttons')).commands[0]).toBe(
         "set q color '#000000' --on button --when variant:secondary",
       );

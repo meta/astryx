@@ -5,7 +5,7 @@
 import {useState} from 'react';
 import {Card} from '@astryxdesign/core/Card';
 import {useGridFocus} from '@astryxdesign/core/hooks';
-import {VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 
 const COLUMNS = 8;
@@ -46,15 +46,15 @@ export default function UseGridFocusHookUsage() {
     <Card padding={4}>
       <VStack gap={3}>
         <Text type="body">Selected: {selected}</Text>
-        <div
+        <VStack
           ref={gridRef}
           role="grid"
           aria-label="Colors"
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
-          style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+          gap={1}>
           {ROWS.map((row, index) => (
-            <div key={index} role="row" style={{display: 'flex', gap: 4}}>
+            <HStack key={index} role="row" gap={1}>
               {row.map(swatch => (
                 <div
                   key={swatch.name}
@@ -77,9 +77,9 @@ export default function UseGridFocusHookUsage() {
                   />
                 </div>
               ))}
-            </div>
+            </HStack>
           ))}
-        </div>
+        </VStack>
       </VStack>
     </Card>
   );

@@ -39,29 +39,31 @@ import {
   renderComputerAgentText,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
-import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {renderProjectAgentDocsBlock} from '../docs/_adapter.mjs';
 import {
-  placeSkillFiles,
+  savedName,
   projectPlacesValue,
   renderProjectSkill,
 } from '../../foundation/agent-docs/skill-places.mjs';
-import {
-  keptReason,
-  managedFileState,
-  removeManagedFileIfOwned,
-  writeManagedFile,
-} from '../../foundation/agent-docs/managed-skill-file.mjs';
 import {
   computerSkillFolders,
   recordComputerSkillFolders,
 } from '../../foundation/env/user-settings.mjs';
 import {setConfigValues} from '../../foundation/config/config-writer.mjs';
-import {PathSafetyError, assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
-export {readProjectPlaces} from '../../foundation/agent-docs/skill-place-files.mjs';
+export {
+  leftoverIntegrationSkills,
+  readProjectPlaces,
+  removeIntegrationSkillFiles,
+  removeSkillPlace,
+  writeSkillPlace,
+} from '../../foundation/agent-docs/skill-place-files.mjs';
+import {keptText, skillPlaceEscape} from '../../foundation/agent-docs/skill-place-files.mjs';
+export {integrationSkillFiles as integrationSkillTexts} from '../docs/skills/skills.mjs';
+import {projectIntegrationSkills} from '../docs/_adapter.mjs';
 
 // What the run leaf reads before it writes agent docs: the state of the files
 // it is about to write.
@@ -228,18 +230,8 @@ export function saveProjectPlaces(projectRoot, places, {check = false} = {}) {
  * @param {string} projectRoot
  */
 export function assertPlaceWithin(place, projectRoot) {
-  for (const file of placeSkillFiles(place, projectRoot)) {
-    try {
-      assertWithin(path.relative(projectRoot, file), projectRoot, {label: 'skill file'});
-    } catch (err) {
-      if (!(err instanceof PathSafetyError)) throw err;
-      throw new AstryxError(
-        `${err.message} Astryx writes the project skill only inside the project; make that folder a real folder in the project, or choose another place with \`--to\`.`,
-        undefined,
-        ERROR_CODES.ERR_PATH_TRAVERSAL,
-      );
-    }
-  }
+  const escape = skillPlaceEscape(place, projectRoot);
+  if (escape) throw new AstryxError(escape, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
 }
 
 /**
@@ -248,7 +240,7 @@ export function assertPlaceWithin(place, projectRoot) {
  * @returns {Promise<string>}
  */
 export async function projectSkillText(projectRoot) {
-  return renderProjectSkill(await renderAgentDocsBlock(projectRoot));
+  return renderProjectSkill(await renderProjectAgentDocsBlock(projectRoot));
 }
 
 /**
@@ -260,65 +252,8 @@ export function computerSkillText(command) {
   return renderComputerAgentText({command, install: computerInstallStep()});
 }
 
-/**
- * Write `text` to each skill file of `place`. The copies of one place are
- * written together or not at all: when any is a person's own (edited, or not
- * Astryx's), each is kept, so every agent reads one text.
- * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
- * @param {string | null} projectRoot
- * @param {string} text
- * @returns {Array<{file: string, action: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'pair-kept'}>}
- */
-export function writeSkillPlace(place, projectRoot, text) {
-  const files = placeSkillFiles(place, projectRoot);
-  const states = files.map(file => ({file, state: managedFileState(file, text)}));
-  const owned = (/** @type {string} */ state) => state === 'edited' || state === 'foreign';
-  if (files.length > 1 && states.some(each => owned(each.state))) {
-    return states.map(({file, state}) => ({
-      file,
-      action: /** @type {const} */ ('kept'),
-      reason: owned(state) ? keptReason(/** @type {'edited' | 'foreign'} */ (state)) : /** @type {const} */ ('pair-kept'),
-    }));
-  }
-  return files.map(file => ({file, ...writeManagedFile(file, text)}));
-}
 
-/**
- * Remove each skill file of `place` that is an unedited Astryx file.
- * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
- * @param {string | null} projectRoot
- * @returns {Array<{file: string, action: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx'}>}
- */
-export function removeSkillPlace(place, projectRoot) {
-  // Folders the removal empties go too, up to the folder the place names, or
-  // the project root for the skills folders.
-  const stop = place.kind === 'folder' ? place.dir : projectRoot;
-  return placeSkillFiles(place, projectRoot).map(file => {
-    const result = removeManagedFileIfOwned(file);
-    if (result.action === 'removed' && stop)
-      removeEmptyFolders(path.dirname(file), stop);
-    return {file, ...result};
-  });
-}
 
-/**
- * Remove `dir` and each folder above it while it is empty, stopping below
- * `stop`.
- * @param {string} dir
- * @param {string} stop
- */
-function removeEmptyFolders(dir, stop) {
-  let at = dir;
-  while (at !== stop && !path.relative(stop, at).startsWith('..')) {
-    try {
-      fs.rmdirSync(at);
-    } catch (error) {
-      // Already gone: the file's own folder goes with the file.
-      if (/** @type {{code?: string}} */ (error).code !== 'ENOENT') return;
-    }
-    at = path.dirname(at);
-  }
-}
 
 /**
  * Add folders outside any project to the ones the settings file records.
@@ -327,4 +262,67 @@ function removeEmptyFolders(dir, stop) {
 export function addComputerSkillFolders(folders) {
   const saved = computerSkillFolders();
   recordComputerSkillFolders([...new Set([...saved, ...folders])]);
+}
+
+/**
+ * Drop folders outside any project from the ones the settings file records.
+ * @param {readonly string[]} folders as saved: `~/<path>` or absolute
+ */
+export function dropComputerSkillFolders(folders) {
+  const drop = new Set(folders);
+  const saved = computerSkillFolders();
+  if (saved.some(each => drop.has(each))) {
+    recordComputerSkillFolders(saved.filter(each => !drop.has(each)));
+  }
+}
+
+/**
+ * The folders outside any project the settings file records.
+ * @returns {string[]}
+ */
+export function computerSkillFoldersSaved() {
+  return computerSkillFolders();
+}
+
+
+/**
+ * One receipt row, and its line, for one skill file a run wrote or removed.
+ * Null for a file that was not there.
+ * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
+ * @param {{file: string, action: string, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill', skill?: string}} row
+ * @param {(file: string) => string} shown the file as the receipt names it
+ * @param {string} editedHint what a person does with a file they edited
+ * @param {string} [cwd] the folder the command runs in, for the commands a line names
+ * @returns {{entry: import('./init.type.mjs').InitSkillFile, line: string} | null}
+ */
+export function skillReceiptRow(place, row, shown, editedHint, cwd) {
+  if (row.action === 'absent') return null;
+  /** @type {import('./init.type.mjs').InitSkillFile} */
+  const entry = {
+    path: shown(row.file),
+    place: savedName(place),
+    action: /** @type {import('./init.type.mjs').InitSkillFile['action']} */ (row.action),
+  };
+  if (row.skill) entry.skill = row.skill;
+  if (row.reason) entry.reason = row.reason;
+  const line =
+    entry.action === 'kept'
+      ? `[skip] Astryx skill: ${entry.path} ${keptText(entry.reason, editedHint, cwd)}`
+      : entry.action === 'unchanged'
+        ? `[ok] Astryx skill: ${entry.path} already current, nothing changed`
+        : `[ok] Astryx skill: ${entry.path} ${entry.action}`;
+  return {entry, line};
+}
+
+/**
+ * Why each skill the project's integrations declare was left out.
+ * @param {string} projectRoot
+ * @returns {Promise<Array<{package: string, message: string}>>}
+ */
+export async function integrationSkillProblems(projectRoot) {
+  try {
+    return (await projectIntegrationSkills(projectRoot)).problems;
+  } catch {
+    return [];
+  }
 }

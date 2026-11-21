@@ -1,11 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * A template doc that writes a command with a `{@command …}` token never
- * prints that token: `astryx template`, `astryx build` and `astryx search`
- * show the command with the project's command name in text and as the bare
- * `astryx …` command in JSON (spec:AST-081 FR5). A template's source prints
- * byte for byte.
+ * A template doc that writes a command with a `{@command …}` token, or links
+ * a doc with `{@link …}`, never prints the token: `astryx template`,
+ * `astryx build` and `astryx search` show the command with the project's
+ * command name in text and as the bare `astryx …` command in JSON
+ * (spec:AST-081 FR5). A template's source prints byte for byte.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -27,6 +27,8 @@ vi.setConfig({testTimeout: 60_000, hookTimeout: 60_000});
 const RUN = 'acme astryx';
 const PAGE = 'Zebra roster board: read {@command docs icons} first.';
 const BLOCK = 'Zebra roster strip: read {@command docs icons} first.';
+const LINKED =
+  'Zebra roster panel: theme it as {@link @astryxdesign/cli:generic:theme} says.';
 const SOURCE =
   '// Run `astryx docs icons` for icons.\nexport default function Page() { return null; }\n';
 
@@ -57,6 +59,7 @@ beforeAll(() => {
   for (const [name, type, description] of [
     ['zebra-roster', 'page', PAGE],
     ['ZebraStrip', 'block', BLOCK],
+    ['zebra-panel', 'page', LINKED],
   ]) {
     fs.writeFileSync(
       path.join(pkg, 'templates', `${name}.doc.mjs`),
@@ -95,11 +98,40 @@ beforeAll(() => {
     path.join(blocks, 'blocks', 'Button', 'ZebraBand.tsx'),
     SOURCE,
   );
+  fs.writeFileSync(
+    path.join(blocks, 'blocks', 'Button', 'ZebraLinkBand.doc.mjs'),
+    `export default ${JSON.stringify({
+      name: 'ZebraLinkBand',
+      description:
+        'Zebra roster link band: theme it as {@link @astryxdesign/cli:generic:theme} says.',
+      componentsUsed: ['Button'],
+    })};\n`,
+  );
+  fs.writeFileSync(
+    path.join(blocks, 'blocks', 'Button', 'ZebraLinkBand.tsx'),
+    SOURCE,
+  );
 });
 
 afterAll(() => {
   fs.rmSync(dir, {recursive: true, force: true});
 });
+
+/** @param {string} out */
+function expectLinkedText(out) {
+  expect(out).toContain(
+    `Zebra roster panel: theme it as \`${RUN} docs theme\` says.`,
+  );
+  expect(out).not.toContain('{@link');
+}
+
+/** @param {string} out */
+function expectLinkedJson(out) {
+  expect(out).toContain(
+    'Zebra roster panel: theme it as `astryx docs theme` says.',
+  );
+  expect(out).not.toContain('{@link');
+}
 
 /** @param {string} out */
 function expectText(out) {
@@ -186,6 +218,54 @@ describe('astryx search', () => {
   });
 });
 
+describe('a {@link} in a template description', () => {
+  it('astryx template: the list and the skeleton', async () => {
+    const list = await runCli(['template', '--list'], dir);
+    expect(list.code).toBe(0);
+    expectLinkedText(list.stdout);
+    const listJson = await runCli(['template', '--list', '--json'], dir);
+    expectLinkedJson(listJson.stdout);
+    const skeleton = await runCli(
+      ['template', 'zebra-panel', '--skeleton'],
+      dir,
+    );
+    expect(skeleton.code).toBe(0);
+    expectLinkedText(skeleton.stdout);
+    const skeletonJson = await runCli(
+      ['template', 'zebra-panel', '--skeleton', '--json'],
+      dir,
+    );
+    expectLinkedJson(skeletonJson.stdout);
+  });
+
+  it('astryx build', async () => {
+    const text = await runCli(
+      ['build', 'zebra roster panel', '--verbose'],
+      dir,
+    );
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain('zebra-panel');
+    expectLinkedText(text.stdout);
+    const json = await runCli(['build', 'zebra roster panel', '--json'], dir);
+    expect(json.stdout).toContain('zebra-panel');
+    expectLinkedJson(json.stdout);
+  });
+
+  it('astryx search', async () => {
+    const text = await runCli(
+      ['search', 'zebra roster panel', '--type', 'template', '--verbose'],
+      dir,
+    );
+    expect(text.code).toBe(0);
+    expectLinkedText(text.stdout);
+    const json = await runCli(
+      ['search', 'zebra roster panel', '--type', 'template', '--json'],
+      dir,
+    );
+    expectLinkedJson(json.stdout);
+  });
+});
+
 describe('astryx component --blocks', () => {
   it("a block's description, in text and JSON", async () => {
     const text = await runCli(['component', 'Button', '--blocks'], dir);
@@ -204,6 +284,22 @@ describe('astryx component --blocks', () => {
     );
     expect(json.stdout).not.toContain('{@command');
     expect(json.stdout).not.toContain(RUN);
+  });
+
+  it("a block's {@link}, in text and JSON", async () => {
+    const text = await runCli(['component', 'Button', '--blocks'], dir);
+    expect(text.stdout).toContain(
+      `Zebra roster link band: theme it as \`${RUN} docs theme\` says.`,
+    );
+    expect(text.stdout).not.toContain('{@link');
+    const json = await runCli(
+      ['component', 'Button', '--blocks', '--json'],
+      dir,
+    );
+    expect(json.stdout).toContain(
+      'Zebra roster link band: theme it as `astryx docs theme` says.',
+    );
+    expect(json.stdout).not.toContain('{@link');
   });
 });
 

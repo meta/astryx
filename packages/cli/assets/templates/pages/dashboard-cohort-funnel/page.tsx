@@ -56,10 +56,10 @@ import {
 import {
   ArrowUpIcon,
   ArrowDownIcon,
-  ArrowDownTrayIcon,
-  ArrowTrendingDownIcon,
-} from '@heroicons/react/24/outline';
-import {StopIcon} from '@heroicons/react/24/solid';
+  DownloadIcon,
+  TrendDownIcon,
+} from '@astryxdesign/template-icons';
+import {StopIcon} from '@astryxdesign/template-icons/24/solid';
 
 // ============= TYPES =============
 
@@ -85,7 +85,7 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 
 // Funnel bars step through the categorical palette top-to-bottom.
@@ -597,13 +597,7 @@ function FunnelSteps({segment}: {segment: Segment}) {
               <Token
                 size="sm"
                 color={leaky ? 'red' : 'green'}
-                icon={
-                  <Icon
-                    icon={ArrowTrendingDownIcon}
-                    size="xsm"
-                    color="inherit"
-                  />
-                }
+                icon={<Icon icon={TrendDownIcon} size="xsm" color="inherit" />}
                 label={`-${step.drop.toFixed(0)}%`}
               />
             </HStack>
@@ -838,7 +832,7 @@ export default function FunnelCohortAnalyticsPage() {
               <Button
                 label="Export"
                 variant="secondary"
-                icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                icon={<Icon icon={DownloadIcon} size="sm" />}
                 onClick={() =>
                   // Demo only: replace this toast with the call that performs the action.
                   showToast({

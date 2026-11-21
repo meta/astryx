@@ -18,9 +18,9 @@ import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
   SparklesIcon,
-  ClipboardDocumentIcon,
+  ClipboardIcon,
   ChevronDownIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -88,7 +88,7 @@ export default function TechnicalDocumentationPage() {
 
             <Card>
               <VStack gap={3}>
-                <HStack gap={2} vAlign="center">
+                <HStack wrap="wrap" gap={2} vAlign="center">
                   <StackItem size="fill">
                     <HStack gap={2} vAlign="center">
                       <Icon icon={SparklesIcon} size="sm" color="secondary" />
@@ -102,7 +102,7 @@ export default function TechnicalDocumentationPage() {
                       label="Copy prompt"
                       variant="ghost"
                       size="sm"
-                      icon={<Icon icon={ClipboardDocumentIcon} />}
+                      icon={<Icon icon={ClipboardIcon} />}
                       onClick={() => {
                         void copy(
                           'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and import its precompiled reset.css and astryx.css once at the app entry point. 2. Wrap my app in Theme with a theme package such as @astryxdesign/theme-neutral. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',

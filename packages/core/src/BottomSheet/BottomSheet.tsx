@@ -127,6 +127,11 @@ import {
   type BottomSheetSwitcherContextValue,
   type BottomSheetSwitcherPhase,
 } from './BottomSheetSwitcherContext';
+import {devMissingCallback} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
@@ -434,6 +439,16 @@ function StandaloneBottomSheet({
   xstyle,
   ...props
 }: StandaloneBottomSheetProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'BottomSheet',
+      'onOpenChange',
+      'is required to close the bottom sheet, for example onOpenChange={setIsOpen}. BottomSheet has no onClose prop.',
+    );
+  }
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -1002,6 +1017,7 @@ function SwitcherBottomSheetItem({
     registerSheetDialog,
     registerSheetPurpose,
     onBeforeSheetPresent,
+    onBeforeSheetShow,
     isCoveredInTopLayer,
     onSheetEnterStart,
     onSheetTransitionComplete,
@@ -1166,6 +1182,7 @@ function SwitcherBottomSheetItem({
           presentWithClearScrim(dialog);
         }
       } else {
+        onBeforeSheetShow();
         dialog.show();
       }
     }
@@ -1177,6 +1194,7 @@ function SwitcherBottomSheetItem({
     isInteractive,
     isPresented,
     onBeforeSheetPresent,
+    onBeforeSheetShow,
     ownsScrim,
     sheetId,
   ]);

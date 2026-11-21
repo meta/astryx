@@ -61,7 +61,6 @@ function spellsOut(term, name, description) {
   const words = term.split(/\s+/).filter(Boolean);
   const parts = wordsOf(name);
   if (words.length < 2 || words.length !== parts.length) return false;
-  const described = wordsOf(description);
   let expanded = false;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -70,7 +69,7 @@ function spellsOut(term, name, description) {
     // Only a single-letter word is an abbreviation to spell out: "With" in a
     // name is not spelled out by "without".
     if (p.length !== 1 || !w.startsWith(p)) return false;
-    if (!described.some(d => sameWord(d, w))) return false;
+    if (!wordsOf(description).some(d => sameWord(d, w))) return false;
     expanded = true;
   }
   return expanded;
@@ -108,6 +107,25 @@ const mentionPatterns = new Map();
  * terms, so this cache stays small; one search uses a handful of terms.
  */
 const MENTION_LIMIT = 1_000;
+
+/**
+ * Each term's forms (see termWords), worked out once per term, not once for
+ * every candidate: a search scores every candidate for every term and
+ * synonym. The cache starts over at MENTION_LIMIT terms, as the patterns do.
+ * @type {Map<string, import('./_words.mjs').TermWords>}
+ */
+const termForms = new Map();
+
+/** @param {string} term */
+function formsOf(term) {
+  let t = termForms.get(term);
+  if (!t) {
+    if (termForms.size >= MENTION_LIMIT) termForms.clear();
+    t = termWords(term);
+    termForms.set(term, t);
+  }
+  return t;
+}
 
 /**
  * @param {string} term
@@ -272,8 +290,12 @@ export function scoreCandidate(
     _familyIndex,
   } = candidate;
   // The term's forms, worked out once for every word below.
-  const t = termWords(term);
+  const t = formsOf(term);
   const p = prepare(candidate);
+  // Whether the term has a space, and the term with its spaces removed:
+  // the same for every name and keyword below.
+  const spaced = /\s/.test(term);
+  const termNoSpace = spaced ? term.replace(/\s+/g, '') : term;
   let best = 0;
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
@@ -346,15 +368,15 @@ export function scoreCandidate(
     const spelled =
       domain !== 'doc' &&
       !/[\s_-]/.test(nameLower) &&
-      nameLower === term.replace(/\s+/g, '');
+      nameLower === termNoSpace;
     if (nameLower === term || leafLower === term || spelled) {
       consider(100, 'exact name');
     } else if (
       joins &&
       (domain === 'component' || domain === 'hook') &&
-      /\s/.test(term) &&
-      nameLower.startsWith(term.replace(/\s+/g, '')) &&
-      term.replace(/\s+/g, '').length / nameLower.length >= 0.75
+      spaced &&
+      nameLower.startsWith(termNoSpace) &&
+      termNoSpace.length / nameLower.length >= 0.75
     ) {
       // Most of the name typed as words, cut short: `complex select` is
       // ComplexSelector, ahead of a one-word keyword elsewhere.
@@ -362,6 +384,7 @@ export function scoreCandidate(
     } else if (
       domain !== 'doc' &&
       domain !== 'theme' &&
+      spaced &&
       spellsOut(term, candidateName, description)
     ) {
       // The name's short words spelled out, in order, as the entry's own
@@ -411,7 +434,7 @@ export function scoreCandidate(
     (_familyIndex ?? Infinity) < FAMILY_MEMBERS &&
     (term === _family.toLowerCase() ||
       term === wordsOf(_family).join(' ') ||
-      term.replace(/\s+/g, '') === _family.toLowerCase())
+      termNoSpace === _family.toLowerCase())
   ) {
     consider(90, `member of ${_family}`);
   }
@@ -420,7 +443,7 @@ export function scoreCandidate(
   // In search's reading (`ownEvidence`), a template's used components match
   // as its keywords do, after its own keywords, and the hit says it came from
   // one.
-  const termJoined = joined(term);
+  const termJoined = spaced ? joined(term) : '';
   /** Whether a keyword is one the page's text gathers (see `consider`). */
   const byText = (/** @type {string} */ lower) =>
     summarized != null && mentionKeyword(candidate, lower);
@@ -453,7 +476,7 @@ export function scoreCandidate(
       );
       continue;
     }
-    if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
+    if (joins && domain !== 'doc' && spaced && kwText === termJoined) {
       consider(
         90,
         `keyword "${kw}"`,
