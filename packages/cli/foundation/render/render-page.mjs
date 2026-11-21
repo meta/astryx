@@ -66,8 +66,27 @@ export const RENDER_TIMEOUT_MS = 60_000;
 export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
+ * The console line React prints for a prop that reaches a DOM element it
+ * does not know, with the prop's name.
+ */
+export const REACT_UNKNOWN_PROP = /React does not recognize the `([^`]+)` prop|Unknown event handler property `([^`]+)`/;
+
+/**
+ * A warning for each of the first five lines the page printed while it
+ * rendered.
+ * @param {{level: string, text: string}[]} logs
+ * @returns {RenderWarning[]}
+ */
+export function pageOutputWarnings(logs) {
+  return logs.slice(0, 5).map(log => ({
+    code: 'page-output',
+    message: `The page printed while rendering (${log.level}): ${log.text.split('\n')[0].slice(0, 200)}`,
+  }));
+}
+
+/**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'unknown-prop' | 'props-not-checked' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -83,7 +102,9 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
  * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back (each also has a warning); present only when there are some.
- * @property {{component: string, prop: string, value: string, file: string, line: number}[]} [propValues] - Each string the page's own files give a Core component's prop, for the caller to check against the component's docs.
+ * @property {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]} [propValues] - What the page's own files certainly give a Core component's prop (the kinds of value and the strings among them), for the caller to check against the component's docs and types.
+ * @property {{level: string, text: string}[]} [logs] - What the page printed while it rendered, of which the `page-output` warnings show the first lines.
+ * @property {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]} [propNames] - Each prop the page's own files give a Core component by name, with the file's absolute path and where its element opens, for the caller to check against the component's docs and types.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -2452,14 +2473,7 @@ export async function renderPage(entry, options = {}) {
       message: `The page imports ${sheet}, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.`,
     });
   }
-  for (const log of /** @type {{level: string, text: string}[]} */ (
-    message.logs ?? []
-  ).slice(0, 5)) {
-    warnings.push({
-      code: 'page-output',
-      message: `The page printed while rendering (${log.level}): ${log.text.split('\n')[0].slice(0, 200)}`,
-    });
-  }
+  warnings.push(...pageOutputWarnings(message.logs ?? []));
 
   const files = /** @type {string[]} */ (message.files ?? [entry]);
   if (!files.includes(entry)) files.unshift(entry);
@@ -2923,6 +2937,8 @@ export async function renderPage(entry, options = {}) {
     warnings,
     ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
     propValues: message.propValues ?? [],
+    propNames: message.propNames ?? [],
+    logs: message.logs ?? [],
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
     ...(remoteSummary && remoteSummary.fetched.length + remoteSummary.failed.length > 0 ? {remoteImages: remoteSummary} : {}),

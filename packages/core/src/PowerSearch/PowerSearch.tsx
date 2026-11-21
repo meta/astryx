@@ -79,10 +79,7 @@ import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
 import {formatFilterValue} from './formatFilterValue';
 import {NestedEditor, PowerSearchEditPopover} from './PowerSearchEditPopover';
-import {
-  buildRelativeDateOptions,
-  PowerSearchValueEditor,
-} from './PowerSearchValueEditor';
+import {PowerSearchValueEditor} from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
@@ -306,7 +303,6 @@ const LazyPowerSearchBottomSheet = lazy(async () =>
 const SHEET_EDITORS: PowerSearchSheetEditors = {
   NestedEditor,
   PowerSearchValueEditor,
-  buildRelativeDateOptions,
 };
 
 /**
@@ -763,8 +759,7 @@ export function PowerSearch({
             ),
             locale,
             calendar,
-            undefined,
-            undefined,
+            t,
             timezoneID,
           )
         : null;
