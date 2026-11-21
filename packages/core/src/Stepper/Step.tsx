@@ -71,6 +71,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Stepper/Step.generated';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -426,7 +427,7 @@ const styles = stylex.create({
       // slice of the animated span or a zero — so this is the fallback that
       // applies if a connector is ever rendered without it.
       transitionDuration: {
-        default: FILL_SPAN_TIME,
+        default: `calc(${FILL_SPAN_TIME} * ${transformMotion.factor})`,
         '@media (prefers-reduced-motion: reduce)': '0s',
       },
       // Linear, deliberately, and not the `--ease-standard` the rest of the
@@ -460,11 +461,11 @@ const styles = stylex.create({
   connectorTiming: (duration: string, delay: string) => ({
     '::before': {
       transitionDuration: {
-        default: duration,
+        default: `calc(${duration} * ${transformMotion.factor})`,
         '@media (prefers-reduced-motion: reduce)': '0s',
       },
       transitionDelay: {
-        default: delay,
+        default: `calc(${delay} * ${transformMotion.factor})`,
         '@media (prefers-reduced-motion: reduce)': '0s',
       },
     },

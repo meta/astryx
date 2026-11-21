@@ -96,6 +96,7 @@ import {
 import type {SpacingStep, SpacingToken} from '../Layout';
 import {useDrawerDialogPresence} from './useDrawerDialogPresence';
 import {devMissingCallback} from '../utils/devWarning';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -157,7 +158,7 @@ const styles = stylex.create({
     // discrete `display` transition, so only `transform` animates here.
     display: 'none',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: `calc(${durationVars['--duration-medium']} * ${transformMotion.factor} + ${transformMotion.settle})`,
     transitionTimingFunction: easeVars['--ease-standard'],
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '0.01s',

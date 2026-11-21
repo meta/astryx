@@ -76,6 +76,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 const styles = stylex.create({
   root: {
@@ -144,7 +145,10 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-large-size'],
     lineHeight: typeScaleVars['--text-large-leading'],
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
+      [transformMotion.reduce]: '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   chevronOpen: {

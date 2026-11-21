@@ -70,6 +70,7 @@ registerEnglishFallback(english);
 import {TableContext} from '../../TableContext';
 import {defaultCellRenderer} from '../../columnUtils';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+import {transformMotion} from '../../../privateAttributes/transformMotion.stylex';
 
 // =============================================================================
 // Types
@@ -368,7 +369,10 @@ const treeStyles = stylex.create({
   },
   chevronIcon: {
     transitionProperty: 'transform',
-    transitionDuration: '150ms',
+    transitionDuration: {
+      default: `calc(150ms * ${transformMotion.factor})`,
+      [transformMotion.reduce]: '0s',
+    },
   },
   // The RTL mirror is folded into each state's transform rather than living on
   // a parent span. Both are `transform`, so on one element the later value

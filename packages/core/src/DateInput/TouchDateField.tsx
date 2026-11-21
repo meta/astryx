@@ -141,6 +141,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/TouchDateField.generated';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 // The month math needs a date before today is known (server render,
 // hydration). The sheet's content, which shows the month, waits for today.
@@ -397,7 +398,7 @@ const styles = stylex.create({
     // fast-out-slow-in is what that curve is for. Same duration as the
     // surface it announces, so the two land together.
     transitionProperty: 'transform',
-    transitionDuration: SWAP_DURATION,
+    transitionDuration: `calc(${SWAP_DURATION} * ${transformMotion.factor} + ${transformMotion.settle})`,
     transitionTimingFunction: easeVars['--ease-standard'],
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '0.01s',

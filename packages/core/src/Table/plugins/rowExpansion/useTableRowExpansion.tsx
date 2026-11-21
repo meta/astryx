@@ -80,6 +80,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/rowExpansion/useTableRowExpansion.generated';
+import {transformMotion} from '../../../privateAttributes/transformMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -237,7 +238,10 @@ const expansionStyles = stylex.create({
   },
   chevron: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
+      [transformMotion.reduce]: '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   // The RTL mirror is folded into each state's transform rather than living

@@ -87,6 +87,7 @@ import {
 import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
 import {isRenderable} from '../utils/isRenderable';
 import {createSharedContext} from '../utils/sharedContext';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -191,7 +192,7 @@ const styles = stylex.create({
     fontSize: 'inherit',
     transitionProperty: 'transform',
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],

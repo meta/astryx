@@ -57,6 +57,7 @@ import {
 } from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {devPropError} from '../utils/devWarning';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -112,7 +113,10 @@ const styles = stylex.create({
     height: '1em',
     fontSize: 'inherit',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
+      [transformMotion.reduce]: '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   chevronOpen: {
@@ -200,7 +204,10 @@ const drawerStyles = stylex.create({
     height: '1em',
     fontSize: 'inherit',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
+      [transformMotion.reduce]: '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   chevronExpanded: {

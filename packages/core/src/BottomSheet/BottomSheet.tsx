@@ -137,6 +137,7 @@ export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 const styles = stylex.create({
   dialog: {
@@ -247,7 +248,7 @@ const styles = stylex.create({
   positionerStackMotion: {
     transformOrigin: '50% 0',
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: `calc(${durationVars['--duration-medium']} * ${transformMotion.factor} + ${transformMotion.settle})`,
     transitionTimingFunction: easeVars['--ease-standard'],
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '0.01s',

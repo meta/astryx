@@ -71,6 +71,7 @@ import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
 import {useSwitchTouch, type SwitchTouchParts} from './useSwitchTouch';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 /**
  * The track box of each size, px (width × height), for the touch
@@ -586,7 +587,7 @@ const styles = stylex.create({
     // Under reduced motion nothing slides: under a finger the thumb
     // cross-fades through the animator, and with a mouse it moves at once.
     transitionDuration: {
-      default: durationVars['--duration-fast'],
+      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',

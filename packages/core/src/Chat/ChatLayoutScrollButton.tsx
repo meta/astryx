@@ -37,6 +37,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatLayoutScrollButton.generated';
+import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -84,7 +85,7 @@ const styles = stylex.create({
     transitionProperty: 'opacity, transform, max-width, visibility',
     transitionTimingFunction: easeVars['--ease-standard'],
     transitionDuration: {
-      default: durationVars['--duration-fast-max'],
+      default: `calc(${durationVars['--duration-fast-max']} * ${transformMotion.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
   },
