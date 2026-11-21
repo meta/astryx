@@ -12740,9 +12740,12 @@ function scopedFillPairProblems(ctx, data, res) {
     const readers = (map[x.on]?.contains ?? []).filter(
       (/** @type {string} */ c) => readsItself(c, pair.on),
     );
-    // (An on-color the theme sets on any other part, one around this part
-    // or a reader inside it, or for one variant, is drawn there as set:
-    // this part's scope alone does not say what its readers draw.)
+    // (An on-color the theme sets on a part around this one, on a reader
+    // inside it, or for one variant or state, is drawn there as set: this
+    // part's scope alone does not say what its readers draw. One set for
+    // the whole theme, or on a part elsewhere, is what the scope reads.)
+    const around = (/** @type {string} */ t) =>
+      (map[t]?.contains ?? []).includes(x.on);
     if (
       readsItself(x.on, pair.on) ||
       !readers.length ||
@@ -12750,7 +12753,11 @@ function scopedFillPairProblems(ctx, data, res) {
         y =>
           y.source === 'token' &&
           y.thing === pair.on &&
-          (y.on !== x.on || y.when || y.state),
+          (y.when ||
+            y.state ||
+            (y.on != null &&
+              y.on !== x.on &&
+              (around(y.on) || readers.includes(y.on)))),
       )
     )
       continue;

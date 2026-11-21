@@ -176,6 +176,29 @@ describe('contrast measures what is drawn', () => {
       expect(
         texts(around).filter(p => /^inside app-shell-header/.test(p.problem)),
       ).toEqual([]);
+      // One set for the whole theme, in the other mode, or on a part
+      // elsewhere, leaves this part's pair measured.
+      await themeEditNew('wt', {cwd, like: 'neutral'});
+      await themeEditSet('wt', '--color-on-accent', '#111111', {
+        cwd,
+        mode: 'dark',
+      });
+      await themeEditSet('wt', '--color-on-accent', '#111111', {
+        cwd,
+        on: 'card',
+      });
+      const elsewhere = await themeEditSet('wt', '--color-accent', '#ffffff', {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      expect(
+        texts(elsewhere).some(p =>
+          /^inside app-shell-header, --color-on-accent .* 1(\.00)?:1 in light/.test(
+            p.problem,
+          ),
+        ),
+      ).toBe(true);
       // A see-through fill shows the part under it, not one known color.
       const glass = await themeEditSet(
         'wa',
