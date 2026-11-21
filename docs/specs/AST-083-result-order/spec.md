@@ -57,8 +57,8 @@ owns response fields and compatibility.
   the catalog, another entry's name is that entry's evidence: a component a
   block uses never answers a query word for the block alone, an entry that is not a doc
   takes the every-word tier only with two strong query words, each a
-  keyword-strength hit or a word of its own name, display name or title (a doc,
-  which answers in prose, needs one), and a title inside
+  keyword-strength hit or a word of its own name, display name or title, or the
+  start of one (a doc, which answers in prose, needs one), and a title inside
   the query reaches its tier only when no query word it leaves unanswered names
   a component or hook and no doc. In that reading, a doc that opens a level (a
   docs-tree namespace) does not answer a query word through its text (its prose,

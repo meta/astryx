@@ -3,7 +3,7 @@
 /**
  * @file In search's view, an entry that is not a doc takes the every-word
  * tier only with two strong query words: a keyword-strength hit, or a word of
- * its own name. One strong word
+ * its own name or the start of one. One strong word
  * and a mention of the others stays on the token sum. A doc answers in prose,
  * so one strong word still lifts it. searchCore, which build reads, keeps the
  * bar of one. All entries here are made up.
@@ -88,6 +88,34 @@ describe('the every-word tier in search', () => {
     expect(scoreOf(view, 'TeeterStates')).toBeGreaterThanOrEqual(
       FULL_COVERAGE_SCORE,
     );
+  });
+
+  it('counts the start of a word of its own name as a strong word', () => {
+    const folding = entry('component', 'ZentaFoldablePanel', {
+      keywords: ['panel'],
+      description: 'Tucks its content away.',
+    });
+    const view = rankLexical(
+      'fold panel',
+      {},
+      searchView(catalog([...all, folding])),
+    );
+    expect(scoreOf(view, 'ZentaFoldablePanel')).toBeGreaterThanOrEqual(
+      FULL_COVERAGE_SCORE,
+    );
+  });
+
+  it('does not count a word its description alone answers', () => {
+    const drawer = entry('component', 'ZentaDrawer', {
+      keywords: ['panel'],
+      description: 'Slides out and can fold away.',
+    });
+    const view = rankLexical(
+      'fold panel',
+      {},
+      searchView(catalog([...all, drawer])),
+    );
+    expect(scoreOf(view, 'ZentaDrawer')).toBeLessThan(FULL_COVERAGE_SCORE);
   });
 
   it('lifts a doc with one strong word and the others in its prose', () => {
