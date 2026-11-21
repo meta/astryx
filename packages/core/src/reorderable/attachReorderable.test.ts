@@ -604,6 +604,33 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     expect(document.body.children.length).toBe(1);
   });
 
+  it('puts nothing in a container that is itself a dialog or a theme scope', () => {
+    for (const make of [
+      () => document.createElement('dialog'),
+      () => {
+        const scope = document.createElement('ul');
+        scope.setAttribute('data-astryx-theme', '');
+        return scope;
+      },
+    ]) {
+      const container = make();
+      const row = document.createElement('li');
+      row.textContent = 'Milk';
+      const grip = document.createElement('button');
+      row.append(grip);
+      container.append(row);
+      document.body.append(container);
+      const attachment = createReorderable({onReorder: () => {}}).attach(
+        container,
+        {items: () => [{key: 'milk', element: row, handle: grip}]},
+      );
+      act(() => grip.click());
+      expect(Array.from(container.children)).toEqual([row]);
+      attachment.detach();
+      container.remove();
+    }
+  });
+
   it("follows an item's rename and an unnamed item's move in its handle's name", async () => {
     const container = document.createElement('ul');
     const make = (key: string, text: string) => {

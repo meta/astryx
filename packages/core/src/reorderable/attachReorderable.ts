@@ -208,9 +208,10 @@ export function attachReorderable(
   // its children. The theme scope gives the hint its theme.
   // Inside a dialog they go in the dialog: a modal one makes everything
   // outside it inert.
+  // The search starts above the container, which gains no element itself.
   const ownedParentOf = (): HTMLElement =>
-    container.closest<HTMLElement>('dialog') ??
-    container.closest<HTMLElement>('[data-astryx-theme]') ??
+    container.parentElement?.closest<HTMLElement>('dialog') ??
+    container.parentElement?.closest<HTMLElement>('[data-astryx-theme]') ??
     doc.body;
   const ownedParent = ownedParentOf();
   ownedParent.append(instructions);
