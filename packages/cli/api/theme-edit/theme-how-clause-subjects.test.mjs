@@ -444,7 +444,37 @@ const ROWS = [
     {
       q: 'Header: navy with white text. Cards: white background, header: gray.',
       has: ["background-color '#1e3a8a' --on app-shell-header"],
-      never: /contradict/,
+    },
+  ],
+  [
+    'a subject stays a subject when a later sentence repeats its look',
+    {
+      q: 'The popover and hover card: dark. Make the text darker.',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'a subject after a prohibition read later stays a subject',
+    {
+      q: "Don't change the sidebar. Make the popover and hover card: dark.",
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'a subject on its own line stays a subject',
+    {
+      q: 'Sidebar: navy\nPopover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a word another sentence names before its colon never frees this list's item",
+    {
+      q: 'Header: navy. Cards: white background, gray header.',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+      ],
     },
   ],
   [
