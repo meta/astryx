@@ -414,6 +414,28 @@ const ROWS = [
     },
   ],
   [
+    'an undo that names three changes takes back all three',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Make the buttons blue. Undo the card change, the heading change and the button change.',
+      never: /--on (?:card|heading|button)\b|^headings /,
+    },
+  ],
+  [
+    'an undo of a font size keeps the family said earlier',
+    {
+      q: 'Make the headings bigger. Make the headings serif. Undo the heading font size change.',
+      has: ['font serif --on heading'],
+    },
+  ],
+  [
+    'an undo that names three parts at once reads each once',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Make the buttons blue. Undo the card, heading and button changes.',
+      never: /--on (?:card|heading|button)\b|^headings /,
+      saysNot: /no heading change was said earlier/,
+    },
+  ],
+  [
     'an undo that names two changes of one part, each with its look, takes back both',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change and the heading weight change.',

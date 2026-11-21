@@ -29109,6 +29109,9 @@ export function draftAnswer(ctx, env, question) {
   // the card shadows" takes back a card shadow, never "cards rounder", and
   // never a change said after it. Each undo is read in turn.)
   for (const unmet of result.filter(d => d.unmet)) {
+    // (An undo an earlier undo already read, "the heading changes" in "Undo
+    // the card, heading and button changes", is not read again.)
+    if (!result.includes(unmet)) continue;
     const [, what, part] =
       /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
     const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
@@ -29118,14 +29121,10 @@ export function draftAnswer(ctx, env, question) {
       String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
     );
     const uc = /** @type {any} */ (draftClause.get(unmet));
-    // ("Undo the card change and the heading change": the clause after the
-    // undo that only names another change is part of the undo.)
-    const next = clauses[undoAt + 1];
-    // (A next clause that names a change of its own look, "and the heading
-    // weight change", is part of the undo too.)
-    // (Only a part with a change said earlier in the ask: "and the heading
-    // change" after "make the headings bold". A phrase naming a part with no
-    // earlier change is read as before.)
+    // ("Undo the card change, the heading change and the button change":
+    // the run of clauses after the undo that each only name a change of a
+    // part changed earlier in the ask is part of the undo. A phrase naming
+    // a part with no earlier change is read as before.)
     const changedBefore = new Set(
       result
         .map(d => /** @type {any} */ (draftClause.get(d)))
@@ -29134,19 +29133,27 @@ export function draftAnswer(ctx, env, question) {
           (c.parts ?? []).map((/** @type {{on: string}} */ p) => p.on),
         ),
     );
-    const alsoNamed =
-      next &&
-      !next.colors?.length &&
-      (next.parts ?? []).every((/** @type {{on: string}} */ p) =>
-        changedBefore.has(p.on),
-      ) &&
-      /^\W*(?:and\s+)?(?:the\s+)?(?:[\w-]+\s+){0,3}changes?\W*$/i.test(
-        String(next.text ?? ''),
-      );
-    // (The clause after it, when it is part of the undo, is its own
-    // phrase: a comma keeps the two apart.)
-    const said =
-      `${String(uc?.text ?? '')}${alsoNamed ? `, ${String(next.text)}` : ''}`.toLowerCase();
+    /** @type {any[]} */
+    const nexts = [];
+    for (let i = undoAt + 1; undoAt >= 0 && i < clauses.length; i++) {
+      const c = /** @type {any} */ (clauses[i]);
+      if (nexts.some(n => n.text === c.text)) continue;
+      if (
+        c.colors?.length ||
+        !(c.parts ?? []).every((/** @type {{on: string}} */ p) =>
+          changedBefore.has(p.on),
+        ) ||
+        !/^\W*(?:and\s+)?(?:the\s+)?(?:[\w-]+\s+){0,3}changes?\W*$/i.test(
+          String(c.text ?? ''),
+        )
+      )
+        break;
+      nexts.push(c);
+    }
+    // (Each clause of the run is its own phrase: a comma keeps them apart.)
+    const said = [String(uc?.text ?? ''), ...nexts.map(n => String(n.text))]
+      .join(', ')
+      .toLowerCase();
     const lookOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
         /** @type {any} */ (draftClause.get(d))?.aspects ?? []
@@ -29198,22 +29205,34 @@ export function draftAnswer(ctx, env, question) {
         })
       );
     });
-    // (Each look the undo names: "the heading size change" is the size;
-    // a part's size is its text size or its room, "bigger buttons".)
-    const LOOK_WORDS = /** @type {Array<[RegExp, string[]]>} */ ([
-      [/\b(?:tracking|letter[- ]spacing)\b/, ['tracking']],
-      [/\b(?:leading|line[- ]heights?)\b/, ['leading']],
-      [/\bsizes?\b/, ['fontsize', 'size', 'spacing']],
-      [/\b(?:weights?|bold(?:ness)?)\b/, ['weight']],
-      [/\b(?:corners?|radius|roundness)\b/, ['corners']],
-      [/\bshadows?\b/, ['shadow']],
-      [/\bborders?\b/, ['border']],
-      [/\b(?:spacing|padding|density)\b/, ['spacing']],
-      [/\b(?:fonts?|typefaces?)\b/, ['family']],
+    // (Each look the undo names, read by `aspectsOf`: "the heading size
+    // change" is the size, and a part's size is its text size or its room,
+    // "bigger buttons".)
+    const LOOKS = new Set([
+      'tracking',
+      'leading',
+      'fontsize',
+      'size',
+      'weight',
+      'corners',
+      'shadow',
+      'border',
+      'spacing',
+      'family',
     ]);
-    const lookWords = LOOK_WORDS.filter(([re]) => re.test(said)).flatMap(
-      ([, a]) => a,
-    );
+    // (A bare "size", "the heading size change", is a look `aspectsOf`
+    // leaves to the part; here it is the part's text size or its room.)
+    const looksIn = (/** @type {string} */ t) => [
+      ...new Set([
+        ...aspectsOf(t)
+          .filter(a => LOOKS.has(a))
+          .flatMap(a => (a === 'size' ? ['fontsize', 'size', 'spacing'] : [a])),
+        ...(/\bsizes?\b/.test(t) && !/\bfont[- ]?sizes?\b/.test(t)
+          ? ['fontsize', 'size', 'spacing']
+          : []),
+      ]),
+    ];
+    const lookWords = looksIn(said);
     // ("Make the text bigger. Undo the text change.", "the body text
     // change": the text with no look named is every look of the text.)
     const textSaid = what === 'text' && !colorSaid && !lookWords.length;
@@ -29272,7 +29291,7 @@ export function draftAnswer(ctx, env, question) {
       }
       const text = said.slice(phrases[k][0], end);
       return [
-        ...LOOK_WORDS.filter(([re]) => re.test(text)).flatMap(([, a]) => a),
+        ...looksIn(text),
         ...(/\bcolou?rs?\b/.test(text) ? ['text', 'background'] : []),
       ];
     };
@@ -29320,16 +29339,20 @@ export function draftAnswer(ctx, env, question) {
       continue;
     }
     if (!undone.length) continue;
-    if (alsoNamed) {
-      // (A reader that copies the clause, one copy per mode or piece, copies
-      // its text too: every copy is the undo's.)
-      for (const c of clauses) if (c.text === next.text) answeredByUndo.add(c);
-      // (The change it names is the undo's, never an ask of its own: "and
-      // the heading weight change" writes no weight.)
-      for (let k = result.length - 1; k >= 0; k--)
-        if (draftClause.get(/** @type {any} */ (result[k])) === next)
-          result.splice(k, 1);
-    }
+    // (A reader that copies a clause, one copy per mode or piece, copies
+    // its text too: every copy is the undo's. The change each names is the
+    // undo's, never an ask of its own: "and the heading weight change"
+    // writes no weight.)
+    const runTexts = new Set(nexts.map(n => n.text));
+    for (const c of clauses) if (runTexts.has(c.text)) answeredByUndo.add(c);
+    for (let k = result.length - 1; k >= 0; k--)
+      if (
+        runTexts.has(
+          /** @type {any} */ (draftClause.get(/** @type {any} */ (result[k])))
+            ?.text,
+        )
+      )
+        result.splice(k, 1);
     // (A whole answer that holds every line, "all of it, in order", loses
     // each line taken back once; a later clause that says the change again
     // keeps it.)
