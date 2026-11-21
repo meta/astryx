@@ -23795,11 +23795,51 @@ export function draftAnswer(ctx, env, question) {
                       !(C.partReads(pt, 'border') ?? []).length,
                   ),
                 ];
+            // (A neutral look of a bordered panel that Core draws with no
+            // border, a muted card, takes it too; a hue's look, or one with
+            // no fill of its own, keeps its own.)
+            const neutralLooks = everywhere
+              ? []
+              : edgeParts
+                  .flatMap(f => FAMILIES[f] ?? [f])
+                  .filter(pt => C.MAP[pt] && !edged.includes(pt))
+                  .flatMap(pt =>
+                    (C.partReads(pt, 'background') ?? [])
+                      .filter((/** @type {{token: string}} */ r) =>
+                        /^--color-background-(?:muted|surface|card|popover)$/.test(
+                          r.token,
+                        ),
+                      )
+                      .flatMap((/** @type {{when: string[]}} */ r) =>
+                        r.when
+                          .filter(w => !/:|selected/.test(w))
+                          .map(w => /(?:^|\s)variant=([\w-]+)/.exec(w)?.[1])
+                          .filter(
+                            v =>
+                              v &&
+                              Object.entries(
+                                C.MAP[pt]?.at?.['border-width'] ?? {},
+                              ).some(
+                                ([sel, bw]) =>
+                                  sel.split(',').includes(`variant=${v}`) &&
+                                  !/selected/.test(sel) &&
+                                  /^\s*0(?:px)?\s*$/.test(String(bw)),
+                              ),
+                          )
+                          .map(v => ({on: pt, when: `variant:${v}`})),
+                      ),
+                  );
             /** @type {Step[]} */
             const steps = [
               ...(wide ? [set('--border-width', wide)] : []),
               set('--color-border', color, modeOf(c)),
               set('--color-border-emphasized', color, modeOf(c)),
+              ...neutralLooks.map(x =>
+                set('border', `${wide ?? bwNow0} solid ${color}`, {
+                  ...x,
+                  ...modeOf(c),
+                }),
+              ),
               ...(everywhere ? borderless : edged).map(pt =>
                 set('border', `${wide ?? bwNow0} solid ${color}`, {
                   on: pt,

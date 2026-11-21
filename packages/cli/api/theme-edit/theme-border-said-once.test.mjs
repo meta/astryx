@@ -81,6 +81,19 @@ describe('a whole-theme border said once', () => {
       expect(bordered(part), part).toBe(true);
     for (const part of ['badge', 'layout-header', 'avatar', 'collapsible'])
       expect(bordered(part), part).toBe(false);
+    // A muted card (a neutral look Core draws borderless) takes it; a hue's
+    // look keeps its own.
+    expect(
+      cmds.some(x =>
+        /^set br border '1px solid .*#ccc.*' --on card --when variant:muted$/.test(
+          x,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      cmds.some(x => / --on clickable-card --when variant:muted$/.test(x)),
+    ).toBe(true);
+    expect(cmds.some(x => /--on card --when variant:blue/.test(x))).toBe(false);
     // Flat surfaces said with it: the cards keep a border too.
     expect(
       (
