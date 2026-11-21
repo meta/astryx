@@ -2614,7 +2614,12 @@ function chromeBinary() {
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {APP_COPY_MARK, appCopyDescriptor, appCopyHead} from './_marks.mjs';
+import {
+  APP_COPY_MARK,
+  appCopyDescriptor,
+  appCopyHead,
+  descriptorWords,
+} from './_marks.mjs';
 import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
 /**
@@ -2768,8 +2773,14 @@ function appCopyFiles(cwd, slug, fontsCss) {
   // (`colorModes`); the copy's source re-exports it, so a build of the copy
   // writes it too and `theme add` reads it.
   const oneMode = builtColorMode(f.js).mode;
+  // (The copy's display name and description stay as they are: a shared
+  // theme added with its editor state keeps its own.)
+  const doc = path.join(dir, `${name}.doc.mjs`);
   const files = {
-    [`${name}.doc.mjs`]: appCopyDescriptor(slug),
+    [`${name}.doc.mjs`]: appCopyDescriptor(
+      slug,
+      fs.existsSync(doc) ? descriptorWords(fs.readFileSync(doc, 'utf8')) : {},
+    ),
     [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
     // The theme folder's own modules the build imports, as they are, under

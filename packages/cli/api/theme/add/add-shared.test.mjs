@@ -618,15 +618,24 @@ describe('theme add with a shared theme', () => {
     );
     const before = tree(app);
     const result = await themeAdd(archive, {cwd: app});
-    expect(result.data.copy?.editor).toEqual({
+    expect(result.data.copy?.workingFiles).toEqual({
       from: 'bundle/editor-theme',
       outputDir: 'themes/sunset',
-      files: expect.arrayContaining([
-        'sunset.settings.json',
-        'sunset.theme.ts',
-        'tokens/sunset.palette.ts',
-      ]),
+      files: ['sunset.settings.json'],
     });
+    // (Data files only: the editor builds the theme's source when it opens
+    // the theme, so the sharer's code is neither copied nor run.)
+    expect(fs.existsSync(path.join(app, 'themes/sunset/sunset.theme.ts'))).toBe(
+      false,
+    );
+    expect(fs.existsSync(path.join(app, 'themes/sunset/tokens'))).toBe(false);
+    // (The copy keeps the shared theme's own display name and description.)
+    const doc = fs.readFileSync(
+      path.join(app, 'src/themes/sunset/sunsetTheme.doc.mjs'),
+      'utf8',
+    );
+    expect(doc).toMatch(/description: "The sunset theme\."/);
+    expect(doc).toMatch(/maintained: false/);
     expect(
       fs.readFileSync(
         path.join(app, 'themes/sunset/sunset.settings.json'),
@@ -652,7 +661,7 @@ describe('theme add with a shared theme', () => {
       SETTINGS('ocean'),
     );
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(result.data.copy?.editor).toMatchObject({
+    expect(result.data.copy?.workingFiles).toMatchObject({
       files: [],
       notCopied: expect.stringMatching(/already holds files/),
     });
@@ -673,8 +682,10 @@ describe('theme add with a shared theme', () => {
       JSON.stringify({recipe: 'astryx-oklch-v99'}),
     );
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(result.data.copy?.editor?.notCopied).toBeUndefined();
-    expect(result.data.copy?.editor?.files).toContain('palette.config.json');
+    expect(result.data.copy?.workingFiles?.notCopied).toBeUndefined();
+    expect(result.data.copy?.workingFiles?.files).toContain(
+      'palette.config.json',
+    );
   });
 
   it.each([
@@ -707,7 +718,7 @@ describe('theme add with a shared theme', () => {
         );
       const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
       expect(result.data.default).toBe('ocean');
-      expect(result.data.copy?.editor).toMatchObject({
+      expect(result.data.copy?.workingFiles).toMatchObject({
         files: [],
         notCopied: expect.stringMatching(why),
       });
@@ -735,7 +746,9 @@ describe('theme add with a shared theme', () => {
       else fs.rmSync(path.join(shared, 'b', 'editor'), {recursive: true});
       const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
       if (leftOut)
-        expect(again.data.copy?.editor?.notCopied).toMatch(/already holds/);
+        expect(again.data.copy?.workingFiles?.notCopied).toMatch(
+          /already holds/,
+        );
       else expect(again.data.copy).not.toHaveProperty('editor');
       const removed = await themeRemove('ocean', {cwd: app});
       expect(removed.data.undo?.removed).toEqual(
@@ -761,10 +774,10 @@ describe('theme add with a shared theme', () => {
       SETTINGS('ocean'),
     );
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(result.data.copy?.editor).toMatchObject({
+    expect(result.data.copy?.workingFiles).toMatchObject({
       files: ['ocean.settings.json'],
     });
-    expect(result.data.copy?.editor).not.toHaveProperty('notCopied');
+    expect(result.data.copy?.workingFiles).not.toHaveProperty('notCopied');
     const doc = fs.readFileSync(
       path.join(app, 'src/themes/ocean/oceanTheme.doc.mjs'),
       'utf8',
@@ -814,7 +827,7 @@ describe('theme add with a shared theme', () => {
       SETTINGS('ocean', 'dark-only'),
     );
     const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(again.data.copy?.editor).not.toHaveProperty('notCopied');
+    expect(again.data.copy?.workingFiles).not.toHaveProperty('notCopied');
     expect(
       fs.readFileSync(
         path.join(app, 'themes/ocean/ocean.settings.json'),
@@ -839,7 +852,9 @@ describe('theme add with a shared theme', () => {
     );
     fs.writeFileSync(path.join(shared, 'b', 'editor', '.DS_Store'), 'a');
     const first = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(first.data.copy?.editor?.files).toEqual(['ocean.settings.json']);
+    expect(first.data.copy?.workingFiles?.files).toEqual([
+      'ocean.settings.json',
+    ]);
     expect(fs.existsSync(path.join(app, 'themes/ocean/.DS_Store'))).toBe(false);
     // (The system writes its own file there later.)
     fs.writeFileSync(path.join(app, 'themes/ocean/.DS_Store'), 'b');
@@ -848,7 +863,7 @@ describe('theme add with a shared theme', () => {
       SETTINGS('ocean', 'dark-only'),
     );
     const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(again.data.copy?.editor).not.toHaveProperty('notCopied');
+    expect(again.data.copy?.workingFiles).not.toHaveProperty('notCopied');
     expect(
       fs.readFileSync(
         path.join(app, 'themes/ocean/ocean.settings.json'),
@@ -870,7 +885,7 @@ describe('theme add with a shared theme', () => {
       );
     }
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(result.data.copy?.editor).toMatchObject({
+    expect(result.data.copy?.workingFiles).toMatchObject({
       files: [],
       notCopied: expect.stringMatching(
         /2 folders with ocean\.settings\.json \(one, two\)/,

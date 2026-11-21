@@ -37,12 +37,43 @@ export const appCopyHead = (slug, open, close) =>
   `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
 
 /**
- * An app copy's descriptor, as the editor writes it: one text for the editor
- * and for `theme add` of a shared theme with its editor state.
- * @param {string} slug
+ * The display name and description a theme descriptor's text gives, each
+ * only when written as one string literal.
+ * @param {string} text
+ * @returns {{displayName?: string, description?: string}}
  */
-export const appCopyDescriptor = slug =>
-  `${appCopyHead(slug, '//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`;
+export function descriptorWords(text) {
+  /** @param {string} key */
+  const pick = key => {
+    const m = new RegExp(
+      `\\b${key}:\\s*(?:"((?:[^"\\\\\\n]|\\\\.)*)"|'((?:[^'\\\\\\n]|\\\\.)*)')`,
+    ).exec(text);
+    if (!m) return undefined;
+    try {
+      return m[1] !== undefined
+        ? JSON.parse(`"${m[1]}"`)
+        : JSON.parse(`"${m[2].replace(/\\'/g, "'").replace(/"/g, '\\"')}"`);
+    } catch {
+      return undefined;
+    }
+  };
+  const displayName = pick('displayName');
+  const description = pick('description');
+  return {
+    ...(typeof displayName === 'string' ? {displayName} : {}),
+    ...(typeof description === 'string' ? {description} : {}),
+  };
+}
+
+/**
+ * An app copy's descriptor, as the editor writes it: one text for the editor
+ * and for `theme add` of a shared theme with its editor state. A display
+ * name and description already given (a shared theme's own) are kept.
+ * @param {string} slug
+ * @param {{displayName?: string, description?: string}} [words]
+ */
+export const appCopyDescriptor = (slug, words = {}) =>
+  `${appCopyHead(slug, '//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(words.displayName ?? slug)},\n  description: ${JSON.stringify(words.description ?? `The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`;
 
 /**
  * The marks a file's leading comment can carry, and the command it names:

@@ -424,9 +424,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   still in the record is owned by or imports. It edits no application code (DEC-2) and adds no
   configuration (`spec:AST-017/FR19`) (DEC-12). When the shared theme also
   carries the theme editor's saved state for that theme (a folder holding
-  `<name>.settings.json`), the add copies it to the editor's folder for the
-  theme, `themes/<name>/`, so the theme editor opens it. The add reads that
-  state as data and runs none of it; the editor builds the theme's source,
+  `<name>.settings.json`), the add copies its data files (the settings and
+  the palette data) to the editor's folder for the theme, `themes/<name>/`,
+  so the theme editor opens it. The add reads them as data and runs and
+  copies no shared code; the editor builds the theme's source,
   `<name>.theme.ts`, when it opens the theme. A settings file the editor's
   own checks refuse, or a palette made with a recipe no Astryx CLI makes
   (a newer Astryx recipe is copied, as DEC-11 opens it), or more than one
@@ -434,9 +435,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   named, and the theme is still added; nor is it
   copied into a folder that already holds editor state the add did not
   write, which is left in place and named. With that state copied, the app
-  copy's descriptor is the one the editor writes for its app copy (marked
-  `maintained: false`, under the editor's mark), so the editor's next builds
-  keep the copy current. The receipt lists the files copied, and
+  copy's descriptor keeps the shared theme's display name and description,
+  with the editor's mark and `maintained: false`, so the editor's next builds
+  keep the copy current. The JSON names these files `workingFiles`. The receipt lists the files copied, and
   `theme remove` takes back the unchanged ones.
 
 ### Platform support

@@ -836,12 +836,12 @@ function printThemeApp(result) {
       text(
         `[ok] ${change.slug} is the app's default theme: an app wired to the generated module shows it now.`,
       ),
-      ...(copy.editor
+      ...(copy.workingFiles
         ? [
             text(
-              copy.editor.files.length
-                ? `[ok] Kept the shared theme's working files from ${copy.editor.from} in ${copy.editor.outputDir}.`
-                : `[note] The shared theme carries working files (${copy.editor.from}), not copied: ${copy.editor.notCopied}.`,
+              copy.workingFiles.files.length
+                ? `[ok] Kept the shared theme's working files from ${copy.workingFiles.from} in ${copy.workingFiles.outputDir}.`
+                : `[note] The shared theme carries working files (${copy.workingFiles.from}), not copied: ${copy.workingFiles.notCopied}.`,
             ),
           ]
         : []),

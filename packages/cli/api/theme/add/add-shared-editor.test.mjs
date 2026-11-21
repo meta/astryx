@@ -66,7 +66,9 @@ it('an editor set after the add updates the app copy the add wrote', async () =>
   );
 
   const added = await themeAdd(bundle, {cwd: receiver});
-  expect(added.data.copy?.editor?.files).toContain('sunset.settings.json');
+  expect(added.data.copy?.workingFiles?.files).toContain(
+    'sunset.settings.json',
+  );
   // (The app copy's descriptor is the editor's own, so the copy is current
   // right after the add: the editor's check finds nothing to rewrite.)
   expect(

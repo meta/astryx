@@ -14,8 +14,8 @@ import {
   extractImportedPackages,
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
-import {copyTree, stageSharedTheme} from './_shared-source.mjs';
-import {appCopyDescriptor} from '../theme-edit/_marks.mjs';
+import {stageSharedTheme} from './_shared-source.mjs';
+import {appCopyDescriptor, descriptorWords} from '../theme-edit/_marks.mjs';
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {newerRecipe} from './palette/generate/newer-recipe.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
@@ -2144,8 +2144,14 @@ export async function addSharedThemeToApp(source, options) {
           editorAside = asideAt;
         }
         editorWriting = true;
-        copyTree(staged.editor.dir, editorDir);
-        editorFiles = filesUnder(staged.editor.dir);
+        // (Data files only: the editor builds the theme's source when it
+        // opens the theme, so no shared code is copied or run.)
+        editorFiles = filesUnder(staged.editor.dir).filter(isDataFile);
+        for (const file of editorFiles) {
+          const to = path.join(editorDir, file);
+          fs.mkdirSync(path.dirname(to), {recursive: true});
+          fs.copyFileSync(path.join(staged.editor.dir, file), to);
+        }
       }
       const {outputDir, files} = ejectThemeFiles(theme, {
         cwd,
@@ -2153,12 +2159,21 @@ export async function addSharedThemeToApp(source, options) {
         takenSlugs: new Set(),
       });
       // With the editor's state beside it, the copy stays the editor's: its
-      // descriptor is eject's (maintained: false) under the line the editor
-      // writes on its app copy, so the editor's next builds update it.
+      // descriptor keeps the shared theme's display name and description,
+      // with the editor's mark and maintained: false, so the editor's next
+      // builds update it.
       if (editorFiles.length) {
         const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
-        if (doc)
-          fs.writeFileSync(path.join(target, doc), appCopyDescriptor(name));
+        if (doc) {
+          const at = path.join(target, doc);
+          fs.writeFileSync(
+            at,
+            appCopyDescriptor(
+              name,
+              descriptorWords(fs.readFileSync(at, 'utf8')),
+            ),
+          );
+        }
       }
       const install = installSharedThemeNeeds(
         forkNeeds(outputDir, files, cwd),
@@ -2254,7 +2269,7 @@ export async function addSharedThemeToApp(source, options) {
         ],
         ...(staged.editor
           ? {
-              editor: {
+              workingFiles: {
                 from: staged.editor.folder,
                 outputDir: relFrom(cwd, editorDir),
                 files: editorFiles,
@@ -2353,6 +2368,13 @@ function installLockfiles(projectDir) {
     if (dir === top || path.dirname(dir) === dir) return [];
   }
 }
+
+/**
+ * Whether a file of the editor's saved state is data (its settings and
+ * palette, JSON), which a shared theme's add copies.
+ * @param {string} file
+ */
+const isDataFile = file => file.endsWith('.json');
 
 /**
  * Every file under `dir`, relative to it, in `/` form.
