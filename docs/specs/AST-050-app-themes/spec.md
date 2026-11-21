@@ -692,6 +692,14 @@ through the element it rides (a list item's `selected`, which its item marks)
 is written as that element's attribute inside the part's rule (plain or
 variant).
 
+A theme whose palette recipe the editor does not know (a newer CLI's) keeps
+its palette and settings module exactly as saved, and that CLI's build of the
+same settings counts as current; on a theme not edited by hand, a change that
+leaves its colors alone keeps the shades it shows, and a change to what its palette is made from (a color
+dial, the vibrancy or the whole-theme accent token) is refused, saying what
+still works, with no update step, as a CLI that makes that recipe may not be
+released.
+
 Rejected: failing doctor on such a setting, which fails a working setup.
 
 ### DEC-12 — A shared theme is copied, because it has no package to import
