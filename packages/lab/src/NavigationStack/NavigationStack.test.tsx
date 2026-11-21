@@ -14,7 +14,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {useState, type ReactNode} from 'react';
+import {useRef, useState, type ReactNode} from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {
@@ -397,6 +397,58 @@ describe('NavigationStack', () => {
     );
     await waitFor(() =>
       expect(screen.getByRole('button', {name: 'Info'})).toHaveFocus(),
+    );
+  });
+
+  it('returns focus to the control push names in sourceRef', async () => {
+    function SourceRefRoot() {
+      const nav = useNavigationStack<string>();
+      const opener = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={opener} type="button">
+            Open later
+          </button>
+          <button
+            type="button"
+            onClick={() => nav.push('General', {sourceRef: opener})}>
+            Push
+          </button>
+        </>
+      );
+    }
+    function SourceRefHarness() {
+      const [path, setPath] = useState<string[]>([]);
+      return (
+        <NavigationStack
+          label="Settings"
+          root={
+            <NavigationScreen title="Settings">
+              <SourceRefRoot />
+            </NavigationScreen>
+          }
+          path={path}
+          onPathChange={setPath}
+          getKey={entry => entry}
+          renderScreen={entry => (
+            <NavigationScreen title={entry}>
+              <p>{entry} content</p>
+            </NavigationScreen>
+          )}
+        />
+      );
+    }
+    render(<SourceRefHarness />);
+    fireEvent.click(screen.getByRole('button', {name: 'Push'}));
+    await screen.findByRole('heading', {name: 'General', level: 2});
+
+    fireEvent.click(backButton('Settings') as HTMLElement);
+    await waitFor(
+      () => expect(screen.queryByText('General content')).toBeNull(),
+      {timeout: 3000},
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Open later'})).toHaveFocus(),
     );
   });
 
