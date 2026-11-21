@@ -255,9 +255,8 @@ this record's current membership snapshot must be updated with it.
   layer returns it, or else on the host itself. The rule is the same for a
   mouse, a pen, and a finger.
 
-FR2 and FR3 gap: no popover has `tabBehavior: 'pageOrder'`, so Escape and
-platform close requests reach a Popover through the shared stack and native
-auto light dismiss wherever focus is (`spec:AST-116` FR12 and FR15 gaps).
+FR3 gap: a platform close request does not reach a `usePopover` popover with
+`tabBehavior: 'pageOrder'`.
 FR2 gap: a Lab TourStep without a backdrop ends the tour on Escape wherever
 focus is (`spec:AST-119` FR14 gap).
 FR9 gap: a Popover's focus return to a control is a plain focus, which can
