@@ -94,7 +94,6 @@
     "packages/core/src/TabList/__tests__/TabListOverflow.interaction.browser.spec.ts": 1.4,
     "packages/core/src/TabList/__tests__/TabListTextSize.interaction.browser.spec.ts": 3.6,
     "packages/core/src/TabList/__tests__/TabPressPointer.interaction.browser.spec.ts": 1.9,
-    "packages/core/src/TimeInput/__tests__/TimeTextDirection.interaction.browser.spec.ts": 2.1,
     "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts": 14.9,
     "packages/core/src/Toast/__tests__/ToastEmptyViewport.interaction.browser.spec.ts": 2.5,
     "packages/core/src/Toast/__tests__/ToastSwipeScroll.interaction.browser.spec.ts": 52.7,
