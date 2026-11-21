@@ -166,11 +166,11 @@ describe('iconUse with a variant', () => {
       suggestions: [
         {
           name: 'astryx experimental icon use glyphs --backup lines --variant outline',
-          reason: 'its default look, outline',
+          reason: 'its default variant, outline',
         },
         {
           name: 'astryx experimental icon use glyphs --backup lines --variant solid',
-          reason: 'its solid look',
+          reason: 'its solid variant',
         },
       ],
     });
@@ -180,11 +180,11 @@ describe('iconUse with a variant', () => {
     ).rejects.toMatchObject({
       code: 'ERR_INVALID_ARGUMENT',
       message:
-        'Icon set "@acme/lines/lines" declares no variants: it draws one look, so it takes no --variant.',
+        'Icon set "@acme/lines/lines" declares no variants, so it takes no --variant.',
       suggestions: [
         {
           name: 'astryx experimental icon use lines --backup glyphs',
-          reason: 'use it in its one look',
+          reason: 'use it as it is',
         },
       ],
     });

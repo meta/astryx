@@ -1644,12 +1644,19 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
-// Imports between the files of an installed package resolve by path (a
-// Node without in-thread hooks resolves them itself). The hook answers only
-// relative imports inside a package, and single-copy-hooks.mjs answers only
-// package names, so neither changes what the other resolves.
+// Imports between the files of an installed or a linked package resolve by
+// path (a Node without in-thread hooks resolves them itself). The hook
+// answers only relative imports inside a package, and single-copy-hooks.mjs
+// answers only package names, so neither changes what the other resolves.
+// The page's own folders, and a folder that holds the page, are never a
+// linked package's: the page's modules compile as its own.
 const registerHooks = /** @type {any} */ (Module).registerHooks;
-if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
+if (typeof registerHooks === 'function')
+  registerHooks(
+    packageResolveHooks(undefined, {
+      skip: folder => isLocal(folder) || entry.startsWith(folder),
+    }),
+  );
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;

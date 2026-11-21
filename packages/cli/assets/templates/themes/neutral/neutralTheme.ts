@@ -373,14 +373,15 @@ export const neutralTheme = defineTheme({
       base: {
         '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
+      // A label line taller than the size grows the item.
       'size:sm': {
-        height: 'calc(var(--size-element-sm) - 8px)',
+        height: 'max(calc(var(--size-element-sm) - 8px), 1lh)',
       },
       'size:md': {
-        height: 'calc(var(--size-element-md) - 8px)',
+        height: 'max(calc(var(--size-element-md) - 8px), 1lh)',
       },
       'size:lg': {
-        height: 'calc(var(--size-element-lg) - 8px)',
+        height: 'max(calc(var(--size-element-lg) - 8px), 1lh)',
       },
       selected: {
         boxShadow: 'none',

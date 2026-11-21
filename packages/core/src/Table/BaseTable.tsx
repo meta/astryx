@@ -94,6 +94,7 @@ import {devError} from '../utils/devWarning';
 import {useDevWarningPerMessage} from '../hooks/useDevWarning';
 import {EmptyState} from '../EmptyState';
 import {Text} from '../Text';
+import {TextMeasureOnInterestContext} from '../Text/textClampContext';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -303,10 +304,14 @@ function TableBodyCell<T extends Record<string, unknown>>({
     typeof rawContent === 'string' &&
     rawContent.length > 0
   ) {
+    // Many cells mount at once, so each measures its truncation on its
+    // first hover, tap or focus, which is when its tooltip can first show.
     content = (
-      <Text type="body" maxLines={1}>
-        {rawContent}
-      </Text>
+      <TextMeasureOnInterestContext value={true}>
+        <Text type="body" maxLines={1}>
+          {rawContent}
+        </Text>
+      </TextMeasureOnInterestContext>
     );
   } else {
     content = rawContent;
@@ -930,8 +935,13 @@ function BaseTableInner<T extends Record<string, unknown>>({
       // Resolve header content from slots — plugins write to named slots
       // to avoid conflicts (e.g. sort writes `after`, resize writes `overlay`)
       const resolvedContent = cellRenderProps.content ?? headerContent;
+      // A truncating header discloses a cut heading only through its
+      // keyboard-focus tooltip, so it carries no native title, which the
+      // browser shows on hover.
       const headerTitleProp =
-        typeof resolvedContent === 'string' && resolvedContent.length > 0
+        textOverflow !== 'truncate' &&
+        typeof resolvedContent === 'string' &&
+        resolvedContent.length > 0
           ? {title: resolvedContent}
           : {};
       const {before, after, overlay, below} = cellRenderProps;

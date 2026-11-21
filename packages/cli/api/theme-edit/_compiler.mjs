@@ -36,7 +36,7 @@ const SOFT =
   /^--(color-data|color-syntax|syntax|duration|ease|z-|layer|breakpoint|text-display-\d|color-icon-[a-z]+$)/;
 
 /** @typedef {{token: string, props: string[], when: string[]}} Read */
-/** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
+/** @typedef {{message: string, run: string[], also: string[], soft?: boolean, held?: string[]}} CheckFailure */
 /** @typedef {import('./_parts.mjs').PartData} PartData */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -582,6 +582,8 @@ export function makeCompiler(project, parts) {
     return {
       message: `${target} never reads ${token}. ${what}.`,
       run,
+      // (The tokens the parts it holds read for this, when it reads none.)
+      held: kidTokens,
       also: kids.length
         ? [
             `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${HOW} ${kids[0]})`,
@@ -736,13 +738,23 @@ export function makeCompiler(project, parts) {
      * the part sits in, else the page).
      * @param {unknown} fg @param {unknown} bg @param {string} m
      * @param {unknown} [beneath]
+     * @param {boolean} [onPage] whether a see-through region sits on the page
      */
-    const drawn = (fg, bg, m, beneath = page(m)) => {
+    const drawn = (fg, bg, m, beneath = page(m), onPage = true) => {
       /** @type {[number, number, number]} */
-      const ground =
-        parseColor(beneath) ??
-        parseColor(page(m)) ??
-        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const pageColor =
+        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      // (A see-through region, a translucent top bar, is drawn over the
+      // page itself. A surface Core draws in its own scheme, a lightbox,
+      // sits over its media and a blurred page, not a bare one: its color
+      // is the ground as it is.)
+      const region = parseColor(beneath);
+      /** @type {[number, number, number]} */
+      const ground = !region
+        ? pageColor
+        : onPage
+          ? compositeOver(region, alphaOf(beneath), pageColor)
+          : region;
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
@@ -861,7 +873,7 @@ export function makeCompiler(project, parts) {
         }
         const measured = stops.map(stop => ({
           stop,
-          pair: drawn(fg, stop, m, beneath),
+          pair: drawn(fg, stop, m, beneath, !(/** @type {any} */ (p).mediaOf)),
         }));
         if (stops.length > 1 && measured.some(x => !x.pair)) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
