@@ -20745,11 +20745,15 @@ export function draftAnswer(ctx, env, question) {
    */
   function textOfRole(c, toks, part) {
     const secondary = toks.filter(t => t === '--color-text-secondary');
-    /** Whether the part, or one it holds, draws its placeholder in it. */
-    const placeholderReads = [part, ...(C.MAP[part]?.contains ?? [])].some(t =>
-      /** @type {string[]} */ (
-        C.MAP[t]?.own?.color?.tokens?.['--color-text-secondary'] ?? []
-      ).some(w => /::placeholder/.test(w)),
+    /** Whether the part, or one it holds, draws its placeholder in it (on its own element, or on an element inside it, a text input's field). */
+    const placeholderReads = [part, ...(C.MAP[part]?.contains ?? [])].some(
+      t =>
+        /** @type {string[]} */ (
+          C.MAP[t]?.own?.color?.tokens?.['--color-text-secondary'] ?? []
+        ).some(w => /::placeholder/.test(w)) ||
+        [...(C.MAP[t]?.inside?.['--color-text-secondary'] ?? [])].some(
+          (/** @type {string} */ x) => /placeholder/.test(x),
+        ),
     );
     // (The fainter, muted or subtle text is the secondary text.)
     return /\b(?:secondary|muted|faint|fainter|subtle|subdued)\s+(?:text|labels?|copy|writing)\b/.test(
