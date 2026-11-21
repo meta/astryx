@@ -181,6 +181,8 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {string} [state]
  * @property {'light' | 'dark'} [mode]
  * @property {boolean} [only]
+ * @property {boolean} [narrowed] - A group's height the narrowing copied onto
+ *   this member, with only, when one control of the group took its own.
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note]
  * @property {string} [stateNote] - The state word a command wrote as another state, said in its result.
@@ -1837,6 +1839,7 @@ const ENTRY_FIELDS = [
   'state',
   'mode',
   'only',
+  'narrowed',
 ];
 
 /**
@@ -2340,6 +2343,13 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       if (read) s.only = true;
       else delete s.only;
     } else if (s.only === false) delete s.only;
+    // (`narrowed` is the narrowing's own mark: true or absent.)
+    if (s.narrowed != null && s.narrowed !== true) {
+      notes.push(
+        `${s.thing} was saved with narrowed ${JSON.stringify(s.narrowed)}, read as kept on ${s.on ?? 'its part'} alone`,
+      );
+      delete s.narrowed;
+    }
     if (!['dial', 'token', 'property'].includes(s.source)) {
       const typed = typeof s.source === 'string' ? s.source.trim() : '';
       const read = typed
@@ -5034,8 +5044,20 @@ export function namesControls(ctx, on) {
 }
 
 /**
+ * Whether a height saved with --only on one control of a group is the
+ * group's plain height, narrowed off a control kept apart: the narrowing
+ * marks each copy it writes on the group's other members (`narrowed`). A
+ * height kept on one control, with --only, carries no mark.
+ * @param {Setting} x
+ */
+export function narrowedGroupHeight(x) {
+  return x.source === 'property' && x.only === true && x.narrowed === true;
+}
+
+/**
  * Whether a saved setting sets the height of some controls at a size:
- * a height (not `--only`, not in a state) that reaches a control, for that
+ * a height (not in a state, and with `--only` only as a group's narrowed
+ * height) that reaches a control, for that
  * size or for every size, or that size's token on controls. A height on
  * another part reaches controls when it spreads to them (a text area's
  * height reaches the inputs drawn alike).
@@ -5044,7 +5066,10 @@ export function namesControls(ctx, on) {
  * @param {'sm' | 'md' | 'lg'} size
  */
 export function setsControlHeight(ctx, x, size) {
-  if (x.state || x.only || !x.on) return false;
+  if (x.state || !x.on) return false;
+  // (A height kept on one control with --only is its own; one the
+  // narrowing left on a group's other controls is still the group's.)
+  if (x.only && !narrowedGroupHeight(x)) return false;
   // (A size token on one control is that control's own height, as --only
   // gives it; on a group it is the height of the controls in it, also on a
   // group that mixes controls with other parts, such as the button-like
