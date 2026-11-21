@@ -1,13 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * A ghost button's look names every part drawn as a ghost button inside
- * other components (a calendar's arrows, a code block's copy button, an
- * input's clear button, a toggle button), each with the line that keeps it
- * as Core draws it; a look set for a variant names them with no keep line,
- * since a rule on such a part never outranks the variant's rule; a look for
- * another variant names none of them. Against
- * a real bundled base theme.
+ * A ghost button's look (`--when variant:ghost`) names every part drawn as
+ * a ghost button inside other components (a calendar's arrows, a code
+ * block's copy button, an input's clear button, a toggle button) with no
+ * keep line, since a rule on such a part never outranks the variant's
+ * rule; a look for another variant names none of them. Against a real
+ * bundled base theme.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
