@@ -4532,20 +4532,20 @@ export function draftAnswer(ctx, env, question) {
       )?.value ?? '',
     ),
   );
-  // (The words as asked, for the readers that hold the whole question;
-  // their case too, which carries tone: an emphatic "SO" in a lowercase
-  // line.)
-  const raw0 = String(question);
-  const asked0 = raw0.toLowerCase();
   // A file named in url() is a value, written as typed: it is set aside
-  // (url(uu<n>uu)) while the words are read, rewritten and split into asks,
-  // and each answer writes it back as typed. (Nor is it a picture to match:
-  // the reader of picture files never sees it.)
+  // (url(uu<n>uu)) before any reader reads the words, and each answer
+  // writes it back as typed. (Nor is it a picture to match: the reader of
+  // picture files never sees it.)
   const urls = /** @type {string[]} */ ([]);
   question = String(question).replace(/url\([^()]*\)/gi, m => {
     urls.push(m);
     return `url(uu${urls.length - 1}uu)`;
   });
+  // (The words as asked, for the readers that hold the whole question;
+  // their case too, which carries tone: an emphatic "SO" in a lowercase
+  // line.)
+  const raw0 = String(question);
+  const asked0 = raw0.toLowerCase();
   /** Text with each file set aside put back as typed. @param {string} s */
   const withUrls = s =>
     s.replace(/url\(uu(\d+)uu\)/g, (m, n) => urls[Number(n)] ?? m);
@@ -32768,8 +32768,7 @@ export function draftAnswer(ctx, env, question) {
       t.toLowerCase().match(/[a-z]{3,}|#[0-9a-f]{3,8}|\d+/g) ?? [];
     /** @param {Clause} c */
     const asTyped = c => {
-      // (An ask's files are compared as typed.)
-      const t = withUrls(c.text).trim();
+      const t = c.text.trim();
       const at = raw0.toLowerCase().indexOf(t.toLowerCase());
       if (at >= 0) return [raw0.slice(at, at + t.length)];
       const others = new Set(

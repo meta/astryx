@@ -140,3 +140,17 @@ it('a second url() layer left unwritten is named as not used', async () => {
     true,
   );
 }, 240_000);
+
+it("a word in a file's path changes no other ask", async () => {
+  const alone = (await answer('menus opacity 0.9')).commands;
+  const {commands} = await answer(
+    'menus opacity 0.9, cards background-image: url(/img/frosted.png)',
+  );
+  for (const line of alone) expect(commands).toContain(line);
+  expect(commands.some(l => /background-color .*--on menu/.test(l))).toBe(
+    false,
+  );
+  expect(commands).toContain(
+    "set pu background-image 'url(/img/frosted.png)' --on card",
+  );
+}, 240_000);
