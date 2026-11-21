@@ -349,12 +349,12 @@ function grayStop(family, stop) {
   );
 }
 
+/** A mode's page said as a sentence head, "dark mode: page plum". */
+const MODE_PAGE_HEAD = /^\s*(?:light|dark)[- ]mode\s*:\s*page\b/i;
 /**
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
-/** A mode's page said as a sentence head, "dark mode: page plum". */
-const MODE_PAGE_HEAD = /^\s*(?:light|dark)[- ]mode\s*:\s*page\b/i;
 const PALETTE_NAMES = new Set([
   'sky',
   'tan',
