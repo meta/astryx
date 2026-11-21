@@ -2458,11 +2458,39 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
 }
 
 /**
+ * The one page below `route`, at any depth, whose last route segment or
+ * title has the words of `rest` (nameWords): `authoring/define-the-theme`
+ * finds `authoring/building-blocks/themes/define-the-theme`. None when no page or more than one has them.
+ * An experimental page is never found.
+ * @param {DocsTree} tree
+ * @param {string} route
+ * @param {string} rest the typed segments after `route`
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function pageBelow(tree, route, rest) {
+  const words = nameWords(rest).join(' ');
+  if (words === '') return [];
+  const found = [...tree.nodes.values()].filter(
+    node =>
+      node.route.startsWith(`${route}/`) &&
+      [node.route.slice(node.route.lastIndexOf('/') + 1), node.title].some(
+        name => name != null && nameWords(name).join(' ') === words,
+      ) &&
+      !isExperimentalTreeNode(tree, node),
+  );
+  return found.length === 1
+    ? [{name: found[0].route, reason: found[0].summary}]
+    : [];
+}
+
+/**
  * The error for a docs argument that names nothing. For a route, it suggests
  * every child of the deepest namespace the route reaches, closest first by
  * each child's route, title and keywords, with a child the route names kept
- * first. Otherwise it suggests the docs whose own name it is, or whose route
- * it spells with hyphens; failing that, the topics and top-level namespaces,
+ * first; the one page further down that the rest of the route names
+ * ({@link pageBelow}) comes right after that child, or first. Otherwise it
+ * suggests the docs whose own name it is, or whose route it spells with
+ * hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
  * none shares a word with the argument, with the names a slip or two from it
  * first). When the argument matches a component, hook or template
@@ -2485,6 +2513,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   let suggestions = [];
   // Route children stay whole (spec:AST-046); only the other lists are cut.
   let routeChildren = false;
+  /** @type {Array<{name: string, reason: string}>} */
+  let deeper = [];
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -2495,6 +2525,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
         routeChildren = true;
+        deeper = pageBelow(tree, near.route, parts.slice(depth).join('/'));
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -2534,6 +2565,16 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       orderRouteSuggestions(topic, suggestions, {closest: false}),
       orderDocPages(tree, topic, suggestions, false),
     );
+    // The page below leads, after a child the route names (spec:AST-046 FR6).
+    const kept = namesRoute(topic, suggestions[0]?.name ?? '') ? 1 : 0;
+    const lead = suggestions.slice(0, kept);
+    const below = deeper.filter(
+      page => !lead.some(entry => entry.name === page.name),
+    );
+    const rest = suggestions
+      .slice(kept)
+      .filter(entry => !below.some(page => page.name === entry.name));
+    suggestions = [...lead, ...below, ...rest];
   } else if (typeof topic === 'string') {
     // Every topic and namespace is listed, so a near name (`tokns` for
     // tokens, `colr` for color) only moves to the front, from four letters.
