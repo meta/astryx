@@ -16,6 +16,7 @@
  */
 
 import {devWarn} from '../utils/devWarning';
+import {isHTMLElement} from '../utils/nodeType';
 import {settledBox} from './settledBox';
 
 // Bundlers replace this value at build time. The declaration lets a product
@@ -215,7 +216,7 @@ export function writeLayerEntranceSide(
   // pass a registered, non-inherited property to a child that asks to
   // inherit it, so each of those elements gets the side of its own.
   for (const element of [layer, ...Array.from(layer.children)]) {
-    if (!(element instanceof HTMLElement)) {
+    if (!isHTMLElement(element)) {
       continue;
     }
     for (const [name, value] of values) {

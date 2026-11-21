@@ -131,6 +131,29 @@ describe('readLayerEntranceSide and writeLayerEntranceSide', () => {
     layer.remove();
     anchor.remove();
   });
+
+  it('writes the side on the direct child of a layer in another window', () => {
+    // An element from another window fails `instanceof HTMLElement` here.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const otherDocument = frame.contentDocument!;
+    const layer = otherDocument.createElement('div');
+    const surface = otherDocument.createElement('div');
+    layer.append(surface);
+    otherDocument.body.append(layer);
+    writeLayerEntranceSide(layer, {
+      x: 0,
+      y: 1,
+      originX: 50,
+      originY: 0,
+      gap: 4,
+    });
+    expect(surface.style.getPropertyValue(LAYER_ENTER_Y_PROPERTY)).toBe('1');
+    expect(surface.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
+      '4px',
+    );
+    frame.remove();
+  });
 });
 
 describe('registerLayerEntranceProperties', () => {
