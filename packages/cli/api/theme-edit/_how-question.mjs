@@ -3134,6 +3134,55 @@ function lexCopy(re, flags) {
 }
 
 /**
+ * The patterns the every-word gate runs on each clause, listed once for each
+ * lexicon: its part patterns made global, and the state words without the
+ * global flag.
+ * @type {WeakMap<object, {parts: RegExp[], states: Array<[RegExp, string]>}>}
+ */
+const gatePatterns = new WeakMap();
+
+/**
+ * The every-word gate's patterns for `lex` (see gatePatterns).
+ * @param {{parts: Array<[RegExp, unknown]>}} lex
+ * @returns {{parts: RegExp[], states: Array<[RegExp, string]>}}
+ */
+export function gatePatternsOf(lex) {
+  let made = gatePatterns.get(lex);
+  if (!made) {
+    made = {
+      parts: lex.parts.map(([re]) => globalOf(re)),
+      states: STATE_WORDS.map(
+        ([re, st]) => /** @type {[RegExp, string]} */ ([plainOf(re), st]),
+      ),
+    };
+    gatePatterns.set(lex, made);
+  }
+  return made;
+}
+
+/**
+ * `text` with each part name the global patterns find blanked out, in their
+ * order. A made pattern finds nothing in a text without its word, so it is
+ * not run there.
+ * @param {string} text
+ * @param {RegExp[]} parts
+ * @returns {string}
+ */
+export function blankParts(text, parts) {
+  let out = text;
+  for (const re of parts) {
+    if (
+      re instanceof NeedRegExp &&
+      re.need !== undefined &&
+      !out.includes(re.need)
+    )
+      continue;
+    out = out.replace(re, ' ');
+  }
+  return out;
+}
+
+/**
  * `new RegExp(source)` for a pattern every match of which holds a match of
  * `re`: a made pattern with `re`'s word if `re` is one.
  * @param {RegExp} re
@@ -13559,16 +13608,10 @@ export function draftAnswer(ctx, env, question) {
     const values = steps.map(st => String(st.value ?? '').toLowerCase());
     // A state said, never in a step. (A part's own name holds no state:
     // "hover card".)
-    const noParts = lex.parts.reduce(
-      (t, [re]) =>
-        t.replace(
-          lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
-          ' ',
-        ),
-      text,
-    );
-    for (const [re, st] of STATE_WORDS) {
-      const m = lexCopy(re, '').exec(noParts);
+    const gate = gatePatternsOf(lex);
+    const noParts = blankParts(text, gate.parts);
+    for (const [re, st] of gate.states) {
+      const m = re.exec(noParts);
       if (
         m &&
         !steps.some(
