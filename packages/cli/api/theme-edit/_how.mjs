@@ -47,6 +47,7 @@ import {
   selfSizedBoxLines,
   selfSizedWhy,
   sizesItsOwnBox,
+  givesEdge,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -1105,6 +1106,7 @@ function finish(env, drafts) {
       )
         continue;
     }
+    afterAskedEdge(env, d, drafts);
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
     // (The draft found it in place already: said, with no command.)
@@ -2367,4 +2369,42 @@ async function pictureLook(cwd, name, read) {
     results,
     unsure,
   };
+}
+
+/**
+ * Corners asked with the edge the same ask gives that part ("pagination:
+ * 6px radius, 1px border"). Alone they show nothing, as the part has no
+ * edge yet; the whole ask runs them after its edge. So the corners' own
+ * answer takes that edge first, as the whole ask does, and says so.
+ * @param {any} env
+ * @param {any} d
+ * @param {any[]} drafts
+ */
+function afterAskedEdge(env, d, drafts) {
+  const isCorner = (/** @type {any} */ st) =>
+    st.verb === 'set' &&
+    (st.thing === 'corners' || /^border.*radius$/.test(st.thing));
+  if (
+    d.sequence ||
+    !d.options.length ||
+    !d.options.every(
+      (/** @type {any[]} */ o) => o.length === 1 && isCorner(o[0]),
+    )
+  )
+    return;
+  const on = d.options[0][0].on;
+  const edge = drafts
+    .filter(x => x !== d && x.sequence)
+    .flatMap(x => x.options[0] ?? [])
+    .find(
+      (/** @type {any} */ x) => x.verb === 'set' && x.on === on && givesEdge(x),
+    );
+  if (!edge || d.options.some((/** @type {any[]} */ o) => env.check(o).ok))
+    return;
+  const withEdge = d.options
+    .map((/** @type {any[]} */ o) => [edge, ...o])
+    .find((/** @type {any[]} */ o) => env.check(o).ok);
+  if (!withEdge) return;
+  d.options = [withEdge];
+  d.text = `${d.text}, after the ${edge.thing} this ask gives it (alone, its corners would show nothing)`;
 }

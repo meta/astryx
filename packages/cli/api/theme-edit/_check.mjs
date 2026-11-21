@@ -124,6 +124,9 @@ import {
   radiusTokenOf,
   borderParts,
   cornerParts,
+  boxFrameOf,
+  rowFrameOf,
+  givesEdge,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -4163,6 +4166,7 @@ export function checkSetting(
   unset = false,
   scope = {},
 ) {
+  ctx.settingsNow = data.settings;
   try {
     return checkTyped(ctx, slug, data, thing, value, flags, unset, scope);
   } catch (e) {
@@ -8749,17 +8753,44 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     parts.some(t => cornerParts(ctx, t).some(x => x !== t))
   )
     return;
-  // An edge the theme gives the part itself shows its corners too.
+  // An edge the theme gives the part itself, in any state, shows its
+  // corners too.
   const edged = data.settings.some(
     x =>
       x.source === 'property' &&
-      /^(background|border|box-shadow|outline)/.test(x.thing) &&
+      givesEdge(x, true) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
   if (edged) return;
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
     .filter(k => ctx.C.showsCorners(k) && ctx.C.MAP[k])
     .slice(0, 3);
+  // (A border radius set on a pager goes on the row that frames its pages;
+  // asked of that row, the same. With no edge there yet it shows nothing:
+  // refused, with the row's lookup and the line that rounds each page.)
+  const frame =
+    boxFrameOf(ctx, s) ??
+    ([...ctx.project.target.keys()].some(k => rowFrameOf(ctx, k) === parts[0])
+      ? parts[0]
+      : null);
+  if (frame) {
+    const pager =
+      frame === s.on
+        ? [...ctx.project.target.keys()].find(
+            k => k !== frame && rowFrameOf(ctx, k) === frame,
+          )
+        : s.on;
+    const perPage = pager
+      ? `${P} set ${slug} corners ${s.value} --on ${pager}`
+      : null;
+    refuse(
+      E.ERR_THEME_NO_EFFECT,
+      `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s border radius goes on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners.${perPage ? ` To round each page on its own instead: ${perPage}.` : ''}`,
+      {
+        run: [`${HOW} ${frame}`, ...(perPage ? [perPage] : [])],
+      },
+    );
+  }
   refuse(
     E.ERR_THEME_NO_EFFECT,
     `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. To round ${s.on} itself, give it a background or a border first, then set its corners.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,

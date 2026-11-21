@@ -79,6 +79,7 @@ import {
   nearest,
   closestOf,
   partsOf,
+  boxFrameOf,
   undoArgs,
   isCheckNote,
   withoutBadValues,
@@ -7400,6 +7401,15 @@ async function changeOnce(
   // said once, for every side written.)
   const stateNote = shorthand?.stateNote ?? s.stateNote;
   if (stateNote) notes.push(stateNote);
+  // (A border or shadow on a pager goes on the row that frames its pages:
+  // said, with its undo, when it changed something.)
+  {
+    const frame = sub === 'set' && !r.unchanged ? boxFrameOf(ctx, s) : null;
+    if (frame)
+      notes.push(
+        `wrote on ${frame}, the row that frames ${s.on}'s controls as one strip, so they draw one box together; to undo it: ${P} undo ${slug} ${undoArgs(s)}`,
+      );
+  }
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.

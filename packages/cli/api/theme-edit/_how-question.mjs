@@ -68,6 +68,8 @@ import {
   DIAL_RADII,
   borderParts,
   cornerParts,
+  rowFrameOf,
+  givesEdge,
   focusStateOf,
   paddedParts,
   innerTextTokens,
@@ -12528,10 +12530,42 @@ export function draftAnswer(ctx, env, question) {
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
   // boxes): those parts (for a border, only pieces that draw one).
+  // (A row that frames a part's controls as one strip takes the border and
+  // shadow asked of the part, and its corners once the row has an edge at
+  // rest, from this ask or the theme; else each control rounds, as asked of
+  // the part on its own.)
+  const STRIP_ASPECTS = ['border', 'shadow'];
+  /** Whether this ask or the theme gives a row frame an edge at rest. @param {string} frame */
+  const framedEdge = frame =>
+    clauses.some(
+      o =>
+        !o.state &&
+        !o.neg &&
+        o.aspects.some(a => STRIP_ASPECTS.includes(a)) &&
+        o.parts.some(q => q.on === frame || rowFrameOf(ctx, q.on) === frame),
+    ) ||
+    (env.data?.settings ?? []).some(
+      (/** @type {any} */ x) =>
+        x.source === 'property' &&
+        givesEdge(x) &&
+        partsOf(ctx, x).includes(frame),
+    );
   for (const c of clauses)
-    if (c.aspects.some(a => a === 'border' || a === 'corners'))
+    if (
+      c.aspects.some(a =>
+        ['border', 'corners', 'shadow', 'background', 'outline'].includes(a),
+      )
+    )
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
+        const frame = rowFrameOf(ctx, p.on);
+        if (
+          frame &&
+          (c.aspects.some(a => STRIP_ASPECTS.includes(a)) ||
+            (c.aspects.includes('corners') && framedEdge(frame)))
+        )
+          return [{...p, on: frame}];
+        if (!c.aspects.some(a => a === 'border' || a === 'corners')) return [p];
         const own = C.MAP[p.on]?.own ?? {};
         const inner = (
           c.aspects.includes('corners')
@@ -29094,6 +29128,22 @@ export function draftAnswer(ctx, env, question) {
           coversProperty(st.thing, x.thing),
       );
       if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
+    }
+    // Corners on a part that shows none yet, said with the edge the same
+    // ask gives it ("pagination: 6px radius, 1px border"): they show only
+    // once the edge is there, so they run after it, whichever came first.
+    const cornerStep = (/** @type {Step} */ t) =>
+      t.thing === 'corners' || /^border.*radius$/.test(String(t.thing));
+    for (let i = 0; i < all.length; i++) {
+      const st = all[i];
+      if (!st.on || !cornerStep(st) || C.showsCorners(one(st.on))) continue;
+      let edge = -1;
+      for (let j = i + 1; j < all.length; j++)
+        if (all[j].on === st.on && !all[j].state && givesEdge(all[j])) edge = j;
+      if (edge < 0) continue;
+      all.splice(i, 1);
+      all.splice(edge, 0, st);
+      i--;
     }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
