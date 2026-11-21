@@ -5,9 +5,11 @@
 /**
  * @file hooks.ts
  * @input Uses React hooks, the shared useTypeahead hook, MultiSelectorOptionData type
- * @output Exports useMultiCombobox hook
- * @position Public hook, exported from the MultiSelector entry point; used by
- *   MultiSelector.tsx
+ * @output Exports useMultiCombobox hook, and the internal
+ *   useMultiComboboxWithKeyHighlight and
+ *   useMultiSelectorActiveOptionAnnouncement that MultiSelector.tsx uses
+ * @position Public hook, exported from the MultiSelector entry point; the
+ *   internal hooks are not exported there
  *
  * SYNC: When modified, update:
  * - /packages/core/src/MultiSelector/index.ts
@@ -15,6 +17,13 @@
  */
 
 import {useCallback, useState} from 'react';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/hooks.generated';
+import {isIosWebKit} from '../utils/touchQueries';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
@@ -76,27 +85,88 @@ interface UseMultiComboboxResult {
   ) => void;
 }
 
+registerEnglishFallback(english);
+
+/**
+ * The keyboard-move callback for MultiSelector: on iOS WebKit it announces
+ * the active option politely, with its name, `selected` when it is, and its
+ * position. iOS VoiceOver ignores `aria-activedescendant`; elsewhere screen
+ * readers follow it, and an announcement would say each move twice. Remove
+ * the announcement once iOS VoiceOver follows `aria-activedescendant`. A new
+ * move replaces a name not yet spoken. `items` are the options in list
+ * order; `isSelected` tells whether one is selected.
+ *
+ * SYNC: Selector's useActiveOptionAnnouncement (Selector/hooks.ts) makes the
+ * same announcement. Keep the words, the count, the iOS gate and the removal
+ * condition the same in both.
+ */
+export function useMultiSelectorActiveOptionAnnouncement<
+  I extends {readonly value: string; readonly label?: string},
+>(
+  items: ReadonlyArray<I>,
+  isSelected: (item: I) => boolean,
+): (index: number) => void {
+  const t = useComponentTranslator();
+  const announce = useAnnounce({hasReplace: true});
+  return useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (item == null || !isIosWebKit()) {
+        return;
+      }
+      announce(
+        t(
+          isSelected(item)
+            ? '@astryx.selector.activeOptionSelected'
+            : '@astryx.selector.activeOption',
+          {
+            label: item.label ?? item.value,
+            position: index + 1,
+            total: items.length,
+          },
+        ),
+      );
+    },
+    [announce, items, isSelected, t],
+  );
+}
+
 /**
  * Handles keyboard navigation and toggle logic for multi-select combobox.
  * Works like useCombobox (index-based) but toggling does NOT close the dropdown.
  *
  * The caller must ensure selectableItems is in the same order as the rendered DOM.
  */
-export function useMultiCombobox({
-  selectableItems,
-  isDisabled = false,
-  isOpen,
-  hasSearch = false,
-  onOpen,
-  onClose,
-  onToggle,
-  onClear,
-  hasValue = false,
-  listboxId,
-  isGrid = false,
-  rowHasAction,
-  onActivateAction,
-}: UseMultiComboboxOptions): UseMultiComboboxResult {
+export function useMultiCombobox(
+  options: UseMultiComboboxOptions,
+): UseMultiComboboxResult {
+  return useMultiComboboxWithKeyHighlight(options);
+}
+
+/**
+ * `useMultiCombobox` for Core's own MultiSelector: `onKeyboardHighlight` runs
+ * after each move of the highlight by a key, with the new index, so the
+ * caller can announce the active option. Internal:
+ * not exported from the MultiSelector entry point.
+ */
+export function useMultiComboboxWithKeyHighlight(
+  {
+    selectableItems,
+    isDisabled = false,
+    isOpen,
+    hasSearch = false,
+    onOpen,
+    onClose,
+    onToggle,
+    onClear,
+    hasValue = false,
+    listboxId,
+    isGrid = false,
+    rowHasAction,
+    onActivateAction,
+  }: UseMultiComboboxOptions,
+  onKeyboardHighlight?: (index: number) => void,
+): UseMultiComboboxResult {
   const [highlightedIndex, setHighlightedIndexState] = useState<number>(-1);
   const [highlightedCell, setHighlightedCell] =
     useState<MultiComboboxCell>('option');
@@ -105,6 +175,15 @@ export function useMultiCombobox({
     setHighlightedIndexState(index);
     setHighlightedCell('option');
   }, []);
+  const highlightByKey = useCallback(
+    (index: number) => {
+      setHighlightedIndex(index);
+      if (index >= 0) {
+        onKeyboardHighlight?.(index);
+      }
+    },
+    [onKeyboardHighlight, setHighlightedIndex],
+  );
 
   // A match on the closed control opens the list on that option.
   const typeahead = useTypeahead({
@@ -113,7 +192,7 @@ export function useMultiCombobox({
     getCurrentIndex: () => (isOpen ? highlightedIndex : -1),
     onMatch: index => {
       if (isOpen || onOpen() !== false) {
-        setHighlightedIndex(index);
+        highlightByKey(index);
       }
     },
   });
@@ -251,7 +330,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -259,7 +338,7 @@ export function useMultiCombobox({
               currentEnabledPos + 1,
               enabledIndices.length - 1,
             );
-            setHighlightedIndex(enabledIndices[nextPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[nextPos] ?? highlightedIndex);
           }
           break;
 
@@ -267,12 +346,12 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(true));
+              highlightByKey(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
             const prevPos = Math.max(currentEnabledPos - 1, 0);
-            setHighlightedIndex(enabledIndices[prevPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[prevPos] ?? highlightedIndex);
           }
           break;
 
@@ -297,7 +376,7 @@ export function useMultiCombobox({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           }
           break;
@@ -318,14 +397,14 @@ export function useMultiCombobox({
         case 'Home':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'End':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -335,14 +414,14 @@ export function useMultiCombobox({
         case 'PageUp':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'PageDown':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -370,7 +449,7 @@ export function useMultiCombobox({
       isGrid,
       rowHasAction,
       onActivateAction,
-      setHighlightedIndex,
+      highlightByKey,
       onToggle,
       getEnabledIndices,
       findOpeningIndex,

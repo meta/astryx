@@ -74,7 +74,10 @@ import {
   normalizeOption,
   getSelectableOptions,
 } from '../Selector/utils';
-import {useMultiCombobox} from './hooks';
+import {
+  useMultiComboboxWithKeyHighlight,
+  useMultiSelectorActiveOptionAnnouncement,
+} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -1877,6 +1880,20 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     [handleSelectAll, handleToggle, commitCreate],
   );
 
+  // Each move by a key names the active option for iOS VoiceOver, which
+  // does not follow aria-activedescendant.
+  const isOptionSelected = useCallback(
+    (item: (typeof sortedItems)[number]) =>
+      item.value === SELECT_ALL_VALUE
+        ? allEnabledSelected
+        : !isCreateValue(item.value) && optimisticValue.includes(item.value),
+    [allEnabledSelected, optimisticValue],
+  );
+  const onKeyboardHighlight = useMultiSelectorActiveOptionAnnouncement(
+    sortedItems,
+    isOptionSelected,
+  );
+
   // Multi-select combobox behavior — index-based, matching useCombobox pattern.
   // sortedItems is the single source of truth for item order.
   const getActionCellIdForActivate = useCallback(
@@ -1893,35 +1910,40 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
     setHighlightedIndex,
-  } = useMultiCombobox({
-    selectableItems: sortedItems,
-    isDisabled: isDisabled || isEffectivelyReadOnly,
-    isOpen: surface.isOpen,
-    hasSearch,
-    onOpen: useCallback(() => surface.show(), [surface]),
-    onClose: surface.hide,
-    onToggle: handleNavigableToggle,
-    onClear: hasClear ? clearValues : undefined,
-    hasValue,
-    listboxId,
-    isGrid,
-    rowHasAction: useCallback(
-      (index: number) => sortedItems[index]?.action != null,
-      [sortedItems],
-    ),
-    onActivateAction: useCallback(
-      (index: number) => {
-        // Fire the caller's control as a press would: the first focusable
-        // thing in the action cell. Reading the rendered DOM, not the node.
-        const cell = document.getElementById(getActionCellIdForActivate(index));
-        const control = cell?.querySelector<HTMLElement>(
-          'button, a, input, [role="button"], [tabindex]',
-        );
-        control?.click();
-      },
-      [getActionCellIdForActivate],
-    ),
-  });
+  } = useMultiComboboxWithKeyHighlight(
+    {
+      selectableItems: sortedItems,
+      isDisabled: isDisabled || isEffectivelyReadOnly,
+      isOpen: surface.isOpen,
+      hasSearch,
+      onOpen: useCallback(() => surface.show(), [surface]),
+      onClose: surface.hide,
+      onToggle: handleNavigableToggle,
+      onClear: hasClear ? clearValues : undefined,
+      hasValue,
+      listboxId,
+      isGrid,
+      rowHasAction: useCallback(
+        (index: number) => sortedItems[index]?.action != null,
+        [sortedItems],
+      ),
+      onActivateAction: useCallback(
+        (index: number) => {
+          // Fire the caller's control as a press would: the first focusable
+          // thing in the action cell. Reading the rendered DOM, not the node.
+          const cell = document.getElementById(
+            getActionCellIdForActivate(index),
+          );
+          const control = cell?.querySelector<HTMLElement>(
+            'button, a, input, [role="button"], [tabindex]',
+          );
+          control?.click();
+        },
+        [getActionCellIdForActivate],
+      ),
+    },
+    onKeyboardHighlight,
+  );
 
   // A new query is a new list: the old highlight's index would name another
   // row, or one past the end, so it is cleared. With no row highlighted, Left

@@ -2043,6 +2043,14 @@
     "defaultMessage": "{count, number} {count, plural, one {result} other {results}}",
     "description": "Polite screen-reader announcement of how many Selector options match the search query, spoken as the user types. Live-region text, never shown on screen; example: `1 result`, `12 results`."
   },
+  "@astryx.selector.activeOption": {
+    "defaultMessage": "{label}, {position, number} of {total, number}",
+    "description": "Polite screen-reader announcement of the option a key just highlighted in a Selector or MultiSelector list, for screen readers that do not follow the highlight on their own. `{label}` is the option's text, `{position}` its 1-based place in the list and `{total}` the number of options. Live-region text, never shown on screen; example: `Banana, 2 of 12`."
+  },
+  "@astryx.selector.activeOptionSelected": {
+    "defaultMessage": "{label}, selected, {position, number} of {total, number}",
+    "description": "The same announcement as `@astryx.selector.activeOption` for an option that is already selected. `selected` matches the word screen readers use for a selected option. Example: `Banana, selected, 2 of 12`."
+  },
   "@astryx.typeahead.resultCount": {
     "defaultMessage": "{count, number} {count, plural, one {result} other {results}}",
     "description": "Polite screen-reader announcement of how many suggestions a Typeahead search returned. Live-region text, never shown on screen; example: `1 result`, `12 results`."

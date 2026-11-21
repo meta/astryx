@@ -1,0 +1,7 @@
+---
+'@astryxdesign/core': patch
+---
+
+[fix] Selector and MultiSelector now announce the option a key highlights, with its position and selected state, to VoiceOver on iPhone, which does not follow the list's highlight on its own. Other screen readers keep reading the highlight as before, with no second announcement.
+
+@cixzhang

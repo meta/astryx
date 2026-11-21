@@ -74,7 +74,11 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
+import {
+  useActiveOptionAnnouncement,
+  useComboboxWithKeyHighlight,
+  useSelectedItemOverlayMargin,
+} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -1642,6 +1646,17 @@ export function Selector<T extends SelectorOptionType>(
     ],
   );
 
+  // Each move by a key names the active option for iOS VoiceOver, which
+  // does not follow aria-activedescendant.
+  const isOptionSelected = useCallback(
+    (item: (typeof filteredItems)[number]) => item.value === optimisticValue,
+    [optimisticValue],
+  );
+  const onKeyboardHighlight = useActiveOptionAnnouncement(
+    filteredItems,
+    isOptionSelected,
+  );
+
   // Selector behavior (keyboard nav, selection)
   const {
     highlightedIndex,
@@ -1651,23 +1666,26 @@ export function Selector<T extends SelectorOptionType>(
     onKeyDown: comboboxKeyDown,
     onItemSelect,
     onItemMouseEnter: comboboxItemMouseEnter,
-  } = useCombobox({
-    selectableItems: filteredItems,
-    // The optimistic value, not the raw prop: with a pending changeAction the
-    // prop still holds the old selection, so the popup would open with the
-    // highlight on it and Delete/Backspace could clear a value the action has
-    // already replaced.
-    value: optimisticValue,
-    isDisabled: isDisabled || isEffectivelyReadOnly,
-    isOpen: surface.isOpen,
-    hasSearch,
-    onOpen: useCallback(() => surface.show(), [surface]),
-    onClose: surface.hide,
-    onSelect: commitValue,
-    onClear: hasClear ? clearValue : undefined,
-    onSearchSeed: appendSearchQuery,
-    listboxId,
-  });
+  } = useComboboxWithKeyHighlight(
+    {
+      selectableItems: filteredItems,
+      // The optimistic value, not the raw prop: with a pending changeAction the
+      // prop still holds the old selection, so the popup would open with the
+      // highlight on it and Delete/Backspace could clear a value the action has
+      // already replaced.
+      value: optimisticValue,
+      isDisabled: isDisabled || isEffectivelyReadOnly,
+      isOpen: surface.isOpen,
+      hasSearch,
+      onOpen: useCallback(() => surface.show(), [surface]),
+      onClose: surface.hide,
+      onSelect: commitValue,
+      onClear: hasClear ? clearValue : undefined,
+      onSearchSeed: appendSearchQuery,
+      listboxId,
+    },
+    onKeyboardHighlight,
+  );
 
   // Only after keyboard input does the active option draw the focus ring; a
   // pointer highlight keeps the fill alone, as a focused menu row does.
@@ -1769,6 +1787,7 @@ export function Selector<T extends SelectorOptionType>(
       const item = selectableItems[index];
       if (surface.isOpen) {
         setHighlightedIndex(index);
+        onKeyboardHighlight(index);
       } else if (item.value !== optimisticValue) {
         commitValue(item.value);
         announce(item.label ?? item.value);

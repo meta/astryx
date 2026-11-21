@@ -4,13 +4,12 @@
 
 /**
  * @file hooks.ts
- * @input Uses untransformed DOM layout geometry from the Selector's outer
- *   anchor, listbox, and selected option, the open listbox's resize reports,
- *   and the layer runtime's keyboard inset
- * @output Hooks for Selector. useSelectedItemOffset and useCombobox are
- *   public, exported from the Selector entry point. CommandPalette also uses
- *   useCombobox, and so do products with a combobox over their own text field
- *   (spec:AST-075). useSelectedItemOverlayMargin is Selector's own.
+ * @input DOM layout geometry of the Selector's anchor, listbox and selected
+ *   option, the open listbox's resize reports, and the layer runtime's
+ *   keyboard inset
+ * @output Public useSelectedItemOffset and useCombobox (also used by
+ *   CommandPalette and products, spec:AST-075); Selector-only hooks
+ *   (useSelectedItemOverlayMargin, the active-option announcement)
  * @position Selector hooks; used by Selector.tsx and CommandPalette
  *
  * SYNC: When useCombobox's options or return change, update:
@@ -19,6 +18,12 @@
 
 import {useCallback, useState} from 'react';
 import {flushSync} from 'react-dom';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Selector/hooks.generated';
 import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -32,11 +37,14 @@ import {layoutViewportHeight} from '../utils/layoutViewport';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
+import {isIosWebKit} from '../utils/touchQueries';
 import {isShortcutChord} from '../utils/typeaheadMatch';
 
 // The selected row renders one optical pixel below the closed trigger label at
 // the same mathematical center, so compensate before viewport clamping.
 const SELECTED_ITEM_OPTICAL_OFFSET = 1;
+
+registerEnglishFallback(english);
 
 /**
  * Return an element's document-relative layout top without CSS transforms.
@@ -459,20 +467,101 @@ function hasModifier(e: React.KeyboardEvent): boolean {
  * rows and where the list renders. The caller announces each new result count
  * through useAnnounce (spec:AST-075 DEC-2), with the words the field shows.
  */
-export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
-  selectableItems,
-  value,
-  isDisabled = false,
-  isOpen,
-  hasSearch = false,
-  onOpen,
-  onClose,
-  onSelect,
-  onClear,
-  onSearchSeed,
-  listboxId,
-}: UseComboboxOptions<T>): UseComboboxResult<T> {
+export function useCombobox<T extends ComboboxOption = SelectorOptionData>(
+  options: UseComboboxOptions<T>,
+): UseComboboxResult<T> {
+  return useComboboxWithKeyHighlight(options);
+}
+
+/**
+ * Whether Core's comboboxes also announce the active option in the polite
+ * live region. iOS VoiceOver ignores `aria-activedescendant`, so on iOS the
+ * announcement is how it hears each keyboard move. Elsewhere screen readers
+ * follow `aria-activedescendant`, and an announcement would say each move
+ * twice. It decides for Selector; MultiSelector's announcer hook keeps the
+ * same gate (see its SYNC note). Remove the gate, and the announcement, once
+ * iOS VoiceOver follows `aria-activedescendant`.
+ */
+export function announcesActiveOption(): boolean {
+  return isIosWebKit();
+}
+
+/**
+ * The keyboard-move callback for Selector: it announces the active
+ * option politely, with its name, `selected` when it is, and its position,
+ * where announcesActiveOption says so. A new move replaces a name not yet
+ * spoken. `items` are the options in list order; `isSelected` tells whether
+ * one is selected.
+ *
+ * SYNC: MultiSelector's useMultiSelectorActiveOptionAnnouncement
+ * (MultiSelector/hooks.ts) makes the same announcement. Keep the words, the
+ * count, the iOS gate (announcesActiveOption) and the removal condition the
+ * same in both.
+ */
+export function useActiveOptionAnnouncement<
+  I extends {readonly value: string; readonly label?: string},
+>(
+  items: ReadonlyArray<I>,
+  isSelected: (item: I) => boolean,
+): (index: number) => void {
+  const t = useComponentTranslator();
+  const announce = useAnnounce({hasReplace: true});
+  return useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (item == null || !announcesActiveOption()) {
+        return;
+      }
+      announce(
+        t(
+          isSelected(item)
+            ? '@astryx.selector.activeOptionSelected'
+            : '@astryx.selector.activeOption',
+          {
+            label: item.label ?? item.value,
+            position: index + 1,
+            total: items.length,
+          },
+        ),
+      );
+    },
+    [announce, items, isSelected, t],
+  );
+}
+
+/**
+ * `useCombobox` for Core's own comboboxes: `onKeyboardHighlight` runs after
+ * each move of the highlight by a key, with the new index, so the caller can
+ * announce the active option. A pointer's move does not call it.
+ */
+export function useComboboxWithKeyHighlight<
+  T extends ComboboxOption = SelectorOptionData,
+>(
+  {
+    selectableItems,
+    value,
+    isDisabled = false,
+    isOpen,
+    hasSearch = false,
+    onOpen,
+    onClose,
+    onSelect,
+    onClear,
+    onSearchSeed,
+    listboxId,
+  }: UseComboboxOptions<T>,
+  onKeyboardHighlight?: (index: number) => void,
+): UseComboboxResult<T> {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const highlightByKey = useCallback(
+    (index: number) => {
+      setHighlightedIndex(index);
+      if (index >= 0) {
+        onKeyboardHighlight?.(index);
+      }
+    },
+    [onKeyboardHighlight],
+  );
 
   const getItemId = useCallback(
     (index: number) => `${listboxId}-item-${index}`,
@@ -562,7 +651,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -570,7 +659,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
               currentEnabledPos + 1,
               enabledIndices.length - 1,
             );
-            setHighlightedIndex(enabledIndices[nextPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[nextPos] ?? highlightedIndex);
           }
           break;
 
@@ -578,12 +667,12 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(true));
+              highlightByKey(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
             const prevPos = Math.max(currentEnabledPos - 1, 0);
-            setHighlightedIndex(enabledIndices[prevPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[prevPos] ?? highlightedIndex);
           }
           break;
 
@@ -604,7 +693,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           }
           break;
@@ -625,14 +714,14 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         case 'Home':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'End':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -642,14 +731,14 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         case 'PageUp':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'PageDown':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -684,6 +773,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       }
     },
     [
+      highlightByKey,
       isDisabled,
       isOpen,
       onOpen,
@@ -740,7 +830,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           onOpen() !== false
         ) {
           e.preventDefault();
-          setHighlightedIndex(enabledIndices[0] ?? -1);
+          highlightByKey(enabledIndices[0] ?? -1);
         }
         return;
       }
@@ -764,7 +854,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
               : position < 0
                 ? count - 1
                 : (position - 1 + count) % count;
-          setHighlightedIndex(enabledIndices[next]);
+          highlightByKey(enabledIndices[next]);
           break;
         }
         case 'Enter': {
@@ -789,6 +879,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       }
     },
     [
+      highlightByKey,
       isDisabled,
       getEnabledIndices,
       isOpen,
