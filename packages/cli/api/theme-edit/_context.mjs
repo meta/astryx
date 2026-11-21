@@ -42,7 +42,7 @@ import {
   SYSTEM_FONTS,
 } from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
-import {openProject, installLine} from './_project.mjs';
+import {openProject, installLine, refusePlugAndPlay} from './_project.mjs';
 import {addCensusStates, partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
@@ -106,19 +106,7 @@ export function requireProject(cwd) {
   // package.json lists @astryxdesign/core.
   const app = coreApp(cwd);
   if (!app) refuseNoApp(cwd);
-  // Yarn Plug'n'Play has no node_modules for the editor to read Core from:
-  // its .pnp.cjs sits at the app or at the workspace root above it.
-  if (pnpAbove(app))
-    throw new AstryxError(
-      "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
-      [
-        {
-          name: 'yarn config set nodeLinker node-modules',
-          reason: 'do this first, then yarn install',
-        },
-      ],
-      E.ERR_PROJECT_REQUIRED,
-    );
+  refusePlugAndPlay(app);
   if (findNodeModulesPackage(app, '@astryxdesign/core')) return;
   // The app lists Core but it is not installed.
   throw new AstryxError(
@@ -225,22 +213,6 @@ export function coreApp(cwd) {
     const up = path.dirname(dir);
     if (up === dir) return null;
     dir = up;
-  }
-}
-
-/**
- * Whether a Yarn Plug'n'Play loader (.pnp.cjs) is at the app folder or above
- * it, up to its workspace root (or, outside a workspace, the repository
- * root).
- * @param {string} app
- */
-function pnpAbove(app) {
-  const root = findDeclaredWorkspaceRoot(app);
-  for (let dir = app; ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, '.pnp.cjs'))) return true;
-    if (dir === root || (!root && fs.existsSync(path.join(dir, '.git'))))
-      return false;
-    if (path.dirname(dir) === dir) return false;
   }
 }
 
