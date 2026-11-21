@@ -7875,7 +7875,7 @@ async function changeOnce(
         const to = box(x, after);
         if (from === to) continue;
         notes.push(
-          `${x.thing} on ${s.on} draws on ${to} now, not on ${from}: ${to === s.on ? `${s.on} is filled, so it is its own box` : `${s.on} shows no fill, so its pages draw one strip on ${row}`}; to put it back: ${putBack}`,
+          `${x.thing} on ${s.on}${x.when ? ` (--when ${x.when})` : ''}${x.mode ? ` (--mode ${x.mode})` : ''} draws on ${to} now, not on ${from}: ${to === s.on ? `${s.on} is filled, so it is its own box` : `${s.on} shows no fill, so its pages draw one strip on ${row}`}; to put it back: ${putBack}`,
         );
       }
     }

@@ -15780,9 +15780,41 @@ export function fillsPart(settings, part, scope = {}) {
       x.source === 'property' &&
       !x.state &&
       (!x.mode || x.mode === scope.mode) &&
-      (!x.when || x.when === scope.when) &&
+      whenCovers(x.when, scope.when) &&
       /^background/.test(String(x.thing)) &&
       givesEdge(x),
+  );
+}
+
+/**
+ * Whether a `--when` scope reaches where another draws: no scope reaches
+ * everywhere, and `variant:dots` reaches `variant:dots+size:sm` (each of
+ * its pieces is one of the other's).
+ * @param {unknown} wide
+ * @param {unknown} narrow
+ */
+export function whenCovers(wide, narrow) {
+  if (!wide) return true;
+  const pieces = new Set(
+    String(narrow ?? '')
+      .split('+')
+      .filter(Boolean),
+  );
+  return String(wide)
+    .split('+')
+    .every(p => pieces.has(p));
+}
+
+/**
+ * Whether a value paints nothing: a keyword that draws no paint, or a
+ * color with zero alpha (read by the shared color reader).
+ * @param {unknown} value
+ */
+export function seeThrough(value) {
+  return (
+    /^(?:none|hidden|initial|unset|0(?:px)?|transparent)$/i.test(
+      String(value ?? '').trim(),
+    ) || alphaOf(value) === 0
   );
 }
 
@@ -15810,10 +15842,7 @@ export function givesEdge(x, state) {
     /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
       kebab(String(x.thing ?? '')),
     ) &&
-    !/^(?:none|hidden|initial|unset|0(?:px)?|transparent)$/i.test(
-      String(x.value ?? '').trim(),
-    ) &&
-    alphaOf(x.value) !== 0
+    !seeThrough(x.value)
   );
 }
 

@@ -89,6 +89,8 @@ import {
   cornerParts,
   rowFrameOf,
   fillsPart,
+  seeThrough,
+  whenCovers,
   givesEdge,
   isRowFrame,
   focusStateOf,
@@ -12548,9 +12550,10 @@ export function draftAnswer(ctx, env, question) {
         !o.state &&
         !o.neg &&
         !/\b(?:transparent|see-through|clear)\b/i.test(o.text) &&
+        !(o.colors.length && o.colors.every(v => seeThrough(v))) &&
         (!o.mode || o.mode === mode) &&
         o.aspects.includes('background') &&
-        o.parts.some(q => q.on === part && (!q.when || q.when === when)),
+        o.parts.some(q => q.on === part && whenCovers(q.when, when)),
     ) || fillsPart(env.data?.settings ?? [], part, {mode, when});
   for (const c of clauses)
     if (

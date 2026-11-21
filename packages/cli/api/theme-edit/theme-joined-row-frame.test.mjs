@@ -329,6 +329,13 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
       on: 'pagination',
     });
     expect(variant.data.parts).toEqual(['pagination-list']);
+    // A fill for a variant reaches a narrower scope inside it.
+    const narrow = await themeEditSet('v', 'border', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:dots+size:sm',
+    });
+    expect(narrow.data.parts).toEqual(['pagination']);
     // Undoing the fill moves the border back onto the row, and says so.
     await themeEditNew('u', {cwd, like: 'neutral'});
     await themeEditSet('u', 'background-color', '#f8f9fa', {
@@ -394,7 +401,7 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
       when: 'variant:dots',
     });
     expect(undone.data.notes.join('\n')).toMatch(
-      /border on pagination draws on pagination-list now, not on pagination[^\n]*to put it back: [^\n]* set w background-color '?#f8f9fa'? --on pagination --when '?variant:dots'?/,
+      /border on pagination \(--when variant:dots\) draws on pagination-list now, not on pagination[^\n]*to put it back: [^\n]* set w background-color '?#f8f9fa'? --on pagination --when '?variant:dots'?/,
     );
   }, 240_000);
 });
