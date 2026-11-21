@@ -4532,11 +4532,23 @@ export function draftAnswer(ctx, env, question) {
       )?.value ?? '',
     ),
   );
+  // A file named in url() is a value, written as typed: it is set aside
+  // (url(uu<n>uu)) before any reader reads the words, and each answer
+  // writes it back as typed. (Nor is it a picture to match: the reader of
+  // picture files never sees it.)
+  const urls = /** @type {string[]} */ ([]);
+  question = String(question).replace(/url\([^()]*\)/gi, m => {
+    urls.push(m);
+    return `url(uu${urls.length - 1}uu)`;
+  });
   // (The words as asked, for the readers that hold the whole question;
   // their case too, which carries tone: an emphatic "SO" in a lowercase
   // line.)
   const raw0 = String(question);
   const asked0 = raw0.toLowerCase();
+  /** Text with each file set aside put back as typed. @param {string} s */
+  const withUrls = s =>
+    s.replace(/url\(uu(\d+)uu\)/g, (m, n) => urls[Number(n)] ?? m);
   // "darkmode", "dark-mode": one spelling of a mode before any clause is
   // read, so every reader that names a mode sees it.
   // One mode grammar: every way of naming a mode is read here as "dark
@@ -5178,11 +5190,37 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /(^|[.;,!?—\n]\s*)([a-z]+)[ \t]*:[ \t]*([a-z-]+)(?=[ \t]*(?:[.,;!\n]|$))/gim,
       (m, lead, label, value, at, whole) => {
-        // (A label after a part is named, "Card\nRadius: large" or
-        // "cards: white, radius: large", is that part's: left to the
-        // part's readers.)
-        const before = ` ${String(whole).slice(0, at).toLowerCase()} `;
-        if (partLexicon(ctx).parts.some(([re]) => re.test(before))) return m;
+        // (A label after a part named in its own sentence, "cards: white,
+        // radius: large", or under a part's heading line, "Card\nRadius:
+        // large", is that part's: left to the part's readers.)
+        const text = String(whole).toLowerCase();
+        // (From after the label's lead: the period or line break before it
+        // ends the sentence before.)
+        const said = text.slice(0, at + String(lead).length);
+        const sentence = said.split(/[;!?\n]|\.(?=\s|$)/).at(-1) ?? '';
+        const lines = said.split('\n');
+        // (The heading is the line above the run of label lines, numbered
+        // or not, past any blank line; "Cards:" ends in its colon.)
+        let k = lines.length - 2;
+        while (
+          k >= 0 &&
+          (!String(lines[k]).trim() ||
+            /^\s*(?:\d+[.)]\s*)?[a-z][a-z -]*[ \t]*:[ \t]*\S/.test(
+              String(lines[k]),
+            ))
+        )
+          k--;
+        const heading = k >= 0 ? String(lines[k]).replace(/:\s*$/, '') : '';
+        const namesPart = (/** @type {string} */ t) =>
+          partLexicon(ctx).parts.some(([re]) => re.test(` ${t} `));
+        if (
+          namesPart(sentence) ||
+          (!/:/.test(heading) &&
+            !/[.!?]\s*$/.test(heading) &&
+            heading.trim().split(/\s+/).length <= 3 &&
+            namesPart(heading))
+        )
+          return m;
         const l = String(label).toLowerCase();
         const v = String(value).toLowerCase();
         // (The label is the dial's own name, or a word only that dial has;
@@ -10595,10 +10633,71 @@ export function draftAnswer(ctx, env, question) {
         .find(Boolean);
       const plural = !said || /s$/i.test(said);
       const colon = joinOf.get(c)?.list !== 'with';
+      // ("popover, tooltip and hover card: dark": a part named as a whole
+      // item before the first colon of the clause's own sentence, as
+      // asked, is one of the list's subjects, never an item of the first.
+      // Read from the words as asked, so a reader's rewrite of the colon
+      // does not change it; a part said after that colon, "cards: white
+      // background, header: navy", or inside a longer name, "icon
+      // buttons: … blue icon", stays an item.)
+      // (The clause's own sentence, by position: the sentence breaks the
+      // clause splitter found before it pick that sentence of the ask as
+      // typed, so neither a reader's rewrite nor a word another sentence
+      // repeats changes it. Where the ask's line breaks or marks end
+      // sentences the splitter does not count, the sentence is the one
+      // that holds the words a rewrite keeps.)
+      const sentences = asked0.split(/[;!?\n]|\.(?!\d)/).filter(x => x.trim());
+      const breaksBefore = clauses
+        .slice(0, clauses.indexOf(c) + 1)
+        .filter(x => joinOf.get(x)?.sep === 'break').length;
+      const breaks = clauses.filter(x => joinOf.get(x)?.sep === 'break').length;
+      const lowered = c.text.toLowerCase().trim();
+      const ownColon = lowered.search(/:(?!\d)/);
+      const keptWords = (
+        ownColon >= 0
+          ? lowered.slice(ownColon + 1)
+          : said
+            ? lowered.slice(Math.max(0, lowered.indexOf(said.toLowerCase())))
+            : lowered
+      ).trim();
+      // (A rewrite can move a clause, "don't change the sidebar" read after
+      // the ask: the sentence by position counts only when it holds the
+      // words the rewrite keeps.)
+      const byPosition =
+        sentences.length === breaks + 1 ? sentences[breaksBefore] : undefined;
+      // (Else the sentences that hold the clause as typed, "gray header",
+      // so a part word another sentence also says, "Header: navy, e.g. …",
+      // never frees it; only a clause a reader rewrote falls back to the
+      // words the rewrite keeps.)
+      const holding = sentences.filter(x => x.includes(lowered));
+      const ownSentences =
+        byPosition && (!keptWords || byPosition.includes(keptWords))
+          ? [byPosition]
+          : holding.length
+            ? holding
+            : keptWords
+              ? sentences.filter(x => x.includes(keptWords))
+              : [];
+      const subjectOfColon =
+        !!said &&
+        ownSentences.some(sentence => {
+          const colon = sentence.search(/:(?!\d)/);
+          if (colon < 0) return false;
+          return sentence
+            .slice(0, colon)
+            .split(/,|&|\band\b/)
+            .map(item =>
+              item
+                .trim()
+                .replace(/^(?:the|all|every|each|our|my|your|any)\s+/, ''),
+            )
+            .includes(said.toLowerCase());
+        });
       if (
         holder &&
         head !== c &&
         inWith &&
+        !subjectOfColon &&
         C.MAP[holder] &&
         !c.parts.some(
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),
@@ -22140,20 +22239,9 @@ export function draftAnswer(ctx, env, question) {
               one(/** @type {string} */ (on)),
               'corners',
             )?.[0]?.token;
-            // (A part that shows no corners of its own, a heading, takes the
-            // corners dial as before.)
-            if (
-              !C.showsCorners(/** @type {string} */ (on)) &&
-              !(env.data?.settings ?? []).some(
-                (/** @type {any} */ x) =>
-                  x.source === 'property' &&
-                  x.on === on &&
-                  /^(?:background|border|box-shadow|outline)/.test(
-                    String(x.thing),
-                  ),
-              )
-            )
-              break cornersAt;
+            // (A part that shows no corners of its own still takes only the
+            // corners named: the check refuses them, with why, until the
+            // part has an edge, and an edge the same ask gives runs first.)
             // (A token that resolves to 0 rounds nothing: the round rung.)
             const tokRounds =
               tok != null && parseFloat(String(current(tok))) > 0;
@@ -29898,12 +29986,17 @@ export function draftAnswer(ctx, env, question) {
     const rest = draftAnswer(
       ctx,
       env,
-      named0
-        ? followAsk.replace(
-            /\b(them|it|those|these)\b/i,
-            `${named0} ${asked === 'border-radius' ? 'corners' : asked.replace(/-color$/, '').replace('-', ' ')}`,
-          )
-        : followAsk,
+      // (The ask is read again with its files as typed: that reading sets
+      // them aside and writes them back itself. "Them" is read on the ask
+      // with its files still aside, so a word of a path is never swapped.)
+      withUrls(
+        named0
+          ? followAsk.replace(
+              /\b(them|it|those|these)\b/i,
+              `${named0} ${asked === 'border-radius' ? 'corners' : asked.replace(/-color$/, '').replace('-', ' ')}`,
+            )
+          : followAsk,
+      ),
     );
     return {
       parts: rest.parts,
@@ -32635,7 +32728,9 @@ export function draftAnswer(ctx, env, question) {
     };
     /** @type {string[]} */
     const named = [];
+    // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
+      .replace(/url\([^()]*\)/gi, ' ')
       .split(/[,;\n]|\band\b|\bthen\b/i)
       .map(seg => seg.trim())
       .filter(Boolean);
@@ -32804,6 +32899,15 @@ export function draftAnswer(ctx, env, question) {
     if (writes) result.push(note);
     else result.splice(0, result.length, note);
   }
+  // Each file set aside is written back as typed, where an answer names or
+  // writes it.
+  if (urls.length)
+    for (const d of result) {
+      d.text = withUrls(d.text);
+      for (const o of d.options)
+        for (const st of o)
+          if (typeof st.value === 'string') st.value = withUrls(st.value);
+    }
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
