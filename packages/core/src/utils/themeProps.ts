@@ -14,8 +14,9 @@ export function themeDataAttributeName(prop: string): `data-${string}` {
   return `data-${prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
 }
 
-// Most visual prop names are lowercase ASCII, so they skip the regex and the
-// copy. A non-ASCII character can have a lowercase form, so it takes the regex.
+// Most prop names are lowercase ASCII and need no change, so they skip the
+// conversion. A non-ASCII letter can have a lowercase form, so a name with one
+// goes through the conversion.
 function isLowercaseAscii(text: string): boolean {
   for (let index = 0; index < text.length; index++) {
     const code = text.charCodeAt(index);
