@@ -15,6 +15,8 @@ export const docs = {
     'authoring',
     'make a package',
     'make an integration',
+    'integration create',
+    'new integration',
     'first integration',
     'integration tutorial',
     'package.json',
