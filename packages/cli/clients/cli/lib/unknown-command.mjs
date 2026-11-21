@@ -909,11 +909,11 @@ async function pointed(first, program, findEntry, iconFeatures) {
  *   points at a command. `iconFeatures` says whether icon features are on;
  *   without it, they are off. `projectScript` finds the project's own script
  *   the word names; without it, no word names one
- * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, near?: true, help?: {name: string, reason: string}, fallback?: true} | null>}
- *   null when no word names a command; `near` when the suggestions are the
- *   names of commands the word is a typo of, with `help`: the help run, with
- *   the program options typed, for a printer that names only runs;
- *   `fallback` when nothing fits and the one suggestion is the help
+ * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, help: {name: string, reason: string}, near?: string[], fallback?: true} | null>}
+ *   null when no word names a command; `help`: the help run, with the
+ *   program options typed; `near`: the suggestions that are names of
+ *   commands the word is a typo of, not runs; `fallback` when nothing fits
+ *   and the one suggestion is the help
  */
 export async function unknownCommandAnswer(
   program,
@@ -951,19 +951,40 @@ export async function unknownCommandAnswer(
     ].join(' '),
     reason: 'every command, with what it does',
   };
+  // `help` travels with the answer so a printer that shows only runs can
+  // name it in place of a typo's command names.
+  const answer = {
+    ...withoutScript(word, message, runs, program, help),
+    help,
+  };
   // A word that names one of the project's own package.json scripts (`test`,
   // `dev`) is most likely that script, typed through the CLI: its run comes
   // first.
   const script = await projectScript(word).catch(() => null);
-  if (script)
-    return {
-      word,
-      message,
-      suggestions: [
-        {name: script, reason: `the project's own ${word} script`},
-        ...(runs.length > 0 ? runs : [help]),
-      ],
-    };
+  if (!script) return answer;
+  // The script's run is a run, so the answer is no longer only the help.
+  const {fallback: _fallback, ...rest} = answer;
+  return {
+    ...rest,
+    suggestions: [
+      {name: script, reason: `the project's own ${word} script`},
+      ...answer.suggestions,
+    ],
+  };
+}
+
+/**
+ * The answer the word gets when it names no project script: the runs the
+ * words point at, else the commands a typo of the word could be, else the
+ * help.
+ * @param {string} word
+ * @param {string} message
+ * @param {Array<{name: string, reason: string}>} runs
+ * @param {CommandLike} program
+ * @param {{name: string, reason: string}} help
+ * @returns {{word: string, message: string, suggestions: Array<{name: string, reason: string}>, near?: string[], fallback?: true}}
+ */
+function withoutScript(word, message, runs, program, help) {
   if (runs.length > 0) return {word, message, suggestions: runs};
   const near = nearNames(
     word,
@@ -974,8 +995,7 @@ export async function unknownCommandAnswer(
       word,
       message,
       suggestions: near.map(name => ({name, reason: 'did you mean this?'})),
-      near: true,
-      help,
+      near,
     };
   // When nothing fits, the help lists every command with what it does. A
   // bare list of names would put the first one (`init`, which writes files)

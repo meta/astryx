@@ -192,6 +192,18 @@ describe('the command the words point at', () => {
     expect(far?.suggestions.map(s => s.name)).toEqual(['astryx help']);
   });
 
+  it("keeps what the word gets without a script after the project's own script", async () => {
+    // `doc` is a typo of `docs`: a project's `doc` script comes first, and
+    // the typo's command still follows it.
+    /** @param {string} word */
+    const projectScript = async word => (word === 'doc' ? 'npm run doc' : null);
+    const a = await unknownCommandAnswer(program(), ['doc'], {
+      findEntry: entries,
+      projectScript,
+    });
+    expect(a?.suggestions.map(s => s.name)).toEqual(['npm run doc', 'docs']);
+  });
+
   it('keeps the program options the reader typed in the help it falls back to', async () => {
     expect(await names(['frobnicate', '--json'])).toEqual([
       'astryx help --json',
@@ -689,7 +701,7 @@ describe('the CLI', () => {
         JSON.stringify({
           name: 'app',
           private: true,
-          scripts: {test: 'vitest', dev: 'vite'},
+          scripts: {test: 'vitest', dev: 'vite', doc: 'typedoc'},
           dependencies: {'@astryxdesign/core': '*'},
         }),
       );
@@ -713,6 +725,25 @@ describe('the CLI', () => {
       expect(
         lint.suggestions.map((/** @type {{name: string}} */ s) => s.name),
       ).toEqual(['astryx --json help']);
+      // A script whose name is a typo of a command keeps that command after
+      // it; the stray-option answer prints the runs, then the help.
+      const doc = JSON.parse((await runCli(['--json', 'doc'], tmp)).stdout);
+      expect(
+        doc.suggestions.map((/** @type {{name: string}} */ s) => s.name),
+      ).toEqual(['pnpm run doc', 'docs']);
+      const stray = await runCli(['doc', '--bogus'], tmp);
+      expect(stray.stderr).toMatch(/^Run: pnpm run doc$/m);
+      expect(stray.stderr).toMatch(/^Run: .* help$/m);
+      // The help in place of the typo's names keeps the options typed.
+      const strayJson = JSON.parse(
+        (await runCli(['--json', 'doc', '--bogus'], tmp)).stdout,
+      );
+      const strayNames = strayJson.suggestions.map(
+        (/** @type {{name: string}} */ s) => s.name,
+      );
+      expect(strayNames[0]).toBe('pnpm run doc');
+      expect(strayNames[1]).toMatch(/ --json help$/);
+      expect(strayNames).toHaveLength(2);
     } finally {
       fs.rmSync(tmp, {recursive: true, force: true});
     }
