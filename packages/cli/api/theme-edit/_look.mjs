@@ -57,7 +57,7 @@ import {
 /**
  * One problem a person would see.
  * @typedef {object} LookProblem
- * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts' | 'page-image'} kind
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'font-unloaded' | 'charts' | 'page-image' | 'bar-fill' | 'chart-ground'} kind
  * @property {Mode | 'both'} mode
  * @property {string} message
  * @property {string} [token] the token that draws it
@@ -242,13 +242,13 @@ function textProblems(look) {
     const drawn = (p, side, m) => {
       const mode = /** @type {Mode} */ (m);
       const s = p[side];
-      const when = /** @type {any} */ (p).when ?? null;
+      const block = pairBlock(look.map, p);
       const own = partValue(
         styles,
         s.target,
         side === 'fg' ? ['color'] : ['backgroundColor', 'background'],
         mode,
-        when ? String(when).replace(/^(\w+)=/, '$1:') : null,
+        block,
       );
       if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
       let tok = s.tokens[0];
@@ -260,7 +260,6 @@ function textProblems(look) {
       if (side === 'fg' && tok) {
         // A text token a part sets for itself wins over the theme's: the
         // text's own part first, then the part it sits on.
-        const block = when ? String(when).replace(/^(\w+)=/, '$1:') : null;
         const set =
           partValue(styles, p.fg.target, [tok], mode, block) ??
           partValue(styles, p.bg.target, [tok], mode, block);
@@ -293,8 +292,7 @@ function textProblems(look) {
     /** @type {TextPair} */
     const p = x.pair;
     const mode = /** @type {Mode} */ (x.mode);
-    const when = /** @type {any} */ (p).when ?? null;
-    const block = when ? String(when).replace(/^(\w+)=/, '$1:') : null;
+    const block = pairBlock(look.map, p);
     const fg = shown(drawn(p, 'fg', mode), x.ground);
     /** @type {Omit<AcceptRecord, 'reason'> | null} */
     const record = fg
@@ -452,7 +450,8 @@ function flatMenus(look, m, likePage) {
 /**
  * The style block a pair is drawn in: its own variant, else the one
  * variant of its part whose fill reads the pair's ground token (a Button
- * drawn as its default variant), else none (the plain block).
+ * drawn as its default variant), else `selected` for a fill drawn only
+ * when selected, else none (the plain block).
  * @param {Look['map']} map @param {TextPair} p
  * @returns {string | null}
  */
@@ -461,12 +460,27 @@ function pairBlock(map, p) {
   if (when) return String(when).replace(/^(\w+)=/, '$1:');
   const q = p.bg.target;
   const tok = p.bg.tokens[0];
-  if (!q || !tok || q !== p.fg.target) return null;
-  const conds = map[q]?.own?.['background-color']?.tokens?.[tok] ?? [];
+  if (!q || !tok) return null;
+  const own = map[q]?.own ?? {};
+  const conds = [
+    ...(own['background-color']?.tokens?.[tok] ?? []),
+    ...(own.background?.tokens?.[tok] ?? []),
+  ];
+  // A fill drawn only in the selected state (a selected row's): the
+  // theme's `selected` style draws it.
+  const selected =
+    conds.length > 0 && conds.every(c => /(?:^|,)selected=selected\b/.test(c));
+  if (q !== p.fg.target) return selected ? 'selected' : null;
+  // The variants that draw the fill at rest (not selected, not under the
+  // pointer), when there are any.
+  const rest = conds.filter(c => !/selected=|:/.test(c));
   const variants = new Set(
-    conds.map(c => /(?:^|,)variant=([\w-]+)/.exec(c)?.[1]).filter(Boolean),
+    (rest.length ? rest : conds)
+      .map(c => /(?:^|,)variant=([\w-]+)/.exec(c)?.[1])
+      .filter(Boolean),
   );
-  return variants.size === 1 ? `variant:${[...variants][0]}` : null;
+  if (variants.size === 1) return `variant:${[...variants][0]}`;
+  return selected ? 'selected' : null;
 }
 
 /**
@@ -558,12 +572,204 @@ function barTextProblems(look) {
       }
     }
   }
+  // A fill the bar sets for what it holds (a lighter `--color-neutral`
+  // for its buttons): the text the parts draw on it, their own or the
+  // bar's, must read there.
+  for (const [part, blocks] of Object.entries(components ?? {})) {
+    if (!blocks || typeof blocks !== 'object') continue;
+    const within = inside(map, part);
+    if (!within.size) continue;
+    for (const m of look.modes) {
+      const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+      const bar =
+        shown(
+          colorIn(
+            partValue(components, part, ['backgroundColor', 'background'], m),
+            res[m],
+            m,
+          ),
+          page,
+        ) ?? page;
+      const style = blocks.base ?? {};
+      const fills = [
+        ...Object.keys(style),
+        ...Object.keys(style[`@${m}`] ?? {}),
+      ].filter(k => /^--color-/.test(k) && !TEXT_TOKEN.test(k));
+      for (const token of fills) {
+        const value = partValue(components, part, [token], m);
+        for (const p of pairs) {
+          const q = p.bg.target;
+          if (!q || q === part || !within.has(q) || p.bg.tokens[0] !== token)
+            continue;
+          const block = pairBlock(map, p);
+          if (
+            partValue(
+              components,
+              q,
+              ['backgroundColor', 'background', token],
+              m,
+              block,
+            ) != null
+          )
+            continue;
+          const fill = shown(colorIn(value, res[m], m), bar);
+          const tok = p.fg.tokens[0];
+          const text =
+            partValue(components, p.fg.target, ['color'], m, block) ??
+            (tok
+              ? (partValue(components, p.fg.target, [tok], m, block) ??
+                partValue(components, q, [tok], m, block) ??
+                partValue(components, part, [tok], m) ??
+                `var(${tok})`)
+              : null);
+          const fg = fill ? shown(colorIn(text, res[m], m), fill) : null;
+          if (!fill || !fg) continue;
+          const r = ratio(fg, fill);
+          if (r >= TEXT) continue;
+          const key = `fill|${part}|${token}|${m}`;
+          const had = out.get(key);
+          if (had) {
+            if (!had.parts?.includes(q)) had.parts?.push(q);
+            if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
+            continue;
+          }
+          out.set(key, {
+            kind: 'bar-fill',
+            mode: m,
+            message: '',
+            part,
+            token,
+            parts: [q],
+            ratio: fixed(r),
+            needs: TEXT,
+          });
+        }
+      }
+    }
+  }
   for (const p of out.values()) {
     const groups = [...new Set((p.parts ?? []).map(q => familyOf(q) ?? q))];
-    p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`;
+    p.message =
+      p.kind === 'bar-fill'
+        ? `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw their text on that fill: ${p.ratio}:1 in ${p.mode}. Change ${p.token} in ${p.part}'s style, or the text those parts draw there`
+        : `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`;
   }
   return [...out.values()];
 }
+
+/**
+ * Text on a selected part's own fill: a part whose `selected` style paints
+ * it (a selected row) holds text its census pairs measure only at rest.
+ * Each pair drawn in the part, or in a part inside it, is measured again
+ * on the selected fill, with the text the selected style gives.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function selectedProblems(look) {
+  const {res, components, pairs} = look;
+  /** @type {Map<string, LookProblem>} */
+  const out = new Map();
+  for (const [part, blocks] of Object.entries(components ?? {})) {
+    const sel = /** @type {any} */ (blocks)?.selected;
+    if (!sel || typeof sel !== 'object') continue;
+    for (const m of look.modes) {
+      const fillValue = partValue(
+        components,
+        part,
+        ['backgroundColor', 'background'],
+        m,
+        'selected',
+      );
+      if (fillValue == null) continue;
+      /** @type {Record<string, string>} */
+      const tokens = {...res[m]};
+      for (const inner of [sel, sel[`@${m}`]])
+        if (inner && typeof inner === 'object')
+          for (const [k, v] of Object.entries(inner))
+            if (k.startsWith('--') && typeof v === 'string') tokens[k] = v;
+      const page = shown(colorIn(`var(${PAGE})`, tokens, m), null);
+      const fill = shown(colorIn(fillValue, tokens, m), page);
+      if (!fill) continue;
+      // A part that holds free content (a table cell) shows any of it.
+      const holdsContent = (look.map[part]?.contains ?? []).some(q =>
+        CONTENT_HOLDERS.includes(q),
+      );
+      for (const p of pairs) {
+        const within = /** @type {any} */ (p).within ?? [];
+        const content =
+          holdsContent &&
+          CONTENT_PARTS.includes(String(p.fg.target)) &&
+          p.bg.target === p.fg.target;
+        if (p.bg.target !== part && !within.includes(part) && !content)
+          continue;
+        if (p.fg.target === part && p.bg.target === part) continue;
+        const block = pairBlock(look.map, p);
+        // The pair's own ground when it is a part inside the selected one
+        // (see-through over the selected fill); else the selected fill
+        // covers it.
+        const inner =
+          content ||
+          (look.map[part]?.contains ?? []).includes(String(p.bg.target));
+        const groundValue = !inner
+          ? null
+          : (partValue(
+              components,
+              p.bg.target,
+              ['backgroundColor', 'background'],
+              m,
+              block,
+            ) ?? (p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw));
+        const ground = groundValue
+          ? (shown(colorIn(groundValue, tokens, m), fill) ?? fill)
+          : fill;
+        const tok = p.fg.tokens[0];
+        const text =
+          partValue(components, p.fg.target, ['color'], m, block) ??
+          (tok
+            ? (partValue(components, p.fg.target, [tok], m, block) ??
+              `var(${tok})`)
+            : null);
+        const fg = shown(colorIn(text, tokens, m), ground);
+        if (!fg) continue;
+        const r = ratio(fg, ground);
+        if (r >= TEXT) continue;
+        const key = `${part}|${m}`;
+        const had = out.get(key);
+        if (had) {
+          if (!had.parts?.includes(p.text)) had.parts?.push(p.text);
+          if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
+          continue;
+        }
+        out.set(key, {
+          kind: 'part-text',
+          mode: m,
+          message: '',
+          part,
+          parts: [p.text],
+          ratio: fixed(r),
+          needs: TEXT,
+        });
+      }
+    }
+  }
+  for (const p of out.values())
+    p.message = `text on ${p.part}'s selected fill is ${p.ratio}:1 in ${p.mode} (needs ${TEXT}), in ${(p.parts ?? []).slice(0, 3).join(', ')}: give those parts text that reads in ${p.part}'s selected style`;
+  return [...out.values()];
+}
+
+/** The bars and panels a page is built from. */
+const PAGE_BARS = [
+  'app-shell-header',
+  'layout-header',
+  'layout-footer',
+  'layout-panel',
+  'top-nav',
+  'side-nav',
+];
+/** Parts that hold whatever content an app puts in them. */
+const CONTENT_HOLDERS = ['table-cell', 'list-item'];
+/** Content parts an app puts in a cell: their text, on their own fill. */
+const CONTENT_PARTS = ['badge', 'token', 'text'];
 
 /** The OKLab step a hover changes a fill by that a person sees at a glance. */
 const HOVER_SHOWS = 0.02;
@@ -813,6 +1019,47 @@ function coreGeneric(look, t) {
 }
 
 /**
+ * Chart series that do not show on the surfaces charts sit on (a card, the
+ * page): each categorical color against each, below 95% of Core's own
+ * color's contrast on Core's same surface, and 3:1 always enough.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function chartGroundProblems(look) {
+  const {res, base} = look;
+  /** @type {LookProblem[]} */
+  const out = [];
+  const series = Object.keys(look.defaults)
+    .filter(t => /^--color-data-categorical-/.test(t))
+    .sort();
+  for (const m of look.modes) {
+    const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+    for (const g of [CARD, PAGE]) {
+      const ground = shown(colorIn(`var(${g})`, res[m], m), page);
+      const coreGround = shown(colorIn(`var(${g})`, base[m], m), null);
+      if (!ground || !coreGround) continue;
+      const faint = series.filter(t => {
+        const c = shown(colorIn(`var(${t})`, res[m], m), ground);
+        const core = shown(colorIn(`var(${t})`, base[m], m), coreGround);
+        if (!c || !core) return false;
+        const needs = Math.min(NON_TEXT, EDGE_SHARE * ratio(core, coreGround));
+        return ratio(c, ground) + 0.005 < needs;
+      });
+      if (!faint.length) continue;
+      out.push({
+        kind: 'chart-ground',
+        mode: m,
+        on: g,
+        token: faint[0],
+        parts: faint,
+        message: `chart colors barely show on ${g} in ${m}: ${faint.slice(0, 3).join(', ')}${faint.length > 3 ? ` and ${faint.length - 3} more` : ''}`,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Whether a color the theme sets is Core's own, copied: in each mode, the
  * value Core gives it in one of its modes (a dark look that copies Core's
  * dark colors into both).
@@ -870,9 +1117,11 @@ export function lookProblems(look) {
   const out = [
     ...text.problems,
     ...barTextProblems(look),
+    ...selectedProblems(look),
     ...hoverProblems(look),
     ...fontProblems(look),
     ...chartProblems(look),
+    ...chartGroundProblems(look),
   ];
   for (const m of modes) {
     const at = (/** @type {string} */ t) => colorIn(`var(${t})`, res[m], m);
@@ -946,6 +1195,31 @@ export function lookProblems(look) {
         token: g,
         on: PAGE,
         message: `${g} is ${sideOf(ground)} while the page is ${sideOf(page)} in ${m}: the page looks half painted`,
+      });
+    }
+    // A bar or panel of the page whose own fill stays light while the page
+    // is dark.
+    for (const [part, blocks] of Object.entries(look.components ?? {})) {
+      if (!blocks || typeof blocks !== 'object') continue;
+      if (!PAGE_BARS.includes(part)) continue;
+      const v = partValue(
+        look.components,
+        part,
+        ['backgroundColor', 'background'],
+        m,
+      );
+      const fill = v != null ? shown(colorIn(v, res[m], m), page) : null;
+      // (A dark bar over a light page is a look; a light one left over a
+      // dark page is a part that did not follow the mode.)
+      if (!fill || sideOf(page) !== 'dark' || sideOf(fill) !== 'light')
+        continue;
+      if (ratio(fill, page) < NON_TEXT) continue;
+      out.push({
+        kind: 'half-painted',
+        mode: m,
+        part,
+        on: PAGE,
+        message: `${part}'s own fill is ${sideOf(fill)} while the page is ${sideOf(page)} in ${m}: the page looks half painted. Give ${part}'s backgroundColor a value for each mode`,
       });
     }
   }
@@ -1152,9 +1426,15 @@ export function lookRepair(look, problems) {
   const why = {};
   const fills = filledColors(look);
   const filledHad = new Set(Object.keys(fills));
+  // A chart color the theme copied from Core's is derived again only when
+  // the check says the charts keep Core's colors.
+  const charts = problems.some(p => p.kind === 'charts');
   for (const [t, v] of Object.entries(fills)) {
+    if (own.has(t) && !charts) continue;
     perMode[t] = v;
-    why[t] = 'unset: filled from the colors the theme sets';
+    why[t] = own.has(t)
+      ? "Core's chart color, copied: derived from the colors the theme sets"
+      : 'unset: filled from the colors the theme sets';
   }
   // Measured again with the filled colors, so each move is made on the
   // grounds the theme will have.
@@ -1296,7 +1576,9 @@ export function lookRepair(look, problems) {
             from: /** @type {string | [string, string]} */ (from),
             accept: keep[t].map(r => ({...r, reason: ''})),
           }
-        : {}),
+        : own.has(t)
+          ? {from: /** @type {string | [string, string]} */ (from)}
+          : {}),
     });
   }
   const {defaults} = look;

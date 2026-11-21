@@ -40,9 +40,10 @@ const PAGE_RULE =
 
 /**
  * @typedef {object} AppThemeUse
- * @property {Array<{file: string, nameEnd: number, mode: string | null | undefined}>} elements
+ * @property {Array<{file: string, nameEnd: number, mode: string | null | undefined, shared?: string}>} elements
  *   each `<Theme>` that wears the theme: `mode` is the mode it pins, null
- *   when written as an expression, undefined when it pins none
+ *   when written as an expression, undefined when it pins none; `shared`
+ *   names a map of several themes the element picks from
  * @property {'light' | 'dark' | null} pinned the mode every one of them pins, or null
  * @property {boolean} modeByExpression whether one of them sets its mode by an expression the check cannot read
  * @property {boolean} painted whether a stylesheet of the app paints the page with the theme
@@ -90,11 +91,7 @@ function pageImageOf(css) {
         if (!rule.selectors.some(s => /^(html|body|:root)$/.test(s.trim())))
           return;
         rule.walkDecls(/^background(-image)?$/, decl => {
-          if (
-            /url\(|gradient\(|var\(--/.test(decl.value) &&
-            !/^var\(--color-background-body\)$/.test(decl.value.trim())
-          )
-            found ??= decl.value.trim();
+          if (/url\(|gradient\(/.test(decl.value)) found ??= decl.value.trim();
         });
       });
   } catch {
@@ -176,6 +173,15 @@ function importsOneOf(file, files) {
   );
 }
 
+/** A file's text, or '' when it is not there. @param {string} file */
+const readIfThere = file => {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+};
+
 /** Whether a file is inside a folder. @param {string} dir @param {string} file */
 const isWithin = (dir, file) => {
   const rel = path.relative(dir, file);
@@ -234,10 +240,15 @@ export async function appThemeUse(root, themeFiles) {
       elements.push({
         file,
         nameEnd: el.nameEnd,
+        // (A mode written as an expression that themeModes does not answer
+        // stays an expression: check cannot tell what it pins.)
         mode:
           picked && el.attributes.mode === null
-            ? (picked.mode ?? undefined)
+            ? (picked.mode ?? null)
             : el.attributes.mode,
+        // A map that is not the generated module may hold other themes:
+        // the element serves them all.
+        ...(picked ? {} : {shared: el.memberOf.file}),
       });
     }
   }
@@ -281,15 +292,28 @@ export async function appThemeUse(root, themeFiles) {
  * The font families an app loads, as family keys: what its stylesheets
  * load with `@font-face` or import, what its modules import (a Fontsource
  * package, a stylesheet, a `next/font/google` font), and what its page
- * head links from a font service.
+ * head links from a font service; null when a stylesheet from elsewhere
+ * that names no family may load any.
  * @param {string} app the app's folder
  * @param {string[]} files the project's source files
- * @returns {Promise<Set<string>>}
+ * @returns {Promise<Set<string> | null>}
  */
 async function appLoadedFonts(app, files) {
   const {pageFontLinks} = await import('../doctor/theme-checks.mjs');
   /** @type {Set<string>} */
   const loaded = new Set(pageFontLinks(app).families);
+  // A stylesheet from elsewhere that names no family (a font kit's link)
+  // may load any font: then what the app loads is not known.
+  const external = (/** @type {string} */ text) =>
+    [
+      ...text.matchAll(
+        /(?:@import\s+(?:url\()?|href=)\s*['"]?((?:https?:)?\/\/[^'")\s]+)/g,
+      ),
+    ].some(
+      ([, url]) => !/fonts\.(googleapis|bunny)\.|fonts\.bunny\.net/.test(url),
+    );
+  for (const name of ['index.html', 'public/index.html'])
+    if (external(readIfThere(path.join(app, name)))) return null;
   for (const file of files) {
     if (!isWithin(app, file)) continue;
     const dir = path.dirname(file);
@@ -298,6 +322,7 @@ async function appLoadedFonts(app, files) {
       for (const f of importedFontFamilies(spec, dir)) loaded.add(f);
     };
     if (file.endsWith('.css')) {
+      if (external(fs.readFileSync(file, 'utf8'))) return null;
       add(`./${path.basename(file)}`);
       continue;
     }
@@ -356,7 +381,11 @@ export function pinAppMode(root, use, mode) {
   const at = new Map();
   for (const el of use.elements) {
     const shown = path.relative(root, el.file);
-    if (el.mode === null)
+    if (el.shared)
+      declined.push(
+        `${shown}: its <Theme> serves every theme in ${path.relative(root, el.shared)}; set mode="${mode}" for this one there yourself`,
+      );
+    else if (el.mode === null)
       declined.push(
         `${shown}: its <Theme> sets mode with an expression; set it to "${mode}" yourself`,
       );

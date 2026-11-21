@@ -2256,6 +2256,8 @@ function checkNextEdit(p, file, kept) {
   if (p.kind === 'page')
     return `in a stylesheet ${app === "the app's file that renders <Theme>" ? 'the app loads' : `${app} loads`}, add body { background: var(--color-background-body); }`;
   const at = `in ${file}, `;
+  if (p.kind === 'hover' && !p.part)
+    return `${at}set ${p.token} to a tint that shows on ${(p.parts ?? []).slice(0, 3).join(', ')}`;
   if (p.kind === 'hover')
     return `${at}give ${p.part}${p.parts?.length ? ` ${p.parts[0].replace(/^\S+ /, '')}` : ''} a ':hover' fill that differs from its fill at rest`;
   if (p.kind === 'blend' && p.part) {
