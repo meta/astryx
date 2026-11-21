@@ -71,7 +71,7 @@ deciding_specs:
 ```
 
 This record defines the shared public API contract for stable Astryx components.
-Its handle-ref rule (INV8, DEC-7) applies in every package.
+Its handle-ref rule (INV8, DEC-10) applies in every package.
 
 ## Purpose
 
@@ -159,7 +159,7 @@ guidance owns the process used to propose and test APIs.
   prop and connects it to the element promised by its contract. In every
   package, a public ref through which a component or a definition exposes an
   imperative handle takes `Ref<Handle>`, so it accepts an object ref or a
-  callback ref (DEC-7). React calls a callback ref with the handle when the
+  callback ref (DEC-10). React calls a callback ref with the handle when the
   handle attaches, so the caller learns when the handle is ready. When the
   handle detaches, a cleanup the callback ref returned runs; a callback ref
   without a cleanup is called with `null`. A chart series definition's
@@ -346,7 +346,7 @@ guidance owns the process used to propose and test APIs.
   change coupling step 6 describes. A removed or renamed row follows INV9.
 
 This record applies to stable public packages, and INV23 also applies to Lab
-source. INV8's handle-ref rule (DEC-7) applies in every package, Lab, Charts
+source. INV8's handle-ref rule (DEC-10) applies in every package, Lab, Charts
 and Vega included. Lab components are not stable public promises until
 promotion.
 
@@ -472,9 +472,9 @@ The owner said: "okay let's get rid of this massive file. We don't need it, we s
 
 Rejected: keeping a committed generated API report per package.
 
-### DEC-7 — Every package's handle refs accept callback refs
+### DEC-10 — Every package's handle refs accept callback refs
 
-**Reference:** `architecture:public-component-api/DEC-7`
+**Reference:** `architecture:public-component-api/DEC-10`
 **Decider:** `cixzhang`, `2026-11-19 17:20 PT`
 
 Callback refs are an API convention of the whole system, not of one package. A
