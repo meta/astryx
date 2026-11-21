@@ -193,6 +193,44 @@ describe('a top nav link colored for a dark bar', () => {
     expect(drawer).toMatch(/#333333/);
   }, 240_000);
 
+  it('keeps the color in a state the theme paints a fill for, in the phone menu too', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('sel', {cwd, like: 'neutral'});
+    await themeEditSet('sel', 'mode', 'light-only', {cwd});
+    await themeEditSet('sel', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('sel', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    const sr = /** @type {any} */ (
+      await themeEditSet('sel', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    // (Measured on the theme's black block: no problem named for it.)
+    expect(JSON.stringify(sr.data.newProblems ?? [])).not.toMatch(/selected/);
+    const rules = (cssOf('sel').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r => /top-nav-item/.test(r) && /drawer/.test(r),
+    );
+    // (The selected link keeps the light color on its black block.)
+    expect(
+      rules.some(r => /selected|aria-current/.test(r) && /#bfbfbf/.test(r)),
+    ).toBe(true);
+  }, 240_000);
+
+  it('holds nothing for a text variant or a heading level', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('tx', {cwd, like: 'neutral'});
+    const r = /** @type {any} */ (
+      await themeEditSet('tx', 'color', '#555555', {cwd, on: 'text'})
+    );
+    expect(r.data.setting.hold).toBeUndefined();
+    expect(r.data.notes.join('\n')).not.toMatch(/phone menu/);
+  }, 240_000);
+
   it('holds nothing where the color reads in the menu too', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('ok', {cwd, like: 'neutral'});
