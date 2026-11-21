@@ -251,6 +251,7 @@ describe('MultiSelector', () => {
     fireEvent.click(trigger, {detail: 1});
     const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
     fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+    fireEvent.pointerUp(dialog, {pointerType: 'touch'});
     fireEvent.click(dialog, {detail: 1});
 
     trigger.focus();
@@ -277,6 +278,7 @@ describe('MultiSelector', () => {
     fireEvent.click(trigger, {detail: 1});
     const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
     fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+    fireEvent.pointerUp(dialog, {pointerType: 'touch'});
     fireEvent.click(dialog, {detail: 1});
     rerender(field(true));
     const ring = stylex

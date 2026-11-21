@@ -64,6 +64,14 @@ import {
 } from './powerSearchSheetUtils';
 import {renderHook} from '@testing-library/react';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // PowerSearch and Tokenizer load their sheets on demand, and a first load
 // under the test transform can take seconds on a busy machine. The file loads
 // both sheet modules before any test runs, so neither load counts against a
@@ -3983,7 +3991,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
     openSheet();
     settleSheets();
     // A click on the dialog element itself is the scrim.
-    fireEvent.click(sheet());
+    pressScrim(sheet());
     expect(isSheetOpen()).toBe(false);
     settleSheets();
 
@@ -3996,7 +4004,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
       expect.stringContaining('Status'),
     );
     // The value step is an info sheet: its scrim dismisses it.
-    fireEvent.click(sheet());
+    pressScrim(sheet());
     settleSheets();
     expect(isSheetOpen()).toBe(true);
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
@@ -4042,7 +4050,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
     openSheet();
     const filters = sheet();
     tapRow('Add filter');
-    fireEvent.click(filters);
+    pressScrim(filters);
     expect(isSheetOpen()).toBe(true);
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
   });
@@ -4053,7 +4061,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
     tapRow('Closed');
     // The staged value is not protected by a form purpose: a scrim press
     // reveals Filters, and nothing is committed.
-    fireEvent.click(sheet());
+    pressScrim(sheet());
     expect(sheet()).toHaveAttribute('aria-label', 'Filters');
   });
 
