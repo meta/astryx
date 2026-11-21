@@ -23,7 +23,7 @@ import {
   ratioWords,
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
-import {OVERRIDES} from './_part-words.mjs';
+import {OVERRIDES, partForWord} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
 import {outOfBounds, valueAsked} from './_how-values.mjs';
@@ -2690,6 +2690,73 @@ const ROW_METRICS = [
   'tracking',
   'family',
 ];
+
+/**
+ * Whether a stripe asked on striped tables also names other tables to stripe
+ * ("…and on plain tables", "…, plain tables too", "in every table, even on
+ * striped tables"), read clause by clause: the clauses between commas,
+ * semicolons, brackets and "but", and each "and" piece of one. The stripe's
+ * own piece (its rows) adds the tables it names. Another piece adds them only
+ * when it asks nothing of its own: "…and every table header bold" asks about
+ * the headers, and "…, and all tables and buttons get rounded corners" joins
+ * the tables to another ask's subject. Tables after "not", "except" or
+ * "leave" are left out, never added.
+ * @param {string} q the question as typed, lower-cased
+ */
+function addsTables(q) {
+  if (
+    /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:tables?\s+)?and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+tables?\b/.test(
+      q,
+    )
+  )
+    return true;
+  // ("every other table", "every non striped table", "plain ones":
+  // tables other than the striped ones.)
+  const TABLES =
+    /\b(?:the\s+)?(?:(?:every|all|any)\s+(?:(?:other|plain|non[\s-]?striped|unstriped)\s+)?tables?|(?:other|plain|non[\s-]?striped|unstriped)\s+(?:tables?|ones))\b/;
+  /** Whether a piece asks something of its own. @param {string} text */
+  const asks = text =>
+    colorsIn(text).length > 0 ||
+    /\d/.test(text) ||
+    aspectsOf(text).length > 0 ||
+    text
+      .split(/\s+/)
+      .some(w => w && !/^tables?$/.test(w) && partForWord(w) != null);
+  for (const clause of q.split(/[,;()]|\bbut\b/)) {
+    const pieces = clause.split(/\band\b/).map(x => x.trim());
+    for (const [i, piece] of pieces.entries()) {
+      const m = TABLES.exec(piece);
+      if (
+        !m ||
+        /\b(?:not|except|without|leave|leaving|besides|excluding|other\s+than|apart\s+from)\b/.test(
+          piece.slice(0, m.index),
+        )
+      )
+        continue;
+      // (The stripe's own piece, "odd rows #f9f9f9 in every table", adds
+      // the tables it names; a piece about other rows, "all tables get
+      // taller rows", asks something of its own.)
+      if (/\b(?:odd|even|zebra|stripes?|striping|alternat\w*)\b/.test(piece))
+        return true;
+      const rest = (
+        piece.slice(0, m.index) + piece.slice(m.index + m[0].length)
+      )
+        .replace(
+          /\b(?:also|plus|along|together|with|as|well|too|on|in|for|even|including|both|modes?|dark|light|only)\b/g,
+          ' ',
+        )
+        .trim();
+      if (asks(rest)) continue;
+      // ("all tables and buttons get…": tables with no "on" before an "and"
+      // piece that asks are that ask's subject, not a place for the stripe.)
+      const next = pieces[i + 1];
+      if (next && !/^(?:also\s+)?(?:on|in|for)\b/.test(piece) && asks(next))
+        continue;
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * The aspects a clause asks about, by its words. Order is the answer order.
@@ -16119,9 +16186,13 @@ export function draftAnswer(ctx, env, question) {
             continue;
           }
         } else if (!p.when && !p.state && p.on === priorOn) {
-          said.push(
-            `${name} is the part being changed, so it cannot be kept apart`,
-          );
+          // (A stripe the answer already keeps to the striped tables, or
+          // takes back from them, has kept those tables apart itself:
+          // "…but not on striped tables", "…, not on plain tables".)
+          if (!prior.steps.some(st => st.on === p.on && st.state === 'striped'))
+            said.push(
+              `${name} is the part being changed, so it cannot be kept apart`,
+            );
           continue;
         }
         // Steps the change writes for the kept variant itself (one per
@@ -26906,20 +26977,58 @@ export function draftAnswer(ctx, env, question) {
               .map(w => /:nth-child\((odd|even)\b/.exec(w)?.[1])
               .find(Boolean) ?? null;
           const value = c.neg ? 'transparent' : colorFor(c, 'fill');
+          // "odd rows #f9f9f9 on striped tables": only the tables the app
+          // marks isStriped. ("striped tables" alone asks for the stripes.)
+          // Read from the question as the reader words it, where every
+          // exclusion ("everywhere but", "other than", "besides") is
+          // "except".
+          // ("…on striped tables too", "every table, even on striped tables",
+          // "…and on plain tables": the ask adds those tables, so it stays
+          // on every table; read clause by clause.)
+          // (Read from the ask as typed: its commas end clauses.)
+          const widens = addsTables(asked0);
+          const onStriped =
+            !widens &&
+            /(?<!\b(?:not|except|without|but)\s)\b(?:on|in|for|of)\s+(?:the\s+|all\s+|any\s+|every\s+)?striped\s+tables?\b|(?<!\b(?:not|except|without|but)\s(?:(?:on|in|for|of)\s+)?(?:the\s+|all\s+|any\s+|every\s+)?)\btables?\s+(?:that\s+are\s+|marked\s+)(?:is\s*)?striped\b/i.test(
+              q,
+            );
+          // "odd rows #f9f9f9 but not on striped tables": the editor has no
+          // condition for a table that is not striped, so the stripe goes
+          // on every table and those tables keep Core's own stripe.
+          const offStriped =
+            !onStriped &&
+            /\b(?:not|except|without|but)\s+(?:(?:on|in|for|of)\s+)?(?:the\s+|all\s+|any\s+|every\s+)?(?:striped\s+tables?|tables?\s+(?:that\s+are\s+|marked\s+)(?:is\s*)?striped)\b/i.test(
+              q,
+            );
+          const striped = onStriped ? {state: 'striped'} : {};
+          const stripedWhere = onStriped
+            ? 'in the tables the app marks isStriped'
+            : 'in every data-driven table';
+          const limit = onStriped
+            ? ''
+            : '; add --state striped to stripe only the tables the app marks isStriped';
           // One stripe named ("odd rows #f9f9f9", "zebra rows, odd ones
           // shaded"): that stripe's fill on the row, in every table, and the
           // other stripe of a striped table cleared, where Core draws its
           // own. A theme with no stripe of its own and no color keeps Core's.
-          if (parityOn && paritySaid.length === 1 && value) {
+          // ("even rows transparent" takes that stripe away, as "no stripes
+          // on even rows" does.)
+          const clears =
+            c.neg || (!value && /\btransparent\b/.test(noMode(c.text)));
+          if (parityOn && paritySaid.length === 1 && (value || clears)) {
             const p = paritySaid[0];
             const other = parities.find(v => v !== p);
+            const clearsOther =
+              !clears && !offStriped && !!coreParity && other === coreParity;
+            const keepsStriped = !clears && offStriped;
             const steps = [
-              set('background-color', value, {
+              set('background-color', value ?? 'transparent', {
                 on: parityOn,
                 when: `parity:${p}`,
+                ...striped,
                 ...modeOf(c),
               }),
-              ...(!c.neg && coreParity && other === coreParity
+              ...(clearsOther
                 ? [
                     set('background-color', 'transparent', {
                       on: parityOn,
@@ -26929,11 +27038,23 @@ export function draftAnswer(ctx, env, question) {
                     }),
                   ]
                 : []),
+              // (Striped tables the ask leaves out keep that row as Core
+              // draws it.)
+              ...(keepsStriped
+                ? [
+                    set('background-color', 'transparent', {
+                      on: parityOn,
+                      when: `parity:${p}`,
+                      state: 'striped',
+                      ...modeOf(c),
+                    }),
+                  ]
+                : []),
             ];
             return {
-              text: c.neg
-                ? `no stripe on the ${p} rows of ${parityOn}. On a table with hover those rows lose Core's hover color too`
-                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every data-driven table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}. On a table with hover the stripe${steps.length > 1 ? ' and the cleared rows' : ''} cover Core's hover color; add --state striped to stripe only the tables the app marks isStriped`,
+              text: clears
+                ? `no stripe on the ${p} rows of ${parityOn}${onStriped ? ` ${stripedWhere}` : ''}. On a table with hover those rows lose Core's hover color too`
+                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), ${stripedWhere}${keepsStriped ? '; a table marked isStriped keeps those rows as Core draws them (a table that is not striped has no condition of its own, so the stripe goes on every table and is taken back on striped ones)' : ''}${clearsOther ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}. On a table with hover the stripe${clearsOther ? ' and the cleared rows' : ''} cover Core's hover color${limit}`,
               options: [steps],
               sequence: steps.length > 1,
             };
@@ -26994,19 +27115,100 @@ export function draftAnswer(ctx, env, question) {
             stripe &&
             !c.neg &&
             !paritiesSaid(q).length
-          )
+          ) {
+            // (On striped tables, Core already paints that stripe while the
+            // theme fills none of those rows: a rule would add nothing and
+            // cover Core's hover. A theme whose row fill covers it gets the
+            // stripe back.)
+            // A theme row fill at rest or on striped tables.
+            /** @param {any} x @param {string | undefined} when */
+            const rowFill = (x, when) =>
+              x.on === parityOn &&
+              /^background(?:-color)?$/.test(String(x.thing)) &&
+              (!x.state || x.state === 'striped') &&
+              (x.when ?? undefined) === when;
+            const settings = env.data?.settings ?? [];
+            // (The theme cleared the stripe's own color on the row, "no
+            // stripes": Core's stripe draws nothing until that is taken
+            // back.)
+            const cleared = settings.find(
+              (/** @type {any} */ x) =>
+                x.on === parityOn &&
+                x.thing === stripe &&
+                !x.when &&
+                (!x.state || x.state === 'striped') &&
+                /^transparent$/i.test(String(x.value ?? '').trim()),
+            );
+            // (A theme row fill at rest or on striped tables, on every row or
+            // on that stripe, covers Core's stripe.)
+            const covered = settings.some(
+              (/** @type {any} */ x) =>
+                rowFill(x, undefined) || rowFill(x, `parity:${coreParity}`),
+            );
+            if (onStriped && cleared) {
+              /** @type {Step} */
+              const takeBack = {
+                verb: 'undo',
+                thing: stripe,
+                on: parityOn,
+                ...(cleared.state ? {state: cleared.state} : {}),
+                ...(cleared.mode ? {mode: cleared.mode} : {}),
+              };
+              const steps = [
+                takeBack,
+                ...(covered
+                  ? [
+                      set('background-color', `var(${stripe})`, {
+                        on: parityOn,
+                        when: `parity:${coreParity}`,
+                        state: 'striped',
+                        ...modeOf(c),
+                      }),
+                    ]
+                  : []),
+              ];
+              return {
+                text: `the theme made ${stripe}, the color Core stripes ${parityOn} with, transparent; taking that back${covered ? `, and writing the ${coreParity} stripe over the theme's row fill,` : ''} shows the stripe on tables marked isStriped again`,
+                options: [steps],
+                sequence: steps.length > 1,
+              };
+            }
+            const otherParity = parities.find(v => v !== coreParity);
+            // (The theme stripes the other rows itself: "odd rows #f9f9f9
+            // on striped tables" set them and cleared Core's.)
+            if (
+              onStriped &&
+              settings.some(
+                (/** @type {any} */ x) =>
+                  rowFill(x, `parity:${otherParity}`) &&
+                  String(x.value) !== 'transparent',
+              )
+            )
+              return {
+                text: `the theme already stripes the ${otherParity} rows of ${parityOn} on tables marked isStriped; to stripe the ${coreParity} rows instead, name a color (background-color <color> --on ${parityOn} --when parity:${coreParity} --state striped)`,
+                options: [],
+              };
+            // (Core already paints that stripe on striped tables while no
+            // theme fill, on every row or on that stripe, covers it.)
+            if (onStriped && !covered)
+              return {
+                text: `Core already stripes the ${coreParity} rows of a table marked isStriped with ${stripe}; to change them, name a color (background-color <color> --on ${parityOn} --when parity:${coreParity} --state striped)`,
+                options: [],
+              };
             return {
-              text: `stripes on every data-driven table: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them). On a table with hover the stripe covers Core's hover color; add --state striped to stripe only the tables the app marks isStriped`,
+              text: `stripes ${stripedWhere}: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them). On a table with hover the stripe covers Core's hover color${limit}`,
               options: [
                 [
                   set('background-color', `var(${stripe})`, {
                     on: parityOn,
                     when: `parity:${coreParity}`,
+                    ...striped,
                     ...modeOf(c),
                   }),
                 ],
               ],
             };
+          }
           return {
             text:
               (parityOn ?? rowParity)
@@ -31287,7 +31489,9 @@ export function draftAnswer(ctx, env, question) {
             st.value === 'transparent' &&
             st.state === 'striped' &&
             /^parity:/.test(String(st.when ?? '')) &&
-            st.when !== stripe.when
+            // (the other stripe cleared, or, under a stripe for every table,
+            // the same stripe taken back on striped tables)
+            (st.when !== stripe.when || !stripe.state)
           )
             st.mode = stripe.mode;
       }

@@ -322,6 +322,29 @@ const QUESTIONS = [
     },
   ],
   [
+    'odd rows #f9f9f9 on striped tables',
+    {
+      parts: ['table-row'],
+      // (Only the tables the app marks isStriped: the stripe and the clear
+      // both carry the striped state.)
+      top: /^set q background-color '#f9f9f9' --on table-row --when parity:odd --state striped --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
+      adds: /table-row\.parity:odd\+striped\.@light\.backgroundColor=#f9f9f9/,
+    },
+  ],
+  [
+    // (Core already paints that stripe there: no write.)
+    'zebra rows on striped tables',
+    {parts: ['table-row'], top: null},
+  ],
+  [
+    // (Alone, "striped tables" asks for the stripes, on every table.)
+    'striped tables',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
     'odd rows light gray #f9f9f9',
     {
       parts: ['table-row'],
@@ -876,6 +899,346 @@ describe('stripe answers keep to the stripe', () => {
       expect(data.results[0].text).toMatch(/hover/);
     },
   );
+  it('stripes striped tables again after the theme cleared their stripe', async () => {
+    await themeEditNew('zseq', {cwd, like: 'neutral'});
+    await themeEditSet('zseq', 'background-color', 'transparent', {
+      cwd,
+      on: 'table-row',
+      when: 'parity:even',
+      state: 'striped',
+    });
+    const {data} = await themeEditHow('zebra rows on striped tables', {
+      cwd,
+      theme: 'zseq',
+    });
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).toMatch(
+      /background-color 'var\(--color-background-muted\)' --on table-row --when parity:even --state striped/,
+    );
+  });
+  it.each([
+    [{}, 'a plain row fill'],
+    [{state: 'striped'}, 'a striped-table row fill'],
+  ])('stripes striped tables again over %s (%s)', async (flags, _name) => {
+    const theme = `zfill${Object.keys(flags).length}`;
+    await themeEditNew(theme, {cwd, like: 'neutral'});
+    await themeEditSet(theme, 'background-color', '#ffffff', {
+      cwd,
+      on: 'table-row',
+      ...flags,
+    });
+    const {data} = await themeEditHow('zebra rows on striped tables', {
+      cwd,
+      theme,
+    });
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).toMatch(
+      /--on table-row --when parity:even --state striped/,
+    );
+  });
+  it('writes nothing over a hover-only row color', async () => {
+    await themeEditNew('zhover', {cwd, like: 'neutral'});
+    await themeEditSet('zhover', 'background-color', '#eeeeee', {
+      cwd,
+      on: 'table-row',
+      state: 'hover',
+    });
+    const {data} = await themeEditHow('zebra rows on striped tables', {
+      cwd,
+      theme: 'zhover',
+    });
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).not.toMatch(/--when parity:even/);
+  });
+  it.each([
+    'odd rows #f9f9f9, but not on striped tables',
+    'odd rows #f9f9f9 except on striped tables',
+    'odd rows #f9f9f9 except for tables marked isStriped',
+    'odd rows #f9f9f9 but not for tables that are striped',
+    'odd rows #f9f9f9 but not on the tables marked isStriped',
+    'odd rows #f9f9f9 except the tables marked isStriped',
+    'odd rows #f9f9f9 everywhere but on striped tables',
+    'odd rows #f9f9f9 other than on striped tables',
+    'odd rows #f9f9f9 apart from striped tables',
+    'odd rows #f9f9f9 besides striped tables',
+    'odd rows #f9f9f9 excluding striped tables',
+    'odd rows #f9f9f9 anywhere but on striped tables',
+  ])('stripes every table for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).toMatch(/'#f9f9f9' --on table-row --when parity:odd/);
+    expect(commands).not.toMatch(/'#f9f9f9'[^\n]*--state striped/);
+    // (Striped tables keep those rows as Core draws them, and keep Core's
+    // own even stripe.)
+    // (The take-back holds in the stripe's own mode.)
+    const fillMode =
+      /'#f9f9f9' --on table-row --when parity:odd( --mode \w+)?/.exec(
+        commands,
+      )?.[1] ?? '';
+    expect(commands).toContain(
+      `background-color transparent --on table-row --when parity:odd --state striped${fillMode}`,
+    );
+    expect(commands).not.toMatch(/--when parity:even --state striped/);
+  });
+  // An ask that adds striped tables to the others stays on every table,
+  // as "odd rows #f9f9f9" does.
+  it.each([
+    'odd rows #f9f9f9 on striped tables too',
+    'odd rows #f9f9f9 in every table, even on striped tables',
+    'odd rows #f9f9f9 on plain tables and on striped tables',
+    'odd rows #f9f9f9 on plain and on striped tables',
+    'odd rows #f9f9f9 on all tables',
+    'odd rows #f9f9f9 on striped tables and on plain tables',
+    'odd rows #f9f9f9 on striped tables, also on plain tables',
+    'odd rows #f9f9f9 on striped tables and every other table',
+    'odd rows #f9f9f9 on striped tables and all other tables',
+    'odd rows #f9f9f9 on striped tables and on every table',
+    'odd rows #f9f9f9 on striped tables and on non-striped tables',
+    'odd rows #f9f9f9 on striped tables and plain tables',
+    'odd rows #f9f9f9 on striped tables but also on plain tables',
+    'odd rows #f9f9f9 on striped tables plus plain tables',
+    'odd rows #f9f9f9 on striped tables along with plain tables',
+    'odd rows #f9f9f9 on striped tables (and plain tables)',
+    'odd rows #f9f9f9 on striped tables, plain tables too',
+    'odd rows #f9f9f9 on striped tables and plain ones too',
+    'odd rows #f9f9f9 on striped tables and on non-striped ones',
+    'odd rows #f9f9f9 on striped tables and every non striped table',
+  ])('stays on every table for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    expect(
+      data.results[0].commands
+        .map((/** @type {string} */ c) => bare(c))
+        .join(' && '),
+    ).toMatch(
+      /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
+    );
+  });
+  // Tables added after the striped ones keep every table with a mode said
+  // after them, or with another ask in a later clause; no odd line is scoped.
+  it.each([
+    'odd rows #f9f9f9 on striped tables and on plain tables in dark mode',
+    'odd rows #f9f9f9 on striped tables and on plain tables in light mode',
+    'odd rows #f9f9f9 on striped tables and on plain tables in dark mode only',
+    'odd rows #f9f9f9 on striped tables and on plain tables in both modes',
+    'odd rows #f9f9f9 on striped tables and on unstriped tables in dark mode',
+    'odd rows #f9f9f9 on striped tables and on plain tables, and buttons get rounded corners',
+    'odd rows #f9f9f9 on striped tables and plain tables, and cards get a 1px border',
+    'odd rows #f9f9f9 on striped tables and on every table, and buttons get rounded corners',
+  ])('keeps every table for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const odd = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .filter(c => /'#f9f9f9' --on table-row --when parity:odd/.test(c));
+    expect(odd.length).toBeGreaterThan(0);
+    for (const c of odd) expect(c).not.toMatch(/--state striped/);
+  });
+  // Striped tables named only for themselves, or beside another clause's
+  // "every" or "all", keep the striped scope.
+  it.each([
+    [
+      'even rows #eeeeee on striped tables',
+      /'#eeeeee' --on table-row --when parity:even --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on any striped table',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on every striped table',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, not on plain tables',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, leave other tables alone',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'make all buttons rounder and odd rows #f9f9f9 on striped tables',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and bold text in every table header',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and a 1px border on every table',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and every table header bold',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and every table gets a 1px border',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and all table headers bold',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and plain tables get a 1px border',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables and buttons get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and every table and card gets a 1px border',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and every table and every card get a 1px border',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables and badges get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables and menus get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables and inputs get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables and checkboxes get rounded corners',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, and all tables get taller rows',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables and bold header rows on every table',
+      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
+    ],
+  ])('keeps the striped scope for %s', async (question, want) => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).toMatch(want);
+  });
+  // The stripe answer keeps the tables apart itself, so no note says they
+  // cannot be.
+  it.each([
+    'odd rows #f9f9f9 but not on striped tables',
+    'odd rows #f9f9f9 on striped tables, not on plain tables',
+    'odd rows #f9f9f9 on striped tables, leave other tables alone',
+    'odd rows #f9f9f9 on striped tables other than plain tables',
+  ])('says no part is kept apart wrongly for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const text = (data.results ?? [])
+      .map((/** @type {{text: string}} */ r) => r.text)
+      .join('\n');
+    expect(text).not.toMatch(/cannot be kept apart/);
+    expect(
+      (data.results ?? []).flatMap(
+        (/** @type {{commands: string[]}} */ r) => r.commands,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /--on table-row --when parity:odd --state striped/,
+        ),
+      ]),
+    );
+  });
+  it('writes nothing for zebra rows on striped tables beside every card white', async () => {
+    const {data} = await themeEditHow(
+      'zebra rows on striped tables and every card white',
+      {cwd, theme: 'q'},
+    );
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).not.toMatch(
+      /--on table-row --when parity:even(?! --state striped)/,
+    );
+  });
+  it('takes back a cleared stripe color and writes the stripe over a row fill', async () => {
+    await themeEditNew('zclf', {cwd, like: 'neutral'});
+    await themeEditSet('zclf', '--color-background-muted', 'transparent', {
+      cwd,
+      on: 'table-row',
+    });
+    await themeEditSet('zclf', 'background-color', '#ffffff', {
+      cwd,
+      on: 'table-row',
+    });
+    const {data} = await themeEditHow('zebra rows on striped tables', {
+      cwd,
+      theme: 'zclf',
+    });
+    expect(
+      data.results[0].commands
+        .map((/** @type {string} */ c) => bare(c))
+        .join(' && '),
+    ).toMatch(
+      /^undo zclf --color-background-muted --on table-row && set zclf background-color 'var\(--color-background-muted\)' --on table-row --when parity:even --state striped$/,
+    );
+  });
+  it('takes back a cleared stripe color for zebra rows on striped tables', async () => {
+    await themeEditNew('zclr', {cwd, like: 'neutral'});
+    await themeEditSet('zclr', '--color-background-muted', 'transparent', {
+      cwd,
+      on: 'table-row',
+    });
+    const {data} = await themeEditHow('zebra rows on striped tables', {
+      cwd,
+      theme: 'zclr',
+    });
+    expect(bare(data.results[0].commands[0] ?? '')).toMatch(
+      /^undo zclr --color-background-muted --on table-row$/,
+    );
+  });
+  it('keeps the stripe the theme chose on striped tables', async () => {
+    await themeEditNew('zodd', {cwd, like: 'neutral'});
+    const first = await themeEditHow('odd rows #f9f9f9 on striped tables', {
+      cwd,
+      theme: 'zodd',
+    });
+    for (const command of first.data.results[0].commands[0].split(' && ')) {
+      const [, theme, thing, ...rest] = words(bare(command));
+      const fi = rest.findIndex(w => /^--(on|when|state|mode)$/.test(w));
+      /** @type {Record<string, string>} */
+      const flags = {};
+      for (let k = fi; k < rest.length; k += 2)
+        flags[rest[k].slice(2)] = rest[k + 1];
+      await themeEditSet(theme, thing, rest.slice(0, fi).join(' '), {
+        cwd,
+        ...flags,
+      });
+    }
+    const {data} = await themeEditHow('zebra rows on striped tables', {
+      cwd,
+      theme: 'zodd',
+    });
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).not.toMatch(/--when parity:even/);
+    expect(data.results[0].text).toMatch(/already stripes the odd rows/);
+  });
   it("reads a stripe ask that names no part as a table row's", async () => {
     expect(await commandsFor('zebra stripes')).toMatch(
       /--on table-row --when parity:even/,
@@ -5007,5 +5370,40 @@ describe('r19 (2): not dark enough / not light enough', () => {
         cmds.includes('--mode dark'),
       );
     }
+  });
+});
+
+describe('a stripe made transparent', () => {
+  // "even rows transparent" takes that stripe away, as "no stripes on even
+  // rows" does, in the mode the ask names.
+  it.each([
+    [
+      'even rows transparent',
+      /^set q background-color transparent --on table-row --when parity:even$/,
+    ],
+    [
+      'odd rows transparent',
+      /^set q background-color transparent --on table-row --when parity:odd$/,
+    ],
+    [
+      'make the even rows transparent',
+      /^set q background-color transparent --on table-row --when parity:even$/,
+    ],
+    [
+      'even rows transparent in dark mode',
+      /^set q background-color transparent --on table-row --when parity:even --mode dark$/,
+    ],
+    // (on striped tables: only there)
+    [
+      'even rows transparent on striped tables',
+      /^set q background-color transparent --on table-row --when parity:even --state striped$/,
+    ],
+  ])('%s', async (question, want) => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const top = (data.results ?? []).find(
+      (/** @type {{commands: string[]}} */ r) =>
+        r.commands.some(c => / editor set /.test(c)),
+    );
+    expect(bare(top?.commands[0] ?? '')).toMatch(want);
   });
 });
