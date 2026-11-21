@@ -867,12 +867,21 @@ function generatedMediaStatusRoleDefaults(
   return aliases;
 }
 
+/**
+ * The scope root in an adaptation's media blocks: `:scope`, with its 0,1,0
+ * specificity. Chromium files a bare `:scope` under a list of theme names
+ * with the rules every element tries; with the theme attribute in `:where()`,
+ * it files the rule under that attribute.
+ */
+const ADAPTATION_SCOPE_ROOT = `:scope:where([data-${dataAttrNamespace}-theme])`;
+
 /** The `:scope` token block for portable and theme-local token values. */
 function tokenBlock(
   source: ThemeRuleSource,
   location: string,
   sink: DiagnosticSink,
   tokenEntries: [string, string][] = Object.entries(source.tokens),
+  rootSelector: string = ':scope',
 ): string | null {
   const declarations = [
     // Font sizes follow the reader's text size where the root Theme sets the
@@ -892,7 +901,7 @@ function tokenBlock(
     .join('\n');
   const hasEntries =
     tokenEntries.length > 0 || Object.keys(source.localTokens ?? {}).length > 0;
-  return hasEntries ? `  :scope {\n${declarations}\n  }` : null;
+  return hasEntries ? `  ${rootSelector} {\n${declarations}\n  }` : null;
 }
 
 /** `components.button["variant:secondary"]`-style location for a rule. */
@@ -2033,10 +2042,13 @@ function generateAdaptationRuleRules(
   themeDarkPageSides: ReadonlySet<MediaSide>,
 ): string[] {
   const parts: string[] = [];
-  const tokens = tokenBlock(rule, location, sink, [
-    ...Object.entries(rule.tokens),
-    ...statusRoleDefaults,
-  ]);
+  const tokens = tokenBlock(
+    rule,
+    location,
+    sink,
+    [...Object.entries(rule.tokens), ...statusRoleDefaults],
+    ADAPTATION_SCOPE_ROOT,
+  );
   if (tokens !== null) {
     parts.push(tokens);
   }
@@ -2144,6 +2156,7 @@ export function generateAdaptationCSS(
       `adaptations[${index}].statusRoles.`,
       sink,
       roleEntries,
+      ADAPTATION_SCOPE_ROOT,
     );
     if (roleRule !== null) {
       blocks.push(
