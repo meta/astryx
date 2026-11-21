@@ -53,7 +53,8 @@ import {
   easeVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {Icon, type IconName, type IconType} from '../Icon';
+import {drawsAsIcon} from '../Icon/Icon';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {usePopover} from '../Popover/usePopover';
@@ -625,6 +626,29 @@ export function SideNavItem({
   }, [isItemCollapsed, isItemControlled, itemCollapsibleConfig]);
 
   const displayIcon = isSelected && selectedIcon ? selectedIcon : icon;
+  // The icon's own target carries the row's states, not its size: the Icon
+  // reflects its own `size` on the same element.
+  const iconThemeProps = themeProps('side-nav-item-icon', {
+    selected: isSelected ? 'selected' : null,
+    disabled: isDisabled ? 'disabled' : null,
+  });
+  // Core never injects props into a caller's own node, so that node carries
+  // no target.
+  const itemIcon =
+    displayIcon &&
+    (drawsAsIcon(displayIcon) ? (
+      <Icon
+        icon={displayIcon as IconName | IconType}
+        size="sm"
+        // `inherit` so a selected row's icon follows the row to HighlightText
+        // under forced colors. Identical to `primary` otherwise: both token
+        // families are emitted from one expression.
+        color={isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary'}
+        {...iconThemeProps}
+      />
+    ) : (
+      displayIcon
+    ));
 
   // When collapsible + a primary action (href or onClick), the action and
   // toggle are independent: clicking the label navigates/fires onClick,
@@ -679,16 +703,6 @@ export function SideNavItem({
   // Collapsed mode — icon-only items, popover for items with children
   // =========================================================================
   if (isCollapsed) {
-    const collapsedIcon =
-      displayIcon &&
-      renderIconSlot(displayIcon, {
-        size: 'sm',
-        // `inherit` so a selected row's icon follows the row to HighlightText
-        // under forced colors. Identical to `primary` otherwise: both token
-        // families are emitted from one expression.
-        color: isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary',
-      });
-
     // Shared collapsed item styles — used by trigger, link, and button.
     // All three render a focusable element, so each draws the shared ring.
     const collapsedItemStyles = {
@@ -732,7 +746,7 @@ export function SideNavItem({
             data-testid={testId}
             {...popover.triggerProps}
             {...collapsedItemStyles}>
-            {collapsedIcon}
+            {itemIcon}
           </button>
           {popover.render(
             <div
@@ -781,7 +795,7 @@ export function SideNavItem({
         {...rest}
         {...collapsedAriaProps}
         {...collapsedItemStyles}>
-        {collapsedIcon}
+        {itemIcon}
       </NavItemElement>
     );
 
@@ -797,12 +811,7 @@ export function SideNavItem({
 
   const itemContent = (
     <>
-      {displayIcon &&
-        renderIconSlot(displayIcon, {
-          size: 'sm',
-          // `inherit` — see the collapsed path above.
-          color: isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary',
-        })}
+      {itemIcon}
       {!isCollapsed && <span {...stylex.props(styles.label)}>{label}</span>}
       {!isCollapsed && isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>

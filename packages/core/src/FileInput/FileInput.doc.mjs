@@ -174,7 +174,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-file-input', visualProps: ['mode', 'status']},
-      {className: 'astryx-file-input-icon', visualProps: ['mode']},
+      {className: 'astryx-file-input-icon', sitsOn: 'icon', visualProps: ['mode']},
     ],
   },
   usage: {
@@ -335,7 +335,7 @@ export const docsZh = {
   theming: {
     targets: [
       {className: 'astryx-file-input', visualProps: ['mode', 'status']},
-      {className: 'astryx-file-input-icon', visualProps: ['mode']},
+      {className: 'astryx-file-input-icon', sitsOn: 'icon', visualProps: ['mode']},
     ],
   },
   usage: {

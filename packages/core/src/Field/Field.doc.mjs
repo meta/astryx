@@ -32,10 +32,11 @@ export const docs = {
       {className: 'astryx-field-status', visualProps: ['type', 'variant']},
       {
         className: 'astryx-input-status-icon',
+        sitsOn: 'icon',
         visualProps: ['size', 'status'],
       },
-      {className: 'astryx-input-clear-button'},
-      {className: 'astryx-input-clear-icon'},
+      {className: 'astryx-input-clear-button', sitsOn: 'button'},
+      {className: 'astryx-input-clear-icon', sitsOn: 'icon'},
     ],
     vars: [
       {name: '--_field-radius', description: 'Border radius of input fields', default: 'var(--radius-element)', private: true},

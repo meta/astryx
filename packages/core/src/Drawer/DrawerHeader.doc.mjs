@@ -107,7 +107,7 @@ export const docs = {
       {className: 'astryx-drawer-header-start-content'},
       {className: 'astryx-drawer-header-title-block'},
       {className: 'astryx-drawer-header-end-content'},
-      {className: 'astryx-drawer-header-close-icon'},
+      {className: 'astryx-drawer-header-close-icon', sitsOn: 'icon'},
     ],
   },
   examples: [
@@ -233,7 +233,7 @@ export const docsZh = {
       {className: 'astryx-drawer-header-start-content'},
       {className: 'astryx-drawer-header-title-block'},
       {className: 'astryx-drawer-header-end-content'},
-      {className: 'astryx-drawer-header-close-icon'},
+      {className: 'astryx-drawer-header-close-icon', sitsOn: 'icon'},
     ],
   },
 };

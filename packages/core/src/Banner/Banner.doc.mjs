@@ -170,12 +170,12 @@ function SaveSettings() {
     targets: [
       {className: 'astryx-banner-frame', visualProps: ['container', 'elevation']},
       {className: 'astryx-banner', visualProps: ['container', 'status']},
-      {className: 'astryx-banner-icon', visualProps: ['status']},
+      {className: 'astryx-banner-icon', sitsOn: 'icon', visualProps: ['status']},
       {className: 'astryx-banner-message'},
       {className: 'astryx-banner-title'},
       {className: 'astryx-banner-description'},
       {className: 'astryx-banner-content', visualProps: ['container', 'status']},
-      {className: 'astryx-banner-close'},
+      {className: 'astryx-banner-close', sitsOn: 'button'},
     ],
     vars: [
       {name: '--_banner-radius', description: 'Border radius of the card container (header, content area and the elevated root silhouette)', default: 'var(--radius-container)', private: true},
@@ -253,6 +253,7 @@ export const docsZh = {
       },
       {
         className: 'astryx-banner-icon',
+        sitsOn: 'icon',
         visualProps: [
           'status',
         ],
@@ -275,6 +276,7 @@ export const docsZh = {
       },
       {
         className: 'astryx-banner-close',
+        sitsOn: 'button',
       },
     ],
     vars: [

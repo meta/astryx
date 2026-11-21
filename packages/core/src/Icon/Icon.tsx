@@ -509,15 +509,27 @@ export function renderIconSlot(
   icon: React.ReactNode | IconType,
   props?: {size?: IconSize; color?: IconColor},
 ): React.ReactNode {
-  if (typeof icon === 'string') {
-    return <Icon icon={icon as IconName} {...props} />;
-  }
+  return drawsAsIcon(icon) ? (
+    <Icon icon={icon as IconName | IconType} {...props} />
+  ) : (
+    icon
+  );
+}
 
-  if (
+/**
+ * Whether Icon draws an icon slot value: a semantic icon name or an icon
+ * component (a function or a forwardRef object). Any other value is the
+ * caller's own node, rendered as given. Core-internal. `renderIconSlot`
+ * shares it with components that put their own target on the Icon. Both
+ * then read a slot value the same way. The package entry does
+ * not export it.
+ */
+export function drawsAsIcon(
+  icon: React.ReactNode | IconType,
+): icon is string | IconType {
+  return (
+    typeof icon === 'string' ||
     typeof icon === 'function' ||
     (typeof icon === 'object' && icon !== null && 'render' in icon)
-  ) {
-    return <Icon icon={icon as unknown as IconType} {...props} />;
-  }
-  return icon;
+  );
 }

@@ -23,7 +23,9 @@ export {
   generateAdaptationCSS,
   generateThemeRules,
   generateThemeRulesSplit,
+  THEME_SUB_LAYER_ORDER,
   type ThemeCSSOutput,
+  type ThemeLayerOptions,
   type ThemeRulesSplit,
 } from './generateThemeRules';
 export {

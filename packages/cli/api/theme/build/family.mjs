@@ -467,11 +467,29 @@ export function generateFamilyCSS(members) {
     ...factorSections(members, 'adaptationProse'),
   ];
   const schemes = colorSchemeSections(members);
-  const themed = [
-    ...schemes.themed,
+  const ruled = [
     ...factorRules(members, 'component'),
     ...factorSections(members, 'adaptation'),
     ...factorSections(members, 'onMedia'),
+  ].filter(Boolean);
+  // When a member has a shared-element part entry, the theme rules sit in two
+  // astryx-theme sub-layers, `components` then `parts` (in the order its core
+  // wrote), so a part's rules win over the component it sits on; the
+  // color-scheme rules stay outside both. Otherwise one layer, as always.
+  const layerOrder =
+    members.find(member => member.css.layered)?.css.layerOrder ?? '';
+  const partRules = layerOrder ? factorSections(members, 'parts') : [];
+  const themed = [
+    ...schemes.themed,
+    ...(layerOrder
+      ? [
+          layerOrder,
+          ...(ruled.length > 0
+            ? [`@layer components {\n${ruled.join('\n\n')}\n}`]
+            : []),
+          `@layer parts {\n${partRules.join('\n\n')}\n}`,
+        ]
+      : ruled),
   ].filter(Boolean);
   const parts = [];
   if (prose.length > 0) parts.push(`@layer reset {\n${prose.join('\n\n')}\n}`);
