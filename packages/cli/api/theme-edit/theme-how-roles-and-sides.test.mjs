@@ -129,6 +129,10 @@ describe('a light neutral', () => {
     );
     expect(lighter.join('\n')).toMatch(/ neutral '#/);
     expect(lighter.join('\n')).not.toMatch(/--color-background-/);
+    // (A stated color with a comparative word still fills the surfaces.)
+    expect(
+      (await how('q1', 'a warmer neutral #f5f5dc')).flatMap(r => r.commands),
+    ).toContain("set q1 --color-background-body '#f5f5dc' --mode light");
   }, 240_000);
 });
 

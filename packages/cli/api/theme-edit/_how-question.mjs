@@ -28632,7 +28632,7 @@ export function draftAnswer(ctx, env, question) {
       seedRgb &&
       // (A color the ask states, never one a lighter or darker step works
       // out from the saved neutral.)
-      !c.dir &&
+      color === given &&
       alphaOf(String(color)) >= 1 &&
       env.data.mode !== 'dark-only' &&
       ratio([0, 0, 0], seedRgb) >= ratio([255, 255, 255], seedRgb)
