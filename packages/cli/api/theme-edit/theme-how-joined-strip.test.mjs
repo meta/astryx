@@ -106,13 +106,14 @@ describe('one joined strip', () => {
         console.warn(`skipped: ${unbuilt}`);
         test.skip();
       }
-      // With no line color, nothing of the strip is one mode's: answered as
-      // before, never an empty strip.
-      const plain = await answer(
+      const [plain] = await answer(
         'dark mode: pagination pages in one bordered strip',
       );
-      expect(plain.some(r => /as one strip/.test(r.text))).toBe(false);
-      expect(plain.flatMap(r => r.sets).length).toBeGreaterThan(0);
+      expect(plain.sets).toContain('gap 0 --on pagination-list');
+      expect(plain.sets.join('\n')).not.toMatch(/--mode/);
+      expect(plain.text).toMatch(
+        /same in light and dark, so nothing of it is dark mode's own/,
+      );
       const [lined] = await answer(
         'pagination pages in one bordered strip with #333333 lines in dark mode',
       );
@@ -155,6 +156,12 @@ describe('one joined strip', () => {
       const strip = results.find(r => /as one strip/.test(r.text));
       expect(strip?.sets.join('\n')).not.toMatch(/box-shadow/);
       expect(strip?.text).not.toMatch(/large shadow/);
+      // The look it leaves goes on the strip's row, never on each page.
+      const sets = results.flatMap(r => r.sets).join('\n');
+      expect(sets).toMatch(
+        /box-shadow 'var\(--shadow-high\)' --on pagination-list/,
+      );
+      expect(sets).not.toMatch(/box-shadow [^\n]*--on pagination-item/);
       const [joined] = await answer(
         'pagination pages in one bordered strip with 3px corners, a soft shadow, and #dddddd lines',
       );

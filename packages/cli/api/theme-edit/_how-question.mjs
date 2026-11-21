@@ -14063,6 +14063,11 @@ export function draftAnswer(ctx, env, question) {
     // the clause comes first: "a #e8def8 pill".)
     const unreadHere = unread.filter(
       w =>
+        // (A draft whose steps keep their own modes says how it reads the
+        // mode said: a strip's shape in both modes.)
+        !(
+          /** @type {any} */ (d1).modesKept && w === `${clauseNow?.mode} mode`
+        ) &&
         !(
           colorsIn(w.toLowerCase()).length &&
           clauseNow?.aspects.some(a =>
@@ -15581,8 +15586,19 @@ export function draftAnswer(ctx, env, question) {
             x.text,
           ) ||
           STRIP_UNSAID.test(noMode(x.text))
-        )
+        ) {
+          // (A look the strip does not write, said right after it of the
+          // controls the strip names, is the strip's: it goes on the row.)
+          if (
+            !x.neg &&
+            STRIP_UNSAID.test(noMode(x.text)) &&
+            x.parts.length &&
+            x.parts.every(p => p.on === item) &&
+            !/\b(?:pages?|cells?|items?|buttons?)\b/.test(x.text)
+          )
+            x.parts = x.parts.map(p => ({...p, on: row}));
           break;
+        }
         after.push(x);
       }
       const said = [c, ...after];
@@ -15627,11 +15643,9 @@ export function draftAnswer(ctx, env, question) {
         ? `${Math.max(0, Number(px[1]) - 1)}px`
         : `calc(${outer} - 1px)`;
       // (Said for one mode, only the line color takes it: the strip's shape
-      // is the same in light and dark. With no line color said, nothing of
-      // the strip is that mode's own, so the ask is answered as before.)
+      // is the same in light and dark, and the answer says so.)
       const mode =
         said.map(x => modeOf(x)).find(m => Object.keys(m).length) ?? {};
-      if (Object.keys(mode).length && !lineColor) return null;
       const steps = [
         ...(lineColor
           ? [set('--color-border', lineColor, {on: row, ...mode})]
@@ -15665,7 +15679,7 @@ export function draftAnswer(ctx, env, question) {
           typed: said.flatMap(x => [...x.colors, ...x.lengths]),
           families: [...new Set(drawn.flatMap(a => ASPECT_FAMILIES[a]))],
         },
-        text: `${component} as one strip: ${row} draws the border and corners with no gap between its controls; each ${item} draws a separator after it${cells.length ? ` (and ${cells.join(', ')}, a cell of the row too)` : ''}, and the first and last take the row's corners, the last with no separator${after.length ? ` (with ${after.map(x => `"${x.text.trim()}"`).join(', ')})` : ''}${said.some(x => x.mode) ? `; the strip's shape is the same in light and dark${lineColor ? `, and its line color is for ${said.find(x => x.mode)?.mode} mode` : ''}` : ''}`,
+        text: `${component} as one strip: ${row} draws the border and corners with no gap between its controls; each ${item} draws a separator after it${cells.length ? ` (and ${cells.join(', ')}, a cell of the row too)` : ''}, and the first and last take the row's corners, the last with no separator${after.length ? ` (with ${after.map(x => `"${x.text.trim()}"`).join(', ')})` : ''}${said.some(x => x.mode) ? `; the strip's shape is the same in light and dark${lineColor ? `, and its line color is for ${said.find(x => x.mode)?.mode} mode` : `, so nothing of it is ${said.find(x => x.mode)?.mode} mode's own`}` : ''}`,
         options: [steps],
         sequence: true,
         // (Each step carries its own mode: only the line color has one.)
