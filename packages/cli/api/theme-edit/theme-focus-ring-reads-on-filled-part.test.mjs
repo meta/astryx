@@ -54,7 +54,7 @@ const headerRings = (slug, part = 'app-shell-header') =>
       .readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8')
       .matchAll(
         new RegExp(
-          `\\.astryx-${part}\\)?[^{]*\\{[^}]*--focus-outline-color: ([^;]+);`,
+          `\\.astryx-${part}(?![\\w-])\\)?[^{]*\\{[^}]*--focus-outline-color: ([^;]+);`,
           'g',
         ),
       ),
@@ -168,6 +168,18 @@ describe('a focus ring inside a part the theme fills', () => {
     const bar = headerRings('sh');
     expect(bar.length).toBeGreaterThan(0);
     expect(bar).not.toContain('#ffffff');
+  }, 240_000);
+
+  it('writes none on a control that rings itself in its own shape inside', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('sw', {cwd, like: 'neutral'});
+    await themeEditSet('sw', 'background-color', '#2d4373', {
+      cwd,
+      on: 'layout-content',
+      mode: 'light',
+    });
+    expect(headerRings('sw', 'switch')).toEqual([]);
+    expect(headerRings('sw', 'checkbox')).toEqual([]);
   }, 240_000);
 
   it('writes none on a part that draws its own ring, which lies on the page', async ctx => {

@@ -8578,12 +8578,12 @@ export function compileTheme(ctx, data, base) {
       const rest = Object.keys(at).find(k => !k.includes(' '));
       return rest == null ? null : opaque(at[rest], m);
     };
-    /** Whether a part draws a focus ring itself, when it has focus (not a frame's for a part inside, as a card's). @param {string} target */
+    /** Whether a part draws a focus ring itself, by its own rules, in whatever shape (a button's outline, a switch's track), but not a frame's ring for the control inside it (a card's), which is read for what it holds. @param {string} target */
     const drawsRing = target =>
       Object.values(ctx.C.MAP[target]?.own ?? {}).some((/** @type {any} */ v) =>
         /** @type {string[]} */ (
           v?.tokens?.['--focus-outline-color'] ?? []
-        ).some(w => /(?:^|\s):focus-visible$/.test(w.trim())),
+        ).some(w => !/:has\(>\s*\[data-astryx-focus-owner\]/.test(w)),
       );
     /** Whether the theme sets a focus ring color on a part. @param {string} target */
     const ringSet = target =>
