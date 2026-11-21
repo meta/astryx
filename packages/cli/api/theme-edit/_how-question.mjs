@@ -347,6 +347,12 @@ function grayStop(family, stop) {
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
+/**
+ * A plural part said to work in both modes, "headings that work in light
+ * and dark mode"; never after "must", "should" or "needs to".
+ */
+const PLURAL_BOTH_MODES =
+  /\b(?:that\s+|which\s+)?(?<!\b(?:must|should|shall|will|can|to|needs?\s+to|has\s+to|have\s+to)\s+)(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/i;
 const PALETTE_NAMES = new Set([
   'sky',
   'tan',
@@ -4998,10 +5004,7 @@ export function draftAnswer(ctx, env, question) {
     // after "must", "should" or "needs to": "text that must work in light
     // and dark mode" asks for text that reads in both, as the rule below
     // reads it.)
-    .replace(
-      /\b(?:that\s+|which\s+)?(?<!\b(?:must|should|shall|will|can|to|needs?\s+to|has\s+to|have\s+to)\s+)(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/gi,
-      ' in both modes ',
-    )
+    .replace(new RegExp(PLURAL_BOTH_MODES.source, 'gi'), ' in both modes ')
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark.)
     .replace(
@@ -33141,6 +33144,31 @@ export function draftAnswer(ctx, env, question) {
     if (writes) result.push(note);
     else result.splice(0, result.length, note);
   }
+  // (A part said to work in both modes asks that it reads in both: a text
+  // color written for both that one mode's page makes hard to read says
+  // so, with that mode, the ratio and the way to keep it readable there.)
+  if (modal && PLURAL_BOTH_MODES.test(asked0))
+    for (const r of result) {
+      /** @type {string[]} */
+      const notes = [];
+      for (const step of r.options.flat()) {
+        if (
+          step.verb !== 'set' ||
+          step.mode ||
+          !(step.thing === 'color' || /^--color-text-/.test(String(step.thing)))
+        )
+          continue;
+        const rgb = parseColor(String(step.value));
+        if (!rgb) continue;
+        for (const m of /** @type {const} */ (['light', 'dark'])) {
+          const page = parseColor(current('--color-background-body', m));
+          const read = page ? ratio(rgb, page) : Infinity;
+          const note = `${step.value} reads ${read.toFixed(2)}:1 on the ${m} page (under 4.5:1); for ${m} mode, set a ${m === 'dark' ? 'lighter' : 'darker'} color with --mode ${m}`;
+          if (read < 4.5 && !notes.includes(note)) notes.push(note);
+        }
+      }
+      if (notes.length) r.text = `${r.text}; ${notes.join('; ')}`;
+    }
   // Each file set aside is written back as typed, where an answer names or
   // writes it.
   if (urls.length)
