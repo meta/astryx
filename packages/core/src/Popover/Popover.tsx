@@ -992,8 +992,12 @@ export function Popover({
       return;
     }
     attachedTriggerRef.current = null;
-    anchorElementRef.current = null;
-    setPopoverTrigger(null);
+    // A render-prop trigger that took over may already be the anchor. Only
+    // the anchor this check set is cleared.
+    if (anchorElementRef.current === attached.anchor) {
+      anchorElementRef.current = null;
+      setPopoverTrigger(null);
+    }
     attached.detach();
   }, [setPopoverTrigger]);
 
@@ -1024,7 +1028,6 @@ export function Popover({
         const text = readTriggerText(button);
         if (text !== attached.text) {
           attached.text = text;
-          // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the caller-rendered trigger's text, which only the DOM holds
           setTriggerText(text);
         }
       }
