@@ -81,31 +81,37 @@ describe('Popover children mode', () => {
     expect(clicks()).toBe(attachedAtMount);
   });
 
-  it('attaches a trigger that the caller swaps for another element', () => {
+  it('attaches a trigger that the caller swaps for another component', () => {
+    // Two component types, as with an IconButton and a Button: React mounts a
+    // new element for the swap instead of reusing the old one.
+    function CompactTrigger() {
+      return (
+        <button type="button" aria-label="Shortcuts compact">
+          ?
+        </button>
+      );
+    }
+    function WideTrigger() {
+      return <button type="button">Shortcuts wide</button>;
+    }
     let setCompact: (isCompact: boolean) => void = () => {};
     function Parent() {
       const [isCompact, setIsCompact] = useState(false);
       setCompact = setIsCompact;
       return (
         <Popover content={<span>Shortcuts</span>} label="Shortcuts">
-          {isCompact ? (
-            <button type="button" aria-label="Shortcuts compact">
-              ?
-            </button>
-          ) : (
-            <button type="button">Shortcuts wide</button>
-          )}
+          {isCompact ? <CompactTrigger /> : <WideTrigger />}
         </Popover>
       );
     }
     render(<Parent />);
-    expect(
-      screen.getByRole('button', {name: 'Shortcuts wide'}),
-    ).toHaveAttribute('aria-haspopup');
+    const wide = screen.getByRole('button', {name: 'Shortcuts wide'});
+    expect(wide).toHaveAttribute('aria-haspopup');
 
     act(() => setCompact(true));
 
     const compact = screen.getByRole('button', {name: 'Shortcuts compact'});
+    expect(compact).not.toBe(wide);
     expect(compact).toHaveAttribute('aria-haspopup');
     expect(compact).toHaveAttribute('aria-expanded', 'false');
   });
