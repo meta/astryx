@@ -30,6 +30,8 @@ const RETIRED_EVERYWHERE = [
   {word: 'icon registry', pattern: /\bicon[- ]registr/i},
   {word: 'icon pack', pattern: /\bicon[- ]packs?\b/i},
   {word: 'semantic icon', pattern: /\bsemantic icons?\b(?!\s+colou?r)/i},
+  {word: '图标注册表 (icon registry)', pattern: /图标注册表/},
+  {word: '语义图标 (semantic icon)', pattern: /语义图标/},
 ];
 
 const RETIRED_IN_ICON_GUIDES = [
