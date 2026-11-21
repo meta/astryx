@@ -474,6 +474,22 @@ describe('family reach by default', () => {
         },
       );
       expect(cssOf(slug)).toContain('linear-gradient(#eeeeee, #dddddd)');
+      // (A disabled fill of the theme's own, set before the gradient, wins.)
+      await themeEditNew(`${slug}c`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}c`, 'background-color', '#eeeeee', {
+        cwd,
+        on: 'button',
+        state: 'disabled',
+      });
+      await themeEditSet(`${slug}c`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+      });
+      expect(
+        cssOf(`${slug}c`)
+          .match(/\.astryx-button[^{\s]*:is\(:disabled[^{]*\{[^}]*\}/g)
+          ?.join('\n') ?? '',
+      ).not.toMatch(/background: revert-layer/);
       // (The other variants keep Core's disabled look: the copy stays.)
       expect(cssOf(slug)).toMatch(
         /\.astryx-button[^{\s]*:is\(:disabled[^{]*\{[^}]*background(?:-image)?: revert-layer/,
