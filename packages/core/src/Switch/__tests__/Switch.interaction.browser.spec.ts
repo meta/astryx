@@ -3553,8 +3553,34 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     'storyboard: tap — travel',
     {tag: '@storyboard'},
     async ({page}, testInfo) => {
-      const {driver, center, thumb} = await openSwitch(page);
+      const {driver, center, thumb, input} = await openSwitch(page);
       await installTimerGate(page);
+      // The value's commit rebuilds the running travel on its own clock
+      // (useSwitchTouch setValue), so a hold taken before it loses its run.
+      // On a loaded runner the commit comes after the hold. In Chromium the
+      // browser's click is late. In WebKit the switch clicks its input from a
+      // 300 ms timer. So the page freezes its timers at the lift and swallows
+      // the browser's click. The switch then clicks its input from that
+      // timer, after the thaw.
+      await page.evaluate(() => {
+        const gate = (
+          window as unknown as {__harnessTimerGate: {freeze(): void}}
+        ).__harnessTimerGate;
+        window.addEventListener('touchend', () => gate.freeze(), {
+          capture: true,
+          once: true,
+        });
+        window.addEventListener(
+          'click',
+          event => {
+            if (event.isTrusted) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+          },
+          {capture: true, once: true},
+        );
+      });
       const clip = page.locator('#storybook-root .astryx-switch');
       // The press starts two animations. The release starts its travel with
       // several others at once, so a count of 3 holds at the release.
@@ -3582,6 +3608,8 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       });
       await releaseAnimations(page, {finish: true});
       await thawTimers(page);
+      // The commit still comes, after the thaw.
+      await expect(input).toBeChecked();
       await storyboard.write(testInfo);
       const offsets = storyboard.frames.map(f => f.data.offset as number);
       expect(offsets.at(-1)).toBeCloseTo(TRAVEL_PX, 0);
