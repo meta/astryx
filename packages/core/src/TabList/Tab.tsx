@@ -32,7 +32,8 @@ import {
 import type {BaseProps} from '../BaseProps';
 import {useTabListContext} from './TabListContext';
 import type {TabListSize} from './TabListContext';
-import {tabScope} from './tab.markers.stylex';
+import {controlPressOwner} from '../privateAttributes/pressOwner.stylex';
+import {ownerLayerPressStyles} from '../privateAttributes/press.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -102,12 +103,6 @@ export interface TabProps extends BaseProps<HTMLButtonElement> {
 // Styles
 // =============================================================================
 
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
-// that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
-
 const styles = stylex.create({
   base: {
     position: 'relative',
@@ -135,6 +130,7 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // The hover and press paint come from the recipe's owner layer.
   hoverBg: {
     position: 'absolute',
     inset: 0,
@@ -142,43 +138,6 @@ const styles = stylex.create({
     width: '100%',
     borderRadius: radiusVars['--radius-element'],
     pointerEvents: 'none',
-    backgroundColor: {
-      default: 'transparent',
-      [stylex.when.ancestor(':hover', tabScope)]: {
-        '@media (hover: hover)': colorVars['--color-overlay-hover'],
-      },
-      // Pressed: the same layer steps up to the pressed overlay, read off the
-      // tab the way the hover is, so a press paints on a finger too. Repeated
-      // inside the hover-capable branch so it outranks the hover rule there
-      // (a media-nested rule carries extra generated priority; see
-      // interactionOverlay.stylex.ts).
-      [stylex.when.ancestor(':active', tabScope)]: {
-        default: colorVars['--color-overlay-pressed'],
-        '@media (hover: hover)': colorVars['--color-overlay-pressed'],
-        // Under a coarse pointer the touch press model writes `data-astryx-press`
-        // on the tab instead, and paints as an image below.
-        '@media (pointer: coarse)': 'transparent',
-      },
-    },
-    // The touch press, as an image layer over the colour: an image change is
-    // discrete, so the layer's colour transition cannot fade the onset in,
-    // and the strength the tab's `pressedAlpha` arms own (1 while on, 1 → 0
-    // over the release) is what moves. Coarse pointers only, like the colour
-    // arms above; see interactionOverlay.stylex.ts.
-    backgroundImage: {
-      default: null,
-      [stylex.when.ancestor('[data-astryx-press="on"]', tabScope)]: {
-        default: null,
-        '@media (pointer: coarse)': pressedOverlayImage,
-      },
-      [stylex.when.ancestor('[data-astryx-press="fading"]', tabScope)]: {
-        default: null,
-        '@media (pointer: coarse)': pressedOverlayImage,
-      },
-    },
-    transitionProperty: 'background-color',
-    transitionDuration: durationVars['--duration-fast'],
-    transitionTimingFunction: easeVars['--ease-standard'],
   },
   selected: {
     color: colorVars['--color-text-primary'],
@@ -413,7 +372,7 @@ export function Tab({
         sizeStyles[size],
         isSelected && styles.selected,
         isFill ? layoutStyles.fill : layoutStyles.hug,
-        !isDisabled && tabScope,
+        !isDisabled && controlPressOwner,
         // The touch press's strength and release live on the tab the
         // controller writes to; the hover layer inherits and paints it.
         !isDisabled && interactionOverlayStyles.pressedAlpha,
@@ -427,7 +386,11 @@ export function Tab({
   const hoverBgElement = (
     <span
       aria-hidden="true"
-      {...stylex.props(styles.hoverBg, hoverSizeStyles[size])}
+      {...stylex.props(
+        styles.hoverBg,
+        ownerLayerPressStyles.layer,
+        hoverSizeStyles[size],
+      )}
     />
   );
 
