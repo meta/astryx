@@ -56,6 +56,18 @@ async function freshTableWithCountedTooltip() {
     loads.count += 1;
     return importOriginal();
   });
+  // These tests count the cells' Tooltip load. A truncating header cell's
+  // keyboard cut-text loads its own module, which also imports Tooltip, on
+  // its own schedule with its own tests, so it is left out here.
+  const noCutText = () => ({
+    tooltip: null,
+    onFocus: () => {},
+    onBlur: () => {},
+    onPointerDown: () => {},
+  });
+  vi.doMock('../Text/cutTextOnKeyboardFocus', () => ({
+    useCutTextOnKeyboardFocus: noCutText,
+  }));
   const held: FrameRequestCallback[] = [];
   const frame = vi
     .spyOn(window, 'requestAnimationFrame')
@@ -76,6 +88,7 @@ async function freshTableWithCountedTooltip() {
     restore() {
       frame.mockRestore();
       vi.doUnmock('../Tooltip/Tooltip');
+      vi.doUnmock('../Text/cutTextOnKeyboardFocus');
     },
   };
 }
