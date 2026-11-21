@@ -847,7 +847,9 @@ function writeEntranceSide(
   // WebKit can deliver the first resize observation after a slow first
   // frame's paint. The next animation frame runs before that paint, so the
   // side reaches the first frame of a show from a press in every engine.
-  const frame = view.requestAnimationFrame(writeOnce);
+  const frame = view.requestAnimationFrame(function writeEntranceSideOnFrame() {
+    writeOnce();
+  });
   const observer = new Observer(function writeEntranceSideOnResize() {
     writeOnce();
   });
