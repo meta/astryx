@@ -7167,7 +7167,8 @@ async function changeOnce(
     ...(sub === 'set' &&
     !s.on &&
     s.thing === '--color-background-body' &&
-    !hadPageColor
+    !hadPageColor &&
+    !pageNoteSaidOnModeSwitch(cwd, slug)
       ? [pageColorNote(data.mode)]
       : []),
     // A scale step far outside reading sizes is named.
@@ -10102,6 +10103,31 @@ function lastStepTakes(cwd, slug, now) {
     return stepTakesBack(now, before);
   }
   return [];
+}
+
+/**
+ * Whether the theme's history holds a switch to one mode made while it set
+ * no page color: that switch said the page note, so the first page color
+ * after it does not say it again.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+function pageNoteSaidOnModeSwitch(cwd, slug) {
+  const oneMode = (/** @type {unknown} */ m) =>
+    m === 'light-only' || m === 'dark-only';
+  const states = readHistory(themeFiles(cwd, slug).history)
+    .steps.map(step => /** @type {any} */ (settingsJson(step)))
+    .filter(x => x && typeof x === 'object' && Array.isArray(x.settings));
+  return states.some(
+    (after, i) =>
+      i > 0 &&
+      !oneMode(states[i - 1].mode) &&
+      oneMode(after.mode) &&
+      !after.settings.some(
+        (/** @type {any} */ x) =>
+          x.thing === '--color-background-body' && !x.on,
+      ),
+  );
 }
 
 /**

@@ -56,3 +56,22 @@ it('a theme that sets its page color says no page note when made one-mode', asyn
   const r = await themeEditSet('m2', 'mode', 'dark-only', {cwd});
   expect(notes(r)).not.toMatch(NOTE);
 }, 300_000);
+
+it('a theme made one-mode says no page note again on its first page color', async () => {
+  await themeEditNew('m3', {cwd, like: 'neutral'});
+  expect(notes(await themeEditSet('m3', 'mode', 'dark-only', {cwd}))).toMatch(
+    NOTE,
+  );
+  const r = await themeEditSet('m3', '--color-background-body', '#101010', {
+    cwd,
+  });
+  expect(notes(r)).not.toMatch(NOTE);
+}, 300_000);
+
+it('a theme that was never made one-mode says the page note on its first page color', async () => {
+  await themeEditNew('m4', {cwd, like: 'neutral'});
+  const r = await themeEditSet('m4', '--color-background-body', '#101010', {
+    cwd,
+  });
+  expect(notes(r)).toMatch(NOTE);
+}, 300_000);
