@@ -24,4 +24,6 @@ What changes on screen:
 
 Custom themes: a theme that doesn't set `--color-border-control` gets Core's default. A custom theme that set only `--color-border-emphasized` for its field edges now gets Core's default control edge; set `--color-border-control` to a value that suits your palette and reaches 3:1 against your surface and page body.
 
-@cixzhang
+This builds on rubyycheung's contrast work in #7662 and #7766.
+
+@cixzhang @rubyycheung
