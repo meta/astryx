@@ -13388,6 +13388,7 @@ export async function contrastProblems(ctx, data, res) {
     ...borderContrastProblems(ctx, data, res, base),
     ...trackContrastProblems(ctx, data, res, base),
     ...scopedFillPairProblems(ctx, data, res),
+    ...layerTextProblems(ctx, data, res),
     ...floatingEdgeProblems(ctx, data, res, base),
     ...scoped.problems,
     ...buttonStyleProblems(ctx, data, res),
@@ -13753,6 +13754,125 @@ function scopedFillPairProblems(ctx, data, res) {
     }
   }
   return out;
+}
+
+/**
+ * A text or icon token set on a bar (white text on the app's header or its
+ * top nav) also reaches the menus and popovers its items open: Core draws
+ * a layer inside the element that opens it, so the layer inherits the
+ * bar's tokens. Its surface still paints the popover fill, which the bar
+ * does not change. The token is measured, as the bar's scope resolves it,
+ * on the popover fill there. Below 4.5:1 is a problem, fixed with the token
+ * on the overlays, at the value the theme gives it elsewhere: a token
+ * declared on the popover beats the inherited one. A bar is a part that
+ * holds a bar row, or that row (see barRows). A setting for the part alone
+ * (`--only`), and a token the theme sets on the popover already, are drawn
+ * there as set.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function layerTextProblems(ctx, data, res) {
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  if (!map.popover) return [];
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  const FILL = '--color-background-popover';
+  /** The bars: the parts that hold a bar row, and those rows. */
+  const bars = new Set(
+    Object.keys(map).flatMap(h => {
+      const rows = barRows(map, h);
+      return rows.length ? [h, ...rows] : [];
+    }),
+  );
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const lightDark = /^light-dark\((.*)\)$/is.exec(x);
+      if (lightDark) {
+        const halves = splitTop(lightDark[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** The token as a part's own scope draws it in a mode. @param {string} on @param {string} tok @param {'light' | 'dark'} m */
+  const inScope = (on, tok, m) => {
+    const set = [...data.settings]
+      .reverse()
+      .find(
+        y =>
+          y.source === 'token' &&
+          y.thing === tok &&
+          y.on === on &&
+          !y.state &&
+          !y.when &&
+          (!y.mode || y.mode === m),
+      );
+    return inMode(set ? set.value : `var(${tok})`, m);
+  };
+  /** @type {Map<string, {tok: string, m: 'light' | 'dark', parts: string[], text: number[], fill: number[], r: number}>} */
+  const found = new Map();
+  for (const x of data.settings) {
+    if (x.source !== 'token' || !x.on || x.state || x.when || x.only) continue;
+    if (!/^--color-(?:text|icon)-[\w-]+$/.test(x.thing)) continue;
+    const own = partsOf(ctx, x);
+    if (own.includes('popover') || !bars.has(x.on)) continue;
+    for (const m0 of modes) {
+      const m = /** @type {'light' | 'dark'} */ (m0);
+      if (x.mode && x.mode !== m) continue;
+      const onPopover = data.settings.some(
+        y =>
+          y.source === 'token' &&
+          y.thing === x.thing &&
+          !y.state &&
+          !y.when &&
+          (!y.mode || y.mode === m) &&
+          partsOf(ctx, y).includes('popover'),
+      );
+      if (onPopover) continue;
+      const page =
+        parseColor(inMode('var(--color-background-body)', m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const fillValue = inScope(x.on, FILL, m);
+      const textValue = inScope(x.on, x.thing, m);
+      const fillRgb = parseColor(fillValue);
+      const textRgb = parseColor(textValue);
+      if (!fillRgb || !textRgb || alphaOf(fillValue) < 1) continue;
+      const fill = compositeOver(
+        fillRgb,
+        1,
+        /** @type {[number, number, number]} */ (page),
+      );
+      const text = compositeOver(textRgb, alphaOf(textValue), fill);
+      const r = ratio(text, fill);
+      if (r >= 4.5) continue;
+      const key = `layer-text|${x.thing}|${m}`;
+      const seen = found.get(key);
+      if (seen) {
+        if (!seen.parts.includes(x.on)) seen.parts.push(x.on);
+        if (r < seen.r) Object.assign(seen, {text, fill, r});
+      } else found.set(key, {tok: x.thing, m, parts: [x.on], text, fill, r});
+    }
+  }
+  return [...found.entries()].map(([key, f]) => {
+    const elsewhere = parseColor(inMode(`var(${f.tok})`, f.m));
+    const value =
+      elsewhere && ratio(compositeOver(elsewhere, 1, f.fill), f.fill) >= 4.5
+        ? hex(/** @type {[number, number, number]} */ (elsewhere))
+        : nearestReading(f.text, [f.fill], 4.5);
+    return {
+      key,
+      text: `a menu or popover opened from ${f.parts.slice(0, 3).join(', ')}${f.parts.length > 3 ? ` and ${f.parts.length - 3} more` : ''} draws its ${f.tok} (${hex(f.text)}) on the popover fill (${hex(f.fill)}): ${ratioWords(f.r)}:1 in ${f.m}; text needs 4.5:1`,
+      fix: `${P} set ${data.name} ${f.tok} '${value}' --on overlays${modeFlag(f.m)}`,
+    };
+  });
 }
 
 /**
