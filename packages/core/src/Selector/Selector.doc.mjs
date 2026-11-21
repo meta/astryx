@@ -18,7 +18,7 @@ const anatomy = [
     name: 'Icon-rendered start icon',
     required: false,
     description:
-      'Optional leading built-in meaning or icon component rendered through Icon.',
+      'Optional leading icon, by built-in meaning or icon component, rendered through Icon.',
   },
   {
     name: 'Caller-rendered start content',

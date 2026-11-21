@@ -24,7 +24,7 @@ export const docs = {
       {guidance: false, description: "Don't use custom wrappers around individual calls; the component handles single vs. grouped layout automatically based on the array length."},
     ],
     anatomy: [
-      {name: 'Status icon', required: true, description: 'The theme icons\' success or error icon, or a spinner while the call is pending or running.'},
+      {name: 'Status icon', required: true, description: 'The success or error icon (theme icons, else built-in), or a spinner while the call is pending or running.'},
       {name: 'Tool name', required: true, description: 'The function or tool name displayed in monospace: bash, edit, read, web_search, etc.'},
       {name: 'Node badge', required: false, description: 'A neutral pill badge showing which sandbox or environment ran the tool, like cli:remote-server or workspace.'},
       {name: 'Target label', required: false, description: 'The target of the action (a file path, command, or search query) shown after the tool name.'},

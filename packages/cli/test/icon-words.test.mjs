@@ -79,7 +79,14 @@ function propText(mod) {
   const out = [];
   for (const doc of [mod.docs, mod.docsZh, mod.docsDense]) {
     if (!doc) continue;
-    for (const key of ['props', 'propDescriptions', 'params', 'returns'])
+    for (const key of [
+      'props',
+      'propDescriptions',
+      'params',
+      'returns',
+      'paramDescriptions',
+      'returnDescriptions',
+    ])
       proseOf(doc[key], out);
   }
   return out;

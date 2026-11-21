@@ -40,7 +40,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use it in a custom component that places a built-in meaning itself, so a Theme that overrides the icon changes the component too.',
+          'Use it in a custom component that places the icon for a built-in meaning itself, so a Theme that overrides the icon changes the component too.',
       },
       {
         guidance: true,
@@ -77,7 +77,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use in custom components that place a built-in meaning, so Theme overrides reach them.',
+          'Use in custom components that place the icon for a built-in meaning, so Theme overrides reach them.',
       },
       {
         guidance: true,
