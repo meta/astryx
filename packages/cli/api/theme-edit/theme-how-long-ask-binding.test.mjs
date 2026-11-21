@@ -99,10 +99,256 @@ const ROWS = [
     },
   ],
   [
+    'labels one per line each set their dial',
+    {
+      q: 'Density: roomy\nRadius: small',
+      has: ['spacing roomy', 'corners small'],
+    },
+  ],
+  [
+    'a label that starts its clause sets its dial at the value said',
+    {
+      q: 'Density: roomy. Radius: small.',
+      has: ['spacing roomy', 'corners small'],
+    },
+  ],
+  [
+    'sans after a design system is still "without"',
+    {q: 'a minimal UI sans shadows', never: /^font system/},
+  ],
+  [
+    'sans after a design system is still "without" for borders',
+    {q: 'a clean design system sans borders', never: /^font system/},
+  ],
+  [
+    'a design system sans shadows writes no stronger shadows',
+    {
+      q: 'design system sans shadows',
+      never: /^font system|--shadow-(?:low|med|high) (?!none)/,
+    },
+  ],
+  [
+    "a label that belongs to a part is that part's, never a dial's",
+    {
+      q: 'Body weight: bold. Letter spacing: tight.',
+      never: /^headings bold|^spacing tight/,
+    },
+  ],
+  [
+    "a label that is a part's dial word keeps the part's reading",
+    {q: 'Tracking: tight.', never: /--on heading$/},
+  ],
+  [
+    'sans between ordinary words is still without',
+    {q: 'cards: simple sans borders', has: ['border none --on card']},
+  ],
+  [
+    'sans after a kind of typeface is the typeface',
+    {q: 'a humanist sans for the body', has: ['font system --on body']},
+  ],
+  [
+    "a label under a part heading stays the part's",
+    {q: 'Card\nPadding: roomy\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a heading with a colon keeps its labels',
+    {q: 'Cards:\nPadding: roomy\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a heading with a colon over one label keeps it',
+    {q: 'Card:\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a blank line under a heading keeps its labels',
+    {q: 'Card\n\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    "numbered labels under a heading stay the part's",
+    {q: 'Card\n1. Padding: roomy\n2. Radius: large', never: /^corners large$/},
+  ],
+  [
+    "a decimal in a part's sentence keeps its label",
+    {q: 'cards: 1.5px border, radius: large', never: /^corners large$/},
+  ],
+  [
+    "a decimal in a part's sentence keeps a spacing label",
+    {q: 'cards: 0.5rem gap, padding: roomy', never: /^spacing roomy$/},
+  ],
+  [
+    'a two-word label line under a heading keeps the run on the part',
+    {
+      q: 'Card\nBackground color: white\nRadius: large',
+      never: /^corners large$/,
+    },
+  ],
+  [
+    'a hyphenated label line under a heading keeps the run on the part',
+    {q: 'Card\nBorder-radius: 8px\nPadding: roomy', never: /^spacing roomy$/},
+  ],
+  [
+    'a short sentence on its own line is not a heading',
+    {q: 'Soft cards.\nRadius: small.', has: ['corners small']},
+  ],
+  [
+    'a label after an earlier part sentence still sets its dial',
+    {q: 'soft shadows on cards. Radius: small.', has: ['corners small']},
+  ],
+  [
+    "a label in a part's colon list stays the part's",
+    {q: 'cards: white background, radius: large', never: /^corners large$/},
+  ],
+  [
+    "a labelled look reads each label as its dial, its value as that dial's word",
+    {
+      q: 'Bulma — Type: system sans 16px, 1.5 leading. Density: roomy. Surface: flat, soft shadows on cards. Edges: 6px corners, 1px #dbdbdb borders. Feel: border darkens on hover. Color: turquoise #00d1b2 primary, blue #485fc7 links.',
+      has: [
+        'text-size 16',
+        '--text-body-leading 1.5',
+        'spacing roomy',
+        'surfaces flat',
+        'corners 6px',
+      ],
+    },
+  ],
+  [
+    "a labelled look: a dial value after its label, a color before a part's variant",
+    {
+      q: 'Primer — Type: system sans 14px, 1.5 leading. Density: medium. Surface: flat, subtle shadow only on overlays. Edges: 6px corners, 1px #d0d7de borders. Feel: light gray fill on hover, darker on press. Color: green #1f883d primary buttons, blue #0969da links, neutral grays.',
+      has: ['text-size 14', 'spacing medium', 'corners 6px'],
+      never: /spacing more/,
+    },
+  ],
+  [
+    'two clashes are each offered as a choice',
+    {
+      q: '8px corners on cards, 2px corners on cards, compact tables, roomy tables, a teal accent',
+      says: /contradict each other[\s\S]*contradict each other(?![\s\S]*not used)/,
+    },
+  ],
+  [
+    'a whole-theme color takes its typed value whatever word comes with it',
+    {q: 'navy #000080 everywhere', has: ["accent '#000080'"]},
+  ],
+  [
+    'a bare size beside a font family is the text size',
+    {
+      q: '16px, Inter font',
+      has: ['text-size 16'],
+      says: /^(?![\s\S]*not used: "16px")/,
+    },
+  ],
+  [
+    "title bars said of dialogs are the dialogs', never the app's top bar",
+    {q: 'navy title bars on dialogs', never: /--on app-shell-header/},
+  ],
+  [
+    "a modal window's title bars are the modal's",
+    {q: 'modal window title bars navy', never: /--on app-shell-header/},
+  ],
+  [
+    'a bare size beside a leading said in words is the text size',
+    {
+      q: '16px, tight leading',
+      has: ['text-size 16'],
+      says: /^(?![\s\S]*contradict)/,
+    },
+  ],
+  [
+    'a bare size beside tracking said in words is the text size',
+    {
+      q: '16px, tight tracking',
+      has: ['text-size 16'],
+      says: /^(?![\s\S]*not used: "16px")/,
+    },
+  ],
+  [
+    "a dialog's title bar is the dialog's, never the app's top bar",
+    {q: 'dialog title bar #eeeeee background', never: /--on app-shell-header/},
+  ],
+  [
+    'a bare size beside a leading is the text size, never a second leading',
+    {
+      q: '16px, 1.5 leading',
+      has: ['text-size 16', '--text-body-leading 1.5'],
+      says: /^(?![\s\S]*contradict)/,
+    },
+  ],
+  [
+    'a clash holds back only its own pair; the rest is answered',
+    {
+      q: '8px corners on cards, compact tables, a teal accent, 2px corners on cards',
+      has: ['spacing less --on table-row', "accent '#0d9488'"],
+      says: /contradict each other/,
+    },
+  ],
+  [
+    "a decimal after a look's name is one value",
+    {
+      q: 'Windows 98 look: silver #c0c0c0 everywhere, 1.5 leading, square corners, bevelled buttons',
+      has: ['--text-body-leading 1.5', "neutral '#c0c0c0'"],
+      never: /line-height 5|^accent '#c0c0c0'/,
+      says: /^(?![\s\S]*not taken: [^\n]*"everywhere")/,
+    },
+  ],
+  [
+    'a text line for a clashing fill goes with that fill in the choice',
+    {
+      q: 'pressed checkboxes: a #0069d6 fill and a #eeeeee fill',
+      says: /^(?![\s\S]*readable text on that fill)[\s\S]*choice also sets #ffffff text/,
+    },
+  ],
+  [
+    'a clashing color is offered only in the choice',
+    {q: 'make it blue, make it green', says: /^(?![\s\S]*--color-accent)/},
+  ],
+  [
+    'a clashing heading weight is offered only in the choice',
+    {q: 'bold headings, light headings', says: /^(?![\s\S]*font-weight)/},
+  ],
+  [
+    'a color taken away everywhere is never the accent',
+    {q: "don't use red everywhere", never: /accent '#dc2626'|--color-accent/},
+  ],
+  [
+    'a color turned down everywhere is never the accent',
+    {q: 'less blue everywhere', never: /^accent '#|^--color-accent '#/},
+  ],
+  [
+    'a clash on a repeated step keeps it out of the rest',
+    {
+      q: 'corners 2 steps rounder, square corners, compact tables',
+      // (The corners pair is the choice; the tables are still answered,
+      // and "corners more" is offered once, never again in a sequence.)
+      has: ['corners more', 'corners square'],
+      says: /^(?![\s\S]*corners more[\s\S]*corners more)[\s\S]*table-row/,
+    },
+  ],
+  [
+    'whole-theme words in a look ask are never named as not taken',
+    {
+      q: 'a calm look: soft blue all over, the whole app roomy',
+      says: /^(?![\s\S]*not taken: [^\n]*"(?:over|whole)")/,
+    },
+  ],
+  [
+    'a color for the whole theme keeps the mode said with it',
+    {
+      q: 'red everywhere in dark mode',
+      has: ["--color-accent '#dc2626' --mode dark"],
+      never: /^accent '#dc2626'|^--color-accent '#dc2626'$/,
+    },
+  ],
+  [
+    'white for the whole theme is its page',
+    {q: 'white everywhere', has: ["--color-background-body '#ffffff'"]},
+  ],
+  [
     "a look's name before its colon is the theme's look, never an unknown part",
     {
       q: 'neon synthwave: deep purple night background, hot pink accent #ff69b4, cyan accent, a glow',
-      has: ["accent '#ff69b4'"],
+      // (The two accents clash: offered as a choice; the rest is answered.)
+      has: ["--color-background-body '#230d47' --mode dark"],
+      says: /accent #ff69b4 and accent #0891b2/,
     },
   ],
   [
@@ -439,9 +685,12 @@ const ROWS = [
     'a tinted glass is a tint, in the whole answer too',
     {
       // (A soft blue said as a tint is a pale wash of it, as main reads
-      // it; the tint reading is in the follow-up #13044.)
+      // it; the tint reading is in the follow-up #13044. It clashes with
+      // the white content, so that pair is offered as its own choice and
+      // the rest of the ask is written.)
       q: 'translucent glassy window frames, soft blue-tinted glass, white content',
-      has: ["background-color '#eff6ff' --on containers --mode light"],
+      has: ['surfaces glass'],
+      says: /#eff6ff/,
       never: /'#2563eb'/,
     },
   ],
@@ -537,6 +786,27 @@ const ROWS = [
         "--color-text-accent '#ffffff' --mode dark",
       ],
       never: /--on side-nav-item/,
+    },
+  ],
+  [
+    "a brief's state look led by a label is the part the brief named, as main reads it",
+    {
+      q: 'Surface: filled fields. Feel: 8% tint on hover.',
+      has: [
+        "background-color '#f2f2f2' --on inputs --state hover --mode light",
+        "background-color '#242424' --on inputs --state hover --mode dark",
+      ],
+    },
+  ],
+  [
+    'a whole brief keeps its labelled hover look on the fields it named',
+    {
+      q: 'Material (M2 web) — Type: Roboto 14px, 1.43 leading. Density: comfortable. Surface: raised (elevation shadows on buttons and cards), filled fields. Edges: 4px corners. Feel: 8% tint on hover, 12% on press. Color: purple #6200ee primary, teal #03dac6 secondary.',
+      has: [
+        "background-color '#f2f2f2' --on inputs --state hover --mode light",
+        "background-color '#242424' --on inputs --state hover --mode dark",
+        'corners 4px',
+      ],
     },
   ],
   [

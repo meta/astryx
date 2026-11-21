@@ -1823,12 +1823,13 @@ jobs:
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
-      # A Lab-only change may carry a Lab component's CLI discovery entry; the
-      # committed list must match its generator (spec:AST-030 FR26).
+      # A Lab-only change can change the CLI's official package list, which the
+      # CLI derives when it is packed: the list must still build from the
+      # repository (spec:AST-030 FR26).
       - name: 'Lab-only: CLI official-packages check'
         if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
         # One Node-project test file: Vitest finds its project from the path.
-        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
+        run: pnpm exec vitest run packages/cli/scripts/generate-official-packages.test.mjs --maxWorkers=1
 
   # The Node project's browser contracts run in a job of their own, beside the
   # Node legs: theme-family compilation (owned by `theme-build`, not Build,

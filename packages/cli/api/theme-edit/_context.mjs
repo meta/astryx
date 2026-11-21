@@ -42,7 +42,7 @@ import {
   SYSTEM_FONTS,
 } from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
-import {openProject, installLine} from './_project.mjs';
+import {openProject, installLine, refusePlugAndPlay} from './_project.mjs';
 import {addCensusStates, partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
@@ -106,19 +106,7 @@ export function requireProject(cwd) {
   // package.json lists @astryxdesign/core.
   const app = coreApp(cwd);
   if (!app) refuseNoApp(cwd);
-  // Yarn Plug'n'Play has no node_modules for the editor to read Core from:
-  // its .pnp.cjs sits at the app or at the workspace root above it.
-  if (pnpAbove(app))
-    throw new AstryxError(
-      "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
-      [
-        {
-          name: 'yarn config set nodeLinker node-modules',
-          reason: 'do this first, then yarn install',
-        },
-      ],
-      E.ERR_PROJECT_REQUIRED,
-    );
+  refusePlugAndPlay(app);
   if (findNodeModulesPackage(app, '@astryxdesign/core')) return;
   // The app lists Core but it is not installed.
   throw new AstryxError(
@@ -225,22 +213,6 @@ export function coreApp(cwd) {
     const up = path.dirname(dir);
     if (up === dir) return null;
     dir = up;
-  }
-}
-
-/**
- * Whether a Yarn Plug'n'Play loader (.pnp.cjs) is at the app folder or above
- * it, up to its workspace root (or, outside a workspace, the repository
- * root).
- * @param {string} app
- */
-function pnpAbove(app) {
-  const root = findDeclaredWorkspaceRoot(app);
-  for (let dir = app; ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, '.pnp.cjs'))) return true;
-    if (dir === root || (!root && fs.existsSync(path.join(dir, '.git'))))
-      return false;
-    if (path.dirname(dir) === dir) return false;
   }
 }
 
@@ -1379,10 +1351,11 @@ export function styledChanges(before, after, base, drawn) {
 
 /**
  * The line that says which pictures to open after a run that took them:
- * each family of components' first ({@link familyPages}), then the sample
- * page's and the open states' (every menu, tooltip, popover and list drawn
- * open), of the mode shown first (light when the theme has both). Null when
- * this run took none of them.
+ * each family of components' first ({@link familyPages}), then the pages
+ * section's (the sample app and each page template, cut between pages),
+ * then the sample page's and the open states' (every menu, tooltip, popover
+ * and list drawn open), of the mode shown first (light when the theme has
+ * both). Null when this run took none of them.
  * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
  * @returns {string | null}
  */
@@ -1399,10 +1372,11 @@ export function lookAtPictures(files) {
     files.filter(f =>
       new RegExp(`^sheet-${g}${dark}(?:-\\d+)?\\.png$`).test(path.basename(f)),
     );
-  const families = FAMILY_SECTIONS.flatMap(g =>
-    cuts(g, '').length ? cuts(g, '') : cuts(g, '-dark'),
-  );
-  if (!preview && !open && !families.length) return null;
+  /** @param {string} g */
+  const pictured = g => (cuts(g, '').length ? cuts(g, '') : cuts(g, '-dark'));
+  const families = FAMILY_SECTIONS.flatMap(pictured);
+  const pages = pictured('pages');
+  if (!preview && !open && !families.length && !pages.length) return null;
   const dark =
     files.some(f => /-dark\.png$/.test(f)) &&
     files.some(f => /(?<!-dark)\.png$/.test(f));
@@ -1410,6 +1384,9 @@ export function lookAtPictures(files) {
     // A family's own picture reads whole; the full sheet does not.
     ...(families.length
       ? [`${families.join(', ')} (one family of components each)`]
+      : []),
+    ...(pages.length
+      ? [`${pages.join(', ')} (the sample app and each page template)`]
       : []),
     ...(preview
       ? [
@@ -1455,9 +1432,10 @@ export async function openStatesPage(ctx, slug, data) {
 }
 
 /**
- * The tallest a family's picture is: a reader fits a picture to its width,
- * and a taller one comes out too small to read, so it is cut into pictures
- * this tall (`sheet-inputs-1.png`, `-2` …).
+ * The tallest a family's or the pages section's picture is: a reader fits a
+ * picture to its width, and a taller one comes out too small to read, so it
+ * is cut into pictures this tall (`sheet-inputs-1.png`, `-2` …;
+ * `sheet-pages-1.png` …).
  */
 export const FAMILY_PICTURE_HEIGHT = 1600;
 

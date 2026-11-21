@@ -47,6 +47,7 @@ import {
   baseInstalled,
   installLine,
   packageInstalled,
+  refusePlugAndPlay,
   themeCacheRoot,
 } from './_project.mjs';
 import * as preview from './_preview-app.mjs';
@@ -306,6 +307,9 @@ async function withLock(root, name, fn, bestEffort = false, again = null) {
   // A preview command, which holds the preview lock, suggests the list of
   // previews (what the other command may be changing).
   again ??= name === 'preview' ? 'experimental theme preview list' : null;
+  // A Plug'n'Play app has no node_modules to keep the lock in, and the editor
+  // refuses it: refuse before any lock folder, read-only commands included.
+  if (!isOutsideProject(root)) refusePlugAndPlay(root);
   /** @type {string | null} */
   let dir;
   try {
@@ -658,7 +662,9 @@ export const themeEditUndo = (theme, options = {}) =>
 export const themeEditShow = (theme, options = {}) =>
   inProject(
     options,
-    lockName(theme),
+    // A lookup of one part writes nothing, and may name a theme that is not
+    // the editor's: it takes no theme lock.
+    options.on != null ? null : lockName(theme),
     o => edit.themeEditShow(theme, o),
     true,
     words(
