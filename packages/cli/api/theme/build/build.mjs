@@ -2672,11 +2672,11 @@ function hasNamedExport(/** @type {string} */ file, /** @type {string} */ name, 
   return esm ? unknown ? null : false : null;
 }
 // prettier-ignore
-async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string, compiledCopy?: string, checkOnly?: boolean}>} */ registries, /** @type {string} */ aggregatePath) {
+async function validateRegistryGraphs(/** @type {Array<{specifier: string, exportName: string, compiledCopy?: string}>} */ registries, /** @type {string} */ aggregatePath) {
   // A registry the build compiles is checked by importing its compiled copy
   // with Node, as the family module imports it; that import also loads every
   // module the copy imports, so the walk below its source only reads them.
-  /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string, compiledCopy?: string, checkOnly?: boolean}, compiled?: boolean}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root, compiled: root.compiledCopy != null || root.checkOnly === true}));
+  /** @type {Array<{specifier: string, parent: string, commonJs: boolean, imports: string[], root?: {exportName: string, compiledCopy?: string}, compiled?: boolean}>} */ const pending = registries.map(root => ({specifier: root.specifier, parent: aggregatePath, commonJs: false, imports: [root.exportName], root, compiled: root.compiledCopy != null}));
   /** @type {Array<{file: string, exportName: string, load?: string}>} */ const runtimeChecks = []; const seen = new Set();
   while (pending.length > 0) {
     const current = pending.pop(); if (!current) break; const {specifier, parent, commonJs, imports, root, compiled} = current;
@@ -2686,7 +2686,7 @@ async function validateRegistryGraphs(/** @type {Array<{specifier: string, expor
     const external = file.split(path.sep).includes('node_modules');
     if (!compiled) for (const name of imports) if (external) runtimeChecks.push({file, exportName: name}); else { const named = hasNamedExport(file, name); if (named === false) throw registryGraphError(`Family registry ${file} does not export "${name}".`); if (named === null) runtimeChecks.push({file, exportName: name}); }
     else if (!external) for (const name of imports) if (hasNamedExport(file, name) === false) throw registryGraphError(`Family registry ${file} does not export "${name}".`);
-    if (root && !root.checkOnly) runtimeChecks.push({file, exportName: root.exportName, load: root.compiledCopy});
+    if (root) runtimeChecks.push({file, exportName: root.exportName, load: root.compiledCopy});
     if (seen.has(file)) continue; seen.add(file);
     if (/\.[cm]?[jt]sx?$/i.test(file)) for (const edge of moduleDependencies(fs.readFileSync(file, 'utf8'), file)) pending.push({...edge, parent: file, compiled});
   }
@@ -2704,9 +2704,8 @@ async function validateRegistryGraphs(/** @type {Array<{specifier: string, expor
  * the family module will import it. The folder is always removed.
  * @param {Array<{specifier: string, exportName: string, compiledCopy?: string}>} registries
  * @param {string} aggregatePath
- * With `--check` nothing is written: a compiled registry is only read, and
- * the comparison of the committed modules with this build's reports any that
- * are stale or missing.
+ * With `--check` nothing is written, and each registry is checked from its
+ * source, as before.
  * @param {{outDir: string, modulesDir: string, writes: Array<{dest: string, content: string}>, check?: boolean}} compiled
  */
 async function checkFamilyRegistries(registries, aggregatePath, {outDir, modulesDir, writes, check}) {
@@ -2715,7 +2714,7 @@ async function checkFamilyRegistries(registries, aggregatePath, {outDir, modules
   // from its source, as before.
   const written = new Set(writes.map(write => write.dest));
   registries = registries.map(({compiledCopy, ...registry}) => (compiledCopy && written.has(compiledCopy) ? {...registry, compiledCopy} : registry));
-  if (check) return validateRegistryGraphs(registries.map(({compiledCopy, ...registry}) => (compiledCopy ? {...registry, checkOnly: true} : registry)), aggregatePath);
+  if (check) return validateRegistryGraphs(registries.map(({compiledCopy, ...registry}) => registry), aggregatePath);
   if (!registries.some(registry => registry.compiledCopy)) return validateRegistryGraphs(registries, aggregatePath);
   const checkDir = fs.mkdtempSync(path.join(outDir, `.${path.basename(modulesDir)}-check-`));
   /** @param {string} file */
