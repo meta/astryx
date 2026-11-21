@@ -615,7 +615,7 @@ export function assertIconExport(file, module, exportName) {
 /**
  * The files a library read does not follow into: the set's generated module,
  * by its path and its real path. A library that re-exports the set (its root
- * entry ends with `export * from` the generated module) then gives only its
+ * entry has `export * from` the generated module) then gives only its
  * own icons.
  * @param {string} [own] the generated module's absolute path
  * @returns {Set<string>}
@@ -795,9 +795,10 @@ export function modulePrefix(file, options) {
  * ({@link lookPositions}), read from its icon exports once. A large module
  * reports its reading, as {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, module?: string, progress?: (line: string) => void}} [options]
- *   `module`: the module as the author named it, for progress; `progress`:
- *   hears the reading of a large module
+ * @param {{adapter?: boolean, own?: string, module?: string, progress?: (line: string) => void}} [options]
+ *   `own`: the set's generated module, never read as the library's
+ *   ({@link iconCandidates}); `module`: the module as the author named it,
+ *   for progress; `progress`: hears the reading of a large module
  * @returns {{prefix: string[], positions: Array<Set<string>>}}
  */
 export function moduleNaming(file, options = {}) {
@@ -805,7 +806,7 @@ export function moduleNaming(file, options = {}) {
   let count = 0;
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => {
       const candidates = iconCandidates(file, options);
       count = candidates.length;
@@ -1055,7 +1056,7 @@ export function libraryIcons(file, options = {}) {
   let all = [];
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => {
       all = collectLibraryIcons(file, options);
       const prefer =
@@ -1085,14 +1086,17 @@ export function libraryIcons(file, options = {}) {
  * runs and the line `found` gives after.
  * @template T
  * @param {string} file
- * @param {{label: string, progress?: (line: string) => void}} reading
- *   `label`: the module as the author named it
+ * @param {{label: string, progress?: (line: string) => void, own?: string}} reading
+ *   `label`: the module as the author named it; `own`: the set's generated
+ *   module, left out of the count ({@link iconCandidates})
  * @param {() => T} read
  * @param {(result: T) => string} found
  * @returns {T}
  */
-function readingLibrary(file, {label, progress}, read, found) {
-  const exportCount = progress ? followedExportNames(file).length : 0;
+function readingLibrary(file, {label, progress, own}, read, found) {
+  const exportCount = progress
+    ? followedExportNames(file, ownModules(own)).length
+    : 0;
   if (progress == null || exportCount < PROGRESS_FROM) return read();
   progress(`Reading ${exportCount} exports of ${label}...`);
   const result = read();
@@ -1176,7 +1180,7 @@ export function everyLibraryIcon(file, options = {}) {
   const label = options.module ?? path.basename(file);
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => collectLibraryIcons(file, options),
     icons => `Found ${icons.length} exports in ${label}.`,
   );

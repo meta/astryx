@@ -2134,5 +2134,46 @@ describe('a refresh of a set the library ships itself, whose root re-exports the
     expect(
       dataOf('own').icons.map((/** @type {{id: string}} */ icon) => icon.id),
     ).toEqual(['arrow-down', 'search', 'star', 'trash', 'x']);
+
+    // One new glyph, added on its own, is named by its glyph.
+    for (const style of STYLES) {
+      for (const weight of WEIGHTS) {
+        const name = `Heart${style}24WGHT${weight}Icon`;
+        fs.writeFileSync(
+          path.join(pkg, 'icons', `${name}.js`),
+          'export default function h(props) { return null; }\n',
+        );
+        rootLines.push(
+          `export {default as ${name}} from './icons/${name}.js';`,
+        );
+      }
+    }
+    writeRoot(["export * from './icon-sets/own/own.generated.js';"]);
+    const listed = await json([
+      'experimental',
+      'icon',
+      'add',
+      'HeartOutline24WGHT400Icon',
+      '--from',
+      '@acme/icons',
+      '--set',
+      'own',
+    ]);
+    expect(listed.code, JSON.stringify(listed.body)).toBe(0);
+    expect(listed.body.data.id).toBe('heart');
+
+    // A default-look change without --from reads the looks the icons draw.
+    const moved = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'own',
+      '--variants',
+      'outline,filled',
+      '--default-variant',
+      'filled',
+    ]);
+    expect(moved.code).not.toBe(0);
+    expect(moved.body.error).toContain('still draws "outline"');
   });
 });

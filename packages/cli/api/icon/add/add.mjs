@@ -212,6 +212,7 @@ export async function iconAdd(exportName, options) {
         ? {prefix: [], positions: []}
         : moduleNaming(source.file, {
             adapter: Boolean(set.data.adapter),
+            own: path.resolve(packageDir, generated),
             module: source.module,
             progress: line => logger.warn(line),
           });
