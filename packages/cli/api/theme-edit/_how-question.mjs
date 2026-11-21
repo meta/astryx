@@ -4696,10 +4696,12 @@ export function draftAnswer(ctx, env, question) {
       // earlier reading.)
       // (A mode said with the look, "the card border in dark mode", takes it
       // away in that mode only.)
-      const mode = /\b(?:in\s+)?(dark|light)\s+mode\b/i.exec(own)?.[1];
+      const mode = /\b(?:in\s+)?(dark|light)\s+(?:mode|theme)\b/i.exec(
+        own,
+      )?.[1];
       const others = own
         .toLowerCase()
-        .replace(/\b(?:in\s+)?(?:dark|light)\s+mode\b/, ' ')
+        .replace(/\b(?:in\s+)?(?:dark|light)\s+(?:mode|theme)\b/, ' ')
         .replace(longest[0].trim(), ' ')
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)

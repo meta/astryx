@@ -447,6 +447,10 @@ describe('a look taken away by a pronoun in one mode', () => {
           /border-color transparent --on card --mode dark\b/,
         ],
         [
+          'the card border in dark theme is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
           'the card border in light mode is ugly, hide it',
           /border-color transparent --on card --mode light\b/,
         ],
@@ -459,8 +463,8 @@ describe('a look taken away by a pronoun in one mode', () => {
         expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
         expect(lines, String(q)).not.toMatch(/(?:none|transparent) --on \S+$/m);
       }
-      // (A shadow has no one-mode value: the look is never taken away in
-      // both modes.)
+      // (A card draws no shadow of its own and set takes --mode only for
+      // colors: the look is never taken away in both modes.)
       const lines = (
         first(
           await answer(
