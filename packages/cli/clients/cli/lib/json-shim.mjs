@@ -1204,10 +1204,15 @@ async function answerStrayOption(err, rejected, message, exitCode) {
         answer && {
           message: answer.message,
           // Only runs: a near command name is no run to print after `Run:`,
-          // so the program's help stands in for those. A run of the
-          // project's own script keeps its package manager.
-          suggestions: answer.near
-            ? [{name: formatCliCommand('--help'), reason: 'every command'}]
+          // so the help run, with the options typed, stands in for those. A
+          // run of the project's own script keeps its package manager.
+          suggestions: answer.help
+            ? [
+                {
+                  name: formatCliCommand(answer.help.name),
+                  reason: answer.help.reason,
+                },
+              ]
             : answer.suggestions.map(s => ({
                 name: s.name.startsWith('astryx ')
                   ? formatCliCommand(s.name)
