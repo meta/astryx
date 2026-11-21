@@ -48,11 +48,11 @@ export interface OverlayScrimProps {
 // =============================================================================
 
 const FADE = durationVars['--duration-fast'];
-// On hide, the clip path applies when the fade ends. On a hover reveal it
-// lifts after about one frame, so the overlay fades in from its first frame
-// and takes no click before it paints.
+// On hide, the clip path applies when the fade ends. On a hover reveal, it
+// lifts one frame after the fade starts. The first paint and the first click
+// then happen on the same frame, at any fade length.
 const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE;
-const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, calc(' + FADE + ' / 8)';
+const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, 1ms';
 
 const styles = stylex.create({
   base: {
@@ -67,8 +67,7 @@ const styles = stylex.create({
       default: FADE + ', ' + FADE + ', ' + FADE + ', 0s',
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
-    // The clip path of a CSS-driven reveal is discrete. It waits for the fade
-    // on hide, so content fades out before the clip removes it.
+    // The clip path is discrete. Its delay times it against the fade.
     transitionBehavior: 'allow-discrete',
     transitionTimingFunction: easeVars['--ease-standard'],
   },
@@ -120,9 +119,9 @@ const styles = stylex.create({
 
   // CSS-driven reveals hide with opacity, not visibility. Hidden content stays
   // in the tab order, so Tab can reach an action and focus-within can reveal it.
-  // At rest a clip path keeps the content out of hit-testing, even content that
-  // sets its own pointer-events, and even a touch tap that arrives before the
-  // hover state. A clip path keeps the content in the tab order.
+  // At rest a clip path keeps the content out of hit-testing. This includes
+  // content that sets its own pointer-events, and a touch tap that arrives
+  // before the hover state. The clip path keeps the content in the tab order.
   hoverReveal: {
     clipPath: {
       default: 'inset(50%)',

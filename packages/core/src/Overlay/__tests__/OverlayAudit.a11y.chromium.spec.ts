@@ -624,10 +624,10 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
     reducedMotion,
     run: async (page, check, frame) => {
       const samples = await hoverFrames(page);
-      const early = samples.filter(x => x.hit && x.opacity < 0.4);
+      const early = samples.filter(x => x.hit && x.opacity < 0.05);
       check(
         early.length === 0,
-        `the action takes a click while mostly transparent: ${JSON.stringify(early)}`,
+        `the action takes a click while transparent: ${JSON.stringify(early)}`,
       );
       const firstPaint = samples.find(x => x.painted);
       check(
