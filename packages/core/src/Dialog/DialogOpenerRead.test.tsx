@@ -173,4 +173,41 @@ describe("Dialog reads its opener's box only for an entrance that uses it (archi
     const dialog = screen.getByRole('dialog', {hidden: true});
     expect(dialog.style.getPropertyValue('--dialog-dir-x')).not.toBe('0px');
   });
+  it('watches the reduced-motion preference only while it is open under reduced motion', () => {
+    stubReducedMotion(false);
+    const {unmount} = render(<Opener />);
+    const opener = screen.getByRole('button', {name: 'Open'});
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(reducedMotion.listeners.size).toBe(0);
+
+    act(() => {
+      screen
+        .getByRole('dialog', {hidden: true})
+        .dispatchEvent(new Event('cancel', {cancelable: true}));
+    });
+    stubReducedMotion(true);
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(reducedMotion.listeners.size).toBe(1);
+
+    act(() => {
+      screen
+        .getByRole('dialog', {hidden: true})
+        .dispatchEvent(new Event('cancel', {cancelable: true}));
+    });
+    expect(reducedMotion.listeners.size).toBe(0);
+
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    expect(reducedMotion.listeners.size).toBe(1);
+    unmount();
+    expect(reducedMotion.listeners.size).toBe(0);
+  });
 });
