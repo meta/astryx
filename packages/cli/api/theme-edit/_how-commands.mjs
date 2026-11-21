@@ -13,6 +13,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   BORDER_COLOR_PROP,
   borderFor,
+  broughtBorderAt,
   checkSetting,
   indicatorLines,
   pillDrawnRadios,
@@ -1548,7 +1549,7 @@ export function apply(ctx, slug, d, st) {
   // border, whose shorthand would reset it.)
   if (edge) {
     d.settings = d.settings.filter(x => keyOf(x) !== k);
-    d.settings.push(edge);
+    d.settings.splice(broughtBorderAt(ctx, d.settings, edge), 0, edge);
   }
   const i = d.settings.findIndex(x => keyOf(x) === k);
   if (unset) {

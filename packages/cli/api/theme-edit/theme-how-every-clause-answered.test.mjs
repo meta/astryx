@@ -74,6 +74,14 @@ const ROWS = [
       ],
     },
   ],
+  // (A run of colors is one list.)
+  [
+    'a run of colors is one list, never a lone color piece',
+    {
+      q: "Use Slack's brand colors for accents: green, blue, red, yellow on badges and status.",
+      never: /accent '#2563eb'/,
+    },
+  ],
   // Named, never silent.
   [
     'a mood clause is named',
@@ -428,6 +436,14 @@ const ROWS = [
     {
       q: 'primary button border color rgba(0,0,0,0.1) on top and sides and rgba(0,0,0,0.25) on the bottom',
       never: /^background-color/,
+    },
+  ],
+  [
+    'a lone color after a part item fills that part, never the whole accent',
+    {
+      q: 'big buttons, a sky blue, high contrast',
+      saysNot: /not used/,
+      never: /^accent /,
     },
   ],
 ];
