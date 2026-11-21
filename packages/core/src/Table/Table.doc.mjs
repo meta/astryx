@@ -307,6 +307,7 @@ export const docs = {
     {name: 'TableHeaderCell'},
     {name: 'useTableSelection'},
     {name: 'useTableSelectionState'},
+    {name: 'useTableActivation'},
     {name: 'TableSelectionToolbar'},
     {name: 'useTableSortable'},
     {name: 'useTableTreeData'},
@@ -329,6 +330,11 @@ export const docs = {
         guidance: true,
         description:
           'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs attention.',
+      },
+      {
+        guidance: true,
+        description:
+          'Drive adjacent detail content from useTableActivation rather than hand-rolled row click handlers: the active row stays visibly anchored, keyboard users get Enter/Space parity, and nested cell controls keep working without activating the row.',
       },
       {
         guidance: true,
