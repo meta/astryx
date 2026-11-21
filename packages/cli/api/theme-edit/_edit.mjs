@@ -7860,6 +7860,14 @@ async function changeOnce(
       const after = data.settings;
       const box = (/** @type {any} */ x, /** @type {any[]} */ settings) =>
         boxFrameOf({...ctx, themeSettings: settings}, x) ?? x.on;
+      // (An undone fill comes back with its own scope and value.)
+      const undone = settingsBefore.find(same);
+      const putBack =
+        sub === 'set'
+          ? `${P} undo ${slug} ${undoArgs(s)}`
+          : undone
+            ? `${P} set ${slug} ${setArgs(undone, String(undone.value ?? ''))}`
+            : `${P} undo ${slug}`;
       for (const x of after) {
         if (same(x)) continue;
         if (x.on !== s.on || x.source !== 'property') continue;
@@ -7867,7 +7875,7 @@ async function changeOnce(
         const to = box(x, after);
         if (from === to) continue;
         notes.push(
-          `${x.thing} on ${s.on} draws on ${to} now, not on ${from}: ${to === s.on ? `${s.on} is filled, so it is its own box` : `${s.on} shows no fill, so its pages draw one strip on ${row}`}; to put it back: ${sub === 'set' ? `${P} undo ${slug} ${undoArgs(s)}` : `${P} set ${slug} ${s.thing} ${quoteCommandArgument(String(s.value ?? ''))} --on ${s.on}`}`,
+          `${x.thing} on ${s.on} draws on ${to} now, not on ${from}: ${to === s.on ? `${s.on} is filled, so it is its own box` : `${s.on} shows no fill, so its pages draw one strip on ${row}`}; to put it back: ${putBack}`,
         );
       }
     }
