@@ -180,4 +180,32 @@ describe('one joined strip', () => {
       expect(r.sets).toContain('gap 0 --on pagination-list');
     }, 240_000);
   });
+
+  describe('the looks said after a strip', () => {
+    it('takes a plain shadow after ", and with", and sends looks after a stop to the row', async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        test.skip();
+      }
+      const [joined] = await answer(
+        'pagination pages in one bordered strip with 3px corners, and with a soft shadow',
+      );
+      expect(joined.sets).toContain(
+        "box-shadow 'var(--shadow-low)' --on pagination-list",
+      );
+      const all = (
+        await answer(
+          'pagination pages in one bordered strip with thick borders and 3px corners',
+        )
+      )
+        .flatMap(r => r.sets)
+        .join('\n');
+      expect(all).not.toMatch(
+        /(?:corners|border-radius) 3px --on pagination-item\b/,
+      );
+      expect(all).toMatch(
+        /(?:corners|border-radius) 3px --on pagination-list\b/,
+      );
+    }, 240_000);
+  });
 });

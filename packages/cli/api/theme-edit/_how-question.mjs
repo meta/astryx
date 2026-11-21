@@ -140,7 +140,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean, joined?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, modesKept?: boolean, unmet?: string, offer?: boolean, already?: boolean, joined?: boolean}} Draft
  */
 
 /** The words a badge style ask is made of when the style is all it asks. */
@@ -13201,7 +13201,7 @@ export function draftAnswer(ctx, env, question) {
     // halves (a shadow's colors in one mode) needs no --mode, nor a draft
     // whose steps carry their own modes (a strip's line color).
     if (/** @type {any} */ (d).modeInValue) return d;
-    if (/** @type {any} */ (d).modesKept) return d;
+    if (d.modesKept) return d;
     /**
      * A shared shadow token taken away in one mode ("no shadows in dark
      * mode"): its colors in that mode go transparent, the other mode's stay
@@ -14065,9 +14065,7 @@ export function draftAnswer(ctx, env, question) {
       w =>
         // (A draft whose steps keep their own modes says how it reads the
         // mode said: a strip's shape in both modes.)
-        !(
-          /** @type {any} */ (d1).modesKept && w === `${clauseNow?.mode} mode`
-        ) &&
+        !(d1.modesKept && w === `${clauseNow?.mode} mode`) &&
         !(
           colorsIn(w.toLowerCase()).length &&
           clauseNow?.aspects.some(a =>
@@ -15528,6 +15526,10 @@ export function draftAnswer(ctx, env, question) {
   addRunLooks(clauses, Object.keys(HUES));
   /** Clauses a strip's answer writes, after the strip's own. @type {Set<Clause>} */
   const absorbed = new Set();
+  // (Looks the strip does not write: said with it, they are answered on
+  // their own, after it.)
+  const STRIP_UNSAID =
+    /\b(?:thick|thin|heavy|bold|hairline|double|groove|ridge|inset|outset|large|big|huge|deep|strong|subtle|faint|glow(?:ing)?)\b/;
   /**
    * "pagination pages in one bordered strip", "joined page buttons": a row
    * of controls drawn as one strip. Read from the parts, not a list of
@@ -15541,10 +15543,6 @@ export function draftAnswer(ctx, env, question) {
    * @param {Clause} c
    * @returns {Draft | null}
    */
-  // (Looks the strip does not write: said with it, they are answered on
-  // their own, after it.)
-  const STRIP_UNSAID =
-    /\b(?:thick|thin|heavy|bold|hairline|double|groove|ridge|inset|outset|large|big|huge|deep|strong|subtle|faint|glow(?:ing)?)\b/;
   const joinedStrip = c => {
     if (
       !/\b(?:(?:one|a single|single)\s+(?:[a-z]+\s+)?(?:strip|bar|block)|joined|connected)\b/.test(
@@ -15581,22 +15579,29 @@ export function draftAnswer(ctx, env, question) {
         if (
           x.neg ||
           x.parts.some(p => TARGET.get(one(p.on))?.component !== component) ||
-          !/^(?:with|and|,|,\s*and)?$/.test(String(x.joint ?? '').trim()) ||
+          !/^(?:with|and|,|(?:,\s*)?and(?:\s*with)?)?$/.test(
+            String(x.joint ?? '').trim(),
+          ) ||
           !/\b(?:shadows?|lines?|borders?|separators?|dividers?|corners?|radius|rounded|edges?)\b/.test(
             x.text,
           ) ||
           STRIP_UNSAID.test(noMode(x.text))
         ) {
           // (A look the strip does not write, said right after it of the
-          // controls the strip names, is the strip's: it goes on the row.)
-          if (
-            !x.neg &&
-            STRIP_UNSAID.test(noMode(x.text)) &&
-            x.parts.length &&
-            x.parts.every(p => p.on === item) &&
-            !/\b(?:pages?|cells?|items?|buttons?)\b/.test(x.text)
-          )
-            x.parts = x.parts.map(p => ({...p, on: row}));
+          // controls the strip names, is the strip's: it goes on the row,
+          // and so does each look said after it of those controls, until
+          // one names its own part.)
+          if (STRIP_UNSAID.test(noMode(x.text)))
+            for (let k = i; k < clauses.length; k++) {
+              const y = clauses[k];
+              if (
+                !y.parts.length ||
+                !y.parts.every(p => p.on === item) ||
+                /\b(?:pages?|cells?|items?|buttons?)\b/.test(y.text)
+              )
+                break;
+              y.parts = y.parts.map(p => ({...p, on: row}));
+            }
           break;
         }
         after.push(x);
