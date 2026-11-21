@@ -4944,8 +4944,10 @@ const STRIPE_NAMES = new WeakMap();
  * turns them on: the prop whose description names the `parity` a row's
  * stripe is, whose description leads with the stripes' plain names
  * ("Stripes alternate rows (every other row, zebra striping): …"). A name
- * matches by its words no other prop of that component uses, or, when all its
- * words are common ("every other row"), as the whole phrase.
+ * matches by its words no other prop of that component uses, in any form
+ * ("alternating"), or, when all its words are common ("every other row"), as
+ * the whole phrase, which may name the component before its last word
+ * ("every other table row").
  * @param {{components?: Record<string, any>}} project
  * @returns {(text: string) => boolean}
  */
@@ -4959,7 +4961,20 @@ function stripeNamesOf(project) {
       .match(/[a-z][a-z-]*/g) ?? [];
   /** @type {RegExp[]} */
   const names = [];
-  for (const info of Object.values(project.components ?? {})) {
+  /**
+   * A word's own forms: "alternate" → alternate, alternates, alternated,
+   * alternating, alternately; "stripes" → stripe, stripes, striped,
+   * striping. Never another word that starts the same ("strip",
+   * "alternative").
+   * @param {string} w
+   */
+  const forms = w => {
+    const base = w.replace(/s$/, '');
+    return base.endsWith('e')
+      ? `${base.slice(0, -1)}(?:e|es|ed|ing|ely)`
+      : `${base}s?`;
+  };
+  for (const [component, info] of Object.entries(project.components ?? {})) {
     const props = Object.values(info?.props ?? {});
     const flag = props.find(pr =>
       /`parity`/.test(String(pr?.description ?? '')),
@@ -4975,11 +4990,13 @@ function stripeNamesOf(project) {
       .filter(Boolean)) {
       const words = wordsOf(phrase);
       const own = words.filter(w => !others.has(w));
+      const named = `(?:${wordsOf(component).join('\\s+')}\\s+)?`;
+      const bare = words.map(w => w.replace(/s$/, ''));
       names.push(
         own.length
-          ? new RegExp(`\\b(?:${own.join('|')})\\b`)
+          ? new RegExp(`\\b(?:${own.map(forms).join('|')})\\b`)
           : new RegExp(
-              `\\b${words.map(w => w.replace(/s$/, '')).join('s?\\s+')}s?\\b`,
+              `\\b${bare.slice(0, -1).join('s?\\s+')}s?\\s+${named}${bare.at(-1)}s?\\b`,
             ),
       );
     }
