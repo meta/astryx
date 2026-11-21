@@ -78,7 +78,6 @@
     "packages/core/src/Popover/__tests__/PopoverFocusReturn.interaction.browser.spec.ts": 1.9,
     "packages/core/src/Popover/__tests__/PopoverKeyboard.interaction.browser.spec.ts": 17.2,
     "packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts": 34.3,
-    "packages/core/src/Popover/__tests__/PopoverTriggerSwitch.interaction.browser.spec.ts": 5.3,
     "packages/core/src/Resizable/__tests__/grabZone.interaction.browser.spec.ts": 19.7,
     "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts": 29.3,
     "packages/core/src/SegmentedControl/__tests__/SegmentedControl.interaction.browser.spec.ts": 106,
