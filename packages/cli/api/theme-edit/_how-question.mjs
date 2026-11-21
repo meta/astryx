@@ -52,6 +52,7 @@ import {
   HEADING_WEIGHTS,
   P,
   CORNERS,
+  EDGE_PARTS,
   FAMILIES,
   FONTS,
   HOW,
@@ -14443,6 +14444,62 @@ export function draftAnswer(ctx, env, question) {
   /** Each family's ramp in the theme, read once. @type {Map<string, any>} */
   const ramps = new Map();
   /**
+   * A gray's dark-mode twin: the theme's dark gray nearest the dark page
+   * that stands off it as far as the color does from the light page, or
+   * null for a color off the grays (a hue)
+   * or a theme whose grays cannot be read.
+   * @param {string} v
+   * @returns {string | null}
+   */
+  const grayTwin = v => {
+    const rgb = parseColor(v);
+    if (
+      !rgb ||
+      Math.max(...rgb.slice(0, 3)) - Math.min(...rgb.slice(0, 3)) > 24
+    )
+      return null;
+    if (!ramps.has('neutral'))
+      ramps.set(
+        'neutral',
+        (() => {
+          try {
+            return familyRamp(
+              ctx.project.cwd,
+              env.slug,
+              env.data,
+              /** @type {any} */ (env.base),
+              'neutral',
+            );
+          } catch {
+            return null;
+          }
+        })(),
+      );
+    const ramp = ramps.get('neutral');
+    const step = ramp ? nearestShade(ramp.light, v) : null;
+    // (The first step out from the dark page, toward the light end, that
+    // stands off that page at least as far as the color does from the
+    // light page: a line as plain on each page.)
+    const [lightPage, darkPage] = /** @type {const} */ (['light', 'dark']).map(
+      m => parseColor(String(current('--color-background-body', m))),
+    );
+    const from =
+      ramp && darkPage
+        ? nearestShade(ramp.dark, hex(darkPage.slice(0, 3)))
+        : null;
+    const want = lightPage
+      ? ratio(rgb.slice(0, 3), lightPage.slice(0, 3))
+      : null;
+    let dark = null;
+    if (step != null && from != null && want != null && darkPage)
+      for (let k = Number(from) + 5; k <= 100 && !dark; k += 5) {
+        const c = parseColor(String(ramp.dark?.[String(k)] ?? ''));
+        if (c && ratio(c.slice(0, 3), darkPage.slice(0, 3)) >= want)
+          dark = String(ramp.dark[String(k)]);
+      }
+    return dark && parseColor(String(dark)) ? String(dark) : null;
+  };
+  /**
    * A color word's shade in the theme's own family for its hue: grey (and
    * gray, neutral) the theme's grays, which every theme has; another hue
    * its palette family when the theme's colors define one; at the stop
@@ -23698,19 +23755,35 @@ export function draftAnswer(ctx, env, question) {
             // indicator lines (a tab's underline), at the border width.
             const selectedOnly = everywhere ? selectedBoxes(C) : [];
             const lines = everywhere && wide ? indicatorLines(C) : [];
+            // A plain "1px borders" (no "everything") reaches the surfaces,
+            // fields and controls Core draws with none (a card, a menu, a
+            // button, a table), never a small box (a badge) nor the layout
+            // frame: those take a border said for them by name.
+            const edged = everywhere
+              ? []
+              : [
+                  ...borderless.filter(pt =>
+                    EDGE_PARTS.some(f => (FAMILIES[f] ?? [f]).includes(pt)),
+                  ),
+                  ...EDGE_PARTS.filter(
+                    pt =>
+                      !FAMILIES[pt] &&
+                      !borderless.includes(pt) &&
+                      C.MAP[pt] &&
+                      !(C.partReads(pt, 'border') ?? []).length,
+                  ),
+                ];
             /** @type {Step[]} */
             const steps = [
               ...(wide ? [set('--border-width', wide)] : []),
               set('--color-border', color, modeOf(c)),
               set('--color-border-emphasized', color, modeOf(c)),
-              ...(everywhere
-                ? borderless.map(pt =>
-                    set('border', `${wide ?? bwNow0} solid ${color}`, {
-                      on: pt,
-                      ...modeOf(c),
-                    }),
-                  )
-                : []),
+              ...(everywhere ? borderless : edged).map(pt =>
+                set('border', `${wide ?? bwNow0} solid ${color}`, {
+                  on: pt,
+                  ...modeOf(c),
+                }),
+              ),
               ...selectedOnly.map(pt =>
                 set('border', `${wide ?? bwNow0} solid ${color}`, {
                   on: pt,
@@ -23724,7 +23797,7 @@ export function draftAnswer(ctx, env, question) {
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${edged.length ? `, and a border on the surfaces and controls drawn with none (${edged.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };
@@ -31481,10 +31554,24 @@ export function draftAnswer(ctx, env, question) {
               );
               continue;
             }
-            // (A border shorthand keeps its width in both modes: only its
-            // color is the light mode's, the dark mode keeping the border
-            // color the part draws now, an input's emphasized one, else the
-            // theme's.)
+            // (A light gray border color said once for the whole theme
+            // covers both modes: the dark mode takes the theme's gray as far
+            // off the dark page, so the line is as plain on each page. One
+            // said for a part, or a color off the grays, stays the light
+            // mode's, the dark mode keeping the border color the part draws
+            // now, an input's emphasized one, else the theme's: on the dark
+            // page it would be a glaring edge.)
+            const twin = st.on ? null : grayTwin(v);
+            if (twin) {
+              st.value = String(st.value).replace(
+                v,
+                `light-dark(${v}, ${twin})`,
+              );
+              notes.add(
+                `(a light border color said once covers both modes: the dark mode takes the theme's gray as far off the dark page, ${twin}; for another dark color, set it with --mode dark)`,
+              );
+              continue;
+            }
             if (st.thing === 'border') {
               const own =
                 st.on && restRead(C.partReads(one(st.on), 'border') ?? [], '');

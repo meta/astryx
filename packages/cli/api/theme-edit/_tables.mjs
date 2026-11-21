@@ -83,6 +83,14 @@ function baseDialWords() {
  * Groups of parts that should look alike. `--on <group>` styles every member.
  * @type {Record<string, string[]>}
  */
+/**
+ * What a whole-theme "Npx borders" reaches beyond the shared border tokens:
+ * the surface, field and menu families, and the controls and tables Core
+ * draws with no border. Never a small box (a badge, a token) nor the layout
+ * frame, avatars or collapsibles: those take a border said for them.
+ */
+export const EDGE_PARTS = ['containers', 'menus', 'inputs', 'button', 'table'];
+
 export const FAMILIES = wordTable({
   inputs: [
     'text-input',
