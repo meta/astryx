@@ -63,7 +63,7 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display before the label; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'label',
@@ -151,7 +151,7 @@ export const docsZh = {
     {
       name: 'icon',
       type: 'ReactNode | IconType',
-      description: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+      description: '显示在标签前的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'label',
@@ -230,7 +230,7 @@ export const docsDense = {
   description:
     'one pointer-menu action/destination row; parent owns keyboard, row owns activation, state, destination, content, and root inputs',
   propDescriptions: {
-    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    icon: 'icon before label; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     label: 'primary label text',
     description: 'secondary text below label',
     onClick:

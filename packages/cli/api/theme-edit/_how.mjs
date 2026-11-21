@@ -54,7 +54,8 @@ import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
+import {draftAnswer, partLexicon} from './_how-question.mjs';
+import {valueAsked} from './_how-values.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -179,12 +180,14 @@ export async function themeEditHow(subject, options = {}) {
  * @returns {T}
  */
 function withPrefix(value, cwd) {
-  const stem = `${getCliInvocation(cwd)} experimental theme`;
-  if (stem === 'astryx experimental theme') return value;
+  const cli = getCliInvocation(cwd);
+  if (cli === 'astryx') return value;
+  // (A line may name the stable theme commands too, "astryx theme add
+  // neutral"; each runs as the app runs the CLI.)
   /** @param {any} v @returns {any} */
   const walk = v =>
     typeof v === 'string'
-      ? v.split('astryx experimental theme').join(stem)
+      ? v.replace(/\bastryx (experimental theme|theme)\b/g, `${cli} $1`)
       : Array.isArray(v)
         ? v.map(walk)
         : v && typeof v === 'object'
@@ -2300,7 +2303,12 @@ async function pictureLook(cwd, name, read) {
   const familyHolds = (family, on) => {
     const families =
       family === 'controls' ? ['button-like', 'inputs'] : [family];
-    return families.some(f => on === f || (groups[f] ?? []).includes(on));
+    // (The family itself holds what is set on it: a height set on a
+    // control is saved on the controls.)
+    return (
+      on === family ||
+      families.some(f => on === f || (groups[f] ?? []).includes(on))
+    );
   };
   const env = await howTheme(ctx, cwd, name);
   const own = env.data.settings;

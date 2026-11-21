@@ -7,7 +7,8 @@
  * turn light and the result measures them that way. A link's color goes
  * into the token its color prop reads. A text size or weight on a part
  * whose text is drawn by elements that read one token for it goes into
- * that token. A text property an element inside the part sets by the
+ * that token; a text size token a part never reads, where the parts it
+ * holds read one, goes into that one. A text property an element inside the part sets by the
  * component's props is refused. A bare 0 inside calc() is saved as 0px. A refusal points at
  * the token that reaches the text, and a part name with a piece after it
  * points at the part that holds it. `how` keeps these asks to what they
@@ -181,15 +182,14 @@ describe('a text size or weight on a part that holds its text', () => {
   );
 
   it(
-    'is refused with each token where the text reads several (a title and a subtitle)',
+    'goes into the main text token where the text reads several (a title and a subtitle)',
     async () => {
       fs.writeFileSync(file(), fresh);
       const r = await set(['font-size', '20px', '--on', 'top-nav-heading']);
-      expect(r.error).toMatch(/never reaches it/);
-      expect(lines(r)).toEqual([
-        "set t --text-large-size 20px --on top-nav-heading",
-        "set t --text-supporting-size 20px --on top-nav-heading",
-      ]);
+      expect(r.error).toBeUndefined();
+      expect(declsOn('.astryx-top-nav-heading')).toContain(
+        '--text-large-size: 20px',
+      );
     },
     T,
   );
@@ -212,13 +212,47 @@ describe('a text size or weight on a part that holds its text', () => {
   );
 
   it(
-    'that reads no token, holding parts that do, is offered their token on it',
+    'that reads no token, holding parts that do, goes into their token on it',
     async () => {
       fs.writeFileSync(file(), fresh);
       const r = await set(['--text-body-size', '13px', '--on', 'tab-list']);
-      expect(r.error).toMatch(/the parts inside it read --text-label-size/);
-      expect(lines(r)[0]).toBe("set t --text-label-size 13px --on tab-list");
-      expect((await follow(lines(r)[0])).error).toBeUndefined();
+      expect(r.error).toBeUndefined();
+      expect(JSON.stringify(r)).toMatch(/goes into --text-label-size on tab-list/);
+      expect(saved().at(-1).thing).toBe('--text-body-size');
+      expect(declsOn('.astryx-tab-list')).toContain('--text-label-size: 13px');
+      expect(declsOn('.astryx-tab-list')).not.toContain('--text-body-size');
+    },
+    T,
+  );
+
+  it(
+    'that draws text pieces of its own is still refused, never sent to one of them',
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      const r = await set([
+        '--text-body-size',
+        '12px',
+        '--on',
+        'top-nav-heading',
+      ]);
+      expect(r.error).toMatch(/never reads --text-body-size/);
+    },
+    T,
+  );
+
+  it(
+    'that draws text of its own beside a held part is still refused',
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      // (A paragraph's prose inherits its size; only its inline code reads
+      // --text-code-size.)
+      const r = await set([
+        '--text-body-size',
+        '13px',
+        '--on',
+        'markdown-paragraph',
+      ]);
+      expect(r.error).toMatch(/never reads --text-body-size/);
     },
     T,
   );
