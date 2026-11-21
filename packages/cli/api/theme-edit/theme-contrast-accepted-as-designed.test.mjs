@@ -458,6 +458,26 @@ describe('the official themes', () => {
   });
 });
 
+describe('options that do not apply', () => {
+  it('are refused, never dropped', async () => {
+    for (const [thing, value, opts] of /** @type {const} */ ([
+      ['contrast-accepted', "matches the original's label", {state: 'hover'}],
+      ['contrast-accepted', "matches the original's label", {only: true}],
+      ['contrast-accepted', "matches the original's label", {png: true}],
+      ['background-color', '#ffffff', {ground: 'card'}],
+    ])) {
+      const err = await themeEditSet('any', thing, value, {
+        cwd: process.cwd(),
+        on: 'button',
+        ...opts,
+      }).catch(e => e);
+      expect(err?.code, `${thing} ${JSON.stringify(opts)}`).toBe(
+        'ERR_INVALID_ARGUMENT',
+      );
+    }
+  });
+});
+
 describe('a kept pair, measured alone', () => {
   const data = /** @type {any} */ ({
     name: 'u',
