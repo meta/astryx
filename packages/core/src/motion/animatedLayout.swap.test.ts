@@ -35,6 +35,15 @@ let media: Record<string, boolean> = {};
 const originalAnimate = Element.prototype.animate;
 const originalMatchMedia = window.matchMedia;
 
+/**
+ * Runs the next frame. A change made with no motion running starts its
+ * motions there, at the first frame drawn after its task.
+ */
+const nextFrame = async () =>
+  new Promise<void>(resolve => {
+    requestAnimationFrame(() => resolve());
+  });
+
 beforeEach(() => {
   played = [];
   media = {};
@@ -128,7 +137,7 @@ describe('the in-place swap (spec:AST-105 FR8)', () => {
     expect(copy.isConnected).toBe(false);
   });
 
-  it('plays the copy out and the incoming elements in on one motion, then removes the copy', () => {
+  it('plays the copy out and the incoming elements in on one motion, then removes the copy', async () => {
     const {handle, content, host} = setup();
     const swap = holdLayoutSwap(handle, content);
     const title = document.getElementById('title') as HTMLElement;
@@ -148,7 +157,9 @@ describe('the in-place swap (spec:AST-105 FR8)', () => {
     const enter = played.find(entry => entry.element === title);
     expect(enter?.keyframes[0].opacity).toBe(0);
     expect(enter?.keyframes.at(-1)?.opacity).toBe(1);
-    // One clock: the same duration, started on the same timeline time.
+    // One clock: the same duration, started on the same timeline time, at
+    // the first frame after the swap's task.
+    await nextFrame();
     expect(new Set(played.map(entry => entry.options.duration)).size).toBe(1);
     expect(new Set(played.map(entry => entry.startTime))).toEqual(
       new Set([500]),
@@ -158,7 +169,7 @@ describe('the in-place swap (spec:AST-105 FR8)', () => {
     expect(typeof end).toBe('function');
   });
 
-  it('starts every part of one swap together however long making them takes, with no block between two of them', () => {
+  it('starts every part of one swap together however long making them takes, with no block between two of them', async () => {
     const {handle, content, host} = setup();
     const swap = holdLayoutSwap(handle, content);
     const parts = [0, 1, 2, 3].map(() => {
@@ -185,8 +196,15 @@ describe('the in-place swap (spec:AST-105 FR8)', () => {
       incoming: parts.map(element => ({element, frames: p => ({opacity: p})})),
     });
     expect(played.length).toBe(5);
+    // They start together, at the first frame drawn after the task that made
+    // them, which comes after the 75 ms of work.
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      value: {currentTime: page},
+    });
+    await nextFrame();
     expect(new Set(played.map(entry => entry.startTime))).toEqual(
-      new Set([500]),
+      new Set([page]),
     );
   });
 
@@ -648,7 +666,7 @@ describe('more swap layout cases', () => {
     expect(swap!.copy.style.height).toBe('20.4px');
   });
 
-  it('plays frames on the same motion with no copy, opacity-only under DR2', () => {
+  it('plays frames on the same motion with no copy, opacity-only under DR2', async () => {
     const {handle} = setup();
     const title = document.getElementById('title') as HTMLElement;
     playLayoutFrames(handle, [
@@ -660,6 +678,7 @@ describe('more swap layout cases', () => {
     const spring = played.find(entry => entry.element === title);
     expect(spring?.keyframes[0].boxShadow).toBe('100px 0px 0px 0px red');
     expect(spring?.keyframes.at(-1)?.boxShadow).toBe('0px 0px 0px 0px red');
+    await nextFrame();
     expect(spring?.startTime).toBe(500);
     // Released when the motion ends: the element shows its own styles again.
     const cancel = vi.fn();
