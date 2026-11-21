@@ -59,7 +59,7 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {
   textDirectionProps,
-  truncatedTextStyles,
+  textDirectionStyles,
 } from '../utils/textDirection';
 import type {HeadingTypeMap} from './index';
 
@@ -342,7 +342,7 @@ export function Heading({
             textWrap && textWrapStyles[textWrap],
             // Justify (text alignment)
             justify !== 'start' && justifyStyles[justify],
-            cutDirection != null && truncatedTextStyles.pageAlign,
+            cutDirection != null && textDirectionStyles.pageAlign,
             // Capsize
             hasCapsize && capsizeStyles.enabled,
             // Decorations

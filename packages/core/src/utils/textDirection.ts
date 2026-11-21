@@ -14,8 +14,8 @@
  *   description, FieldStatus and the status tooltip use withTextDirection.
  *   MultiSelector's labels trigger puts each label in isolatedText. Text,
  *   Heading, Button, SegmentedControl and TableHeaderCell put
- *   textDirectionProps and truncatedTextStyles on the element that cuts its
- *   label.
+ *   textDirectionProps and textDirectionStyles.pageAlign on the element that
+ *   cuts its label.
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
@@ -42,8 +42,13 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
 // page. `match-parent` takes the parent's alignment and resolves `start` and
 // `end` in the parent's direction, so a centred label stays centred. Chromium
 // supports only the prefixed keyword.
-const styles = stylex.create({
-  span: {
+// An element that cuts its own text with an ellipsis takes the same two
+// pieces: its own direction decides which end the cut takes, so under a
+// right-to-left page a Latin label lost its start ("…onth"). With
+// `textDirectionProps` it keeps its start ("Mon…"), and `pageAlign` keeps the
+// page's alignment.
+export const textDirectionStyles = stylex.create({
+  pageAlign: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
   },
   isolate: {
@@ -62,7 +67,7 @@ export function withTextDirection(content: ReactNode): ReactNode {
   const {dir} = textDirectionProps(content);
   return dir == null || content === ''
     ? content
-    : createElement('span', {dir, ...stylex.props(styles.span)}, content);
+    : createElement('span', {dir, ...stylex.props(textDirectionStyles.pageAlign)}, content);
 }
 
 /**
@@ -86,22 +91,8 @@ export function isolatedText(
     {
       key,
       dir: dir ?? textDirectionProps(text).dir,
-      ...stylex.props(styles.isolate),
+      ...stylex.props(textDirectionStyles.isolate),
     },
     text,
   );
 }
-
-/**
- * For an element that cuts its own text with an ellipsis. Its own direction
- * decides which end the cut takes, so under a right-to-left page a Latin
- * label lost its start ("…onth"). With `textDirectionProps` the label keeps
- * its start ("Mon…"); a label with a right-to-left letter keeps the page's
- * direction and is cut at its own end. Put `pageAlign` beside the `dir` so
- * the element keeps the page's alignment.
- */
-export const truncatedTextStyles = stylex.create({
-  pageAlign: {
-    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
-  },
-});
