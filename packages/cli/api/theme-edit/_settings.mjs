@@ -7218,21 +7218,36 @@ export function compileTheme(ctx, data, base) {
       const longhands = y => {
         const v = String(y.value);
         if (kebab(y.thing) !== 'outline') return [[kebab(y.thing), v]];
-        /** @type {Array<[string, string]>} */
-        const out = [];
-        const color = [];
+        /** @type {Record<string, string>} */
+        const got = {};
+        /** @type {string[]} */
+        const open = [];
         for (const w of splitTop(v, ' ').filter(Boolean))
           if (
             /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i.test(
               w,
             )
           )
-            out.push(['outline-style', w]);
-          else if (/^(?:thin|medium|thick|-?[\d.]+[a-z%]*)$/i.test(w))
-            out.push(['outline-width', w]);
-          else color.push(w);
-        if (color.length) out.push(['outline-color', color.join(' ')]);
-        return out;
+            got['outline-style'] = w;
+          else if (
+            /^(?:thin|medium|thick|-?[\d.]+[a-z%]*|(?:calc|min|max|clamp)\(.*\))$/i.test(
+              w,
+            )
+          )
+            got['outline-width'] = w;
+          else if (/^(?:var|env)\(/i.test(w)) open.push(w);
+          else got['outline-color'] = w;
+        // (A variable is the one part still unsaid; with more than one
+        // unsaid part, the shorthand is copied as written.)
+        const unsaid = [
+          'outline-style',
+          'outline-width',
+          'outline-color',
+        ].filter(k => !(k in got));
+        if (open.length > 1 || (open.length === 1 && unsaid.length !== 1))
+          return [['outline', v]];
+        if (open.length === 1) got[unsaid[0]] = open[0];
+        return Object.entries(got);
       };
       // (A longhand the resting scope sets itself, in every mode or the
       // wider value's mode, is that scope's own: no wider value is copied
@@ -7248,7 +7263,9 @@ export function compileTheme(ctx, data, base) {
               z =>
                 sameScope(z) &&
                 (z.mode == null || z.mode === y.mode) &&
-                (kebab(z.thing) === 'outline' || kebab(z.thing) === long),
+                (long === 'outline'
+                  ? kebab(z.thing).startsWith('outline')
+                  : kebab(z.thing) === 'outline' || kebab(z.thing) === long),
             )
           )
             putComp({...y, thing: long, when: s.when, state}, target, long, v);

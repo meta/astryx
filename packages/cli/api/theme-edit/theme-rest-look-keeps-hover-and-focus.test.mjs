@@ -277,6 +277,34 @@ describe('a resting outline', () => {
     );
   }, 240_000);
 
+  it('reads a variable width in a wider focus outline as the width', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('vv', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'vv',
+      'outline',
+      'var(--focus-outline-width) solid #ff0000',
+      {
+        cwd,
+        on: 'button',
+        state: 'focus-visible',
+        when: 'variant:ghost',
+      },
+    );
+    await themeEditSet('vv', 'outline', 'none', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost+size:sm',
+    });
+    const rules = scoped(cssOf('vv'), ':focus-visible', [
+      'data-variant="ghost"',
+      'data-size="sm"',
+    ]);
+    expect(rules).toMatch(/outline-width: var\(--focus-outline-width\)/);
+    expect(rules).toMatch(/outline-color: #ff0000/);
+    expect(rules).toMatch(/outline-style: solid/);
+  }, 240_000);
+
   it('copies a wider color set for the plain focus state to a narrower resting scope', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('cf', {cwd, like: 'neutral'});
