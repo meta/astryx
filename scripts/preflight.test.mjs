@@ -53,6 +53,7 @@ describe('planChecks', () => {
       'vitest node',
       'knowledge',
       'changesets',
+      'lab sync',
     ]);
     expect(argvs(byId(checks, 'build'))).toEqual(['pnpm build']);
     expect(argvs(byId(checks, 'typecheck'))[0]).toContain(
@@ -191,6 +192,7 @@ describe('planChecks --quick', () => {
       'changed tests',
       'knowledge',
       'changesets',
+      'lab sync',
     ]);
     const typecheck = argvs(byId(checks, 'typecheck'))[0];
     expect(typecheck).toContain('--filter [abc123]');
