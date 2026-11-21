@@ -11,7 +11,7 @@ import {once} from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {cleanupFixtures, tempDir} from './release-fixtures.mjs';
-import {sweepTrash, trashFolder} from './run-folder.mjs';
+import {TEST_TMP_PREFIX, sweepTrash, trashFolder} from './run-folder.mjs';
 
 afterEach(() => {
   cleanupFixtures();
@@ -61,6 +61,20 @@ describe('trashFolder', () => {
   });
 });
 
+describe('the run temp folder', () => {
+  it("leaves room for Chromium's socket below a nested temp folder", () => {
+    const socket = path.posix.join(
+      '/tmp/test-run-123/tmp',
+      `${TEST_TMP_PREFIX}123456`,
+      'astryx-browser-123456',
+      'org.chromium.Chromium.123456',
+      'SingletonSocket',
+    );
+    // Unix socket paths have 104 bytes on macOS, including the final NUL.
+    expect(Buffer.byteLength(socket)).toBeLessThan(104);
+  });
+});
+
 describe('sweepTrash', () => {
   it("removes trash that an earlier run left, and keeps a later run's", async () => {
     const parent = tempDir('sweep');
@@ -71,6 +85,9 @@ describe('sweepTrash', () => {
       'astryx-test-tmp-d.trash-1000',
       'astryx-test-tmp-e',
       'astryx-test-user-f.trash-1000',
+      `${TEST_TMP_PREFIX}g.trash-1000`,
+      `${TEST_TMP_PREFIX}h.trash-3000`,
+      `${TEST_TMP_PREFIX}i`,
       'another-tool.trash-1000',
     ]) {
       plant(path.join(parent, name), 3);
@@ -82,6 +99,8 @@ describe('sweepTrash', () => {
       'astryx-cli-tarball-b.trash-3000',
       'astryx-cli-tarball-c',
       'astryx-test-tmp-e',
+      `${TEST_TMP_PREFIX}h.trash-3000`,
+      `${TEST_TMP_PREFIX}i`,
     ]);
   });
 });
