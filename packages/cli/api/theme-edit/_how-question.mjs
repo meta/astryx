@@ -32873,6 +32873,27 @@ export function draftAnswer(ctx, env, question) {
     if (writes) result.push(note);
     else result.splice(0, result.length, note);
   }
+  // The first answer that sets the page color says, in its own lines, how
+  // a page without AppShell takes it: an agent that runs that answer alone
+  // still paints its page.
+  {
+    const first = result.find(d =>
+      d.options.some(o =>
+        o.some(
+          st =>
+            st.verb === 'set' &&
+            st.thing === '--color-background-body' &&
+            !st.on,
+        ),
+      ),
+    );
+    if (first && !/without AppShell/.test(first.text)) {
+      const frameLine =
+        first.options.length > 1 &&
+        first.options[1].some(st => st.on === 'app-shell');
+      first.text = `${first.text}. In an app without AppShell the page shows it only with \`body { background: var(--color-background-body) }\` in global CSS${frameLine ? ', or with the second line (the frame and the main panel)' : ''}`;
+    }
+  }
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
