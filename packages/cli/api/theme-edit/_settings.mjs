@@ -5277,28 +5277,8 @@ export function boxFrameOf(ctx, s) {
   // (A piece of the frame set for one mode or variant goes where the frame
   // it narrows draws, so every piece of one frame lands on one box: a
   // dark-mode border color follows the border it colors.)
-  if (s.mode || s.when) {
-    const wider = (ctx.themeSettings ?? []).find(
-      x =>
-        x !== s &&
-        x.on === s.on &&
-        x.source === 'property' &&
-        !x.state &&
-        FRAME_THING.test(kebab(String(x.thing))) &&
-        (!x.mode || x.mode === s.mode) &&
-        whenCovers(x.when, s.when) &&
-        // (Strictly wider, so the search ends.)
-        (!!s.mode && !x.mode
-          ? true
-          : String(x.when ?? '')
-              .split('+')
-              .filter(Boolean).length <
-            String(s.when ?? '')
-              .split('+')
-              .filter(Boolean).length),
-    );
-    if (wider) return boxFrameOf(ctx, wider);
-  }
+  const wider = widerFrameOf(ctx.themeSettings ?? [], s);
+  if (wider) return boxFrameOf(ctx, wider);
   // (On a part the theme fills, the fill is its box: its border, radius
   // and shadow stay on it, as they always did.)
   if (fillsPart(ctx.themeSettings ?? [], s.on, {mode: s.mode, when: s.when}))
@@ -15801,7 +15781,7 @@ export function fillsPart(settings, part, scope = {}) {
       !x.state &&
       (!x.mode || x.mode === scope.mode) &&
       whenCovers(x.when, scope.when) &&
-      /^background/.test(String(x.thing)) &&
+      FILL_THING.test(kebab(String(x.thing))) &&
       givesEdge(x),
   );
 }
@@ -15809,6 +15789,37 @@ export function fillsPart(settings, part, scope = {}) {
 /** A frame's whole outline: its border (and width, style, color), radius or shadow. */
 export const FRAME_THING =
   /^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius|border-(?:start|end)-(?:start|end)-radius)$/;
+
+/**
+ * The saved frame setting a piece set for one mode or variant narrows: a
+ * border, radius or shadow on the same part, at rest, for a strictly wider
+ * scope that holds the piece's. Undefined when there is none.
+ * @param {ReadonlyArray<Setting>} settings
+ * @param {Pick<Setting, 'on' | 'thing'> & {mode?: unknown, when?: unknown}} s
+ * @returns {Setting | undefined}
+ */
+export function widerFrameOf(settings, s) {
+  if (!s.mode && !s.when) return undefined;
+  const pieces = (/** @type {unknown} */ w) =>
+    String(w ?? '')
+      .split('+')
+      .filter(Boolean).length;
+  return settings.find(
+    x =>
+      x !== s &&
+      x.on === s.on &&
+      x.source === 'property' &&
+      !x.state &&
+      FRAME_THING.test(kebab(String(x.thing))) &&
+      (!x.mode || x.mode === s.mode) &&
+      whenCovers(x.when, s.when) &&
+      // (Strictly wider, so the search ends.)
+      ((!!s.mode && !x.mode) || pieces(x.when) < pieces(s.when)),
+  );
+}
+
+/** A background longhand that paints: the fill color or image. */
+export const FILL_THING = /^background(?:-color|-image)?$/;
 
 /**
  * Whether a `--when` scope reaches where another draws: no scope reaches
@@ -15863,9 +15874,10 @@ export function roundsCorners(thing) {
 export function givesEdge(x, state) {
   return (
     (!x.state || state === true || x.state === state) &&
-    /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
-      kebab(String(x.thing ?? '')),
-    ) &&
+    (FILL_THING.test(kebab(String(x.thing ?? ''))) ||
+      /^(?:border(?!.*radius)|box-shadow|outline)/.test(
+        kebab(String(x.thing ?? '')),
+      )) &&
     !seeThrough(x.value)
   );
 }

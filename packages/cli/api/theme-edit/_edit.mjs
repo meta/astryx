@@ -88,8 +88,9 @@ import {
   closestOf,
   partsOf,
   boxFrameOf,
+  FILL_THING,
   FRAME_THING,
-  fillsPart,
+  widerFrameOf,
   rowFrameOf,
   undoArgs,
   isCheckNote,
@@ -7851,7 +7852,7 @@ async function changeOnce(
     if (
       row &&
       !r.unchanged &&
-      (/^background/.test(kebab(String(s.thing))) ||
+      (FILL_THING.test(kebab(String(s.thing))) ||
         FRAME_THING.test(kebab(String(s.thing)))) &&
       (sub === 'set' || sub === 'undo')
     ) {
@@ -7878,15 +7879,14 @@ async function changeOnce(
         const from = box(x, settingsBefore);
         const to = box(x, after);
         if (from === to) continue;
-        const scope = {mode: x.mode, when: x.when};
-        const fillMoved =
-          fillsPart(settingsBefore, String(s.on), scope) !==
-          fillsPart(after, String(s.on), scope);
-        const why = fillMoved
-          ? to === s.on
+        // (The reason is where it draws now: with a wider frame that still
+        // covers it, else on the bar or the row as the fill there says.)
+        const wider = widerFrameOf(after, x);
+        const why = wider
+          ? `it goes with the wider ${s.on} frame it narrows, on ${to}`
+          : to === s.on
             ? `${s.on} is filled there, so it is its own box`
-            : `${s.on} shows no fill there, so its pages draw one strip on ${row}`
-          : `it goes with the wider ${s.on} frame it narrows, on ${to}`;
+            : `${s.on} shows no fill there, so its pages draw one strip on ${row}`;
         notes.push(
           `${x.thing} on ${s.on}${x.when ? ` (--when ${x.when})` : ''}${x.mode ? ` (--mode ${x.mode})` : ''} draws on ${to} now, not on ${from}: ${why}; to put it back: ${putBack}`,
         );

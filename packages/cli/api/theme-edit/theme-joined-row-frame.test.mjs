@@ -492,7 +492,25 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
       on: 'pagination',
     });
     expect(undone.data.notes.join('\n')).toMatch(
-      /border on pagination \(--when variant:pages\) draws on pagination now, not on pagination-list[^\n]*to put it back: [^\n]* set x border '1px solid #cccccc' --on pagination/,
+      /border on pagination \(--when variant:pages\) draws on pagination now, not on pagination-list: pagination is filled there, so it is its own box; to put it back: [^\n]* set x border '1px solid #cccccc' --on pagination/,
     );
+    // A background longhand that paints nothing is no fill.
+    await themeEditNew('y', {cwd, like: 'neutral'});
+    await themeEditSet('y', 'border', '1px solid #dddddd', {
+      cwd,
+      on: 'pagination',
+    });
+    const position = await themeEditSet('y', 'background-position', 'center', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(position.data.notes.join('\n')).not.toMatch(
+      /draws on pagination now/,
+    );
+    const after = await themeEditSet('y', 'box-shadow', '0 1px 2px #0000001a', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(after.data.parts).toEqual(['pagination-list']);
   }, 240_000);
 });
