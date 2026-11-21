@@ -725,6 +725,8 @@ function buildSpans(
 
 const TAB_SIZE = 2;
 
+const BAR_WIDTH = `calc(3 * ${borderVars['--border-width']})`;
+
 // Column widths, also used to place pinned cells and size split panes.
 const MARKER_WIDTH: Record<DiffViewerChangeIndicator, string> = {
   classic: `calc(1ch + ${spacingVars['--spacing-1']} + ${spacingVars['--spacing-2']})`,
@@ -915,18 +917,41 @@ const styles = stylex.create({
   },
   // The bar sits at the start of the indicator column, beside the code.
   // Added lines get a solid bar, removed lines a dashed one, so the two read
-  // apart without relying on colour.
+  // apart without relying on colour. Forced colors drop background colours
+  // and gradients, so there the bar paints as a border of the same width.
   bar: {
     position: 'absolute',
     insetBlock: 0,
     insetInlineStart: 0,
-    width: `calc(3 * ${borderVars['--border-width']})`,
+    boxSizing: 'border-box',
+    width: BAR_WIDTH,
+    borderInlineStartWidth: {
+      default: null,
+      '@media (forced-colors: active)': BAR_WIDTH,
+    },
+    borderInlineStartColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
   barAdded: {
     backgroundColor: 'var(--color-syntax-added-marker)',
+    borderInlineStartStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
   },
   barRemoved: {
     backgroundImage: `repeating-linear-gradient(to bottom, var(--color-syntax-removed-marker) 0 calc(2 * ${borderVars['--border-width']}), transparent calc(2 * ${borderVars['--border-width']}) calc(4 * ${borderVars['--border-width']}))`,
+    borderInlineStartStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'dashed',
+    },
+  },
+  // With no indicator, the row tint alone marks a change. Forced colors drop
+  // the tint, so the bar shows there instead.
+  barWhenForced: {
+    display: {default: 'none', '@media (forced-colors: active)': 'block'},
   },
   // Line numbers and change indicators stay put while unwrapped code scrolls
   // sideways. They paint the syntax background under their tint so scrolled
@@ -1539,6 +1564,16 @@ export function DiffViewer({
             {...stylex.props(
               styles.bar,
               kind === 'added' ? styles.barAdded : styles.barRemoved,
+            )}
+          />
+        )}
+        {isChange && changeIndicator === 'none' && hasChangeBackground && (
+          <span
+            aria-hidden="true"
+            {...stylex.props(
+              styles.bar,
+              kind === 'added' ? styles.barAdded : styles.barRemoved,
+              styles.barWhenForced,
             )}
           />
         )}
