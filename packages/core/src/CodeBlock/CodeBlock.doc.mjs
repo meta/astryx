@@ -100,6 +100,31 @@ export const docs = {
             variant: 'ghost',
             size: 'sm',
             label: 'Run in terminal',
+            tooltip: 'Run in terminal',
+            icon: {
+              __element: 'svg',
+              props: {
+                viewBox: '0 0 24 24',
+                width: 16,
+                height: 16,
+                fill: 'none',
+                stroke: 'currentColor',
+                strokeWidth: 2,
+                strokeLinecap: 'round',
+                strokeLinejoin: 'round',
+                'aria-hidden': true,
+              },
+              children: [
+                {__element: 'path', props: {d: 'm7 11 2-2-2-2'}},
+                {__element: 'path', props: {d: 'M11 13h4'}},
+                {
+                  __element: 'rect',
+                  props: {x: 3, y: 3, width: 18, height: 18, rx: 2},
+                },
+              ],
+            },
+            // Match Copy's muted header glyph colour; the icon inherits it.
+            style: {color: 'var(--color-syntax-comment)'},
           },
         },
       ],
