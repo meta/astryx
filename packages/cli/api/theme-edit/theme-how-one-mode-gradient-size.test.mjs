@@ -148,9 +148,30 @@ it('a sized gradient with its mode said at the end is written whole, in that mod
   );
 }, 240_000);
 
-it('a slash between two asks after a gradient still splits them', async () => {
+it('a slash between two asks after a sized gradient still splits them', async () => {
   const lines = await commands(
-    'header background linear-gradient(#ffffff, #eeeeee) / cards red',
+    'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode / buttons blue',
   );
-  expect(lines.some(l => /--on card\b/.test(l))).toBe(true);
+  expect(lines).toContain(
+    "set pg background 'linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+  expect(lines).toContain("set pg background-color '#2563eb' --on button");
+  expect(lines.some(l => /linear-gradient.*--on button/.test(l))).toBe(false);
+}, 240_000);
+
+it('a size right after a gradient with no position is a new ask', async () => {
+  const lines = await commands(
+    'header background linear-gradient(#ffffff, #eeeeee) / 12px radius on cards',
+  );
+  expect(lines.some(l => /\/ 12px/.test(l))).toBe(false);
+}, 240_000);
+
+it('a trailing mode after a gradient with a nested stop reads as that mode', async () => {
+  expect(
+    await commands(
+      'header background linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+    ),
+  ).toContain(
+    "set pg background 'linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
 }, 240_000);
