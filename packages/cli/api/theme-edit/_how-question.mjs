@@ -90,7 +90,6 @@ import {
   rowFrameOf,
   fillsPart,
   givesEdge,
-  isRowFrame,
   focusStateOf,
   paddedParts,
   innerTextTokens,
