@@ -17,7 +17,7 @@ import {
   it,
   vi,
 } from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -103,14 +103,22 @@ describe('a negated state word', () => {
   it(
     'a word the synonym table reads keeps its reading (inactive is disabled)',
     async () => {
-      const e = await refusal(() =>
-        themeEditSet('t', 'background-color', '#eeeeee', {
+      // (Written as that state, and said.)
+      const r = /** @type {any} */ (
+        await themeEditSet('t', 'background-color', '#eeeeee', {
           cwd,
           on: 'button',
           state: 'inactive',
-        }),
+        })
       );
-      expect(e.run[0]).toMatch(/ --state disabled$/);
+      expect(r.data.setting.state).toBe('disabled');
+      expect(r.data.notes.join('\n')).toMatch(/read as --state disabled/);
+      await themeEditUndo('t', {
+        cwd,
+        thing: 'background-color',
+        on: 'button',
+        state: 'disabled',
+      });
     },
     T,
   );

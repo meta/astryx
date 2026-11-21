@@ -123,14 +123,19 @@ describe('one-line looks', () => {
     expect(writes(await how('q0', 'red only for alerts'))[0]).toBe(
       `set q0 danger '#dc2626'`,
     );
+    // (The mode the app opens in keeps both modes: the line that drops
+    // light is offered after the answer, never in it.)
+    const darkFirst = await how(
+      'q0',
+      'urgent but calm, red only for alerts, dark mode first',
+    );
+    expect(top(darkFirst)[0]).toBe(`set q0 danger '#dc2626'`);
+    expect(top(darkFirst)).not.toContain('set q0 mode dark-only');
     expect(
-      top(
-        await how(
-          'q0',
-          'urgent but calm, red only for alerts, dark mode first',
-        ),
-      ),
-    ).toEqual([`set q0 danger '#dc2626'`, 'set q0 mode dark-only']);
+      darkFirst
+        .slice(1)
+        .some(r => r.commands.some(c => / mode dark-only$/.test(c))),
+    ).toBe(true);
   }, 240_000);
 });
 
