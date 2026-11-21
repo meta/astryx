@@ -199,7 +199,7 @@ describe('a definition that replaces another', () => {
     for (const old of ['orbit', 'planet']) {
       const [first] = rankIcons([set], old);
       expect(first).toMatchObject({id: 'home', score: 100});
-      expect(first.reason).toBe(`definition "meteor" (replaced "${old}")`);
+      expect(first.reason).toBe(`meaning "meteor" (replaced "${old}")`);
     }
   });
 
