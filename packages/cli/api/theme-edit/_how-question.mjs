@@ -22345,7 +22345,18 @@ export function draftAnswer(ctx, env, question) {
           (ofTextSize || !asChange)
             ? String(Number(pct.toFixed(3)))
             : null;
-        // (A change "by N%" with no way said writes nothing.)
+        // (A change "by N%" with no way said writes nothing and asks which
+        // way.)
+        if (
+          byPct &&
+          factorSaid == null &&
+          pctAbsolute == null &&
+          pxRatio == null
+        )
+          return {
+            text: `the line height${on ? ` on ${on}` : ''} by ${pctLeading?.[0] ?? 'that much'}, but which way? Say "raise the line height by ${pctLeading?.[0] ?? '10%'}" or "drop the line height by ${pctLeading?.[0] ?? '10%'}"`,
+            options: [],
+          };
         const leadFactor =
           pxRatio != null || pctAbsolute != null
             ? null

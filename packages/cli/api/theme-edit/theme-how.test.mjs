@@ -3441,6 +3441,7 @@ const QUESTIONS_J = [
   ],
   ['drop the line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
   ['tighten line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
+  ['change the line height by 10%', {top: null}],
   ['line height 150% by default', {top: /^set q --text-body-leading 1\.5$/}],
   [
     'line height 150% of the font size',
