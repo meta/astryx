@@ -570,6 +570,44 @@ const ROWS = [
     },
   ],
   [
+    'a phrase after the undo naming a part with no earlier change is never a new change',
+    {
+      q: 'Make the headings bold. Undo the heading change and the card corners change.',
+      never: /--on card\b|^headings bold$/,
+      says: /no card change was said earlier in this ask, so nothing is written for it/,
+    },
+  ],
+  [
+    'a phrase naming a look of a part with no change writes nothing for it',
+    {
+      q: 'Make the cards blue. Undo the card change and the heading weight change.',
+      never: /--on card\b|^headings bold$|--on heading\b/,
+      says: /no heading change was said earlier/,
+    },
+  ],
+  [
+    'a step another clause also writes stays after the undo phrase',
+    {
+      q: 'Make the cards blue. Undo the card change and the heading weight change. Make the headings bold.',
+      has: ['headings bold'],
+    },
+  ],
+  [
+    'a phrase naming a part with an earlier change makes the undo name two changes',
+    {
+      q: 'Make the headings bigger. Undo the heading size change and the heading bold change.',
+      never: /^headings bold$/,
+      says: /names more than one change/,
+    },
+  ],
+  [
+    'an ask after the undo that changes a value stays its own ask',
+    {
+      q: 'Make the cards blue. Undo the card change and change the headings to 12px.',
+      has: ['font-size 12px --on heading'],
+    },
+  ],
+  [
     'an undo that names a look takes back only that look',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',

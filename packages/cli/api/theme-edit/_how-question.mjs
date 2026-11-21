@@ -29502,12 +29502,33 @@ export function draftAnswer(ctx, env, question) {
     // answer says so. A bare "size" or "weights" said alone is read below.
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
+    // (A phrase naming another part's change, "and the card corners
+    // change", is part of the undo too: never a new change.)
     const alsoNamed =
       next &&
-      !next.aspects?.length &&
       !next.colors?.length &&
-      /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
+      /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\W*$/i.test(
         String(next.text ?? ''),
+      );
+    // (A phrase whose parts had no change earlier, "and the card corners
+    // change" after only a heading change, takes nothing back: the undo
+    // reads as the undo of its own part alone.)
+    const changedEarlier = (/** @type {string} */ on) =>
+      result.some(d => {
+        const c = /** @type {any} */ (draftClause.get(d));
+        return (
+          d !== unmet &&
+          !d.unmet &&
+          c &&
+          clauses.indexOf(c) < undoAt &&
+          c.parts?.some((/** @type {{on: string}} */ p) => p.on === on)
+        );
+      });
+    const nextNew =
+      alsoNamed &&
+      (next.parts ?? []).length > 0 &&
+      (next.parts ?? []).every(
+        (/** @type {{on: string}} */ p) => !changedEarlier(p.on),
       );
     const lookOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
@@ -29525,7 +29546,37 @@ export function draftAnswer(ctx, env, question) {
         ? ['said']
         : []),
     ];
-    const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    // (The phrase is the undo's, never an ask of its own: its lines leave
+    // the answer, the whole one included.)
+    const strikeNext = () => {
+      // (The phrase is the undo's, never an ask of its own: its lines
+      // leave the answer, the whole one included.)
+      const own = result.filter(
+        d => /** @type {any} */ (draftClause.get(d))?.text === next.text,
+      );
+      // (A step another clause also writes, "make the headings bold"
+      // after "the heading weight change", stays.)
+      const kept = result
+        .filter(d => draftClause.get(d) && !own.includes(d))
+        .flatMap(d => d.options.flat());
+      const gone = own
+        .flatMap(d => d.options[0] ?? [])
+        .filter(
+          st => !kept.some(k => JSON.stringify(k) === JSON.stringify(st)),
+        );
+      for (const d of result)
+        if (!draftClause.get(d) && d.options.length)
+          d.options = d.options
+            .map(o =>
+              o.filter(
+                st => !gone.some(g => JSON.stringify(g) === JSON.stringify(st)),
+              ),
+            )
+            .filter(o => o.length);
+      result.splice(0, result.length, ...result.filter(d => !own.includes(d)));
+      for (const c of clauses) if (c.text === next.text) answeredByUndo.add(c);
+    };
+    const several = (uc?.parts?.length ?? 0) > 1 || (alsoNamed && !nextNew);
     // ("Make the headings bigger. Make the headings bold. Undo the heading
     // size change.": a look the undo names, read by `aspectsOf`, takes back
     // only the earlier change of that look. A bare "size" is the part's
@@ -29546,7 +29597,8 @@ export function draftAnswer(ctx, env, question) {
     const followed =
       next &&
       !GOING_BACK.test(String(next.text ?? '')) &&
-      /\bchanges?\W*$/i.test(String(next.text ?? ''));
+      /\bchanges?\W*$/i.test(String(next.text ?? '')) &&
+      !nextNew;
     if (lookNamed.length && !several && !colorSaid && !followed) {
       const ofLook = undone.filter(d =>
         lookNamed.some(a => lookOf(d).includes(a)),
@@ -29577,6 +29629,13 @@ export function draftAnswer(ctx, env, question) {
           looksSaid.some(a => lookOf(d).includes(a))
         );
       });
+    if (nextNew) {
+      strikeNext();
+      result.push({
+        text: `no ${[...new Set((next.parts ?? []).map((/** @type {{on: string}} */ p) => p.on))].join(' or ')} change was said earlier in this ask, so nothing is written for it`,
+        options: [],
+      });
+    }
     if (!undone.length && !several && !loose) continue;
     const unsure =
       several ||
@@ -29585,13 +29644,36 @@ export function draftAnswer(ctx, env, question) {
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
     if (unsure) {
+      // (A part the undo names that had no change earlier gets nothing.)
+      const unchanged = several
+        ? [
+            ...new Set(
+              [
+                ...(uc?.parts ?? []),
+                ...(alsoNamed ? (next.parts ?? []) : []),
+              ].map((/** @type {{on: string}} */ p) => p.on),
+            ),
+          ].filter(
+            on =>
+              !result.some(d => {
+                const c = /** @type {any} */ (draftClause.get(d));
+                return (
+                  d !== unmet &&
+                  !d.unmet &&
+                  c &&
+                  clauses.indexOf(c) < undoAt &&
+                  c.parts?.some((/** @type {{on: string}} */ p) => p.on === on)
+                );
+              }),
+          )
+        : [];
       unmet.text = several
-        ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
+        ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time${unchanged.length ? `; no ${unchanged.join(' or ')} change was said earlier, so nothing is written for it` : ''}`
         : loose
           ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
           : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
       if (uc) answeredByUndo.add(uc);
-      if (alsoNamed) answeredByUndo.add(next);
+      if (alsoNamed) strikeNext();
       continue;
     }
     // (A whole answer that holds every line, "all of it, in order", loses
