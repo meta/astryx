@@ -733,12 +733,12 @@ function widenedLines(widened) {
   return [
     ...widened.map(w =>
       w.keep
-        ? `- ${w.setting} now also reaches ${w.parts.join(', ')} (drawn alike); to keep it as it was: ${w.keep}`
+        ? `- ${w.setting} now also reaches ${w.parts.join(', ')} (drawn alike); to keep it on ${/ --on (\S+)/.exec(w.keep)?.[1] ?? 'its part'} alone: ${w.keep}`
         : `- ${w.setting} now also reaches ${w.parts.join(', ')} (set on the group, so it follows the group's members)`,
     ),
     ...(keeps.length > 1
       ? [
-          `- to keep all ${keeps.length} as they were: ${commandLines(keeps, true).join('\n  ')}`,
+          `- to keep each on its own part: ${commandLines(keeps, true).join('\n  ')}`,
         ]
       : []),
   ];
