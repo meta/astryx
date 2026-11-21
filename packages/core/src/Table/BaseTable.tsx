@@ -39,6 +39,7 @@ import {
 import {TableContext} from './TableContext';
 import {use} from 'react';
 import {
+  getWindowFallbackReason,
   isFixedHeightColumn,
   getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
@@ -611,6 +612,20 @@ const MemoizedTableRow = memo(TableRowInner, areRowPropsEqual) as <
 /**
  * Inner BaseTable implementation (generic-preserving).
  */
+/**
+ * The development warning's reason for a column that turns row windowing off:
+ * the first-party plugin's own reason, or a caller's renderCell and its remedy.
+ */
+function describeCustomCellFallback<T extends Record<string, unknown>>(
+  column: TableColumn<T>,
+): string {
+  const pluginReason = getWindowFallbackReason(column);
+  if (pluginReason != null) {
+    return `${pluginReason}, so row virtualization is off for this table`;
+  }
+  return `column "${column.key}" has a custom renderCell, which Table cannot check keeps the fixed row height, so row virtualization is off for this table. Columns without renderCell, the selection column and a row-number column that counts from 1 stay windowed; render this column's value without renderCell to window the rows`;
+}
+
 function BaseTableInner<T extends Record<string, unknown>>({
   data,
   columns: columnsProp,
@@ -737,7 +752,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
         (rowIndexStart != null || rowCount != null
           ? 'legacy row offsets or counts conflict with windowed metadata'
           : customCellColumn != null
-            ? `column "${customCellColumn.key}" has a custom renderCell, which is not height-safe, so row virtualization is off for this table. Default cells (no renderCell) and the row-number and selection columns stay windowed; render this column's value without renderCell to window the rows`
+            ? describeCustomCellFallback(customCellColumn)
             : !Number.isFinite(config.rowHeight) ||
                 config.rowHeight <= 0 ||
                 !Number.isFinite(config.initialViewportHeight) ||
