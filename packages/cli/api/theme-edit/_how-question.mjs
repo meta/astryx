@@ -4728,7 +4728,7 @@ export function draftAnswer(ctx, env, question) {
           spans[0][0] > lookAt ||
           /^\s*(?:the\s+)?$/.test(text.slice(0, spans[0][0]));
         if (
-          listed.length > 1 &&
+          listed.length === 2 &&
           together &&
           opens &&
           left.every(w => JUDGING.test(w)) &&
