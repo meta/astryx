@@ -4804,14 +4804,18 @@ export function namesControls(ctx, on) {
 export function setsControlHeight(ctx, x, size) {
   if (x.state || x.only || !x.on) return false;
   // (A size token on one control is that control's own height, as --only
-  // gives it; on a group it is the height of the controls in it.)
-  if (x.source === 'token')
+  // gives it; on a group it is the height of the controls in it, also on a
+  // group that mixes controls with other parts, such as the button-like
+  // parts a picture's answer wrote it on.)
+  if (x.source === 'token') {
+    const controls = new Set(groupsOf(ctx).controls ?? []);
     return (
       !!groupsOf(ctx)[x.on] &&
-      namesControls(ctx, x.on) &&
+      membersOf(ctx, x.on).some(t => controls.has(t)) &&
       x.thing === `--size-element-${size}` &&
       x.when == null
     );
+  }
   if (
     x.source !== 'property' ||
     !isControlHeight(ctx, x) ||

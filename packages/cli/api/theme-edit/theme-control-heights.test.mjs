@@ -1004,4 +1004,22 @@ describe('one control height per size', () => {
       'complex-selector',
     ]);
   }, 240_000);
+
+  it('a size token saved on the button-like parts is a control height show lists', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('picbtn', {cwd, like: 'neutral'});
+    // (An earlier picture answer wrote the medium size token on the
+    // button-like parts only.)
+    const data = saved('picbtn');
+    data.settings.push({
+      thing: '--size-element-md',
+      value: '28px',
+      source: 'token',
+      on: 'button-like',
+    });
+    save('picbtn', data);
+    const missed = await heightMisses('picbtn');
+    expect(missed.length).toBe(1);
+    expect(JSON.stringify(missed[0])).toMatch(/height 28px --on button\b/);
+  }, 240_000);
 });
