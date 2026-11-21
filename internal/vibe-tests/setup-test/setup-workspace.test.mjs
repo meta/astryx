@@ -90,8 +90,12 @@ function pnpmEnv(registry) {
   return {
     ...process.env,
     CI: 'true',
+    // pnpm 11 reads the pnpm_config_ names; older pnpm reads npm_config_.
     npm_config_registry: registry,
-    ...(storeDir ? {npm_config_store_dir: storeDir} : {}),
+    pnpm_config_registry: registry,
+    ...(storeDir
+      ? {npm_config_store_dir: storeDir, pnpm_config_store_dir: storeDir}
+      : {}),
   };
 }
 
@@ -190,18 +194,23 @@ function pnpmAsync(args, cwd, registry) {
     const child = spawn('pnpm', args, {
       cwd,
       env: pnpmEnv(registry),
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let stderr = '';
+    // pnpm prints its errors on stdout, so a failed install keeps both.
+    let output = '';
+    child.stdout.on('data', chunk => {
+      output += chunk;
+    });
     child.stderr.on('data', chunk => {
-      stderr += chunk;
+      output += chunk;
     });
-    child.on('close', status => resolve({status, stderr}));
+    child.on('close', status => resolve({status, stderr: output}));
   });
 }
 
 /** Installs the shared fixture once, from the stand-in registry. */
 async function installFixture() {
+  if (installedFixture) return;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-workspace-src-'));
   temporaryDirectories.push(root);
   storeDir = path.join(root, 'store');
@@ -475,6 +484,11 @@ describeWithPnpm('measurement build root over a pnpm virtual store', () => {
  * one mutation for each, and no more.
  */
 describeWithPnpm('a copy that is not a copy is caught', () => {
+  beforeAll(async () => {
+    // Each block installs the shared fixture, so it runs on its own too.
+    await installFixture();
+  }, 300_000);
+
   it('mirroring the virtual store writes through, and is reported', () => {
     const {app} = installedSandbox();
     const packageFile =
