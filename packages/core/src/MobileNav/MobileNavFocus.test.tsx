@@ -185,13 +185,24 @@ function DetachHarness() {
   );
 }
 
-/** Hides the opener (an inert navigation region) as the drawer closes. */
-function HiddenOpenerHarness({isPlainMain = false}: {isPlainMain?: boolean}) {
+/**
+ * Hides the opener as the drawer closes: an inert navigation region by
+ * default, or an `aria-hidden` one.
+ */
+function HiddenOpenerHarness({
+  isPlainMain = false,
+  hiding = 'inert',
+}: {
+  isPlainMain?: boolean;
+  hiding?: 'inert' | 'aria-hidden';
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   return (
     <>
-      <div inert={isHidden || undefined}>
+      <div
+        inert={(hiding === 'inert' && isHidden) || undefined}
+        aria-hidden={(hiding === 'aria-hidden' && isHidden) || undefined}>
         <button
           type="button"
           data-testid="trigger"
@@ -558,6 +569,21 @@ describe('MobileNav focus restoration', () => {
     vi.useFakeTimers();
     try {
       render(<HiddenOpenerHarness />);
+      openFromTrigger();
+      fireEvent.click(screen.getByTestId('hide'));
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(screen.getByTestId('main')).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves focus to main when the opener is connected but aria-hidden', () => {
+    vi.useFakeTimers();
+    try {
+      render(<HiddenOpenerHarness hiding="aria-hidden" />);
       openFromTrigger();
       fireEvent.click(screen.getByTestId('hide'));
       act(() => {
