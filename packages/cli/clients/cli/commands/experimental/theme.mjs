@@ -3080,43 +3080,15 @@ function checkLines(d, name, fix) {
     );
   }
   if (d.notes.length) out.push(section('notes:'), list(d.notes));
-  // One plain next step, last, while problems remain.
-  if (d.problems.length)
+  // One plain next step, last, while problems remain: the fix, or after
+  // it the edit it cannot make.
+  if (d.next)
     out.push(
       fix
-        ? `Next: ${checkNextEdit(d.problems[0], d)}`
-        : `Next: ${PREFIX} check ${quoteCommandArgument(name)} --fix`,
+        ? `next: ${d.next}`
+        : `next: ${PREFIX} check ${quoteCommandArgument(name)} --fix`,
     );
   return out;
-}
-
-/**
- * The edit that repairs a problem fix left, in plain words, in the file
- * it belongs in: the theme's, or the app's for its mode and page.
- * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditCheckProblem} p
- * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditCheckResponse['data']} d the check's result
- * @returns {string}
- */
-function checkNextEdit(p, d) {
-  const app =
-    d.protectedFiles[0]?.file ?? "the app's file that renders <Theme>";
-  if (p.kind === 'one-look')
-    return `in ${app}, add mode="${d.modes.length === 1 ? d.modes[0] : 'dark'}" to the <Theme> that wears the theme`;
-  if (p.kind === 'page')
-    return `in a stylesheet ${app === "the app's file that renders <Theme>" ? 'the app loads' : `${app} loads`}, add body { background: var(--color-background-body); }`;
-  const at = `in ${d.file}, `;
-  if (p.kind === 'hover')
-    return `${at}give ${p.part}${p.parts?.length ? ` ${p.parts[0].replace(/^\S+ /, '')}` : ''} a ':hover' fill that differs from its fill at rest`;
-  if (p.kind === 'blend' && p.part) {
-    const edit = p.message.split('. In ')[1];
-    return edit
-      ? `in ${edit}`
-      : `${at}give ${p.part}'s style a shadow or a border`;
-  }
-  if (p.token && p.needs != null)
-    return `${at}set ${p.token} to a color that reads at ${p.needs}:1${p.on ? ` on ${p.on}` : ''} in ${p.mode}${p.kind === 'text' || p.kind === 'part-text' ? ", or, for a color you set, keep it as designed with a record in the theme's .accepted.json" : ''}`;
-  if (p.part) return `${at}change ${p.part}'s own style: ${p.message}`;
-  return p.message;
 }
 
 /**

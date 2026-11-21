@@ -529,6 +529,37 @@ export function themeModuleStylesheets(source, typescript) {
 }
 
 /**
+ * The default theme of a generated theme module: its slug, the specifier
+ * the module imports it from, and the mode `themeModes` gives it; null for
+ * a module that holds no record.
+ * @param {string} source
+ * @returns {{slug: string, module: string, mode: 'light' | 'dark' | null} | null}
+ */
+export function themeModuleDefault(source) {
+  let record;
+  try {
+    record = parseThemeModuleRecord(source);
+  } catch {
+    return null;
+  }
+  const slug = record.defaultSlug;
+  if (!slug) return null;
+  /** @type {string[]} */
+  const imports = [];
+  /** @type {Record<string, 'light' | 'dark'>} */
+  const modes = {};
+  for (const line of source.split('\n')) {
+    const named = NAMED_IMPORT_RE.exec(line);
+    if (named) imports.push(JSON.parse(named[2]));
+    const mode = MODE_ENTRY_RE.exec(line);
+    if (mode)
+      modes[JSON.parse(mode[1])] = /** @type {'light' | 'dark'} */ (mode[2]);
+  }
+  const module = imports[Object.keys(record.themes).indexOf(slug)];
+  return module ? {slug, module, mode: modes[slug] ?? null} : null;
+}
+
+/**
  * Is `source` exactly the module `renderThemeModule` writes for the record it
  * carries? Only then may a command delete the module: it holds nothing a
  * person wrote. The imports come from the module itself, so the check works

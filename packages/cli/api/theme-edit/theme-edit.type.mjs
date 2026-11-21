@@ -370,6 +370,7 @@
  * @property {string} data.file - The theme source checked.
  * @property {Array<'light' | 'dark'>} data.modes - The modes checked: both, or the one the app pins.
  * @property {ThemeEditCheckProblem[]} data.problems - What a person would see as broken (after the repair, with fix); empty when nothing is.
+ * @property {string} [data.next] - While problems remain, the one next step: run the check again with fix, or after it, the edit fix cannot make and the file it goes in.
  * @property {number} data.accepted - Measured pairs the theme's `accepted` records keep as designed (a sibling `<theme>.accepted.json`): left as they are, not problems.
  * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: Array<{part: string, ground: string, when?: string, mode: 'light' | 'dark', ratio: number, color?: string, groundColor?: string, reason: string}>}>} data.fixed - Each value fix wrote: a token; a text token set again on a group of parts inside a bar (`group`, its member `parts`); or the app's mode or page; a [light, dark] pair when the modes differ. A color the author set that fix moved names its old value (`from`) and the records that would keep it as designed instead (`accept`, its `reason` left to write).
  * @property {string[]} data.files - The files fix wrote, named from the folder the command ran in, as `file` is.
