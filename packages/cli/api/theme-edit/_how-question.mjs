@@ -25,6 +25,14 @@ import {
 import {luminance} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {
+  BAR_PARTS,
+  TEXT_LOOKS,
+  addRunLooks,
+  barLinksAreNavItems,
+  colorInOtherDraft,
+  weightIn,
+} from './_text-looks.mjs';
+import {
   DESIGN,
   DENSITY,
   DIALS,
@@ -1711,25 +1719,6 @@ function inkAtRatio(ink, grounds, target) {
     if (out && under.every(g => ratio(out, g) >= target)) return moved;
   }
   return null;
-}
-
-/**
- * A font weight written in a clause: a number from 100 to 900, or a weight
- * word ("semibold").
- * @param {{text: string}} c
- */
-function weightIn(c) {
-  const n = /\b([1-9]00)\b(?!\s*(px|ms|%))/.exec(c.text)?.[1];
-  if (n) return n;
-  // "weight 450": any weight from 1 to 1000 written beside the word.
-  const typed =
-    /\bweight\s*:?\s*(\d{1,4})\b(?!\s*(?:px|ms|%|rem|em))/.exec(c.text)?.[1] ??
-    /\b(\d{1,4})\s+(?:font\s+)?weight\b/.exec(c.text)?.[1];
-  if (typed && Number(typed) >= 1 && Number(typed) <= 1000) return typed;
-  const w = /\b(semi-?bold|medium|regular|normal)\b/.exec(c.text)?.[1];
-  return w
-    ? HEADING_WEIGHTS[w === 'normal' ? 'regular' : w.replace('-', '')]
-    : null;
 }
 
 /** Scale a CSS length. @param {string} v @param {number} f */
@@ -9328,7 +9317,6 @@ export function draftAnswer(ctx, env, question) {
       });
   // ("badges uppercase bold": two looks of a part's text said together are
   // each an ask of their own, run in turn.)
-  const TEXT_LOOKS = ['case', 'weight', 'italic', 'tracking', 'fontsize'];
   for (const [ci, c] of [...clauses.entries()].reverse()) {
     // ("large bold headings", "bigger, bolder headings": a heading's size
     // word beside its weight is its text size.)
@@ -14010,6 +13998,7 @@ export function draftAnswer(ctx, env, question) {
     if (
       literals.length &&
       steps.length &&
+      !colorInOtherDraft(c, steps, Object.keys(HUES), literals) &&
       !steps.some(x => x.verb !== 'set') &&
       !literals.some(l => values.some(v => v.includes(l)))
     )
@@ -15566,6 +15555,15 @@ export function draftAnswer(ctx, env, question) {
     drafts.splice(from, 0, d);
     draftClause.set(d, gc);
   };
+  barLinksAreNavItems(
+    clauses,
+    t => lex.parts.some(([re, p]) => BAR_PARTS.has(p.on) && re.test(` ${t} `)),
+    c => {
+      for (let n = placeNotes.length - 1; n >= 0; n--)
+        if (placeNotes[n].c === c) placeNotes.splice(n, 1);
+    },
+  );
+  addRunLooks(clauses, Object.keys(HUES));
   for (const c of clauses) {
     clauseNow = c;
     settleSubject();
