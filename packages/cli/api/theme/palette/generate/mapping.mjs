@@ -1302,8 +1302,43 @@ export function mapPalette(candidate, dials, fills, context) {
       }
       return ref(id, m, b.stop);
     };
+  /**
+   * A token the official theme leaves to Core, at a family's shade nearest
+   * Core's own color for it in each mode: it follows the family at the
+   * lightness Core gives it.
+   */
+  const nearCore =
+    /**
+     * @param {string} token
+     * @param {string} id
+     * @returns {Partial<Record<PaletteMode, StopRef>>}
+     */
+    (token, id) => {
+      const raw = context.defaults?.[token];
+      const core = (typeof raw === 'string' ? raw : '').trim();
+      const halves = /^light-dark\((.*)\)$/i.exec(core);
+      const parts = halves ? splitTopComma(halves[1]) : [core];
+      return each(m => {
+        const target = parseColor(
+          (parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+        );
+        const best = target
+          ? stops.reduce((x, y) =>
+              perceptualDelta(ref(id, m, y).color, hex(target)) <
+              perceptualDelta(ref(id, m, x).color, hex(target))
+                ? y
+                : x,
+            )
+          : stops[Math.floor(stops.length / 2)];
+        return ref(id, m, best);
+      });
+    };
   const neutral = dials.find(f => f.id === 'neutral');
   if (neutral) {
+    // The track of a slider, which the official theme leaves to Core's
+    // blue gray: the neutral color's shade nearest it, so a warm or cool
+    // gray reaches it as it reaches the surfaces.
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
