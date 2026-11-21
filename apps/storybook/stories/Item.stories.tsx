@@ -773,3 +773,36 @@ export const SwipeCommit: Story = {
     );
   },
 };
+
+/**
+ * A row that opens something: `controlProps` puts the disclosure's state and
+ * relation on the control a keyboard user focuses (the row's invisible
+ * button), where a screen reader reads them with the name. The root keeps
+ * the rest of the row's props.
+ */
+export const DisclosureRow: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <Stack gap={1}>
+        <Item
+          label="Changed files"
+          description={isOpen ? '3 files, shown below' : '3 files'}
+          onClick={() => setIsOpen(open => !open)}
+          endContent={<Text color="secondary">{isOpen ? 'Hide' : 'Show'}</Text>}
+          controlProps={{
+            'aria-expanded': isOpen,
+            'aria-controls': 'disclosure-row-panel',
+          }}
+        />
+        {isOpen && (
+          <div id="disclosure-row-panel">
+            <Item label="src/app.tsx" description="+12 −4" />
+            <Item label="src/row.tsx" description="+3 −1" />
+            <Item label="docs/row.md" description="+40" />
+          </div>
+        )}
+      </Stack>
+    );
+  },
+};

@@ -170,6 +170,12 @@ export const docs = {
             'Link URL. Makes the item a link via an invisible anchor element. A row whose root is already a link component (see `as`) carries the address on that root instead, and no invisible anchor is rendered.',
         },
         {
+          name: 'controlProps',
+          type: 'ItemControlProps',
+          description:
+            "Attributes spread on the control the row renders for `onClick` or `href` (the invisible button or anchor the label sits in), the element keyboard focus lands on: a disclosure's `aria-expanded`, `aria-haspopup` and `aria-controls`, a toggle's `aria-pressed`, a name of its own through `aria-label` or `aria-labelledby`, a host's `data-*` marks, `onKeyDown`, a composite's roving `tabIndex`. Every other prop keeps landing on the root. `aria-disabled` is the row's own, from `isDisabled`: a disabled row's control says so and does not activate, and keeps the enabled row's focus order, or the `tabIndex` these set. Where the root is the link (`as` is a link component, with or without a `role`) these land on the root after the row's other props, so on an attribute named in both places the `controlProps` value is written, and an invisible button the row still nests inside that root for `onClick` takes none of them. A row given no `controlProps` renders as if the prop did not exist. Ignored with a development warning where the row renders no control: a row with a `role` on a plain root, or one with an `interactiveRef`, a link root included. `ListItem` passes it through unchanged. Accepts HTML attributes except `role`, `onClick`, `className`, `style`, `children`, `dangerouslySetInnerHTML`, `hidden`, `inert`, `aria-hidden` and `aria-disabled`.",
+        },
+        {
           name: 'target',
           type: "'_blank' | '_self'",
           description:
@@ -277,6 +283,11 @@ export const docs = {
         guidance: true,
         description:
           'Give a swipe action a second home in the row (a menu or a button in endContent): the swipe is a touch accelerator, and a verb reachable only by swipe is unreachable by keyboard and by mouse.',
+      },
+      {
+        guidance: true,
+        description:
+          'Put a state or relation a screen reader must read with the row (aria-expanded, aria-haspopup, aria-controls, aria-pressed) in controlProps, so it lands on the control that takes focus; an aria-* attribute on the row itself lands on the root, where it is invalid or unread.',
       },
       {
         guidance: false,

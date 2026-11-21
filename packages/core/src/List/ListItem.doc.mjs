@@ -133,6 +133,12 @@ export const docs = {
         "Deprecated (DEP-0017): pass swipeBehavior in createSwipe's options instead. Passed through to Item unchanged; astryx upgrade rewrites static uses.",
       default: "'reveal'",
     },
+    {
+      name: 'controlProps',
+      type: 'ItemControlProps',
+      description:
+        'Attributes for the control the row renders for onClick or href, passed through to Item unchanged. See Item.controlProps.',
+    },
   ],
 };
 
@@ -236,6 +242,12 @@ export const docsZh = {
       description:
         '已弃用（DEP-0017）：请改为在 createSwipe 的选项中传入 swipeBehavior。原样传递给 Item；astryx upgrade 会改写静态用法。',
       default: "'reveal'",
+    },
+    {
+      name: 'controlProps',
+      type: 'ItemControlProps',
+      description:
+        '行为 onClick 或 href 渲染的控件的属性，原样传递给 Item。参见 Item.controlProps。',
     },
   ],
 };
