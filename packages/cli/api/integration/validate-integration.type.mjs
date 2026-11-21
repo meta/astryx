@@ -126,19 +126,19 @@
 
 /**
  * Experimental (spec:AST-084 FR15): for a package that declares
- * `experimental.iconSets`, which icon definitions each valid set leaves
+ * `experimental.iconSets`, which icon meanings each valid set leaves
  * unmapped, and what the checks could not judge. Listed beside the issues and
- * never counted: mapping an optional definition is optional, an item not
+ * never counted: mapping an optional meaning is optional, an item not
  * checked is not a failure, and nothing here fails a check, even under
  * `--strict`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconSetCoverage
  * @property {string} set The set's name.
  * @property {Array<{name: string, description: string, words: string[]}>} unmappedDefinitions
- *   Astryx's optional (not built-in) definitions the set's `map` does not
- *   name. An unmapped built-in definition is an error issue instead.
+ *   Astryx's optional (not built-in) meanings the set's `map` does not
+ *   name. An unmapped built-in meaning is an error issue instead.
  * @property {Array<{definition: string, icon: string}>} suggestions For each
- *   unmapped definition (built-in, optional, or the set's own), the best icon
+ *   unmapped meaning (built-in, optional, or the set's own), the best icon
  *   `integration check` gives it, by the rule `experimental icon new-set`
  *   uses for its suggestions, when one is.
  * @property {Array<{icon?: string, adapter?: string, entry?: string, reason: string}>} unchecked
@@ -148,7 +148,7 @@
  *   (`adapter`); and a theme map or theme-map entry it cannot read
  *   (`entry`).
  * @property {{unmapped: Array<{definition: string, templates: number}>}} [templateMeanings]
- *   The icon definitions the bundled templates use that the set's `map`
+ *   The icon meanings the bundled templates use that the set's `map`
  *   does not name, leaving out one whose fallback (AST-084 FR23) it maps,
  *   each with how many templates use it, most used first, then by name. A
  *   copied template renders a placeholder for each in a
