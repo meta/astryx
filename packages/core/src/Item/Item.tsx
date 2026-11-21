@@ -1012,11 +1012,18 @@ export function Item({
   const mergedRef = useMergedRefs(ref, containerRef);
   const rootRef = isDelegate || isLinkRow ? mergedRef : ref;
 
+  const handleLinkRowClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (isEventInsideRow(event)) {
+      containerOnClick(event);
+    }
+  };
+
   // The row's own primary. The click the browser synthesizes after a swipe
   // never reaches it: the gesture system swallows it.
-  const primaryOnClick =
-    isDelegate || isLinkRow
-      ? containerOnClick
+  const primaryOnClick = isDelegate
+    ? containerOnClick
+    : isLinkRow
+      ? handleLinkRowClick
       : hasParentRole
         ? onClick
         : isInteractive
@@ -1117,7 +1124,9 @@ export function Item({
         isLinkRow
           ? (event: React.MouseEvent<HTMLElement>) => {
               restProps.onMouseUp?.(event);
-              linkRowOnMouseUp(event);
+              if (isEventInsideRow(event)) {
+                linkRowOnMouseUp(event);
+              }
             }
           : restProps.onMouseUp
       }>
@@ -1164,3 +1173,9 @@ export function Item({
 }
 
 Item.displayName = 'Item';
+
+// React bubbles an event through a portal the caller renders from the row,
+// but its target is not in the row, so it is not a press on the row.
+function isEventInsideRow(event: React.MouseEvent<HTMLElement>): boolean {
+  return event.currentTarget.contains(event.target as Node);
+}

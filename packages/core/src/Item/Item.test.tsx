@@ -807,6 +807,29 @@ describe('Item', () => {
       }
     });
 
+    it('a middle press in content the row portals out does not open the link', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      try {
+        render(
+          <Item
+            label="Ada Lovelace"
+            href="/candidates/1"
+            endContent={createPortal(
+              <span data-testid="portaled">Portaled</span>,
+              document.body,
+            )}
+          />,
+        );
+        // Present first: a middle press on the row opens the link.
+        fireEvent.mouseUp(screen.getByText('Ada Lovelace'), {button: 1});
+        expect(open).toHaveBeenCalledTimes(1);
+        fireEvent.mouseUp(screen.getByTestId('portaled'), {button: 1});
+        expect(open).toHaveBeenCalledTimes(1);
+      } finally {
+        open.mockRestore();
+      }
+    });
+
     it("a press on the row reaches a router link component's own click handler", () => {
       const navigate = vi.fn();
       function RouterLink({
