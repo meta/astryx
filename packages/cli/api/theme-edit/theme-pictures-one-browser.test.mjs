@@ -104,11 +104,11 @@ describe('show --png', () => {
   );
 
   it('counts a group of parts as the parts it sets', async () => {
-    const {project} = await context(cwd);
+    const ctx = await context(cwd);
     /** @param {string} on */
     const families = on =>
       touchedFamilies(
-        project,
+        ctx,
         /** @type {any} */ ({
           settings: [{thing: 'x', value: 'y', source: 'property', on}],
         }),
@@ -116,6 +116,9 @@ describe('show --png', () => {
     expect(families('inputs')).toContain('inputs');
     expect(families('containers')).toContain('containers');
     expect(families('badge')).toEqual(['feedback']);
+    // A family role is read from the census, as the change reads it.
+    expect(families('option-rows')).not.toEqual([]);
+    expect(families('button-like')).toContain(families('button')[0]);
   });
 });
 

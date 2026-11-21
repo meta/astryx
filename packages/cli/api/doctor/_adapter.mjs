@@ -87,14 +87,36 @@ import {
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {packageImportTarget} from '../../foundation/discovery/package-exports.mjs';
-import {projectAugmentations} from '../../foundation/discovery/core-augmentation-points.mjs';
+import {
+  OTHER_JSX_RUNTIME,
+  judgeCoreProps,
+  readCoreDocs,
+  widensJsx,
+} from '../../foundation/discovery/unknown-core-props.mjs';
+import {
+  listProjectSourceFiles,
+  MARKUP_PAGE,
+  SOURCE_FILE_LIMIT,
+} from '../../foundation/fs/project-source-files.mjs';
+export {
+  listProjectSourceFiles,
+  SOURCE_EXTENSIONS,
+} from '../../foundation/fs/project-source-files.mjs';
+export {
+  projectImportsModule,
+  specifierTargets,
+} from '../../foundation/fs/project-sources.mjs';
 import {
   resolveProjectTypeScript,
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from '../../foundation/discovery/project-typescript.mjs';
-import {nameWords, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
-import {compilerOptionsFor, existingFile, pathsFor, projectMapsImport, resolvePath} from '../../foundation/render/ts-paths.mjs';
+import {
+  existingFile,
+  pathsFor,
+  projectMapsImport,
+  resolvePath,
+} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
   splitSpecifier,
@@ -112,8 +134,10 @@ import {
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {hostedRun} from '../../foundation/runtime/package-root.mjs';
-import {pointsToDoctor} from '../../foundation/integrations/integration-warnings.mjs';
-import {CORE_COMPARISON_CODES} from '../../foundation/discovery/component-replacement.mjs';
+import {
+  doctorChecksOutside,
+  pointsToDoctor,
+} from '../../foundation/integrations/integration-warnings.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -142,7 +166,6 @@ import {
   findInstalledPackage,
   findPackageRoot,
   isInside,
-  findWorkspaceRoot,
 } from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {
@@ -287,7 +310,8 @@ export const BUTTON_ACTIONS_CODEC = {
     Array.isArray(value.found) &&
     Number.isInteger(value.files) &&
     typeof value.incomplete === 'boolean' &&
-    (value.domListener === undefined || typeof value.domListener === 'string') &&
+    (value.domListener === undefined ||
+      typeof value.domListener === 'string') &&
     value.found.every(
       (/** @type {any} */ button) =>
         button != null &&
@@ -308,29 +332,6 @@ export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
 }
 
-export const SOURCE_EXTENSIONS = new Set([
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-]);
-
-/** The folders the source walk skips as a build's output, at a package's root. */
-const ROOT_OUTPUT_DIRS = new Set(['build', 'coverage', 'dist']);
-
-const SKIP_DIRS = new Set([
-  '.git',
-  '.next',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-]);
-
 /** @param {string} file */
 export function readTextFile(file) {
   return fs.readFileSync(file, 'utf-8');
@@ -347,10 +348,8 @@ export function readTextFileIfExists(file) {
 }
 
 /** A module path of only `.` and `..`, with an optional `index`: `'..'`, `'./index'`. */
-const FOLDER_PATH = /['"`](?:\.{1,2}\/)*\.{1,2}(?:\/(?:index(?:\.[cm]?[jt]sx?)?)?)?['"`]/;
-
-/** A page in a format that renders components but is not a script: MDX or Astro. */
-const MARKUP_PAGE = /\.(?:mdx|astro)$/u;
+const FOLDER_PATH =
+  /['"`](?:\.{1,2}\/)*\.{1,2}(?:\/(?:index(?:\.[cm]?[jt]sx?)?)?)?['"`]/;
 
 /**
  * A load in a module's text: `import(…)`, `require(…)`, `require.context(…)`
@@ -360,74 +359,6 @@ const MARKUP_PAGE = /\.(?:mdx|astro)$/u;
  */
 const TEXT_LOAD =
   /(?:\bimport\s*\(|\brequire(?:\.context)?\s*\(|\bimport\.meta\.glob(?:Eager)?\s*\(\s*\[?)\s*(?:(['"`])([^'"`$*?{[]*))?/g;
-
-/** The most source files {@link listProjectSourceFiles} reads. */
-const SOURCE_FILE_LIMIT = 5000;
-
-/**
- * A bounded app-source walk that excludes dependencies, generated output, and
- * links. The doctor parses the returned bytes without executing app code.
- * @param {string} root
- * @param {string} generatedModule
- * @param {{stylesheets?: boolean, pages?: boolean, markup?: boolean, outputAtRootsOnly?: boolean, skippedLinks?: string[]}} [options] - also list
- *   `.css` files, `.html` pages, and `.mdx` and `.astro` pages; with
- *   `outputAtRootsOnly`, skip a `build`, `dist` or `coverage` folder only in
- *   a folder with a package.json, where a build writes its output, and read
- *   one anywhere else (an app route named `build`); `skippedLinks` collects
- *   each linked folder or source file the walk does not follow
- */
-export function listProjectSourceFiles(root, generatedModule, options = {}) {
-  /** @type {string[]} */
-  const files = [];
-  /** @type {string[]} */
-  const queue = [root];
-  while (queue.length > 0 && files.length < SOURCE_FILE_LIMIT) {
-    const dir = /** @type {string} */ (queue.shift());
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, {withFileTypes: true});
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const file = path.join(dir, entry.name);
-      if (entry.isSymbolicLink()) {
-        if (options.skippedLinks && !SKIP_DIRS.has(entry.name)) {
-          let linkedFolder = false;
-          try {
-            linkedFolder = fs.statSync(file).isDirectory();
-          } catch {
-            // A link that resolves to nothing holds no module.
-          }
-          if (linkedFolder || SOURCE_EXTENSIONS.has(path.extname(entry.name)) || MARKUP_PAGE.test(entry.name)) {
-            options.skippedLinks.push(file);
-          }
-        }
-        continue;
-      }
-      if (entry.isDirectory()) {
-        const skipped =
-          SKIP_DIRS.has(entry.name) &&
-          !(options.outputAtRootsOnly === true && ROOT_OUTPUT_DIRS.has(entry.name) && !fs.existsSync(path.join(dir, 'package.json')));
-        if (!skipped && !entry.name.startsWith('.astryx-')) {
-          queue.push(file);
-        }
-      } else if (
-        entry.isFile() &&
-        file !== generatedModule &&
-        (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
-          (options.stylesheets === true &&
-            path.extname(entry.name) === '.css') ||
-          (options.pages === true &&
-            /^\.html?$/u.test(path.extname(entry.name))) ||
-          (options.markup === true && MARKUP_PAGE.test(entry.name)))
-      ) {
-        files.push(file);
-      }
-    }
-  }
-  return files;
-}
 
 /**
  * Each file in the project's own source that still uses the placeholder
@@ -470,7 +401,8 @@ export function findIconPlaceholders(projectDir) {
  * Test, story and fixture files: code that shows or checks a button, not a
  * page that a person uses. The check reads none of them.
  */
-const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|cy|fixture|stories|story)\.(?:[cm]?[jt]sx?|mdx)$/;
+const TEST_FILE =
+  /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|cy|fixture|stories|story)\.(?:[cm]?[jt]sx?|mdx)$/;
 
 /**
  * Folders that usually hold tests, stories or fixtures, though an app may
@@ -502,7 +434,8 @@ const DOM_PRESS_LISTENER =
  * (`from 'x'`, `import('x')`, `require('x')`), as the capture: a package, a
  * path alias or a `#` key.
  */
-const NON_RELATIVE_MODULE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./][^'"]*)['"]/g;
+const NON_RELATIVE_MODULE =
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./][^'"]*)['"]/g;
 
 /** @param {string} text */
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -520,8 +453,13 @@ const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function findButtonsWithoutAction(projectDir) {
   /** @type {string[]} */
   const skippedLinks = [];
-  const listed = listProjectSourceFiles(projectDir, '', {markup: true, outputAtRootsOnly: true, skippedLinks});
-  const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
+  const listed = listProjectSourceFiles(projectDir, '', {
+    markup: true,
+    outputAtRootsOnly: true,
+    skippedLinks,
+  });
+  const relative = (/** @type {string} */ file) =>
+    path.relative(projectDir, file).split(path.sep).join('/');
   const kept = listed.filter(file => !TEST_FILE.test(relative(file)));
   // An MDX or Astro page is not read, but one that names a component may
   // render it anywhere.
@@ -529,7 +467,8 @@ export function findButtonsWithoutAction(projectDir) {
   const files = kept.filter(file => !MARKUP_PAGE.test(file));
   // A listing cut short may leave out a module that renders a component, so
   // the check cannot tell that nothing renders it.
-  if (listed.length >= SOURCE_FILE_LIMIT) return {found: [], files: files.length, incomplete: true};
+  if (listed.length >= SOURCE_FILE_LIMIT)
+    return {found: [], files: files.length, incomplete: true};
   /** @type {Map<string, string | null>} */
   const texts = new Map();
   const textOf = (/** @type {string} */ file) => {
@@ -549,13 +488,28 @@ export function findButtonsWithoutAction(projectDir) {
   const candidates = files.filter(file => {
     if (TEST_FOLDER.test(relative(file))) return false;
     const text = textOf(file);
-    return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
+    return (
+      text != null &&
+      text.includes('@astryxdesign/core') &&
+      /\b(?:Icon)?Button\b/.test(text)
+    );
   });
-  if (candidates.length === 0) return {found: [], files: files.length, incomplete: false};
+  if (candidates.length === 0)
+    return {found: [], files: files.length, incomplete: false};
   // A script that listens for a press through the DOM may act on any button,
   // by its wrapper's id or from the document, so no button is judged.
-  const listener = files.find(file => !TEST_FOLDER.test(relative(file)) && DOM_PRESS_LISTENER.test(textOf(file) ?? ''));
-  if (listener) return {found: [], files: files.length, incomplete: false, domListener: relative(listener)};
+  const listener = files.find(
+    file =>
+      !TEST_FOLDER.test(relative(file)) &&
+      DOM_PRESS_LISTENER.test(textOf(file) ?? ''),
+  );
+  if (listener)
+    return {
+      found: [],
+      files: files.length,
+      incomplete: false,
+      domListener: relative(listener),
+    };
   const declared = declaredPackages(projectDir);
   const ownName = readPackageJson(path.join(projectDir, 'package.json'))?.name;
   // The project's own packages, by name: a package.json in a folder of the
@@ -566,27 +520,42 @@ export function findButtonsWithoutAction(projectDir) {
   /** @type {Set<string>} */
   const walked = new Set();
   for (const file of files) {
-    for (let dir = path.dirname(file); isInside(dir, projectDir) && !walked.has(dir); dir = path.dirname(dir)) {
+    for (
+      let dir = path.dirname(file);
+      isInside(dir, projectDir) && !walked.has(dir);
+      dir = path.dirname(dir)
+    ) {
       walked.add(dir);
       const name = readPackageJson(path.join(dir, 'package.json'))?.name;
-      if (typeof name === 'string' && !localPackages.has(name)) localPackages.set(name, dir);
+      if (typeof name === 'string' && !localPackages.has(name))
+        localPackages.set(name, dir);
     }
   }
   /** @type {Map<string, {kind: 'member' | 'installed' | 'none', dir: string | null}>} */
   const installed = new Map();
   // Where Node finds a package from a file: a workspace member is linked from
   // node_modules to a folder of the project outside any node_modules.
-  const installedAs = (/** @type {string} */ name, /** @type {string} */ file) => {
+  const installedAs = (
+    /** @type {string} */ name,
+    /** @type {string} */ file,
+  ) => {
     const key = `${path.dirname(file)}\0${name}`;
     let found = installed.get(key);
     if (found == null) {
       const local = localPackages.get(name);
-      const packageDir = local ?? findInstalledPackage(path.dirname(file), name, Infinity);
+      const packageDir =
+        local ?? findInstalledPackage(path.dirname(file), name, Infinity);
       found = {kind: packageDir == null ? 'none' : 'installed', dir: null};
       if (packageDir != null) {
         try {
           const dir = fs.realpathSync(packageDir);
-          if (isInside(dir, projectDir) && !path.relative(projectDir, dir).split(path.sep).includes('node_modules')) {
+          if (
+            isInside(dir, projectDir) &&
+            !path
+              .relative(projectDir, dir)
+              .split(path.sep)
+              .includes('node_modules')
+          ) {
             found = {kind: 'member', dir};
           }
         } catch {
@@ -602,10 +571,14 @@ export function findButtonsWithoutAction(projectDir) {
   // resolves, such as an alias with no tsconfig path. The project's own name
   // (a package.json `exports` path to its own files) and a workspace member
   // (a package linked to a folder of the project) are its own code.
-  const knownPackage = (/** @type {string} */ specifier, /** @type {string} */ file) => {
+  const knownPackage = (
+    /** @type {string} */ specifier,
+    /** @type {string} */ file,
+  ) => {
     const {name} = splitSpecifier(specifier.replace(/^node:/, ''));
     if (name === ownName) return false;
-    if (specifier.startsWith('node:') || builtinModules.includes(name)) return true;
+    if (specifier.startsWith('node:') || builtinModules.includes(name))
+      return true;
     const {kind} = installedAs(name, file);
     if (kind === 'member') return false;
     return declared.has(name) || kind === 'installed';
@@ -616,7 +589,9 @@ export function findButtonsWithoutAction(projectDir) {
   /** @type {Set<string>} */
   const importedMembers = new Set();
   for (const file of [...files, ...markup]) {
-    for (const [, specifier] of (textOf(file) ?? '').matchAll(NON_RELATIVE_MODULE)) {
+    for (const [, specifier] of (textOf(file) ?? '').matchAll(
+      NON_RELATIVE_MODULE,
+    )) {
       if (specifier.startsWith('#')) continue;
       const {name} = splitSpecifier(specifier);
       const {kind, dir} = installedAs(name, file);
@@ -635,7 +610,9 @@ export function findButtonsWithoutAction(projectDir) {
   };
   // An app that routes by the URL hash opens its first page from a `#` link:
   // one that imports a hash router or a hash history.
-  const hashRouting = files.some(file => routesByHash(textOf(file) ?? '', {jsx: !/\.[cm]?ts$/.test(file)}));
+  const hashRouting = files.some(file =>
+    routesByHash(textOf(file) ?? '', {jsx: !/\.[cm]?ts$/.test(file)}),
+  );
   /** @type {Map<string, import('../../foundation/discovery/button-actions.mjs').ModuleScan | null>} */
   const scans = new Map();
   const scan = (/** @type {string} */ file) => {
@@ -658,7 +635,9 @@ export function findButtonsWithoutAction(projectDir) {
                 const target = /^\.{1,2}(?:\/|$)/.test(specifier)
                   ? path.resolve(path.dirname(file), specifier)
                   : ownImportTarget(specifier, file);
-                return specifierStem((target ?? specifier).split(path.sep).join('/'));
+                return specifierStem(
+                  (target ?? specifier).split(path.sep).join('/'),
+                );
               },
             }),
       );
@@ -671,7 +650,9 @@ export function findButtonsWithoutAction(projectDir) {
   /** @type {Set<string>} */
   const aliasImporters = new Set();
   for (const file of files) {
-    for (const [, specifier] of (textOf(file) ?? '').matchAll(NON_RELATIVE_MODULE)) {
+    for (const [, specifier] of (textOf(file) ?? '').matchAll(
+      NON_RELATIVE_MODULE,
+    )) {
       if (specifier.startsWith('#') || projectMapsImport(specifier, file)) {
         aliasImporters.add(file);
         break;
@@ -686,7 +667,9 @@ export function findButtonsWithoutAction(projectDir) {
     const pattern = new RegExp(`\\b(?:${alternatives})\\b`);
     return [...files, ...markup].filter(file => {
       const text = textOf(file) ?? '';
-      return pattern.test(text) || FOLDER_PATH.test(text) || aliasImporters.has(file);
+      return (
+        pattern.test(text) || FOLDER_PATH.test(text) || aliasImporters.has(file)
+      );
     });
   };
   // A module that loads modules by a path the scan cannot read may load any
@@ -699,7 +682,11 @@ export function findButtonsWithoutAction(projectDir) {
   for (const file of [...files, ...markup]) {
     // A tool's config file (`next.config.js`, beside a package.json) loads its
     // own settings, never a component.
-    if (/\.config\.[cm]?[jt]s$/.test(file) && fs.existsSync(path.join(path.dirname(file), 'package.json'))) continue;
+    if (
+      /\.config\.[cm]?[jt]s$/.test(file) &&
+      fs.existsSync(path.join(path.dirname(file), 'package.json'))
+    )
+      continue;
     const text = textOf(file) ?? '';
     if (!/\bimport\s*\(|\brequire\b|import\.meta\.glob/.test(text)) continue;
     const read = scan(file);
@@ -707,7 +694,13 @@ export function findButtonsWithoutAction(projectDir) {
     const folders = read
       ? read.loads
       : [...text.matchAll(TEXT_LOAD)]
-          .filter(([, quote, written]) => !quote || written === '' || /^\.{1,2}\//.test(written) || !knownPackage(written, file))
+          .filter(
+            ([, quote, written]) =>
+              !quote ||
+              written === '' ||
+              /^\.{1,2}\//.test(written) ||
+              !knownPackage(written, file),
+          )
           .map(([, quote, written]) => loadFolder(quote ? written : ''));
     for (const folder of folders) {
       if (folder === '*') loadsAnything = true;
@@ -725,16 +718,32 @@ export function findButtonsWithoutAction(projectDir) {
   // A linked folder or file the walk does not follow may render any
   // component, so no component counts as one that nothing renders.
   const complete = skippedLinks.length === 0;
-  const found = buttonsWithoutAction({files: withButtons, scan, modulesNaming, loaded, complete}).map(each => ({
+  const found = buttonsWithoutAction({
+    files: withButtons,
+    scan,
+    modulesNaming,
+    loaded,
+    complete,
+  }).map(each => ({
     ...each,
     file: path.relative(projectDir, each.file).split(path.sep).join('/'),
   }));
-  found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
+  found.sort(
+    (a, b) =>
+      compareText(a.file, b.file) || a.line - b.line || a.column - b.column,
+  );
   return {found, files: files.length, incomplete: false};
 }
 
 /** The conditions a bundler reads a package.json `imports` key under. */
-const BUNDLER_CONDITIONS = ['types', 'import', 'module', 'browser', 'require', 'node'];
+const BUNDLER_CONDITIONS = [
+  'types',
+  'import',
+  'module',
+  'browser',
+  'require',
+  'node',
+];
 
 /**
  * The module of the app's own code that a path alias or a package.json
@@ -748,8 +757,12 @@ const BUNDLER_CONDITIONS = ['types', 'import', 'module', 'browser', 'require', '
 function ownImportTarget(specifier, file) {
   if (specifier.startsWith('#')) {
     const root = findPackageRoot(path.dirname(file));
-    const imports = root ? readPackageJson(path.join(root, 'package.json'))?.imports : null;
-    const target = root ? packageImportTarget(imports, specifier, BUNDLER_CONDITIONS) : null;
+    const imports = root
+      ? readPackageJson(path.join(root, 'package.json'))?.imports
+      : null;
+    const target = root
+      ? packageImportTarget(imports, specifier, BUNDLER_CONDITIONS)
+      : null;
     if (!root || !target?.startsWith('./')) return null;
     return existingFile(path.join(root, target)) ?? path.join(root, target);
   }
@@ -766,188 +779,62 @@ function ownImportTarget(specifier, file) {
 function declaredPackages(projectDir, {ownName = false} = {}) {
   const pkg = readPackageJson(path.join(projectDir, 'package.json')) ?? {};
   return new Set(
-    ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
+    [
+      'dependencies',
+      'devDependencies',
+      'peerDependencies',
+      'optionalDependencies',
+    ]
       .flatMap(field => Object.keys(pkg[field] ?? {}))
       .concat(ownName && typeof pkg.name === 'string' ? [pkg.name] : []),
   );
 }
 
 /**
- * A TypeScript module that may widen what JSX gives every component: one
- * that augments React or the global scope (where `JSX` lives), or that loads
- * a library's `css` prop types.
- */
-const JSX_DECLARATION = /\bdeclare\s+(?:module\s+['"]react(?:\/jsx-runtime)?['"]|global\b)|\bnamespace\s+JSX\b|styled-components\/cssprop|@emotion\/react\/types\/css-prop/;
-
-/**
- * A module that compiles its JSX with a runtime other than React's (a
- * `@jsxImportSource` or `@jsx` pragma), which can give every component props
- * of its own.
- */
-const OTHER_JSX_RUNTIME = /@jsxImportSource\s+(?!react(?:\s|\*|$))\S|@jsx\s+(?!React\.createElement\b)[A-Za-z_$]/m;
-
-/**
- * The JSX runtime other than React's that compiler options name: a
- * `jsxImportSource` other than `react`, or a `jsxFactory` other than
- * `React.createElement`. Null for React's.
- * @param {Record<string, unknown>} options
- * @returns {string | null}
- */
-function otherJsxRuntime(options) {
-  const {jsxImportSource: source, jsxFactory: factory} = options;
-  if (typeof source === 'string' && source !== 'react') return source;
-  if (typeof factory === 'string' && factory !== 'React.createElement') return factory;
-  return null;
-}
-
-/**
- * A build config, by file name, that can set how JSX compiles: Babel, SWC,
- * Vite, Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or tsup.
- */
-const BUILD_CONFIG =
-  /^(?:\.babelrc(?:\.[cm]?js|\.json)?|babel\.config\.(?:[cm]?[jt]s|json)|\.swcrc|(?:vite|vitest|webpack|rspack|rsbuild|next|esbuild|tsup)\.config\.[cm]?[jt]s)$/;
-
-/**
- * A build setting that compiles JSX other than as React does: a runtime
- * (`jsxImportSource`, `importSource`) other than `react`; a classic factory
- * (`jsxFactory`, `pragma`, a name such as `jsx` or `h`) other than
- * `React.createElement`; or Next.js's `styledComponents` compiler option,
- * which compiles a `css` prop, when it is not `false`.
- */
-const BUILD_JSX_RUNTIME =
-  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*['"]|\bstyledComponents['"]?\s*:(?!\s*false\b)/;
-
-/**
- * The packages that compile a `css` prop at build time, whatever name the
- * build config gives them (Babel reads `styled-components` as
- * `babel-plugin-styled-components`): a config can use one only when the
- * project depends on it, or when it is installed through another package
- * (`gatsby-plugin-emotion` brings emotion's preset).
- */
-const CSS_PROP_TRANSFORMS = new Set([
-  '@emotion/babel-preset-css-prop',
-  'gatsby-plugin-emotion',
-  'babel-plugin-styled-components',
-  '@swc/plugin-styled-components',
-  '@compiled/babel-plugin',
-  '@compiled/webpack-loader',
-  '@compiled/vite-plugin',
-  '@compiled/parcel-config',
-  '@compiled/parcel-transformer',
-]);
-
-/**
- * What compiles the JSX of a page other than as React does, in the folder of
- * the page or a folder above it, up to the project's workspace root (as
- * `findWorkspaceRoot` reads it): a build config
- * that sets another runtime or factory (a config file, or the `babel` key of
- * a `package.json`), a `package.json` that depends on a transform that
- * compiles a `css` prop, or such a transform installed where the project
- * finds packages. Null when nothing does.
- * @param {string[]} pages
- * @param {string} projectDir
- * @returns {{file: string, transform: string | null, installed?: boolean} | null}
- *   the config, and the transform it depends on or has installed
- */
-function buildJsxRuntime(pages, projectDir) {
-  const top = findWorkspaceRoot(projectDir);
-  /** @type {Map<string, {file: string, transform: string | null, installed?: boolean} | null>} */
-  const configIn = new Map();
-  const read = (/** @type {string} */ dir) => {
-    /** @type {string[]} */
-    let names;
-    try {
-      names = fs.readdirSync(dir).sort();
-    } catch {
-      return null;
-    }
-    for (const name of names) {
-      const file = path.join(dir, name);
-      /** @type {string | null} */
-      let text = null;
-      try {
-        if (BUILD_CONFIG.test(name)) text = readTextFile(file);
-        else if (name === 'package.json') {
-          const manifest = JSON.parse(readTextFile(file));
-          for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
-            const transform = Object.keys(manifest?.[field] ?? {}).find(dependency => CSS_PROP_TRANSFORMS.has(dependency));
-            if (transform) return {file, transform};
-          }
-          text = manifest?.babel == null ? null : JSON.stringify(manifest.babel);
-        }
-      } catch {
-        continue;
-      }
-      if (text != null && BUILD_JSX_RUNTIME.test(text)) return {file, transform: null};
-    }
-    return null;
-  };
-  for (const page of pages) {
-    for (let dir = path.dirname(page); ; dir = path.dirname(dir)) {
-      if (!configIn.has(dir)) configIn.set(dir, read(dir));
-      const found = configIn.get(dir);
-      if (found) return found;
-      if (dir === top || path.relative(top, dir).startsWith('..') || dir === path.dirname(dir)) break;
-    }
-  }
-  // A transform installed where a page finds packages: the project's own
-  // folders, or a workspace member's.
-  const pageDirs = [...new Set([projectDir, ...pages.map(page => path.dirname(page))])];
-  for (const transform of [...CSS_PROP_TRANSFORMS].sort()) {
-    for (const dir of pageDirs) {
-      const installed = findInstalledPackage(dir, transform, Infinity);
-      if (installed) return {file: installed, transform, installed: true};
-    }
-  }
-  return null;
-}
-
-/**
- * @typedef {object} UnknownCoreProp
- * @property {string} file relative to the project, with `/`
- * @property {number} line
- * @property {number} column
- * @property {string} component
- * @property {string} prop
- * @property {string | null} suggestion a documented prop with the same
- *   words, when there is one
- */
-
-/**
  * The props the project's own source gives Core components that the
- * component does not take. A prop is a candidate when Core's docs for the
- * component (the props `astryx component <Name> --package @astryxdesign/core`
- * lists) leave it out, and it is reported only when the project's TypeScript,
- * reading Core's own published types as the project's pages see them, says
- * the component's props do not take it either; the project's own modules
- * that widen React's JSX are read with Core's types. A prop name React's types
- * give an HTML or SVG element is never reported, since a component may pass
- * it on to the element it renders, and neither is a prop JSX gives every
- * component. A component with no docs, one TypeScript cannot read, a generic
- * one, and a module that compiles its JSX with another runtime are not
- * judged. Test, story and fixture files are not read. Each page is judged
- * with the config TypeScript reads for it. `skipped` says why nothing was
- * checked: no TypeScript, a config that compiles JSX with another runtime, or
- * more source files than doctor reads, whatever the pages hold; or, for a
- * prop the docs leave out, types or augmentations it could not read.
+ * component does not take, judged by `judgeCoreProps`. Test, story and
+ * fixture files are not read, and neither is a module that compiles its JSX
+ * with another runtime (a pragma). `skipped` says why nothing was checked:
+ * no TypeScript, more source files than doctor reads, pages that find no
+ * installed Core, or a config or build on another JSX runtime, whatever the
+ * pages hold; or, for a prop the docs leave out, the reason `judgeCoreProps`
+ * gives.
  * @param {string} projectDir
- * @returns {Promise<{found: UnknownCoreProp[], uses: number, skipped: string | null}>}
+ * @returns {Promise<{found: import('../../foundation/discovery/unknown-core-props.mjs').UnknownCoreProp[], uses: number, skipped: string | null}>}
  */
 export async function findUnknownCoreProps(projectDir) {
-  const notChecked = (/** @type {string} */ reason) => ({found: [], uses: 0, skipped: `${reason}, so the props were not checked.`});
+  const notChecked = (/** @type {string} */ reason) => ({
+    found: [],
+    uses: 0,
+    skipped: `${reason}, so the props were not checked.`,
+  });
   const files = listProjectSourceFiles(projectDir, '');
   // A declaration beyond the files doctor reads could add a prop to every
   // component.
-  if (files.length >= SOURCE_FILE_LIMIT) return notChecked('the project has more source files than doctor reads');
+  if (files.length >= SOURCE_FILE_LIMIT)
+    return notChecked('the project has more source files than doctor reads');
   const compiler = resolveProjectTypeScript([projectDir]);
   if (compiler === null) {
-    return {found: [], uses: 0, skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`};
+    return {
+      found: [],
+      uses: 0,
+      skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`,
+    };
   }
   if (compiler.ts === null) {
-    return {found: [], uses: 0, skipped: unusableTypeScriptReason(compiler.version, 'the props were not checked')};
+    return {
+      found: [],
+      uses: 0,
+      skipped: unusableTypeScriptReason(
+        compiler.version,
+        'the props were not checked',
+      ),
+    };
   }
-  const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
-  /** @type {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string, path: string}>} */
+  const {ts} = compiler;
+  const relative = (/** @type {string} */ file) =>
+    path.relative(projectDir, file).split(path.sep).join('/');
+  /** @type {import('../../foundation/discovery/unknown-core-props.mjs').PageCorePropUse[]} */
   const uses = [];
   /** @type {string[]} */
   const jsxDeclarations = [];
@@ -962,158 +849,39 @@ export async function findUnknownCoreProps(projectDir) {
     } catch {
       continue;
     }
-    if (/\.[cm]?tsx?$/.test(file) && JSX_DECLARATION.test(text)) jsxDeclarations.push(file);
-    if (notPageCode(relative(file)) || !text.includes('@astryxdesign/core')) continue;
+    if (widensJsx(file, text)) jsxDeclarations.push(file);
+    if (notPageCode(relative(file)) || !text.includes('@astryxdesign/core'))
+      continue;
     corePages.push(file);
     if (OTHER_JSX_RUNTIME.test(text)) continue;
     // The scanner loads only when a page imports Core.
-    scanCoreProps ??= (await import('../../foundation/discovery/core-props.mjs')).scanCoreProps;
-    for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file), path: file});
+    scanCoreProps ??= (
+      await import('../../foundation/discovery/core-props.mjs')
+    ).scanCoreProps;
+    for (const use of scanCoreProps(text) ?? [])
+      uses.push({...use, file: relative(file), path: file});
   }
-  // Each page that imports Core is read with the config TypeScript reads for
-  // it; pages that share a config share one read.
-  /** @type {Map<string, {file: string, options: Record<string, unknown>}>} */
-  const configs = new Map();
-  /** @type {Map<string, string>} */
-  const configOf = new Map();
-  for (const file of corePages) {
-    const config = compilerOptionsFor(file) ?? {file: '', options: {}};
-    configs.set(config.file, config);
-    configOf.set(file, config.file);
-  }
-  // Each page is read as TypeScript reads it: with its config, and with Core
-  // and React found from the page's own folder. Pages that share a config and
-  // an installed Core share one read. A page whose config maps a Core module
-  // path elsewhere (`paths`) reads another module, and a page that finds no
-  // installed Core has no types to read; neither is judged.
-  /** @type {Map<string, string | null>} */
-  const coreFrom = new Map();
-  const coreDirFrom = (/** @type {string} */ dir) => {
-    if (!coreFrom.has(dir)) {
-      const found = findInstalledPackage(dir, '@astryxdesign/core', Infinity);
-      let real = found;
-      try {
-        real = found ? fs.realpathSync(found) : null;
-      } catch {
-        // A Core folder that does not resolve is read where it is found.
-      }
-      coreFrom.set(dir, real);
-    }
-    return coreFrom.get(dir) ?? null;
-  };
-  // Pages that import Core and find no installed Core have no types to read.
-  if (corePages.length > 0 && corePages.every(page => !coreDirFrom(path.dirname(page)))) {
-    return notChecked('Core is not installed where the pages that import it can find it');
-  }
-  for (const {options} of configs.values()) {
-    const runtime = otherJsxRuntime(options);
-    if (runtime) return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
-  }
-  const build = buildJsxRuntime(corePages, projectDir);
-  if (build?.transform) {
-    return notChecked(
-      `${build.installed ? `\`${build.transform}\` is installed` : `the project depends on \`${build.transform}\``}, which compiles a \`css\` prop that every component can take`,
-    );
-  }
-  if (build) {
-    return notChecked(
-      `the build config \`${relative(build.file)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
-    );
-  }
-  /** @type {Map<string, {configFile: string, from: string, uses: typeof uses}>} */
-  const groups = new Map();
-  for (const use of uses) {
-    if (projectMapsImport(use.source, use.path)) continue;
-    const from = path.dirname(use.path);
-    const coreDir = coreDirFrom(from);
-    if (!coreDir) continue;
-    const configFile = configOf.get(use.path) ?? '';
-    const key = `${configFile}\0${coreDir}`;
-    const group = groups.get(key) ?? /** @type {any} */ (groups.set(key, {configFile, from, uses: []}).get(key));
-    group.uses.push(use);
-  }
-  /** @type {UnknownCoreProp[]} */
-  const found = [];
-  for (const group of groups.values()) {
-    const {COMPONENT_BATCH_SELECTOR_LIMIT, component: componentAnswer} = await import('../component/component.mjs');
-    // Batched reads of the props the docs of the group's Core list, as
-    // `astryx component <Name> --props` prints them; a component they do not
-    // describe is not judged.
-    /** @type {Map<string, string[]>} */
-    const documented = new Map();
-    const names = [...new Set(group.uses.map(use => use.component))];
-    for (let start = 0; start < names.length; start += COMPONENT_BATCH_SELECTOR_LIMIT) {
-      const batch = names.slice(start, start + COMPONENT_BATCH_SELECTOR_LIMIT);
-      const answer = /** @type {any} */ (await componentAnswer(batch, {cwd: group.from, package: '@astryxdesign/core', props: true}));
-      for (const read of answer?.data?.results ?? []) {
-        const props = read?.status === 'found' ? read.result?.data : null;
-        if (Array.isArray(props)) documented.set(read.selector, props.map((/** @type {any} */ prop) => prop?.name).filter(Boolean));
-      }
-    }
-    const candidates = group.uses.filter(use => {
-      const props = documented.get(use.component);
-      return props != null && !props.includes(use.prop);
-    });
-    if (candidates.length === 0) continue;
-    const {readCorePropTypes} = await import('../../foundation/discovery/core-prop-types.mjs');
-    // What augments Core for a page: the project's files and installed
-    // packages, and those of the page's own package, as a workspace member
-    // installs its own.
-    const memberDir = findPackageRoot(group.from) ?? projectDir;
-    const reads = [projectAugmentations(projectDir, candidates[0].path)];
-    if (memberDir !== projectDir) reads.push(projectAugmentations(memberDir, candidates[0].path));
-    if (reads.some(read => !read.complete)) return notChecked("the files that may add to Core's types could not all be read");
-    const augmentations = {files: [...new Set(reads.flatMap(read => read.files))]};
-    /** @type {Map<string, Set<string>>} */
-    const asked = new Map();
-    /** @type {Map<string, string>} */
-    const sources = new Map();
-    for (const use of candidates) {
-      (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
-      if (!sources.has(use.component)) sources.set(use.component, use.source);
-    }
-    const types = readCorePropTypes({
-      ts: compiler.ts,
-      projectDir: group.from,
-      configDir: group.configFile ? path.dirname(group.configFile) : group.from,
-      options: configs.get(group.configFile)?.options ?? {},
-      augmentations: [...augmentations.files, ...jsxDeclarations],
-      props: asked,
-      sources,
-      configFile: group.configFile || undefined,
-    });
-    if (types.unread) return notChecked(types.unread);
-    for (const use of candidates) {
-      if (types.attributes.has(use.prop) || types.takes.get(use.component)?.get(use.prop) !== false) continue;
-      const {path: _file, source: _source, ...report} = use;
-      found.push({...report, suggestion: closestProp(use.prop, documented.get(use.component) ?? [])});
-    }
-  }
-  found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
-  return {found, uses: uses.length, skipped: null};
-}
-
-/**
- * The documented prop a name means, when one has the same words: in another
- * order or case, with a plural `s`, or with the `is` or `has` that Core puts
- * in front of a yes-or-no prop (`isLabelHidden` for `labelHidden`,
- * `startIcon` for `iconStart`). Words are read as a failed lookup reads them.
- * A name with another word, or a near spelling, can mean something else
- * (`padding` for `paddingX`, `maxWidth` for `minWidth`), so it is not
- * offered. Null when no prop has the same words.
- * @param {string} name
- * @param {string[]} props
- * @returns {string | null}
- */
-function closestProp(name, props) {
-  const key = (/** @type {string} */ text) =>
-    nameWords(text)
-      .filter(word => word !== 'is' && word !== 'has')
-      .map(word => (word.length > 3 ? word.replace(/s$/, '') : word))
-      .sort()
-      .join(' ');
-  const wanted = key(name);
-  return orderByAffinity(name, props, prop => [prop]).find(prop => prop !== name && key(prop) === wanted) ?? null;
+  const judged = await judgeCoreProps({
+    projectDir,
+    // Doctor says a project on another JSX runtime is not checked whatever
+    // its props are.
+    runtimeFirst: true,
+    uses,
+    pages: corePages,
+    readDocs: async (names, cwd) => {
+      const {COMPONENT_BATCH_SELECTOR_LIMIT, component: componentAnswer} =
+        await import('../component/component.mjs');
+      return readCoreDocs(
+        componentAnswer,
+        names,
+        cwd,
+        COMPONENT_BATCH_SELECTOR_LIMIT,
+      );
+    },
+    typescript: () => ({ts}),
+    jsxDeclarations: () => jsxDeclarations,
+  });
+  return {...judged, uses: judged.skipped ? 0 : uses.length};
 }
 
 /**
@@ -1559,24 +1327,19 @@ export async function computerIntegrationsOutside(cwd) {
   }
   /** @type {Array<{name: string, __computer?: boolean, __loadError?: string}>} */
   const loaded = project.loadedIntegrations;
-  const used = loaded
-    .filter(i => i.__computer && !i.__loadError)
-    .map(i => i.name);
+  const used = loaded.filter(doctorChecksOutside).map(i => i.name);
   // The everyday commands count these issues when they point at doctor, so
-  // doctor names them. Doctor reads no Core outside a project, so it leaves
-  // out the comparisons with Core components; the everyday commands judge
-  // those against the Core they carry. Core's templates come with the CLI.
+  // doctor names them. Where doctor reads no Core, they name a comparison
+  // with Core components themselves.
   const names = new Set(used);
-  const noCore = project.coreDir() == null;
+  const doctorReadsCore = project.coreDir() != null;
   /** @type {Array<{package: string, severity: string, message: string}>} */
   let issues = [];
   try {
     issues = (await project.issues())
       .filter(
         issue =>
-          names.has(issue.package) &&
-          pointsToDoctor(issue) &&
-          !(noCore && CORE_COMPARISON_CODES.has(issue.code)),
+          names.has(issue.package) && pointsToDoctor(issue, {doctorReadsCore}),
       )
       .map(issue => ({
         package: issue.package,
@@ -2024,7 +1787,6 @@ export async function fontPackagesInstallLine(projectDir, families) {
   };
 }
 
-
 /**
  * What doctor reads about the project's skill places.
  * @typedef {object} SkillPlacesReport
@@ -2053,7 +1815,8 @@ export async function fontPackagesInstallLine(projectDir, families) {
 export async function readSkillPlaces(cwd) {
   const root = resolveAgentDocsRoot(cwd) ?? cwd;
   /** @param {string} file */
-  const shown = file => path.relative(cwd, file).split(path.sep).join('/') || '.';
+  const shown = file =>
+    path.relative(cwd, file).split(path.sep).join('/') || '.';
   /** @param {string} file */
   const read = file => {
     try {
@@ -2073,7 +1836,9 @@ export async function readSkillPlaces(cwd) {
     atHome = true;
   }
   const places = atHome ? [] : await readProjectPlaces(root);
-  const skillPlaces = places.filter(place => place.kind === 'skills' || place.kind === 'folder');
+  const skillPlaces = places.filter(
+    place => place.kind === 'skills' || place.kind === 'folder',
+  );
   /** @type {SkillPlacesReport['files']} */
   const files = [];
   // A place linked out of the project is not the project's: init and
@@ -2095,18 +1860,32 @@ export async function readSkillPlaces(cwd) {
       const text = renderProjectSkill(await renderProjectAgentDocsBlock(root));
       const declared = await integrationSkillFiles(root);
       // A package that did not load is the integration checks' to report.
-      skillProblems.push(...declared.problems.filter(problem => !problem.unread));
+      skillProblems.push(
+        ...declared.problems.filter(problem => !problem.unread),
+      );
       const keep = declared.keep;
       for (const place of inside) {
         for (const {file, state} of inspectSkillPlace(place, root, text)) {
           files.push({path: shown(file), place: savedName(place), state});
         }
         for (const each of declared.skills) {
-          for (const {file, state} of inspectSkillPlace(place, root, each.text, each.name)) {
-            files.push({path: shown(file), place: savedName(place), skill: each.name, state});
+          for (const {file, state} of inspectSkillPlace(
+            place,
+            root,
+            each.text,
+            each.name,
+          )) {
+            files.push({
+              path: shown(file),
+              place: savedName(place),
+              skill: each.name,
+              state,
+            });
           }
         }
-        for (const file of declared.complete ? leftoverIntegrationSkills(place, root, keep) : []) {
+        for (const file of declared.complete
+          ? leftoverIntegrationSkills(place, root, keep)
+          : []) {
           leftovers.push(shown(file));
         }
       }
@@ -2118,7 +1897,11 @@ export async function readSkillPlaces(cwd) {
   // pointer line, so its problems are read either way.
   if (skillPlaces.length === 0) {
     try {
-      skillProblems.push(...(await integrationSkillFiles(root)).problems.filter(problem => !problem.unread));
+      skillProblems.push(
+        ...(await integrationSkillFiles(root)).problems.filter(
+          problem => !problem.unread,
+        ),
+      );
     } catch {
       // Unreadable integrations are the integration checks' to report.
     }
@@ -2130,7 +1913,10 @@ export async function readSkillPlaces(cwd) {
   // out of the project (such as `.claude` linked to `~/.claude`) holds the
   // computer's skills, not the project's, so it is not read.
   const projectFolders = (atHome ? [] : PROJECT_SKILL_FOLDERS).filter(folder =>
-    resolvesInside(path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md'), root),
+    resolvesInside(
+      path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md'),
+      root,
+    ),
   );
   // The project skill copies in those folders.
   const skillsFolderFiles = projectFolders
@@ -2141,7 +1927,9 @@ export async function readSkillPlaces(cwd) {
   // the folder places saved in the project.
   const skillFiles = [
     ...new Set([
-      ...projectFolders.map(folder => path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md')),
+      ...projectFolders.map(folder =>
+        path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md'),
+      ),
       ...inside
         .filter(place => place.kind === 'folder')
         .flatMap(place => placeSkillFiles(place, root)),
@@ -2149,7 +1937,8 @@ export async function readSkillPlaces(cwd) {
   ]
     .filter(file => read(file) != null)
     .map(shown);
-  const plainNamed = projectFolders.map(folder => path.join(root, folder, COMPUTER_SKILL_NAME))
+  const plainNamed = projectFolders
+    .map(folder => path.join(root, folder, COMPUTER_SKILL_NAME))
     .filter(dir => fs.existsSync(path.join(dir, 'SKILL.md')))
     .map(shown);
   return {
