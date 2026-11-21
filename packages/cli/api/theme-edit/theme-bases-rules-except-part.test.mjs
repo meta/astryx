@@ -195,12 +195,13 @@ describe('wrong writes that are no longer accepted', () => {
     T,
   );
   it(
-    'y2k: rounder corners keep the pill badges a pill',
+    'y2k: rounder corners keep the badges on the element corners',
     async test => {
       needsBases(test);
       await themeEditSet('y', 'corners', 'more', {cwd});
       const css = fs.readFileSync(path.join(cwd, 'themes/y/y.css'), 'utf8');
       const badge = /\.astryx-badge \{[^}]*\}/.exec(css)?.[0] ?? '';
+      expect(badge).toMatch(/border-radius: var\(--radius-element\)/);
       expect(badge).not.toMatch(/border-radius: var\(--radius-full\)/);
     },
     T,

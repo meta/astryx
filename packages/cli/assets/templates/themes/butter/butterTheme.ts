@@ -853,8 +853,7 @@ export const butterTheme = defineTheme({
       ...INPUT_STATUS_VARS,
     },
     selector: {
-      // (Inline padding only: Core sets the block padding that keeps this
-      // control at its size's height, beside the other controls.)
+      // Inline padding only. Core sets the block padding that keeps the control at its size's height.
       base: {
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -863,8 +862,7 @@ export const butterTheme = defineTheme({
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'multi-selector': {
-      // (Inline padding only: Core sets the block padding that keeps this
-      // control at its size's height, beside the other controls.)
+      // Inline padding only. Core sets the block padding that keeps the control at its size's height.
       base: {
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -874,8 +872,7 @@ export const butterTheme = defineTheme({
     },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
     typeahead: {
-      // (Inline padding only: Core sets the block padding that keeps this
-      // control at its size's height, beside the other controls.)
+      // Inline padding only. Core sets the block padding that keeps the control at its size's height.
       base: {
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -883,8 +880,7 @@ export const butterTheme = defineTheme({
       ...INPUT_STATUS_VARS,
     },
     tokenizer: {
-      // (Inline padding only: Core sets the block padding that keeps this
-      // control at its size's height, beside the other controls.)
+      // Inline padding only. Core sets the block padding that keeps the control at its size's height.
       base: {
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
