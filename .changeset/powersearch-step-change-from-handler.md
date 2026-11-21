@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] PowerSearch's touch presentation moves focus to the control a step change names during the action that makes the change, not after the next render. Where focus lands and what is announced do not change.
+[chore] Internal: PowerSearch's touch presentation moves focus and speaks a step change from the handler of the action, not from Effects keyed on the step. Apps see no change in where focus lands or what is announced.
 
 @cixzhang

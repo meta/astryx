@@ -1593,11 +1593,9 @@ export function PowerSearchBottomSheet({
     [changeStep, filters, isInteractive, nextDraftGeneration],
   );
 
-  // Removes the filter at `index` and shows Filters, with focus on the next
-  // editable row's remove action, else Add filter. The popover
-  // presentation's token × announces the same phrase. A removal from a
-  // Filters row stays in that sheet; a caller's Editor that removes returns
-  // to it; either way the words are spoken in the Filters sheet's dialog.
+  // The popover's token × announces the same phrase. The words are spoken in
+  // the Filters sheet's dialog, also when a caller's Editor removes the filter
+  // from the value step.
   const handleRemoveFilter = useCallback(
     (index: number) => {
       const filter = filters[index];
