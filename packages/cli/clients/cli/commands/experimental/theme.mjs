@@ -744,7 +744,11 @@ const VARIANT_LINES = 4;
 function valueText(v) {
   if (v == null) return 'no value';
   if (typeof v === 'string') return v;
-  return `light ${v.light ?? 'no value'}, dark ${v.dark ?? 'no value'}`;
+  // (A mode left out is not shown yet; a mode given as null has no value.)
+  return /** @type {const} */ (['light', 'dark'])
+    .filter(m => m in v)
+    .map(m => `${m} ${v[m] ?? 'no value'}`)
+    .join(', ');
 }
 
 /**
@@ -800,7 +804,7 @@ function partValueBlocks(d) {
     value: valueText(v.value),
     tokens: (Array.isArray(v.tokens)
       ? v.tokens
-      : [...new Set([...v.tokens.light, ...v.tokens.dark])]
+      : [...new Set([...(v.tokens.light ?? []), ...(v.tokens.dark ?? [])])]
     ).join(' '),
     source: v.source,
     via: v.via,
@@ -1603,9 +1607,12 @@ function previewExtraWords(sub, doc, head) {
  * there is none.
  * @param {string} name
  * @param {unknown[]} rest the words after the theme
- * @param {{png?: boolean, section?: string}} o the options read
+ * @param {{png?: boolean, section?: string, on?: string}} o the options read
  */
 function showStray(name, rest, o) {
+  // (Beside --on, the refusal offers no other show: a show without --on
+  // writes the pages, and the lookup's own line is not offered yet.)
+  const offer = (/** @type {string} */ line) => (o.on ? null : line);
   // The theme typed as an option (`show --theme t`), as set and undo read
   // it: the show on that theme, never its help alone.
   const asOption = /^--?(?:theme|name)$/i.test(String(name));
@@ -1619,7 +1626,9 @@ function showStray(name, rest, o) {
         option: String(name),
         note: "the theme is show's first word",
       },
-      `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+      offer(
+        `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+      ),
     );
   }
   const stray = rest.map(String).find(w => w.startsWith('-'));
@@ -1632,7 +1641,9 @@ function showStray(name, rest, o) {
     showDoc,
     `${EDITOR} show`,
     {option: stray},
-    `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    offer(
+      `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    ),
   );
 }
 

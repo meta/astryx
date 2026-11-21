@@ -224,7 +224,7 @@ describe('show --on: what one part of a theme shows', () => {
     });
   }, 120_000);
 
-  it('credits the card rules a whole-theme dial writes to that dial, and a variant’s own property setting to the part', async () => {
+  it('reads the card rules a whole-theme dial writes as the part’s (which dial is not shown yet), and a variant’s own property setting as the part’s', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('outlined', {cwd, on: 'card'})
     );
@@ -239,12 +239,13 @@ describe('show --on: what one part of a theme shows', () => {
         ),
     );
     expect(ruled.length).toBeGreaterThan(0);
-    for (const v of ruled) expect(v.via).toBe('dial');
+    // (A whole-theme dial is not credited with a part rule yet.)
+    for (const v of ruled) expect(v.via).toBe('part');
     // A border color set on the card for one variant is that variant's
-    // rule on the part; the card at rest still shows the dial's.
+    // rule on the part; the card at rest still shows the dial's rule.
     expect(valueOf(r, 'border-color')).toMatchObject({
       source: 'theme',
-      via: 'dial',
+      via: 'part',
     });
     expect(valueOf(r, 'border-color', 'variant:muted')).toMatchObject({
       value: '#ff0000',
@@ -449,6 +450,10 @@ describe('show --on: what one part of a theme shows', () => {
     expect(fill).toMatchObject({source: 'theme', via: 'token'});
     expect(fill.value.light).toBe('#abcdef');
     expect(fill.value.dark).not.toBe('#abcdef');
+    // The token's own row gives the light value and leaves the dark one
+    // out (not shown yet), never a null it does not mean.
+    const own = valueOf(r, '--color-background-card');
+    expect(own.value).toEqual({light: '#abcdef'});
   }, 120_000);
 
   it('credits a variant-scoped token block only where it shows', async () => {
@@ -469,6 +474,22 @@ describe('show --on: what one part of a theme shows', () => {
     const muted = valueOf(r, 'background-color', 'variant:muted');
     expect(muted).toMatchObject({source: 'theme'});
     expect(muted.value.light).toBe('#ff0000');
+  }, 120_000);
+
+  it('refuses a stray option beside --on without offering a show that drops --on', async () => {
+    for (const args of [
+      ['show', '--theme', 'neutral', '--on', 'card'],
+      ['show', 'neutral', '--on', 'card', '--zz'],
+    ]) {
+      const out = await runCli(
+        ['--json', 'experimental', 'theme', 'editor', ...args],
+        {cwd},
+      );
+      expect(out.code).not.toBe(0);
+      const err = JSON.parse(out.stdout || out.stderr);
+      const lines = JSON.stringify(err);
+      expect(lines).not.toMatch(/editor show neutral(?! --on)["\s]/);
+    }
   }, 120_000);
 
   it('gives a button’s corner radius once, not once per corner', async () => {

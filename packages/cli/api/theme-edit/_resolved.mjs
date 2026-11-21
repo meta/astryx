@@ -229,8 +229,7 @@ async function loadNamedTheme(ctx, cwd, name) {
     // A rule the theme writes on a part comes from a property setting on
     // it, matched by the rule key the build writes for that setting (its
     // `--when` and `--state` placed the way the build places them), else
-    // from a dial: one on the part, or a whole-theme dial that writes part
-    // rules (`surfaces outlined` writes the card's border).
+    // from a dial on the part.
     /** @type {NonNullable<LoadedTheme['settingAt']>} */
     const settingAt = (property, part, when, state) => {
       const t = ctx.project.target.get(part);
@@ -300,16 +299,17 @@ async function loadNamedTheme(ctx, cwd, name) {
         return onPart ? 'part' : 'token';
       },
       // A rule the theme writes on a part comes from a property setting
-      // on it, else from a dial: one on the part, or a whole-theme dial
-      // that writes part rules (`surfaces outlined` writes the card's
-      // border).
+      // on it, else from a dial on the part.
       settingAt,
+      // (A whole-theme dial is not credited with a part rule: telling the
+      // rules a dial writes from the ones another setting copies there is
+      // not shown yet, so such a rule reads `part`.)
       propertyVia: (property, part, when, state) =>
         settingAt(property, part, when, state)
           ? 'part'
           : data.settings.some(
                 st =>
-                  st.source === 'dial' && (st.on == null || reaches(st, part)),
+                  st.source === 'dial' && st.on != null && reaches(st, part),
               )
             ? 'dial'
             : 'part',
@@ -703,6 +703,7 @@ export async function themePartValues(cwd, name, part) {
         : m.mode === 'light'
           ? {light: a, dark: b}
           : {light: b, dark: a};
+    let alone = false;
     let target = values.find(v => {
       const r = rawKey.get(v);
       return (
@@ -735,6 +736,7 @@ export async function themePartValues(cwd, name, part) {
         values.find(
           v => v.property === m.property && v.when == null && v.state == null,
         );
+      alone = !base;
       target = {
         property: m.property,
         ...cond,
@@ -754,6 +756,13 @@ export async function themePartValues(cwd, name, part) {
     target.value = pair(shown, half(target.value, other));
     target.expression = pair(m.value, half(target.expression, other));
     target.tokens = pair(chain, half(target.tokens, other));
+    // (A row of its own with nothing else under its condition: the other
+    // mode is not shown yet, so it is left out, not given as no value.)
+    if (alone) {
+      target.value = /** @type {any} */ ({[m.mode]: shown});
+      target.expression = /** @type {any} */ ({[m.mode]: m.value});
+      target.tokens = /** @type {any} */ ({[m.mode]: chain});
+    }
     // (A block the theme takes as it is from the theme it extends is the
     // base's.)
     const inherited = !ownBlock(m);
