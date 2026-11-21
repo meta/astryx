@@ -269,7 +269,7 @@ describe('keeps', () => {
     );
     expect(lines[0]).toBe(`set ${t} border-color '#dc2626' --on inputs`);
     expect(lines).toContain(
-      `set ${t} border-color 'var(--color-border-control)' --on text-input --when status:error --only`,
+      `set ${t} border-color 'var(--color-border)' --on text-input --when status:error --only`,
     );
     await follow(lines);
   }, 240_000);

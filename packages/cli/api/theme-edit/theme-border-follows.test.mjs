@@ -1,9 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The emphasized border and the control edge (input, selector and box
- * frames) are never fainter than the border: a fainter border leaves each,
- * a stronger one carries it.
+ * @file The emphasized border (input and selector frames) is never fainter
+ * than the border: a fainter border leaves it, a stronger one carries it.
  * When it follows, the set result says so, and show names what it follows
  * (never the theme's own source).
  */
@@ -29,8 +28,6 @@ let cwd;
 let faint;
 /** @type {any} */
 let strong;
-/** @type {any} */
-let middle;
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-d-border-', FIXTURE_PACKAGES);
@@ -44,9 +41,6 @@ beforeAll(async () => {
   await themeEditSet('br', 'neutral', '#000000', {cwd});
   await themeEditSet('br', 'mode', 'light-only', {cwd});
   strong = (await themeEditSet('br', '--color-border', '#000000', {cwd})).data;
-  await themeEditNew('md', {cwd, like: 'neutral'});
-  await themeEditSet('md', 'mode', 'light-only', {cwd});
-  middle = (await themeEditSet('md', '--color-border', '#a3a3a3', {cwd})).data;
 }, 600_000);
 
 afterAll(() => {
@@ -60,26 +54,14 @@ const changedNames = d =>
 describe('the emphasized border', () => {
   it('stays when the border is fainter than it', () => {
     expect(changedNames(faint)).not.toContain('--color-border-emphasized');
-    expect(changedNames(faint)).not.toContain('--color-border-control');
-    expect(faint.notes.join('\n')).not.toMatch(/follows? it/);
+    expect(faint.notes.join('\n')).not.toMatch(/follows it/);
   });
 
   it('follows a stronger border, and the result says so', () => {
     expect(changedNames(strong)).toContain('--color-border-emphasized');
-    expect(changedNames(strong)).toContain('--color-border-control');
     expect(strong.notes.join('\n')).toMatch(
-      /--color-border-emphasized \(cards, dividers and the other stronger edges\) and --color-border-control \(the frames of inputs, selectors and checkbox and radio boxes\) follow it, never fainter than the border/,
+      /--color-border-emphasized follows it \(the frames of inputs and selectors/,
     );
-  });
-
-  it('a border between the two frames carries only the fainter one, and the note names only what that draws', () => {
-    expect(changedNames(middle)).toContain('--color-border-emphasized');
-    expect(changedNames(middle)).not.toContain('--color-border-control');
-    const note = middle.notes.join('\n');
-    expect(note).toMatch(
-      /--color-border-emphasized \(cards, dividers and the other stronger edges\) follows it/,
-    );
-    expect(note).not.toMatch(/inputs/);
   });
 
   it('show names what it follows, not the theme source', async () => {

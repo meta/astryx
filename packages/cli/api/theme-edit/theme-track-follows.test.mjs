@@ -55,10 +55,10 @@ describe('a track the base theme draws from the emphasized border', () => {
       await themeEditSet('t', '--color-border', '#000000', {cwd})
     );
     const line = data.notes.find((/** @type {string} */ n) =>
-      /follows? it/.test(n),
+      /follows it/.test(n),
     );
     expect(line).toMatch(
-      /the parts the base theme draws from (it|them): .*progress-bar/,
+      /the parts the base theme draws from it: .*progress-bar/,
     );
     expect(line).toMatch(/switch/);
   });

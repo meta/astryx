@@ -18431,7 +18431,7 @@ export function draftAnswer(ctx, env, question) {
             };
           // "thick black borders on everything": the shared width (thick is
           // one pixel past it), the shared border colors (inputs draw the
-          // control edge), and on "everything" a border on the surfaces
+          // emphasized one), and on "everything" a border on the surfaces
           // that draw none (dialogs, popovers, menus).
           const bwNow0 = String(current('--border-width') ?? '1px');
           const onePast = (() => {
@@ -18465,7 +18465,6 @@ export function draftAnswer(ctx, env, question) {
               ...(wide ? [set('--border-width', wide)] : []),
               set('--color-border', color, modeOf(c)),
               set('--color-border-emphasized', color, modeOf(c)),
-              set('--color-border-control', color, modeOf(c)),
               ...(everywhere
                 ? borderless.map(pt =>
                     set('border', `${wide ?? bwNow0} solid ${color}`, {
@@ -18487,7 +18486,7 @@ export function draftAnswer(ctx, env, question) {
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-control is what inputs and checkbox and radio boxes draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };
@@ -25186,7 +25185,7 @@ export function draftAnswer(ctx, env, question) {
               continue;
             // (A border shorthand keeps its width in both modes: only its
             // color is the light mode's, the dark mode keeping the border
-            // color the part draws now, an input's control edge, else the
+            // color the part draws now, an input's emphasized one, else the
             // theme's.)
             if (st.thing === 'border') {
               const own =

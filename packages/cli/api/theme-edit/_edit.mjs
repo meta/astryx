@@ -7235,20 +7235,8 @@ async function changeOnce(
         .map(([t]) => t);
     if (followers.length) {
       const also = [...new Set(followers.flatMap(drawnFrom))];
-      // Each frame that follows the border says what it draws.
-      const frames = {
-        '--color-border-emphasized':
-          'cards, dividers and the other stronger edges',
-        '--color-border-control':
-          'the frames of inputs, selectors and checkbox and radio boxes',
-      };
-      const verb = followers.length === 1 ? 'follows' : 'follow';
-      const moved =
-        s.thing === '--color-border'
-          ? `${followers.map(k => `${k} (${frames[/** @type {keyof typeof frames} */ (k)]})`).join(' and ')} ${verb} it, never fainter than the border`
-          : `${followers.join(', ')} ${verb} it (the fills made from the surface, at the base theme's step from it)`;
       notes.push(
-        `${moved}${also.length ? `, and so do the parts the base theme draws from ${followers.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
+        `${followers.join(', ')} ${followers.length === 1 ? 'follows' : 'follow'} it (${s.thing === '--color-border' ? 'the frames of inputs and selectors, never fainter than the border' : "the fills made from the surface, at the base theme's step from it"})${also.length ? `, and so do the parts the base theme draws from ${followers.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
       );
     }
   }
