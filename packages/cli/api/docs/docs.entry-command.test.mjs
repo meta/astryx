@@ -283,6 +283,8 @@ describe('docs() for a name another command reads', () => {
         ['widgets/Tables', 'astryx component Table'],
         // Plurals that add `es`, and words that end in `s` before a plural.
         ['widgets/Switches', 'astryx component Switch'],
+        // Each word singular, not only the last.
+        ['widgets/TabsList', 'astryx component TabList'],
         ['widgets/StatusDots', 'astryx component StatusDot'],
         ['widgets/FieldStatuses', 'astryx component FieldStatus'],
         // A Core hook not named `use…` matches by its full name too.

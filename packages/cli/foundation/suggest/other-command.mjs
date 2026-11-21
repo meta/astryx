@@ -221,8 +221,9 @@ function bestMatch(command, names, typed, tail = []) {
  * @returns {string[]}
  */
 export function tailForms(typed) {
-  const folded = foldEntryName(typed.slice(typed.lastIndexOf('/') + 1));
-  const forms = [folded, nameWords(folded).join('')];
+  const last = typed.slice(typed.lastIndexOf('/') + 1);
+  const folded = foldEntryName(last);
+  const forms = [folded, nameWords(folded).join(''), nameWords(last).join('')];
   if (folded.endsWith('s') && !folded.endsWith('ss')) {
     forms.push(folded.slice(0, -1));
   }
