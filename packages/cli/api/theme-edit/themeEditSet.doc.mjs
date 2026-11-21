@@ -72,6 +72,12 @@ export const doc = {
         'With a member of an always-alike group, style just that part.',
     },
     {
+      name: 'options.ground',
+      type: 'string',
+      description:
+        'With contrast-accepted only: the part the text sits on, as the contrast problem names it.',
+    },
+    {
       name: 'options.png',
       type: 'boolean',
       description: 'Also take PNG pictures of the preview.',

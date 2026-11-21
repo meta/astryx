@@ -194,6 +194,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {Setting[]} settings
  * @property {string[]} [lifted] - Variant keys the last build repeated a part setting on.
  * @property {string} [palette] - The hash of the palette.config.json the editor last wrote.
+ * @property {AcceptedContrast[]} [accepted] - Contrast misses kept on purpose, each with its reason.
  */
 
 /** What lifted secondary text sits on: the contrast check measures it there. */
@@ -12094,7 +12095,7 @@ export async function contrastProblems(ctx, data, res) {
       return true;
     });
   };
-  return sayOnce([
+  const said = sayOnce([
     ...oneNotePerCause(
       problems.map(x => ({
         x,
@@ -12491,6 +12492,7 @@ export async function contrastProblems(ctx, data, res) {
         ]
       : []),
   ]);
+  return withAccepted(data, said);
 }
 
 /**
@@ -12638,8 +12640,136 @@ function barFitProblems(ctx, data, res) {
  * no one command does. `key` names the problem whatever its ratio (what
  * is drawn, on what, in which variant and mode), so a change that only
  * moves a ratio makes no new problem.
- * @typedef {{text: string, fix: string | null, key: string, note?: boolean}} ThemeProblem
+ * `accept` is the line that keeps a color the theme copies on purpose (a
+ * typed or read color, never one the editor made) as designed, where one
+ * may; `accepted` the reason a kept one was accepted with.
+ * @typedef {{text: string, fix: string | null, key: string, note?: boolean, accept?: string, accepted?: string}} ThemeProblem
  */
+
+/**
+ * A contrast miss the theme keeps on purpose (a color copied from an
+ * original): the text part and the part it sits on, the mode, the ratio
+ * accepted, the color kept and why. A later change that draws it at a
+ * lower ratio makes it a problem again.
+ * @typedef {{part: string, ground: string, mode: 'light' | 'dark', ratio: number, color: string, reason: string}} AcceptedContrast
+ */
+
+/**
+ * A contrast problem's place, read from its key: what kind of check (text
+ * or track), the part drawn, the part under it, the mode and its ratio
+ * now; null for any other problem.
+ * @param {ThemeProblem} p
+ * @returns {{part: string, ground: string, mode: 'light' | 'dark', ratio: number} | null}
+ */
+export function contrastPlace(p) {
+  const ratioNow = Number(/ is ([\d.]+):1\b/.exec(p.text)?.[1]);
+  if (!Number.isFinite(ratioNow)) return null;
+  const k = String(p.key ?? '').split('|');
+  if (k[0] === 'text' && k.length >= 9) {
+    const mode = k.at(-1);
+    if (mode !== 'light' && mode !== 'dark') return null;
+    return {
+      part: k[2] || k[1],
+      ground: k[4] || 'page',
+      mode,
+      ratio: ratioNow,
+    };
+  }
+  if (k[0] === 'track' && k.length === 4) {
+    const mode = k[3];
+    if (mode !== 'light' && mode !== 'dark') return null;
+    return {part: k[2], ground: k[1], mode, ratio: ratioNow};
+  }
+  return null;
+}
+
+/**
+ * The acceptances a theme keeps, each read whole; a record missing a field
+ * is not one.
+ * @param {ThemeData} data
+ * @returns {AcceptedContrast[]}
+ */
+export function acceptedContrast(data) {
+  const list = Array.isArray(/** @type {any} */ (data).accepted)
+    ? /** @type {any[]} */ (/** @type {any} */ (data).accepted)
+    : [];
+  return list.filter(
+    a =>
+      a &&
+      typeof a.part === 'string' &&
+      typeof a.ground === 'string' &&
+      (a.mode === 'light' || a.mode === 'dark') &&
+      typeof a.ratio === 'number' &&
+      typeof a.reason === 'string' &&
+      a.reason.trim() !== '',
+  );
+}
+
+/**
+ * The colors a theme's own settings give as typed (a token, a property, a
+ * color dial's exact color): a contrast miss in one of them may be a
+ * faithful copy of an original; a color the editor made never is.
+ * @param {ThemeData} data
+ * @returns {Set<string>}
+ */
+function typedColors(data) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const s of data.settings) {
+    for (const m of String(s.value ?? '').match(
+      /#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([^()]*\)/gi,
+    ) ?? []) {
+      const c = parseColor(m);
+      if (c && alphaOf(m) >= 1) out.add(hex(c));
+    }
+    if (/^[a-z]+$/i.test(String(s.value ?? ''))) {
+      const c = parseColor(String(s.value));
+      if (c) out.add(hex(c));
+    }
+  }
+  return out;
+}
+
+/**
+ * Contrast problems a theme accepts as designed become notes that say so,
+ * with the reason; one drawn now at a lower ratio than the one accepted
+ * stays a problem. Each other text or track problem whose failing color
+ * the theme typed gets the line that accepts it.
+ * @param {ThemeData} data
+ * @param {ThemeProblem[]} list
+ * @returns {ThemeProblem[]}
+ */
+export function withAccepted(data, list) {
+  const kept = acceptedContrast(data);
+  const typed = typedColors(data);
+  return list.map(p => {
+    if (p.note) return p;
+    const at = contrastPlace(p);
+    if (!at) return p;
+    const record = kept.find(
+      a =>
+        a.part === at.part &&
+        a.ground === at.ground &&
+        a.mode === at.mode &&
+        at.ratio + 0.005 >= a.ratio,
+    );
+    if (record)
+      return {
+        ...p,
+        note: true,
+        accepted: record.reason,
+        text: `${p.text}; accepted as designed: ${record.reason}`,
+      };
+    const colors = (p.text.match(/#[0-9a-f]{6}\b/gi) ?? []).map(c =>
+      c.toLowerCase(),
+    );
+    if (!colors.some(c => typed.has(c))) return p;
+    return {
+      ...p,
+      accept: `${P} set ${data.name} contrast-accepted '<why the original draws it so>' --on ${at.part} --ground ${at.ground} --mode ${at.mode}`,
+    };
+  });
+}
 
 /**
  * The plain black or white that stands out most from a drawn color: what a
@@ -14401,7 +14531,15 @@ const builtOf = (radii, stops) =>
     : null;
 
 /** The file's own top-level fields. */
-const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted', 'palette'];
+const TOP_FIELDS = [
+  'name',
+  'mode',
+  'like',
+  'settings',
+  'lifted',
+  'palette',
+  'accepted',
+];
 /** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
 const TOP_FIELD_WORDS = /** @type {Record<string, string>} */ ({base: 'like'});
 
