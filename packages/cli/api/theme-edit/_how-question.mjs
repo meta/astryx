@@ -2231,6 +2231,73 @@ const GOING_BACK =
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
 /**
+ * The ask that starts at a word of the question, as asked: up to the end of
+ * its sentence or line, or an "and", "then" or "but" that starts another
+ * ask with a verb of its own.
+ * @param {string} asked the question as asked, lower case
+ * @param {number} at
+ * @param {(w: string) => boolean} isVerb
+ * @returns {string}
+ */
+function askFrom(asked, at, isVerb) {
+  let ask = asked.slice(at);
+  const end = ask.search(/[.!?\n](?=\s|$)|\n/);
+  if (end >= 0) ask = ask.slice(0, end);
+  for (const m of ask.matchAll(/\s(?:and|then|but)\s+([a-z']+)/g))
+    if (isVerb(m[1])) return ask.slice(0, m.index);
+  return ask;
+}
+
+/**
+ * Whether an ask that starts with "clear the ..." takes looks away. Every
+ * word of the ask must be one the clause reader placed in its clause (a
+ * part, its mode or variant, a removable look) or one that only joins them.
+ * When unsure, the clause keeps the reset reading.
+ * @param {Clause} c the clause the ask starts
+ * @param {string} ask the ask as said, from its clear (see askFrom)
+ * @param {Array<[RegExp, PartRef]>} partWords
+ * @returns {boolean}
+ */
+function clearTakesAway(c, ask, partWords) {
+  if (
+    !/^clear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|every|any)\b/.test(
+      ask,
+    ) ||
+    !/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text) ||
+    !c.parts.length ||
+    !c.aspects.length ||
+    c.colors.length ||
+    c.lengths.length ||
+    c.named ||
+    c.state ||
+    c.dir
+  )
+    return false;
+  const removable = new RegExp(`^${REMOVABLE}$`);
+  if (!c.aspects.every(a => removable.test(a))) return false;
+  const ons = new Set(c.parts.map(p => p.on));
+  let rest = ` ${ask} `;
+  for (const [re, ref] of partWords)
+    if (ons.has(ref.on)) rest = rest.replace(lexCopy(re, 'g'), ' ');
+  for (const p of c.parts) {
+    const value = /:([a-z-]+)$/.exec(p.when ?? '')?.[1];
+    if (value) rest = rest.replace(new RegExp(`\\b${value}\\b`, 'g'), ' ');
+  }
+  if (c.mode)
+    rest = rest.replace(
+      /\b(?:in\s+)?(?:dark|light)(?:\s+(?:mode|theme))?\b/g,
+      ' ',
+    );
+  rest = rest
+    .replace(new RegExp(`\\b${REMOVABLE}\\b`, 'g'), ' ')
+    .replace(/'s\b/g, ' ')
+    .replace(
+      /\b(?:clear|all|the|my|our|their|its|this|that|these|those|every|any|on|of|from|in|for|and)\b/g,
+      ' ',
+    );
+  return /^[\s,]*$/.test(rest);
+}
+/**
  * A removal lead and a list of two or more removable items ("the card's
  * border and shadow", "border, shadow and background"), with the part the
  * list is on after it ("from cards"), when there is one. An item with a
@@ -7843,6 +7910,24 @@ export function draftAnswer(ctx, env, question) {
     );
     return asks.every(Boolean) ? each.flat() : [c];
   });
+  // ("clear the dark mode card background": an ask that starts with clear
+  // and says only the parts, their mode and variant, and removable looks
+  // this reader found asks to take those looks away, as remove does. Any
+  // other word in it, a way back included, leaves the reset reading.)
+  {
+    const det = String.raw`\bclear\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|every|any)\b`;
+    const leads = [...asked0.matchAll(new RegExp(det, 'g'))];
+    let k = 0;
+    for (const c of clauses) {
+      if (!new RegExp(det, 'i').test(c.text)) continue;
+      const at = leads[k++]?.index;
+      if (at == null) break;
+      if (!clearTakesAway(c, askFrom(asked0, at, verbWord), lex.parts))
+        continue;
+      c.text = c.text.replace(/\bclear\b/i, 'remove');
+      c.neg = true;
+    }
+  }
   // ("display headings": a numbered look of a part said in the plural is
   // every look of that numbered family the part draws, display-1 to
   // display-3: the values its prop takes, as its component's doc types
