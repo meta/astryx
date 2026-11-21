@@ -405,15 +405,57 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
   }
   const found = target.closest(`[${PRESSABLE_ATTRIBUTE}]`);
   // A held surface (an open swipe row) is read as a disabled one: it takes
-  // the press and paints nothing (privateAttributes/pressHeld.stylex.ts).
+  // the press and paints nothing (privateAttributes/pressHeld.stylex.ts). So
+  // is server markup that React has not hydrated yet.
   if (
     !(found instanceof HTMLElement) ||
     found.matches(DISABLED) ||
-    isPressHeld(found)
+    isPressHeld(found) ||
+    isAwaitingHydration(found)
   ) {
     return null;
   }
   return found;
+}
+
+const REACT_PROPS_KEY = '__reactProps$';
+const REACT_CONTAINER_KEY = '__reactContainer$';
+
+/**
+ * Whether the element is server markup that React has not hydrated yet, such
+ * as a Suspense boundary whose code is still loading. An attribute written on
+ * such markup does not match the server's markup when the boundary hydrates.
+ *
+ * No public React API tells if an element is hydrated, so this reads React's
+ * private keys. React keeps an element's props under an own key that starts
+ * with `__reactProps$`. It marks a root's container with an own key that
+ * starts with `__reactContainer$`. An element without props inside an element
+ * React marks is awaiting hydration. Where React sets neither key, every
+ * surface paints. That covers an element outside React, a root that has not
+ * started to hydrate, and a React version that renames the keys. The canary
+ * in pressFeedback.hydration.test.tsx fails if React stops setting them.
+ */
+function isAwaitingHydration(element: Element): boolean {
+  if (hasOwnKeyStartingWith(element, REACT_PROPS_KEY)) {
+    return false;
+  }
+  for (
+    let ancestor = element.parentElement;
+    ancestor != null;
+    ancestor = ancestor.parentElement
+  ) {
+    if (
+      hasOwnKeyStartingWith(ancestor, REACT_PROPS_KEY) ||
+      hasOwnKeyStartingWith(ancestor, REACT_CONTAINER_KEY)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasOwnKeyStartingWith(element: Element, prefix: string): boolean {
+  return Object.keys(element).some(key => key.startsWith(prefix));
 }
 
 /**
