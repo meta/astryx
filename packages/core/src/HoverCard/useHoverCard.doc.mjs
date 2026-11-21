@@ -83,6 +83,20 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'offset',
+      type: 'SpacingStep',
+      description:
+        'Distance between the trigger and the card, on the spacing scale.',
+      default: '1',
+    },
+    {
+      name: 'padding',
+      type: 'SpacingStep',
+      description:
+        'Inner padding of the card, on the spacing scale. Matches the padding prop on Popover, Card and Stack.',
+      default: '3',
+    },
+    {
       name: 'onShow',
       type: '() => void',
       description: 'Callback fired when the hover card becomes visible.',
@@ -187,6 +201,8 @@ export const docsDense = {
     isOpen:
       'controlled open state: true force-show, false force-hide, undefined unmanaged.',
     isDefaultOpen: 'show on mount.',
+    offset: 'trigger-to-card distance, spacing scale; default 1.',
+    padding: 'card inner padding, spacing scale; default 3.',
     onShow: 'fires when hover card becomes visible.',
     onHide: 'fires when hover card hides.',
   },

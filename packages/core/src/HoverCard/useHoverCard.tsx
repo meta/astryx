@@ -42,6 +42,8 @@ import {
   spacingVars,
 } from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
+import {paddingStyles} from '../Layout/paddingStyles.stylex';
+import type {SpacingStep} from '../utils/types';
 
 const styles = stylex.create({
   // Base container styles passed to useLayer
@@ -54,12 +56,22 @@ const styles = stylex.create({
   // Content wrapper for padding and interaction events.
   content: {
     display: 'block',
-    paddingBlockStart: spacingVars['--spacing-3'],
-    paddingBlockEnd: spacingVars['--spacing-3'],
-    paddingInlineStart: spacingVars['--spacing-3'],
-    paddingInlineEnd: spacingVars['--spacing-3'],
   },
 });
+
+const offsetVars: Record<SpacingStep, string> = {
+  0: spacingVars['--spacing-0'],
+  0.5: spacingVars['--spacing-0-5'],
+  1: spacingVars['--spacing-1'],
+  1.5: spacingVars['--spacing-1-5'],
+  2: spacingVars['--spacing-2'],
+  3: spacingVars['--spacing-3'],
+  4: spacingVars['--spacing-4'],
+  5: spacingVars['--spacing-5'],
+  6: spacingVars['--spacing-6'],
+  8: spacingVars['--spacing-8'],
+  10: spacingVars['--spacing-10'],
+};
 
 /**
  * The card lives in its trigger's document, which can be an iframe or a
@@ -158,6 +170,19 @@ export interface HoverCardOptions {
    * the card stays, and so does the press: nothing underneath dismisses.
    */
   isOpen?: boolean;
+
+  /**
+   * Distance between the trigger and the card, on the spacing scale.
+   * @default 1
+   */
+  offset?: SpacingStep;
+
+  /**
+   * Inner padding of the card, on the spacing scale. Matches the `padding`
+   * prop on `Popover`, `Card` and `Stack`.
+   * @default 3
+   */
+  padding?: SpacingStep;
 
   /**
    * Whether the hover card should be shown on mount.
@@ -280,6 +305,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     label,
     isOpen,
     isDefaultOpen = false,
+    offset = 1,
+    padding = 3,
     onShow,
     onHide,
   } = options;
@@ -671,7 +698,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       const renderProps = {
         placement: renderPlacement,
         alignment: props?.alignment ?? alignment,
-        offset: spacingVars['--spacing-1'],
+        offset: offsetVars[offset],
         // A named dialog when a label is provided; otherwise a group. A group
         // may validly be unnamed, an unnamed dialog may not — and hover cards
         // are non-modal, so group is honest semantics without a name.
@@ -702,7 +729,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
           // interactive-ancestor walk, so a clickable container around the
           // trigger leaves it alone; document listeners still see it.
           ref={registerLayerSurface}
-          {...stylex.props(styles.content)}
+          {...stylex.props(styles.content, paddingStyles[padding])}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
             // register as "hovering content" would block every later hide.
@@ -746,6 +773,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       renderLayer,
       placement,
       alignment,
+      offset,
+      padding,
       label,
       clearTimeouts,
       scheduleHide,
