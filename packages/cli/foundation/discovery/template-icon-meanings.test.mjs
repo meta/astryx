@@ -43,13 +43,13 @@ describe('unmappedTemplateMeanings and templateMeaningsLine', () => {
     const unmapped = unmappedTemplateMeanings(meanings, {scissors: 'cut'});
     expect(unmapped).toEqual(meanings.slice(0, 2));
     expect(templateMeaningsLine(unmapped, 'outline')).toBe(
-      'Templates use 2 meanings this set does not map: document (4 templates), share (2). Map one: `astryx experimental icon map <definition> <icon id> --set outline`.',
+      'Templates use 2 meanings this set does not map: document (4 templates), share (2). Map one: `astryx experimental icon map <meaning> <icon id> --set outline`.',
     );
   });
 
   it('says one meaning and one template in the singular', () => {
     expect(templateMeaningsLine([meanings[2]], 'outline')).toBe(
-      'Templates use 1 meaning this set does not map: scissors (1 template). Map one: `astryx experimental icon map <definition> <icon id> --set outline`.',
+      'Templates use 1 meaning this set does not map: scissors (1 template). Map one: `astryx experimental icon map <meaning> <icon id> --set outline`.',
     );
   });
 
