@@ -348,9 +348,12 @@ describe('VideoPlayer', () => {
     act(() => screen.getByRole('button', {name: 'Play'}).focus());
     await user.keyboard('{Enter}');
     expect(onPlay).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    // The same toggle keeps focus, so the keyboard drives each change. A
+    // pointer click could land after the 2 s idle hide on a slow run, when
+    // the hidden bar refuses pointer input.
+    await user.keyboard('{Enter}');
     expect(onPause).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', {name: 'Play'}));
+    await user.keyboard('{Enter}');
     playback.end();
     expect(onEnded).toHaveBeenCalledTimes(1);
     expect(onPause).toHaveBeenCalledTimes(1);
