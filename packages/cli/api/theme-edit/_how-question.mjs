@@ -4679,6 +4679,41 @@ export function draftAnswer(ctx, env, question) {
       const word = look.toLowerCase().replace(/s$/, '');
       // (Only an ask said on its own: one joined to another by "and",
       // "but" or "then" keeps the reading it has without the pronoun.)
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      // ("the card and dialog border is ugly", "the border is ugly on the
+      // cards and buttons": parts listed with "and", before the look or
+      // after it, each lose the look.)
+      if (/\band\b/i.test(said) && !/\b(?:but|then)\b/i.test(said)) {
+        let rest = ` ${said.toLowerCase()} `;
+        /** @type {string[]} */
+        const listed = [];
+        for (;;) {
+          const hit = partLexicon(ctx)
+            .parts.map(([re]) => re.exec(rest))
+            .filter(x => x != null)
+            .sort(
+              (x, y) =>
+                /** @type {RegExpExecArray} */ (y)[0].length -
+                /** @type {RegExpExecArray} */ (x)[0].length,
+            )[0];
+          if (!hit) break;
+          listed.push(hit[0].trim());
+          rest = `${rest.slice(0, hit.index)} ${rest.slice(hit.index + hit[0].length)}`;
+        }
+        const left = rest
+          .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
+          .split(/[^a-z]+/)
+          .filter(w => w && w !== 'and');
+        if (
+          listed.length > 1 &&
+          left.every(w => JUDGING.test(w)) &&
+          (/\bthem\b\s*[.!]?$/i.test(m) || /\bit\b\s*[.!]?$/i.test(m))
+        )
+          return `${String(lead).replace(/[!?]/, '.')}${listed
+            .map(p => `no ${word} on ${p}`)
+            .join(', ')}`;
+      }
       if (/\b(?:and|but|then)\b/i.test(said)) return m;
       const own = String(said);
       // (The one part the look's own words name, by its longest match.)
@@ -4700,8 +4735,6 @@ export function draftAnswer(ctx, env, question) {
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
-      const JUDGING =
-        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
       if (!others.every(w => JUDGING.test(w))) return m;
       // ("them" names more than one thing: read it only over one part said
       // in the plural.)

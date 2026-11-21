@@ -422,13 +422,47 @@ describe('a look said, then taken away by a pronoun', () => {
         'the bottom border on the cards is ugly, hide it',
         'the shadows on cards and buttons in dark mode are too strong, remove them',
         'the shadows are too strong on cards and buttons in dark mode, remove them',
-        'the card and dialog border is ugly, hide it',
         'the card border is ugly and heavy, hide it',
         'the cards in the dialog have a shadow, remove it',
         'the card border radius is too big, remove it',
       ]) {
         const lines = (first(await answer(q)) ?? []).join('\n');
         expect(lines, q).not.toMatch(/\bnone --on\b|transparent --on/);
+      }
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun over listed parts', () => {
+  it(
+    'takes it away from each listed part, before the look or after it',
+    async () => {
+      for (const [q, ...want] of [
+        [
+          'the card and dialog border is ugly, hide it',
+          /border none --on card\b/,
+          /border none --on dialog\b/,
+        ],
+        [
+          'the border is ugly on the cards and buttons, hide it',
+          /border none --on card\b/,
+          /border none --on button\b/,
+        ],
+        [
+          'cards and buttons have an ugly border, remove it',
+          /border none --on card\b/,
+          /border none --on button\b/,
+        ],
+        [
+          'the shadows on cards and buttons are too strong, remove them',
+          /box-shadow none --on card\b/,
+          /box-shadow none --on button\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        for (const w of want) expect(lines, String(q)).toMatch(w);
+        expect(lines, String(q)).not.toMatch(/border '1px/);
       }
     },
     T,
