@@ -620,7 +620,9 @@ function SyllabusSection() {
     announce(
       count === 0
         ? `No lessons match “${value.trim()}”`
-        : `${count} ${count === 1 ? 'lesson' : 'lessons'} match “${value.trim()}”`,
+        : `${count} ${
+            count === 1 ? 'lesson matches' : 'lessons match'
+          } “${value.trim()}”`,
     );
   };
 
@@ -1014,7 +1016,9 @@ function ReviewsSection() {
     announce(
       count === 0
         ? `No reviews match “${value.trim()}”`
-        : `${count} ${count === 1 ? 'review' : 'reviews'} match “${value.trim()}”`,
+        : `${count} ${
+            count === 1 ? 'review matches' : 'reviews match'
+          } “${value.trim()}”`,
     );
   };
 
@@ -1028,7 +1032,9 @@ function ReviewsSection() {
       announce(
         count === 0
           ? `No reviews match “${query.trim()}”`
-          : `${count} ${count === 1 ? 'review' : 'reviews'} match “${query.trim()}”`,
+          : `${count} ${
+              count === 1 ? 'review matches' : 'reviews match'
+            } “${query.trim()}”`,
       );
       return;
     }
