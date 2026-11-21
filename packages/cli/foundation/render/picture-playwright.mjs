@@ -5,8 +5,8 @@
  * one browser for all, run as its own process by the editor's browser
  * runner.
  * @input argv: the Playwright entry file, the batch (JSON: each job's page
- *   .html, picture .png and color mode), and a browser to use instead of
- *   Playwright's own
+ *   .html, picture .png, color mode and, optionally, its window: a
+ *   phone's), and a browser to use instead of Playwright's own
  * @output each picture at its path, and on stdout, each line led by its
  *   job's place and a tab: the fonts it drew its text in (font-probe.mjs),
  *   the text it draws cut short (cut-short.mjs), and PICTURE_TAKEN once it
@@ -34,7 +34,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [entry, batch, executablePath] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string, boxes?: string[]}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -51,9 +51,11 @@ try {
     await eachAtOnce(
       jobs,
       PICTURE_PAGES_AT_ONCE,
-      async ({html, png, mode, boxes}, i) => {
+      async ({html, png, mode, boxes, window: view}, i) => {
+        // A job's `window` (a phone's) replaces the editor's window.
         const page = await browser.newPage({
-          viewport: {...PICTURE_WINDOW},
+          viewport: {width: (view ?? PICTURE_WINDOW).width, height: (view ?? PICTURE_WINDOW).height},
+          ...(view?.mobile ? {isMobile: true, hasTouch: true} : {}),
           colorScheme: mode === 'dark' ? 'dark' : 'light',
         });
         // The page loads its own files only: a remote stylesheet, font or
