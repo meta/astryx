@@ -31,7 +31,7 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
+import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
@@ -777,20 +777,6 @@ function addsNoName(node: ReactNode): boolean {
 }
 
 /**
- * Whether a caller's Tooltip already describes the Button. Its tooltip
- * replaces the cut-label one, so one tooltip shows at one spot.
- */
-function hasCallerTooltip(button: HTMLElement): boolean {
-  const ids = button.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
-  return ids.some(
-    id =>
-      id !== '' &&
-      button.ownerDocument.getElementById(id)?.getAttribute('role') ===
-        'tooltip',
-  );
-}
-
-/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -948,7 +934,7 @@ export function Button({
     anchorRef: buttonRef,
     measureRef: labelRef,
     isEnabled: canShowCutLabel,
-    isSuppressed: hasCallerTooltip,
+    yieldsToCallerTooltip: true,
   });
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1233,14 +1219,7 @@ export function Button({
     <>
       {element}
       {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
-      {canShowCutLabel && cutLabel.cutText != null && cutLabel.Tooltip ? (
-        <cutLabel.Tooltip
-          anchorRef={buttonRef}
-          content={cutLabel.cutText}
-          isOpen
-          onHide={cutLabel.hide}
-        />
-      ) : null}
+      {cutLabel.tooltip}
     </>
   );
 }

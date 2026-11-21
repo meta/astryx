@@ -703,11 +703,14 @@ variant).
 
 A theme whose palette recipe the editor does not know (a newer CLI's) keeps
 its palette and settings module exactly as saved, and that CLI's build of the
-same settings counts as current; on a theme not edited by hand, a change that
-leaves its colors alone keeps the shades it shows, and a change to what its palette is made from (a color
+same settings counts as current; a change that leaves its colors alone keeps
+the shades it shows, and a change to what its palette is made from (a color
 dial, the vibrancy or the whole-theme accent token) is refused, saying what
 still works, with no update step, as a CLI that makes that recipe may not be
-released.
+released. Beside the accent dial, a whole-theme `--color-accent` saves as an
+exact value, and after a color changed by hand away from the saved palette,
+setting it back to its saved seed (or, for a color the palette has no
+shades for, taking it out) is the way back.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 
@@ -750,6 +753,23 @@ container step.
 
 Rejected: the page radius; Core's chat default is the container radius.
 Rejected: a copied pixel value, which drifts from a container radius set later.
+
+### DEC-20 — A heading the theme editor gives the heading font keeps it when only the body font changes
+
+**Reference:** `spec:AST-050/DEC-20`
+**Decider:** `josephfarina`, `2026-11-20`
+
+Some parts are drawn as a heading element but take the body's font family (an
+empty state's title). In a theme the editor makes, such a part takes
+`var(--font-family-heading)`, as every other heading does, whenever the heading
+and body families differ after a heading font (`font … --on heading`), or after
+a body font set alone (the dial or an exact `--font-family-body`) on a base
+theme that draws its headings and body in one family. On a base with two
+families a body font set alone leaves the part in the body's family, as the
+base draws it; a heading font still gives it the heading font. A plain
+`font-family` set on the part, or on a part that contains it, is kept.
+
+Rejected: the heading font after a body font on every base, which moves a two-family base's title.
 
 ## Open questions
 
