@@ -79,6 +79,10 @@ it.each([
   ],
   ['cards linear-gradient(#ffffff, #eeeeee), #f8fafc', null],
   [
+    'header background linear-gradient(#ffffff, #f8fafc), linear-gradient(#ffffff, #eeeeee) 0 0 / 1.5rem 1.5rem on cards',
+    null,
+  ],
+  [
     'cards background linear-gradient(#0001 1px, transparent 1px), #f8fafc',
     null,
   ],

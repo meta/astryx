@@ -7673,7 +7673,8 @@ export function draftAnswer(ctx, env, question) {
         const next =
           text
             .slice(at + m.length)
-            .match(/^(?:[^(),;.]|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ?? '';
+            .match(/^(?:[^(),;.]|\.(?=\S)|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ??
+          '';
         // (A gradient layer after it belongs to the same value; a layer
         // said with a part of its own is that part's ask; the page keeps its
         // own reading.)
