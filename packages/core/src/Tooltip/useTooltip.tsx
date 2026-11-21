@@ -28,6 +28,7 @@ import {
 import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {getNodeText} from '../utils/getNodeText';
+import {createStore, type SharedStore} from '../utils/sharedRealm';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   DESCRIPTION_SUFFIX,
@@ -358,37 +359,11 @@ function TooltipDescription({
   );
 }
 
-interface HostStore {
-  readonly get: () => HTMLElement | null;
-  readonly set: (host: HTMLElement | null) => void;
-  readonly subscribe: (onChange: () => void) => () => void;
-}
-
-/** The element a description renders its content into, once it exists. */
-function createHostStore(): HostStore {
-  let host: HTMLElement | null = null;
-  const listeners = new Set<() => void>();
-  return {
-    get: () => host,
-    set: next => {
-      if (next === host) {
-        return;
-      }
-      host = next;
-      for (const listener of listeners) {
-        listener();
-      }
-    },
-    subscribe: onChange => {
-      listeners.add(onChange);
-      return () => {
-        listeners.delete(onChange);
-      };
-    },
-  };
-}
-
 const readNoHost = (): HTMLElement | null => null;
+
+/** A store for the element a description renders its content into. */
+const createHostStore = (): SharedStore<HTMLElement | null> =>
+  createStore<HTMLElement | null>(null);
 
 /**
  * Whether tooltip content holds a component element, whose text only its own

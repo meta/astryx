@@ -791,10 +791,12 @@ function hasCallerTooltip(button: HTMLElement): boolean {
   return ids.some(id => {
     const described =
       id === '' ? null : button.ownerDocument.getElementById(id);
-    // A tooltip's description is a hidden copy of its text after the trigger.
+    // A tooltip's description is a hidden copy of its text after the
+    // trigger until its layer mounts, then the content inside the layer.
     return (
-      described?.getAttribute('role') === 'tooltip' ||
-      (described != null && isTooltipDescription(described))
+      described != null &&
+      (described.closest('[role="tooltip"]') != null ||
+        isTooltipDescription(described))
     );
   });
 }
