@@ -16,7 +16,7 @@
 
 import {useCallback, useState} from 'react';
 import {isRtlElement} from '../hooks/isRtlElement';
-import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
+import {useHighlightedOptionHover} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
@@ -177,12 +177,13 @@ export function useMultiCombobox({
 
   // The scroll effect lives here, the highlight owner, so the hover/keyboard
   // split is shared instead of re-implemented in MultiSelector.tsx (#6077).
-  const highlightOnHover = useHighlightedOptionScroll({
-    isOpen,
-    highlightedIndex,
-    setHighlightedIndex,
-    getOptionId: getItemId,
-  });
+  const {highlightFromHover: highlightOnHover, holdHighlight} =
+    useHighlightedOptionHover({
+      isOpen,
+      highlightedIndex,
+      setHighlightedIndex,
+      getOptionId: getItemId,
+    });
 
   const onItemMouseEnter = useCallback(
     (
@@ -234,6 +235,7 @@ export function useMultiCombobox({
           ) {
             e.preventDefault();
             setHighlightedCell('action');
+            holdHighlight();
           }
           return;
         }
@@ -241,6 +243,7 @@ export function useMultiCombobox({
           if (highlightedCell === 'action') {
             e.preventDefault();
             setHighlightedCell('option');
+            holdHighlight();
           }
           return;
         }
@@ -363,6 +366,7 @@ export function useMultiCombobox({
       isDisabled,
       isOpen,
       onOpen,
+      holdHighlight,
       closeAndReset,
       selectableItems,
       highlightedIndex,

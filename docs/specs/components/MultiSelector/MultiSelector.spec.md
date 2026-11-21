@@ -178,6 +178,10 @@ Complete prop syntax and examples remain in `MultiSelector.doc.mjs`.
   observer of its own; its timers are an animation frame that moves focus as
   the panel opens and the typeahead reset timeout. Announcements use the shared
   polite channel.
+- **PR2 — The keyboard module is MultiSelector's own.** Its keyboard behavior
+  builds on the shared `useHighlightedOptionHover` and `useTypeahead`. No
+  shared engine models a grid row's option and action cells, so
+  `architecture:react-component-runtime` INV19's shared engines do not fit.
 
 ## Accessibility contract
 
@@ -207,6 +211,12 @@ and `aria-controls` for the listbox, the listbox carries `aria-label` from
 (with `hasSearch`) or the listbox takes focus and owns arrow, Enter, Escape, and
 typeahead keys while open, so an anchor that cannot take focus still leaves a
 keyboard path.
+
+After keyboard input the active option draws the shared focus ring inside its
+edge, as `component:Selector` AR5 states; the ring's color meets 3:1 against
+the listbox in light and dark (`spec:AST-020` FR1, WCAG 2.2 1.4.11). After
+pointer input the active option keeps the overlay fill alone. In a grid, an
+active action cell draws its own ring instead.
 
 The create row is a `role="option"`, or a `role="row"` with an empty action
 cell in a grid (FR10), with `aria-selected="false"` and no checkbox indicator. When it is the only result, the polite live region announces its
@@ -343,14 +353,11 @@ empty-state content remains one shared tree.
 | FR18                | `MultiSelector.openHighlight.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | ArrowDown, ArrowUp, Enter and a press on a closed list whose first and last options are disabled; a list with no enabled option | An opening highlight on a disabled option, or any highlight when no option is enabled, fails.                                                                                                                                                                                                                          | `audit:MultiSelector/accessibility` |
 | Search required     | `MultiSelector.searchRequired.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Required with search: closed, open, form hides the marker; required without search                                              | An `aria-required` on the role-less trigger, an unannounced required state when closed, or a search combobox without it while open, fails.                                                                                                                                                                             | `audit:MultiSelector/accessibility` |
 | PR1                 | Evidence gap: no test asserts the absence of listeners or the timer bounds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | —                                                                                                                               | —                                                                                                                                                                                                                                                                                                                      | `audit:MultiSelector/behavior`      |
+| Active option       | `MultiSelector.activeOption.test.tsx`: the ring after keyboard input, the fill alone after pointer input, the ring again when keyboard input follows; the indicator measured against the listbox in light and dark                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | keyboard-active option, pointer-active option                                                                                   | Removing the ring, drawing it after pointer input, or an indicator under 3:1 against the listbox fails                                                                                                                                                                                                                 | `audit:MultiSelector/accessibility` |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Canonical anatomy and targets                                                                                                   | Missing, extra, prefixed, stale, or alias-backed mappings fail repository validation.                                                                                                                                                                                                                                  | `audit:MultiSelector/theming`       |
 
 ## Current-state impact
 
-- **Active option perception.** The active option shows only the
-  `--color-overlay-hover` fill, under 3:1 against the listbox in light and
-  dark, against `spec:AST-020` FR1 (WCAG 2.2 1.4.11). Selector draws the
-  shared focus ring after keyboard input (`component:Selector` AR5).
 - **Loading read as no options (FR2).** `isLoading` withholds the Empty state,
   the create row, and search announcements, so a person searching while the
   field reports loading sees and hears nothing, against `spec:AST-001` FR4.
