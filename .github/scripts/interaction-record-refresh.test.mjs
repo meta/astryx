@@ -17,6 +17,7 @@ import yaml from 'yaml';
 import {
   BRANCH,
   earlyWarning,
+  keepUnmeasured,
   medianTimes,
   prBody,
   specCoverage,
@@ -67,6 +68,23 @@ describe('medianTimes', () => {
 
   it('averages the middle two of an even count', () => {
     expect(medianTimes([{a: 10}, {a: 20}])).toEqual({a: 15});
+  });
+});
+
+describe('keepUnmeasured', () => {
+  it('keeps the recorded time of a tracked spec the runs did not time, sorted', () => {
+    // b was added after the latest full run; c is no longer in the tree.
+    expect(
+      keepUnmeasured({a: 5, d: 2}, {a: 4, b: 3, c: 9}, ['a', 'b', 'd']),
+    ).toEqual({a: 5, b: 3, d: 2});
+    expect(Object.keys(keepUnmeasured({d: 2}, {b: 3}, ['b', 'd']))).toEqual([
+      'b',
+      'd',
+    ]);
+  });
+
+  it("lets a run's new time replace the recorded one", () => {
+    expect(keepUnmeasured({a: 5}, {a: 4}, ['a'])).toEqual({a: 5});
   });
 });
 
