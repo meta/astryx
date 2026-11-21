@@ -1535,10 +1535,11 @@ export function withHandlers(v, project) {
     );
     if (CONTROLLED.has(v.__element) && 'value' in props && !props.onChange)
       props.onChange = {__code: '() => {}'};
+    // Written without an arrow, so the page's tags hold no `>` but their own.
     const docProps = project?.components[v.__element]?.props ?? {};
     for (const [name, doc] of Object.entries(docProps))
       if (/^on[A-Z]/.test(name) && doc?.required && !(name in props))
-        props[name] = {__code: '() => {}'};
+        props[name] = {__code: 'function () {}'};
     return {
       ...v,
       props,

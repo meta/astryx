@@ -9,7 +9,7 @@
 import {describe, expect, it} from 'vitest';
 import {withHandlers} from './_preview.mjs';
 
-const NOOP = {__code: '() => {}'};
+const NOOP = {__code: 'function () {}'};
 
 /** A project whose Toast doc requires onDismiss and offers onShow. */
 const project = /** @type {any} */ ({
