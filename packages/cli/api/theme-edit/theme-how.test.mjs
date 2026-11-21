@@ -396,8 +396,9 @@ const QUESTIONS = [
   [
     'glossy gradient header',
     {
-      top: /^set q background 'linear-gradient\(.*\)' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.background=linear-gradient/,
+      // (A gloss is the part's own color in each mode: the sample is help,
+      // never written.)
+      top: null,
     },
   ],
   // borders

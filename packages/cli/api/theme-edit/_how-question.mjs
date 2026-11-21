@@ -27311,6 +27311,13 @@ export function draftAnswer(ctx, env, question) {
               sequence: true,
             };
         }
+        // "glossy buttons": a gloss is a gradient of the part's own color,
+        // which differs by part and mode; the sample is help, never written.
+        if (design === 'glossy')
+          return {
+            text: `a glossy fill${where} is a gradient of the part's own color in each mode, which the editor does not work out here, so nothing is written; set one as a background, for example: background ${DESIGN.glossy} --on ${on}`,
+            options: [],
+          };
         if (design)
           return {
             text: `a ${design} fill${where}`,
