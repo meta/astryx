@@ -58,15 +58,33 @@ const brokenNotes = r =>
     /across lines inside the word/.test(n),
   );
 
+/**
+ * Skip a case that needs pictures when this machine's browser could not
+ * take one (no browser, or one that cannot start here), and say why. Where
+ * a picture was taken, the case runs.
+ * @param {any} r a result asked for with `png`
+ * @param {import('vitest').TestContext} ctx
+ */
+const needPictures = (r, ctx) => {
+  if (
+    r.data.pictures.length ||
+    !/No picture was taken/.test(r.data.pictureProblem ?? '')
+  )
+    return;
+  console.warn(`skipped: ${r.data.pictureProblem}`);
+  ctx.skip();
+};
+
 describe('text the pictures draw cut short', () => {
   it(
     "a fresh theme's pictures name none",
-    async () => {
+    async ctx => {
       // The theme the next case makes too big, while it is fresh.
       await themeEditNew('big', {cwd, like: 'neutral'});
       const r = /** @type {any} */ (
         await themeEditShow('big', {cwd, png: true, section: SMALL})
       );
+      needPictures(r, ctx);
       expect(r.data.pictures).toContain('themes/big/preview.png');
       expect(cutNotes(r)).toEqual([]);
       expect(brokenNotes(r)).toEqual([]);
@@ -76,12 +94,13 @@ describe('text the pictures draw cut short', () => {
 
   it(
     "a fresh butter theme's wider buttons wrap in the sample card, whole, and name none",
-    async () => {
+    async ctx => {
       if (unbuilt) return;
       await themeEditNew('bt', {cwd, like: 'butter'});
       const r = /** @type {any} */ (
         await themeEditShow('bt', {cwd, png: true, section: SMALL})
       );
+      needPictures(r, ctx);
       expect(r.data.pictures).toContain('themes/bt/preview.png');
       expect(cutNotes(r)).toEqual([]);
       expect(brokenNotes(r)).toEqual([]);
@@ -91,11 +110,12 @@ describe('text the pictures draw cut short', () => {
 
   it(
     "a text size that cuts the sample card's badge labels is a problem with the line that keeps them whole, and following it draws them whole",
-    async () => {
+    async ctx => {
       // The fresh theme of the first case.
       const set = /** @type {any} */ (
         await themeEditSet('big', 'text-size', '28', {cwd, png: true})
       );
+      needPictures(set, ctx);
       expect(set.data.pictures).toContain('themes/big/preview.png');
       const notes = cutNotes(set);
       expect(notes).toContainEqual(
@@ -143,11 +163,12 @@ describe('text the pictures draw cut short', () => {
 
   it(
     'where keeping the width does not draw the labels whole, no line is offered',
-    async () => {
+    async ctx => {
       await themeEditNew('huge', {cwd, like: 'neutral'});
       const set = /** @type {any} */ (
         await themeEditSet('huge', 'text-size', '32', {cwd, png: true})
       );
+      needPictures(set, ctx);
       const [problem, ...rest] = cutProblems(set.data.newProblems);
       expect(rest).toEqual([]);
       expect(problem.fix).toBe(null);
