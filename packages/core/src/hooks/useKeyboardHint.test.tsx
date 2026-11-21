@@ -190,6 +190,15 @@ describe('useKeyboardHint dismissal', () => {
     return {first, hidePopover};
   }
 
+  // A popover takes its invoker's place in the focus order. The hint has
+  // nothing to focus, and a popover the focused item opens needs that place.
+  it('shows the hint with no invoker source', () => {
+    renderWithKeyboardFocus();
+    const [options] = vi.mocked(HTMLElement.prototype.showPopover).mock
+      .calls[0];
+    expect(options?.source).toBeUndefined();
+  });
+
   it('stays shown while focus stays in the group, with no time limit', () => {
     vi.useFakeTimers();
     const {hidePopover} = renderWithKeyboardFocus();

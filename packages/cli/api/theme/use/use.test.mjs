@@ -225,3 +225,19 @@ describe('themeUse', () => {
     });
   });
 });
+
+describe('what a receipt reads', () => {
+  it('reads no app source: a receipt is the same whether or not the app imports the module', async () => {
+    const before = await themeUse('reef', {cwd: tmpDir});
+    fs.mkdirSync(path.join(tmpDir, 'src', 'app'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app', 'providers.tsx'),
+      "import {themes, defaultThemeSlug} from '../astryx-themes';\nexport const theme = themes[defaultThemeSlug];\n",
+    );
+    const after = await themeUse('reef', {cwd: tmpDir});
+    expect(Object.keys(before.data.change).sort()).toEqual(
+      Object.keys(after.data.change).sort(),
+    );
+    expect(before.data.change).not.toHaveProperty('notImported');
+  });
+});

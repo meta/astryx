@@ -25,6 +25,11 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
 import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {sidesOf} from './_css.mjs';
+
+/** Text properties CSS inherits, which a part passes to the text inside it. */
+export const INHERITED_TEXT =
+  /^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/;
 import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,
@@ -95,9 +100,11 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, {tokens: Record<string, string[]>, values: string[]}>} own - property -> tokens (with conditions) and raw values
  * @property {Record<string, Record<string, string>>} [at] - property -> the value under each condition, private variables resolved
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
+ * @property {Record<string, string[]>} [innerSets] - inherited text properties a visible unnamed element inside the part that holds text sets to values of its own -> those values (a code block's lines: white-space pre or pre-wrap)
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
+ * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string} [underInput] - drawn under an invisible native input
@@ -763,11 +770,91 @@ function deepFreeze(value) {
 }
 
 /**
+ * The runtime states the census finds a part's own element marked with
+ * that its doc does not list (a list item rides an Item, whose
+ * `data-selected` marks it selected): each `name=name` condition the part
+ * reads under, less its visual props. Added to the part's states, so set
+ * names them and the build writes them as the data attribute Core marks.
+ * @param {{target: Map<string, {props: string[], states: string[]}>}} project
+ * @param {PartData} parts
+ */
+export function addCensusStates(project, parts) {
+  const named = censusStateNames(parts);
+  for (const [part, names] of named) {
+    const t = project.target.get(part);
+    if (!t) continue;
+    const props = new Set(t.props);
+    for (const name of names)
+      if (!props.has(name) && !t.states.includes(name)) {
+        t.states.push(name);
+        let seen = CENSUS_STATES.get(t);
+        if (!seen) CENSUS_STATES.set(t, (seen = new Set()));
+        seen.add(name);
+      }
+  }
+}
+
+/**
+ * The states each part target took from the census alone (addCensusStates):
+ * Core's theme takes no style key for them on that part.
+ * @type {WeakMap<object, Set<string>>}
+ */
+const CENSUS_STATES = new WeakMap();
+
+/**
+ * A part's states that came from the census alone, not its doc: states
+ * Core's theme takes no style key for on that part (a list item rides an
+ * Item, whose own `selected` it shows), which the build writes as the
+ * attribute Core marks.
+ * @param {{target: Map<string, any>}} project
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function censusStatesOf(project, part) {
+  const t = project.target.get(part);
+  return t ? [...(CENSUS_STATES.get(t) ?? [])] : [];
+}
+
+/**
+ * The names each part's rules write as a state (`selected=selected`), read
+ * from the part data: partData hands out the same frozen data while its
+ * file is unchanged, so they are read once for each.
+ * @param {PartData} parts
+ * @returns {Map<string, Set<string>>}
+ */
+function censusStateNames(parts) {
+  const kept = STATE_NAMES.get(parts.map);
+  if (kept) return kept;
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map();
+  for (const [part, rec] of Object.entries(parts.map)) {
+    /** @type {Set<string>} */
+    const found = new Set();
+    for (const byCond of Object.values(rec.at ?? {}))
+      for (const cond of Object.keys(byCond ?? {}))
+        for (const pair of cond.split(/\s/)[0].split(','))
+          if (
+            /^([a-z][\w-]*)=\1$/.test(pair) &&
+            // (A state of a part drawn on this part's element is that
+            // part's: only the part's own marks count, see walkMarkup.)
+            Object.hasOwn(rec.attrs ?? {}, pair.slice(0, pair.indexOf('=')))
+          )
+            found.add(pair.slice(0, pair.indexOf('=')));
+    if (found.size) out.set(part, found);
+  }
+  STATE_NAMES.set(parts.map, out);
+  return out;
+}
+/** @type {WeakMap<object, Map<string, Set<string>>>} */
+const STATE_NAMES = new WeakMap();
+
+/**
  * The part data for the installed Core, from the cache or built now.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {Promise<PartData>}
  */
 export async function partData(project) {
+  if (!project.cacheDir) return buildPartData(project);
   const file = path.join(project.cacheDir, 'parts.json');
   try {
     // The file is read again only when it changed: every command reads it,
@@ -987,6 +1074,19 @@ async function buildPartData(project) {
     const layers = walkMarkup(markup.slice(at), decls, tokens, project.target);
     const added = Object.keys(layers.map).filter(k => !(k in result.map));
     for (const k of added) result.map[k] = layers.map[k];
+    // A part the page draws too keeps its page record, and takes from the
+    // opened overlays only the open state the page never shows (a menu's
+    // submenu row, open while its flyout is): its conditions under the open
+    // attribute.
+    for (const [k, rec] of Object.entries(layers.map)) {
+      if (added.includes(k)) continue;
+      const page = result.map[k];
+      if (!page) continue;
+      for (const [prop, byCond] of Object.entries(rec.at ?? {}))
+        for (const [cond, v] of Object.entries(byCond ?? {}))
+          if (/(?:^|,)aria-expanded=true\b/.test(cond.split(' ')[0]))
+            ((page.at ??= {})[prop] ??= {})[cond] ??= v;
+    }
     const seen = new Set(result.pairs.map(x => JSON.stringify(x)));
     for (const x of layers.pairs)
       if (
@@ -1302,9 +1402,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1382,11 +1482,19 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     // that marks the place with a runtime state of its own (a selected tab)
     // is conditioned by that state already.
     const ownState = Object.keys(dataAttrs).some(k => states.has(k));
-    const context = ownState
-      ? []
-      : [...attrs.matchAll(/\b(aria-(?:current|pressed))="([^"]*)"/g)]
-          .filter(x => x[2] !== 'false')
-          .map(x => `${x[1]}=${x[2]}`);
+    // (Open is the part's own state, never a place another component puts
+    // it: a submenu's row is highlighted while its flyout is open, and open
+    // too.)
+    const context = [
+      ...attrs.matchAll(
+        ownState
+          ? /\b(aria-expanded)="([^"]*)"/g
+          : /\b(aria-(?:current|pressed|expanded))="([^"]*)"/g,
+      ),
+    ]
+      .filter(x => x[2] !== 'false')
+      .map(x => `${x[1]}=${x[2]}`);
+    const open = context.includes('aria-expanded=true');
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
@@ -1404,6 +1512,17 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       Boolean(selfClose) ||
       VOID.has(tag.toLowerCase()) ||
       html.startsWith(`</${tag}>`, (m.index ?? 0) + m[0].length);
+    // (An element that holds text a reader sees: never an empty one, an
+    // icon's box, or text hidden for screen readers alone.)
+    const after = html.slice((m.index ?? 0) + m[0].length);
+    const holdsText =
+      !empty &&
+      !/^\s*<svg\b/i.test(after) &&
+      !own.some(
+        d =>
+          (d.prop === 'clip' && d.value !== 'auto') ||
+          (d.prop === 'clip-path' && /inset\(\s*50%/.test(d.value)),
+      );
     const paints = (
       /** @type {{prop: string, value: string, cond: string}} */ d,
     ) =>
@@ -1444,9 +1563,20 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         innerCorners: new Set(),
         media: false,
       });
-      if (ownsTarget)
+      // A data attribute another target on the element declares is this
+      // part's only when the part rides on that one: a part always drawn
+      // together with another (a list item on its Item) takes that one's
+      // states; a part also drawn on its own (a Button) never takes the
+      // states of a part drawn on it (a pagination cell's selected). Which
+      // is which is known once the whole census is read.
+      if (ownsTarget) {
+        const mine = targets.get(t);
+        if (named.length === 1) T.alone = true;
         for (const [k, v] of Object.entries(dataAttrs))
-          (T.attrs[k] ??= new Set()).add(v);
+          if (!mine || mine.props.includes(k) || mine.states.includes(k))
+            (T.attrs[k] ??= new Set()).add(v);
+          else ((T.borrowed ??= {})[k] ??= new Set()).add(v);
+      }
       // Core's media surface inside the part (a toast's inverted surface):
       // it sets the text tokens of what it holds from the on-dark color
       // where it is dark and the on-light color where it is light (Core's
@@ -1466,6 +1596,10 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         : parent.cond;
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
+        // (An element drawn open is never disabled: what opens it is
+        // enabled. Its disabled rules are recorded where Core draws it
+        // closed, never as open and disabled at once.)
+        if (open && d.cond && /disabled/.test(d.cond)) continue;
         // (An inherited background paints nothing of its own: it reads no
         // token, and what shows is its parent's.)
         const toks = expand(d.value, env, tokens);
@@ -1480,6 +1614,19 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
               toks.has('--border-width')));
         if (!ownsTarget)
           for (const k of toks) (T.inside[k] ??= new Set()).add(d.prop);
+        // (An element inside the part that sets an inherited text property
+        // to a value of its own, a code block's lines keeping white-space
+        // pre: that property set on the part never reaches its text.)
+        if (
+          !ownsTarget &&
+          !toks.size &&
+          INHERITED_TEXT.test(d.prop) &&
+          !/^(inherit|unset|initial|revert)$/.test(String(d.value).trim()) &&
+          holdsText
+        )
+          ((T.innerSets ??= {})[d.prop] ??= new Set()).add(
+            String(d.value).trim(),
+          );
         if (asOwn && (ownsTarget || lineProp)) {
           // (Drawn by the line inside the part, not the part's own element:
           // a setting on the part does not reach it.)
@@ -1574,6 +1721,12 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         for (const at of anc.all ?? (anc.target ? [anc.target] : []))
           if (at !== t) {
             map[at].contains.add(t);
+            // (A part drawn a second time inside the same element is listed
+            // there: a menu's items, never a header's one nav.)
+            const seen = (anc.seen ??= new Map());
+            seen.set(`${at}\0${t}`, (seen.get(`${at}\0${t}`) ?? 0) + 1);
+            if (seen.get(`${at}\0${t}`) === 2)
+              (map[at].listed ??= new Set()).add(t);
             // (The variant each holds there: a toast's close button is a
             // ghost button.)
             if (dataAttrs.variant)
@@ -1674,11 +1827,31 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       inside: Object.fromEntries(
         Object.entries(v.inside).map(([k, s]) => [k, [...s]]),
       ),
+      ...(v.innerSets
+        ? {
+            innerSets: Object.fromEntries(
+              Object.entries(v.innerSets).map(([k, s]) => [k, [...s]]),
+            ),
+          }
+        : {}),
       attrs: Object.fromEntries(
-        Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
+        Object.entries(
+          v.alone
+            ? v.attrs
+            : {
+                ...Object.fromEntries(
+                  Object.entries(v.borrowed ?? {}).map(([k, s]) => [
+                    k,
+                    new Set([...s, ...(v.attrs[k] ?? [])]),
+                  ]),
+                ),
+                ...v.attrs,
+              },
+        ).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
+      ...(v.listed?.size ? {listed: [...v.listed]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
@@ -1703,3 +1876,378 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
   }
   return {map: out, pairs: [...pairs.values()]};
 }
+
+/**
+ * The family roles the census shows, each read from the parts' own
+ * structure (their tags, states, resting fills, press overlays and their
+ * component's doc category), never from their names: a look set on one
+ * member of a role reaches the others.
+ * - `button-like`: drawn as a <button> with a press overlay and a box of
+ *   its own (a fill at rest in some variant, or a pressed state), never a
+ *   selectable item;
+ * - `overlays`: an Overlay component's own surface, filled with the
+ *   surface or popover color;
+ * - `option-rows`: a row (a <div> or <li>) clear at rest that is
+ *   highlighted as you move through a list, or pressed without being
+ *   selectable;
+ * - `selected-items`: a part with a selected (or active) state whose
+ *   selected look fills it;
+ * - `accent-fills`: a part filled with the accent at rest;
+ * - `inset-fields`: the inputs and the parts filled with the track color;
+ * - `status-surfaces`: a part holding a message with a control of its own
+ *   whose fill follows a prop whose values name the theme's status roles
+ *   (info, success, warning, error);
+ * - `overlay-headers`: an Overlay component's part, not its surface, that
+ *   holds a heading and a control (its title and its close button).
+ * @param {{MAP: Record<string, any>}} C
+ * @param {{target: Map<string, any>, components: Record<string, any>}} project
+ * @param {string[]} inputs the inputs group's members
+ * @param {string[]} statusWords the theme's status role words
+ * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers', string[]>}
+ */
+export function familyRoles(
+  C,
+  project,
+  inputs = [],
+  statusWords = ['info', 'success', 'warning', 'error'],
+) {
+  /** @type {Record<string, string[]>} */
+  const out = {
+    'button-like': [],
+    overlays: [],
+    'option-rows': [],
+    'selected-items': [],
+    'accent-fills': [],
+    'inset-fields': [],
+    'status-surfaces': [],
+    'overlay-headers': [],
+  };
+  /** @param {string} key @param {string} prop @param {(cond: string) => boolean} keep */
+  const values = (key, prop, keep) =>
+    Object.entries(C.MAP?.[key]?.at?.[prop] ?? {})
+      .filter(([cond]) => keep(cond))
+      .map(([, v]) => String(v).trim());
+  const CLEAR = /^(?:transparent|none|rgba\(0, ?0, ?0, ?0\))$/;
+  for (const [key, tg] of project.target) {
+    const rec = C.MAP?.[key];
+    if (!rec) continue;
+    const tags = [...(rec.tags ?? [])];
+    const states = [...(tg.states ?? []), ...Object.keys(rec.attrs ?? {})].map(
+      String,
+    );
+    const selectable = states.some(st => /^(?:selected|active)$/.test(st));
+    const highlighted = states.includes('highlighted');
+    const pressed = JSON.stringify(rec.at ?? {}).includes('data-astryx-press');
+    // (At rest: a condition of visual props only, no state (a state the
+    // docs name, an ARIA state, or a boolean attribute Core writes as its
+    // own name, selected="selected"), pseudo-class or inner element.)
+    const docStates = new Set((tg.states ?? []).map(String));
+    const rest = values(
+      key,
+      'background-color',
+      cond =>
+        !/[\s:[]/.test(cond) &&
+        (cond === 'always' ||
+          cond.split(',').every(kv => {
+            const [k, v] = kv.split('=');
+            return k !== v && !docStates.has(k) && !k.startsWith('aria-');
+          })),
+    );
+    const comp = project.components?.[tg.component];
+    const own = comp?.targets?.[0]?.className === `astryx-${key}`;
+    if (
+      tags.length &&
+      tags.every(t => t === 'button') &&
+      pressed &&
+      !selectable &&
+      !highlighted &&
+      (rest.some(v => !CLEAR.test(v)) || states.some(st => /pressed/i.test(st)))
+    )
+      out['button-like'].push(key);
+    if (
+      comp?.category === 'Overlay' &&
+      own &&
+      values(key, 'background-color', cond => !/[\s:[]/.test(cond)).some(v =>
+        /--color-background-(?:surface|popover)\b/.test(v),
+      )
+    )
+      out.overlays.push(key);
+    if (
+      tags.length &&
+      tags.every(t => t === 'div' || t === 'li') &&
+      rest.length > 0 &&
+      rest.every(v => CLEAR.test(v)) &&
+      (highlighted || (pressed && !selectable))
+    )
+      out['option-rows'].push(key);
+    if (
+      selectable &&
+      values(
+        key,
+        'background-color',
+        cond =>
+          /(?:^|,)(?:selected=selected|active=active)(?:,|$)/.test(cond) &&
+          !/[\s:[]/.test(cond),
+      ).some(v => !CLEAR.test(v))
+    )
+      out['selected-items'].push(key);
+    if (rest.some(v => /^var\(--color-accent\)$/.test(v)))
+      out['accent-fills'].push(key);
+    if (
+      inputs.includes(key) ||
+      rest.some(v => /^var\(--color-track\)$/.test(v))
+    )
+      out['inset-fields'].push(key);
+    // (A status prop: one whose values are the theme's status words; the
+    // fill follows it when it differs between them or reads a status
+    // token.)
+    const statusProps = Object.entries(rec.attrs ?? {})
+      .filter(
+        ([, vals]) =>
+          Array.isArray(vals) &&
+          vals.some(v => statusWords.includes(String(v))),
+      )
+      .map(([k]) => k);
+    if (statusProps.length) {
+      const fills = Object.entries(rec.at?.['background-color'] ?? {}).filter(
+        ([cond]) => !/[\s:[]/.test(cond),
+      );
+      const statusFill = new RegExp(
+        `--color-(?:background-)?(?:${statusWords.join('|')})\\b`,
+      );
+      const byStatus = fills.filter(([cond]) =>
+        statusProps.some(k => new RegExp(`(?:^|,)${k}=`).test(cond)),
+      );
+      // (A surface: it holds a message with a control of its own, a dismiss
+      // or an action; a badge or a dot is a mark, not a surface.)
+      if (
+        (rec.contains ?? []).includes('button') &&
+        (byStatus.some(([, v]) => statusFill.test(String(v))) ||
+          new Set(fills.map(([, v]) => String(v))).size > 1)
+      )
+        out['status-surfaces'].push(key);
+    }
+    if (
+      comp?.category === 'Overlay' &&
+      !own &&
+      (rec.contains ?? []).includes('heading') &&
+      (rec.contains ?? []).includes('button')
+    )
+      out['overlay-headers'].push(key);
+  }
+  return /** @type {any} */ (out);
+}
+
+/**
+ * The properties that size a part in the block direction: a part that sets
+ * none of them (a layout region, which may draw a divider line) is a frame
+ * a bar's height passes through.
+ */
+const BLOCK_BOX =
+  /^(height|min-height|max-height|(min-|max-)?block-size|padding(-(top|bottom|block(-start|-end)?))?|margin-(top|bottom|block(-start|-end)?))$/;
+
+/** The elements a control is drawn as: never a bar, nor a bar's row. */
+const CONTROL_TAGS = new Set([
+  'button',
+  'a',
+  'input',
+  'select',
+  'textarea',
+  'label',
+]);
+
+/**
+ * The value a part draws a property with as the census saw it: the one it
+ * always has, else the one every condition it was drawn in agrees on; null
+ * when it sets none (or conditions differ).
+ * @param {PartRecord | undefined} rec
+ * @param {string} prop
+ * @returns {string | null}
+ */
+export function drawnValue(rec, prop) {
+  const at = rec?.at?.[prop];
+  if (!at) return null;
+  if (at.always != null) return at.always;
+  const values = [...new Set(Object.values(at))];
+  return values.length === 1 ? values[0] : null;
+}
+
+/**
+ * The bar rows a part holds, from the part map's `contains` relation: the
+ * parts drawn inside it that lay their own children out in one row,
+ * centered across its whole width (display flex, align-items center, width
+ * 100%: the top nav in the app's header) and holding items of more than
+ * one kind, drawn there once (a part listed inside it is a list's item,
+ * never its bar's row: a menu's items, a side nav's items), neither of them
+ * drawn as a control (a collapsible's trigger, an avatar's button), reached
+ * through frames that draw no box of their own (a layout region). A part
+ * holding such a row is laid out as a bar:
+ * a height or a vertical padding set on it makes the bar that row fills.
+ * @param {Record<string, PartRecord>} map
+ * @param {string} holder
+ * @returns {string[]}
+ */
+export function barRows(map, holder) {
+  const inside = map[holder]?.contains ?? [];
+  /** @param {string} p */
+  const frame = p =>
+    !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
+  /** A part drawn as a control (a button, a link, a field). @param {string} p */
+  const control = p =>
+    (map[p]?.tags ?? []).some(t => CONTROL_TAGS.has(t.toLowerCase()));
+  if (control(holder)) return [];
+  const listed = new Set(map[holder]?.listed ?? []);
+  return inside.filter(r => {
+    const rec = map[r];
+    if (listed.has(r) || control(r)) return false;
+    // (A bar's row lays out items: more than one kind of part inside it,
+    // where a menu's divider or a typeahead option's icon is one or none.)
+    if ((rec?.contains ?? []).length < 2) return false;
+    if (
+      !/^(inline-)?flex$/.test(drawnValue(rec, 'display') ?? '') ||
+      /^column/.test(drawnValue(rec, 'flex-direction') ?? '') ||
+      drawnValue(rec, 'align-items') !== 'center' ||
+      drawnValue(rec, 'width') !== '100%'
+    )
+      return false;
+    return inside
+      .filter(p => p !== r && (map[p]?.contains ?? []).includes(r))
+      .every(frame);
+  });
+}
+
+/**
+ * A pair of block-direction sides (top and bottom) one family of
+ * properties gives, read from `get(prop)`: the longhands win over
+ * `<family>-block`, which wins over the shorthand. Null sides are unset.
+ * @param {(prop: string) => string | null} get
+ * @param {'padding' | 'border-width'} family
+ * @returns {[string | null, string | null]}
+ */
+export function blockSides(get, family) {
+  const [head, tail] =
+    family === 'padding' ? ['padding', ''] : ['border', '-width'];
+  /** @param {string} side */
+  const name = side => `${head}-${side}${tail}`;
+  const whole = get(family);
+  const all = whole ? sidesOf(family, whole) : null;
+  const block = get(name('block'));
+  const ends = block ? sidesOf(name('block'), block) : null;
+  return [
+    get(name('top')) ??
+      get(name('block-start')) ??
+      ends?.[name('block-start')] ??
+      all?.[name('top')] ??
+      null,
+    get(name('bottom')) ??
+      get(name('block-end')) ??
+      ends?.[name('block-end')] ??
+      all?.[name('bottom')] ??
+      null,
+  ];
+}
+
+/**
+ * A part's measured height as it is drawn, in px: its own height or
+ * min-height when it gives one in px, else its vertical padding and
+ * borders around one line of its text (its line height: a length, or a
+ * number times its font size). The theme's own values (`own(prop)`) win
+ * over the ones Core draws it with (the part map's); `px(value)` reads a
+ * length, tokens resolved (null when the value is no length). Null when
+ * neither a height nor a line height reads.
+ * @param {Record<string, PartRecord>} map
+ * @param {string} part
+ * @param {(prop: string) => string | null} own
+ * @param {Record<string, unknown>} tokens the token values a var() reads
+ * @param {(value: string) => number | null} pxOf
+ * @returns {number | null}
+ */
+export function partHeightPx(map, part, own, tokens, pxOf) {
+  /** A value with the tokens it reads put in. @param {string} v */
+  const resolve = v => {
+    let out = String(v);
+    for (let i = 0; i < 6 && /var\(/.test(out); i++)
+      out = out.replace(
+        /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
+        (_, name, fallback) => {
+          const t = tokens[name];
+          const one = Array.isArray(t) ? t[0] : t;
+          return one != null ? String(one) : (fallback ?? '');
+        },
+      );
+    return out.trim();
+  };
+  /** @param {string} v */
+  const px = v => pxOf(resolve(v));
+  /**
+   * The value in effect: a property family the theme sets is all the
+   * theme's (its shorthand covers Core's longhands), else Core's.
+   * @param {RegExp} family
+   */
+  const reader = family => {
+    const ownsFamily = [...Object.keys(map[part]?.at ?? {}), ...FAMILY_PROPS]
+      .filter(k => family.test(k))
+      .some(k => own(k) != null);
+    return (/** @type {string} */ prop) =>
+      ownsFamily ? own(prop) : drawnValue(map[part], prop);
+  };
+  /** @param {string | null} v */
+  const len = v => (v == null ? 0 : (px(v) ?? 0));
+  const pad = blockSides(reader(/^padding/), 'padding');
+  const border = blockSides(reader(/^border/), 'border-width');
+  const sizes = reader(/^(min-)?height$|block-size$/);
+  const explicit = [sizes('height'), sizes('min-height'), sizes('block-size')]
+    .map(v => (v == null ? null : px(v)))
+    .filter(n => n != null);
+  const text = reader(/^(font-size|line-height)$/);
+  /** One line of text: a length, or a number times the font size. @param {string | null} size @param {string | null} leading */
+  const lineOf = (size, leading) => {
+    const fontPx = px(size ?? 'var(--text-body-size, 16px)') ?? 16;
+    const lh = resolve(leading ?? 'var(--text-body-leading)');
+    return /^[\d.]+$/.test(lh)
+      ? Number(lh) * fontPx
+      : lh === 'normal' || lh === ''
+        ? null
+        : px(lh);
+  };
+  // Text the part's own unnamed elements draw with a type of their own (a
+  // nav heading's title) is the line it holds; else its own text, or the
+  // body text it inherits.
+  const inner = Object.entries(map[part]?.inside ?? {})
+    .filter(
+      ([tok, props]) => props.includes('line-height') && /-leading$/.test(tok),
+    )
+    .map(([tok]) =>
+      lineOf(`var(${tok.replace(/-leading$/, '-size')})`, `var(${tok})`),
+    )
+    .filter(n => n != null);
+  const line =
+    text('line-height') == null && inner.length
+      ? Math.max(...inner)
+      : lineOf(text('font-size'), text('line-height'));
+  const box =
+    line == null
+      ? null
+      : len(pad[0]) + len(pad[1]) + len(border[0]) + len(border[1]) + line;
+  const all = [...explicit, ...(box == null ? [] : [box])];
+  return all.length ? Math.max(...all) : null;
+}
+
+/** The block-direction properties a theme may set on a part. */
+const FAMILY_PROPS = [
+  'padding',
+  'padding-block',
+  'padding-top',
+  'padding-bottom',
+  'padding-block-start',
+  'padding-block-end',
+  'border-width',
+  'border-block-width',
+  'border-top-width',
+  'border-bottom-width',
+  'height',
+  'min-height',
+  'block-size',
+  'font-size',
+  'line-height',
+];
