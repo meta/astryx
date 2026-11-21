@@ -3362,17 +3362,15 @@ export class GestureHost {
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
-          // A kept press keeps its finger under any pointer (FR11, DEC-21).
-          this.arena.consumerOf(id)?.keepsTouch?.(id) === true ||
-          // A recognizer that holds the finger before it begins: a
-          // scroll-edge pan pulling away from an edge (FR19, DEC-18), only
-          // while this is the one finger on the screen: with a second one
-          // down anywhere, even off the recognizer's element, the moves stay
-          // the browser's, for its pinch (FR10).
+          // These holds apply only to the one finger on the screen. A kept
+          // press holds its finger under any pointer. A scroll-edge pan holds
+          // its finger before it begins. With a second finger down anywhere,
+          // the moves stay the browser's, for its pinch.
           (event.touches.length === 1 &&
-            this.arena
-              .participantsOf(id)
-              .some(recognizer => internals(recognizer).keepsTouch(id))))
+            (this.arena.consumerOf(id)?.keepsTouch?.(id) === true ||
+              this.arena
+                .participantsOf(id)
+                .some(recognizer => internals(recognizer).keepsTouch(id)))))
       ) {
         event.preventDefault();
         return;
