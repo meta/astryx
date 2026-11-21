@@ -8672,7 +8672,33 @@ export function compileTheme(ctx, data, base) {
         }
       }
     } else if (s.source === 'token') {
-      if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
+      if (parts.length)
+        for (const t of parts) {
+          // (A text size token no part reads, said of one part whose held
+          // parts read one: written into that one, as set's check says.)
+          const held =
+            parts.length === 1 &&
+            /^--text-[a-z0-9-]*size$/.test(String(s.thing)) &&
+            !baseComponentReads(ctx.project.cwd, data.like, t).has(
+              String(s.thing),
+            )
+              ? heldSizeTokenFor(
+                  ctx.C,
+                  s,
+                  t,
+                  String(s.thing),
+                  s.value,
+                  ctx.C.checkTokenOn?.(
+                    '',
+                    t,
+                    String(s.thing),
+                    String(s.value),
+                    '',
+                  ),
+                )
+              : null;
+          putComp(s, t, held ?? s.thing, s.value);
+        }
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
       // A background on the whole app shell is the page background. The
@@ -16366,6 +16392,37 @@ export function mainTextSizeToken(C, part, tokens) {
  */
 export function namesToken(value, token) {
   return new RegExp(`var\\(\\s*${token}\\s*[,)]`).test(String(value));
+}
+
+/**
+ * The one text size token the parts a part holds read (a tab list's tabs,
+ * --text-label-size), for a text size token said of that part alone, with
+ * no state, that set's token check refused: the part reads none and draws
+ * no text pieces of its own. Read from that refusal's own list, so the
+ * refusal and the accept never differ. Null otherwise, and for a value that
+ * names that token (it would read itself).
+ * @param {{MAP: Record<string, any>}} C
+ * @param {{state?: string}} s
+ * @param {string} part
+ * @param {string} thing
+ * @param {unknown} value
+ * @param {{held?: string[], soft?: boolean} | null | undefined} refused
+ * @returns {string | null}
+ */
+export function heldSizeTokenFor(C, s, part, thing, value, refused) {
+  const held = refused && !refused.soft ? (refused.held ?? []) : [];
+  if (
+    s.state ||
+    held.length !== 1 ||
+    held[0] === thing ||
+    !/^--text-[a-z0-9-]*size$/.test(thing) ||
+    !/^--text-[a-z0-9-]*size$/.test(held[0]) ||
+    innerPropTokens(C, part, 'font-size').length
+  )
+    return null;
+  return new RegExp(`var\\(\\s*${held[0]}\\s*[,)]`).test(String(value))
+    ? null
+    : held[0];
 }
 
 /**

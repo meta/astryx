@@ -36,7 +36,7 @@ const SOFT =
   /^--(color-data|color-syntax|syntax|duration|ease|z-|layer|breakpoint|text-display-\d|color-icon-[a-z]+$)/;
 
 /** @typedef {{token: string, props: string[], when: string[]}} Read */
-/** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
+/** @typedef {{message: string, run: string[], also: string[], soft?: boolean, held?: string[]}} CheckFailure */
 /** @typedef {import('./_parts.mjs').PartData} PartData */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -582,6 +582,8 @@ export function makeCompiler(project, parts) {
     return {
       message: `${target} never reads ${token}. ${what}.`,
       run,
+      // (The tokens the parts it holds read for this, when it reads none.)
+      held: kidTokens,
       also: kids.length
         ? [
             `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${HOW} ${kids[0]})`,
