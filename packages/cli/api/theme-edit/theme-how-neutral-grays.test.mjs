@@ -413,4 +413,30 @@ describe('neutral grays', () => {
     for (const v of ['lch(52 0 0)', 'color(srgb 0.5 0.5 0.5)', '#777777'])
       expect(valueHasTint(v), v).toBe(false);
   });
+
+  it(
+    'in a long ask on a tinted theme the plain gray runs with the whole-theme asks, and the readable-text line stays under the cut',
+    async test => {
+      needsBases(test);
+      // (A warm theme of its own: an earlier test makes "warm" plain.)
+      await themeEditNew('toasty', {cwd, like: 'neutral'});
+      await themeEditSet('toasty', 'neutral', '#78716c', {cwd});
+      const results = await answer(
+        'system font, 14px text, medium spacing, flat surfaces, 6px corners, 1px #d0d7de borders, green #1f883d primary buttons, blue #0969da links, neutral grays',
+        'toasty',
+      );
+      expect(results[0].lines).toContain("neutral '#777777'");
+      expect(results[0].text).toMatch(/^the first 6 of /);
+      expect(results.filter(r => /^then, after/.test(r.text)).length).toBe(1);
+      // (The fill's own line, not a sequence line that also holds it.)
+      const fill = results.findIndex(
+        r =>
+          r.lines.length === 1 &&
+          r.lines[0] === "background-color '#1f883d' --on button",
+      );
+      expect(fill).toBeGreaterThan(-1);
+      expect(results[fill + 1]?.text).toMatch(/^readable text on that fill/);
+    },
+    T,
+  );
 });
