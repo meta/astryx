@@ -85,6 +85,7 @@ The detail-row expansion control names the row it acts on without making callers
 ### Performance and resources
 
 - **PR1:** naming adds no dataset scan, observation, asynchronous work or independent expansion state. Existing hook lifetimes remain owned by the hook.
+- **PR2:** a toggle re-renders no row whose expanded state stayed the same. PR2 gap: when a caller's row callbacks change on every render, a toggle still re-renders every row; stable callbacks avoid it.
 
 ## Accessibility contract
 
