@@ -1132,7 +1132,7 @@ export function cornersNamed(text, part = null, names = []) {
   // for the context menu, names no corner either.)
   for (const re of names)
     t = t.replace(
-      new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`),
+      lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
       ' ',
     );
   t = t.replace(/\bupper\b/g, 'top').replace(/\blower\b/g, 'bottom');
@@ -1801,7 +1801,7 @@ function sharedAsk(q, partWords) {
         const middle = pieces.slice(1, -1).map(x => x.trim());
         const isPart = (/** @type {string} */ x) =>
           partWords.some(([re]) =>
-            new RegExp(`^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
+            lexAround(re, `^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
           );
         if (pieces.length > 2 && !middle.every(isPart)) return seg;
         const m = /\s+and\s+/.exec(seg);
@@ -1822,7 +1822,7 @@ function sharedAsk(q, partWords) {
         const right = seg.slice(lastAnd);
         for (const [re] of partWords) {
           // (A state word before the part, "hovered buttons", goes with it.)
-          const lm = new RegExp(`(?:${re.source})\\s*$`).exec(left);
+          const lm = lexAround(re, `(?:${re.source})\\s*$`).exec(left);
           if (!lm) continue;
           const lw = /(\b[a-z]+)\s+$/.exec(left.slice(0, lm.index));
           const withState = lw != null && stateWord(lw[1]) != null;
@@ -1832,9 +1832,10 @@ function sharedAsk(q, partWords) {
           };
           for (const [re2] of partWords) {
             const r =
-              new RegExp(`^\\s*(?:${re2.source})`).exec(right) ??
+              lexAround(re2, `^\\s*(?:${re2.source})`).exec(right) ??
               (() => {
-                const m2 = new RegExp(
+                const m2 = lexAround(
+                  re2,
                   `^\\s*([a-z]+)\\s+(?:${re2.source})`,
                 ).exec(right);
                 // (A word that describes the part, "the draft badge", "the
@@ -3705,9 +3706,66 @@ const NEEDS = new WeakMap();
  * @returns {RegExp}
  */
 function needing(source, need) {
-  const re = new RegExp(source);
+  const re = new NeedRegExp(source, '', need);
   NEEDS.set(re, need);
   return re;
+}
+
+/**
+ * A made lexicon pattern. A text without its word holds no match, so `exec`,
+ * and with it `test`, `match`, `matchAll`, `replace` and `split`, answers at
+ * once there without running the pattern, or compiling it first: an ask runs
+ * every lexicon pattern, and most never need compiling.
+ */
+export class NeedRegExp extends RegExp {
+  /**
+   * @param {string | RegExp} pattern
+   * @param {string} [flags]
+   * @param {string} [need]
+   */
+  constructor(pattern, flags, need) {
+    super(pattern, flags);
+    // A case-blind copy matches the word in any case: it holds no word.
+    /** @type {string | undefined} */
+    this.need = this.ignoreCase
+      ? undefined
+      : (need ?? (pattern instanceof NeedRegExp ? pattern.need : undefined));
+  }
+
+  /** @param {string} text */
+  exec(text) {
+    const s = String(text);
+    if (this.need !== undefined && !s.includes(this.need)) {
+      if (this.global || this.sticky) this.lastIndex = 0;
+      return null;
+    }
+    return super.exec(s);
+  }
+}
+
+/**
+ * `new RegExp(re.source, flags)`, kept a made pattern if `re` is one.
+ * @param {RegExp} re
+ * @param {string} flags
+ * @returns {RegExp}
+ */
+function lexCopy(re, flags) {
+  return re instanceof NeedRegExp
+    ? new NeedRegExp(re, flags)
+    : new RegExp(re.source, flags);
+}
+
+/**
+ * `new RegExp(source)` for a pattern every match of which holds a match of
+ * `re`: a made pattern with `re`'s word if `re` is one.
+ * @param {RegExp} re
+ * @param {string} source
+ * @returns {RegExp}
+ */
+function lexAround(re, source) {
+  return re instanceof NeedRegExp
+    ? new NeedRegExp(source, '', re.need)
+    : new RegExp(source);
 }
 
 /**
@@ -3733,10 +3791,7 @@ const PLAIN_COPIES = new WeakMap();
 function globalOf(re) {
   let copy = GLOBAL_COPIES.get(re);
   if (!copy) {
-    copy = new RegExp(
-      re.source,
-      re.flags.includes('g') ? re.flags : `${re.flags}g`,
-    );
+    copy = lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`);
     GLOBAL_COPIES.set(re, copy);
   }
   return copy;
@@ -3749,10 +3804,10 @@ function globalOf(re) {
  */
 function plainOf(re) {
   // A sticky pattern reads its own lastIndex: it is made anew each time.
-  if (re.sticky) return new RegExp(re.source, re.flags.replace('g', ''));
+  if (re.sticky) return lexCopy(re, re.flags.replace('g', ''));
   let copy = PLAIN_COPIES.get(re);
   if (!copy) {
-    copy = new RegExp(re.source, re.flags.replace('g', ''));
+    copy = lexCopy(re, re.flags.replace('g', ''));
     PLAIN_COPIES.set(re, copy);
   }
   return copy;
@@ -4067,7 +4122,7 @@ function clausesOf(q, partWords, words = null) {
       partWords
         .filter(([, x]) => x.on === p.on)
         .flatMap(([re, x]) =>
-          [...text.matchAll(new RegExp(re.source, 'g'))].map(m => ({
+          [...text.matchAll(lexCopy(re, 'g'))].map(m => ({
             index: m.index ?? 0,
             end: (m.index ?? 0) + m[0].length,
             ...(x.when ? {when: x.when} : {}),
@@ -4221,7 +4276,7 @@ function clausesOf(q, partWords, words = null) {
       const firstAt = p =>
         partWords
           .filter(([, x]) => x.on === p.on)
-          .map(([re]) => new RegExp(re.source, 'g').exec(text))
+          .map(([re]) => lexCopy(re, 'g').exec(text))
           .filter(m => m != null)
           .map(m => m.index)
           .sort((x, y) => x - y)[0] ?? null;
@@ -8132,7 +8187,7 @@ export function draftAnswer(ctx, env, question) {
       lex.parts
         .filter(([, x]) => x.on === on)
         .flatMap(([re]) =>
-          [...t.matchAll(new RegExp(re.source, 'g'))].map(m => [
+          [...t.matchAll(lexCopy(re, 'g'))].map(m => [
             m.index ?? 0,
             (m.index ?? 0) + m[0].length,
           ]),
@@ -8906,7 +8961,7 @@ export function draftAnswer(ctx, env, question) {
         c.aspects.some(a => ['background', 'text', 'border'].includes(a))),
   );
   /** A word-table regex without its global flag. @param {RegExp} re */
-  const once = re => new RegExp(re.source, re.flags.replace('g', ''));
+  const once = re => lexCopy(re, re.flags.replace('g', ''));
   // The part the word table reads a list head as ("the progress bars"), and
   // the words it read; never a piece the part does not have.
   const headPartOf = (/** @type {string} */ headText) => {
@@ -13848,16 +13903,13 @@ export function draftAnswer(ctx, env, question) {
     const noParts = lex.parts.reduce(
       (t, [re]) =>
         t.replace(
-          new RegExp(
-            re.source,
-            re.flags.includes('g') ? re.flags : `${re.flags}g`,
-          ),
+          lexCopy(re, re.flags.includes('g') ? re.flags : `${re.flags}g`),
           ' ',
         ),
       text,
     );
     for (const [re, st] of STATE_WORDS) {
-      const m = new RegExp(re.source).exec(noParts);
+      const m = lexCopy(re, '').exec(noParts);
       if (
         m &&
         !steps.some(
@@ -14197,8 +14249,8 @@ export function draftAnswer(ctx, env, question) {
     let named = false;
     for (const [re, x] of lex.parts)
       if (c.parts.some(p => p.on === x.on)) {
-        const g = new RegExp(
-          re.source,
+        const g = lexCopy(
+          re,
           re.flags.includes('g') ? re.flags : `${re.flags}g`,
         );
         if (g.test(rest)) named = true;
@@ -19981,7 +20033,7 @@ export function draftAnswer(ctx, env, question) {
     const ons = new Set(c.parts.map(x => x.on));
     const text = lex.parts
       .filter(([, x]) => ons.has(x.on))
-      .reduce((t, [re]) => t.replace(new RegExp(re.source, 'g'), ' '), c.text);
+      .reduce((t, [re]) => t.replace(lexCopy(re, 'g'), ' '), c.text);
     // left/right/top/bottom/sides name a side anywhere; inline, block,
     // horizontal and vertical only beside the padding or margin they
     // qualify ("inline padding", "padding-inline", "padding 8px vertical"),
@@ -29403,9 +29455,7 @@ export function draftAnswer(ctx, env, question) {
               // A part's name is never a comparative ("the container like
               // dialogs", "a header like cards"): masked, same length.
               (t, [re]) =>
-                t.replace(new RegExp(re.source, 'g'), m =>
-                  'x'.repeat(m.length),
-                ),
+                t.replace(lexCopy(re, 'g'), m => 'x'.repeat(m.length)),
               c.text,
             )
             .replace(/\b(?:i|we|you)(?: would|'d)? like(?: to| for)?\b/g, m =>
