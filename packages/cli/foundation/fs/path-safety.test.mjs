@@ -4,6 +4,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {fileURLToPath} from 'node:url';
 import {
   assertWithin,
   homeRelativePath,
@@ -13,6 +14,8 @@ import {
   tempFolderOf,
   tempFolders,
 } from './path-safety.mjs';
+
+const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 let tmpDir;
 beforeEach(() => {
@@ -398,10 +401,16 @@ describe('tempFolderOf', () => {
     ['/tmp', fs.realpathSync('/tmp')].some(tmp =>
       [os.homedir(), fs.realpathSync(os.homedir())].some(h => inside(tmp, h)),
     );
-
   it('names the system temp folder that holds a path, and nothing for any other path', () => {
-    expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
+    // The test run's macOS home folder is in the system temp folder, which
+    // then takes no scratch copy. A home outside it keeps the check positive.
+    process.env.HOME = THIS_DIR;
+    const holdsHome = [
       path.resolve(os.tmpdir()),
+      fs.realpathSync(os.tmpdir()),
+    ].some(tmp => inside(tmp, os.homedir()));
+    expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
+      holdsHome ? null : path.resolve(os.tmpdir()),
     );
     expect(
       tempFolderOf(

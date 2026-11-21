@@ -552,7 +552,11 @@ describe('rollback and recovery', () => {
 
 describe('fix3', () => {
   it('picks the home folder only when its package.json lists Core, never out of another repo', () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-home-'));
+    // The real path: macOS keeps the temp folder behind a link (/var is
+    // /private/var), and the home folder is compared by its real path.
+    const home = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-home-')),
+    );
     const saved = process.env.HOME;
     try {
       fs.writeFileSync(
