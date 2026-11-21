@@ -126,7 +126,7 @@ const APPROVED_IMPLEMENTATION_FILES = [
   'packages/core/src/utils/timeFormat.ts',
   'packages/core/src/i18n/useCollator.ts',
   // Joins several catalog messages into one locale-correct list (INV8).
-  'packages/core/src/i18n/useListFormatter.ts',
+  'packages/core/src/i18n/listFormat.ts',
   'packages/charts/src/formatters.ts',
 ];
 
