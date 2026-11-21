@@ -83,7 +83,8 @@ describe('contexts shared by a swizzled copy and the package', () => {
       return <span data-testid="probe">{String(isDisabled)}</span>;
     }
     render(
-      <copy.InputGroupInternalContext value={{isDisabled: true}}>
+      <copy.InputGroupInternalContext
+        value={{isDisabled: true, isInvalid: false}}>
         <pkg.LayerContentBoundary>
           <CopiedConsumer />
         </pkg.LayerContentBoundary>
