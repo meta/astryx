@@ -2773,6 +2773,8 @@ async function withSavedRepair(e, slug, cwd) {
         when: scoped.when,
         state: scoped.state,
         mode: scoped.mode,
+        // Checked as `set` runs the line: a box shorthand as its sides.
+        sides: true,
       },
       false,
     );
@@ -4894,7 +4896,9 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
           structuredClone(data),
           read.thing,
           read.value,
-          read.flags,
+          // A set line is checked the way it runs: a typed box shorthand as
+          // its sides.
+          sub === 'set' ? {...read.flags, sides: true} : read.flags,
           sub === 'undo',
         );
         return sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))
@@ -5801,7 +5805,15 @@ async function changeOnce(
     s =
       sub === 'undo' && rawIdx >= 0
         ? data.settings[rawIdx]
-        : checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
+        : checkSetting(
+            ctx,
+            slug,
+            data,
+            thing,
+            value,
+            sub === 'set' ? {...flags, sides: true} : flags,
+            sub === 'undo',
+          );
   } catch (e) {
     // A stored setting this Core no longer knows (a renamed part or
     // property, or a hand edit) can still be removed.
@@ -6119,6 +6131,20 @@ async function changeOnce(
     data.settings.some(x => keyOf(x) === keyOf({...s, mode: ownMode}))
   )
     s = {...s, mode: ownMode};
+  // A box shorthand written as its sides (a menu's padding of two to four
+  // lengths): the first side is this change's setting, and the others are
+  // written beside it in the same change, so one undo takes back all.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const sidesBeside = [];
+  const shorthand = sub === 'set' && s.sides?.length ? s : null;
+  if (shorthand?.sides) {
+    const [first, ...rest] = shorthand.sides;
+    s = first;
+    sidesBeside.push(...rest);
+  }
+  // The sides this change writes or moves: the ones its undo takes back.
+  /** @type {Set<import('./_settings.mjs').Setting>} */
+  const sidesMoved = new Set();
   let k = keyOf(s);
   let prevIdx =
     rawIdx >= 0
@@ -6561,6 +6587,31 @@ async function changeOnce(
       if (borderAdded) data.settings.push(borderAdded);
     }
     data.settings.push(s);
+    sidesMoved.add(s);
+  }
+  for (const side of sidesBeside) {
+    // An unchanged side stays where it is, as the first side does, unless a
+    // later setting covers it.
+    const at = data.settings.map(x => keyOf(x)).lastIndexOf(keyOf(side));
+    if (
+      at >= 0 &&
+      // (By what is saved: a note the side's check adds is no change.)
+      JSON.stringify(savedSetting(data.settings[at])) ===
+        JSON.stringify(savedSetting(side)) &&
+      !data.settings
+        .slice(at + 1)
+        .some(
+          x =>
+            x.thing === side.thing &&
+            partsOf(ctx, x).some(t => partsOf(ctx, side).includes(t)),
+        )
+    ) {
+      data.settings[at] = side;
+      continue;
+    }
+    data.settings = data.settings.filter(x => keyOf(x) !== keyOf(side));
+    data.settings.push(side);
+    sidesMoved.add(side);
   }
   // A setting listed twice by hand keeps only the entry this command left;
   // every other entry it replaces is named in the notes.
@@ -6605,31 +6656,44 @@ async function changeOnce(
         )
       : [];
   data.settings = data.settings.filter(x => !covered.includes(x));
-  // A shorthand set after its longhands on the same part replaces them.
-  const longhands =
-    sub === 'set' && s.source === 'property'
+  // A shorthand set after its longhands on the same part replaces them
+  // (each side a box shorthand is written as replaces its own).
+  const written = [s, ...sidesBeside];
+  // An earlier setting of the typed shorthand in the same place goes: the
+  // sides written replace it, as a plain set replaces its value.
+  const typedBefore = shorthand
+    ? data.settings.filter(
+        x => !written.includes(x) && keyOf(x) === keyOf(shorthand),
+      )
+    : [];
+  data.settings = data.settings.filter(x => !typedBefore.includes(x));
+  const sidesChanged = written.filter(w => sidesMoved.has(w));
+  /** @param {import('./_settings.mjs').Setting} w */
+  const longhandsOf = w =>
+    sub === 'set' && w.source === 'property'
       ? data.settings.filter(
           x =>
-            x !== s &&
+            !written.includes(x) &&
             x.source === 'property' &&
             // On the same part, or on a member of the group it is set on:
             // the later setting wins, whichever way Core writes it.
-            (x.on === s.on ||
-              (s.on != null &&
-                (groupsOf(ctx)[s.on] ?? []).includes(
+            (x.on === w.on ||
+              (w.on != null &&
+                (groupsOf(ctx)[w.on] ?? []).includes(
                   /** @type {string} */ (x.on),
                 ))) &&
-            x.when === s.when &&
-            x.state === s.state &&
+            x.when === w.when &&
+            x.state === w.state &&
             // A shorthand for one mode replaces longhands of that mode only:
             // a longhand set for both modes still holds the other mode.
-            (!s.mode || x.mode === s.mode) &&
+            (!w.mode || x.mode === w.mode) &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
-            (coversProperty(s.thing, x.thing) ||
-              coversProperty(logicalSide(s.thing), logicalSide(x.thing))),
+            (coversProperty(w.thing, x.thing) ||
+              coversProperty(logicalSide(w.thing), logicalSide(x.thing))),
         )
       : [];
+  const longhands = [...new Set(written.flatMap(longhandsOf))];
   // They go, as the note says: Core writes each side to its own variable,
   // where a later shorthand would not win over them (undo brings them back).
   data.settings = data.settings.filter(x => !longhands.includes(x));
@@ -7073,8 +7137,50 @@ async function changeOnce(
     n =>
       n.includes('could not be read') || n.includes('there was no last build'),
   );
+  // A sides change that moved no side and removed nothing (a repeat over a
+  // stale build) adds no undo step, so its note claims none.
+  const sidesStep = Boolean(
+    sidesChanged.length ||
+    typedBefore.length ||
+    longhands.length ||
+    alsoReplaced.length,
+  );
+  // The entries this change removed that undo puts back: undo leaves out
+  // one the editor no longer accepts, so the note never promises it.
+  const removedBefore = [
+    ...new Set([...typedBefore, ...longhands, ...alsoReplaced]),
+  ];
+  const refusedBefore = new Set(
+    shorthand && removedBefore.length
+      ? storedProblems(ctx, slug, {...data, settings: removedBefore})
+          .filter(p => !p.noEffect)
+          .map(p => p.setting)
+      : [],
+  );
+  const bringsBack = removedBefore.filter(x => !refusedBefore.has(x));
   /** @type {string[]} */
   const notes = [
+    ...(shorthand && !r.unchanged && sidesStep
+      ? [
+          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${written.map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} ${
+            [
+              sidesChanged.length === written.length
+                ? `takes back all ${written.length}`
+                : sidesChanged.length
+                  ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes or moves`
+                  : null,
+              bringsBack.length
+                ? `brings back ${bringsBack.map(describe).join(', ')}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' and ') || 'takes back this change'
+          }`,
+        ]
+      : []),
+    ...(typedBefore.length
+      ? [`replaces ${typedBefore.map(describe).join(', ')}`]
+      : []),
     ...fieldNotes,
     ...(borderAdded
       ? [
@@ -7245,14 +7351,19 @@ async function changeOnce(
       : []),
     ...(longhands.length
       ? [
-          `${s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
+          `${shorthand ? `${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))}` : s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
+        ]
+      : []),
+    ...(shorthand && !r.unchanged && !sidesStep
+      ? [
+          `no change: ${describe({...s, thing: shorthand.thing, value: String(shorthand.value)})} (${written.map(x => `${x.thing} ${x.value}`).join(', ')}) is already set; the theme was built again, and no undo step was added`,
         ]
       : []),
     ...(r.unchanged
       ? [
           drawnAlready
             ? `no change: ${s.on} already draws ${drawnAlready.map(x => x.replace(/^[^:]*:\s*/, '')).join(', ')} at rest, so ${describe(s)} was not written; to change it, set another value`
-            : `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
+            : `no change: ${shorthand ? `${describe({...s, thing: shorthand.thing, value: String(shorthand.value)})} (${written.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} is already set, so nothing was built and no undo step was added`,
         ]
       : []),
     // (A plain part rule whose value matches what the part draws today
@@ -7279,8 +7390,16 @@ async function changeOnce(
         ? familyOf(s.on)
         : null
     : null;
-  if (s.note) notes.push(s.note);
-  if (s.stateNote) notes.push(s.stateNote);
+  // Every side written carries its own check's note, and the typed
+  // shorthand its note for the whole value.
+  for (const note of new Set(
+    [shorthand?.note, ...written.map(w => w.note)].filter(Boolean),
+  ))
+    notes.push(/** @type {string} */ (note));
+  // (A state word the typed shorthand's check read as another state is
+  // said once, for every side written.)
+  const stateNote = shorthand?.stateNote ?? s.stateNote;
+  if (stateNote) notes.push(stateNote);
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -7737,7 +7856,10 @@ async function changeOnce(
   // An earlier setting this one now covers (through a spread too) is named.
   else if (sub === 'set')
     for (const [m, why] of maskedSettings(data, ctx))
-      if (m !== s && why.startsWith(describe(s)))
+      if (
+        !written.includes(m) &&
+        written.some(w => why.startsWith(describe(w)))
+      )
         notes.push(`${describe(m)} no longer shows: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(
@@ -7807,6 +7929,15 @@ async function changeOnce(
         sub === 'set'
           ? {...savedSetting(s), ...(s.note == null ? {} : {note: s.note})}
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
+      ...(shorthand
+        ? {
+            asSides: {
+              thing: shorthand.thing,
+              value: String(shorthand.value),
+              sides: [s, ...sidesBeside],
+            },
+          }
+        : {}),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev
         ? {
@@ -7820,7 +7951,9 @@ async function changeOnce(
       // A plain value that replaced per-mode ones names the first of them;
       // the notes name them all.
       replaced:
-        sub === 'set' ? (prev ?? covered[0] ?? longhands[0] ?? null) : null,
+        sub === 'set'
+          ? (prev ?? typedBefore[0] ?? covered[0] ?? longhands[0] ?? null)
+          : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
