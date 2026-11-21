@@ -144,6 +144,28 @@ describe('the accept line', () => {
     ).toHaveProperty('accept');
   });
 
+  it('is never offered, nor kept, on a surface drawn in a scheme of its own', () => {
+    const lightbox = {
+      key: 'text|button|lightbox|--color-on-accent|button|--color-accent||Next|light',
+      text: `text in button ("Next") is 3:1 in dark (lightbox draws it in its dark scheme) (#ffffff on button's #17a2b8); text needs 4.5:1`,
+      fix: 'x',
+    };
+    const kept = {
+      ...data,
+      accepted: [
+        {
+          part: 'button',
+          ground: 'lightbox',
+          mode: 'light',
+          ratio: 3,
+          reason: 'r s t',
+        },
+      ],
+    };
+    expect(withAccepted(data, [lightbox])[0]).not.toHaveProperty('accept');
+    expect(withAccepted(kept, [lightbox])[0].note).toBeUndefined();
+  });
+
   it('keeps a lower ratio than the one accepted a problem', () => {
     const kept = {
       ...data,

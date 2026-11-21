@@ -67,6 +67,7 @@ import {
   radiusTokenOf,
   acceptedContrast,
   contrastPlace,
+  inOwnScheme,
   contrastProblems,
   describe,
   entryDamage,
@@ -2272,7 +2273,7 @@ async function acceptContrast(slug, reason, options) {
   const res = await resolvedTokens(ctx, slug);
   const found = await contrastProblems(ctx, data, res);
   const here = found.find(p => {
-    const at = contrastPlace(p);
+    const at = inOwnScheme(p) ? null : contrastPlace(p);
     return at != null && same(at);
   });
   if (reason.trim().toLowerCase() === 'none') {
