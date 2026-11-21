@@ -1410,9 +1410,10 @@ export function Step({
   ) : null;
 
   // The step paints nothing of its own when disabled, so it carries no
-  // `disabled` selector. The current step is also `selected`, the state that
-  // marks the chosen item of tabs, navigation items and other selection
-  // controls.
+  // `disabled` selector. The progress bar owns its painted disabled state in
+  // the separated layout, where there is no indicator node on the bar. The
+  // current step is also `selected`, the state that marks the chosen item of
+  // tabs, navigation items and other selection controls.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
@@ -1798,7 +1799,9 @@ export function Step({
         {/* 4px progress bar */}
         <div
           {...mergeProps(
-            themeProps('step-bar'),
+            themeProps('step-bar', {
+              disabled: isDisabled ? 'disabled' : null,
+            }),
             stylex.props(
               styles.verticalBar,
               styles.connectorTrack,
@@ -1867,7 +1870,9 @@ export function Step({
       {/* 4px progress bar segment for this step */}
       <div
         {...mergeProps(
-          themeProps('step-bar'),
+          themeProps('step-bar', {
+            disabled: isDisabled ? 'disabled' : null,
+          }),
           stylex.props(
             styles.horizontalBar,
             styles.connectorTrack,

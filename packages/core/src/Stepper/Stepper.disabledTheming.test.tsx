@@ -17,6 +17,8 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
  * Contract:
  * - In compact on-track layout (where step-label is omitted for non-active steps),
  *   `step-indicator` reflects `data-disabled="disabled"`.
+ * - In compact separated layout, the painted `step-bar` reflects the same
+ *   state because the separated layout has no indicator on the bar.
  * - In expanded horizontal and vertical layouts, `step-indicator` and
  *   `step-label` reflect `data-disabled="disabled"`.
  * - `step` and `step-description` do not reflect `disabled`.
@@ -103,6 +105,32 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     expect(deliveryStep.querySelector('.astryx-step-label')).toBeNull();
   });
 
+  it('reflects disabled on the progress bar in compact separated layout', () => {
+    atWidth(
+      240,
+      <Stepper
+        activeStep={0}
+        label="Checkout"
+        horizontalOptions={{
+          minimumStepWidth: 160,
+          collapsedVariant: 'withLabelAndControls',
+        }}>
+        <Step step={0} label="Shipping" />
+        <Step step={1} label="Delivery" isDisabled />
+        <Step step={2} label="Payment" />
+      </Stepper>,
+    );
+
+    const items = screen.getAllByRole('listitem');
+    const shippingBar = items[0].querySelector('.astryx-step-bar');
+    const deliveryBar = items[1].querySelector('.astryx-step-bar');
+    const paymentBar = items[2].querySelector('.astryx-step-bar');
+
+    expect(shippingBar).not.toHaveAttribute('data-disabled');
+    expect(deliveryBar).toHaveAttribute('data-disabled', 'disabled');
+    expect(paymentBar).not.toHaveAttribute('data-disabled');
+  });
+
   it('reflects disabled on step-indicator and step-label, not step, in expanded horizontal layout', () => {
     render(
       <Stepper activeStep={0} label="Checkout">
@@ -149,7 +177,9 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     const items = screen.getAllByRole('listitem');
     for (const item of items) {
       const indicator = item.querySelector('.astryx-step-indicator');
+      const bar = item.querySelector('.astryx-step-bar');
       expect(indicator).toHaveAttribute('data-disabled', 'disabled');
+      expect(bar).toHaveAttribute('data-disabled', 'disabled');
       expect(item).not.toHaveAttribute('data-disabled');
     }
   });
@@ -164,11 +194,15 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
         'step-label': {
           'disabled:disabled': {opacity: '0.4'},
         },
+        'step-bar': {
+          'disabled:disabled': {opacity: '0.4'},
+        },
       },
     });
 
     const {component: css} = generateThemeCSS(theme);
     expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
+    expect(css).toContain('.astryx-step-bar[data-disabled="disabled"]');
   });
 });
