@@ -249,10 +249,12 @@ function hasInnerRegionHolding(
 export function useFocusRegionContainment(
   containerRef: React.RefObject<HTMLElement | null>,
   isActive: boolean,
+  options?: {preserveNativeEmptyRegion?: boolean},
 ): void {
   const lastFocusRef = useRef<Element | null>(null);
   // Track if focus change was triggered by keyboard (Tab key)
   const isKeyboardNavigationRef = useRef(false);
+  const preserveNativeEmptyRegion = options?.preserveNativeEmptyRegion ?? false;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -380,6 +382,10 @@ export function useFocusRegionContainment(
 
         const focusable = getFocusableElements(container);
         if (focusable.length === 0) {
+          if (preserveNativeEmptyRegion) {
+            isKeyboardNavigationRef.current = false;
+            return;
+          }
           // There is nowhere to advance to. Keep focus on the current
           // programmatic target (for example a dialog panel with tabIndex=-1)
           // rather than allowing the browser to move into background content.
@@ -435,7 +441,7 @@ export function useFocusRegionContainment(
     return () => {
       doc.removeEventListener('keydown', handleKeyDown);
     };
-  }, [containerRef, isActive]);
+  }, [containerRef, isActive, preserveNativeEmptyRegion]);
 }
 
 /**
