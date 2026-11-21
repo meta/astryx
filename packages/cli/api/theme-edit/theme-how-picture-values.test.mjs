@@ -107,3 +107,13 @@ it('a slash between asks after a gradient still splits them', async () => {
   );
   expect(lines.some(l => /--on card\b/.test(l))).toBe(true);
 }, 240_000);
+
+it('a gradient said for one mode is written whole, in that mode', async () => {
+  expect(
+    await commands(
+      'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+    ),
+  ).toContain(
+    "set pv background 'linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+}, 240_000);

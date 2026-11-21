@@ -13465,8 +13465,12 @@ export function draftAnswer(ctx, env, question) {
       return COLOR_PROPS.test(st.thing);
     };
     /** @param {string | undefined} v */
+    // (Only a value background-image takes moves to it: a picture with its
+    // position or size stays the shorthand.)
     const gradientOnly = v =>
-      /gradient\(/i.test(v ?? '') && !/url\(|light-dark\(/i.test(v ?? '');
+      /gradient\(/i.test(v ?? '') &&
+      !/url\(|light-dark\(/i.test(v ?? '') &&
+      matchValue('background-image', String(v));
     const options = d.options
       .map(o =>
         o.map(st =>
