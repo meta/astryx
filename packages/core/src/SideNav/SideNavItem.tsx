@@ -114,17 +114,33 @@ const styles = stylex.create({
     width: sizeVars['--size-element-lg'],
     height: sizeVars['--size-element-lg'],
   },
-  label: {
+  // The label and the end content share one wrapping line box. The label
+  // wraps instead of truncating, so a larger text size never hides it. Its
+  // automatic minimum width is its longest word, capped at the row's width:
+  // when that word and the end content cannot share a line, the end content
+  // moves to its own line at the row's end, and the label wraps across the
+  // full width. A word wider than the row breaks.
+  labelArea: {
     flex: 1,
     minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    columnGap: spacingVars['--spacing-2'],
   },
+  label: {
+    flexGrow: 1,
+    flexBasis: 0,
+    maxWidth: '100%',
+    overflowWrap: 'break-word',
+  },
+  // One line tall, so a badge centers on the label's first line.
   endContent: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
+    blockSize: '1lh',
+    marginInlineStart: 'auto',
   },
   // Row-level secondary controls (actions slot) — siblings of the primary
   // element at the trailing edge of the row. pointerEvents opts back in when
@@ -176,7 +192,7 @@ const styles = stylex.create({
   // each row carries its own indent (`indentStyles` below). `minHeight: 0`
   // lets the 0fr track shrink this item to nothing; the group clips it.
   // `minWidth: 0` keeps the track at the list's width, so a long label
-  // truncates instead of widening the open group past the nav.
+  // wraps instead of widening the open group past the nav.
   childrenInner: {
     minHeight: 0,
     minWidth: 0,
@@ -806,9 +822,13 @@ export function SideNavItem({
           // `inherit` — see the collapsed path above.
           color: isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary',
         })}
-      {!isCollapsed && <span {...stylex.props(styles.label)}>{label}</span>}
-      {!isCollapsed && isRenderable(endContent) && (
-        <span {...stylex.props(styles.endContent)}>{endContent}</span>
+      {!isCollapsed && (
+        <span {...stylex.props(styles.labelArea)}>
+          <span {...stylex.props(styles.label)}>{label}</span>
+          {isRenderable(endContent) && (
+            <span {...stylex.props(styles.endContent)}>{endContent}</span>
+          )}
+        </span>
       )}
       {!isCollapsed && isItemCollapsible && !hasIndependentToggle && (
         <Icon

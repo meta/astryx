@@ -479,7 +479,7 @@ export const EndContent: Story = {
           }
         />
         <SideNavItem
-          label="A very long navigation label that should truncate with ellipsis"
+          label="A very long navigation label that wraps onto a second line"
           icon={DocumentTextIcon}
           href="/long"
           endContent={<Badge label={99} />}
