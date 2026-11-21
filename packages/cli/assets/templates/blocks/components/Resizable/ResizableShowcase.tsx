@@ -2,6 +2,7 @@
 
 'use client';
 
+import {useRef} from 'react';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import {
   Card,
@@ -13,14 +14,23 @@ import {
 import {Text, Heading} from '@astryxdesign/core/Text';
 
 export default function ResizableShowcase() {
+  // The sidebar's limit is a share of the card, so in a narrow column the
+  // resize handle never leaves the card.
+  const cardRef = useRef<HTMLDivElement>(null);
   const sidebar = useResizable({
     defaultSize: 200,
     minSize: 120,
-    maxSize: 400,
+    maxSize: '66%',
+    containerRef: cardRef,
   });
 
   return (
-    <Card variant="muted" height={280} width={600}>
+    <Card
+      ref={cardRef}
+      variant="muted"
+      height={280}
+      width={600}
+      maxWidth="100%">
       <Layout
         height="fill"
         start={

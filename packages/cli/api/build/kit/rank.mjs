@@ -53,7 +53,7 @@
 
 import {
   HEAD_END,
-  SHELL_FAMILY,
+  isAppShell,
   terms,
   modifiersOf,
   pairsOf,
@@ -64,6 +64,7 @@ import {
   keywordUnits,
   keywordWordsFor,
   framesOf,
+  readNames,
 } from './words.mjs';
 import {namedOutright, tieReading} from './weights.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
@@ -141,11 +142,12 @@ const START_TERMS = 2;
  * by how strongly each one's own descriptor answers the idea, then by how
  * typical of its family it is, then by name (`settleTies`).
  *
- * @param {string} query
+ * @param {string} idea
  * @param {PageTemplate[]} pages
  * @returns {RankedPage[]}
  */
-export function rankPages(query, pages) {
+export function rankPages(idea, pages) {
+  const query = readNames(idea, pages);
   const docs = pages.map(page => {
     const [family = '', ...variantParts] = page.category.split(' - ');
     const keywords = page.keywords ?? [];
@@ -290,6 +292,7 @@ export function rankPages(query, pages) {
         family,
         base,
         matched,
+        hidden: page.hidden === true,
       };
     })
     .sort((a, b) => b.score - a.score || Number(b.base) - Number(a.base));
@@ -405,19 +408,29 @@ export function pickAlternatives(ranked, startName, count = 2) {
  * a page the builder already has starts from the app shell (FR9). Either way,
  * the app shell is the shell template the idea describes when one leads.
  *
+ * A family's base is where a part goes only when the ranker leads with it. A
+ * family word that heads the idea and is also a component's name names the
+ * piece, not its place: "a sortable table" is a table to add, not a part for
+ * the table page.
+ *
  * @param {RankedPage[]} ranked
  * @param {IdeaKind} [kind]
+ * @param {Set<string>} [pieceWords] the last word of each component's name
  * @returns {RankedPage | null}
  */
-export function pickStart(ranked, kind = 'page') {
+export function pickStart(ranked, kind = 'page', pieceWords = new Set()) {
   if (kind !== 'page') {
-    const host = kind === 'part' && ranked.find(r => r.base && r.familyNamed);
-    if (host) return host;
+    const lead = ranked[0];
+    const namesPiece =
+      lead?.headNamed && terms(lead.family).some(t => pieceWords.has(t));
+    if (kind === 'part' && lead?.base && lead.familyNamed && !namesPiece) {
+      return lead;
+    }
     // Otherwise the app shell (FR2): the shell template the idea describes
     // when one leads ("a frame with sidebar navigation"), else none, for the
     // kit's neutral fallback.
-    const lead = pickStart(ranked);
-    return lead?.family === SHELL_FAMILY ? lead : null;
+    const shell = pickStart(ranked);
+    return isAppShell(shell) ? shell : null;
   }
   const top = ranked[0];
   if (!top || top.score < START_SCORE) return null;

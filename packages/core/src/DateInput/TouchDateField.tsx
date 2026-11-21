@@ -61,6 +61,7 @@ import {
 import {flushSync} from 'react-dom';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
@@ -174,15 +175,12 @@ const SWAP_DURATION = durationVars['--duration-fast'];
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 180,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 180,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 180,
   },
 });
@@ -374,6 +372,7 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-large-size'],
+    lineHeight: typeScaleVars['--text-large-leading'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
     cursor: {
       default: 'pointer',
@@ -430,6 +429,7 @@ const styles = stylex.create({
   weekday: {
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
   },
@@ -1345,6 +1345,7 @@ export function TouchDateField({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
+          inputRowSizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085

@@ -85,7 +85,7 @@ export async function iconMap(definition, icon, options = {}) {
       await findLocalIconSet(cwd, selector);
     // The docs' kebab id (`eye-slash`) names the same definition, and a
     // library's other name for an icon (`trash-2`) names the same icon.
-    definition = definitionNameOf(definition, mappableDefinitions(set));
+    definition = definitionNameOf(definition, mappableDefinitions(set), set);
     if (!remove) icon = iconIdIn(set, /** @type {string} */ (icon)) ?? icon;
     const map = {...(set.data.map ?? {})};
     const previous = map[definition] ?? null;
@@ -117,8 +117,12 @@ export async function iconMap(definition, icon, options = {}) {
       }
       map[definition] = /** @type {string} */ (icon);
     }
+    // A key that names a replaced definition is written under its
+    // successor's name, as discovery reads it.
     const changed =
-      (remove ? previous != null : previous !== icon) || moduleRenamed;
+      (remove ? previous != null : previous !== icon) ||
+      moduleRenamed ||
+      set.replacedKeys != null;
     /** @type {string[]} */
     const files = [];
     if (changed) {
@@ -146,6 +150,7 @@ export async function iconMap(definition, icon, options = {}) {
         previous,
         changed,
         ...(moduleUpdate ? {moduleUpdate} : {}),
+        ...(set.replacedKeys ? {replacedKeys: set.replacedKeys} : {}),
         ...(files.length > 0 ? {files} : {}),
       },
     };
@@ -201,7 +206,7 @@ async function mapMany({cwd, selector, pairs}) {
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
-    const name = definitionNameOf(match[1], known);
+    const name = definitionNameOf(match[1], known, set);
     const id = iconIdIn(set, match[2]) ?? match[2];
     if (!known.has(name)) {
       throw new AstryxError(
@@ -229,7 +234,10 @@ async function mapMany({cwd, selector, pairs}) {
       changed: previous !== id,
     });
   }
-  const changed = entries.some(each => each.changed) || moduleRenamed;
+  const changed =
+    entries.some(each => each.changed) ||
+    moduleRenamed ||
+    set.replacedKeys != null;
   /** @type {string[]} */
   const files = [];
   if (changed) {
@@ -254,6 +262,7 @@ async function mapMany({cwd, selector, pairs}) {
       entries,
       changed,
       ...(moduleUpdate ? {moduleUpdate} : {}),
+      ...(set.replacedKeys ? {replacedKeys: set.replacedKeys} : {}),
       ...(files.length > 0 ? {files} : {}),
     },
   };

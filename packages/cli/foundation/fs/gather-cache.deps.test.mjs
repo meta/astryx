@@ -6,11 +6,13 @@
  * run found unchanged ends with the run, so a process that runs again checks
  * them again. Entries live in the kept gathers' store, which only an
  * installed CLI with a build id uses, so the CLI's root is set to an
- * installed-looking folder with one.
+ * installed-looking folder with one. An entry's value is the text its codec
+ * checked, and a value that does not read back exactly is never stored.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {readKept} from '../../test-utils/kept-entry.mjs';
+import {EXACT_CODEC} from './exact-codec.mjs';
 import * as fs from 'node:fs';
 import nodeModule from 'node:module';
 import * as path from 'node:path';
@@ -43,9 +45,9 @@ vi.mock('./paths.mjs', async importOriginal => ({
 let cache;
 const savedCache = process.env.XDG_CACHE_HOME;
 const STORE = path.join(TEMP_ROOT, 'cache', 'astryx', 'catalogs');
-// Under the CLI's root, so its files count as the CLI's own, which a value
-// derived from a kept gather keys on.
-const DATA = path.join(FAKE_CLI_ROOT, 'data');
+// Outside the CLI's root: a kept entry checks these files on every read,
+// while the CLI's own files are its build id's to stand for.
+const DATA = path.join(TEMP_ROOT, 'data');
 
 const identity = {
   encode: (/** @type {any} */ value) => value,
@@ -175,6 +177,105 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
       });
     });
 
+    it.each([
+      [
+        'checked for',
+        'checked.txt',
+        (/** @type {string} */ file) => fs.existsSync(file),
+      ],
+      [
+        'resolved',
+        'resolved.txt',
+        (/** @type {string} */ file) => Boolean(fs.realpathSync(file)),
+      ],
+    ])(
+      'builds on an entry that only %s a file it read, and is gathered again alone when that file is edited',
+      async (_how, name, ask) => {
+        write(name, 'one');
+        write('base-own.txt', 'base');
+        write('reader-own.txt', 'reader');
+        const checked = path.join(DATA, name);
+        const runChecked = async () => {
+          /** @type {string[]} */
+          const gathered = [];
+          const value = await cache.recordRun(async () => {
+            const base = await cache.persistedGather(
+              ['deps-test', 'checks'],
+              async () => {
+                gathered.push('checks');
+                return `${ask(checked)}+${read('base-own.txt')}`;
+              },
+              identity,
+            );
+            const reader = await cache.persistedGather(
+              ['deps-test', 'reads'],
+              async () => {
+                gathered.push('reads');
+                return `${read(name)}+${read('reader-own.txt')}`;
+              },
+              identity,
+            );
+            return {base, reader};
+          });
+          return {...value, gathered};
+        };
+        expect(await runChecked()).toEqual({
+          base: 'true+base',
+          reader: 'one+reader',
+          gathered: ['checks', 'reads'],
+        });
+        const reader = entries().get('deps-test/reads');
+        expect(reader?.deps).toHaveLength(1);
+        // It keeps the file it read itself: the entry it builds on holds only
+        // that the file is there, or where it resolves.
+        const own = (reader?.stamps ?? []).map(([file]) => path.basename(file));
+        expect(own).toEqual(expect.arrayContaining([name, 'reader-own.txt']));
+        expect(own).not.toContain('base-own.txt');
+
+        // An edit that keeps the file there: only the entry that read it is
+        // gathered again.
+        write(name, 'two, longer');
+        expect(await runChecked()).toEqual({
+          base: 'true+base',
+          reader: 'two, longer+reader',
+          gathered: ['reads'],
+        });
+      },
+    );
+
+    it("is read back after an in-place edit to one of the CLI's own files, and gathered again after an edit to a package in the CLI's own node_modules", async () => {
+      const own = path.join(FAKE_CLI_ROOT, 'data', 'own.txt');
+      const nested = path.join(
+        FAKE_CLI_ROOT,
+        'node_modules',
+        'dep',
+        'index.js',
+      );
+      fs.mkdirSync(path.dirname(own), {recursive: true});
+      fs.mkdirSync(path.dirname(nested), {recursive: true});
+      fs.writeFileSync(own, 'cli-one');
+      fs.writeFileSync(nested, 'dep-one');
+      const once = () =>
+        cache.recordRun(async () =>
+          cache.persistedGather(
+            ['cli-files-test', 'value'],
+            async () =>
+              `${fs.readFileSync(own, 'utf8')}+${fs.readFileSync(nested, 'utf8')}`,
+            identity,
+          ),
+        );
+      expect(await once()).toBe('cli-one+dep-one');
+      expect(await once()).toBe('cli-one+dep-one');
+      // The build id stands for the CLI's own files: an in-place edit to one
+      // is not seen.
+      fs.writeFileSync(own, 'cli-two');
+      expect(await once()).toBe('cli-one+dep-one');
+      // A package placed in the node_modules folder inside the CLI's is not
+      // part of the build: an edit to it is.
+      fs.writeFileSync(nested, 'dep-two');
+      expect(await once()).toBe('cli-two+dep-two');
+    });
+
     it('is gathered again, then read back, when the entry it builds on is gone', async () => {
       write('base.txt', 'gone-test');
       write('own.txt', 'own');
@@ -247,8 +348,9 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
               identity,
             );
           }
+          // Keyed by what it is worked out from, as search's entry table is.
           const derived = cache.persistedDerived(
-            ['shared-test', 'derived'],
+            ['shared-test', 'derived', last],
             () => {
               ran.push('derived');
               return last.length;
@@ -316,3 +418,70 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
     });
   },
 );
+
+describe.skipIf(!hasModuleHooks)('storing a kept value', () => {
+  /**
+   * One recorded run that gathers `value` under `name` with `codec`.
+   * @param {string} name
+   * @param {unknown} value
+   * @param {any} codec
+   */
+  const keep = (name, value, codec) =>
+    cache.recordRun(() =>
+      cache.persistedGather(['store-test', name], async () => value, codec),
+    );
+
+  it('stores an exact value as the text its check read', async () => {
+    const value = {a: [1, 'two', null], b: undefined, c: {d: true}};
+    await keep('exact', value, EXACT_CODEC);
+    const stored = entries().get('store-test/exact');
+    if (!stored) throw new Error('not stored');
+    const text = fs.readFileSync(stored.file, 'utf8');
+    expect(text.slice(text.indexOf('\n') + 1)).toBe(
+      EXACT_CODEC.encodeText(value),
+    );
+    expect(EXACT_CODEC.decode(stored.value)).toEqual(value);
+  });
+
+  it('stores a derived value as the text its check read, inside the entry a whole-entry write gives', async () => {
+    const value = {
+      rows: [
+        ['a', 1],
+        ['b', undefined],
+      ],
+      note: 'derived',
+    };
+    await cache.recordRun(async () => {
+      await cache.persistedGather(
+        ['store-test', 'base-of-derived'],
+        async () => 'base',
+        identity,
+      );
+      cache.persistedDerived(['store-test-derived'], () => value, EXACT_CODEC);
+    });
+    const file = fs
+      .readdirSync(STORE)
+      .map(name => path.join(STORE, name))
+      .find(f => fs.readFileSync(f, 'utf8').includes('store-test-derived'));
+    if (!file) throw new Error('not stored');
+    const text = fs.readFileSync(file, 'utf8');
+    const stored = JSON.parse(text);
+    expect(text).toBe(
+      JSON.stringify({
+        format: stored.format,
+        derived: true,
+        key: stored.key,
+        value: EXACT_CODEC.encode(value),
+      }),
+    );
+    expect(EXACT_CODEC.decode(stored.value)).toEqual(value);
+  });
+
+  it('never stores a value that does not read back exactly', async () => {
+    // Refused by the exact codec, and by a plain one's round trip.
+    await keep('exact-nan', {n: Number.NaN}, EXACT_CODEC);
+    await keep('plain-undefined', {gone: undefined}, identity);
+    expect(entries().has('store-test/exact-nan')).toBe(false);
+    expect(entries().has('store-test/plain-undefined')).toBe(false);
+  });
+});

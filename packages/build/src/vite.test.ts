@@ -8,7 +8,13 @@
  */
 
 import {describe, it, expect, beforeAll, afterAll, vi} from 'vitest';
-import {mkdtempSync, mkdirSync, rmSync} from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -179,6 +185,77 @@ describe('astryxStylex locale aliases', () => {
   });
 });
 
+describe('astryxStylex stylesheet subpaths', () => {
+  let rootDir: string;
+  let corePackage: string;
+
+  beforeAll(() => {
+    rootDir = mkdtempSync(path.join(tmpdir(), 'astryx-vite-sheets-'));
+    corePackage = path.join(rootDir, 'node_modules/@astryxdesign/core');
+    mkdirSync(corePackage, {recursive: true});
+    writeFileSync(
+      path.join(corePackage, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/core',
+        exports: {
+          '.': './src/index.ts',
+          './reset.css': {
+            types: './src/reset.css.d.ts',
+            default: './src/reset.css',
+          },
+          './astryx.css': {
+            types: './src/astryx.css.d.ts',
+            default: './dist/astryx.css',
+          },
+          './theme': './src/theme/index.ts',
+        },
+      }),
+    );
+  });
+
+  afterAll(() => {
+    rmSync(rootDir, {recursive: true, force: true});
+  });
+
+  it('resolves reset.css to its file in the source', () => {
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    expect(applyAlias(aliases, '@astryxdesign/core/reset.css')).toBe(
+      path.join(corePackage, 'src/reset.css'),
+    );
+  });
+
+  it('resolves the prebuilt stylesheet to an empty stylesheet, since StyleX compiles its rules', () => {
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    const replaced = applyAlias(aliases, '@astryxdesign/core/astryx.css');
+    expect(replaced).not.toContain(corePackage);
+    expect(path.basename(replaced)).toBe('replaced-stylesheet.css');
+    const css = readFileSync(replaced, 'utf8');
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '').trim()).toBe('');
+  });
+
+  it('keeps every other subpath on the source alias', () => {
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    expect(applyAlias(aliases, '@astryxdesign/core/theme')).toBe(
+      path.join(corePackage, 'src/theme'),
+    );
+    expect(applyAlias(aliases, '@astryxdesign/core/Button')).toBe(
+      path.join(corePackage, 'src/Button'),
+    );
+  });
+
+  it('aliases only the prebuilt stylesheet, even when Core is not installed', () => {
+    const aliases = getInjectedConfig(path.join(tmpdir(), 'astryx-vite-none'))
+      .resolve.alias;
+    expect(
+      aliases
+        .filter(
+          (a: any) => typeof a.find === 'string' && a.find.endsWith('.css'),
+        )
+        .map((a: any) => a.find),
+    ).toEqual(['@astryxdesign/core/astryx.css']);
+  });
+});
+
 describe('astryxStylex optimizeDeps package discovery', () => {
   let rootDir: string;
 
@@ -251,6 +328,15 @@ describe('astryxStylex optimizeDeps package discovery', () => {
           'node:url',
         ],
       });
+      // SYNC: the same path rewrites build.mjs applies to dist/vite.mjs.
+      let bundled = readFileSync(outfile, 'utf8');
+      for (const file of ['source-stylesheet.js', 'replaced-stylesheet.css']) {
+        bundled = bundled.replaceAll(
+          `resolve(__dirname, "${file}")`,
+          `resolve(__dirname, "../src/${file}")`,
+        );
+      }
+      writeFileSync(outfile, bundled);
       const script = [
         `const {astryxStylex} = await import(${JSON.stringify(pathToFileURL(outfile).href)});`,
         `const plugin = astryxStylex({rootDir: ${JSON.stringify(rootDir)}})`,

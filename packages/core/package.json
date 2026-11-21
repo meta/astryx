@@ -2,7 +2,7 @@
   "name": "@astryxdesign/core",
   "version": "0.7.17",
   "displayName": "Astryx Core",
-  "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
+  "description": "The Astryx component library: accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
   "license": "MIT",
   "homepage": "https://github.com/meta/astryx#readme",
@@ -724,6 +724,11 @@
       "types": "./dist/i18n/index.d.ts",
       "default": "./dist/i18n/index.js"
     },
+    "./palette": {
+      "source": "./src/palette/index.ts",
+      "types": "./dist/palette/index.d.ts",
+      "default": "./dist/palette/index.js"
+    },
     "./theme": {
       "source": "./src/theme/index.ts",
       "types": "./dist/theme/index.d.ts",
@@ -894,10 +899,20 @@
       "types": "./dist/internal/virtualization.d.ts",
       "default": "./dist/internal/virtualization.js"
     },
+    "./internal/module-loader": {
+      "source": "./src/internal/module-loader.ts",
+      "types": "./dist/internal/module-loader.d.ts",
+      "default": "./dist/internal/module-loader.js"
+    },
     "./internal/committed-ref": {
       "source": "./src/internal/committed-ref.ts",
       "types": "./dist/internal/committed-ref.d.ts",
       "default": "./dist/internal/committed-ref.js"
+    },
+    "./internal/clipboard-copy": {
+      "source": "./src/internal/clipboard-copy.ts",
+      "types": "./dist/internal/clipboard-copy.d.ts",
+      "default": "./dist/internal/clipboard-copy.js"
     },
     "./internal/shared-context": {
       "source": "./src/internal/shared-context.ts",

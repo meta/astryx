@@ -3,7 +3,8 @@
 /**
  * The published package answers `manifest` from the manifest `prepack` stores:
  * the package script writes it, the packed tarball ships it, and the CLI run
- * from that tarball prints the same manifest loading no other command.
+ * from that tarball prints the same manifest loading no other command. `mcp`
+ * serves its tools from the same stored manifest.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -69,9 +70,10 @@ afterAll(() => {
  * doc file is not a command module: the manifest's is read by every run).
  * @param {string} cliRoot
  * @param {string[]} args
+ * @param {string} [input] standard input, closed after it
  * @returns {{stdout: string, commands: string[]}}
  */
-function runListingLoads(cliRoot, args) {
+function runListingLoads(cliRoot, args, input = '') {
   const log = path.join(
     work,
     `loads-${path.basename(cliRoot)}-${args.join('_')}.txt`,
@@ -97,6 +99,7 @@ export async function load(url, context, next) {
     {
       cwd: outside,
       encoding: 'utf8',
+      input,
       env: {...process.env, LOAD_LOG: log, NO_UPDATE_NOTIFIER: '1'},
     },
   );
@@ -145,6 +148,31 @@ describe('the packed package', () => {
           fromCheckout.stdout,
         );
       }
+    } finally {
+      if (moved) fs.renameSync(aside, store);
+    }
+  });
+
+  it('serves the same MCP tools from the stored manifest, loading no other command', () => {
+    const store = path.join(CLI_ROOT, STORE);
+    const aside = `${store}.aside-${process.pid}`;
+    const moved = fs.existsSync(store);
+    if (moved) fs.renameSync(store, aside);
+    try {
+      const requests = [
+        {jsonrpc: '2.0', id: 1, method: 'initialize', params: {protocolVersion: '2025-06-18', capabilities: {}, clientInfo: {name: 'test', version: '1'}}},
+        {jsonrpc: '2.0', id: 2, method: 'tools/list'},
+      ]
+        .map(message => JSON.stringify(message))
+        .join('\n');
+      const fromTarball = runListingLoads(packed, ['mcp'], `${requests}\n`);
+      const fromCheckout = runListingLoads(CLI_ROOT, ['mcp'], `${requests}\n`);
+      expect(fromCheckout.commands.length).toBeGreaterThan(10);
+      expect(fromTarball.commands.map(url => path.basename(url))).toEqual(['mcp.mjs']);
+      /** @param {string} stdout */
+      const tools = stdout => JSON.parse(stdout.trim().split('\n')[1]).result.tools;
+      expect(tools(fromTarball.stdout).length).toBeGreaterThan(40);
+      expect(tools(fromTarball.stdout)).toEqual(tools(fromCheckout.stdout));
     } finally {
       if (moved) fs.renameSync(aside, store);
     }

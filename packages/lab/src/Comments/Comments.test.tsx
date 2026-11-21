@@ -961,6 +961,67 @@ describe('Comments threads', () => {
     ).toBeTruthy();
   });
 
+  it('names, shows and announces a failed link copy', async () => {
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'));
+    render(
+      <Sized>
+        <Comments
+          comments={[{...COMMENTS[0], replies: []}]}
+          currentUser={OTHER}
+        />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'Copy comment link'}));
+    await flush();
+    expect(
+      screen.getByRole('button', {name: 'Failed to copy value to clipboard.'}),
+    ).toBeTruthy();
+    // A failure is an error, so it goes to the assertive region.
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-astryx-live-region="assertive"]'),
+      ).toHaveTextContent('Failed to copy value to clipboard.'),
+    );
+  });
+
+  it('stops the failed-copy reset when the comment unmounts', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    const setTimer = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      writeText.mockRejectedValueOnce(new Error('clipboard denied'));
+      const {unmount} = render(
+        <Sized>
+          <Comments
+            comments={[{...COMMENTS[0], replies: []}]}
+            currentUser={OTHER}
+          />
+        </Sized>,
+      );
+      await click(screen.getByRole('button', {name: 'Copy comment link'}));
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(
+        screen.getByRole('button', {
+          name: 'Failed to copy value to clipboard.',
+        }),
+      ).toBeTruthy();
+      unmount();
+      // The failure shows for two seconds, as a copied link does. After the
+      // unmount, only the shared live region's own two-second clear may still
+      // be pending: the comment's reset is stopped.
+      const cleared = new Set(clearTimer.mock.calls.map(call => call[0]));
+      const pending = setTimer.mock.calls.flatMap((call, index) => {
+        const id = setTimer.mock.results[index]?.value;
+        return call[1] === 2000 && !cleared.has(id) ? [id] : [];
+      });
+      expect(pending.length).toBeLessThanOrEqual(1);
+    } finally {
+      setTimer.mockRestore();
+      clearTimer.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the copied label for the full time after a second copy', async () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));

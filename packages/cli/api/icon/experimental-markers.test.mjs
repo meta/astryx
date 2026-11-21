@@ -59,6 +59,18 @@ describe('icon-set exports carry @experimental', () => {
     }
   });
 
+  it('the stored icon index functions', () => {
+    const source = read('api/icon/search/icon-index.mjs');
+    for (const name of ['exportIconIndex', 'rankIconIndex']) {
+      expect(read('api/index.mjs')).toContain(name);
+      const at = source.search(
+        new RegExp(`^export async function ${name}\\b`, 'mu'),
+      );
+      expect(at, name).toBeGreaterThan(0);
+      expect(docBefore(source, at), name).toMatch(/@experimental\b/u);
+    }
+  });
+
   it.each([
     'authoring/doctypes/icon-set/type.ts',
     'authoring/doctypes/icon-definition/type.ts',

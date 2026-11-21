@@ -5,16 +5,20 @@
 /**
  * @file gestureCounter.ts
  * @input Pointer and context-menu events through the shared input stream;
- *   keydown and click on the document
- * @output Exports the gesture identity, whether its click has run, whether a
+ *   keydown and click on the document, and on each other document a control
+ *   lives in (listenForGestures)
+ * @output Exports the gesture identity, the element the input in hand landed
+ *   on (currentInputTarget), whether its click has run, whether a
  *   press is down or being released (afterRelease runs a callback once that
- *   release is handled), and the press claims (claimPress,
- *   claimContextMenuPress)
+ *   release is handled), the press claims (claimPress,
+ *   claimContextMenuPress), counting in another document (listenForGestures),
+ *   and the touch tap recognizer (useTapRecognizer, TOUCH_POINTER_TYPES)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
  *   gesture too. A layer or a menu that opens on a press claims that press
- *   here
+ *   here. The tap recognizer lives here, so a trigger that only waits for a
+ *   tap does not carry useTouchTrigger
  *
  * A browser light-dismiss and the trigger's own click come from ONE press, and
  * which of them React sees first is a race. Comparing timestamps against a
@@ -24,6 +28,7 @@
  * the dismissal", no matter how long the main thread was blocked in between.
  */
 
+import {useEffect, useState} from 'react';
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
 import {clearTouchEndMark, isTouchEndCancelled} from '../utils/touchEndMark';
@@ -47,7 +52,12 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
     gesture: number;
   } | null,
   isListening: false,
+  // The other documents (a frame, a pop-out window) whose presses count.
+  listenedDocuments: new WeakSet<Document>(),
   unsubscribePress: null as (() => void) | null,
+  // The press, keystroke or click last seen, and the element it landed on.
+  inputEvent: null as Event | null,
+  inputTarget: null as EventTarget | null,
 }));
 
 /**
@@ -64,10 +74,30 @@ function ensureFields(): void {
   if (state.releasingPointerType === undefined) {
     state.releasingPointerType = '';
   }
+  if (state.listenedDocuments === undefined) {
+    state.listenedDocuments = new WeakSet();
+  }
+  if (state.inputTarget === undefined) {
+    state.inputTarget = null;
+  }
+  if (state.inputEvent === undefined) {
+    state.inputEvent = null;
+  }
 }
 
-function advance() {
+// The input in hand counts for as long as its own dispatch runs, which
+// includes a controlled open's synchronous effects.
+function noteInputTarget(event: Event): void {
+  ensureFields();
+  state.inputEvent = event;
+  state.inputTarget = event.composedPath()[0] ?? event.target;
+}
+
+function advance(event?: Event) {
   state.gesture += 1;
+  if (event != null) {
+    noteInputTarget(event);
+  }
 }
 
 // The page listens for a press's end and its context menu only while a press
@@ -78,7 +108,7 @@ function startPress(event: PointerEvent) {
   state.isDispatchingRelease = false;
   // A mark from an earlier press never reaches this one.
   clearTouchEndMark();
-  advance();
+  advance(event);
   state.pressPointerId = event.pointerId;
   const view = event.view ?? document.defaultView;
   if (state.unsubscribePress != null || view == null) {
@@ -122,6 +152,7 @@ function markContextMenu() {
 
 function markClicked(event: MouseEvent) {
   ensureFields();
+  noteInputTarget(event);
   state.clickedGesture = state.gesture;
   // A click the page dispatches while the release itself is dispatched (a
   // menu row's activation) comes before the release's light dismiss, so it
@@ -147,16 +178,34 @@ function listen() {
     return;
   }
   state.isListening = true;
+  listenIn(document);
+}
+
+function listenIn(doc: Document) {
   // Capture phase: the count must advance before any handler reads it.
-  const view = document.defaultView;
+  const view = doc.defaultView;
   if (view != null) {
     subscribeInput(view, 'pointerdown', startPress, {first: true});
     // The window's bubble phase comes after every handler of the release.
     view.addEventListener('pointerup', endReleaseDispatch);
   }
-  document.addEventListener('keydown', advance, true);
+  doc.addEventListener('keydown', advance, true);
   // Capture phase observes the click even when a consumer stops propagation.
-  document.addEventListener('click', markClicked, true);
+  doc.addEventListener('click', markClicked, true);
+}
+
+/**
+ * Counts the presses and keystrokes in `doc` too, from now on. A control in
+ * another document (a frame, a pop-out window) calls it before its first
+ * press. Calling it again, or for the page's own document, does nothing more.
+ */
+export function listenForGestures(doc: Document | null | undefined): void {
+  listen();
+  if (doc == null || doc === document || state.listenedDocuments.has(doc)) {
+    return;
+  }
+  state.listenedDocuments.add(doc);
+  listenIn(doc);
 }
 
 /**
@@ -166,6 +215,20 @@ function listen() {
 export function currentGesture(): number {
   listen();
   return state.gesture;
+}
+
+/**
+ * The element the press, keystroke or click being handled landed on, or null
+ * once its dispatch is over.
+ */
+export function currentInputTarget(): EventTarget | null {
+  listen();
+  ensureFields();
+  const {inputEvent} = state;
+  // An event's phase is none again once its dispatch is over.
+  return inputEvent != null && inputEvent.eventPhase !== 0
+    ? state.inputTarget
+    : null;
 }
 
 /** Whether the click belonging to the current gesture already bubbled. */
@@ -418,4 +481,90 @@ export function claimContextMenuPress(layer: HTMLElement): void {
   if (state.contextMenuGesture === state.gesture) {
     claimPress(layer);
   }
+}
+
+/**
+ * Pointer types whose *press* is a tap rather than a click.
+ *
+ * A pen belongs here but not in the arrival path: in detection range it hovers
+ * — firing `pointerenter`/`pointermove` with no contact, exactly as a mouse
+ * does, on a device where `(hover: hover)` matches — and only becomes a tap
+ * once it lands. See `handlePointerEnter` in useTouchTrigger.
+ */
+export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
+
+/** Waits for the tap that a touch or pen press may become. Internal. */
+export interface TapRecognizer {
+  /**
+   * Call on every press. A touch or pen press on `trigger` waits for its tap:
+   * the press's own `click`. A touch the browser takes for a scroll or a
+   * pinch (`pointercancel`) is no tap, and a new press replaces one still
+   * waiting. Returns whether the press is touch or pen.
+   */
+  press(
+    event: PointerEvent,
+    trigger: Element | null,
+    onTap: (tapEvent: Event) => void,
+  ): boolean;
+  /** Stops waiting for a press still waiting for its tap. */
+  forget(): void;
+  /**
+   * Whether a touch or pen press still waits for its tap, with no key press
+   * or new press since. A focus at that time is the press's own focus.
+   */
+  isTouchPressCurrent(): boolean;
+}
+
+/** One tap recognizer for a trigger, released on unmount. Internal. */
+export function useTapRecognizer(): TapRecognizer {
+  const [recognizer] = useState(createTapRecognizer);
+  // Syncs the trigger's tap listeners (click, pointercancel) with its
+  // lifetime: a tap still waiting is released on unmount.
+  useEffect(() => () => recognizer.forget(), [recognizer]);
+  return recognizer;
+}
+
+function createTapRecognizer(): TapRecognizer {
+  let stopWaiting: (() => void) | null = null;
+  let waitingGesture: number | null = null;
+  const forget = () => {
+    stopWaiting?.();
+    stopWaiting = null;
+  };
+  return {
+    press(event, trigger, onTap) {
+      forget();
+      if (!TOUCH_POINTER_TYPES.has(event.pointerType)) {
+        return false;
+      }
+      if (trigger == null) {
+        return true;
+      }
+      // The tap must belong to this press. A key press or a new pointer press
+      // advances the gesture, so a keyboard activation that later fires
+      // `click` on the trigger (Enter on a button) is not mistaken for it.
+      const gesture = currentGesture();
+      waitingGesture = gesture;
+      const stop = () => {
+        trigger.removeEventListener('click', handleTap);
+        trigger.removeEventListener('pointercancel', stop);
+        if (stopWaiting === stop) {
+          stopWaiting = null;
+        }
+      };
+      const handleTap = (tapEvent: Event) => {
+        stop();
+        if (currentGesture() === gesture) {
+          onTap(tapEvent);
+        }
+      };
+      trigger.addEventListener('click', handleTap);
+      trigger.addEventListener('pointercancel', stop);
+      stopWaiting = stop;
+      return true;
+    },
+    forget,
+    isTouchPressCurrent: () =>
+      stopWaiting != null && waitingGesture === currentGesture(),
+  };
 }

@@ -91,6 +91,16 @@ describe('parseConfig (load boundary)', () => {
     expect(reason({integrations: [1]})).toContain('integrations.0');
   });
 
+  it('accepts the skill places a project saves, and refuses any other value', () => {
+    expect(parseConfig({skills: {to: 'skills'}})).toEqual({skills: {to: 'skills'}});
+    expect(parseConfig({skills: {to: ['agents-md', './team']}}).skills?.to).toEqual(['agents-md', './team']);
+    expect(reason({skills: {to: 'skils'}})).toContain('"skils" is not a place');
+    expect(reason({skills: {to: 'user'}})).toContain('settings file');
+    expect(reason({skills: {to: './../out'}})).toContain('leaves the project');
+    expect(reason({skills: {to: []}})).toContain('skills.to');
+    expect(reason({skills: {where: 'skills'}})).toContain('skills');
+  });
+
   it('rejects a non-URL issuesUrl', () => {
     expect(reason({issuesUrl: 'not-a-url'})).toContain('issuesUrl');
   });

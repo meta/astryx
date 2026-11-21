@@ -16,19 +16,48 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
-  [/\bdividers?\b/, {on: 'divider'}],
+  // (Design systems' names for parts Core has under another name: an
+  // underline nav is a row of tabs; a navigation rail is the side nav.)
+  [/\bunderline[- ]?navs?\b/, {on: 'tab'}],
+  [/\b(?:navigation|nav) rails?\b/, {on: 'side-nav'}],
+  // (A page's title is its top heading, never the page.)
+  [/\bpage (?:titles?|headings?|headers?)\b/, {on: 'heading', level: '1'}],
+  [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (An action, "a toast's action", is the button it holds: before
+  // "button" or at the end of a phrase only. "Action items", "the actions
+  // column" and "an actions menu" are other parts. A call to action is the
+  // primary button, below.)
+  [
+    /(?<!\bcalls? to )\bactions?(?:\s+buttons?\b|(?=\s*(?:$|[,.;:!?)])))/,
+    {on: 'button'},
+  ],
+  // (The page's main panel, the area its content sits in.)
+  [
+    /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
+    {on: 'layout-content'},
+  ],
   [
     /\baccordions? (headers?|triggers?|titles?|headings?)\b/,
     {on: 'collapsible-trigger'},
   ],
   [/\baccordions?\b/, {on: 'collapsible'}],
   [/\bcombo ?box(es)?\b/, {on: 'complex-selector'}],
-  [/\bnotifications?\b/, {on: 'toast'}],
+  // A calendar's range band, and the band a hover would select.
+  [
+    /\b(?:calendar\s+)?range\s+preview(?:\s+bands?)?\b|\bpreview\s+bands?\b/,
+    {on: 'calendar-range-preview'},
+  ],
+  [/\b(?:calendar\s+)?range\s+bands?\b/, {on: 'calendar-range'}],
+  // (Other design systems' names for the same parts: a snackbar is a
+  // toast, a lozenge a badge, the form controls the inputs.)
+  [/\b(?:notifications?|snack ?bars?)\b/, {on: 'toast'}],
   [/\b(focus (ring|outline)s?)\b/, {on: 'focus-ring'}],
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
   [
-    /\b(table header|column headers?|table headings?)\b/,
+    // (The header row is the header cells: "table header row gray" is
+    // never every row.)
+    /\b(table header rows?|header rows?|table headers?|column headers?|table headings?)\b/,
     {on: 'table-header-cell'},
   ],
   [
@@ -36,7 +65,11 @@ export const OVERRIDES = [
     {on: 'tab-indicator'},
   ],
   [/\b(status dots?)\b/, {on: 'status-dot'}],
-  [/\b(progress( bar)?( fill)?|loading bar)\b/, {on: 'progress-bar-fill'}],
+  // (Its indicator too: "the progress indicator".)
+  [
+    /\b(progress( bars?)?( fill| indicators?)?|loading bar)\b/,
+    {on: 'progress-bar-fill'},
+  ],
   [
     /\b((side ?nav|sidebar)( nav(igation)?)? (links?|items?))\b/,
     {on: 'side-nav-item'},
@@ -45,10 +78,18 @@ export const OVERRIDES = [
     /\b((dropdown |context )?menu (items?|options?|entries)|dropdown items?)\b/,
     {on: 'dropdown-menu-item'},
   ],
-  [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
+  // (A top nav's or a navbar's links are its items, never the top nav and
+  // every link.)
+  [
+    /\b((?:top )?(?:nav(igation)?(?: ?bar)?|navbar) (links?|items?))\b/,
+    {on: 'top-nav-item'},
+  ],
   // A context menu is its own part in Core (its items are the dropdown
   // menu's items, which it reuses).
   [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
+  // (Menus said plainly are every menu, the menus group; a dropdown menu,
+  // or one menu, is the dropdown menu.)
+  [/\b(?<!dropdown )menus\b/, {on: 'menus'}],
   [/\b((dropdown )?menus?)\b/, {on: 'dropdown-menu'}],
   // A part's own header or footer ("dialog header", "card footer") is that
   // part's, never the app's top bar or footer.
@@ -62,20 +103,34 @@ export const OVERRIDES = [
     {on: 'top-nav-heading'},
   ],
   [
-    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav(?:igation)? ?bar|app ?bar|masthead)\b/,
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
+  // A radio's dot is its own part (the mark a checked radio shows).
+  [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
-  [/\b(primary|main) buttons?\b/, {on: 'button', when: 'variant:primary'}],
+  // (The accent buttons and the call to action are the primary button:
+  // the one the accent fills.)
+  [
+    /\b(primary|main|accent) buttons?\b|\b(?:ctas?|calls? to action)(?: buttons?)?\b/,
+    {on: 'button', when: 'variant:primary'},
+  ],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],
   [/\bghost buttons?\b/, {on: 'button', when: 'variant:ghost'}],
   [
     /\b(danger|destructive|delete) (buttons?|ones?|variant)\b/,
     {on: 'button', when: 'variant:destructive'},
   ],
-  [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
+  // (Never the operating system, "Windows 11 accent …": a window named
+  // with a version is a product.)
+  [
+    /\b(panels?|windows?(?!\s+(?:\d|xp\b|vista\b))|boxes|tiles?|containers?)\b/,
+    {on: 'containers'},
+  ],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
+  // A sheet is Core's bottom sheet (never a style sheet).
+  [/(?<!\bstyle[\s-]?)\b(?:bottom[\s-]?)?sheets?\b/, {on: 'bottom-sheet'}],
   [/\b(text ?areas?|multi-?line (inputs?|fields?))\b/, {on: 'text-area'}],
   [
     /\b(select (dropdowns?|menus?|box(es)?|inputs?)|selects|dropdowns?|pickers?|select(?! (the|a|an|all|any|one|which|what|it|them)\b))\b/,
@@ -83,26 +138,63 @@ export const OVERRIDES = [
   ],
   [/\b(skeletons?( loaders?)?|loading placeholders?)\b/, {on: 'skeleton'}],
   [
-    /\b(inputs?|text ?box(es)?|text ?fields?|form fields?|fields?)\b/,
+    /\b(inputs?|text ?box(es)?|text ?fields?|form (fields?|controls?|elements?)|fields?)\b/,
     {on: 'inputs'},
   ],
-  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checks'}],
-  // "switch off", "switch the buttons to" are the verb, not the part.
+  // A checkbox is the box itself; the checks group (checkbox and radio)
+  // goes by its own name.
+  // A check mark is the mark drawn inside the box, never the box.
   [
-    /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,
+    /\b(?:checkbox(?:es)?\s+)?(?:check ?marks?|ticks?)\b/,
+    {on: 'checkbox-indicator-check'},
+  ],
+  [/\b(checkbox(es)?)\b/, {on: 'checkbox-indicator'}],
+  // "indicators" alone: the check and radio indicators (the checks group).
+  [/\b(?:check(?:box)?\s+and\s+radio\s+)?indicators?\b/, {on: 'checks'}],
+  // A switch's or toggle's thumb, knob or handle: the thumb, never the
+  // track.
+  [
+    /\b(?:toggle|switch)(?:e?s)?(?:'s)?\s+(?:thumbs?|knobs?|handles?)\b/,
+    {on: 'switch-thumb'},
+  ],
+  // The buttons or items of a toggle group (its own possessive or not):
+  // Core's toggle buttons, never a switch's.
+  [
+    /\btoggle[- ]?(?:button[- ]?)?groups?(?:'s|s'|’s)?\s+(?:buttons?|items?|options?)\b/,
+    {on: 'toggle-button'},
+  ],
+  // A toggle group: the group of toggle buttons, never a switch.
+  [/\btoggle[- ]?(?:button[- ]?)?groups?\b/, {on: 'toggle-button-group'}],
+  // A toggle button: Core's toggle button, never a switch.
+  [/\btoggle[- ]?buttons?\b/, {on: 'toggle-button'}],
+  // "switch off", "switch the buttons to" are the verb, not the part; the
+  // switch's "on color" or "on state" (its checked look) is the part.
+  [
+    /\b(toggles?|switch(?:e?s)?(?! (?:off|on(?![- ](?:colou?r|state|look)\b)|to|the|out|it|them|over|back|from)\b))\b/,
     {on: 'switch'},
   ],
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
-  [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
+  // (A keyboard key, "the key chips", is Core's Kbd, never a badge.)
+  [
+    /\b(kbds?|keyboard (keys?|shortcuts?|chips?)|key ?(chips?|caps?)|shortcut keys?)\b/,
+    {on: 'kbd'},
+  ],
+  // (Kbd's key badges, each key's own box, by their own name.)
+  [/\bkey badges?\b/, {on: 'kbd-key'}],
+  [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
+  // (A large title, the biggest title a screen has, is its top heading.)
+  [/\blarge titles?\b/, {on: 'heading', level: '1'}],
+  // (A display heading is the heading's largest display look.)
+  [/\bdisplay (?:headings?|titles?|text)\b/, {on: 'heading', when: 'type:display-1'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
   // Small, secondary and supporting text, captions and fine print: the
   // supporting text style, not the base size.
   [
-    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?)\b/,
+    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?|footnotes?)\b/,
     {on: 'body', role: 'supporting'},
   ],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
@@ -123,4 +215,28 @@ export function partForWord(word) {
     if (/** @type {RegExp} */ (re).test(w))
       return /** @type {{on: string}} */ (hit).on;
   return null;
+}
+
+/** @type {Map<string, string> | null} */
+let words = null;
+
+/**
+ * The single words the table reads as a part or group, each with what it
+ * names (`sidebar` side-nav, `checkbox` checks, `toggle` switch): the words
+ * a part's typo is read against beside the part names. Taken from the
+ * table's own words, a plural's singular (`toggles?`) included.
+ * @returns {Map<string, string>}
+ */
+export function partWords() {
+  if (words) return words;
+  words = new Map();
+  for (const [re] of OVERRIDES)
+    for (const m of re.source.matchAll(/[a-z]{3,}(\?)?/g)) {
+      const w = m[0].replace(/\?$/, '');
+      for (const each of m[1] ? [w, w.slice(0, -1)] : [w]) {
+        const on = partForWord(each);
+        if (on && !words.has(each)) words.set(each, on);
+      }
+    }
+  return words;
 }

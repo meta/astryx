@@ -21,6 +21,7 @@
  *   (`ownWords`), so a new template can start a build.
  */
 
+import {readNames} from './words.mjs';
 import {STOPWORDS} from '../../search/search.mjs';
 import {keywordUnits, keywordWordsFor} from './words.mjs';
 import {isWordModel} from './word-model.mjs';
@@ -165,10 +166,11 @@ export function weightWords(idea) {
  * @property {WeightTable[]} tables
  * @property {number[]} blend three numbers per member (the tables, in order,
  *   with the ranker second), then one for `SHELL`
- * @property {{tables: WeightTable[], blend: number[]}} [pick] the pick
- *   model: its own tables and blend numbers, used only to choose which page
- *   starts once the call model (the top-level tables and blend) has called a
- *   page. Without it, one model does both.
+ * @property {{tables?: WeightTable[], blend: number[]}} [pick] the pick
+ *   model: its own blend numbers, used only to choose which page starts once
+ *   the call model (the top-level tables and blend) has called a page. It
+ *   reads the top-level tables unless it carries its own. Without it, one
+ *   model does both.
  */
 
 /**
@@ -177,19 +179,27 @@ export function weightWords(idea) {
  * @param {WeightsFile} weights
  * @returns {boolean}
  */
-const hasPickModel = weights =>
-  isWordModel(weights.pick, weights.candidates.length);
+const hasPickModel = weights => {
+  const pick = weights.pick;
+  return (
+    pick != null &&
+    isWordModel(
+      {...pick, tables: pick.tables ?? weights.tables},
+      weights.candidates.length,
+    )
+  );
+};
 
 /**
- * The pick model of a weights file: its `pick` tables and blend when present,
- * else the file's own.
+ * The pick model of a weights file: its `pick` blend, over its own tables or
+ * else the top-level ones, when present; else the file's own model.
  * @param {WeightsFile} weights
  * @returns {WeightsFile}
  */
 const pickModel = weights => {
   const pick = weights.pick;
   return pick && hasPickModel(weights)
-    ? {...weights, tables: pick.tables, blend: pick.blend}
+    ? {...weights, tables: pick.tables ?? weights.tables, blend: pick.blend}
     : weights;
 };
 
@@ -376,7 +386,9 @@ function blend(idea, ranked, pick, catalog, weights) {
     .filter(n => !shellIds.has(n) && !weights.candidates.includes(n));
   const cands = [...listed, ...extra];
   const position = new Map(weights.candidates.map((c, i) => [c, i]));
-  const words = new Set(weightWords(idea).map(stem));
+  // A template named in any case, separator or with a neighbour-letter swap in a word of six or more letters
+  // reads as its id's words, as the page ranker reads it (readNames).
+  const words = new Set(weightWords(readNames(idea, catalog)).map(stem));
   /** @type {(number | undefined)[][]} */
   const members = weights.tables.map(table => {
     const index = new Map(table.words.map((w, i) => [w, i]));
@@ -622,6 +634,39 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
 }
 
 /**
+ * The pick model's probability for a page template among the ready, non-shell
+ * templates: a softmax over the pick model's scores. It says how clearly the
+ * pick model prefers that template over the others, not whether the template
+ * is right. Null without weights or for a template the word tables do not
+ * list.
+ * @param {string} name
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ * @returns {number | null}
+ */
+export function pickFit(name, idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores, position} = blend(
+    readNames(idea, catalog),
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  // The tables cannot judge a template they do not list, so it has no fit.
+  if (!position.has(name)) return null;
+  const pages = cands.flatMap((c, i) => (c === SHELL ? [] : [scores[i]]));
+  const at = cands.filter(c => c !== SHELL).indexOf(name);
+  if (at < 0) return null;
+  const top = Math.max(...pages);
+  const sum = pages.reduce((t, s) => t + Math.exp(s - top), 0);
+  return round4(Math.exp(pages[at] - top) / sum);
+}
+
+/**
  * Every ready, non-shell template in the blend's own order, best first: the
  * order the page start is chosen from, so the alternatives build names beside
  * the start come from the same ranking. Null without weights.
@@ -634,7 +679,7 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  return pickOrder(idea, ranked, pick, catalog, weights);
+  return pickOrder(readNames(idea, catalog), ranked, pick, catalog, weights);
 }
 
 /**
@@ -656,7 +701,11 @@ export function weighStart(
   {weights = null, newPage = false} = {},
 ) {
   if (!weights) return undefined;
-  const {cands, scores, position} = blend(idea, ranked, pick, catalog, weights);
+  // Every reader below sees a template the idea names in any case, separator
+  // or with a neighbour-letter swap in a word of six or more letters as that template's own words
+  // (readNames).
+  const read = readNames(idea, catalog);
+  const {cands, scores, position} = blend(read, ranked, pick, catalog, weights);
   /** @param {(c: string) => boolean} ok */
   const best = ok => {
     let at = -1;
@@ -679,13 +728,13 @@ export function weighStart(
   // and nearly as many; otherwise that listed template starts. Nothing learned about the template is involved,
   // so a new template competes on its own words.
   if (kept && !position.has(kept)) {
-    const listed = bestPage(idea, ranked, pick, catalog, weights, c =>
+    const listed = bestPage(read, ranked, pick, catalog, weights, c =>
       position.has(c),
     );
     if (!listed) return kept;
     // The idea's own words, less search's stopwords: "basically" must not
     // answer the "Basic" of a category.
-    const order = contentWords(idea);
+    const order = contentWords(read);
     const mine = ownWords(kept, catalog, order);
     const theirs = ownWords(listed, catalog, order);
     // An idea that names the template's family before the listed one's
@@ -702,11 +751,11 @@ export function weighStart(
     // whose own descriptor best matches the idea starts (`fullerOfTie`), then
     // the one most typical of the family. Only the templates' descriptors
     // decide this tie, never the tables.
-    return fullerOfTie(kept, idea, ranked, cands, catalog);
+    return fullerOfTie(kept, read, ranked, cands, catalog);
   }
   const top = best(() => true);
   if (top !== SHELL)
-    return bestPage(idea, ranked, pick, catalog, weights) ?? top;
+    return bestPage(read, ranked, pick, catalog, weights) ?? top;
   // An idea that asks for a new page keeps the ranker's template rather than
   // the shell.
   if (newPage && kept) return kept;
@@ -725,7 +774,8 @@ export function weighStart(
  */
 export function blendSummary(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  const read = readNames(idea, catalog);
+  const {cands, scores} = blend(read, ranked, pick, catalog, weights);
   let shell = 0;
   const rest = [];
   for (let i = 0; i < cands.length; i++) {
@@ -736,7 +786,7 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
   return {
     shell,
     best: hasPickModel(weights)
-      ? bestPage(idea, ranked, pick, catalog, weights)
+      ? bestPage(read, ranked, pick, catalog, weights)
       : (rest[0]?.name ?? null),
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,

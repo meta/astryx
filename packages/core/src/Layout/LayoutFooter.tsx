@@ -21,6 +21,7 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {layoutFooterMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
+import {LayoutContainerContext} from './LayoutContainerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
@@ -31,6 +32,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   // Outer shell: owns border/divider and sizing. No padding — that lives on inner.
@@ -149,6 +151,7 @@ export function LayoutFooter({
   ...props
 }: LayoutFooterProps) {
   const dividerCtx = use(LayoutDividerContext);
+  const container = use(LayoutContainerContext);
   const resolvedHasDivider =
     hasDivider ?? dividerCtx?.defaultHasDividers ?? false;
   const isZeroPadding = padding === 0;
@@ -159,7 +162,7 @@ export function LayoutFooter({
       role={role}
       aria-label={label}
       {...mergeProps(
-        themeProps('layout-footer'),
+        themeProps('layout-footer', {container}),
         stylex.props(
           layoutFooterMarker,
           styles.footer,
@@ -181,6 +184,7 @@ export function LayoutFooter({
           padding != null && containerPaddingInlineVarStyles[padding],
           padding != null && containerPaddingBlockStartVarStyles[padding],
           padding != null && containerPaddingBlockEndVarStyles[padding],
+          containerBlockBleedStyles.publish,
         )}>
         {children}
       </div>

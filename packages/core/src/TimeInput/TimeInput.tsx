@@ -32,15 +32,11 @@ import {
   type FocusEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
 import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
-import {
-  colorVars,
-  sizeVars,
-  typographyVars,
-  typeScaleVars,
-} from '../theme/tokens.stylex';
+import {colorVars, typographyVars, typeScaleVars} from '../theme/tokens.stylex';
 import {
   Field,
   InputClearButton,
@@ -147,15 +143,12 @@ const styles = stylex.create({
 
 const sizeStyles = stylex.create({
   sm: {
-    height: sizeVars['--size-element-sm'],
     minWidth: 120,
   },
   md: {
-    height: sizeVars['--size-element-md'],
     minWidth: 120,
   },
   lg: {
-    height: sizeVars['--size-element-lg'],
     minWidth: 120,
   },
 });
@@ -836,6 +829,7 @@ function TimeField({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           sizeStyles[size],
+          inputRowSizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.withinRing,
           fieldStatus && inputStatusBorderStyles[fieldStatus.type],

@@ -11,7 +11,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {baseInstalled, baseModule} from './_project.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
@@ -23,6 +23,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 const CLI = fileURLToPath(
   new URL('../../clients/cli/bin/astryx.mjs', import.meta.url),
@@ -57,11 +65,15 @@ describe('base resolution', () => {
     expect(r.run.slice(1)).toEqual(['neutral']);
   });
 
-  it('a guessed base for set base is only an installed one', async () => {
+  // A typo of a built-in base is that base, installed or not: its install
+  // first, then the set (never no base, which would drop the look).
+  it('a typo of a base that is not installed leads with its install', async () => {
     await themeEditNew('b', {cwd});
     const r = await refusal(() => themeEditSet('b', 'base', 'buttr', {cwd}));
-    expect(r.run.join(' ')).not.toMatch(/ base butter\b/);
-    expect(r.run[0]).toMatch(/ set b base none$/);
+    expect(r.run[0]).toMatch(
+      /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
+    );
+    expect(r.run[1]).toMatch(/ set b base butter$/);
   }, 240_000);
 });
 

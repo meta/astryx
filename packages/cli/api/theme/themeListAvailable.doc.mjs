@@ -13,7 +13,7 @@ export const doc = {
   displayName: 'themeListAvailable()',
   summary: 'List bundled, package, and local themes.',
   description:
-    'Lists every available theme with its owner, source, added state, and default state. Descriptor-less copies left by the released theme add are not themes yet; response meta names them and the upgrade command that adds their descriptors.',
+    "Lists every available theme with its source, added state, and default state, the owner the app imports it from (a bundled theme's own package, whose built output the app uses), and whether that owner is installed (a local theme is; theme add still needs it built). Descriptor-less copies left by the released theme add are not themes yet; response meta names them and the upgrade command that adds their descriptors.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeListAvailable(options?: {cwd?: string, package?: string}): Promise<ThemeListResponse>',

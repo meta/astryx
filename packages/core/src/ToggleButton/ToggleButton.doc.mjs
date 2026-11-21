@@ -17,7 +17,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-toggle-button-group'},
-      {className: 'astryx-toggle-button', states: ['isPressed'], visualProps: ['elevation']},
+      {className: 'astryx-toggle-button', states: ['isPressed', 'grouped'], visualProps: ['elevation']},
     ],
   },
   description: 'A button that toggles between pressed and unpressed states. Thin wrapper over Button with controlled toggle pattern, icon swap, and font weight emphasis.',

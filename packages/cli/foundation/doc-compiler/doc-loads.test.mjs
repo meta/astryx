@@ -54,23 +54,23 @@ const RUNNERS = {
   },
   'api/integration/pack-check.mjs': {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
-    sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
+    sites: ['child_process.spawnSync ×2', 'loadTopicModule'],
+  },
+  'api/search/_gather-docs.mjs': {
+    runs: "each extension doc of a topic, to leave an experimental extension's sections out of search",
+    sites: ['readDocAsData'],
   },
   'api/theme/_adapter.mjs': {
-    runs: 'recorded built theme modules through the shared app-theme loader',
-    sites: ['importThemeArtifact'],
+    runs: "recorded built theme modules through the shared app-theme loader, and the app's package manager to install the Astryx packages a shared theme imports",
+    sites: ['child_process.spawnSync', 'importThemeArtifact'],
   },
   'api/theme-edit/_context.mjs': {
     runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
     sites: ['import(<computed>)'],
   },
   'api/theme-edit/_css.mjs': {
-    runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
-    sites: [
-      'require(@csstools/css-syntax-patches-for-csstree)',
-      'require(css-tree)',
-      'require(mdn-data/css/properties.json)',
-    ],
+    runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
+    sites: ['require(<computed>)'],
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
@@ -85,14 +85,15 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a base theme package a theme imports whole, to name the themes it exports by name; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
-      '.import()',
-      'createJiti ×5',
-      'import(<computed>) ×2',
+      '.import() ×2',
+      'createJiti ×7',
+      'import(<computed>) ×3',
       'require(<computed>)',
-      'withEmptyStylesheets ×5',
+      'require.cache',
+      'withEmptyStylesheets ×6',
     ],
   },
   'api/theme/build/core-interception.mjs': {
@@ -110,6 +111,10 @@ const RUNNERS = {
   'assets/codemods/integration-discovery.mjs': {
     runs: "each integration's codemods, through the codemod parser, to plan an upgrade",
     sites: ['loadModuleWithParser(..., parseCodemod)'],
+  },
+  'assets/codemods/run-codemod.mjs': {
+    runs: "jscodeshift's Babel parser and its TypeScript parser options (CommonJS), on the first declaration file, to parse it as declarations",
+    sites: ['require(./parser/tsOptions.js)', 'require(@babel/parser)'],
   },
   'authoring/example/preview.mjs': {
     runs: 'Babel, its TypeScript plugin and the `globals` lists (CommonJS), each on first use, to read a doc example as the module a live preview runs',
@@ -192,16 +197,31 @@ const RUNNERS = {
       'import ../experimental-theme.doc.mjs',
     ],
   },
-  'clients/cli/commands/experimental/render.mjs': {
+  'clients/cli/commands/experimental/export.mjs': {
     runs: SELF_DOCS,
     sites: [
       'import ../../../../api/render/render.doc.mjs',
-      'import ../experimental-render.doc.mjs',
+      'import ../experimental-export.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/experimental/import.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-import.doc.mjs',
     ],
   },
   'clients/cli/commands/manifest.mjs': {
     runs: SELF_DOCS,
     sites: ['import ./manifest.doc.mjs'],
+  },
+  'clients/cli/commands/mcp.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ./mcp.doc.mjs'],
+  },
+  'clients/cli/lib/mcp-server.mjs': {
+    runs: "this CLI's own bin, once for each tool call an MCP client makes",
+    sites: ['child_process.spawn'],
   },
   'clients/cli/commands/postinstall.mjs': {
     runs: SELF_DOCS,
@@ -353,17 +373,29 @@ const RUNNERS = {
     runs: 'the generated record default theme, or the released package.json astryx.theme value when no record exists',
     sites: ['require(<computed>)'],
   },
+  'foundation/bases/requirements.mjs': {
+    runs: "a base's adapter module, only in a run whose command needs one of its steps",
+    sites: ['import(<computed>)'],
+  },
+  'foundation/bases/core-docs.mjs': {
+    runs: 'docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run',
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
   'foundation/config/project.mjs': {
     runs: 'astryx.config, through the config parser',
+    sites: ['loadModuleWithParser(..., parseConfig)'],
+  },
+  'foundation/discovery/integration-skills.mjs': {
+    runs: "each configured integration's doc modules, to read the skills they declare",
+    sites: ['docsRootFiles', 'loadTopicModule'],
+  },
+  'foundation/agent-docs/skill-place-files.mjs': {
+    runs: 'astryx.config, through the config parser, to read the skill places it saves (only the config, not its integrations)',
     sites: ['loadModuleWithParser(..., parseConfig)'],
   },
   'foundation/agent-docs/agent-docs.mjs': {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
-  },
-  'foundation/fonts/font-stylesheet.mjs': {
-    runs: 'postcss, the first time a font stylesheet is read, so commands that read none do not load it',
-    sites: ['require(postcss)'],
   },
   'foundation/fs/gather-cache.mjs': {
     runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
@@ -433,14 +465,26 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: "the page `astryx experimental export` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; an in-thread resolve hook that resolves imports between the files of an installed package by path; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",
     sites: [
-      '.import() ×6',
+      '.import() ×12',
       'createJiti ×2',
+      'globalThis[<computed>]',
+      'import(<computed>)',
       'module',
       'module.register',
+      'module.registerHooks',
+      'require(@babel/parser)',
       'require(@stylexjs/babel-plugin)',
     ],
+  },
+  'foundation/render/client-bundle.mjs': {
+    runs: "nothing: it parses the page's script it built (a vm.Script that is never run), so a script that would not run never reaches the file",
+    sites: ['vm.Script'],
+  },
+  'foundation/render/layers.mjs': {
+    runs: "the browser's DOM classes and observers, from the small document the render worker draws overlays in, put on the worker thread's globals",
+    sites: ['g[<computed>] ×4'],
   },
   'foundation/render/picture-chrome.mjs': {
     runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
@@ -451,8 +495,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
-    sites: ['child_process.fork', 'child_process.spawnSync'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs, and a parse check of the page's script once it reads its images from the first paint",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl', 'vm.Script'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
@@ -462,8 +506,16 @@ const RUNNERS = {
     runs: 'the module at a file URL, for the doc importers and the module loader',
     sites: ['import(<computed>)'],
   },
+  'foundation/fs/loaded-files.mjs': {
+    runs: 'nothing; reads which modules a loaded CommonJS module required, from the require cache, so a kept answer can stamp every file of the code that worked it out',
+    sites: ['createRequire'],
+  },
+  'foundation/fs/jiti-cache.mjs': {
+    runs: "jiti's own transform, on a transpile no kept copy holds, and jiti's version, part of each copy's name",
+    sites: ['require(jiti)', 'require(jiti/package.json)'],
+  },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module',
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',
     sites: [
       '.import() ×3',
       'importUrl ×2',
@@ -488,13 +540,17 @@ const RUNNERS = {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
   },
+  'foundation/integrations/pack-state.mjs': {
+    runs: "`npm pack --json`, with its output in temporary files: `--dry-run --ignore-scripts` to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is packed), and the real pack `api/integration/pack-check.mjs` asks for (it runs the package's pack scripts and writes the tarball)",
+    sites: ['child_process.spawnSync'],
+  },
   'foundation/integrations/validate-contributions.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written); and @babel/parser, loaded on first use, to read a contribution's source",
-    sites: ['child_process.spawnSync', 'require(@babel/parser)'],
+    runs: "@babel/parser, loaded on first use, to read a contribution's source",
+    sites: ['require(@babel/parser)'],
   },
   'foundation/release/cache.mjs': {
-    runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',
-    sites: ['child_process.spawnSync ×5'],
+    runs: "npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache, and once per run to read npm's own noproxy setting; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it",
+    sites: ['child_process.spawnSync ×6'],
   },
   'foundation/release/npm-guard.mjs': {
     runs: 'npm, in a process group of its own that it ends at the time limit, on Ctrl-C, or when the run that started it goes away',
@@ -508,14 +564,29 @@ const RUNNERS = {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
   },
+  'foundation/runtime/css-tree.mjs': {
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads; reads which of the data files are loaded, from the require cache, to stamp them',
+    sites: [
+      'require(<computed>)',
+      'require(mdn-data/css/properties.json)',
+      'require(mdn-data/css/selectors.json)',
+      'require.cache',
+    ],
+  },
   'foundation/runtime/lazy-dependencies.mjs': {
-    runs: 'Babel, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    runs: "Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported, and the Babel parser's package.json, for its release",
     sites: [
       'require(@babel/core)',
       'require(@babel/parser)',
+      'require(@babel/parser/package.json)',
       'require(jscodeshift)',
+      'require(postcss)',
       'require(postcss-selector-parser)',
     ],
+  },
+  'foundation/suggest/name-index.mjs': {
+    runs: "docs discovery, to load each integration doc once and keep the name it declares in the not-found hint's name index, when no kept index answers",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
   },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
@@ -525,12 +596,20 @@ const RUNNERS = {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
   },
+  'scripts/migrate-template-icons.mjs': {
+    runs: 'Prettier, to format a template file the migration rewrites when the file was formatted before (build tooling, not shipped)',
+    sites: ['require(prettier)'],
+  },
   'scripts/generate-manifest.mjs': {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
   },
   'scripts/generate-component-list.mjs': {
     runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-docs-routes.mjs': {
+    runs: "node, to build the CLI's own docs tree on a copy of exactly the files the package publishes and store its routes (at `prepack`)",
     sites: ['child_process.spawnSync'],
   },
   'scripts/generate-search-catalog.mjs': {
@@ -568,14 +647,18 @@ const LOADER_MODULES = {
   'foundation/discovery/docs-discovery.mjs': [
     'BUILTIN_DOCS_PACKAGE',
     'DocsCatalog',
+    'builtinTopicsForCore',
     'discoverBuiltinTopics',
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
+    'integrationDocDeclaration',
+    'integrationDocsCatalog',
     'isGuideRoute',
     'mergeTopic',
     'mergeTopicReport',
     'problemsInTopic',
+    'sectionContributor',
     'withoutPosition',
     'withSourceTitle',
   ],
