@@ -1072,15 +1072,23 @@ const CASES = [
   },
   {
     name: 'experimental theme check',
-    args: ['experimental', 'theme', 'check', 'checked/checkedTheme.ts'],
-    prepare: async () => {
-      const dir = await themeProject();
-      fs.mkdirSync(path.join(dir, 'checked'), {recursive: true});
+    // With --fix, so the moved color's old value and the records that
+    // would keep it show in both outputs; each run starts from the file as
+    // written.
+    args: [
+      'experimental',
+      'theme',
+      'check',
+      'checked/checkedTheme.ts',
+      '--fix',
+    ],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      fs.mkdirSync(path.join(cwd, 'checked'), {recursive: true});
       fs.writeFileSync(
-        path.join(dir, 'checked', 'checkedTheme.ts'),
-        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const checkedTheme = defineTheme({\n  name: 'checked',\n  tokens: {'--color-text-secondary': ['#d4d4d4', '#3a3a3a']},\n});\n",
+        path.join(cwd, 'checked', 'checkedTheme.ts'),
+        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const checkedTheme = defineTheme({\n  name: 'checked',\n  tokens: {\n    '--color-background-body': ['#ffffff', '#16181d'],\n    '--color-text-primary': ['#15171a', '#f2f3f5'],\n    '--color-text-secondary': ['#d4d4d4', '#3a3a3a'],\n  },\n});\n",
       );
-      return dir;
     },
   },
   {

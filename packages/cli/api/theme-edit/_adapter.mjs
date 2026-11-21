@@ -105,8 +105,7 @@ import {
   fontsourceSuggestion,
   themeSourceRefusal,
   typedThemeName,
-  autoMediaPart,
-  autoMediaSide,
+  mediaTextTokens,
 } from './_settings.mjs';
 
 // Every build of a theme writes its app copy (src/themes/<theme>/).
@@ -116,6 +115,7 @@ import {discoverThemeDirectory} from '../../foundation/discovery/theme-discovery
 import {lookProblems, lookRepair} from './_look.mjs';
 import {withThemeValues} from './_source-values.mjs';
 import {acceptedFileName, parseAccepted} from './_accepted.mjs';
+import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 import {
   appThemeUse,
   paintAppPage,
@@ -2145,27 +2145,18 @@ async function lookOf(ctx, root, file, built) {
     defaults: core.tokenDefaults ?? {},
     pairs: ctx.parts.pairs,
     accepted,
+    unloadedFonts: collectUnloadedFonts(theme),
     map: ctx.C.MAP,
     contrast: ctx.C.contrast,
-    // The side Core's media surface takes, by the editor's own reading of
-    // Core's rule: measured on an auto surface (a toast), else the one side
-    // the part data saw.
-    mediaSide: (part, fill, tokens, mode) => {
-      const rec = ctx.C.MAP[part];
-      if (!rec?.media) return null;
-      if (!autoMediaPart(ctx, part))
-        return /** @type {'dark' | 'light' | null} */ (
-          rec.mediaSides?.[0] ?? null
-        );
-      return autoMediaSide(fill, tokens, {
+    textTokens: (pair, fill, tokens, mode) =>
+      mediaTextTokens(
+        ctx,
+        pair,
+        fill,
+        tokens,
         mode,
-        error: (ctx.C.partReads(part, 'background') ?? []).some(
-          (/** @type {any} */ r) =>
-            r.token === '--color-background-error-inverted' &&
-            fill === tokens[r.token],
-        ),
-      });
-    },
+        pair.bg.tokens[0] === '--color-background-error-inverted',
+      ),
     app: app
       ? {
           themed: app.elements.length > 0,

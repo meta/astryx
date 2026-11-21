@@ -29,7 +29,11 @@ import {
   splitTop,
 } from './_color.mjs';
 import {acceptCovers} from './_accepted.mjs';
-import {FAMILIES, familyOf} from './_tables.mjs';
+import {familyOf} from './_tables.mjs';
+import {
+  hasGenericFamily,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
 import {
   NON_TEXT,
   STATUS_TOKEN,
@@ -50,7 +54,7 @@ import {
 /**
  * One problem a person would see.
  * @typedef {object} LookProblem
- * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page'} kind
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font'} kind
  * @property {Mode | 'both'} mode
  * @property {string} message
  * @property {string} [token] the token that draws it
@@ -77,10 +81,10 @@ import {
  * @property {(value: any, base: any, modes: string[], helpers: any) => {problems: any[]}} contrast the compiler's contrast measure
  * @property {{themed: boolean, pinned: Mode | null, painted: boolean} | null} app what the app does with the theme; null outside an app
  * @property {AcceptRecord[]} accepted the contrast the theme keeps as designed
- * @property {(part: string, fill: string | null, tokens: Record<string, string>, mode: Mode) => 'off' | 'dark' | 'light' | null} mediaSide
- *   the side Core's media surface in a part draws its text in on a fill, by
- *   Core's own rule; null for a part with no media surface, `off` where it
- *   keeps the theme's own text
+ * @property {string[]} unloadedFonts the font families the theme names that are neither generic nor installed with the system
+ * @property {(pair: TextPair, fill: string | null, tokens: Record<string, string>, mode: Mode) => string[]} textTokens
+ *   the text tokens a pair's text reads on its fill in a mode, as the
+ *   editor reads Core's media surface
  */
 
 /** The page and the grounds text and controls sit on. */
@@ -90,6 +94,8 @@ const CARD = '--color-background-card';
 const SURFACE = '--color-background-surface';
 const GROUNDS = [PAGE, SURFACE, CARD, POPOVER];
 const EDGE = '--color-border-emphasized';
+/** The share of Core's own edge contrast a control edge must reach. */
+const EDGE_SHARE = 0.95;
 const TEXT_TOKEN = /^--color-(text|icon)-/;
 /** Tokens drawn only as text or icons, never as a fill: the ones a repair may move. */
 const DRAWN_AS_TEXT = /^--color-(text|icon|on)-/;
@@ -218,18 +224,11 @@ function textProblems(look) {
       );
       if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
       let tok = s.tokens[0];
-      // Core's media surface (a toast, a lightbox) sets the text it holds
-      // from --color-on-dark or --color-on-light, on the side Core picks.
-      if (side === 'fg' && tok && TEXT_TOKEN.test(tok) && p.bg.target) {
-        const media = look.mediaSide(
-          p.bg.target,
-          drawn(p, 'bg', m),
-          tokens[mode],
-          mode,
-        );
-        if (media === 'dark') tok = '--color-on-dark';
-        if (media === 'light') tok = '--color-on-light';
-      }
+      // Core's media surface (a toast, a lightbox) draws the text it holds
+      // in its own on-colors: read as the editor reads it.
+      if (side === 'fg' && tok)
+        tok =
+          look.textTokens(p, drawn(p, 'bg', m), tokens[mode], mode)[0] ?? tok;
       if (tok) return colorIn(`var(${tok})`, tokens[mode], mode);
       return s.raw;
     };
@@ -326,42 +325,106 @@ function textProblems(look) {
 }
 
 /**
- * The shadow tokens each part with the menu fill reads: what sets a menu
- * apart from what it opens over.
+ * The parts with the menu fill, each with the shadow tokens it reads: what
+ * sets a menu apart from what it opens over.
  * @param {Look['map']} map
- * @returns {string[][]}
+ * @returns {Array<{part: string, shadows: string[]}>}
  */
-function overlayShadows(map) {
-  /** @type {string[][]} */
+function menuParts(map) {
+  /** @type {Array<{part: string, shadows: string[]}>} */
   const out = [];
-  for (const rec of Object.values(map)) {
+  for (const [part, rec] of Object.entries(map)) {
     const own = rec?.own ?? {};
     const fill = Object.entries(own).some(
       ([prop, v]) => /^background/.test(prop) && POPOVER in (v.tokens ?? {}),
     );
-    const shadows = Object.keys(own['box-shadow']?.tokens ?? {}).sort();
-    if (fill && shadows.length) out.push(shadows);
+    if (fill)
+      out.push({
+        part,
+        shadows: Object.keys(own['box-shadow']?.tokens ?? {}).sort(),
+      });
   }
   return out;
 }
 
+/** A shadow, border or width value that draws nothing. @param {unknown} v */
+const drawsNothing = v => /^(none|0|0px|hidden)?$/.test(String(v ?? '').trim());
+
 /**
- * The shadow tokens of the menus that draw no shadow in a mode: every
- * shadow such a menu reads draws nothing.
- * @param {Look} look @param {Mode} m
- * @returns {string[]}
+ * The menus that stand apart from nothing in a mode: no shadow drawn (a
+ * part style that removes it, or every shadow token it reads flat) and no
+ * border of its own, on a fill like the page's. Split by what flattens
+ * them: the shadow tokens, or the part's own style.
+ * @param {Look} look @param {Mode} m @param {(fill: Rgb) => boolean} likePage
+ * @returns {{tokens: string[], parts: string[]}}
  */
-function flatMenuShadows(look, m) {
-  const flat = (/** @type {string} */ t) =>
-    /^(none|0|0px)?$/.test(colorlessValue(look.res[m], t).trim());
-  return [
-    ...new Set(
-      overlayShadows(look.map)
-        .filter(set => set.every(flat))
-        .flat(),
-    ),
-  ].sort();
+function flatMenus(look, m, likePage) {
+  const {res, components} = look;
+  const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+  /** @type {Set<string>} */
+  const tokens = new Set();
+  /** @type {string[]} */
+  const parts = [];
+  for (const {part, shadows} of menuParts(look.map)) {
+    const own = (/** @type {string[]} */ keys) =>
+      partValue(components, part, keys, m);
+    const fill = shown(
+      colorIn(
+        own(['backgroundColor', 'background']) ?? `var(${POPOVER})`,
+        res[m],
+        m,
+      ),
+      page,
+    );
+    if (!fill || !likePage(fill)) continue;
+    const width = own(['borderWidth']);
+    const border =
+      (own(['border']) != null && !drawsNothing(own(['border']))) ||
+      (width != null &&
+        !drawsNothing(width) &&
+        !drawsNothing(own(['borderStyle']) ?? 'none'));
+    if (border) continue;
+    const shadow = own(['boxShadow']);
+    if (shadow != null) {
+      if (drawsNothing(colorlessValue(res[m], '', shadow))) parts.push(part);
+      continue;
+    }
+    if (
+      shadows.length &&
+      shadows.every(t => drawsNothing(colorlessValue(res[m], t)))
+    )
+      for (const t of shadows) tokens.add(t);
+  }
+  return {tokens: [...tokens].sort(), parts};
 }
+
+/**
+ * The style block a pair is drawn in: its own variant, else the one
+ * variant of its part whose fill reads the pair's ground token (a Button
+ * drawn as its default variant), else none (the plain block).
+ * @param {Look['map']} map @param {TextPair} p
+ * @returns {string | null}
+ */
+function pairBlock(map, p) {
+  const when = /** @type {any} */ (p).when;
+  if (when) return String(when).replace(/^(\w+)=/, '$1:');
+  const q = p.bg.target;
+  const tok = p.bg.tokens[0];
+  if (!q || !tok || q !== p.fg.target) return null;
+  const conds = map[q]?.own?.['background-color']?.tokens?.[tok] ?? [];
+  const variants = new Set(
+    conds.map(c => /(?:^|,)variant=([\w-]+)/.exec(c)?.[1]).filter(Boolean),
+  );
+  return variants.size === 1 ? `variant:${[...variants][0]}` : null;
+}
+
+/**
+ * The style blocks of the parts inside a bar whose text failed, by bar
+ * problem: `part|block`, the block `base` or a variant (`variant:primary`).
+ * The repair writes only there.
+ * @type {WeakMap<LookProblem, Set<string>>}
+ */
+const BAR_BLOCKS = new WeakMap();
 
 /**
  * Bar text: a part whose own style sets a text token sets it for every
@@ -380,6 +443,16 @@ function barTextProblems(look) {
     if (!within.size) continue;
     for (const m of look.modes) {
       const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
+      // What the bar paints: a see-through fill inside it shows the bar.
+      const bar =
+        shown(
+          colorIn(
+            partValue(components, part, ['backgroundColor', 'background'], m),
+            res[m],
+            m,
+          ),
+          page,
+        ) ?? page;
       const style = blocks.base ?? {};
       const tokens = new Set(
         [...Object.keys(style), ...Object.keys(style[`@${m}`] ?? {})].filter(
@@ -388,29 +461,37 @@ function barTextProblems(look) {
       );
       for (const token of tokens) {
         const set = partValue(components, part, [token], m);
-        const fg = shown(colorIn(set, res[m], m), page);
+        const fg = shown(colorIn(set, res[m], m), bar);
         if (!fg) continue;
         for (const p of pairs) {
           const q = p.bg.target;
           if (!q || q === part || !within.has(q) || p.fg.tokens[0] !== token)
             continue;
+          const block = pairBlock(map, p);
           // A part that sets the token again for itself draws its own.
-          if (partValue(components, q, [token], m) != null) continue;
+          if (partValue(components, q, [token], m, block) != null) continue;
           const fillValue =
-            partValue(components, q, ['backgroundColor', 'background'], m) ??
-            (p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw);
-          const fill = shown(colorIn(fillValue, res[m], m), page);
+            partValue(
+              components,
+              q,
+              ['backgroundColor', 'background'],
+              m,
+              block,
+            ) ?? (p.bg.tokens[0] ? `var(${p.bg.tokens[0]})` : p.bg.raw);
+          const fill = shown(colorIn(fillValue, res[m], m), bar);
           if (!fill) continue;
           const r = ratio(fg, fill);
           if (r >= TEXT) continue;
           const key = `${part}|${token}|${m}`;
           const had = out.get(key);
+          const at = `${q}|${block ?? 'base'}`;
           if (had) {
             if (!had.parts?.includes(q)) had.parts?.push(q);
             if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
+            BAR_BLOCKS.get(had)?.add(at);
             continue;
           }
-          out.set(key, {
+          const problem = /** @type {LookProblem} */ ({
             kind: 'bar-text',
             mode: m,
             message: '',
@@ -420,6 +501,8 @@ function barTextProblems(look) {
             ratio: fixed(r),
             needs: TEXT,
           });
+          out.set(key, problem);
+          BAR_BLOCKS.set(problem, new Set([at]));
         }
       }
     }
@@ -429,6 +512,145 @@ function barTextProblems(look) {
     p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their own fill: ${p.ratio}:1 in ${p.mode}. The fix sets the theme's own ${p.token} again on ${groups.join(', ')}`;
   }
   return [...out.values()];
+}
+
+/** The smallest OKLab step a person sees as a change when a pointer moves on. */
+const HOVER_SHOWS = 0.02;
+
+/**
+ * The hover fill a part's own style gives in a block, or null.
+ * @param {Look['components']} components
+ * @param {string} part @param {Mode} m @param {string | null} block
+ */
+function ownHover(components, part, m, block) {
+  for (const b of [block, 'base']) {
+    const hover = b ? components?.[part]?.[b]?.[':hover'] : null;
+    if (!hover || typeof hover !== 'object') continue;
+    for (const inner of [hover[`@${m}`], hover])
+      if (inner && typeof inner === 'object')
+        for (const k of ['backgroundColor', 'background'])
+          if (typeof inner[k] === 'string') return inner[k];
+  }
+  return null;
+}
+
+/**
+ * Hover that shows nothing: a part Core paints differently under the
+ * pointer (its own hover fill, or the hover overlay over its fill) that the
+ * theme paints the same as at rest. Read from the states the part data
+ * records, per variant; measured on the fill a painted part around it
+ * gives, else the page.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function hoverProblems(look) {
+  const {res, base, components, map} = look;
+  /** @type {Map<string, LookProblem>} */
+  const out = new Map();
+  /** The painted part a part sits in, its fill. @param {string} part @param {Mode} m */
+  const around = (part, m) => {
+    for (const [outer, rec] of Object.entries(map)) {
+      if (!(rec?.contains ?? []).includes(part)) continue;
+      const v = partValue(
+        components,
+        outer,
+        ['backgroundColor', 'background'],
+        m,
+      );
+      if (v != null) return colorIn(v, res[m], m);
+    }
+    return null;
+  };
+  for (const [part, rec] of Object.entries(map)) {
+    const at = rec?.at?.['background-color'] ?? {};
+    for (const key of Object.keys(at)) {
+      const hovered = /^(.*?)\s*:hover(::before)?$/.exec(key);
+      if (!hovered) continue;
+      const restKey = hovered[1] || 'always';
+      const variant = /(?:^|,)variant=([\w-]+)/.exec(restKey)?.[1];
+      const block = variant ? `variant:${variant}` : null;
+      for (const m of look.modes) {
+        /**
+         * The rest and hover paint, opaque, with a theme's tokens and styles.
+         * @param {Record<Mode, Record<string, string>>} tokens
+         * @param {Look['components']} styles @param {string | null} ground
+         */
+        const paints = (tokens, styles, ground) => {
+          const page = shown(colorIn(`var(${PAGE})`, tokens[m], m), null);
+          const under = shown(ground, page) ?? page;
+          const restValue =
+            partValue(
+              styles,
+              part,
+              ['backgroundColor', 'background'],
+              m,
+              block,
+            ) ??
+            at[restKey] ??
+            'transparent';
+          const rest = shown(colorIn(restValue, tokens[m], m), under) ?? under;
+          const hoverValue = ownHover(styles, part, m, block) ?? at[key];
+          const c = colorIn(hoverValue, tokens[m], m);
+          const top = c ? /** @type {Rgb} */ (parseColor(c)) : null;
+          const hover =
+            top && rest ? compositeOver(top, alphaOf(c), rest) : rest;
+          return rest && hover ? oklabDistance(rest, hover) : null;
+        };
+        const theme = paints(res, components, around(part, m));
+        const core = paints(base, {}, null);
+        if (theme == null || core == null) continue;
+        if (core < HOVER_SHOWS || theme >= HOVER_SHOWS) continue;
+        const k = `${part}|${block ?? ''}|${m}`;
+        if (out.has(k)) continue;
+        out.set(k, {
+          kind: 'hover',
+          mode: m,
+          part,
+          ...(variant ? {parts: [`${part} (${block})`]} : {}),
+          message: `${part}${variant ? ` (${block})` : ''} looks the same under the pointer as at rest in ${m}, where Core's own changes`,
+        });
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/**
+ * Font families the theme names that nothing loads and that end in no
+ * generic family: the browser then shows its default serif.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function fontProblems(look) {
+  /** @type {LookProblem[]} */
+  const out = [];
+  for (const t of [...look.own].filter(x => /^--font-family/.test(x)).sort()) {
+    const value = String(look.res.light[t] ?? '');
+    if (!value || hasGenericFamily(value)) continue;
+    const missing = namedFontFamilies(value).filter(f =>
+      look.unloadedFonts.some(u => u.toLowerCase() === f.toLowerCase()),
+    );
+    if (!missing.length) continue;
+    out.push({
+      kind: 'font',
+      mode: 'both',
+      token: t,
+      message: `${t} names ${missing.join(', ')}, which nothing loads, and no generic family after it: the browser shows its default serif`,
+    });
+  }
+  return out;
+}
+
+/**
+ * The generic family Core's own value of a font token ends in, or null.
+ * @param {Look} look @param {string} t
+ */
+function coreGeneric(look, t) {
+  const families = String(look.base.light[t] ?? look.defaults[t] ?? '')
+    .split(',')
+    .map(f => f.trim())
+    .filter(Boolean);
+  return families.reverse().find(f => !namedFontFamilies(f).length) ?? null;
 }
 
 /**
@@ -441,7 +663,12 @@ export function lookProblems(look) {
   const {res, base, modes, own, app} = look;
   const text = textProblems(look);
   /** @type {LookProblem[]} */
-  const out = [...text.problems, ...barTextProblems(look)];
+  const out = [
+    ...text.problems,
+    ...barTextProblems(look),
+    ...hoverProblems(look),
+    ...fontProblems(look),
+  ];
   for (const m of modes) {
     const at = (/** @type {string} */ t) => colorIn(`var(${t})`, res[m], m);
     const page = shown(at(PAGE), null);
@@ -456,20 +683,24 @@ export function lookProblems(look) {
         message: `menus and dropdowns are see-through in ${m} (${POPOVER} is ${popoverValue})`,
       });
     const card = shown(at(CARD), page);
-    const flat = flatMenuShadows(look, m);
-    if (
-      popover &&
-      flat.length &&
-      [page, card].every(g => !g || oklabDistance(popover, g) < LOOKS_ALIKE)
-    )
+    const flat = flatMenus(look, m, fill =>
+      [page, card].every(g => !g || oklabDistance(fill, g) < LOOKS_ALIKE),
+    );
+    if (popover && (flat.tokens.length || flat.parts.length))
       out.push({
         kind: 'blend',
         mode: m,
-        token: flat[0],
-        message: `menus and dialogs blend into the page in ${m}: the same fill as the page and cards, and no shadow (${flat.join(', ')})`,
+        ...(flat.tokens.length
+          ? {token: flat.tokens[0]}
+          : {part: flat.parts[0]}),
+        ...(flat.parts.length ? {parts: flat.parts} : {}),
+        message: `menus and dialogs blend into the page in ${m}: the same fill as the page and cards, and no shadow (${[
+          ...flat.tokens,
+          ...flat.parts.map(q => `${q}'s own boxShadow`),
+        ].join(', ')})`,
       });
-    // Control edges: no fainter than Core's own edge on its own ground,
-    // and 3:1 is enough.
+    // Control edges: at least EDGE_SHARE of Core's own edge contrast on
+    // Core's same ground, and 3:1 always passes.
     const edge = shown(at(EDGE), page);
     if (edge)
       for (const g of GROUNDS) {
@@ -477,7 +708,8 @@ export function lookProblems(look) {
         const coreEdge = shown(colorIn(`var(${EDGE})`, base[m], m), null);
         const coreGround = shown(colorIn(`var(${g})`, base[m], m), null);
         if (!ground || !coreEdge || !coreGround) continue;
-        const needs = Math.min(NON_TEXT, ratio(coreEdge, coreGround));
+        const core = ratio(coreEdge, coreGround);
+        const needs = Math.min(NON_TEXT, EDGE_SHARE * core);
         const r = ratio(edge, ground);
         // (Within rounding of the second decimal the ratios print with.)
         if (r + 0.005 >= needs) continue;
@@ -488,7 +720,7 @@ export function lookProblems(look) {
           on: g,
           ratio: fixed(r),
           needs: fixed(needs),
-          message: `checkbox, switch and field edges barely show on ${g} in ${m}: ${fixed(r)}:1 (Core's own edge there is ${fixed(needs)}:1)`,
+          message: `checkbox, switch and field edges barely show on ${g} in ${m}: ${fixed(r)}:1 (Core's own edge there is ${fixed(core)}:1; needs ${fixed(needs)}:1)`,
         });
       }
     // A main surface on the other side of light and dark from the page.
@@ -530,11 +762,12 @@ export function lookProblems(look) {
 }
 
 /**
- * A token's value with no color reading, as written in a mode's tokens.
- * @param {Record<string, string>} res @param {string} t
+ * A token's value with no color reading, as written in a mode's tokens,
+ * each lone `var()` followed (or a raw value's).
+ * @param {Record<string, string>} res @param {string} t @param {string} [raw]
  */
-function colorlessValue(res, t) {
-  let v = String(res[t] ?? '');
+function colorlessValue(res, t, raw = undefined) {
+  let v = String(raw ?? res[t] ?? '');
   for (let i = 0; i < 8; i++) {
     const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim());
     if (!ref) break;
@@ -734,9 +967,20 @@ export function lookRepair(look, problems) {
     });
   }
   const {defaults} = look;
+  for (const p of problems) {
+    if (p.kind !== 'font' || !p.token) continue;
+    const generic = coreGeneric(look, p.token);
+    if (!generic) continue;
+    tokens[p.token] = `${String(look.res.light[p.token]).trim()}, ${generic}`;
+    lines.push({
+      token: p.token,
+      value: tokens[p.token],
+      why: `named a font nothing loads with no generic after it: ${generic}, as in Core's own stack`,
+    });
+  }
   for (const p of problems)
     if (p.kind === 'blend' && p.mode !== 'both')
-      for (const t of flatMenuShadows(look, p.mode))
+      for (const t of flatMenus(look, p.mode, () => true).tokens)
         if (defaults[t] && !tokens[t]) {
           tokens[t] = String(defaults[t]);
           lines.push({
@@ -745,10 +989,9 @@ export function lookRepair(look, problems) {
             why: "menus blended into the page: Core's own overlay shadow",
           });
         }
-  // The parts inside a bar take the theme's own text again, a group at a
-  // time: every member of the group a failing part belongs to (its own
-  // part when it belongs to none) spreads one shared const, so the person
-  // has one line to change.
+  // The parts inside a bar take the theme's own text again: the style
+  // block whose text failed spreads one shared const, so the person has
+  // one line to change; the lines are told by group.
   /** @type {LookRepair['components']} */
   const components = {};
   /** @type {LookRepair['shared']} */
@@ -761,15 +1004,21 @@ export function lookRepair(look, problems) {
     if (!value) continue;
     const name = `${p.part.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())}InsideText`;
     (shared[name] ??= {})[p.token] = value;
+    // Only the style block whose text failed (a variant, else the plain
+    // block) takes the text: the part elsewhere, and its other variants,
+    // keep the bar's text.
     /** @type {Map<string, string[]>} */
     const groups = new Map();
-    for (const q of p.parts ?? []) {
-      const group = familyOf(q);
-      groups.set(group ?? q, group ? FAMILIES[group] : [q]);
+    for (const at of BAR_BLOCKS.get(p) ?? []) {
+      const [q, block] = at.split('|');
+      ((components[q] ??= {})[block] ??= {})[`...${name}`] = true;
+      const group = familyOf(q) ?? q;
+      groups.set(group, [
+        ...(groups.get(group) ?? []),
+        block === 'base' ? q : `${q} (${block})`,
+      ]);
     }
-    for (const [group, members] of groups) {
-      for (const q of members)
-        ((components[q] ??= {}).base ??= {})[`...${name}`] = true;
+    for (const [group, members] of groups)
       if (!lines.some(x => x.group === group && x.token === p.token))
         lines.push({
           group,
@@ -778,7 +1027,6 @@ export function lookRepair(look, problems) {
           value,
           why: `inside ${p.part}: the theme's own text on their own fill, from ${name}`,
         });
-    }
   }
   const one = problems.find(p => p.kind === 'one-look');
   const darkPage = shown(colorIn(`var(${PAGE})`, res.dark, 'dark'), null);

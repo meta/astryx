@@ -144,14 +144,17 @@ function editsFor(text, object, tree, edits, where) {
       end: open,
       text: `\n${atStart.join('\n')}${oneLine && first ? `\n${inner}` : oneLine ? `\n${lineIndent(text, object.start)}` : ''}`,
     });
-  // Beside a spread a new key goes last, so it wins over the spread.
+  // Beside a spread a new key goes last, so it wins over the spread: after
+  // the last property and its comma, when it has one.
   if (spreading && added.length) {
     const last = object.properties[object.properties.length - 1];
-    const comma = text.slice(last.end, object.end).trimStart().startsWith(',');
+    const after = text.slice(last.end, object.end);
+    const comma = /^\s*,/.exec(after);
+    const at = /** @type {number} */ (last.end) + (comma ? comma[0].length : 0);
     edits.push({
-      start: last.end,
-      end: last.end,
-      text: `${comma ? '' : ','}\n${added.join('\n').replace(/,$/, comma ? ',' : '')}`,
+      start: at,
+      end: at,
+      text: `${comma ? '' : ','}\n${added.join('\n')}`,
     });
   }
 }

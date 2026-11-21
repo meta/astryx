@@ -85,6 +85,27 @@ function importEnd(source, specifier = CORE_CSS) {
   }
 }
 
+/** Whether a file is inside a folder. @param {string} dir @param {string} file */
+const isWithin = (dir, file) => {
+  const rel = path.relative(dir, file);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+};
+
+/**
+ * The folder of the package a file belongs to, at or below the project
+ * root: the nearest folder above it with a package.json.
+ * @param {string} root @param {string} file
+ */
+function packageAround(root, file) {
+  for (
+    let dir = path.dirname(file);
+    isWithin(root, dir) || dir === root;
+    dir = path.dirname(dir)
+  )
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+  return root;
+}
+
 /** @param {string} source @param {string} specifier */
 const importsModule = (source, specifier) => importEnd(source, specifier) >= 0;
 
@@ -103,12 +124,8 @@ export async function appThemeUse(root, themeFiles) {
   const wears = new Set(themeFiles.map(f => path.resolve(f)));
   /** @type {AppThemeUse['elements']} */
   const elements = [];
-  let painted = false;
   for (const file of files) {
-    if (file.endsWith('.css')) {
-      painted ||= paintsPage(fs.readFileSync(file, 'utf8'));
-      continue;
-    }
+    if (file.endsWith('.css')) continue;
     for (const el of renderedElements(file, {
       sources: CORE_THEME_SOURCES,
       name: 'Theme',
@@ -119,11 +136,22 @@ export async function appThemeUse(root, themeFiles) {
   }
   const modes = new Set(elements.map(e => e.mode));
   const one = modes.size === 1 ? [...modes][0] : null;
+  // The page and the stylesheet entry are the app's that renders the
+  // theme: the package around its <Theme>, not a sibling app.
+  const app = elements.length ? packageAround(root, elements[0].file) : null;
+  const painted = app
+    ? files.some(
+        f =>
+          f.endsWith('.css') &&
+          isWithin(app, f) &&
+          paintsPage(fs.readFileSync(f, 'utf8')),
+      )
+    : false;
   return {
     elements,
     pinned: one === 'light' || one === 'dark' ? one : null,
     painted,
-    entry: coreStylesheetLoad(root).file,
+    entry: app ? coreStylesheetLoad(app).file : null,
   };
 }
 

@@ -2868,9 +2868,33 @@ function checkLines(d, name, fix) {
           ...(f.token ? {token: f.token} : {}),
           ...(f.part ? {part: f.part} : {}),
           value: Array.isArray(f.value) ? f.value.join(', ') : f.value,
+          ...(f.from
+            ? {from: Array.isArray(f.from) ? f.from.join(', ') : f.from}
+            : {}),
           why: f.why,
         })),
         {layout: 'inline'},
+      ),
+    );
+  // A moved color the author set can be kept as designed instead: the
+  // records to put in the theme's .accepted.json, each with a reason.
+  const keep = d.fixed.flatMap(f => f.accept ?? []);
+  if (keep.length)
+    out.push(
+      section(
+        'to keep a moved color as designed, add to <theme>.accepted.json:',
+      ),
+      records(
+        keep.map(r => ({
+          part: r.part,
+          ground: r.ground,
+          ...(r.when ? {when: r.when} : {}),
+          mode: r.mode,
+          ratio: String(r.ratio),
+          color: r.color ?? '',
+          groundColor: r.groundColor ?? '',
+          reason: r.reason || '(write why)',
+        })),
       ),
     );
   if (d.protectedFiles.length)

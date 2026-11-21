@@ -9676,6 +9676,58 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
 }
 
 /**
+ * The text tokens a pair's text reads in a mode. On Core's media surface
+ * inside its part (a toast's inverted surface) that is the on-dark color
+ * where the ground is dark and the on-light color where it is light, as
+ * Core's media surface sets them; else the tokens the census saw.
+ * @param {Ctx} ctx
+ * @param {TextPair} p
+ * @param {string | null | undefined} fill the pair's ground as drawn in the mode
+ * @param {Record<string, string>} tokens the theme's resolved tokens in the mode
+ * @param {string} m
+ * @param {boolean} error the pair is an error toast's
+ * @returns {string[]}
+ */
+export function mediaTextTokens(ctx, p, fill, tokens, m, error) {
+  const t = p.fg.target;
+  // Text on a surface that keeps one side (a caption on a lightbox's
+  // dark island) reads the on-color for that side, in both modes.
+  const g = p.bg.target;
+  const sides = /** @type {string[]} */ (
+    /** @type {any} */ (g ? ctx.C.MAP[g] : null)?.mediaSides ?? []
+  );
+  if (
+    g &&
+    g !== t &&
+    ctx.C.MAP[g]?.media &&
+    !autoMediaPart(ctx, g) &&
+    sides.length === 1 &&
+    /^--color-text-(primary|secondary)$/.test(String(p.fg.tokens[0]))
+  )
+    return [`--color-on-${sides[0]}`];
+  if (!t || !ctx.C.MAP[t]?.media || ctx.C.MAP[t]?.own?.color)
+    return p.fg.tokens;
+  // A surface that follows what is painted behind it (a toast's) takes
+  // the side Core's rule takes on the part's fill: the theme's own text
+  // where it reads ('off'), else an on-color; a fixed one, by its ground.
+  if (autoMediaPart(ctx, t)) {
+    const side = autoMediaSide(fill, tokens, {mode: m, error});
+    return [
+      side === 'off'
+        ? '--color-text-primary'
+        : side === 'dark'
+          ? '--color-on-dark'
+          : '--color-on-light',
+    ];
+  }
+  const ground = parseColor(fill);
+  if (!ground) return p.fg.tokens;
+  return [
+    plainOn(ground) === '#ffffff' ? '--color-on-dark' : '--color-on-light',
+  ];
+}
+
+/**
  * Contrast problems this theme caused: text below 4.5:1 that was not as low
  * in the base theme. A part's own color or background setting, or a token
  * set on that part or on the part the text sits on, counts for that part.
@@ -9867,57 +9919,16 @@ export async function contrastProblems(ctx, data, res) {
     );
     return hits.length === 1 ? `variant:${hits[0]}` : null;
   };
-  /**
-   * The text tokens a pair's text reads in a mode. On Core's media surface
-   * inside its part (a toast's inverted surface) that is the on-dark color
-   * where the ground is dark and the on-light color where it is light, as
-   * Core's media surface sets them; else the tokens the census saw.
-   * @param {TextPair} p @param {string} m
-   * @param {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} read
-   * @returns {string[]}
-   */
-  const textTokens = (p, m, read) => {
-    const t = p.fg.target;
-    // Text on a surface that keeps one side (a caption on a lightbox's
-    // dark island) reads the on-color for that side, in both modes.
-    const g = p.bg.target;
-    const sides = /** @type {string[]} */ (
-      /** @type {any} */ (g ? ctx.C.MAP[g] : null)?.mediaSides ?? []
+  /** @type {(p: TextPair, m: string, read: (p: TextPair, side: 'fg' | 'bg', m: string) => string | null) => string[]} */
+  const textTokens = (p, m, read) =>
+    mediaTextTokens(
+      ctx,
+      p,
+      read(p, 'bg', m),
+      res[/** @type {'light' | 'dark'} */ (m)],
+      m,
+      pairVariant(p) === 'type:error',
     );
-    if (
-      g &&
-      g !== t &&
-      ctx.C.MAP[g]?.media &&
-      !autoMediaPart(ctx, g) &&
-      sides.length === 1 &&
-      /^--color-text-(primary|secondary)$/.test(String(p.fg.tokens[0]))
-    )
-      return [`--color-on-${sides[0]}`];
-    if (!t || !ctx.C.MAP[t]?.media || ctx.C.MAP[t]?.own?.color)
-      return p.fg.tokens;
-    // A surface that follows what is painted behind it (a toast's) takes
-    // the side Core's rule takes on the part's fill: the theme's own text
-    // where it reads ('off'), else an on-color; a fixed one, by its ground.
-    if (autoMediaPart(ctx, t)) {
-      const side = autoMediaSide(
-        read(p, 'bg', m),
-        res[/** @type {'light' | 'dark'} */ (m)],
-        {mode: m, error: pairVariant(p) === 'type:error'},
-      );
-      return [
-        side === 'off'
-          ? '--color-text-primary'
-          : side === 'dark'
-            ? '--color-on-dark'
-            : '--color-on-light',
-      ];
-    }
-    const ground = parseColor(read(p, 'bg', m));
-    if (!ground) return p.fg.tokens;
-    return [
-      plainOn(ground) === '#ffffff' ? '--color-on-dark' : '--color-on-light',
-    ];
-  };
   /**
    * The setting that draws a pair's text in a mode, by CSS's own order: a
    * `color` the text's part sets wins over a text token it sets, which

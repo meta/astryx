@@ -4,12 +4,12 @@
  * @file Contrast a theme keeps as designed: its `accepted` records, and
  * the rule a record covers a measured pair by. A record names the Core part
  * of the text, the part it is drawn on (`page` for none), the variant scope
- * it was accepted in (`when`, as the editor's --when writes it), a mode,
+ * it was accepted in (`when`: `prop:value`, joined with `+`), a mode,
  * the ratio accepted, and the two colors. It covers that pair at that ratio
  * or better while both colors stay the same (each channel within 3); a
  * record without both colors covers nothing. A theme file keeps its
  * records in a sibling `<theme>.accepted.json` that holds only the
- * `accepted` list; an editor theme keeps them in its settings.
+ * `accepted` list.
  *
  * @input the text of a records file; a record and a measured pair
  * @output the records, checked; whether a record covers a pair

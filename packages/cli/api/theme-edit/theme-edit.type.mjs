@@ -307,7 +307,7 @@
  * One problem `experimental theme check` found.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditCheckProblem
- * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page'} kind - What is broken: text that does not read (on a token, or on a part's own style), a bar's text inside its menus and fields, see-through menus, menus that blend into the page, control edges that do not show, a surface on the other side of light and dark from the page, one look for both modes the app does not pin, or an app page nobody paints.
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font'} kind - What is broken: text that does not read (on a token, or on a part's own style), a bar's text inside its menus and fields, see-through menus, menus that blend into the page (by the shadow tokens or a menu's own style), control edges that do not show, a surface on the other side of light and dark from the page, one look for both modes the app does not pin, an app page nobody paints, a part that looks the same under the pointer as at rest where Core's changes, or a font nothing loads with no generic family after it.
  * @property {'light' | 'dark' | 'both'} mode - The mode it shows in.
  * @property {string} message - What a person sees, in one sentence.
  * @property {string} [token] - The token that draws it.

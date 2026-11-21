@@ -12,6 +12,8 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditCheck} from './theme-edit.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
+import {hex as hexOf, ratio as contrastRatio} from './_color.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
@@ -179,11 +181,50 @@ describe('experimental theme check', () => {
           '--color-border-emphasized': ['#fbfbfb', '#18191e'],
         }),
       );
-      expect(
-        edges.problems.some(
-          p => p.kind === 'edge' && p.token === '--color-border-emphasized',
-        ),
-      ).toBe(true);
+      // One edge rule for check and the look gate: --color-border-emphasized
+      // on each of the page, surface, card and menu fill passes at 95% of
+      // Core's own edge contrast on Core's same ground, and 3:1 always
+      // passes.
+      const edge = edges.problems.find(
+        p =>
+          p.kind === 'edge' &&
+          p.token === '--color-border-emphasized' &&
+          p.on === '--color-background-body' &&
+          p.mode === 'light',
+      );
+      if (!edge?.needs) throw new Error('no edge problem on the light page');
+      const core = Number(
+        /Core's own edge there is ([\d.]+):1/.exec(edge.message)?.[1],
+      );
+      expect(edge.needs).toBeCloseTo(Math.min(3, 0.95 * core), 2);
+      // A gray edge on the white page at 0.9 of Core's contrast fails; at
+      // 0.97 it passes.
+      /** @param {number} share */
+      const grayAt = share => {
+        for (let v = 255; v >= 0; v--) {
+          const c = /** @type {[number, number, number]} */ ([v, v, v]);
+          if (contrastRatio(c, [255, 255, 255]) >= share * core)
+            return hexOf(c);
+        }
+        return '#000000';
+      };
+      /** @param {string} name @param {number} share */
+      const bodyEdge = async (name, share) =>
+        (
+          await check(
+            themeFile(name, {
+              ...READABLE,
+              '--color-border-emphasized': [grayAt(share), '#5b5f68'],
+            }),
+          )
+        ).problems.some(
+          p =>
+            p.kind === 'edge' &&
+            p.on === '--color-background-body' &&
+            p.mode === 'light',
+        );
+      expect(await bodyEdge('edge90', 0.9)).toBe(true);
+      expect(await bodyEdge('edge97', 0.97)).toBe(false);
       const half = await check(
         themeFile('half', {
           ...READABLE,
@@ -213,9 +254,11 @@ describe('experimental theme check', () => {
       expect(
         fill.problems.some(p => p.kind === 'part-text' && p.part === 'button'),
       ).toBe(true);
+      // A dark panel that sets white text for what it holds: the field
+      // inside it draws that text on its own white fill.
       const bar = await check(
         themeFile('bar', READABLE, {
-          'top-nav': {
+          card: {
             base: {
               '--color-text-primary': '#ffffff',
               backgroundColor: '#101010',
@@ -225,36 +268,34 @@ describe('experimental theme check', () => {
       );
       const leak = bar.problems.find(p => p.kind === 'bar-text');
       expect(leak).toMatchObject({
-        part: 'top-nav',
+        part: 'card',
         token: '--color-text-primary',
       });
-      expect(leak?.parts?.length).toBeGreaterThan(0);
-      // The repair keeps the bar's line and sets the theme's own text on
-      // the groups inside it: the menus read again, and the bar's items
-      // still read on the bar.
+      expect(leak?.parts).toContain('text-input');
+      // A see-through fill inside it (a secondary button's) shows the
+      // panel, where the white text reads: not a problem.
+      expect(leak?.parts).not.toContain('button');
       expect(leak?.message).toMatch(
-        /sets the theme's own --color-text-primary again on /,
+        /sets the theme's own --color-text-primary again on inputs/,
       );
       const barFixed = await check('bar/barTheme.ts', {fix: true});
       expect(barFixed.problems.some(p => p.kind === 'bar-text')).toBe(false);
-      expect(
-        barFixed.problems.some(p =>
-          (p.parts ?? []).some(q => q.startsWith('top-nav')),
-        ),
-      ).toBe(false);
-      const groupLines = barFixed.fixed.filter(x => x.group);
-      expect(groupLines.length).toBeGreaterThan(0);
+      expect(barFixed.fixed.filter(x => x.group === 'inputs')).toHaveLength(1);
       expect(barFixed.fixed.every(x => !x.part)).toBe(true);
       const text = fs.readFileSync(
         path.join(cwd, 'bar', 'barTheme.ts'),
         'utf8',
       );
-      // One shared const holds the text; each member spreads it.
+      // One shared const holds the text; only the failing field's block
+      // spreads it: buttons and toasts elsewhere keep their own text.
       expect(text).toMatch(
-        /^const topNavInsideText = \{\n {2}'--color-text-primary': '[^']+',\n\};$/m,
+        /^const cardInsideText = \{\n {2}'--color-text-primary': '[^']+',\n\};$/m,
       );
-      expect(text).toMatch(/base: \{\n\s+\.\.\.topNavInsideText,/);
-      // The bar's own line stays as written.
+      expect(text).toMatch(
+        /'text-input': \{\n\s+base: \{\n\s+\.\.\.cardInsideText,/,
+      );
+      expect(text).not.toMatch(/\bbutton: \{|toast/);
+      // The panel's own line stays as written.
       expect(text).toContain('"--color-text-primary": "#ffffff"');
     },
     T,
@@ -517,6 +558,74 @@ describe('experimental theme check', () => {
   );
 
   it(
+    "finds a menu a part style flattens, a hover that shows nothing, and a font with no fallback; --fix gives the font Core's generic",
+    async () => {
+      const flat = await check(
+        themeFile(
+          'menuflat',
+          {
+            ...READABLE,
+            '--color-background-popover': ['#ffffff', '#16181d'],
+            '--color-background-card': ['#ffffff', '#16181d'],
+          },
+          {'dropdown-menu': {base: {boxShadow: 'none'}}},
+        ),
+      );
+      expect(
+        flat.problems.some(
+          p => p.kind === 'blend' && p.part === 'dropdown-menu',
+        ),
+      ).toBe(true);
+      const still = await check(
+        themeFile('still', {
+          ...READABLE,
+          '--color-overlay-hover': 'transparent',
+        }),
+      );
+      expect(still.problems.some(p => p.kind === 'hover')).toBe(true);
+      const font = themeFile('fontless', {
+        ...READABLE,
+        '--font-family-body': 'Figtree',
+      });
+      const before = await check(font);
+      expect(
+        before.problems.some(
+          p => p.kind === 'font' && p.token === '--font-family-body',
+        ),
+      ).toBe(true);
+      const fixed = await check(font, {fix: true});
+      expect(fixed.problems.some(p => p.kind === 'font')).toBe(false);
+      expect(fs.readFileSync(path.join(cwd, font), 'utf8')).toMatch(
+        /'--font-family-body': 'Figtree, (sans-serif|system-ui|serif|monospace)'/,
+      );
+    },
+    T,
+  );
+
+  it(
+    "passes the official Neutral theme's control edges",
+    async test => {
+      const unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        return test.skip();
+      }
+      fs.mkdirSync(path.join(cwd, 'official'), {recursive: true});
+      fs.writeFileSync(
+        path.join(cwd, 'official', 'officialTheme.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral/built';
+
+export const officialTheme = defineTheme({name: 'official', extends: neutralTheme});
+`,
+      );
+      const d = await check('official/officialTheme.ts');
+      expect(d.problems.filter(p => p.kind === 'edge')).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */
@@ -542,7 +651,8 @@ describe('experimental theme check', () => {
       const taken = themeFile('taken', READABLE);
       fs.writeFileSync(path.join(cwd, 'taken', 'taken.css'), '/* my own */\n');
       expect(await code(themeEditCheck(taken, {cwd}))).toBe('ERR_FILE_EXISTS');
-      // A theme object with a spread: the repair cannot be written beside it.
+      // Tokens that spread another object: the repair goes after the
+      // spread, so it wins, and the file still builds.
       const spread = themeFile('spread', {
         '--color-background-body': '#ffffff',
         '--color-text-secondary': '#dddddd',
@@ -554,11 +664,31 @@ describe('experimental theme check', () => {
           .readFileSync(spreadPath, 'utf8')
           .replace('  tokens: {', '  tokens: {\n    ...{},'),
       );
-      const was = fs.readFileSync(spreadPath, 'utf8');
-      expect(await code(themeEditCheck(spread, {cwd, fix: true}))).toBe(
+      expect(await code(themeEditCheck(spread, {cwd, fix: true}))).toBe('ok');
+      expect(fs.readFileSync(spreadPath, 'utf8')).toMatch(
+        /'--color-text-secondary': \[?'#/,
+      );
+      // A computed key: a value written beside it could be replaced, so
+      // nothing is written.
+      const computed = themeFile('computed', {
+        '--color-background-body': '#ffffff',
+        '--color-text-secondary': '#dddddd',
+      });
+      const computedPath = path.join(cwd, computed);
+      fs.writeFileSync(
+        computedPath,
+        fs
+          .readFileSync(computedPath, 'utf8')
+          .replace(
+            '  tokens: {',
+            "  tokens: {\n    ['--color-border']: '#eeeeee',",
+          ),
+      );
+      const was = fs.readFileSync(computedPath, 'utf8');
+      expect(await code(themeEditCheck(computed, {cwd, fix: true}))).toBe(
         'ERR_THEME_INVALID',
       );
-      expect(fs.readFileSync(spreadPath, 'utf8')).toBe(was);
+      expect(fs.readFileSync(computedPath, 'utf8')).toBe(was);
       // A protected theme file is refused before anything is written.
       const ignored = themeFile('ignored', {
         '--color-background-body': '#ffffff',
