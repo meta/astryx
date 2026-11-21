@@ -38,7 +38,7 @@ capabilities see it, and what else on the header may change while it is shown.
 
 It also owns one part of width resolution: every resizable column, including the
 last, keeps the width a person sets, and `onColumnResizeEnd` reports the last
-column's width with the other widths a drag commits (FR11). Other width resolution, per-column minimums, proportional-neighbor
+column's width with the other widths a drag or keyboard resize commits (FR11). Other width resolution, per-column minimums, proportional-neighbor
 behavior, the rest of the commit callback, and the module's configuration remain
 uncontracted; this record is their canonical owner when they are recorded.
 
@@ -47,7 +47,7 @@ and two parts of it are already known to be wrong: a drag snapshots every column
 pixel widths, so proportional columns stop being proportional, and a trailing
 proportional column does not absorb the delta when the column before it is resized.
 Both are defects to correct there, not variations this record allows. FR11 leaves
-both as they are: a drag still commits every column to its rendered pixel width,
+both as they are: a drag or keyboard resize still commits every column to its rendered pixel width,
 and FR11 adds only the last column to what it commits and reports.
 
 ## Compatibility and migration
@@ -70,7 +70,7 @@ and FR11 adds only the last column to what it commits and reports.
   where it was the column's minimum until the first resize.
 - FR11 compatibility class: an intentional layout change shipped as `[feat]`
   (`spec:AST-017` FR3, FR7; `architecture:public-component-api` INV9), with no
-  source change for any caller. A drag commits and reports the last column's
+  source change for any caller. A drag or keyboard resize commits and reports the last column's
   width with the others, so the last column keeps its width instead of taking
   the remaining width, and untouched columns keep the rendered widths a drag
   already commits. A Table whose `columnWidths` holds no width for the last
@@ -86,8 +86,8 @@ and FR11 adds only the last column to what it commits and reports.
   4. a column hidden through column settings after a drag leaves its space
      as filler instead of growing the last column.
 - Migration decision: none. No consumer edit and no codemod. To keep the previous
-  look, a caller leaves the last column's key out of `columnWidths`, as the
-  Changeset says. A caller that stores
+  look, a caller leaves the last column's key out of `columnWidths`, which the
+  implementation's Changeset names (`spec:AST-017` FR3). A caller that stores
   the widths `onColumnResizeEnd` reports receives one more key, the last
   column's, and storing it keeps that column's width after a remount (DEC-8).
 
@@ -104,7 +104,7 @@ pull request owns runtime code, tests, and its Changeset.
   pointer, on visible focus, and during drag, and the precedence between them.
 - The vertical extent of the drawn indicator and the requirement that it never
   adds block scrolling to the Table scroll region.
-- FR11's part of width resolution: a drag commits and reports the last column's
+- FR11's part of width resolution: a drag or keyboard resize commits and reports the last column's
   width with the others.
 - Which pointer capabilities receive the affordance at all, and which receive its
   hover reveal.
