@@ -1,13 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A border, corners, shadow, fill or outline asked of a part that
- * draws no edge of its own, whose controls sit side by side in a row of
- * the same component that frames them (a pager's control row around its
- * page cells), go on that row: one strip, never a border or corners on
- * each control. Each is written there, said with its undo; corners with
- * no edge on the row yet are refused. A part whose edges sit in no such
- * row keeps its own answer.
+ * @file A border, border radius or shadow asked of a part that draws no
+ * edge of its own, whose controls sit side by side in a row of the same
+ * component that frames them (a pager's control row around its page
+ * cells), goes on that row: one strip, never a border on each control,
+ * said with its undo; a radius before the row has an edge is refused with
+ * the per-page line. The corners dial still rounds each control. `how`
+ * puts an ask's corners on the row once the row has an edge at rest, from
+ * the ask or the theme; with none, it rounds each page.
  *
  * @position api/theme-edit — tests
  */
@@ -46,27 +47,26 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
-describe('a border, corners, shadow, fill or outline on a row of joined controls', () => {
-  it('is written on the row that frames them, never on each control', async test => {
+describe('a border, radius, shadow or corners on a row of joined controls', () => {
+  it('writes a border, radius or shadow on the row that frames them, never on each control', async test => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       test.skip();
     }
     // With no edge on the row yet, its corners show nothing: refused, with
-    // the lookup that names the edges it takes, never a line on each page.
+    // the lookup that names the edges it takes and the per-page line.
     const early = await refusal(() =>
       themeEditSet('p', 'border-radius', '3px', {cwd, on: 'pagination'}),
     );
+    expect(early.message).toMatch(/corners 3px --on pagination\b/);
     expect(early.code).toBe('ERR_THEME_NO_EFFECT');
     expect(early.run).toEqual([expect.stringMatching(/ how pagination-list$/)]);
-    // Each is written on the row, said with its undo; the setting keeps the
-    // part it was asked of, so a theme saved that way builds the strip.
+    // A border or shadow is written on the row, said with its undo; the
+    // setting keeps the part it was asked of.
     for (const [thing, value] of [
       ['border', '1px solid rgba(0, 0, 0, 0.15)'],
       ['border-radius', '3px'],
       ['box-shadow', '0 1px 2px rgba(0, 0, 0, 0.05)'],
-      ['background-color', '#ffffff'],
-      ['outline', '1px solid #dddddd'],
     ]) {
       const {data} = await themeEditSet('p', thing, value, {
         cwd,
@@ -80,13 +80,27 @@ describe('a border, corners, shadow, fill or outline on a row of joined controls
         ),
       );
     }
+    // Set again unchanged: no undo line for a step that was never added.
+    const again = await themeEditSet(
+      'p',
+      'border',
+      '1px solid rgba(0, 0, 0, 0.15)',
+      {cwd, on: 'pagination'},
+    );
+    expect(again.data.notes.join('\n')).not.toMatch(/wrote on pagination-list/);
+    // The corners dial on the pager rounds each page, as it always did.
+    const dial = await themeEditSet('p', 'corners', '6px', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(dial.data.parts).not.toContain('pagination-list');
     const css = fs.readFileSync(themeFiles(cwd, 'p').css, 'utf8');
     const row = /\.astryx-pagination-list\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(row).toMatch(/border: 1px solid rgba\(0, 0, 0, 0\.15\)/);
     expect(row).toMatch(/border-radius: 3px/);
     expect(row).toMatch(/box-shadow: 0 1px 2px rgba\(0, 0, 0, 0\.05\)/);
     expect(css).not.toMatch(
-      /\.astryx-pagination\s*\{[^}]*(?:border|box-shadow|outline)/,
+      /\.astryx-pagination\s*\{[^}]*(?:border|box-shadow)/,
     );
     expect(css).not.toMatch(/\.astryx-pagination-item\s*\{[^}]*border:/);
   }, 240_000);

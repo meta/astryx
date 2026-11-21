@@ -126,6 +126,7 @@ import {
   cornerParts,
   boxFrameOf,
   rowFrameOf,
+  givesEdgeAtRest,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -8755,17 +8756,16 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   const edged = data.settings.some(
     x =>
       x.source === 'property' &&
-      /^(background|border|box-shadow|outline)/.test(x.thing) &&
+      givesEdgeAtRest(x) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
   if (edged) return;
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
     .filter(k => ctx.C.showsCorners(k) && ctx.C.MAP[k])
     .slice(0, 3);
-  // (Set on a pager, the corners go on the row that frames its pages; with
-  // no edge there yet they show nothing, and never on each page.)
-  // (Asked of the row itself, the same: its cells' corners would round
-  // each page apart.)
+  // (A border radius set on a pager goes on the row that frames its pages;
+  // asked of that row, the same. With no edge there yet it shows nothing:
+  // refused, with the row's lookup and the line that rounds each page.)
   const frame =
     boxFrameOf(ctx, s) ??
     ([...ctx.project.target.keys()].some(k => rowFrameOf(ctx, k) === parts[0])
@@ -8774,7 +8774,7 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   if (frame)
     refuse(
       E.ERR_THEME_NO_EFFECT,
-      `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s corners go on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners; corners on each control would round each one apart.`,
+      `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s border radius goes on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners; to round each page on its own instead: ${P} set ${slug} corners ${s.value} --on ${s.on}.`,
       {run: [`${HOW} ${frame}`]},
     );
   refuse(

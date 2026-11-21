@@ -4590,23 +4590,19 @@ export function partsOf(ctx, s) {
 }
 
 /**
- * The row a border, corners, shadow, fill or outline set on a part goes on
- * instead (a pager's control row, for one set on the pager): the part
- * paints no box of its own, and its controls sit side by side in a row
- * that frames them as one strip. On the part it would land on the whole
- * bar, or on no box at all; on each control it would box each one apart.
- * Null for every other setting.
+ * The row a border, border radius or shadow set on a part goes on instead
+ * (a pager's control row, for one set on the pager): the part paints no
+ * box of its own, and its controls sit side by side in a row that frames
+ * them as one strip. On the part it would land on the whole bar, or show
+ * nothing; on each control it would box each one apart. Null for every
+ * other setting, the corners dial included: it rounds each control.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'thing'>} s
  * @returns {string | null}
  */
 export function boxFrameOf(ctx, s) {
   if (!s.on || FAMILIES[s.on]) return null;
-  if (
-    !/^(?:box-shadow|background(?:-color)?|outline|border|corners)(?:-|$)/.test(
-      kebab(String(s.thing ?? '')),
-    )
-  )
+  if (!/^(?:box-shadow|border)(?:-|$)/.test(kebab(String(s.thing ?? ''))))
     return null;
   const own = ctx.C?.MAP?.[s.on]?.own ?? {};
   if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
@@ -14296,10 +14292,24 @@ export const DIAL_RADII = [
 export function cornerParts(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [part];
-  const frame = rowFrameOf(ctx, part);
-  if (frame) return [frame];
   const inner = roundedPartsInside(ctx, part);
   return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a setting gives its part an edge at rest that shows its corners:
+ * a fill, border, shadow or outline that is not none, zero or transparent,
+ * with no state.
+ * @param {{thing?: unknown, value?: unknown, state?: unknown}} x
+ */
+export function givesEdgeAtRest(x) {
+  return (
+    !x.state &&
+    /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
+      kebab(String(x.thing ?? '')),
+    ) &&
+    !/^(?:none|hidden|0(?:px)?|transparent)$/.test(String(x.value ?? '').trim())
+  );
 }
 
 /**
@@ -14309,7 +14319,7 @@ export function cornerParts(ctx, part) {
  * @param {string} part
  * @returns {string[]}
  */
-export function roundedPartsInside(ctx, part) {
+function roundedPartsInside(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [];
   return (rec.contains ?? []).filter(

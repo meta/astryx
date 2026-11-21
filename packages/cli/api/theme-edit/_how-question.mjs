@@ -69,7 +69,7 @@ import {
   borderParts,
   cornerParts,
   rowFrameOf,
-  roundedPartsInside,
+  givesEdgeAtRest,
   focusStateOf,
   paddedParts,
   innerTextTokens,
@@ -12530,21 +12530,23 @@ export function draftAnswer(ctx, env, question) {
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
   // boxes): those parts (for a border, only pieces that draw one).
-  const EDGE_ASPECTS = ['border', 'shadow', 'background', 'outline'];
-  /** Whether this ask or the theme gives a row frame an edge. @param {string} frame */
+  // (A row that frames a part's controls as one strip takes the border and
+  // shadow asked of the part, and its corners once the row has an edge at
+  // rest, from this ask or the theme; else each control rounds, as asked of
+  // the part on its own.)
+  const STRIP_ASPECTS = ['border', 'shadow'];
+  /** Whether this ask or the theme gives a row frame an edge at rest. @param {string} frame */
   const framedEdge = frame =>
     clauses.some(
       o =>
-        o.aspects.some(a => EDGE_ASPECTS.includes(a)) &&
+        !o.state &&
+        o.aspects.some(a => STRIP_ASPECTS.includes(a)) &&
         o.parts.some(q => q.on === frame || rowFrameOf(ctx, q.on) === frame),
     ) ||
     (env.data?.settings ?? []).some(
       (/** @type {any} */ x) =>
         x.source === 'property' &&
-        /^(?:background|border(?!.*radius)|box-shadow|outline)/.test(
-          String(x.thing),
-        ) &&
-        !/^(?:none|0(?:px)?|transparent)$/.test(String(x.value).trim()) &&
+        givesEdgeAtRest(x) &&
         (x.on === frame || rowFrameOf(ctx, x.on) === frame),
     );
   for (const c of clauses)
@@ -12555,24 +12557,18 @@ export function draftAnswer(ctx, env, question) {
     )
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
-        // (A row that frames the part's controls as one strip takes its
-        // border, corners, shadow, fill and outline: one strip together.
-        // Corners alone go there only once the row has an edge, from this
-        // ask or the theme; else each control rounds, as the part's own
-        // corners do.)
         const frame = rowFrameOf(ctx, p.on);
-        const cornersOnly = c.aspects.every(
-          a => a === 'corners' || !EDGE_ASPECTS.includes(a),
-        );
-        if (frame && !(cornersOnly && !framedEdge(frame)))
+        if (
+          frame &&
+          (c.aspects.some(a => STRIP_ASPECTS.includes(a)) ||
+            (c.aspects.includes('corners') && framedEdge(frame)))
+        )
           return [{...p, on: frame}];
         if (!c.aspects.some(a => a === 'border' || a === 'corners')) return [p];
         const own = C.MAP[p.on]?.own ?? {};
         const inner = (
           c.aspects.includes('corners')
-            ? frame
-              ? roundedPartsInside(ctx, p.on)
-              : cornerParts(ctx, p.on)
+            ? cornerParts(ctx, p.on)
             : borderParts(ctx, p.on)
         ).filter(t => t !== p.on);
         return inner.length && !Object.keys(own).some(k => /^border/.test(k))
@@ -29135,10 +29131,6 @@ export function draftAnswer(ctx, env, question) {
     // Corners on a part that shows none yet, said with the edge the same
     // ask gives it ("pagination: 6px radius, 1px border"): they show only
     // once the edge is there, so they run after it, whichever came first.
-    const drawsEdge = (/** @type {Step} */ t) =>
-      /^(?:border(?!.*radius)|background|box-shadow|outline)/.test(
-        String(t.thing),
-      ) && !/^(?:none|0(?:px)?|transparent)$/.test(String(t.value).trim());
     const cornerStep = (/** @type {Step} */ t) =>
       t.thing === 'corners' || /^border.*radius$/.test(String(t.thing));
     for (let i = 0; i < all.length; i++) {
@@ -29146,7 +29138,8 @@ export function draftAnswer(ctx, env, question) {
       if (!st.on || !cornerStep(st) || C.showsCorners(one(st.on))) continue;
       let edge = -1;
       for (let j = i + 1; j < all.length; j++)
-        if (all[j].on === st.on && !all[j].state && drawsEdge(all[j])) edge = j;
+        if (all[j].on === st.on && !all[j].state && givesEdgeAtRest(all[j]))
+          edge = j;
       if (edge < 0) continue;
       all.splice(i, 1);
       all.splice(edge, 0, st);
