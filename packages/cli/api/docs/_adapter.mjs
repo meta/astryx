@@ -2583,6 +2583,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
           // Kept with the project's one name index (the docs catalog itself
           // is not asked from here).
           docsRoutes: routes.docsRoutesLazily,
+          tail: componentTail(hint.tailForms(String(topic)), tree, catalog),
         })
       : null;
   if (hint && elsewhere) {
@@ -2603,6 +2604,28 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     suggestions,
     ERROR_CODES.ERR_UNKNOWN_TOPIC,
   );
+}
+
+/**
+ * The names a typed last route segment may give a component or hook by, or
+ * none when a doc or topic has one of those names: a doc wins (`icons` is a
+ * topic, so `foundations/icons` names no component).
+ * @param {string[]} forms folded, as other-command.mjs tailForms gives them
+ * @param {DocsTree} tree
+ * @param {DocsCatalog} catalog
+ * @returns {string[]}
+ */
+function componentTail(forms, tree, catalog) {
+  const docNames = [
+    ...[...tree.nodes.values()].map(node => node.name),
+    ...catalog.names(),
+  ];
+  const namesADoc = docNames.some(name =>
+    [name.toLowerCase().replace(/[\s-]+/g, ''), nameWords(name).join('')].some(
+      form => forms.includes(form),
+    ),
+  );
+  return namesADoc ? [] : forms;
 }
 
 /**

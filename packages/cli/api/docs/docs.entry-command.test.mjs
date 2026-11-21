@@ -274,6 +274,36 @@ describe('docs() for a name another command reads', () => {
   );
 
   it(
+    "names a Core component or hook a route's last segment names, singular or not",
+    async () => {
+      for (const [typed, command] of [
+        ['widgets/Buttons', 'astryx component Button'],
+        ['widgets/use-collapsible', 'astryx hook useCollapsible'],
+      ]) {
+        const error = await docs(typed, undefined, {cwd: tmpDir}).catch(e => e);
+        expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+        expect(error.suggestions[0].name).toBe(command);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'lets a doc keep a last segment that also names a component',
+    async () => {
+      // `icons` is a topic, though Core has an Icon component.
+      const error = await docs('guides/icons', undefined, {cwd: tmpDir}).catch(
+        e => e,
+      );
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      expect(error.suggestions.some(s => s.name.startsWith('astryx '))).toBe(
+        false,
+      );
+    },
+    SLOW,
+  );
+
+  it(
     'leaves a docs typo and a docs route alone',
     async () => {
       const typo = await docs('tokns', undefined, {cwd: tmpDir}).catch(e => e);
