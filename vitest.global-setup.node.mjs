@@ -164,6 +164,8 @@ export default async function setup(project) {
       const written = writtenSince(checkoutBefore, checkoutState(root));
       if (written.length) {
         endRun();
+        // Vitest reports an error a teardown throws, and still exits 0.
+        process.once('exit', () => (process.exitCode = 1));
         throw new Error(
           `tests wrote into the checkout (every fixture belongs in a temp folder): ${written.slice(0, 10).join('; ')}`,
         );
