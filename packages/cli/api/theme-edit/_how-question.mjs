@@ -26479,9 +26479,16 @@ export function draftAnswer(ctx, env, question) {
           // ("…on striped tables too", "every table, even on striped tables",
           // "on plain and on striped tables": the ask adds those tables, so
           // it stays on every table.)
+          // (Words tied to striped tables, "striped tables too", "even on
+          // striped tables", "plain and on striped tables", "striped tables
+          // and on plain tables", are read from the question; "every table", "plain tables" only from the stripe's own
+          // clause, so another clause's "every table header" leaves the scope.)
           const widens =
-            /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|(?<!\b(?:not|except|without|but|leave|leaving)\s+(?:(?:on|in|for)\s+)?(?:the\s+)?)\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+)?tables?\b/.test(
+            /\bstriped\s+tables?\s+(?:too|as\s+well)\b|\bstriped\s+tables?\s*,?\s*(?:and\s+(?:also\s+)?|also\s+)(?:(?:on|in|for)\s+)?(?:the\s+)?(?:every|all|plain|other|non-striped|unstriped)(?:\s+other)?\s+tables?\b|\b(?:also|even|including)\s+(?:on|in|for)\s+(?:the\s+)?striped\s+tables?\b|\b(?:every|all|plain|other|non-striped|unstriped)\s+(?:tables?\s+)?and\s+(?:on\s+|in\s+|for\s+)?(?:the\s+)?striped\s+tables?\b/.test(
               q,
+            ) ||
+            /(?<!\b(?:not|except|without|but|leave|leaving)\s+(?:(?:on|in|for)\s+)?(?:the\s+)?)\b(?:every|all|plain|other|non-striped|unstriped)\s+tables?\b/.test(
+              c.text.toLowerCase(),
             );
           const onStriped =
             !widens &&
