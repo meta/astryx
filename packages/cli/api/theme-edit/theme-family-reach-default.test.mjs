@@ -474,6 +474,43 @@ describe('family reach by default', () => {
         },
       );
       expect(cssOf(slug)).toContain('linear-gradient(#eeeeee, #dddddd)');
+      // (A disabled fill of the theme's own, set before the gradient, wins.)
+      await themeEditNew(`${slug}c`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}c`, 'background-color', '#eeeeee', {
+        cwd,
+        on: 'button',
+        state: 'disabled',
+      });
+      await themeEditSet(`${slug}c`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+      });
+      /** The button's disabled rules. @param {string} th */
+      const disabledRules = th =>
+        cssOf(th)
+          .match(/\.astryx-button[^{]*disabled[^{]*\{[^}]*\}/g)
+          ?.join('\n') ?? '';
+      // (Only the image comes off, so the fill shows.)
+      expect(disabledRules(`${slug}c`)).not.toMatch(/background: revert-layer/);
+      expect(disabledRules(`${slug}c`)).toMatch(
+        /background-image: revert-layer/,
+      );
+      expect(disabledRules(`${slug}c`)).toMatch(/#eeeeee/);
+      // (The same set after the gradient shows too.)
+      await themeEditNew(`${slug}d`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}d`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+      });
+      await themeEditSet(`${slug}d`, 'background-color', '#eeeeee', {
+        cwd,
+        on: 'button',
+        state: 'disabled',
+      });
+      expect(disabledRules(`${slug}d`)).toMatch(
+        /background-image: revert-layer/,
+      );
+      expect(disabledRules(`${slug}d`)).not.toMatch(/background: revert-layer/);
       // (The other variants keep Core's disabled look: the copy stays.)
       expect(cssOf(slug)).toMatch(
         /\.astryx-button[^{\s]*:is\(:disabled[^{]*\{[^}]*background(?:-image)?: revert-layer/,
