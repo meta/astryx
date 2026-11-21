@@ -57,7 +57,12 @@ import {
   runningCopy,
 } from './choose.mjs';
 import {readReleaseFacts} from './project.mjs';
-import {cliBinOf, ensureRelease, userCacheDir} from './cache.mjs';
+import {
+  cliBinOf,
+  ensureRelease,
+  settleSignals,
+  userCacheDir,
+} from './cache.mjs';
 import {runtimeToPreload, withPnpRuntime} from './pnp-runtime.mjs';
 import {
   maybeFetchCore,
@@ -415,6 +420,7 @@ export async function startRun({cliRoot, argv, declinedProjectCli}) {
       cacheDir,
       onProgress: json ? undefined : progressLine,
     });
+    await settleSignals();
     if (!('bin' in release)) {
       await fallBack(release.reason);
       return;

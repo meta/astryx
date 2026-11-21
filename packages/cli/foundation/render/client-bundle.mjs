@@ -693,6 +693,8 @@ export function scriptSafe(code) {
  *   builtin: (name: string) => boolean,
  *   describe: (file: string) => string,
  *   oneCopy?: string[],
+ *   stylexFiles?: string[],
+ *   packageSource?: (file: string) => {contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null,
  * }} options
  *   `source` compiles one of the page's own files as the server compiled it
  *   (null for any other file, which esbuild loads); `isPageFile` tells the
@@ -704,10 +706,13 @@ export function scriptSafe(code) {
  *   the copy the server loaded (React outside a project), else null;
  *   `builtin` tells a Node built-in; `describe` names a file for a message;
  *   `oneCopy` names the packages every module, a package's too, takes from
- *   the one copy `packageDir` names (React outside a project).
- * @returns {Promise<{code: string, modules: number, astryx: boolean, module: boolean}>}
+ *   the one copy `packageDir` names (React outside a project);
+ *   `stylexFiles` names the package files that hold StyleX source, which
+ *   alone go to `packageSource`.
+ * @returns {Promise<{code: string, modules: number, astryx: boolean, module: boolean, files: string[]}>}
  *   `astryx`: the build's module graph holds a module an Astryx package owns;
- *   `module`: the script runs the same as a module script ({@link runsAsModule})
+ *   `module`: the script runs the same as a module script ({@link runsAsModule});
+ *   `files`: the files on disk the script holds code of
  */
 export async function bundleForBrowser({
   esbuild,
@@ -719,6 +724,8 @@ export async function bundleForBrowser({
   builtin,
   describe,
   oneCopy = [],
+  stylexFiles = [],
+  packageSource = () => null,
 }) {
   // A page whose script throws, in render or in an effect (a cookie write in
   // a frame that blocks cookies, say), keeps its first paint: React would
@@ -734,7 +741,8 @@ export async function bundleForBrowser({
   // Only the page's own files and the mount go through this plugin: esbuild
   // resolves and loads every package file itself, which keeps the build fast.
   // A package file comes back here only for an import every module must take
-  // from one copy (`oneCopy`) or for a Node module, which is refused.
+  // from one copy (`oneCopy`), for a Node module, which is refused, or to be
+  // loaded compiled when it holds StyleX source (`stylexFiles`).
   /** @param {any} args */
   const resolveImport = async args => {
     if (args.pluginData?.astryx) return undefined;
@@ -824,6 +832,15 @@ export async function bundleForBrowser({
           return {errors: [{text: describe(args.path), detail: {compile: e}}]};
         }
       });
+      // Only the package files that hold StyleX source call back here, so
+      // every other package file stays with esbuild.
+      if (stylexFiles.length > 0) {
+        const holdsStylex = new RegExp(`^(?:${stylexFiles.map(escapeRegExp).join('|')})$`);
+        build.onLoad({filter: holdsStylex, namespace: 'file'}, (/** @type {any} */ args) => {
+          const compiled = packageSource(args.path);
+          return compiled ? {...compiled, resolveDir: path.dirname(args.path)} : undefined;
+        });
+      }
       // A package's own stylesheet import adds nothing to the script.
       build.onLoad({filter: /\.(css|scss|sass|less)$/i}, () => ({
         contents: '',
@@ -913,14 +930,18 @@ export async function bundleForBrowser({
   }
   // The modules the script holds: those esbuild kept any of.
   const output = Object.values(result.metafile?.outputs ?? {})[0];
-  const modules = Object.values(output?.inputs ?? {}).filter(
-    (/** @type {any} */ input) => input.bytesInOutput > 0,
-  ).length;
+  const kept = Object.entries(output?.inputs ?? {}).filter(
+    ([, /** @type {any} */ input]) => input.bytesInOutput > 0,
+  );
   const astryx = graphHoldsAstryx(
     Object.keys(result.metafile?.inputs ?? {}),
     entry,
   );
-  return {code, modules, astryx, module};
+  const files = kept.flatMap(([name]) => {
+    const file = inputFile(name);
+    return file === null ? [] : [file];
+  });
+  return {code, modules: kept.length, astryx, module, files};
 }
 
 /** A script's own strict-mode directive, after any comments. */
@@ -992,12 +1013,14 @@ export function graphHoldsAstryx(inputs, entry) {
 /**
  * The file a metafile input names: a file-namespace path is relative to the
  * build's working folder, a page file's is absolute after its namespace;
- * the build's own virtual modules name no file.
+ * the build's own virtual modules, and a file a package's `browser` field
+ * maps to false (`(disabled):…`), name no file.
  * @param {string} key
  * @returns {string | null}
  */
 function inputFile(key) {
-  const named = /^([a-z][a-z-]+):(.+)$/.exec(key);
+  if (/^[a-z]:[\\/]/i.test(key)) return path.resolve(key);
+  const named = /^([^\\/:]+):(.+)$/.exec(key);
   if (!named) return path.resolve(key);
   return named[1] === PAGE ? named[2] : null;
 }

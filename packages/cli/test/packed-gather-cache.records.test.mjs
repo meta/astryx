@@ -117,6 +117,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "what doctor's Core-props check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the TypeScript, Core and project-config versions it used",
     );
     expect(plain).toContain(
+      "what doctor's Core-button check finds in the project's source files, keyed by the folders it lists and the files it reads, and by the installed packages and Node.js version it used",
+    );
+    expect(plain).toContain(
       'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
     );
     // The row names the other checks that can make the folder.
@@ -551,8 +554,9 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     () => {
       const tmp = keptTmp('doctor-core');
       // A project with no installed Core, and an opted-in integration whose
-      // component replaces a Core one: everyday commands read the Core the CLI
-      // carries, doctor only the project's (none), so their lists differ.
+      // component replaces a name Core does not have: everyday commands read
+      // the Core the CLI carries and find it, doctor reads only the project's
+      // (none) and cannot judge it, so their lists differ.
       const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
       // The Core the CLI carries: the repository's, beside the installed CLI,
       // for this case only.
@@ -596,7 +600,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             name: 'AcmeSideNav',
             displayName: 'AcmeSideNav',
             import: '@acme/nav/components/AcmeSideNav',
-            replaces: 'SideNav',
+            replaces: 'NoSuchCoreNav',
             keywords: ['acme'],
             usage: {description: 'AcmeSideNav for Acme apps.'},
             props: [],
@@ -611,15 +615,18 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
           );
         const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
-        // Doctor, reading no Core, finds the replaced component missing; the
-        // everyday command, reading the carried Core, finds nothing.
-        expect(JSON.stringify(fresh)).toContain('SideNav');
+        // Doctor, reading no Core, cannot judge the replacement and names
+        // nothing; the everyday command, reading the carried Core, finds the
+        // missing target and prints it itself, since doctor cannot.
+        expect(JSON.stringify(fresh)).not.toContain('NoSuchCoreNav');
         const everyday = run(['template', '--list'], {
           tmp,
           cwd: dir,
           json: false,
         });
-        expect(everyday.stderr).not.toContain('@acme/nav');
+        expect(everyday.stderr).toContain(
+          'Warning: @acme/nav: Component "AcmeSideNav" replaces "NoSuchCoreNav", which is not a Core component.',
+        );
         run(['template', '--list'], {tmp, cwd: dir, json: false});
         // The everyday command kept its lists (the integration's and the
         // project's); doctor still answers as a fresh doctor does.

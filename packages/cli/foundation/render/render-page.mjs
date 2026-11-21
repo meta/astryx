@@ -67,7 +67,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'unknown-prop' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -83,7 +83,8 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
  * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back (each also has a warning); present only when there are some.
- * @property {{component: string, prop: string, value: string, file: string, line: number}[]} [propValues] - Each string the page's own files give a Core component's prop, for the caller to check against the component's docs.
+ * @property {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]} [propValues] - What the page's own files certainly give a Core component's prop (the kinds of value and the strings among them), for the caller to check against the component's docs and types.
+ * @property {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]} [propNames] - Each prop the page's own files give a Core component by name, with the file's absolute path and where its element opens, for the caller to check against the component's docs and types.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -2923,6 +2924,7 @@ export async function renderPage(entry, options = {}) {
     warnings,
     ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
     propValues: message.propValues ?? [],
+    propNames: message.propNames ?? [],
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
     ...(remoteSummary && remoteSummary.fetched.length + remoteSummary.failed.length > 0 ? {remoteImages: remoteSummary} : {}),
