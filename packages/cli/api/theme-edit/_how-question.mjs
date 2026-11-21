@@ -2732,7 +2732,7 @@ const lexicons = new WeakMap();
 const REMOVAL_VERBS =
   // ("strip the shadows" takes them away; "one bordered strip", a strip
   // said last, is a noun.)
-  '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip(?!\\s*(?:$|[,.;:!?]))|nix|scrap|take away|take off)(?: all the| the| all| any)?';
+  '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip(?!\\s*(?:$|[,.;:!?]))|nix|scrap|take away|take off|clear)(?: all the| the| all| any)?';
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
 /**
  * A clause that forbids a change ("don't make buttons rounder", "never hide
@@ -2785,12 +2785,18 @@ const removalSaid = t => {
  */
 const PLACE_ONLY =
   /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|too|as well|also|only|so|but|because|since|while|and nothing|please|thanks|thank you|(?:background|backdrop|fill|bg)s?)\b)/;
-/** Words that ask for a setting's earlier value: a reset, never a look. */
-const GOING_BACK =
-  /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
 /** The things a removal can take away. */
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
+/**
+ * Words that ask for a setting's earlier value: a reset, never a look.
+ * ("Clear the card background" takes the background away, as "remove"
+ * does: clear is a reset only when no removable thing follows it, or when
+ * the person's changes or overrides do, as in "clear my border changes".)
+ */
+const GOING_BACK = new RegExp(
+  `\\b(reset|revert|restore|back to|default|original|what it was|standard|clear(?!\\s+(?:[a-z'-]+\\s+){0,4}?${REMOVABLE}\\b(?!\\s+(?:changes?|overrides?|settings?|edits?)\\b))|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\\b`,
+);
 /**
  * A removal lead and a list of two or more removable items ("the card's
  * border and shadow", "border, shadow and background"), with the part the
