@@ -45,6 +45,7 @@ import React, {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {useAttachment} from '../hooks/useAttachment';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import type {
@@ -978,99 +979,94 @@ export function Popover({
     ],
   );
 
-  // The trigger the wiring is attached to, and what attached it.
+  // Warns once for each element that holds no button, so an attachment that
+  // looks for it after each commit does not warn on every commit.
+  const warnedAnchorRef = useRef<HTMLElement | null>(null);
+  // The anchor the trigger wiring uses: the element `anchorRef` holds, or in
+  // children mode the wrapper, which takes no pressed-state transform. A
+  // render-prop trigger sets its own anchor through `setRenderTrigger`.
+  const findTriggerAnchor = (): HTMLElement | null => {
+    const anchor = anchorRef
+      ? anchorRef.current
+      : typeof children === 'function'
+        ? null
+        : wrapperRef.current;
+    if (anchor == null) {
+      return null;
+    }
+    if (findTriggerButton(anchor) == null) {
+      if (warnedAnchorRef.current !== anchor) {
+        warnedAnchorRef.current = anchor;
+        devWarn(
+          'Popover',
+          (anchorRef
+            ? 'anchorRef must reference a <button> or [role="button"] element. '
+            : 'children must contain a <button> or [role="button"] element. ') +
+            'The popover trigger implements the button + dialog ARIA pattern.',
+        );
+      }
+      // Without a button, sibling mode has no anchor; children mode keeps
+      // the wrapper.
+      return anchorRef ? null : anchor;
+    }
+    return anchor;
+  };
+  const findTrigger = (): HTMLElement | null => {
+    const anchor = findTriggerAnchor();
+    return anchor == null ? null : findTriggerButton(anchor);
+  };
+
+  useAttachment(
+    findTriggerAnchor,
+    anchor => {
+      anchorElementRef.current = anchor;
+      setPopoverTrigger(anchor);
+      return () => {
+        // A render-prop trigger that took over may already be the anchor.
+        if (anchorElementRef.current === anchor) {
+          anchorElementRef.current = null;
+          setPopoverTrigger(null);
+        }
+      };
+    },
+    setPopoverTrigger,
+  );
+
+  // The trigger's text names a sheet that has no `label`. The attach reads
+  // it; the Effect below follows a change while the same trigger stays.
   const attachedTriggerRef = useRef<{
-    anchor: HTMLElement;
-    button: HTMLElement | null;
-    attach: typeof attachTrigger;
-    detach: () => void;
+    button: HTMLElement;
     text: string;
   } | null>(null);
-  const detachTrigger = useCallback(() => {
+  useAttachment(
+    findTrigger,
+    button => {
+      const detach = attachTrigger(button);
+      const attached = {button, text: readTriggerText(button)};
+      attachedTriggerRef.current = attached;
+      return () => {
+        if (attachedTriggerRef.current === attached) {
+          attachedTriggerRef.current = null;
+        }
+        detach();
+      };
+    },
+    attachTrigger,
+  );
+
+  // Effect: syncs the trigger text state with the attached trigger element's
+  // text, and sets it only when it changed.
+  useIsomorphicLayoutEffect(() => {
     const attached = attachedTriggerRef.current;
     if (attached == null) {
       return;
     }
-    attachedTriggerRef.current = null;
-    // A render-prop trigger that took over may already be the anchor. Only
-    // the anchor this check set is cleared.
-    if (anchorElementRef.current === attached.anchor) {
-      anchorElementRef.current = null;
-      setPopoverTrigger(null);
+    const text = readTriggerText(attached.button);
+    if (text !== attached.text) {
+      attached.text = text;
+      setTriggerText(text);
     }
-    attached.detach();
-  }, [setPopoverTrigger]);
-
-  // Effect: syncs the trigger element's listeners and ARIA attributes with the
-  // popover. Sibling mode attaches to the element `anchorRef` holds. Children mode
-  // anchors to the wrapper, which takes no pressed-state transform. It
-  // attaches to the button inside the wrapper. The check runs after every
-  // commit, so a trigger the caller replaces is attached too. It attaches
-  // again only when the anchor, the button or `attachTrigger` changed.
-  // Otherwise it reads the trigger's text, which names a sheet that has no
-  // `label`, and sets it only when it changed.
-  useIsomorphicLayoutEffect(() => {
-    let anchor: HTMLElement | null = null;
-    if (anchorRef) {
-      anchor = anchorRef.current;
-    } else if (typeof children !== 'function') {
-      anchor = wrapperRef.current;
-    }
-    const button = anchor == null ? null : findTriggerButton(anchor);
-    const attached = attachedTriggerRef.current;
-    if (
-      attached != null &&
-      attached.anchor === anchor &&
-      attached.button === button &&
-      attached.attach === attachTrigger
-    ) {
-      if (button != null) {
-        const text = readTriggerText(button);
-        if (text !== attached.text) {
-          attached.text = text;
-          setTriggerText(text);
-        }
-      }
-      return;
-    }
-    detachTrigger();
-    if (anchor == null) {
-      return;
-    }
-    if (!button) {
-      devWarn(
-        'Popover',
-        anchorRef
-          ? 'anchorRef must reference a <button> or [role="button"] element. ' +
-              'The popover trigger implements the button + dialog ARIA pattern.'
-          : 'children must contain a <button> or [role="button"] element. ' +
-              'The popover trigger implements the button + dialog ARIA pattern.',
-      );
-      if (anchorRef) {
-        // Remembered, so the warning shows once for this element.
-        attachedTriggerRef.current = {
-          anchor,
-          button,
-          attach: attachTrigger,
-          detach: () => {},
-          text: '',
-        };
-        return;
-      }
-    }
-    anchorElementRef.current = anchor;
-    setPopoverTrigger(anchor);
-    attachedTriggerRef.current = {
-      anchor,
-      button,
-      attach: attachTrigger,
-      detach: button == null ? () => {} : attachTrigger(button),
-      text: button == null ? '' : readTriggerText(button),
-    };
   });
-  // Effect: removes the trigger element's listeners and ARIA attributes when
-  // the Popover unmounts.
-  useIsomorphicLayoutEffect(() => detachTrigger, [detachTrigger]);
 
   // Sync controlled state: show or hide the anchored popover, the one surface
   // with an imperative API, to follow the latch. The sheet follows the latch

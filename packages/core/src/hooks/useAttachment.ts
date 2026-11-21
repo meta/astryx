@@ -4,20 +4,28 @@
 
 /**
  * @file useAttachment.ts
- * @input Node refs (an element's, or the document's), an attach function
- *   and a key
+ * @input Node refs (an element's, or the document's) or functions that find
+ *   a node after each commit, an attach function and a key
  * @output Exports useAttachment and useAttachmentPair (two elements): they keep
  *   the attach function bound to the nodes the refs hold across commits
  * @position Internal React helper, not in hooks/index.ts: the one attach and
  *   release lifecycle of the gesture hooks, the pager and useAnimator
  *
  * SYNC: When modified, update gestures/__tests__/useGestureRecognizer.test.tsx,
- * gestures/__tests__/useFingerScroll.test.tsx and
- * __tests__/useAttachmentPair.test.tsx.
+ * gestures/__tests__/useFingerScroll.test.tsx,
+ * __tests__/useAttachmentPair.test.tsx and __tests__/useAttachment.test.tsx.
  */
 
 import {useRef, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+
+/**
+ * Where an attachment finds its node after each commit: a ref, or a function
+ * that returns the node, for a node no ref holds (such as an element found
+ * inside the caller's children).
+ */
+export type AttachmentTarget<T extends Node> =
+  RefObject<T | null> | (() => T | null);
 
 /**
  * Keep `attach` bound to the node `ref` holds after each commit: an element,
@@ -26,7 +34,7 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
  * a commit that changes neither does nothing (react-component-runtime INV3).
  */
 export function useAttachment<T extends Node = Element>(
-  ref: RefObject<T | null>,
+  ref: AttachmentTarget<T>,
   attach: (element: T) => () => void,
   key: unknown,
 ): void {
@@ -41,8 +49,8 @@ export function useAttachment<T extends Node = Element>(
  * changes neither does nothing.
  */
 export function useAttachmentPair<A extends Element, B extends Element>(
-  firstRef: RefObject<A | null>,
-  secondRef: RefObject<B | null>,
+  firstRef: AttachmentTarget<A>,
+  secondRef: AttachmentTarget<B>,
   attach: (first: A, second: B) => () => void,
   key: unknown,
 ): void {
@@ -59,7 +67,7 @@ export function useAttachmentPair<A extends Element, B extends Element>(
  * and at unmount.
  */
 function useAttachedNodes(
-  refs: ReadonlyArray<RefObject<Node | null>>,
+  refs: ReadonlyArray<AttachmentTarget<Node>>,
   attach: (nodes: ReadonlyArray<Node>) => () => void,
   key: unknown,
 ): void {
@@ -71,7 +79,9 @@ function useAttachedNodes(
 
   // Syncs the attachment with the DOM nodes the refs hold after this commit.
   useIsomorphicLayoutEffect(() => {
-    const nodes = refs.map(ref => ref.current);
+    const nodes = refs.map(ref =>
+      typeof ref === 'function' ? ref() : ref.current,
+    );
     const current = attachmentRef.current;
     if (
       current != null &&

@@ -171,10 +171,10 @@ describe('Popover children mode', () => {
 
 describe('Popover trigger mode change', () => {
   it('opens anchored to the render-prop trigger after children change from an element to a render function', () => {
-    let useRenderProp: () => void = () => {};
+    let switchToRenderProp: () => void = () => {};
     function Parent() {
       const [isRenderProp, setIsRenderProp] = useState(false);
-      useRenderProp = () => setIsRenderProp(true);
+      switchToRenderProp = () => setIsRenderProp(true);
       return (
         <Popover content={<span>Shortcuts</span>} label="Shortcuts">
           {isRenderProp ? (
@@ -191,7 +191,7 @@ describe('Popover trigger mode change', () => {
     }
     render(<Parent />);
 
-    act(() => useRenderProp());
+    act(() => switchToRenderProp());
 
     // A closed trigger names no anchor; the shown popover anchors to it.
     const trigger = screen.getByRole('button', {name: 'Render trigger'});
