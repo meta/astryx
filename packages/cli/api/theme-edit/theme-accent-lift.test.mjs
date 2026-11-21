@@ -53,13 +53,36 @@ it('keeps the official secondary text lift on a new accent while it reads', asyn
   const before = lifts(
     fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
   );
-  // The lifted parts (selected rows, a dropzone, a numbered citation) and
-  // any coloured card that sets its own secondary text.
-  expect(before.length).toBeGreaterThanOrEqual(5);
+  // The lifted parts (selected rows, a dropzone, a numbered citation, top
+  // nav items) and any coloured card that sets its own secondary text.
+  expect(before.length).toBeGreaterThanOrEqual(6);
   const r = await themeEditSet('t', 'accent', '#E11D48', {cwd});
   const after = lifts(
     fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
   );
   expect(after).toEqual(before);
   expect(r.data.styled.filter(x => /color-text-secondary/.test(x))).toEqual([]);
+}, 240_000);
+
+it("moves the top nav item's pressed-fill lift with a new neutral, as it moves the others", async test => {
+  if (unbuilt) {
+    console.warn(`skipped: ${unbuilt}`);
+    return test.skip();
+  }
+  await themeEditNew('n', {cwd, like: 'neutral'});
+  /** @param {string} css */
+  const nav = css =>
+    /\n {2}\.astryx-top-nav-item \{\s*--color-text-secondary: (light-dark\([^;]*\));/.exec(
+      css,
+    )?.[1];
+  const read = () => fs.readFileSync(path.join(cwd, 'themes/n/n.css'), 'utf8');
+  const before = nav(read());
+  expect(before).toMatch(/^light-dark\(/);
+  const r = await themeEditSet('n', 'neutral', '#78716C', {cwd});
+  const after = nav(read());
+  expect(after).toMatch(/^light-dark\(/);
+  expect(after).not.toBe(before);
+  expect(r.data.styled).toContain(
+    `top-nav-item: --color-text-secondary ${after}`,
+  );
 }, 240_000);
