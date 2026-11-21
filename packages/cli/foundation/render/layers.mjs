@@ -151,7 +151,8 @@ export {desktopMatches} from './picture-window.mjs';
  * on each one an opened overlay holds (a submenu's row), and a typed letter
  * in each combobox field that a press leaves closed. A drawing that opened
  * nothing and holds a layer is right-clicked (a context menu). Each overlay
- * is kept once, as it was when it opened.
+ * is kept once, as it was when it opened; a control on the page that opens
+ * keeps the drawn part with it open, without its overlays.
  * @param {any} host the element the page was drawn in
  * @param {(fn: () => void) => void} flushSync
  * @returns {Promise<string[]>}
@@ -243,6 +244,26 @@ export async function openLayerMarkup(host, flushSync) {
     }
     await tick();
     keep();
+    // A control the page itself draws (a top nav's menu trigger, outside
+    // every overlay) shows its open state only on the page: the part as
+    // drawn now, with that control open and without its overlays, is kept
+    // too.
+    if (
+      control.getAttribute('aria-expanded') === 'true' &&
+      !control.closest('[data-astryx-layer-root]')
+    ) {
+      const part = host.cloneNode(true);
+      for (const layer of part.querySelectorAll('[data-astryx-layer-root]'))
+        layer.remove();
+      const html = String(part.innerHTML).replace(
+        /<template><\/template>/g,
+        '',
+      );
+      if (html && !seen.has(html)) {
+        seen.add(html);
+        out.push(html);
+      }
+    }
     if (control.getAttribute('aria-expanded') === 'true')
       for (const layer of g.document.querySelectorAll(
         '[data-astryx-layer-root]',

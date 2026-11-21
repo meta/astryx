@@ -4,13 +4,24 @@
 export const docs = {
   name: 'useHotkeys',
   displayName: 'useHotkeys',
-  keywords: ['hotkey', 'shortcut', 'keyboard', 'keydown', 'command', 'palette', 'mod', 'cmd', 'ctrl', 'kbd'],
+  keywords: [
+    'hotkey',
+    'shortcut',
+    'keyboard',
+    'keydown',
+    'command',
+    'palette',
+    'mod',
+    'cmd',
+    'ctrl',
+    'kbd',
+  ],
   params: [
     {
       name: 'hotkeys',
       type: 'Hotkey[]',
       description:
-        'Shortcut registrations. Each entry: `{ keys, onPress, allowInInputs?, isDisabled? }`. `keys` is a "+"-separated combo like "mod+k", "?", "escape"; "mod" is ⌘ on macOS and Ctrl elsewhere. Register a punctuation key that shift changes as the character it produces: "?", not "shift+/", because the final key is compared against `event.key`. `onPress` receives the KeyboardEvent after preventDefault(). `allowInInputs` (default false) lets the hotkey fire while typing in inputs/textareas/selects/contenteditable. `isDisabled` temporarily disables the entry.',
+        'Shortcut registrations. Each entry: `{ keys, onPress, allowInInputs?, isDisabled? }`. `keys` is a "+"-separated combo like "mod+k", "?", "escape"; "mod" is ⌘ on macOS and Ctrl elsewhere. Register a punctuation key that shift changes as the character it produces: "?", not "shift+/", because the final key is compared against `event.key`. On Apple platforms (macOS, and iPadOS or iOS with a hardware keyboard), where Option changes the typed character (Option+A types "å"), an "alt" combo with a letter, digit, punctuation or space key also matches that key at its US position, on every layout, when Option typed a dead key or a non-ASCII character; when Option types a plain ASCII character, the combo matches that character (a German Mac types "@" for Option+L, so it fires "alt+@"). On Apple platforms, name shifted punctuation as "alt+shift+/", not "alt+?". `onPress` receives the KeyboardEvent after preventDefault(). `allowInInputs` (default false) lets the hotkey fire while typing in inputs/textareas/selects/contenteditable. `isDisabled` temporarily disables the entry.',
       required: true,
     },
   ],
@@ -19,10 +30,26 @@ export const docs = {
     description:
       'Registers global keyboard shortcuts with a single window keydown listener per hook instance. Handlers live in a ref, so re-renders never re-subscribe. Skips events from typing targets (input, textarea, select, contenteditable) unless allowInInputs, skips defaultPrevented events, and calls preventDefault() on match. SSR-safe.',
     bestPractices: [
-      { guidance: true, description: 'Use for app-level shortcuts like command palettes (mod+k), help overlays ("?"), and navigation keys.' },
-      { guidance: true, description: 'Pair with the Kbd component to display the same combo you register; both resolve "mod" per platform identically.' },
-      { guidance: true, description: 'Use isDisabled to suspend shortcuts while a modal or wizard owns the keyboard, instead of unmounting the hook.' },
-      { guidance: false, description: 'Use for focus-scoped keyboard navigation inside a widget; use useListFocus or useGridFocus instead.' },
+      {
+        guidance: true,
+        description:
+          'Use for app-level shortcuts like command palettes (mod+k), help overlays ("?"), and navigation keys.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pair with the Kbd component to display the same combo you register; both resolve "mod" per platform identically.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use isDisabled to suspend shortcuts while a modal or wizard owns the keyboard, instead of unmounting the hook.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use for focus-scoped keyboard navigation inside a widget; use useListFocus or useGridFocus instead.',
+      },
     ],
   },
   relatedComponents: ['Kbd'],
@@ -37,16 +64,32 @@ export const docsDense = {
     'Global keyboard shortcuts w/ one window keydown listener per hook instance. Handlers kept in ref; re-renders never re-subscribe. Skips typing targets (input/textarea/select/contenteditable) unless allowInInputs, skips defaultPrevented and IME key events (even with allowInInputs), preventDefault() on match. "mod" = ⌘ on macOS, Ctrl elsewhere. SSR-safe.',
   paramDescriptions: {
     hotkeys:
-      'array of { keys, onPress, allowInInputs?, isDisabled? }. keys = "+"-separated combo ("mod+k", "?", "escape"). Shifted punctuation = produced char ("?", not "shift+/"); final key compared vs event.key.',
+      'array of { keys, onPress, allowInInputs?, isDisabled? }. keys = "+"-separated combo ("mod+k", "?", "escape"). Shifted punctuation = produced char ("?", not "shift+/"); final key compared vs event.key; on Apple platforms (macOS; iPadOS/iOS with a hardware keyboard) an alt combo (letter/digit/punctuation/space) also matches the US key position (event.code) when Option typed a dead key or non-ASCII char, else the typed char; there shifted punctuation as alt+shift+/.',
   },
   usage: {
     description:
       'Global keyboard shortcuts w/ one window keydown listener per hook instance. Handlers kept in ref; re-renders never re-subscribe. Skips typing targets unless allowInInputs, skips defaultPrevented and IME key events (even with allowInInputs), preventDefault() on match. SSR-safe.',
     bestPractices: [
-      { guidance: true, description: 'Use for app-level shortcuts: command palettes (mod+k), help overlays ("?"), navigation keys.' },
-      { guidance: true, description: 'Pair w/ Kbd component to display same combo registered; both resolve "mod" per platform identically.' },
-      { guidance: true, description: 'Use isDisabled to suspend shortcuts while modal/wizard owns keyboard, instead of unmounting hook.' },
-      { guidance: false, description: 'Use for focus-scoped keyboard nav inside widget; use useListFocus / useGridFocus instead.' },
+      {
+        guidance: true,
+        description:
+          'Use for app-level shortcuts: command palettes (mod+k), help overlays ("?"), navigation keys.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pair w/ Kbd component to display same combo registered; both resolve "mod" per platform identically.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use isDisabled to suspend shortcuts while modal/wizard owns keyboard, instead of unmounting hook.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use for focus-scoped keyboard nav inside widget; use useListFocus / useGridFocus instead.',
+      },
     ],
   },
 };

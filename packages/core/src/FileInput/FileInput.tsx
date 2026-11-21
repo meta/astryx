@@ -307,6 +307,9 @@ const styles = stylex.create({
     textAlign: 'start',
     flex: 1,
     minWidth: 0,
+    // A word wider than the field breaks inside itself, so the prompt wraps
+    // inside the border and loses no text at large sizes.
+    overflowWrap: 'break-word',
   },
 });
 
