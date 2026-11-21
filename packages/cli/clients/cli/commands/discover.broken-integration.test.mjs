@@ -69,7 +69,7 @@ describe('astryx discover with a manifest that fails to load', () => {
 
     expect(status).toBe(0);
     expect(stderr).toMatch(
-      /Warning: @test\/broken has 1 integration issue\(s\)\. Run: .+ doctor/,
+      /Warning: @test\/broken has 1 integration issue\(s\)\. Run: .+ doctor integration validate @test\/broken/,
     );
     expect(stdout).not.toContain('No integrations configured.');
     expect(stdout).toContain(
@@ -133,8 +133,10 @@ describe('astryx discover with a configured package that is not installed', () =
     const {status, stderr} = await runCli(['discover'], {cwd: project});
 
     expect(status).toBe(0);
+    // The folder declares no Astryx, so it is outside a project, where
+    // doctor checks the computer: the line names the package's own check.
     expect(stderr).toMatch(
-      /Warning: @test\/missing has 1 integration issue\(s\)\. Run: .+ doctor\n/,
+      /Warning: @test\/missing has 1 integration issue\(s\)\. Run: .+ doctor integration validate @test\/missing\n/,
     );
   });
 });
@@ -152,8 +154,9 @@ describe('astryx search with a manifest that fails to load', () => {
     const {status, stderr} = await runCli(['search', 'button'], {cwd: project});
 
     expect(status).toBe(0);
+    // Core is installed here, so the folder is a project: doctor names it.
     expect(stderr).toMatch(
-      /Warning: @test\/broken has 1 integration issue\(s\)\. Run: .+ doctor/,
+      /Warning: @test\/broken has 1 integration issue\(s\)\. Run: .+ doctor\n/,
     );
 
     const asJson = await runCli(['search', 'button', '--json'], {cwd: project});

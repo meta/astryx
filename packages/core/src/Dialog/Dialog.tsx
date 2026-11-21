@@ -82,7 +82,7 @@ import {
 import type {SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {createDevWarnings} from '../utils/devWarning';
+import {createDevWarnings, devMissingCallback} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
@@ -103,6 +103,10 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {isHTMLElement} from '../utils/nodeType';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
@@ -571,6 +575,16 @@ export function Dialog({
   ref,
   ...props
 }: DialogProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'Dialog',
+      'onOpenChange',
+      'is required to close the dialog, for example onOpenChange={setIsOpen}. Dialog has no onClose prop.',
+    );
+  }
   // A modal dialog open on the server renders closed until hydration, and
   // opens in the render after it, the first one that can call showModal(): a
   // <dialog> painted open with aria-modal before it is modal claims a state it
@@ -630,13 +644,27 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  // A composed header whose title renders after the dialog mounted asks the
-  // dialog to look for the title again.
-  const syncDefaultName = useCallback(() => {
-    if (dialogRef.current != null) {
-      attachDialog(dialogRef.current);
-    }
-  }, [attachDialog]);
+  // A header title that mounts or unmounts after the dialog mounted reports
+  // it, so the default name follows the title. A composed header with no
+  // report asks the dialog to look for the title again.
+  const syncDefaultName = useCallback(
+    (isTitleMounted?: boolean) => {
+      const node = dialogRef.current;
+      if (node == null || hasConsumerName) {
+        return;
+      }
+      if (isTitleMounted === undefined) {
+        attachDialog(node);
+      } else if (isTitleMounted) {
+        node.setAttribute('aria-labelledby', titleId);
+      } else if (node.getAttribute('aria-labelledby') === titleId) {
+        // Only the default name goes. A report from a header that rendered
+        // before a caller name arrived leaves that name.
+        node.removeAttribute('aria-labelledby');
+      }
+    },
+    [attachDialog, hasConsumerName, titleId],
+  );
 
   const dialogContextValue = useMemo(
     () => ({isInline, titleId, syncDefaultName}),
