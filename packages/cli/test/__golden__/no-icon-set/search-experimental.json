@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 16,
+    "matchCount": 18,
     "results": [
       {
         "domain": "doc",
@@ -97,6 +97,20 @@
       },
       {
         "domain": "doc",
+        "name": "cli/api/functions/theme-add",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/api/functions/theme-add",
+        "parent": "astryx docs cli/api/functions",
+        "mentions": [
+          "docs mention \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
         "name": "cli/commands/theme",
         "package": "@astryxdesign/cli",
         "score": "<text>",
@@ -107,6 +121,20 @@
         "parent": "astryx docs cli/commands",
         "mentions": [
           "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "cli/commands/theme-add",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/commands/theme-add",
+        "parent": "astryx docs cli/commands",
+        "mentions": [
+          "docs mention \"experimental\""
         ]
       },
       {

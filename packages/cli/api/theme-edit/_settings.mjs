@@ -150,7 +150,11 @@ import {
   STATUS_TOKEN,
   settingsBeforeChange,
 } from './_palette.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -293,41 +297,7 @@ export function themeFiles(cwd, slug) {
   };
 }
 
-/** Files a system or a tool puts in any folder; a folder of only these is empty. */
-export const FOLDER_JUNK = new Set([
-  '.DS_Store',
-  '.gitkeep',
-  'Thumbs.db',
-  'desktop.ini',
-]);
-
-/**
- * Whether `dir` holds nothing of anyone's: absent, empty, or only system
- * files (what `git rm -r` or a branch switch leaves). A path that is not a
- * folder, or one that does not read, is not empty.
- * @param {string} dir
- * @returns {boolean}
- */
-export function folderIsEmpty(dir) {
-  if (!fs.existsSync(dir)) return true;
-  try {
-    // A folder holding only empty folders (an empty tokens/) holds nothing
-    // either; a link is never followed.
-    return (
-      fs.lstatSync(dir).isDirectory() &&
-      fs
-        .readdirSync(dir)
-        .every(
-          n =>
-            FOLDER_JUNK.has(n) ||
-            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
-              folderIsEmpty(path.join(dir, n))),
-        )
-    );
-  } catch {
-    return false;
-  }
-}
+export {FOLDER_JUNK, folderIsEmpty};
 
 /**
  * Whether a dial takes a value of its own kind beside its named words (a

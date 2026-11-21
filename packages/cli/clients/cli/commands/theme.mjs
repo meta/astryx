@@ -836,6 +836,15 @@ function printThemeApp(result) {
       text(
         `[ok] ${change.slug} is the app's default theme: an app wired to the generated module shows it now.`,
       ),
+      ...(copy.workingFiles
+        ? [
+            text(
+              copy.workingFiles.files.length
+                ? `[ok] Kept the shared theme's working files from ${copy.workingFiles.from} in ${copy.workingFiles.outputDir}.`
+                : `[note] The shared theme carries working files (${copy.workingFiles.from}), not copied: ${copy.workingFiles.notCopied}.`,
+            ),
+          ]
+        : []),
       text(`Wrote: ${copy.written.join(', ')}.`),
       text(
         `Changed: ${copy.config.module} (default ${copy.config.default})${copy.config.dependencies.length > 0 ? `; package.json dependencies ${copy.config.dependencies.join(', ')}` : ''}. ${copy.previousDefault ? `\`${formatCliCommand(`theme use ${copy.previousDefault}`, process.cwd())}\` then ` : ''}\`${formatCliCommand(`theme remove ${change.slug}`, process.cwd())}\` undoes this add.`,
@@ -855,6 +864,12 @@ function printThemeApp(result) {
       emit(
         text(
           `[note] Kept ${undo.kept.join(', ')}: changed since theme add wrote them.`,
+        ),
+      );
+    if (undo.keptWorkingFiles?.length)
+      emit(
+        text(
+          `[note] Kept ${undo.keptWorkingFiles.join(', ')}: changed since theme add wrote them, or the theme has been built there since.`,
         ),
       );
     if (undo.uninstalled.length > 0)
