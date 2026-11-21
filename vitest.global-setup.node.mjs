@@ -7,9 +7,9 @@
  *   older than its sources once no earlier run is still running. It
  *   regenerates the Sandbox template registry and route wrappers, builds the
  *   theme editor's cache for the CLI's own Core, gives the folder the run
- *   builds each bundled theme once in, packs the CLI, and points
- *   the per-user folder at a folder of this run, once, before any test
- *   worker forks. Its teardown fails the run when a test wrote into the
+ *   builds each bundled theme once in, packs the CLI, points the per-user
+ *   folder at a folder of this run and names the repository's package
+ *   manager as the run's launcher, once, before any test worker forks. Its teardown fails the run when a test wrote into the
  *   checkout.
  * @position Referenced by vitest.config.ts's `node` project. The build-theme
  *   suites need a compiled Core; the Sandbox route contract imports generated
@@ -37,6 +37,7 @@ import {
   writtenSince,
 } from './packages/cli/test-utils/checkout-writes.mjs';
 import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
+import {repositoryUserAgent} from './packages/cli/test-utils/test-launcher.mjs';
 import {
   sweepTrash,
   trashFolder,
@@ -93,6 +94,10 @@ export default async function setup(project) {
       process.env.npm_config_cache ??= path.join(os.homedir(), '.npm');
       process.env.HOME = userHome;
     }
+    // Tests read the package manager that started them from its user agent.
+    // The run names the repository's own, so a run started with `node` or
+    // `npx vitest` prints the same commands as one started with pnpm.
+    process.env.npm_config_user_agent = repositoryUserAgent(root);
     // Every theme editor fixture that links the CLI's own Core reads the
     // same part data and component docs, which take a render of every
     // component to build. They are built once here, and each fixture starts
