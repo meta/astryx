@@ -29543,7 +29543,10 @@ export function draftAnswer(ctx, env, question) {
     ];
     // (Only an undo said alone: one followed by another "… change" phrase
     // reads as before.)
-    const followed = next && /\bchanges?\W*$/i.test(String(next.text ?? ''));
+    const followed =
+      next &&
+      !GOING_BACK.test(String(next.text ?? '')) &&
+      /\bchanges?\W*$/i.test(String(next.text ?? ''));
     if (lookNamed.length && !several && !colorSaid && !followed) {
       const ofLook = undone.filter(d =>
         lookNamed.some(a => lookOf(d).includes(a)),

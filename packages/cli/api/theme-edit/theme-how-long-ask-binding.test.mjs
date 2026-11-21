@@ -609,6 +609,14 @@ const ROWS = [
     },
   ],
   [
+    'a named-look undo followed by a separate undo still takes back its look',
+    {
+      q: 'Make the cards rounder. Make the headings bigger. Make the headings bold. Undo the heading size change. Undo the card change.',
+      has: ['headings bold'],
+      never: /--text-heading-\d-size|--on card\b/,
+    },
+  ],
+  [
     'an undo of an italic keeps the bold said earlier',
     {
       q: 'Make the headings italic. Make the headings bold. Undo the heading italic change.',
