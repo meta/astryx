@@ -5030,6 +5030,18 @@ export function draftAnswer(ctx, env, question) {
   // line.)
   const raw0 = String(question);
   const asked0 = raw0.toLowerCase();
+  // A file named in url() is a value, written as typed: it is set aside
+  // (url(uu<n>uu)) while the words are read, rewritten and split into asks,
+  // and put back in each ask once its parts are read. (Nor is it a picture
+  // to match: the reader of picture files never sees it.)
+  const urls = /** @type {string[]} */ ([]);
+  question = String(question).replace(/url\([^()]*\)/gi, m => {
+    urls.push(m);
+    return `url(uu${urls.length - 1}uu)`;
+  });
+  /** Text with each file set aside put back as typed. @param {string} s */
+  const withUrls = s =>
+    s.replace(/url\(uu(\d+)uu\)/g, (m, n) => urls[Number(n)] ?? m);
   // "darkmode", "dark-mode": one spelling of a mode before any clause is
   // read, so every reader that names a mode sees it.
   // One mode grammar: every way of naming a mode is read here as "dark
@@ -9633,6 +9645,10 @@ export function draftAnswer(ctx, env, question) {
       .replace(/\s*qq\d+qq\s*/g, ' font ')
       .replace(/\s+/g, ' ')
       .trim();
+    // (The ask's CSS value is read with the file put back; the ask's words
+    // keep it set aside, so no later reader reacts to a word of its path.)
+    if (/url\(uu\d+uu\)/.test(c.text) && c.named)
+      c.named = namedProperty(withUrls(c.text));
     if (c.quoted.length && !c.aspects.includes('family'))
       c.aspects.push('family');
   }
@@ -32873,6 +32889,15 @@ export function draftAnswer(ctx, env, question) {
     if (writes) result.push(note);
     else result.splice(0, result.length, note);
   }
+  // Each file set aside is written back as typed, where an answer names or
+  // writes it.
+  if (urls.length)
+    for (const d of result) {
+      d.text = withUrls(d.text);
+      for (const o of d.options)
+        for (const st of o)
+          if (typeof st.value === 'string') st.value = withUrls(st.value);
+    }
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
