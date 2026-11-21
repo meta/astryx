@@ -321,6 +321,60 @@ describe('show --on: what one part of a theme shows', () => {
     expect(new Set(ids).size).toBe(ids.length);
   }, 120_000);
 
+  it('reads a state setting beside a dial as the part’s, once per condition, and a one-mode color into that mode’s value', async () => {
+    await themeEditNew('held', {cwd, like: 'neutral'});
+    await themeEditSet('held', 'corners', 'pill', {cwd});
+    await themeEditSet('held', 'background-color', '#123456', {
+      cwd,
+      on: 'button',
+      state: 'disabled',
+    });
+    await themeEditSet('held', 'background-color', '#654321', {
+      cwd,
+      on: 'button',
+      when: 'variant:secondary',
+      state: 'expanded',
+    });
+    await themeEditSet('held', 'background-color', '#abcdef', {
+      cwd,
+      on: 'card',
+      mode: 'light',
+    });
+    const button = /** @type {any} */ (
+      await themeEditShow('held', {cwd, on: 'button'})
+    );
+    /** @param {string | null} when @param {string} state */
+    const rowsAt = (when, state) =>
+      button.data.values.filter(
+        (/** @type {any} */ v) =>
+          v.property === 'background-color' &&
+          v.when === when &&
+          v.state === state,
+      );
+    // The setting's own --when and --state, beside the corners dial.
+    expect(rowsAt(null, 'disabled')).toEqual([
+      expect.objectContaining({value: '#123456', source: 'theme', via: 'part'}),
+    ]);
+    expect(rowsAt('variant:secondary', 'expanded')).toEqual([
+      expect.objectContaining({value: '#654321', source: 'theme', via: 'part'}),
+    ]);
+    const card = /** @type {any} */ (
+      await themeEditShow('held', {cwd, on: 'card'})
+    );
+    // A color for one mode is that mode's value, not a condition. (A card
+    // always draws a variant, and the build writes a card fill there.)
+    expect(valueOf(card, 'background-color', 'variant:default')).toMatchObject({
+      value: {light: '#abcdef', dark: expect.any(String)},
+      source: 'theme',
+      via: 'part',
+    });
+    expect(
+      card.data.values.some((/** @type {any} */ v) =>
+        /@light|@dark/.test(`${v.when} ${v.state}`),
+      ),
+    ).toBe(false);
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})

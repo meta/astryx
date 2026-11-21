@@ -23,7 +23,14 @@ import {
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {context} from './_context.mjs';
 import {baseResolved} from './_project.mjs';
-import {compileTheme, editedThemes, loadTheme} from './_settings.mjs';
+import {
+  compileTheme,
+  controlOf,
+  editedThemes,
+  loadTheme,
+  stateSlot,
+} from './_settings.mjs';
+import {censusStatesOf} from './_parts.mjs';
 import {
   mergeRules,
   ownTokens,
@@ -50,7 +57,8 @@ import {condition} from './_how.mjs';
  *   for an editor theme: what writes a token, from its saved settings (an
  *   exact token setting, a dial, or a rule on the part); `onPart` when the
  *   part's own rule sets it
- * @property {(property: string, part: string, when: string | null, state: string | null) => 'dial' | 'part'} [propertyVia] -
+ * @property {(property: string, part: string, when: string, state: string) => {when: string | null, state: string | null, exact: boolean} | null} [settingAt] - The property setting that wrote the theme's rule on the part under a rule key (`when|state` as the build writes them), as `set` took it.
+ * @property {(property: string, part: string, when: string, state: string) => 'dial' | 'part'} [propertyVia] -
  *   for an editor theme: what writes a CSS property the theme's own rule on
  *   the part sets under a condition (`when` as `set --when` takes it, null
  *   at rest): a property setting on the part for that condition that covers
@@ -91,11 +99,90 @@ const sets = (a, b) =>
   coversProperty(physical(a), physical(b));
 
 /**
- * A state as `set --state` takes it, without a pseudo-class colon
- * (`:hover` is `hover`); null for none.
- * @param {string | null | undefined} state
+ * A part's rules with each rule's `@light` and `@dark` blocks taken out,
+ * and what those blocks set: a value for one mode of a property under the
+ * rule's key, not a condition of its own.
+ * @param {Record<string, any> | undefined} comp
  */
-const bareState = state => (state ? state.replace(/^:+/, '') : null);
+function foldModes(comp) {
+  /** @type {Record<string, any>} */
+  const rules = {};
+  /** @type {{when: string, state: string, property: string, mode: 'light' | 'dark', value: string}[]} */
+  const modeSets = [];
+  for (const [when, rule] of Object.entries(comp ?? {})) {
+    if (!rule || typeof rule !== 'object') {
+      rules[when] = rule;
+      continue;
+    }
+    /** @type {Record<string, any>} */
+    const kept = {};
+    for (const [k, v] of Object.entries(rule)) {
+      if (k !== '@light' && k !== '@dark') {
+        kept[k] = v;
+        continue;
+      }
+      const mode = k === '@light' ? 'light' : 'dark';
+      for (const [k2, v2] of Object.entries(v ?? {}))
+        if (v2 && typeof v2 === 'object')
+          for (const [k3, v3] of Object.entries(v2))
+            modeSets.push({
+              when,
+              state: k2,
+              property: kebab(k3),
+              mode,
+              value: String(v3),
+            });
+        else
+          modeSets.push({
+            when,
+            state: '',
+            property: kebab(k2),
+            mode,
+            value: String(v2),
+          });
+    }
+    rules[when] = kept;
+  }
+  return {rules, modeSets};
+}
+
+/**
+ * Whether two rule keys name one condition: a theme's own rule writes a
+ * variant `variant:ghost`, Core writes `variant=ghost`, in any word order.
+ * @param {string} a
+ * @param {string} b
+ */
+const sameWhen = (a, b) => {
+  /** @param {string} w */
+  const words = w =>
+    w
+      .split(/[\s+]/)
+      .filter(Boolean)
+      .map(x => (/^[a-z][\w-]*:[^\s:]+$/i.test(x) ? x.replace(':', '=') : x))
+      .sort()
+      .join(' ');
+  return words(a) === words(b);
+};
+
+/** @param {string} k */
+const kebab = k =>
+  k.startsWith('--') ? k : k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+
+/**
+ * A value with each var() written out from a token map, the way the part
+ * draws it; a token with no value and no fallback leaves the var().
+ * @param {string} value
+ * @param {Record<string, string>} map
+ */
+function resolveVars(value, map) {
+  let out = value;
+  for (let i = 0; i < 8 && /var\(/.test(out); i++)
+    out = out.replace(
+      /var\((--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
+      (m, t, fb) => map[t] ?? (fb != null ? fb.trim() : m),
+    );
+  return out;
+}
 
 /** A token Core keeps to itself (`--_x`, `--astryx-x`). @param {string} t */
 const isPrivate = t => /^--(?:_|astryx-)/.test(t);
@@ -154,6 +241,56 @@ async function loadNamedTheme(ctx, cwd, name) {
       st.on == null
         ? false
         : st.on === part || (FAMILIES[st.on] ?? []).includes(part);
+    // A rule the theme writes on a part comes from a property setting on
+    // it, matched by the rule key the build writes for that setting (its
+    // `--when` and `--state` placed the way the build places them), else
+    // from a dial: one on the part, or a whole-theme dial that writes part
+    // rules (`surfaces outlined` writes the card's border).
+    /** @type {NonNullable<LoadedTheme['settingAt']>} */
+    const settingAt = (property, part, when, state) => {
+      const t = ctx.project.target.get(part);
+      const mine = data.settings.filter(
+        s =>
+          reaches(s, part) &&
+          s.source === 'property' &&
+          sets(String(s.thing), property),
+      );
+      /** @param {any} s */
+      const slotOf = s =>
+        stateSlot(
+          t?.states ?? [],
+          s.state,
+          s.when,
+          controlOf(ctx, part),
+          t?.stateValues,
+          censusStatesOf(ctx.project, part),
+        );
+      const exact = mine.find(s => {
+        const slot = slotOf(s);
+        return slot.key === when && (slot.pseudo ?? '') === state;
+      });
+      if (exact)
+        return {
+          when: exact.when ?? null,
+          state: exact.state ?? null,
+          exact: true,
+        };
+      // (A setting with no --when that the build copies into each variant
+      // rule the part draws, as a card's fill: the part's, under the
+      // variant's own condition.)
+      const copied = mine.find(s => {
+        const slot = slotOf(s);
+        return (
+          s.when == null &&
+          when !== 'base' &&
+          slot.key === 'base' &&
+          (slot.pseudo ?? '') === state
+        );
+      });
+      return copied
+        ? {when: null, state: copied.state ?? null, exact: false}
+        : null;
+    };
     return {
       kind: 'editor',
       tokens: ownTokens(compiled, base, core),
@@ -174,24 +311,16 @@ async function loadNamedTheme(ctx, cwd, name) {
       // on it, else from a dial: one on the part, or a whole-theme dial
       // that writes part rules (`surfaces outlined` writes the card's
       // border).
-      propertyVia: (property, part, when, state) => {
-        if (
-          data.settings.some(
-            st =>
-              reaches(st, part) &&
-              st.source === 'property' &&
-              (st.when ?? null) === when &&
-              bareState(st.state) === bareState(state) &&
-              sets(String(st.thing), property),
-          )
-        )
-          return 'part';
-        return data.settings.some(
-          st => st.source === 'dial' && (st.on == null || reaches(st, part)),
-        )
-          ? 'dial'
-          : 'part';
-      },
+      settingAt,
+      propertyVia: (property, part, when, state) =>
+        settingAt(property, part, when, state)
+          ? 'part'
+          : data.settings.some(
+                st =>
+                  st.source === 'dial' && (st.on == null || reaches(st, part)),
+              )
+            ? 'dial'
+            : 'part',
     };
   }
   const found = await findProjectTheme(cwd, name);
@@ -295,17 +424,21 @@ export async function themePartValues(cwd, name, part) {
       ERROR_CODES.ERR_RENDER_FAILED,
     );
   const theme = await loadNamedTheme(ctx, cwd, name);
+  // A rule's `@light` or `@dark` block is a value for one mode, read into
+  // that mode's value below, not a condition.
+  const folded = foldModes(theme.components?.[key]);
+  const parentFolded = foldModes(theme.parentComponents?.[key]);
   const shows = partShows(
     ctx.C,
     {},
-    {components: theme.components},
+    {components: {...theme.components, [key]: folded.rules}},
     theme.tokens,
     key,
   );
-  const own = partValues(theme.components?.[key]);
-  const inherited = partValues(theme.parentComponents?.[key]);
-  const themeRules = mergeRules(theme.components?.[key] ?? {});
-  const parentRules = mergeRules(theme.parentComponents?.[key] ?? {});
+  const own = partValues(folded.rules);
+  const inherited = partValues(parentFolded.rules);
+  const themeRules = mergeRules(folded.rules);
+  const parentRules = mergeRules(parentFolded.rules);
   /**
    * The tokens inside the part under a condition, in each mode: the
    * theme's, the theme it extends, and Core's, each with what that theme's
@@ -324,6 +457,8 @@ export async function themePartValues(cwd, name, part) {
   });
   /** @type {PartValue[]} */
   const values = [];
+  /** @type {WeakMap<PartValue, {when: string, state: string, own: boolean}>} */
+  const rawKey = new WeakMap();
   // The theme layer comes after Core's styles: a property a rule on the
   // part sets, in the same variant or at rest, is what shows for every
   // property it sets, whatever Core writes.
@@ -377,14 +512,6 @@ export async function themePartValues(cwd, name, part) {
       : onPart
         ? 'part'
         : 'token';
-    // Each condition as `set --when` takes it: `prop:value`, joined with +.
-    const setWhen =
-      when === 'base'
-        ? null
-        : when
-            .split(' ')
-            .map(w => w.replace('=', ':'))
-            .join('+');
     /** @type {PartValue['source']} */
     let source = 'core';
     /** @type {PartValue['via']} */
@@ -403,8 +530,8 @@ export async function themePartValues(cwd, name, part) {
               ? // A variant row with no rule of its own shows the rest rule:
                 // ask with the condition of the rule the value comes from.
                 ruleKey === k
-                ? theme.propertyVia(property, key, setWhen, state || null)
-                : theme.propertyVia(property, key, null, null)
+                ? theme.propertyVia(property, key, when, state)
+                : theme.propertyVia(property, key, 'base', '')
               : 'part',
         ];
       else if (mine.length) [source, via] = ['theme', tokenVia];
@@ -425,9 +552,20 @@ export async function themePartValues(cwd, name, part) {
       .split(' ')
       .map(w => (/^[a-z][\w-]*:[^\s:]+$/i.test(w) ? w.replace(':', '=') : w))
       .join(' ');
-    const flags = condition(ctx, key, coreCond);
+    // A theme rule a property setting wrote takes that setting's own
+    // --when and --state.
+    const wrote =
+      own.has(k) && theme.settingAt
+        ? theme.settingAt(property, key, when, state)
+        : null;
+    const flags = wrote?.exact
+      ? [
+          wrote.when ? `--when ${wrote.when}` : '',
+          wrote.state ? `--state ${wrote.state}` : '',
+        ].join(' ')
+      : condition(ctx, key, coreCond);
     const unsettable = /\(not settable: (.*)\)$/.exec(flags);
-    values.push({
+    const row = {
       property,
       // (Core's attribute words in one order, so one condition is one row.)
       when: unsettable
@@ -449,7 +587,44 @@ export async function themePartValues(cwd, name, part) {
       tokens: light.join(' ') === dark.join(' ') ? light : {light, dark},
       source,
       via,
-    });
+    };
+    values.push(row);
+    rawKey.set(row, {when, state, own: own.has(k)});
+  }
+  // What a rule's `@light` or `@dark` block sets: that mode's value of the
+  // property under the rule's condition.
+  for (const m of folded.modeSets) {
+    const target =
+      values.find(v => {
+        const r = rawKey.get(v);
+        return (
+          v.property === m.property &&
+          r != null &&
+          sameWhen(r.when, m.when) &&
+          r.state === m.state
+        );
+      }) ??
+      values.find(
+        v =>
+          v.property === m.property &&
+          m.when === 'base' &&
+          m.state === '' &&
+          v.when == null &&
+          v.state == null,
+      );
+    if (!target) continue;
+    const at = inside(m.when);
+    const shown = orNull(resolveVars(m.value, at.theme[m.mode]));
+    const now =
+      target.value && typeof target.value === 'object'
+        ? {...target.value}
+        : {light: target.value, dark: target.value};
+    now[m.mode] = shown;
+    target.value = now.light === now.dark ? now.light : now;
+    target.source = 'theme';
+    target.via = theme.propertyVia
+      ? theme.propertyVia(m.property, key, m.when, m.state)
+      : 'part';
   }
   // At rest first, then each variant, in the order the part reads them.
   values.sort((a, b) => Number(a.when != null) - Number(b.when != null));
@@ -457,7 +632,18 @@ export async function themePartValues(cwd, name, part) {
   // says nothing more (a button's four corner radii beside its radius).
   // One condition Core writes in two word orders reads as one row.
   const seenRows = new Set();
+  // A condition a theme rule sets shows the rule's value, not Core's too.
+  const ruled = new Set(
+    values
+      .filter(v => rawKey.get(v)?.own)
+      .map(v => JSON.stringify([v.property, v.when, v.state])),
+  );
   const unique = values.filter(v => {
+    if (
+      !rawKey.get(v)?.own &&
+      ruled.has(JSON.stringify([v.property, v.when, v.state]))
+    )
+      return false;
     const id = JSON.stringify([
       v.property,
       v.when,

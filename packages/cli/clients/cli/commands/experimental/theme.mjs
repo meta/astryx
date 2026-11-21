@@ -782,7 +782,7 @@ function partValueBlocks(d) {
   const shown = variants.filter(
     v =>
       !wordsOf(v).some(
-        w =>
+        (/** @type {string} */ w) =>
           w !== v.when &&
           alone.has(`${w}|${v.state}|${v.property}|${valueText(v.value)}`),
       ),
