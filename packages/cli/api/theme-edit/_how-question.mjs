@@ -28519,11 +28519,23 @@ export function draftAnswer(ctx, env, question) {
           paletteDialOf(k) === 'neutral' &&
           !/inverted|^--color-on-|overlay/.test(k),
       );
+      // (A value is tinted by its color, within one limit everywhere: a
+      // ground or fill up to the ground limit, any other gray up to the
+      // gray limit. Past it, it is a color of its own, never a tint.)
+      /** @param {string} token @param {string} value */
+      const tintedAs = (token, value) => {
+        const c = chroma(value);
+        return (
+          c > UNTINTED_CHROMA &&
+          c <
+            (/^--color-background-|^background(?:-color)?$/.test(token)
+              ? GROUND_CHROMA
+              : GRAY_CHROMA)
+        );
+      };
       /** @param {(k: string, m: 'light' | 'dark') => string} read */
       const tintedBy = read =>
-        grays.filter(k =>
-          modes.some(m => chroma(read(k, m)) > UNTINTED_CHROMA),
-        );
+        grays.filter(k => modes.some(m => tintedAs(k, read(k, m))));
       const tintedNow = tintedBy((k, m) => String(current(k, m) ?? ''));
       // (A gray a part rule sets, the base theme's or the theme's own, keeps
       // its tint when the seed does not reach it: "card variant muted". A
@@ -28536,10 +28548,7 @@ export function draftAnswer(ctx, env, question) {
               x =>
                 paletteDialOf(x.token) === 'neutral' &&
                 !/inverted|^--color-on-|overlay/.test(x.token) &&
-                modes.some(m => {
-                  const c = chroma(x[m]);
-                  return c > UNTINTED_CHROMA && c < GRAY_CHROMA;
-                }),
+                modes.some(m => tintedAs(x.token, x[m])),
             )
             .map(x =>
               x.rule === 'base'
@@ -28553,28 +28562,23 @@ export function draftAnswer(ctx, env, question) {
       // do a text or border color it sets there: each is named, by its color
       // (a strong fill or text color is a color, never a tint of the
       // grays).)
-      /** @param {string} value @param {number} most */
-      const tintedWithin = (value, most) =>
+      /** @param {string} token @param {string} value */
+      const tintedIn = (token, value) =>
         (
           String(value).match(
             /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch|oklab)a?\([^)]*\)/gi,
           ) ?? [String(value)]
-        ).some(v => {
-          const c = chroma(v);
-          return c > UNTINTED_CHROMA && c < most;
-        });
+        ).some(v => tintedAs(token, v));
       const fillsKept = [
         ...new Set(
           env.data.settings
             .filter(
               st =>
                 st.on &&
-                (/^background(?:-color)?$/.test(st.thing) ||
-                /^--color-background-(?:body|surface|card)$/.test(st.thing)
-                  ? tintedWithin(String(st.value), GROUND_CHROMA)
-                  : /^(?:color|border(?:-color)?|--color-text-[a-z-]+|--color-border(?:-[a-z]+)?)$/.test(
-                      st.thing,
-                    ) && tintedWithin(String(st.value), GRAY_CHROMA)),
+                /^(?:background(?:-color)?|--color-background-[a-z-]+|color|(?:border|outline)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-color)?|--color-text-[a-z-]+|--color-border(?:-[a-z]+)?)$/.test(
+                  st.thing,
+                ) &&
+                tintedIn(st.thing, String(st.value)),
             )
             .map(st => `${st.on} ${st.thing}`),
         ),
