@@ -8,7 +8,7 @@
 
 - `astryx experimental theme set`: a dial's value that names a part or group, plural included (`spacing 'buttons: roomy'`, `corners 'cards: pill'`, `corners 'pill on card'`, `spacing 'button compact'`), offers the line that keeps the change on that part (`set my spacing roomy --on button`), never a whole-theme line, even when the label also spells another setting.
 
-- `astryx experimental theme editor how` now writes to the whole theme only when a clause names nothing, or says the whole theme. A clause whose subject matches no part ("command palette 8px corners", "FAB 16px corners") writes nothing, names the words, and lists any parts that contain them. Font names, brand labels and look words still read as before.
+- `astryx experimental theme editor how` writes nothing for a clause led by a plural, or by words of a part's name, that match no part ("command palette 8px corners", "widgets 8px corners"): it names the words and lists any parts that contain them. A single word it does not know ("FAB 16px corners") still changes the whole theme, as released versions do. Font names, brand labels and look words still read as before.
 
 A part's list keeps its items on that part:
 
