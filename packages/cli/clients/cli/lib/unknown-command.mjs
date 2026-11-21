@@ -919,7 +919,7 @@ export async function unknownCommandAnswer(
         ...fitWords(program, first.before),
         'help',
         ...fitWords(program, first.after),
-      ].map(quoteCommandArgument),
+      ].map(w => quoteCommandArgument(w)),
     ].join(' '),
     reason: 'every command, with what it does',
   };
