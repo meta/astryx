@@ -8539,10 +8539,14 @@ export function compileTheme(ctx, data, base) {
   // that fill itself, and keyboard focus would show nothing there. Such a
   // part points the focus ring color of what it holds at a color that reads
   // on its fill at 3:1: its own text color first, else white or black. A
-  // surface inside it that paints its own box (a card in a filled content
-  // area) gets a ring color that reads on its own fill again, the theme's
-  // first. Each is decided from the fill and text color in effect for that
-  // part in each mode. A focus ring color the theme sets on a part stays.
+  // part that draws a focus ring itself (a button) is not given one: its
+  // own ring lies on what is around it, and the color is read inside it
+  // too. A part inside that paints its own box (a card in a filled content
+  // area, a banner, a white top bar in a filled shell) gets a ring color
+  // that reads on its own fill again, the theme's first, unless it draws a
+  // ring itself. Each is decided from the fill and text color in effect for
+  // that part in each mode. A focus ring color the theme sets on a part
+  // stays.
   {
     /** @param {string} x */
     const rgbOf = x => /** @type {[number, number, number]} */ (parseColor(x));
@@ -8574,6 +8578,13 @@ export function compileTheme(ctx, data, base) {
       const rest = Object.keys(at).find(k => !k.includes(' '));
       return rest == null ? null : opaque(at[rest], m);
     };
+    /** Whether a part draws a focus ring itself, by its own rules, in whatever shape (a button's outline, a switch's track), but not a frame's ring for the control inside it (a card's), which is read for what it holds. @param {string} target */
+    const drawsRing = target =>
+      Object.values(ctx.C.MAP[target]?.own ?? {}).some((/** @type {any} */ v) =>
+        /** @type {string[]} */ (
+          v?.tokens?.['--focus-outline-color'] ?? []
+        ).some(w => !/:has\(>\s*\[data-astryx-focus-owner\]/.test(w)),
+      );
     /** Whether the theme sets a focus ring color on a part. @param {string} target */
     const ringSet = target =>
       data.settings.some(
@@ -8592,7 +8603,12 @@ export function compileTheme(ctx, data, base) {
             !s.when,
         )
         .flatMap(s => partsOf(ctx, s))
-        .filter(t => (ctx.C.MAP[t]?.contains ?? []).length && !ringSet(t)),
+        .filter(
+          t =>
+            (ctx.C.MAP[t]?.contains ?? []).length &&
+            !ringSet(t) &&
+            !drawsRing(t),
+        ),
     );
     for (const target of filled)
       for (const m of /** @type {const} */ (['light', 'dark'])) {
@@ -8614,7 +8630,7 @@ export function compileTheme(ctx, data, base) {
           `${target} in ${m}: the focus ring of what it holds is ${picked}, so keyboard focus reads on its ${fill} fill (the theme's ring color, ${ring}, does not)`,
         );
         for (const inner of ctx.C.MAP[target]?.contains ?? []) {
-          if (!SURFACE_PARTS.includes(inner) || ringSet(inner)) continue;
+          if (ringSet(inner) || drawsRing(inner)) continue;
           const own = fillOf(inner, m);
           if (!own || own === fill) continue;
           const back =
