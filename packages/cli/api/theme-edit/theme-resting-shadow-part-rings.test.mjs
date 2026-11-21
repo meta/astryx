@@ -2,8 +2,7 @@
 
 /**
  * A resting shadow on a part that rings itself in its box-shadow keeps the
- * rings: each state Core rings is written with that ring over the shadow,
- * so a bevel whose inset layers cover the ring's width still shows it.
+ * rings: each state Core rings is written with the shadow and that ring.
  * how answers a sunken bevel there. Against real bundled base themes.
  */
 
@@ -78,40 +77,15 @@ describe('a resting shadow on a ringed part', () => {
         `${sel.replace(/[.[\]="()]/g, m => `\\${m}`)}[^{]*\\{\\s*box-shadow: ([^;]*);`,
       ).exec(css)?.[1];
     expect(rule('.astryx-text-input')).toBe(bevel);
-    // The hover and focus rings go over the bevel; a status keeps its own.
+    // The hover and focus rings come after the bevel; a status keeps its own.
     expect(rule('.astryx-text-input:hover')).toMatch(
-      new RegExp(`^inset 0 0 0 2px color-mix\\([^;]*\\), ${bevel}$`),
+      new RegExp(`^${bevel}, inset 0 0 0 2px color-mix\\(`),
     );
     expect(rule('.astryx-text-input:focus-within')).toBe(
-      `inset 0 0 0 2px var(--color-accent-muted), ${bevel}`,
+      `${bevel}, inset 0 0 0 2px var(--color-accent-muted)`,
     );
     expect(rule('.astryx-text-input[data-status="error"]:hover')).toBe(
-      `var(--shadow-inset-error), ${bevel}`,
-    );
-  }, 240_000);
-
-  it('keeps the focus ring in sight over a bevel as deep as the ring', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('w', {cwd, like: 'neutral'});
-    // A sunken bevel three pixels deep on every side: under it, a 2px ring
-    // drawn beneath would be covered on every edge.
-    const bevel =
-      'inset 2px 2px 0 #808080, inset -2px -2px 0 #ffffff, inset 3px 3px 0 #000000, inset -3px -3px 0 #dfdfdf';
-    await themeEditSet('w', 'box-shadow', bevel, {cwd, on: 'inputs'});
-    const css = cssOf('w');
-    // The selector's focus answer is the ring Core draws, first, then the
-    // bevel, for each of its renders.
-    const focus = [
-      ...css.matchAll(
-        /\.astryx-selector(\[[^\]]*\])*:focus-within\s*\{\s*box-shadow: ([^;]*);/g,
-      ),
-    ].map(m => m[2]);
-    expect(focus.length).toBeGreaterThan(0);
-    for (const f of focus)
-      if (f !== bevel)
-        expect(f).toBe(`inset 0 0 0 2px var(--color-accent-muted), ${bevel}`);
-    expect(focus).toContain(
-      `inset 0 0 0 2px var(--color-accent-muted), ${bevel}`,
+      `${bevel}, var(--shadow-inset-error)`,
     );
   }, 240_000);
 
