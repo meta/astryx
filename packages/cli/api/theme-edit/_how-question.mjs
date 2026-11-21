@@ -5522,6 +5522,13 @@ export function draftAnswer(ctx, env, question) {
         ) && !dialValues.has(w),
     );
   };
+  /**
+   * The plain gray seed the bare neutral-grays clause writes: in a sequence
+   * it runs with the whole-theme asks at the start (a dial applies before
+   * every exact setting, whatever the order, so nothing it meets changes).
+   * @type {WeakSet<Step>}
+   */
+  const untintedSeeds = new WeakSet();
   const untintedAsk =
     !setsColors &&
     bareNeutralGrays(question, text => {
@@ -28485,11 +28492,14 @@ export function draftAnswer(ctx, env, question) {
       const keptSaid = kept.length
         ? `; ${kept.join(', ')} ${kept.length > 1 ? 'keep their' : 'keeps its'} tint whatever the seed is: set ${kept.length > 1 ? 'them' : 'it'} to a plain gray to lose it`
         : '';
-      if (tintedNow.some(k => !kept.includes(k)))
+      if (tintedNow.some(k => !kept.includes(k))) {
+        const seed = set('neutral', SEED);
+        untintedSeeds.add(seed);
         return {
           text: `the theme's grays without a tint: the page, surfaces, cards, popovers, muted fills, text and borders the seed makes take plain grays ${inModes}${keptSaid || `; a part ${env.slug} sets itself keeps its own`}`,
-          options: [[set('neutral', SEED)]],
+          options: [[seed]],
         };
+      }
       return kept.length
         ? {
             text: `the grays the seed of ${env.slug} makes have no tint, so a new seed changes nothing${keptSaid}`,
@@ -29487,6 +29497,19 @@ export function draftAnswer(ctx, env, question) {
       const b = batches.at(-1);
       if (b && b.length + g.length <= MAX_STEPS) b.push(...g);
       else batches.push([...g]);
+    }
+    // (The plain gray seed of a bare neutral-grays clause joins the first
+    // sequence when it has room: it is a dial, which applies before every
+    // exact setting whatever the order, so it takes no sequence of its own.
+    // A full first sequence keeps it where it was.)
+    for (let i = 1; i < batches.length; i++) {
+      const seed = batches[i].find(st => untintedSeeds.has(st));
+      if (!seed || batches[0].length >= MAX_STEPS) continue;
+      batches[i].splice(batches[i].indexOf(seed), 1);
+      batches[0].push(seed);
+      all.splice(all.indexOf(seed), 1);
+      all.splice(batches[0].length - 1, 0, seed);
+      if (!batches[i].length) batches.splice(i--, 1);
     }
     const heldKeeps = [
       ...new Set(
