@@ -187,6 +187,11 @@ describe('contrast measures what is drawn', () => {
         cwd,
         on: 'card',
       });
+      await themeEditSet('wt', '--color-on-accent', '#222222', {
+        cwd,
+        on: 'card',
+        state: 'hover',
+      });
       const elsewhere = await themeEditSet('wt', '--color-accent', '#ffffff', {
         cwd,
         on: 'app-shell-header',
@@ -199,6 +204,20 @@ describe('contrast measures what is drawn', () => {
           ),
         ),
       ).toBe(true);
+      // One set on a group that holds a reader is drawn there as set.
+      await themeEditNew('gf', {cwd, like: 'neutral'});
+      await themeEditSet('gf', '--color-on-accent', '#000000', {
+        cwd,
+        on: 'accent-fills',
+      });
+      const group = await themeEditSet('gf', '--color-accent', '#ffffff', {
+        cwd,
+        on: 'app-shell-header',
+        mode: 'light',
+      });
+      expect(
+        texts(group).filter(p => /^inside app-shell-header/.test(p.problem)),
+      ).toEqual([]);
       // A see-through fill shows the part under it, not one known color.
       const glass = await themeEditSet(
         'wa',
