@@ -685,6 +685,13 @@ one rule `set --only` follows, so a theme saved with one still opens; read so,
 an entry at the same place as a later entry of the same setting gives way to
 the later one, the one the build shows.
 
+The editor writes a state so that the build takes it. A state word with
+exactly one reading among a part's states (`pressed` where the part's press is
+`active`) is written as that state, with one note. A state a part shows only
+through the element it rides (a list item's `selected`, which its item marks)
+is written as that element's attribute inside the part's rule (plain or
+variant).
+
 Rejected: failing doctor on such a setting, which fails a working setup.
 
 ### DEC-12 — A shared theme is copied, because it has no package to import
