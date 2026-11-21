@@ -53,7 +53,12 @@
  */
 
 import {spellIdentifiers, joined, sameWord, typoDistance} from './_words.mjs';
-import {tokenizeQuery, phraseWords, pluralOf} from './_query.mjs';
+import {
+  tokenizeQuery,
+  phraseWords,
+  pluralOf,
+  samePhraseWord,
+} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery, STRONG_TOKEN_SCORE} from './_score.mjs';
 import {heldTitle} from './_titles.mjs';
@@ -70,6 +75,15 @@ import {
 import {fold, nameWords} from './_query-words.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
+
+/**
+ * The fewest words a name needs for the query to name it by writing its words
+ * apart (see spelledOut in rankLexical). Two words apart read as plain
+ * language (`multiline text input` asks for no TextInput, `alert dialog` may
+ * ask for either), so only a longer name, which plain language rarely spells
+ * out whole, counts.
+ */
+const SPELLED_NAME_WORDS = 3;
 
 /**
  * A search candidate gathered from one content domain. Extra underscore-
@@ -333,6 +347,56 @@ export function rankLexical(query, options, catalog) {
     return best;
   };
 
+  /**
+   * Where the query spells out the candidate's whole name of
+   * SPELLED_NAME_WORDS or more words as words apart (see spelledOut below),
+   * or null; the longest of its names. A doc page goes by its route's last
+   * part, as in namedSpan.
+   * @param {Candidate} candidate
+   * @returns {[number, number] | null}
+   */
+  const spelledSpan = candidate => {
+    const doc = candidate.domain === 'doc';
+    if (doc && candidate._topic != null && candidate._topic !== candidate.name)
+      return null;
+    const route = String(candidate.name);
+    const names = doc
+      ? [route.slice(route.lastIndexOf('/') + 1)]
+      : [candidate.name, ...(candidate.aliases ?? [])];
+    /** @type {[number, number] | null} */
+    let best = null;
+    for (const name of names) {
+      const words = phraseWords(spellIdentifiers(String(name)));
+      if (words.length < SPELLED_NAME_WORDS) continue;
+      if (best && best[1] - best[0] >= words.length) continue;
+      for (let a = 0; a + words.length <= queryWords.length; a++) {
+        const b = a + words.length;
+        const run = queryWords.slice(a, b);
+        // Every word stands as written (a plural on any), except at most one,
+        // which keeps its first letter, and the run read joined is a typo of
+        // the name joined as the scorer reads a misspelled name
+        // (typoDistance): `with` never stands in for `dot`, nor `list` for
+        // `ghost`.
+        const typos = words.flatMap((word, n) =>
+          samePhraseWord(run[n], word) ? [] : [n],
+        );
+        if (
+          typedAs[a - 1] === typedAs[a] ||
+          typedAs[b] === typedAs[b - 1] ||
+          typedAs[a] === typedAs[b - 1] ||
+          typos.length > 1 ||
+          typos.some(n => run[n][0] !== words[n][0]) ||
+          (typos.length === 1 &&
+            typoDistance(run.join(''), words.join('')) === null)
+        )
+          continue;
+        best = [a, b];
+        break;
+      }
+    }
+    return best;
+  };
+
   // In search's reading (`ownEvidence`, set by searchView), the query words
   // that name a component or hook outright (its whole name, as `namedSpan`
   // and `wordNamed` read it) and no doc. Such a word asks for that entry, and
@@ -565,14 +629,36 @@ export function rankLexical(query, options, catalog) {
   const typedNamed = typed.filter(
     ({span}) => !runs.some(run => inside(span, run)),
   );
+  // In search's reading, an entry whose whole name of SPELLED_NAME_WORDS or
+  // more words the query spells out as words apart leads its run of matches
+  // (_order.mjs): the run's words are the name's words in order (a plural on
+  // any), at most one of them misspelled with its first letter kept, as the
+  // scorer reads a misspelled name: `glim tray sortde rows` for
+  // GlimTraySortedRows. Such a run names the entry more fully than a
+  // component that holds only its first words, or than its family's root. Two words apart stay plain language (see above). It leads
+  // only its run: it moves first among the matches scored the same and is
+  // first in its band, never past a match of another band.
+  const spelledOut = (catalog.ownEvidence ? ranked : []).flatMap(r => {
+    const span = spelledSpan(r.candidate);
+    return span ? [{r, span}] : [];
+  });
+  // A name inside a longer named run, spelled out or joined, names less of
+  // the query than that run: the longest wins.
+  const longer = [...runs, ...spelledOut.map(({span}) => span)];
+  const spelledNamed = spelledOut.filter(
+    ({r, span}) =>
+      !typedNamed.some(t => t.r === r) &&
+      !longer.some(run => inside(span, run)),
+  );
   // A longer name of another entry the query holds, a block's display name or
   // a doc's title or heading (`ChatComposerInput — Controlled`), names that
   // entry more fully, so the name inside it does not lead. It is held as the
   // title tier holds a title (heldTitle), with the query's identifiers spelled
-  // out on both sides.
-  /** @type {[number, number][]} */
+  // out on both sides. An entry's own display name or title does not stop
+  // its spelled-out name.
+  /** @type {{at: [number, number], of: Candidate}[]} */
   const labels = [];
-  if (typedNamed.length) {
+  if (typedNamed.length || spelledNamed.length) {
     const spelledWords = (/** @type {string} */ text) =>
       phraseWords(spellIdentifiers(text));
     for (const candidate of all) {
@@ -581,17 +667,46 @@ export function rankLexical(query, options, catalog) {
         ...(candidate.titles ?? []),
       ]) {
         const held = heldTitle(queryWords, [label], spelledWords);
-        if (held) labels.push(held.at);
+        if (held) labels.push({at: held.at, of: candidate});
       }
     }
   }
-  const leads = new Set(
+  const typedLeads = new Set(
     typedNamed
-      .filter(({span}) => !labels.some(label => inside(span, label)))
+      .filter(({span}) => !labels.some(label => inside(span, label.at)))
       .map(({r}) => r.result),
   );
-  if (leads.size) {
-    scored.sort((a, b) => Number(leads.has(b)) - Number(leads.has(a)));
+  const spelledLeads = spelledNamed
+    .filter(
+      ({r, span}) =>
+        !labels.some(
+          label => label.of !== r.candidate && inside(span, label.at),
+        ),
+    )
+    .map(({r}) => r.result);
+  // A part whose whole name the query spells out keeps its band lead over
+  // its family's root (rootLeads below).
+  const spelledLed = new Set(spelledLeads);
+  const leads = new Set([...typedLeads, ...spelledLeads]);
+  if (typedLeads.size) {
+    scored.sort(
+      (a, b) => Number(typedLeads.has(b)) - Number(typedLeads.has(a)),
+    );
+  }
+  // A spelled-out name goes first among the matches scored the same next to
+  // it, which move as one block in _order.mjs.
+  if (spelledLeads.length) {
+    const spelled = new Set(spelledLeads);
+    for (let a = 0; a < scored.length;) {
+      let b = a + 1;
+      while (b < scored.length && scored[b].score === scored[a].score) b++;
+      const tie = scored.slice(a, b);
+      if (tie.some(r => spelled.has(r))) {
+        tie.sort((x, y) => Number(spelled.has(y)) - Number(spelled.has(x)));
+        scored.splice(a, b - a, ...tie);
+      }
+      a = b;
+    }
   }
 
   // A family's root leads a part of its own family (its doc lists the part
@@ -657,7 +772,13 @@ export function rankLexical(query, options, catalog) {
     for (const r of ranked) {
       const family = r.candidate._family;
       const root = family && byName.get(`${r.result.domain}:${family}`);
-      if (!root || root === r || typedSpan(r) || misspelled(r, family)) {
+      if (
+        !root ||
+        root === r ||
+        typedSpan(r) ||
+        misspelled(r, family) ||
+        spelledLed.has(r.result)
+      ) {
         continue;
       }
       const ofPart = answeredTerms(r.result.reason);
