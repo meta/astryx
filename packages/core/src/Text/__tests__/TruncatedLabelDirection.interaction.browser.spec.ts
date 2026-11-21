@@ -4,9 +4,9 @@
  * @file TruncatedLabelDirection.interaction.browser.spec.ts
  * @input Text's "Truncated Mixed Direction" story and SegmentedControl's
  *   "Truncated Labels" story on a left-to-right and a right-to-left page
- * @output Proves a cut label keeps its start and loses its end in both page
- *   directions: a Latin label reads "Mon…", a right-to-left label is cut at
- *   its own end
+ * @output Proves a cut label keeps its start and loses its end: on a
+ *   right-to-left page every label (a Latin label reads "Mon…"), on a
+ *   left-to-right page every label with no right-to-left letter
  * @position Interaction proof for the cut-label direction
  *   (utils/textDirection.ts truncatedTextStyles)
  */
@@ -15,6 +15,8 @@ import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
+
+const RIGHT_TO_LEFT_LETTER = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
 
 /** For each cut label: whether its first and its last letter show. */
 async function readCutLabels(page: Page, selector: string) {
@@ -51,12 +53,12 @@ const stories = [
   {
     id: 'core-text--truncated-mixed-direction',
     selector: '[data-testid="cut-labels"] > *',
-    count: 5,
+    count: {ltr: 3, rtl: 5},
   },
   {
     id: 'core-segmentedcontrol--truncated-labels',
     selector: '[data-testid="cut-labels"] [role="radio"] > span',
-    count: 2,
+    count: {ltr: 1, rtl: 2},
   },
 ];
 
@@ -68,8 +70,13 @@ for (const story of stories) {
       await page.goto(
         `${storybook()}/iframe.html?id=${story.id}&viewMode=story&globals=direction:${direction}`,
       );
-      const cut = await readCutLabels(page, story.selector);
-      expect(cut.length).toBeGreaterThanOrEqual(story.count);
+      // A label with a right-to-left letter keeps the page direction, so on
+      // a left-to-right page it is cut as before. Only the other labels
+      // count there.
+      const cut = (await readCutLabels(page, story.selector)).filter(
+        label => direction === 'rtl' || !RIGHT_TO_LEFT_LETTER.test(label.label),
+      );
+      expect(cut.length).toBeGreaterThanOrEqual(story.count[direction]);
       for (const label of cut) {
         expect(label, label.label).toMatchObject({
           startShows: true,

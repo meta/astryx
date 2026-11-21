@@ -253,7 +253,7 @@ export const TruncatedMixedDirection: Story = {
   render: () => (
     <div
       data-testid="cut-labels"
-      style={{width: '120px', display: 'grid', gap: '8px'}}>
+      style={{width: '90px', display: 'grid', gap: '8px'}}>
       {[
         'Monthly revenue',
         'דוח חודשי מפורט',
