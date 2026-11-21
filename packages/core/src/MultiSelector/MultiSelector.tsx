@@ -31,6 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {isolatedText, withTextDirection} from '../utils/textDirection';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
@@ -121,7 +122,9 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
-import {useListFormatter} from '../i18n/useListFormatter';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {useListPartsFormatter} from '../i18n/useListFormatter';
+import {useLocale} from '../i18n/useLocale';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -1211,7 +1214,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlStyle != null),
   );
   const t = useComponentTranslator();
-  const formatList = useListFormatter();
+  const formatListParts = useListPartsFormatter();
+  const localeDirection = getLocaleDirection(useLocale());
   const pressable = usePressFeedback();
   const {
     isRequired: isEffectivelyRequired,
@@ -1993,8 +1997,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         const displayed = selectedLabels.slice(0, 3);
         const remaining = selectedLabels.length - displayed.length;
         // The count is the list's last item, so the locale's conjunction goes
-        // before it and not between the shown labels.
-        const text = formatList(
+        // before it and not between the shown labels. Each item is isolated,
+        // so labels in another direction do not reorder their neighbours. A
+        // label takes its own direction. The count has no letter, so it takes
+        // the locale's direction and keeps its catalog form.
+        const countIndex = remaining > 0 ? displayed.length : -1;
+        let elementIndex = -1;
+        const parts = formatListParts(
           remaining > 0
             ? [
                 ...displayed,
@@ -2004,7 +2013,18 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         );
         return (
           <span {...stylex.props(styles.triggerText)}>
-            {formatValue?.(selectedItems) ?? text}
+            {formatValue?.(selectedItems) ??
+              parts.map((part, index) => {
+                if (part.type !== 'element') {
+                  return part.value;
+                }
+                elementIndex += 1;
+                return isolatedText(
+                  part.value,
+                  index,
+                  elementIndex === countIndex ? localeDirection : 'auto',
+                );
+              })}
           </span>
         );
       }
@@ -2035,7 +2055,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     formatValue,
     maxBadges,
     t,
-    formatList,
+    formatListParts,
+    localeDirection,
   ]);
 
   // Render search input
@@ -2483,6 +2504,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the listbox itself owns the keyboard.
   const listboxOwnsKeyboard =
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
+  // A bottom sheet is a modal layer, so Chromium cannot reliably compute the
+  // listbox's name from the trigger outside that layer.
+  const panelListboxLabelProps =
+    surface.activePresentation === 'bottom-sheet'
+      ? {'aria-label': label}
+      : listboxLabelProps;
 
   const panelContent = hasSearch ? (
     <div {...stylex.props(styles.searchPanel)}>
@@ -2494,7 +2521,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           id={listboxId}
           role={isGrid ? 'grid' : 'listbox'}
           aria-multiselectable="true"
-          {...listboxLabelProps}
+          {...panelListboxLabelProps}
           {...stylex.props(styles.listbox)}>
           {renderOptions()}
         </div>
@@ -2507,14 +2534,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         id={listboxId}
         role={isGrid ? 'grid' : 'listbox'}
         aria-multiselectable="true"
-        // The bottom sheet is rendered in a modal layer, so Chromium cannot
-        // reliably compute this listbox's name from the trigger outside that
-        // layer. Name only this no-search sheet directly from the component's
-        // existing label; searchable sheets and popovers retain their current
-        // trigger relationship.
-        {...(surface.activePresentation === 'bottom-sheet'
-          ? {'aria-label': label}
-          : listboxLabelProps)}
+        {...panelListboxLabelProps}
         aria-activedescendant={activeDescendantId}
         tabIndex={listboxOwnsKeyboard ? 0 : undefined}
         onKeyDown={listboxOwnsKeyboard ? onKeyDown : undefined}
@@ -2863,7 +2883,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
       {selectionSurface}
 
-      {showStatusTooltip && statusTooltip.renderTooltip(status?.message ?? '')}
+      {showStatusTooltip &&
+        statusTooltip.renderTooltip(withTextDirection(status?.message ?? ''))}
 
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
