@@ -30,6 +30,7 @@ architecture:
     architecture:react-component-runtime,
     architecture:component-style-authoring,
     architecture:knowledge-contracts,
+    architecture:component-import-boundaries,
   ]
 contributing: []
 system_specs:
@@ -40,6 +41,7 @@ system_specs:
     spec:AST-020,
     spec:AST-027,
     spec:AST-029,
+    spec:AST-086,
   ]
 ---
 
@@ -47,15 +49,15 @@ system_specs:
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `ChatComposer` with a controlled or uncontrolled draft (`value`, `onChange`), `onSubmit`, `placeholder`, `isDisabled`, `isStopShown`, `onStop`, `density`, `elevation`, `status`, `statusPosition`, the drawer, header, input, footer, and send slots, and BaseProps; the exported composition context. |
-| Behavior                | ChatComposer coordinates a controlled or uncontrolled draft, trims a submitted value, clears through the existing value channel, composes caller slots, and keeps the default send/stop action synchronized with context.                                                                               |
-| End-user impact         | Screen-reader users can identify the disabled editor, pointer and touch users can stop an interruptible response, and users of a custom editor send the draft that editor supplied instead of stale composer state.                                                                                     |
-| Builder impact          | None.                                                                                                                                                                                                                                                                                                   |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps are listed under Current-state impact; four owner questions stay open. Evidence still pending for parts of FR1, FR5–FR7, FR10, and PR1–PR2 (read from source; see the verification map).                                            |
-| Review checks           | Reject ignored context submission arguments, a disabled state hidden from the default textbox, an ancestor that blocks an enabled Stop action, or a change that settles an open question without its owner.                                                                                             |
-| Governing rules         | `architecture:interaction-modality/INV4, INV7, INV9`; `architecture:public-component-api/INV5–INV6, INV9, INV12`; `architecture:component-theming-surface/INV4, INV6`; `spec:AST-020/FR1`; `spec:AST-029/DEC-4`.                                                                                        |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | `ChatComposer` with a controlled or uncontrolled draft (`value`, `onChange`), `onSubmit`, `placeholder`, `isDisabled`, `isStopShown`, `onStop`, `density`, `elevation`, `status` (error, warning, or info, with at most one action), `statusPosition`, `hasContent`, the drawer, header, input, footer, and send slots, and BaseProps; the exported composition context. |
+| Behavior                | ChatComposer coordinates a controlled or uncontrolled draft, trims a submitted value, clears through the existing value channel, composes caller slots, and keeps the default send/stop action synchronized with context. A draft that holds content beyond its text sends with empty text when `hasContent` is set.                                                     |
+| End-user impact         | Screen-reader users can identify the disabled editor, pointer and touch users can stop an interruptible response, and users of a custom editor send the draft that editor supplied instead of stale composer state. A notice can offer one action, such as Undo, and a draft of attachments alone can be sent.                                                           |
+| Builder impact          | Optional: the info tone and one action in `status`; `hasContent` for a draft with content and no text.                                                                                                                                                                                                                                                                   |
+| Compatibility/readiness | Records shipped behavior, plus additive FR12–FR13. Three implementation gaps are listed under Current-state impact; five owner questions stay open. Evidence still pending for parts of FR1, FR5–FR7, FR10, and PR1–PR2 (read from source; see the verification map).                                                                                                    |
+| Review checks           | Reject ignored context submission arguments, a disabled state hidden from the default textbox, an ancestor that blocks an enabled Stop action, a second status message or action, an empty-text submission while `hasContent` is false, or a change that settles an open question without its owner.                                                                     |
+| Governing rules         | `architecture:interaction-modality/INV4, INV7, INV9`; `architecture:public-component-api/INV5–INV6, INV9, INV12`; `architecture:component-theming-surface/INV4, INV6`; `architecture:component-import-boundaries/INV10`; `spec:AST-020/FR1`; `spec:AST-029/DEC-4`; `spec:AST-086/FR5–FR6`.                                                                               |
 
 This table is a review projection; the body below is authoritative.
 
@@ -70,7 +72,8 @@ streaming state, validation policy, and the content placed in each slot.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: records shipped behavior; additive status tone, status
+  action, and `hasContent` (FR12–FR13)
 - Controlled/uncontrolled behavior: a successful submission clears through
   `onChange` in controlled mode and local state otherwise
 - Migration decision: none
@@ -87,6 +90,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `className`, and `style` reach the outer frame while `xstyle` reaches the
   painted body. `architecture:public-component-api` INV6 has styling inputs
   compose on one element (FR10, OQ2).
+- **FR12–FR13 gap:** `status` takes the error and warning tones with no action,
+  and a draft with no text never submits, whatever else it holds.
 
 ## Ownership boundary
 
@@ -107,18 +112,19 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept                 | Closed values or states                                      | Meaning                                                                                          | Availability by variant/orientation/state        | Default                     | Owner                               | Stability | Invalid-value behavior                                                        |
-| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ | --------------------------- | ----------------------------------- | --------- | ----------------------------------------------------------------------------- |
-| Draft ownership         | uncontrolled; controlled `value` + `onChange`                | Selects where the serialized input draft is stored and how clearing is reported.                 | Every ChatComposer                               | uncontrolled empty string   | `component:ChatComposer`            | stable    | Controlled `value` without an updating owner remains caller-controlled.       |
-| Submission              | input submit; default send; custom context `onSubmit(value)` | Delivers one trimmed, non-empty supplied value and clears the draft through the current channel. | Enabled composer with a non-empty supplied value | no submission               | `component:ChatComposer`            | stable    | Empty values and submissions while disabled are ignored.                      |
-| Input composition       | default ChatComposerInput; custom React node                 | Supplies the editing surface and optional registered focus control.                              | Every ChatComposer                               | ChatComposerInput           | `component:ChatComposer`            | stable    | A custom input without a registered control gets textarea focus fallback.     |
-| Editing availability    | enabled; disabled                                            | Controls whether the draft can be edited or submitted.                                           | Every ChatComposer                               | enabled                     | `component:ChatComposer`            | stable    | Disabled submission is ignored.                                               |
-| Primary action          | send; stop                                                   | Sends the current draft or requests interruption.                                                | Default ChatSendButton or a custom sendButton    | send                        | `component:ChatComposer`            | stable    | A shown Stop action without `onStop` renders but does nothing (OQ4).          |
-| Density                 | compact; balanced; spacious                                  | Selects composer spacing.                                                                        | Every ChatComposer                               | balanced                    | `component:ChatComposer`            | stable    | Unknown values are rejected by TypeScript.                                    |
-| Elevation               | low; none                                                    | Selects a raised body or a flat bordered body.                                                   | Every ChatComposer                               | low                         | `component:ChatComposer`            | stable    | Unknown values are rejected by TypeScript.                                    |
-| Status                  | absent; error; warning; top; bottom                          | Adds announced feedback before or after the body.                                                | Optional status object                           | absent; bottom when present | `component:ChatComposer`            | stable    | An omitted message renders the bar and announces nothing.                     |
-| Named composition slots | drawer; header actions/context; input; footer/send actions   | Lets callers compose supporting controls and information around the draft.                       | Optional, independently supplied                 | omitted                     | `component:ChatComposer`            | stable    | Omitted slot groups emit no empty header; footer remains for the send action. |
-| BaseProps surface       | ref; DOM props/events; className/style; xstyle               | Extends the component with DOM identity, behavior, and styling.                                  | Every ChatComposer                               | omitted                     | `architecture:public-component-api` | stable    | Split between the frame and the body (FR10, OQ2).                             |
+| Concept                 | Closed values or states                                        | Meaning                                                                                                             | Availability by variant/orientation/state                              | Default                     | Owner                               | Stability | Invalid-value behavior                                                                 |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------- | ----------------------------------- | --------- | -------------------------------------------------------------------------------------- |
+| Draft ownership         | uncontrolled; controlled `value` + `onChange`                  | Selects where the serialized input draft is stored and how clearing is reported.                                    | Every ChatComposer                                                     | uncontrolled empty string   | `component:ChatComposer`            | stable    | Controlled `value` without an updating owner remains caller-controlled.                |
+| Submission              | input submit; default send; custom context `onSubmit(value)`   | Delivers one trimmed value, non-empty unless `hasContent` is set, and clears the draft through the current channel. | Enabled composer with a non-empty supplied value, or with `hasContent` | no submission               | `component:ChatComposer`            | stable    | Empty values while `hasContent` is false, and submissions while disabled, are ignored. |
+| Input composition       | default ChatComposerInput; custom React node                   | Supplies the editing surface and optional registered focus control.                                                 | Every ChatComposer                                                     | ChatComposerInput           | `component:ChatComposer`            | stable    | A custom input without a registered control gets textarea focus fallback.              |
+| Editing availability    | enabled; disabled                                              | Controls whether the draft can be edited or submitted.                                                              | Every ChatComposer                                                     | enabled                     | `component:ChatComposer`            | stable    | Disabled submission is ignored.                                                        |
+| Primary action          | send; stop                                                     | Sends the current draft or requests interruption.                                                                   | Default ChatSendButton or a custom sendButton                          | send                        | `component:ChatComposer`            | stable    | A shown Stop action without `onStop` renders but does nothing (OQ4).                   |
+| Density                 | compact; balanced; spacious                                    | Selects composer spacing.                                                                                           | Every ChatComposer                                                     | balanced                    | `component:ChatComposer`            | stable    | Unknown values are rejected by TypeScript.                                             |
+| Elevation               | low; none                                                      | Selects a raised body or a flat bordered body.                                                                      | Every ChatComposer                                                     | low                         | `component:ChatComposer`            | stable    | Unknown values are rejected by TypeScript.                                             |
+| Status                  | absent; error; warning; info; top; bottom; one optional action | Adds announced feedback, with at most one action, before or after the body.                                         | Optional status object                                                 | absent; bottom when present | `component:ChatComposer`            | stable    | An omitted message renders the bar and announces nothing.                              |
+| Content beyond text     | `hasContent` true or false                                     | Tells the composer the draft holds content its text does not show, such as attachments.                             | Every ChatComposer                                                     | false                       | caller                              | stable    | n/a — boolean                                                                          |
+| Named composition slots | drawer; header actions/context; input; footer/send actions     | Lets callers compose supporting controls and information around the draft.                                          | Optional, independently supplied                                       | omitted                     | `component:ChatComposer`            | stable    | Omitted slot groups emit no empty header; footer remains for the send action.          |
+| BaseProps surface       | ref; DOM props/events; className/style; xstyle                 | Extends the component with DOM identity, behavior, and styling.                                                     | Every ChatComposer                                                     | omitted                     | `architecture:public-component-api` | stable    | Split between the frame and the body (FR10, OQ2).                                      |
 
 ## Behavioral and layout contract
 
@@ -135,6 +141,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR9  | Error status is announced assertively and warning status politely through the shared announcement channel, once per occasion: one state transition, which a rerender or an update to the same value does not repeat (`spec:AST-086` FR6); the status bar itself carries no live role. Both pair a semantic icon with color and can render above or below the body.                                                                                       | implementation, docs, and stories; `spec:AST-020/FR1`; `spec:AST-086/FR2, FR5, FR6`                                                      |
 | FR10 | `ref`, DOM props and events, `className`, and `style` reach the outer frame; `xstyle` reaches the painted body. Implementation gap: the styling inputs split across two elements (Current-state impact; OQ2).                                                                                                                                                                                                                                            | implementation; `architecture:public-component-api/INV5–INV6, INV8`                                                                      |
 | FR11 | The exported context MUST expose the current value, change and submit operations, placeholder, disabled/stop/send state, stop callback, and mutable input focus control to custom composition.                                                                                                                                                                                                                                                           | public export, types, docs, stories, and focused tests; `architecture:public-component-api/INV12`                                        |
+| FR12 | An `info` status MUST be announced politely, once per occasion, as FR9 sets out for warning, and MUST pair a semantic info icon with the info status roles (`--color-info-muted`, `--color-on-info-muted`). A status MAY carry one `action`, `{label, onClick}`: a native button after the message, named by `label`, that calls `onClick` and is operable by pointer, touch, and keyboard. The announcement carries the message only.                   | DEC-1; `spec:AST-086/FR5, FR6`                                                                                                           |
+| FR13 | When `hasContent` is true, the default primary action MUST be enabled while editing is enabled, and a submission with empty text MUST call `onSubmit` with the empty string, then clear the text through the active channel. When `hasContent` is false, ORD2's empty-value rule applies.                                                                                                                                                                | DEC-2                                                                                                                                    |
 
 ### Allowed variation
 
@@ -144,29 +152,31 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                        | Required invariant                                                                                  | Allowed variation                                            |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Empty draft                  | Default send action is disabled and submission does not fire.                                       | Placeholder and optional slots vary.                         |
-| Non-empty draft              | Enter or Send submits one trimmed value and clears through the active ownership channel.            | Serialized token representation and transport behavior vary. |
-| Controlled draft             | Caller value remains authoritative; onChange receives edits and clear requests.                     | The caller may accept or defer each update.                  |
-| Custom input                 | Context operations act on the supplied value and body click uses its registered focus control.      | DOM/editor implementation varies.                            |
-| Disabled editing             | Default textbox exposes disabled state and cannot edit or submit.                                   | Supporting content remains visible.                          |
-| Disabled, interruptible work | Stop remains named, enabled, and reachable by pointer, touch, and keyboard.                         | Product cancellation behavior varies.                        |
-| Flat elevation               | Body has no shadow and uses its bordered presentation; keyboard focus indication remains available. | Theme tokens vary.                                           |
-| Status above or below        | Announcement urgency, icon, color, and selected placement remain synchronized.                      | Message content and status type vary.                        |
-| Narrow viewport              | Composer remains within its containing inline size and the primary action remains operable.         | Available inline size and optional slot content vary.        |
+| State                          | Required invariant                                                                                  | Allowed variation                                            |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Empty draft                    | Default send action is disabled and submission does not fire, unless `hasContent` is true.          | Placeholder and optional slots vary.                         |
+| Draft with content and no text | With `hasContent`, Send is enabled; a submission calls `onSubmit('')` and clears the text.          | The caller's attachments and their clearing vary.            |
+| Non-empty draft                | Enter or Send submits one trimmed value and clears through the active ownership channel.            | Serialized token representation and transport behavior vary. |
+| Controlled draft               | Caller value remains authoritative; onChange receives edits and clear requests.                     | The caller may accept or defer each update.                  |
+| Custom input                   | Context operations act on the supplied value and body click uses its registered focus control.      | DOM/editor implementation varies.                            |
+| Disabled editing               | Default textbox exposes disabled state and cannot edit or submit.                                   | Supporting content remains visible.                          |
+| Disabled, interruptible work   | Stop remains named, enabled, and reachable by pointer, touch, and keyboard.                         | Product cancellation behavior varies.                        |
+| Flat elevation                 | Body has no shadow and uses its bordered presentation; keyboard focus indication remains available. | Theme tokens vary.                                           |
+| Status above or below          | Announcement urgency, icon, color, the optional action, and selected placement remain synchronized. | Message content and status type vary.                        |
+| Narrow viewport                | Composer remains within its containing inline size and the primary action remains operable.         | Available inline size and optional slot content vary.        |
 
 ### Transformation and precedence order
 
 - **ORD1 — Value update.** Receive an editor value → publish through `onChange` when controlled or update local state when uncontrolled → derive current context value and send availability.
-- **ORD2 — Submission.** Receive the operation's supplied value → trim → reject empty or disabled submission → call public `onSubmit` once → request clearing through the current value channel.
-- **ORD3 — Primary action.** Resolve `isStopShown` → expose Stop and dispatch `onStop`, otherwise derive send availability from current draft and disabled state → submit the current context value.
+- **ORD2 — Submission.** Receive the operation's supplied value → trim → reject a disabled submission, or an empty value while `hasContent` is false → call public `onSubmit` once → request clearing through the current value channel.
+- **ORD3 — Primary action.** Resolve `isStopShown` → expose Stop and dispatch `onStop`, otherwise derive send availability from the current draft, `hasContent`, and disabled state → submit the current context value.
 - **ORD4 — Composition order.** Optional top status → drawer → body header → input → footer actions → send actions → primary action → optional bottom status.
 
 ### Performance and resources
 
 - **PR1 — Context stability.** The exported context value SHOULD retain referential stability while none of its public members changes.
 - **PR2 — Focus coordination.** The component adds no document listener or observer of its own for body-click focus or focus indication; it mounts the shared interaction-modality tracker, which adds document-level `pointerdown` and `keydown` listeners (`architecture:interaction-modality`).
+- **PR3 — Opt-ins cost nothing unused.** The info tone, the status action, and `hasContent` each add at most 0.3 KB gzip of first-load JavaScript to a page that renders ChatComposer without them (`architecture:component-import-boundaries` INV10).
 
 ## Accessibility contract
 
@@ -174,20 +184,21 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR2 — Native actions.** The default Send and Stop controls remain native buttons with translated accessible names; disabled Send uses native disabled behavior, while explicit Stop remains operable.
 - **AR3 — Keyboard editing.** Enter submission MUST preserve Shift+Enter newline behavior, IME composition, and caller cancellation through `preventDefault()`.
 - **AR4 — Focus indication.** Keyboard focus in the editor MUST produce the shared visible focus treatment; pointer focus does not claim keyboard modality, and focus on an internal action remains owned by that action.
-- **AR5 — Status feedback.** Error feedback is announced assertively and warning feedback politely through the shared announcement channel (`spec:AST-086` FR2, FR5); the visible status bar carries no live role and stays readable. Visible icon and color do not replace the caller's message content.
+- **AR5 — Status feedback.** Error feedback is announced assertively, and warning and info feedback politely, through the shared announcement channel (`spec:AST-086` FR2, FR5); the visible status bar carries no live role and stays readable. Visible icon and color do not replace the caller's message content.
+- **AR6 — Status action.** The optional status action is a native button with the caller's accessible name, operable by pointer, touch, and keyboard where the status bar renders. Focus stays on it while the status stays; when its press removes the status, focus moves to the composer's input, as a body click does (FR8). Its name is not part of the announcement.
 
 ## Design relationships
 
-| Anatomy or state    | Design requirement                                                  | Representation authority                                                                                   | Hierarchy role | Component contract |
-| ------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------- | ------------------ |
-| Composer frame      | Groups body and optional status into one compositional shell.       | Current source                                                                                             | container      | FR5                |
-| Composer body       | Provides the painted rounded input/action surface and elevation.    | elevation is shipped; public theme reachability is unsettled                                               | prominent      | FR7                |
-| Drawer              | Places attachment/context content before the body.                  | delegated to `component:ChatComposerDrawer`                                                                | supporting     | FR5                |
-| Header              | Places caller actions at start and caller context at end.           | Current source                                                                                             | supporting     | FR5                |
-| Input               | Owns or hosts the editing surface and its focus control.            | delegated to `component:ChatComposerInput` or caller custom input                                          | prominent      | FR1–FR3, FR8, FR11 |
-| Footer              | Places caller actions and the primary action on the final body row. | Current source                                                                                             | supporting     | FR4–FR5            |
-| Send or stop action | Presents the current primary operation.                             | delegated to `component:ChatSendButton` or caller custom send button                                       | prominent      | FR1, FR4           |
-| Status message      | Adds error or warning feedback before or after the body.            | shared-channel announcement and color are shipped; separate public theme reachability is not asserted here | supporting     | FR5, FR9, AR5      |
+| Anatomy or state    | Design requirement                                                                        | Representation authority                                                                                   | Hierarchy role | Component contract       |
+| ------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------- | ------------------------ |
+| Composer frame      | Groups body and optional status into one compositional shell.                             | Current source                                                                                             | container      | FR5                      |
+| Composer body       | Provides the painted rounded input/action surface and elevation.                          | elevation is shipped; public theme reachability is unsettled                                               | prominent      | FR7                      |
+| Drawer              | Places attachment/context content before the body.                                        | delegated to `component:ChatComposerDrawer`                                                                | supporting     | FR5                      |
+| Header              | Places caller actions at start and caller context at end.                                 | Current source                                                                                             | supporting     | FR5                      |
+| Input               | Owns or hosts the editing surface and its focus control.                                  | delegated to `component:ChatComposerInput` or caller custom input                                          | prominent      | FR1–FR3, FR8, FR11       |
+| Footer              | Places caller actions and the primary action on the final body row.                       | Current source                                                                                             | supporting     | FR4–FR5                  |
+| Send or stop action | Presents the current primary operation.                                                   | delegated to `component:ChatSendButton` or caller custom send button                                       | prominent      | FR1, FR4                 |
+| Status message      | Adds error, warning, or info feedback, with at most one action, before or after the body. | shared-channel announcement and color are shipped; separate public theme reachability is not asserted here | supporting     | FR5, FR9, FR12, AR5, AR6 |
 
 The public `chat-composer` target sits on the frame and cannot select the body's
 elevation and border (Current-state impact). No anatomy-theming map is recorded
@@ -207,20 +218,24 @@ yet; the block is optional during migration, so the map is deferred.
 
 ## Verification map
 
-| Contract  | Verification                                                                                                                                                       | Representative states                                                           | Mutation or failure expectation                                                                          | Audit section                       |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| FR1, FR11 | `ChatComposer.test.tsx` input composition tests                                                                                                                    | context-supplied value, custom input reading value, change, and disabled        | A context submission that ignores its argument, or a context member a custom input cannot read, fails.   | `audit:ChatComposer/api-behavior`   |
-| FR2, AR3  | `ChatComposerInput.test.tsx`                                                                                                                                       | Enter, Shift+Enter, composing, cancelled keydown                                | A key path that sends during composition or loses a newline fails.                                       | `audit:ChatComposer/input-behavior` |
-| FR3, AR1  | `ChatComposer.test.tsx` "exposes disabled state on the default textbox and clears it when enabled"                                                                 | disabled and re-enabled default textbox                                         | A textbox that loses or keeps its disabled state wrongly fails.                                          | `audit:ChatComposer/accessibility`  |
-| FR4, AR2  | `ChatComposer.test.tsx` "keeps the Stop action pointer-operable while editing is disabled"; the `DisabledStreamingNarrow` story play in `ChatComposer.stories.tsx` | disabled editing with Stop shown; a narrow viewport with no horizontal overflow | A Stop action an ancestor blocks, or one that does not call `onStop`, fails.                             | `audit:ChatComposer/modality`       |
-| FR7       | `ChatComposer.test.tsx` elevation tests                                                                                                                            | `low` default, `none`                                                           | Levels that share a body class, or a default other than `low`, fail.                                     | `audit:ChatComposer/theming`        |
-| FR8, AR4  | `ChatComposer.test.tsx` focus indication tests and custom-input focus tests; "keeps a click on an open tooltip in the body from focusing the input"                | keyboard, pointer, programmatic after each, internal button, body click         | A ring on pointer focus, a missing ring on keyboard focus, or a body click that skips the control fails. | `audit:ChatComposer/focus`          |
-| FR9, AR5  | `ChatComposer.test.tsx` status announcement tests                                                                                                                  | error, warning, StrictMode mount, repeat after clear, no message, page load     | A live role on the bar, a repeated or missing announcement, or the wrong urgency fails.                  | `audit:ChatComposer/accessibility`  |
+| Contract       | Verification                                                                                                                                                       | Representative states                                                           | Mutation or failure expectation                                                                                                            | Audit section                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| FR1, FR11      | `ChatComposer.test.tsx` input composition tests                                                                                                                    | context-supplied value, custom input reading value, change, and disabled        | A context submission that ignores its argument, or a context member a custom input cannot read, fails.                                     | `audit:ChatComposer/api-behavior`   |
+| FR2, AR3       | `ChatComposerInput.test.tsx`                                                                                                                                       | Enter, Shift+Enter, composing, cancelled keydown                                | A key path that sends during composition or loses a newline fails.                                                                         | `audit:ChatComposer/input-behavior` |
+| FR3, AR1       | `ChatComposer.test.tsx` "exposes disabled state on the default textbox and clears it when enabled"                                                                 | disabled and re-enabled default textbox                                         | A textbox that loses or keeps its disabled state wrongly fails.                                                                            | `audit:ChatComposer/accessibility`  |
+| FR4, AR2       | `ChatComposer.test.tsx` "keeps the Stop action pointer-operable while editing is disabled"; the `DisabledStreamingNarrow` story play in `ChatComposer.stories.tsx` | disabled editing with Stop shown; a narrow viewport with no horizontal overflow | A Stop action an ancestor blocks, or one that does not call `onStop`, fails.                                                               | `audit:ChatComposer/modality`       |
+| FR7            | `ChatComposer.test.tsx` elevation tests                                                                                                                            | `low` default, `none`                                                           | Levels that share a body class, or a default other than `low`, fail.                                                                       | `audit:ChatComposer/theming`        |
+| FR8, AR4       | `ChatComposer.test.tsx` focus indication tests and custom-input focus tests; "keeps a click on an open tooltip in the body from focusing the input"                | keyboard, pointer, programmatic after each, internal button, body click         | A ring on pointer focus, a missing ring on keyboard focus, or a body click that skips the control fails.                                   | `audit:ChatComposer/focus`          |
+| FR9, AR5       | `ChatComposer.test.tsx` status announcement tests                                                                                                                  | error, warning, StrictMode mount, repeat after clear, no message, page load     | A live role on the bar, a repeated or missing announcement, or the wrong urgency fails.                                                    | `audit:ChatComposer/accessibility`  |
+| FR12, AR5, AR6 | Unit tests of the status bar's info tone and action                                                                                                                | info at mount and after a change; an action's press by pointer and by keyboard  | A live role on the bar, an info status announced assertively or twice, an action without its name, or a press that misses `onClick` fails. | `audit:ChatComposer/accessibility`  |
+| FR13           | Unit tests of submission with `hasContent`                                                                                                                         | empty text with and without `hasContent`; disabled editing                      | An empty-text submission while `hasContent` is false, or a disabled Send while it is true and editing is enabled, fails.                   | `audit:ChatComposer/api-behavior`   |
+| PR3            | Bundle measurement of a ChatComposer page with and without each opt-in                                                                                             | each opt-in alone                                                               | An opt-in that adds over 0.3 KB gzip to a ChatComposer page that does not use it fails.                                                    | `audit:ChatComposer/api-behavior`   |
 
 Read from source, with no focused test yet:
 
 - FR1: controlled and uncontrolled draft storage, trimming, rejecting an empty
-  or disabled submission, and clearing through the active channel.
+  submission while `hasContent` is false (FR13) or a disabled one, and clearing
+  through the active channel.
 - FR5: slot order, the omitted header row, and status placement above or below
   the body.
 - FR6: the density spacing.
@@ -231,7 +246,29 @@ Read from source, with no focused test yet:
 
 ## Decision log
 
-No component-local decision is recorded.
+### DEC-1 — Status takes an info tone and one action
+
+**Reference:** `component:ChatComposer/DEC-1`
+**Decider:** pending
+
+Composers show notices that are neither errors nor warnings, such as a mode
+switch, and some offer one way back, such as Undo. So `status` takes an `info`
+tone, announced politely like a warning, and at most one action (FR12). One
+message per bar keeps one announcement per occasion (`spec:AST-086` FR6);
+several notices stay the caller's, above the composer.
+
+Rejected: several messages or actions in one status; a free-form node in the bar, for which the composer cannot keep AR6's focus rule or the info status roles.
+
+### DEC-2 — A draft with content beyond its text can be sent
+
+**Reference:** `component:ChatComposer/DEC-2`
+**Decider:** pending
+
+A draft can hold attachments and no text. The caller owns the attachments, so it
+tells the composer through `hasContent`, and Send and submission treat the draft
+as non-empty (FR13). The composer still trims and clears only the text.
+
+Rejected: a context setter for slots, which gives one fact two owners.
 
 ## Open questions
 
@@ -239,6 +276,7 @@ No component-local decision is recorded.
 - **OQ2 — BaseProps owner.** Should ref, neutral DOM props/events, `className`, `style`, and `xstyle` all own the outer frame or the painted body, and what compatibility path preserves existing consumers? (`human-api`)
 - **OQ3 — Spacious density.** Should `spacious` intentionally alias `balanced`, or should it receive distinct spacing selected by design? (`human-design`)
 - **OQ4 — Stop callback invariant.** When `isStopShown` is true without `onStop`, should the component reject the combination, disable or hide Stop, or keep the currently inert action? (`human-api`)
+- **OQ5 — Single-row arrangement.** Should ChatComposer arrange the input and the actions on one row, as a phone's one-line composer does? The options are a closed `arrangement` axis (`stacked`, the rows FR5 sets out, or `inline`: start actions, the input, then the send area on one row); `inline` only at `compact` density; or no arrangement, which leaves one-row composers to callers. (`human-design`)
 
 ## Content boundary
 

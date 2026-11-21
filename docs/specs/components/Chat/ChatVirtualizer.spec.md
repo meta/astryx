@@ -111,8 +111,10 @@ None beyond the Chat family's own records.
 ## Family and system relationships
 
 - `component:ChatMessageList` owns the transcript's log and its delivery.
-- `component:ChatLayout` runs its own follow on its scroller, so the list does
-  not attach to it.
+- `component:ChatLayout`: in attach mode on ChatLayout's scroller, the list
+  registers as ChatLayout's host list and is the only writer of that scroller's
+  position (`component:ChatLayout` FR11). Implementation gap: the list does not
+  register, so it does not attach to ChatLayout's scroller.
 
 ## Verification map
 
