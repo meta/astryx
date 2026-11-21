@@ -209,7 +209,9 @@ function ownFill(components, part, m, block = null) {
 const opaqueGradient = image =>
   /^(linear|radial)-gradient\(/.test(image.trim()) &&
   (image.match(/gradient\(/g) ?? []).length === 1 &&
-  !/\btransparent\b/i.test(image) &&
+  // (A stop written as a variable is not read here: the gradient may be
+  // see-through, so it is not a fill.)
+  !/\btransparent\b|var\(/i.test(image) &&
   // (A stop the check cannot read, such as one built from a variable,
   // may be see-through: then the gradient is not a fill.)
   colorsIn(image).every(c => parseColor(c) != null && alphaOf(c) >= 1);

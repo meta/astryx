@@ -1276,7 +1276,20 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(
         g.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
       ).toBe(false);
-      // A stop built from a variable may be see-through: not a fill.
+      // A stop built from a variable, or written as one, may be
+      // see-through: not a fill.
+      const bare = await check(
+        themeFile('barevar', READABLE, {
+          card: {
+            base: {
+              backgroundImage: 'linear-gradient(var(--x-dark), var(--x-dark))',
+            },
+          },
+        }),
+      );
+      expect(
+        bare.problems.some(p => p.kind === 'page-image' && p.part === 'card'),
+      ).toBe(true);
       const v = await check(
         themeFile('varstop', READABLE, {
           card: {
