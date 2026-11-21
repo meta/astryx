@@ -22,7 +22,7 @@ import {
   themeEditShow,
   themeEditUndo,
 } from './theme-edit.mjs';
-import {withAccepted} from './_settings.mjs';
+import {keptNow, withAccepted} from './_settings.mjs';
 import {editorKeptContrastAt} from './_adapter.mjs';
 import {acceptedContrastCheck} from '../doctor/theme-checks.mjs';
 import {
@@ -479,5 +479,38 @@ describe('a kept pair, measured alone', () => {
   });
   it('lapses when the same pair is drawn lower (a see-through fill over a darker part)', () => {
     expect(problem('#17a2b8', '3.10').note).toBeUndefined();
+  });
+});
+
+describe('a kept problem, read against what is drawn now', () => {
+  const kept = /** @type {any} */ ({
+    part: 'heading',
+    ground: 'card',
+    when: 'variant:blue',
+    mode: 'light',
+    ratio: 3,
+    reason: 'r s t',
+  });
+  it('is not called passing while one failure across its variants still names it', () => {
+    // (The shape the editor reports: its key names the text part, the
+    // ground and the mode; its text names the variants.)
+    const grouped = /** @type {any} */ ({
+      key: 'variants|--color-text-primary|#1e293b|heading|card|This week|light|lines',
+      text: 'text ("This week") in heading on 3 card variants (blue, green, purple) is 1.17:1 in light (#1e293b on each variant\'s fill); text needs 4.5:1',
+    });
+    expect(keptNow(kept, [grouped])).toEqual({inEffect: false, ratioNow: 1.17});
+  });
+  it('takes no failure on another ground for its own place', () => {
+    const elsewhere = /** @type {any} */ ({
+      key: 'text|heading|heading|--color-text-primary|page|||Title|light',
+      text: 'text in heading ("Title") is 2.10:1 in light (#1e293b on the page\'s #333333); text needs 4.5:1',
+    });
+    expect(keptNow(kept, [elsewhere])).toEqual({
+      inEffect: false,
+      ratioNow: null,
+    });
+  });
+  it('is no longer needed where nothing at its place fails', () => {
+    expect(keptNow(kept, [])).toEqual({inEffect: false, ratioNow: null});
   });
 });
