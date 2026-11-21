@@ -248,6 +248,13 @@ const ROWS = [
     },
   ],
   [
+    'a text line for a clashing fill goes with that fill in the choice',
+    {
+      q: 'pressed checkboxes: a #0069d6 fill and a #eeeeee fill',
+      says: /^(?![\s\S]*readable text on that fill)[\s\S]*choice also sets #ffffff text/,
+    },
+  ],
+  [
     'a clashing color is offered only in the choice',
     {q: 'make it blue, make it green', says: /^(?![\s\S]*--color-accent)/},
   ],
