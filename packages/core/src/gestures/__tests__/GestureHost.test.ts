@@ -6644,7 +6644,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
     vi.useRealTimers();
   });
 
-  it('keeps one passive pointerdown listener on each element that uses a gesture and none on the page while idle; a disabled one keeps none', () => {
+  it('keeps one passive pointerdown listener on each element that uses a gesture and, on the page while idle, only the shared selectionchange listener; a disabled one keeps none', () => {
     const {box, row, off} = mount(
       '<div id="box"></div><div id="row"></div><div id="off"></div>',
     );
@@ -6662,7 +6662,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
       fine.attach(row, new TapGestureRecognizer()),
       fine.attach(off, new TapGestureRecognizer({isEnabled: false})),
     );
-    expect(live()).toEqual([]);
+    expect(live()).toEqual(['selectionchange']);
     expect(boxDowns()).toEqual([
       ['pointerdown', expect.any(Function), {capture: true, passive: true}],
     ]);
@@ -6682,7 +6682,7 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
     press(box, {pointerType: 'pen', button: 2});
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
     press(box, {pointerType: 'mouse', button: 0, ctrlKey: true});
-    expect(live()).toEqual([]);
+    expect(live()).toEqual(['selectionchange']);
     expect(transitions).toEqual([]);
     expect(host.arena.touches).toEqual([]);
   });

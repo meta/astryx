@@ -2,8 +2,8 @@
 
 /**
  * @file GestureHost.ts
- * @input DOM touch, pointer, click, contextmenu, scroll and focus events of
- *   one document; elements with recognizers and consumers attached; the
+ * @input DOM touch, pointer, click, contextmenu, scroll, focus and
+ *   selectionchange events of one document; elements with recognizers and consumers attached; the
  *   input hold's held layers (Layer/inputHold `holdsTouch`)
  * @output Exports GestureHost (the DOM side of the gesture system) and
  *   getGestureHost (one host per document)
@@ -16,7 +16,9 @@
  *   alike (`spec:AST-094` FR43, FR19). Where the primary pointer is coarse
  *   the host listens while something enabled could take a touch. Where it
  *   is fine, each element with an enabled recognizer or consumer keeps one
- *   passive `pointerdown` listener and the page has none; a press on it (a
+ *   passive `pointerdown` listener, and the page keeps only one passive
+ *   `selectionchange` listener, so a mouse or pen press reads the selection
+ *   only when one may exist (selectionState); a press on it (a
  *   mouse's primary button, a pen, or a finger, whose `pointerdown` comes
  *   before its `touchstart`) installs the host's page listeners, which go
  *   once that press's contacts end and the arena has decided them, a tap
@@ -1902,8 +1904,9 @@ export class GestureHost {
 
   /**
    * One passive `selectionchange` subscription for the page while anything is
-   * attached, counted once whatever the number of elements (FR24). The
-   * listener reads nothing: it only marks that a selection may exist.
+   * attached, part of the one shared press controller, whatever the number
+   * of elements. The listener reads nothing: it only marks that a selection
+   * may exist.
    */
   private syncSelectionWatch(): void {
     const view = this.doc.defaultView;
