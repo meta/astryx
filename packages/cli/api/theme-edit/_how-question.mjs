@@ -5044,6 +5044,18 @@ export function draftAnswer(ctx, env, question) {
   // line.)
   const raw0 = String(question);
   const asked0 = raw0.toLowerCase();
+  // A file named in url() is a value, written as typed: it is set aside
+  // (url(uu<n>uu)) while the words are read, rewritten and split into asks,
+  // and each answer writes it back as typed. (Nor is it a picture to match:
+  // the reader of picture files never sees it.)
+  const urls = /** @type {string[]} */ ([]);
+  question = String(question).replace(/url\([^()]*\)/gi, m => {
+    urls.push(m);
+    return `url(uu${urls.length - 1}uu)`;
+  });
+  /** Text with each file set aside put back as typed. @param {string} s */
+  const withUrls = s =>
+    s.replace(/url\(uu(\d+)uu\)/g, (m, n) => urls[Number(n)] ?? m);
   // "darkmode", "dark-mode": one spelling of a mode before any clause is
   // read, so every reader that names a mode sees it.
   // One mode grammar: every way of naming a mode is read here as "dark
@@ -29935,12 +29947,14 @@ export function draftAnswer(ctx, env, question) {
     const rest = draftAnswer(
       ctx,
       env,
+      // (The ask is read again with its files as typed: that reading sets
+      // them aside and writes them back itself.)
       named0
-        ? followAsk.replace(
+        ? withUrls(followAsk).replace(
             /\b(them|it|those|these)\b/i,
             `${named0} ${asked === 'border-radius' ? 'corners' : asked.replace(/-color$/, '').replace('-', ' ')}`,
           )
-        : followAsk,
+        : withUrls(followAsk),
     );
     return {
       parts: rest.parts,
@@ -32747,7 +32761,9 @@ export function draftAnswer(ctx, env, question) {
     };
     /** @type {string[]} */
     const named = [];
+    // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
+      .replace(/url\([^()]*\)/gi, ' ')
       .split(/[,;\n]|\band\b|\bthen\b/i)
       .map(seg => seg.trim())
       .filter(Boolean);
@@ -32904,6 +32920,15 @@ export function draftAnswer(ctx, env, question) {
     if (writes) result.push(note);
     else result.splice(0, result.length, note);
   }
+  // Each file set aside is written back as typed, where an answer names or
+  // writes it.
+  if (urls.length)
+    for (const d of result) {
+      d.text = withUrls(d.text);
+      for (const o of d.options)
+        for (const st of o)
+          if (typeof st.value === 'string') st.value = withUrls(st.value);
+    }
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
