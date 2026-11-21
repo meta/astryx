@@ -304,46 +304,52 @@ export const GlidingRows: StoryObj<{
 };
 
 /**
- * A long table (2,000 rows, not virtualized) with an `animatedLayout`
- * handle: a glide moves only the rows near the visible part, so opening a
- * panel costs the same as in a short table.
+ * A long table (2,000 rows by default, not virtualized) with an
+ * `animatedLayout` handle: a glide moves only the rows near the visible part,
+ * so opening a panel costs the same as in a short table. The `rows` control
+ * renders fewer rows, to measure how a cost grows with the table's size.
  */
-export const GlidingRowsLongTable: StoryObj<{glide?: boolean}> = {
-  args: {glide: true},
-  render: ({glide}) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const animatedLayout = useAnimatedLayout({containerRef});
-    const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
-      () => new Set(),
-    );
-    // Stable callbacks, so the story's own renders do not re-render every row
-    // and a measurement shows only Table's work.
-    const toggleOrder = useCallback(
-      (key: string) => setExpandedKeys(prev => toggleKey(prev, key)),
-      [],
-    );
-    const expansion = useTableRowExpansion<Order>({
-      expandedKeys,
-      onToggle: toggleOrder,
-      getRowKey: getOrderKey,
-      renderExpanded: renderOrderItems,
-      animatedLayout: glide === false ? undefined : animatedLayout,
-    });
-    return (
-      <div
-        ref={containerRef}
-        data-testid="gliding-rows-long"
-        style={{maxWidth: 720, height: 520, overflow: 'auto'}}>
-        <Table
-          data={manyOrders}
-          columns={columns}
-          idKey="id"
-          plugins={{expansion}}
-        />
-      </div>
-    );
-  },
-};
+export const GlidingRowsLongTable: StoryObj<{glide?: boolean; rows?: number}> =
+  {
+    args: {glide: true, rows: 2000},
+    argTypes: {
+      rows: {control: 'select', options: [250, 500, 1000, 2000]},
+    },
+    render: ({glide, rows = 2000}) => {
+      const containerRef = useRef<HTMLDivElement>(null);
+      const animatedLayout = useAnimatedLayout({containerRef});
+      const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+        () => new Set(),
+      );
+      // Stable callbacks, so the story's own renders do not re-render every row
+      // and a measurement shows only Table's work.
+      const toggleOrder = useCallback(
+        (key: string) => setExpandedKeys(prev => toggleKey(prev, key)),
+        [],
+      );
+      const data = useMemo(() => manyOrders.slice(0, rows), [rows]);
+      const expansion = useTableRowExpansion<Order>({
+        expandedKeys,
+        onToggle: toggleOrder,
+        getRowKey: getOrderKey,
+        renderExpanded: renderOrderItems,
+        animatedLayout: glide === false ? undefined : animatedLayout,
+      });
+      return (
+        <div
+          ref={containerRef}
+          data-testid="gliding-rows-long"
+          style={{maxWidth: 720, height: 520, overflow: 'auto'}}>
+          <Table
+            data={data}
+            columns={columns}
+            idKey="id"
+            plugins={{expansion}}
+          />
+        </div>
+      );
+    },
+  };
 
 const rowExpandSlotThemes = [
   {label: 'default', theme: null},
