@@ -530,6 +530,20 @@ describe('family reach by default', () => {
       expect(disabledRules(`${slug}m`)).toMatch(
         /background-image: revert-layer/,
       );
+      // (A gradient set for one mode takes the whole disabled look off in
+      // that mode, its image included.)
+      await themeEditNew(`${slug}g`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}g`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+        mode: 'dark',
+      });
+      expect(disabledRules(`${slug}g`)).toMatch(
+        /data-theme="dark"[^{]*\{\s*background-color: revert-layer/,
+      );
+      expect(disabledRules(`${slug}g`)).toMatch(
+        /data-theme="dark"[^{]*\{\s*background-image: revert-layer/,
+      );
       // (The other variants keep Core's disabled look: the copy stays.)
       expect(cssOf(slug)).toMatch(
         /\.astryx-button[^{\s]*:is\(:disabled[^{]*\{[^}]*background(?:-image)?: revert-layer/,

@@ -5253,21 +5253,22 @@ export function disabledCopies(ctx, data, s) {
     /** @param {string | undefined} m */
     const covers = m => fills.some(x => !x.mode || !m || x.mode === m);
     const imageOnly = {...copy, thing: 'background-image'};
-    if (!fills.length) out.push(copy);
+    // (A copy for one mode is written as longhands: a shorthand set for one
+    // mode is written as its color alone.)
+    /** @param {'light' | 'dark' | undefined} m @returns {Setting[]} */
+    const whole = m =>
+      m
+        ? [
+            {...copy, thing: 'background-color', mode: m},
+            {...imageOnly, mode: m},
+          ]
+        : [copy];
+    if (!fills.length) out.push(...whole(copy.mode));
     else if (copy.mode || fills.some(x => !x.mode))
-      out.push(covers(copy.mode) ? imageOnly : copy);
+      out.push(...(covers(copy.mode) ? [imageOnly] : whole(copy.mode)));
     else
-      for (const m of modesOf(data))
-        out.push(
-          ...(covers(m)
-            ? [{...imageOnly, mode: m}]
-            : // (A mode's copy is written as longhands: a shorthand set
-              // for one mode is written as its color alone.)
-              [
-                {...copy, thing: 'background-color', mode: m},
-                {...imageOnly, mode: m},
-              ]),
-        );
+      for (const m of /** @type {Array<'light' | 'dark'>} */ (modesOf(data)))
+        out.push(...(covers(m) ? [{...imageOnly, mode: m}] : whole(m)));
   }
   return out;
 }
