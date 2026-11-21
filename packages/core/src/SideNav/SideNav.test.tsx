@@ -1268,14 +1268,16 @@ describe('SideNavItem', () => {
     const advanced = screen.getByRole('link', {name: 'Advanced'});
     expect(indentOf(top)).toBeNull();
     expect(indentOf(advanced)).toBe(
-      'calc(var(--spacing-2) + 2 * var(--spacing-6))',
+      'max(var(--spacing-2), min(calc(var(--spacing-2) + 2 * var(--spacing-6)), calc(100% - var(--spacing-2) - 4em)))',
     );
 
     // A split row (own href plus children) keeps the wrapper's base padding
     // and puts the steps on the link, so the whole indent is clickable
     // instead of dead space that still shows hover and press feedback.
     expect(indentOf(general.parentElement!)).toBeNull();
-    expect(indentOf(general)).toBe('calc(1 * var(--spacing-6))');
+    expect(indentOf(general)).toBe(
+      'max(0px, min(calc(1 * var(--spacing-6)), calc(100% - 4em)))',
+    );
   });
 
   it('clips the children group only while it is collapsed', async () => {
@@ -1311,7 +1313,9 @@ describe('SideNavItem', () => {
     );
     const alpha = screen.getByRole('link', {name: 'Alpha'});
     expect(indentOf(alpha.parentElement!)).toBeNull();
-    expect(indentOf(alpha)).toBe('calc(1 * var(--spacing-6))');
+    expect(indentOf(alpha)).toBe(
+      'max(0px, min(calc(1 * var(--spacing-6)), calc(100% - 4em)))',
+    );
   });
 
   it("composes a caller's style with the indent on a nested row", () => {
@@ -1334,12 +1338,14 @@ describe('SideNavItem', () => {
     const general = screen.getByRole('link', {name: 'General'});
     expect(general.style.color).toBe('rebeccapurple');
     expect(indentOf(general)).toBe(
-      'calc(var(--spacing-2) + 1 * var(--spacing-6))',
+      'max(var(--spacing-2), min(calc(var(--spacing-2) + 1 * var(--spacing-6)), calc(100% - var(--spacing-2) - 4em)))',
     );
     // Split row: the caller's style still lands on the primary link.
     const security = screen.getByRole('link', {name: 'Security'});
     expect(security.style.color).toBe('rebeccapurple');
-    expect(indentOf(security)).toBe('calc(1 * var(--spacing-6))');
+    expect(indentOf(security)).toBe(
+      'max(0px, min(calc(1 * var(--spacing-6)), calc(100% - 4em)))',
+    );
   });
 
   it("keeps a caller's className on the row element", () => {
@@ -1409,7 +1415,7 @@ describe('SideNavItem', () => {
     expect(security.style.paddingInlineStart).toBe('20px');
     // A row whose caller sets no padding keeps its indent.
     expect(indentOf(screen.getByRole('link', {name: 'Keys'}))).toBe(
-      'calc(var(--spacing-2) + 2 * var(--spacing-6))',
+      'max(var(--spacing-2), min(calc(var(--spacing-2) + 2 * var(--spacing-6)), calc(100% - var(--spacing-2) - 4em)))',
     );
   });
 
@@ -1420,7 +1426,7 @@ describe('SideNavItem', () => {
       </SideNavItem>,
     );
     expect(indentOf(screen.getByRole('link', {name: 'General'}))).toBe(
-      'calc(var(--spacing-1) + 1 * var(--spacing-6))',
+      'max(var(--spacing-1), min(calc(var(--spacing-1) + 1 * var(--spacing-6)), calc(100% - var(--spacing-1) - 4em)))',
     );
   });
 
@@ -1442,7 +1448,7 @@ describe('SideNavItem', () => {
     expect(indentOf(general)).toBeNull();
     expect(indentOf(general.parentElement!)).toBeNull();
     expect(indentOf(advanced)).toBe(
-      'calc(var(--spacing-2) + 1 * var(--spacing-6))',
+      'max(var(--spacing-2), min(calc(var(--spacing-2) + 1 * var(--spacing-6)), calc(100% - var(--spacing-2) - 4em)))',
     );
   });
 
