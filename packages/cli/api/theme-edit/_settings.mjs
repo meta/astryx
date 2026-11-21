@@ -14057,6 +14057,15 @@ function typedColors(data) {
 }
 
 /**
+ * Whether a contrast problem is drawn on a surface Core draws in a scheme of
+ * its own (a lightbox), as its text names it.
+ * @param {ThemeProblem} p
+ */
+export function inOwnScheme(p) {
+  return /\bdraws it in its (?:dark|light) scheme\)/.test(p.text);
+}
+
+/**
  * Contrast problems a theme accepts as designed become notes that say so,
  * with the reason, while both colors are the pair accepted and the ratio is
  * no lower (what shows under a see-through fill can change it); a change
@@ -14087,7 +14096,10 @@ export function withAccepted(data, list, res) {
   /** @param {NonNullable<ReturnType<typeof contrastPlace>>} at */
   const mixedAt = at => (pairsAt.get(placeKey(at))?.size ?? 0) > 1;
   return list.map(p => {
-    if (p.note) return p;
+    // (A surface Core draws in a scheme of its own, a lightbox, is drawn in
+    // that scheme in either mode: no page mode names it, so it is kept by
+    // no record and offered no line.)
+    if (p.note || inOwnScheme(p)) return p;
     const at = contrastPlace(p);
     if (!at) return p;
     const pair = drawnPair(p, res, at.mode);
