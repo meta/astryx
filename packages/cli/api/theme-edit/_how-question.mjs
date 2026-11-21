@@ -22,7 +22,12 @@ import {
   ratio,
   ratioWords,
 } from './_color.mjs';
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {
+  hexToOklch,
+  luminance,
+  oklchClampedHex,
+  toneToOklabLightness,
+} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
@@ -406,6 +411,24 @@ const SHADED = wordTable(
     },
   }),
 );
+
+/**
+ * A gloss of one fill: a gradient from the fill ten tones lighter at the
+ * top to ten tones darker at the bottom, through the fill, in its own hue
+ * and chroma, on the tone scale the palette's stops are on (a white fill
+ * keeps white at the top, a black fill black at the bottom).
+ * @param {string} fill an opaque hex color
+ */
+function glossOf(fill) {
+  const {L, C: chroma, H} = hexToOklch(fill);
+  // (The tone of the fill on the palette's scale, from its lightness.)
+  const tone = L > 0.2069 ? 116 * L - 16 : L ** 3 * 903.3;
+  const at = (/** @type {number} */ t) => {
+    const l = toneToOklabLightness(Math.max(0, Math.min(100, t)));
+    return oklchClampedHex(l, chroma, H);
+  };
+  return `linear-gradient(${at(tone + 10)} 0%, ${fill} 45%, ${at(tone - 10)} 100%)`;
+}
 
 /**
  * Right before a written color (a hex, a color function): a role word there
@@ -27102,6 +27125,162 @@ export function draftAnswer(ctx, env, question) {
               ],
               sequence: true,
             };
+        }
+        // "glossy buttons": a gloss of the part's own fill in each mode, a
+        // lighter top and a darker bottom around it, written as its colors:
+        // a fill said in the ask, else the fill the theme sets on the part,
+        // else each variant's own fill.
+        if (design === 'glossy') {
+          const part = String(on);
+          // (A fill said in the same ask, "Top bar: dark (#222), glossy": a
+          // color or a light or dark word that names the fill, never one
+          // said of the text, a border or another look.)
+          const fillOnly = (/** @type {Clause} */ o) =>
+            o.aspects.includes('background') &&
+            !o.aspects.some(a =>
+              /^(?:text|border|outline|shadow|icon|link)/.test(a),
+            );
+          /** @param {Clause} o */
+          const fillSaid = o =>
+            fillOnly(o)
+              ? (colorFor(o, 'fill') ??
+                toneIn(
+                  o.text.replace(
+                    /\b(?:dark|light)\s+(?:text|labels?|links?|icons?|borders?)\b/g,
+                    ' ',
+                  ),
+                ))
+              : null;
+          const said =
+            fillSaid(c) ??
+            clauses
+              .filter(
+                o => o !== c && !o.state && o.parts.some(p => p.on === part),
+              )
+              .map(fillSaid)
+              .find(Boolean) ??
+            null;
+          /** @param {string} own */
+          const glossIn = own => {
+            const rgb = parseColor(own);
+            return rgb && alphaOf(own) >= 1 ? glossOf(hex(rgb)) : null;
+          };
+          const saidMode = modeOf(c).mode;
+          // (The fill the theme sets on the part itself comes first.)
+          const set0 = [
+            partValue(part, 'background-color'),
+            partValue(part, 'background'),
+          ].find(v => v != null && glossIn(String(v)) != null);
+          const perVariant =
+            said || set0 != null
+              ? null
+              : byVariant(
+                  part,
+                  'background',
+                  'background-color',
+                  'background-image',
+                  f,
+                  now => glossIn(now),
+                  c,
+                );
+          // (A white fill keeps white at the top, a black one black at the
+          // bottom: there is no lighter or darker shade.)
+          const shades =
+            'a lighter top and a darker bottom around it (a white top or a black bottom stays as it is)';
+          if (perVariant)
+            return {
+              text: `a glossy fill${where}: each variant's own fill, ${shades}${saidMode ? ` in ${saidMode} mode` : ', in each mode'}; a variant with no fill of its own keeps its look`,
+              options: [perVariant],
+            };
+          const token = restRead(
+            C.partReads(one(part), 'background') ?? [],
+            f.when,
+          );
+          // (A variant named, "glossy destructive buttons", shows the base
+          // theme's own rule for it first, as each variant's gloss reads it.)
+          const baseRule = String(
+            /** @type {any} */ (env.base).components?.[one(part)]?.[
+              String(f.when ?? '')
+            ]?.backgroundColor ?? '',
+          ).trim();
+          const ruleToken = /^var\(\s*(--color-[a-z0-9-]+)\s*\)$/.exec(
+            baseRule,
+          )?.[1];
+          const rulePair =
+            /^light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)$/.exec(
+              baseRule,
+            );
+          /** @param {'light' | 'dark'} m */
+          const ruleIn = m =>
+            !/^variant:/.test(String(f.when ?? ''))
+              ? null
+              : ruleToken
+                ? String(current(ruleToken, m) ?? '')
+                : rulePair
+                  ? rulePair[m === 'light' ? 1 : 2].trim()
+                  : parseColor(baseRule)
+                    ? baseRule
+                    : null;
+          const modes = /** @type {Array<'light' | 'dark'>} */ (
+            saidMode
+              ? [saidMode]
+              : env.data.mode === 'dark-only'
+                ? ['dark']
+                : env.data.mode === 'light-only'
+                  ? ['light']
+                  : ['light', 'dark']
+          );
+          const owns = modes.map(
+            m =>
+              said ??
+              (set0 != null ? String(set0) : null) ??
+              ruleIn(m) ??
+              (token
+                ? (tokenSetOn(part, token, m) ??
+                  String(current(token, m) ?? ''))
+                : ''),
+          );
+          // (A part that draws no fill of its own, and is given none, shows
+          // the part it sits in: a gloss on that part shows through it.)
+          if (
+            !said &&
+            set0 == null &&
+            (!token ||
+              owns.every(
+                own =>
+                  /^(?:transparent|none)$/i.test(own.trim()) ||
+                  alphaOf(own) === 0,
+              ))
+          )
+            return {
+              text: `${part} draws no fill of its own here, so nothing is written on it; a gloss on the part it sits in shows through it`,
+              options: [],
+            };
+          // (A mode whose fill is no plain color, a see-through tint, keeps
+          // its look; the others take their gloss.)
+          const glossed = modes
+            .map((m, i) => ({m, g: glossIn(owns[i])}))
+            .filter(x => x.g != null);
+          if (!glossed.length)
+            return {
+              text: `a glossy fill${where} is drawn from the part's own fill color, and ${part} has no plain fill color here; name one ("glossy blue ${part}")`,
+              options: [],
+            };
+          const kept = modes.filter(m => !glossed.some(x => x.m === m));
+          const oneGloss =
+            !kept.length &&
+            new Set(glossed.map(x => x.g)).size === 1 &&
+            !saidMode;
+          return {
+            text: `a glossy fill${where}: ${said ? `the fill ${said}` : 'its own fill'}, ${shades}${oneGloss ? '' : saidMode ? ` in ${saidMode} mode` : kept.length ? ` in ${glossed.map(x => x.m).join(' and ')} mode; its ${kept.join(' and ')} fill is no plain color and keeps its look` : ', in each mode'}`,
+            options: [
+              oneGloss
+                ? [set('background', String(glossed[0].g), f)]
+                : glossed.map(x =>
+                    set('background', String(x.g), {...f, mode: x.m}),
+                  ),
+            ],
+          };
         }
         if (design)
           return {
