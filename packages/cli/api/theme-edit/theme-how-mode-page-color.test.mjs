@@ -253,6 +253,18 @@ describe('a color said for one mode is its page', () => {
         .filter(l => /'#444444' --on button/.test(String(l)));
       expect(typed.length).toBeGreaterThan(0);
       for (const l of typed) expect(String(l)).toMatch(/--mode dark$/);
+      for (const ask of [
+        'dark-mode: page #111111, cards #222222, borders #333333 in light mode, buttons #444444',
+        'dark mode: page #111111, cards #222222, light mode: page #eeeeee, buttons #444444',
+      ]) {
+        const lines = /** @type {string[]} */ (
+          (await themeEditHow(ask, {cwd, theme: 'c'})).data.results ?? []
+        )
+          .flatMap(r => r.commands ?? [])
+          .filter(l => /'#444444' --on button/.test(String(l)));
+        expect(lines.length, ask).toBeGreaterThan(0);
+        for (const l of lines) expect(String(l), ask).toMatch(/--mode dark$/);
+      }
       const links = await first('dark mode is navy, with blue links');
       const accent = links.filter(l => /--color-text-accent/.test(l));
       expect(accent.length).toBeGreaterThan(0);
