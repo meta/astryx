@@ -22,7 +22,12 @@ import {
   ratio,
   ratioWords,
 } from './_color.mjs';
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {
+  hexToOklch,
+  luminance,
+  oklchClampedHex,
+  toneToOklabLightness,
+} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
@@ -408,6 +413,24 @@ const SHADED = wordTable(
     },
   }),
 );
+
+/**
+ * A gloss of one fill: a gradient from the fill ten tones lighter at the
+ * top to ten tones darker at the bottom, through the fill, in its own hue
+ * and chroma, on the tone scale the palette's stops are on (a white fill
+ * keeps white at the top, a black fill black at the bottom).
+ * @param {string} fill an opaque hex color
+ */
+function glossOf(fill) {
+  const {L, C: chroma, H} = hexToOklch(fill);
+  // (The tone of the fill on the palette's scale, from its lightness.)
+  const tone = L > 0.2069 ? 116 * L - 16 : L ** 3 * 903.3;
+  const at = (/** @type {number} */ t) => {
+    const l = toneToOklabLightness(Math.max(0, Math.min(100, t)));
+    return oklchClampedHex(l, chroma, H);
+  };
+  return `linear-gradient(${at(tone + 10)} 0%, ${fill} 45%, ${at(tone - 10)} 100%)`;
+}
 
 /**
  * Right before a written color (a hex, a color function): a role word there
@@ -27311,13 +27334,245 @@ export function draftAnswer(ctx, env, question) {
               sequence: true,
             };
         }
-        // "glossy buttons": a gloss is a gradient of the part's own color,
-        // which differs by part and mode; the sample is help, never written.
-        if (design === 'glossy')
-          return {
-            text: `a glossy fill${where} is a gradient of the part's own color in each mode, which the editor does not work out here, so nothing is written; set one as a background, for example: background ${DESIGN.glossy} --on ${on}`,
-            options: [],
+        // "glossy buttons": a gloss of the part's own fill in each mode, a
+        // lighter top and a darker bottom around it, written as its colors:
+        // a fill said in the ask, else the fill the theme sets on the part,
+        // else each variant's own fill.
+        if (design === 'glossy') {
+          const part = String(on);
+          // (A fill said in the same ask, "Top bar: dark (#222), glossy": a
+          // color or a light or dark word that names the fill, never one
+          // said of the text, a border or another look.)
+          const fillOnly = (/** @type {Clause} */ o) =>
+            o.aspects.includes('background') &&
+            !o.aspects.some(a =>
+              /^(?:text|border|outline|shadow|icon|link)/.test(a),
+            );
+          /** @param {Clause} o */
+          const fillSaid = o =>
+            fillOnly(o)
+              ? (colorFor(o, 'fill') ??
+                toneIn(
+                  o.text.replace(
+                    /\b(?:dark|light)\s+(?:text|labels?|links?|icons?|borders?)\b/g,
+                    ' ',
+                  ),
+                ))
+              : null;
+          const said =
+            fillSaid(c) ??
+            clauses
+              .filter(
+                o => o !== c && !o.state && o.parts.some(p => p.on === part),
+              )
+              .map(fillSaid)
+              .find(Boolean) ??
+            null;
+          /** @param {string} own */
+          const glossIn = own => {
+            const rgb = parseColor(own);
+            return rgb && alphaOf(own) >= 1 ? glossOf(hex(rgb)) : null;
           };
+          const saidMode = modeOf(c).mode;
+          const modes = /** @type {Array<'light' | 'dark'>} */ (
+            saidMode
+              ? [saidMode]
+              : env.data.mode === 'dark-only'
+                ? ['dark']
+                : env.data.mode === 'light-only'
+                  ? ['light']
+                  : ['light', 'dark']
+          );
+          /**
+           * The fill the theme sets on the part for a variant (or for every
+           * variant) in a mode: its own setting for that mode first.
+           * @param {string | null} when @param {'light' | 'dark'} m
+           */
+          const themeFill = (when, m) => {
+            // (The setting that governs is picked first; one that is no
+            // plain color, a cleared or see-through fill, keeps its look.)
+            const mine = [...env.data.settings]
+              .reverse()
+              .filter(
+                st =>
+                  st.on === part &&
+                  !st.state &&
+                  /^background(?:-color)?$/.test(st.thing) &&
+                  (st.when ?? null) === when,
+              );
+            return (
+              mine.find(st => st.mode === m)?.value ??
+              mine.find(st => !st.mode)?.value ??
+              null
+            );
+          };
+          /**
+           * The fill a variant (or the part) shows in a mode: one said in
+           * the ask, else the theme's own, else the base theme's rule for
+           * the variant, else the token the part reads.
+           * @param {string | null} when @param {'light' | 'dark'} m
+           */
+          const fillFor = (when, m) => {
+            // (A theme word or a gray said, "accent", "grey", is read in
+            // the mode.)
+            if (said) return inMode(said, m);
+            const own =
+              themeFill(when, m) ?? (when ? themeFill(null, m) : null);
+            // (A token or a light-dark() pair the theme set is read in the
+            // mode.)
+            if (own != null) return inMode(String(own), m);
+            const look = when
+              ? baseOwnLook(part, 'background-color', when)
+              : null;
+            if (look) return inMode(look, m);
+            const reads = C.partReads(one(part), 'background') ?? [];
+            // (A variant shows a token only where the part reads one for it:
+            // a ghost button's see-through fill is none.)
+            const token = when
+              ? (reads.find(
+                  r =>
+                    /^--color-/.test(r.token) &&
+                    !/overlay|tint/.test(r.token) &&
+                    (r.when ?? []).some(
+                      w => w.trim() === when.replace(':', '='),
+                    ),
+                )?.token ?? null)
+              : restRead(reads, undefined);
+            return token
+              ? inMode(
+                  tokenSetOn(part, token, m) ?? String(current(token, m) ?? ''),
+                  m,
+                )
+              : null;
+          };
+          // (Each look from its own fill, unless the ask names one or says
+          // the fill: the axis the part's fills vary by, a button's variant,
+          // a banner's status, a toast's type; a part with none is one.)
+          /** @type {string | null} */
+          let unread = null;
+          const axis = (() => {
+            /** @type {Map<string, number>} */
+            const seen = new Map();
+            for (const r of C.partReads(one(part), 'background') ?? [])
+              for (const w of r.when ?? []) {
+                const a = /^([a-z]+)=/.exec(w.trim())?.[1];
+                if (a) seen.set(a, (seen.get(a) ?? 0) + 1);
+              }
+            const known = [...seen].sort((x, y) => y[1] - x[1])[0]?.[0];
+            if (known) return known;
+            // (A look axis whose fills the part data does not give, a
+            // banner's status: each look draws its own color, unread here.)
+            const vals = /** @type {Record<string, string[]>} */ (
+              C.variantValues(one(part))
+            );
+            unread =
+              ['status', 'type', 'tone', 'kind', 'intent', 'color'].find(
+                k => (vals[k]?.length ?? 0) > 1,
+              ) ?? null;
+            return 'variant';
+          })();
+          if (
+            unread &&
+            !said &&
+            !f.when &&
+            !modes.some(m => themeFill(null, m) != null)
+          )
+            return {
+              text: `each ${unread} of ${part} draws a color of its own, which the editor does not read here, so nothing is written; name one and its color ("glossy blue ${part}")`,
+              options: [],
+            };
+          /** @type {Record<string, string[]>} */
+          const looks = C.variantValues(one(part));
+          const variants = /** @type {Array<string | null>} */ (
+            f.when
+              ? [f.when]
+              : said
+                ? [null]
+                : (looks[axis] ?? []).map(v => `${axis}:${v}`)
+          );
+          let whens = variants.length ? variants : [null];
+          // (Every variant with the same fill in each mode, the theme's one
+          // fill on the part: one gloss for the part.)
+          if (
+            whens.length > 1 &&
+            whens.every(w =>
+              modes.every(m => fillFor(w, m) === fillFor(whens[0], m)),
+            )
+          )
+            whens = [f.when ?? null];
+          /** @type {Step[]} */
+          const steps = [];
+          /** @type {string[]} */
+          const flat = [];
+          for (const when of whens) {
+            const gs = modes.map(m => {
+              const own = fillFor(when, m);
+              return own == null ? null : glossIn(own);
+            });
+            const name = when ? when.replace(/^[a-z]+:/, '') : part;
+            if (gs.every(g => g == null)) {
+              if (when) flat.push(name);
+              continue;
+            }
+            modes.forEach((m, i) => {
+              if (gs[i] == null) flat.push(`${name} in ${m} mode`);
+            });
+            const scoped = when && when !== f.when ? {...f, when} : f;
+            const thing =
+              when && when !== f.when ? 'background-image' : 'background';
+            if (!saidMode && gs.every(g => g === gs[0]))
+              steps.push(set(thing, String(gs[0]), scoped));
+            else
+              modes.forEach((m, i) => {
+                if (gs[i] != null)
+                  steps.push(set(thing, String(gs[i]), {...scoped, mode: m}));
+              });
+          }
+          // (A part that draws no fill of its own, and is given none, shows
+          // the part it sits in: a gloss on that part shows through it.)
+          if (!steps.length) {
+            // (Only a part whose every fill read is none or transparent draws
+            // no fill; a see-through fill, a ghost or secondary button's, is
+            // one with no plain color.)
+            const none = whens.every(w =>
+              modes.every(m => {
+                const own = fillFor(w, m);
+                return (
+                  own == null ||
+                  own.trim() === '' ||
+                  /^(?:transparent|none)$/i.test(own.trim())
+                );
+              }),
+            );
+            const who = f.when
+              ? `${String(f.when).replace(/^[a-z]+:/, '')} ${part}`
+              : flat.length
+                ? flat.join(', ')
+                : part;
+            // (A gradient the theme set is a fill of its own: it stays.)
+            const gradient = whens.some(w =>
+              modes.some(m => /gradient\(/.test(String(fillFor(w, m) ?? ''))),
+            );
+            return {
+              text: gradient
+                ? `${who} has a gradient fill the theme sets, which stays; a gloss is made from a plain color ("glossy blue ${part}")`
+                : none
+                  ? `${who} draws no fill of its own here, so nothing is written on it; a gloss on the part it sits in shows through it`
+                  : `${who} has no plain fill of its own here (none, or a see-through one), so it keeps its look; name a color ("glossy blue ${part}")`,
+              options: [],
+            };
+          }
+          // (A white fill keeps white at the top, a black one black at the
+          // bottom: there is no lighter or darker shade.)
+          const shades =
+            'a lighter top and a darker bottom around it (a white top or a black bottom stays as it is)';
+          const many = whens.length > 1;
+          return {
+            text: `a glossy fill${where}: ${said ? `the fill ${said}` : many ? "each variant's own fill" : 'its own fill'}, ${shades}${saidMode ? ` in ${saidMode} mode` : ''}${flat.length ? `; with no plain fill of its own, ${flat.join(', ')} ${flat.length > 1 ? 'keep their' : 'keeps its'} look` : ''}`,
+            options: [steps],
+            sequence: steps.length > 1,
+          };
+        }
         if (design)
           return {
             text: `a ${design} fill${where}`,
