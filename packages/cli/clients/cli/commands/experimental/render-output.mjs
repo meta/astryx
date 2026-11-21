@@ -78,6 +78,18 @@ function sharedFolder(files) {
 }
 
 /**
+ * One line for the Tables a phone has to swipe: each Table's place, its
+ * widths, and the Table docs' advice for a page read on phones.
+ * @param {Array<{component: string, at: string[], rowsWidth: number, shownWidth: number}>} tables
+ */
+function wideTablesLine(tables) {
+  const each = tables
+    .map(t => `${t.component} at ${t.at.join(' or ')} (${t.rowsWidth} px of rows in ${t.shownWidth} px)`)
+    .join('; ');
+  return `${each}: a phone swipes sideways to see its last columns; for a page read on phones, show the rows as a List below a breakpoint (astryx component Table, Best practices)`;
+}
+
+/**
  * Print the file a render wrote.
  * @param {import('../../../../api/render/render.type.mjs').RenderPageResponse['data']} d
  * @param {string} run how the caller runs the CLI
@@ -135,7 +147,12 @@ export function printRendered(d, run) {
           section('Pictures'),
           'skipped' in d.pictures
             ? record({skipped: d.pictures.skipped})
-            : record({phone: d.pictures.phone, phoneDark: d.pictures.phoneDark, desktop: d.pictures.desktop}),
+            : record({
+                phone: d.pictures.phone,
+                phoneDark: d.pictures.phoneDark,
+                desktop: d.pictures.desktop,
+                ...(d.pictures.wideTables?.length ? {wideTables: wideTablesLine(d.pictures.wideTables)} : {}),
+              }),
           ...('skipped' in d.pictures ? [] : [text('These pictures are to check how the file looks, not to send.')]),
         ]
       : []),

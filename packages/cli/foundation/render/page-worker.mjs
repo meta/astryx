@@ -192,6 +192,13 @@ const fnTexts = {};
  * @type {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]}
  */
 const propValues = [];
+
+/**
+ * Where the page's own files draw a Core Table, in source order: its file
+ * and the line its JSX opens on, for a note that names the Table.
+ * @type {Array<{file: string, line: number}>}
+ */
+const tableSites = [];
 /**
  * Each prop a page's own file gives a Core component by name, for the
  * unknown-prop warning; a file that compiles its JSX with another runtime
@@ -1382,6 +1389,7 @@ function pagePlugin(filename, browser = false, reactJsx = true) {
         if (browser) return;
         const component = coreComponentOf(p.node.name, p.scope);
         if (!component) return;
+        if (component === 'Table') tableSites.push({file: filename, line: p.node.loc?.start.line ?? 0});
         const attrs = p.node.attributes;
         // A spread after an attribute can replace its value.
         const lastSpread = attrs.findLastIndex((/** @type {any} */ a) => a.type === 'JSXSpreadAttribute');
@@ -2650,6 +2658,7 @@ try {
     builtRemote,
     propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
     propNames,
+    tableSites: tableSites.map(t => ({...t, file: path.relative(path.dirname(entry), t.file).split(path.sep).join('/')})),
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,

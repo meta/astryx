@@ -26,6 +26,7 @@ import {FONT_PROBE_PREFIX} from '../render/font-probe.mjs';
 import {CUT_SHORT_PREFIX} from '../render/cut-short.mjs';
 import {LOW_CONTRAST_PREFIX} from '../render/drawn-contrast.mjs';
 import {PART_BOXES_PREFIX} from '../render/part-boxes.mjs';
+import {TABLE_WIDTHS_PREFIX} from '../render/table-widths.mjs';
 
 /** The script that takes one picture through the project's Playwright. */
 const PLAYWRIGHT_PICTURE = fileURLToPath(
@@ -64,7 +65,7 @@ const PAGE_BOUND_MS = 20_000;
  * One picture of {@link takePictures}: taken, with its PNG and what was
  * measured in it; a run that ended with a stated reason; or the first not
  * taken, with the facts its caller words its advice from.
- * @typedef {{ok: true, png: string, notes: string[], boxes?: Record<string, Array<[number, number]>>, cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string} | {ok: false, failed: string[], pwFound: boolean, pwMissing: boolean, chrome: string | null}} TakenPicture
+ * @typedef {{ok: true, png: string, notes: string[], boxes?: Record<string, Array<[number, number]>>, cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>, tables?: Array<[number, number]>} | {ok: false, reason: string, stopped?: string} | {ok: false, failed: string[], pwFound: boolean, pwMissing: boolean, chrome: string | null}} TakenPicture
  */
 
 /**
@@ -78,8 +79,9 @@ const PAGE_BOUND_MS = 20_000;
  * earlier browser did not take it, and the fonts this machine draws in
  * place of a stack) and what the browser's script measured in the page:
  * the text drawn cut short (`cutShort`), the text too faint to read
- * (`lowContrast`) and each asked part's drawn sizes (`boxes`), each absent
- * when nothing was measured. A run that was stopped, or that could not
+ * (`lowContrast`), each asked part's drawn sizes (`boxes`) and, when asked,
+ * how far each Table scrolls sideways (`tables`), each absent when nothing
+ * was measured. A run that was stopped, or that could not
  * make its temp folder, ends with a result that says so in `reason`.
  * Otherwise the first picture not taken ends the list with what the caller
  * needs to word its own advice: each browser's reason (`failed`), whether
@@ -89,9 +91,9 @@ const PAGE_BOUND_MS = 20_000;
  *   project: its folder, whose path no reason shows, and the require that
  *   finds its Playwright (`req`), or a file whose folder it resolves from
  *   (`from`)
- * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} jobs
+ * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[], tables?: boolean, window?: {width: number, height: number, mobile?: boolean}}>} jobs
  *   absolute paths; `boxes`: parts whose drawn sizes the picture measures;
- *   a job's `window` replaces the editor's window (picture-window.mjs), such
+ *   `tables`: measure how far each Table scrolls sideways; a job's `window` replaces the editor's window (picture-window.mjs), such
  *   as a phone's
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
@@ -203,6 +205,7 @@ export async function takePictures(at, jobs, run = newPictureRun()) {
         ...measuredCutShort(out),
         ...measuredLowContrast(out),
         ...measuredBoxes(out),
+        ...measuredTables(out),
       });
     }
     if (results.length === jobs.length) return results;
@@ -356,6 +359,32 @@ export function measuredBoxes(stdout) {
           b.every(n => typeof n === 'number'),
       );
   return {boxes};
+}
+
+/**
+ * How far each drawn Table scrolls sideways, from the line a picture script
+ * prints after `TABLE_WIDTHS_PREFIX`; nothing when it printed none that
+ * reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{tables?: Array<[number, number]>}} each `[rows width, shown width]`
+ */
+export function measuredTables(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(TABLE_WIDTHS_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(TABLE_WIDTHS_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(found)) return {};
+  return {
+    tables: found.filter(
+      (/** @type {unknown} */ b) =>
+        Array.isArray(b) && b.length === 2 && b.every(n => typeof n === 'number' && n >= 0),
+    ),
+  };
 }
 
 /** A Chrome or Chromium on this machine, at a usual place or on PATH. */

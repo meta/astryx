@@ -85,6 +85,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back (each also has a warning); present only when there are some.
  * @property {(import('../discovery/written-prop-values.mjs').WrittenValue & {component: string, prop: string, file: string, line: number})[]} [propValues] - What the page's own files certainly give a Core component's prop (the kinds of value and the strings among them), for the caller to check against the component's docs and types.
  * @property {(import('../discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}})[]} [propNames] - Each prop the page's own files give a Core component by name, with the file's absolute path and where its element opens, for the caller to check against the component's docs and types.
+ * @property {Array<{file: string, line: number}>} [tableSites] - Where the page's own files draw a Core Table, in source order: the file, relative to the page, and the line its JSX opens on.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -2925,6 +2926,7 @@ export async function renderPage(entry, options = {}) {
     ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
     propValues: message.propValues ?? [],
     propNames: message.propNames ?? [],
+    tableSites: message.tableSites ?? [],
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
     ...(remoteSummary && remoteSummary.fetched.length + remoteSummary.failed.length > 0 ? {remoteImages: remoteSummary} : {}),

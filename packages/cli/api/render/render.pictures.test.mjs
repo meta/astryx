@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
+import {wideTables} from './_adapter.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -51,9 +52,10 @@ const put = (name, content) => {
 
 /**
  * A Playwright stand-in in the fixture: each page it opens records its
- * window and color scheme in `opened.json`, and each picture writes a PNG.
+ * window and color scheme in `opened.json`, each picture writes a PNG, and
+ * the Table measurement gives `tables`.
  */
-function fakePlaywright() {
+function fakePlaywright(/** @type {Array<[number, number]>} */ tables = []) {
   const pw = path.join(dir, 'node_modules/playwright');
   fs.mkdirSync(pw, {recursive: true});
   const log = path.join(pw, 'opened.json');
@@ -68,7 +70,7 @@ function fakePlaywright() {
            const seen = fs.existsSync(log) ? JSON.parse(fs.readFileSync(log, 'utf8')) : [];
            seen.push(options);
            fs.writeFileSync(log, JSON.stringify(seen));
-           return {async route() {}, async goto() {}, async evaluate() {}, context() { return {async newCDPSession() { throw new Error('none'); }}; },
+           return {async route() {}, async goto() {}, async evaluate(fn) { if (fn && fn.name === 'tableWidths') return ${JSON.stringify(tables)}; }, context() { return {async newCDPSession() { throw new Error('none'); }}; },
              async screenshot({path}) { fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64')); },
              async close() {}};
          },
@@ -151,6 +153,46 @@ describe('render(): pictures of the written file', () => {
     expect(JSON.parse(fs.readFileSync(log, 'utf8'))).toHaveLength(3);
   }, 120_000);
 
+  it('names a Table the phone has to swipe, with where the page draws it, and only that one', async () => {
+    put(
+      'src/tables.tsx',
+      [
+        "import {Table} from '@astryxdesign/core/Table';",
+        '',
+        "const rows = [{id: 'a', name: 'Alpha', users: 1, crashes: 2, change: '+3%', status: 'ok'}];",
+        '',
+        'export default function Page() {',
+        '  return (',
+        '    <main>',
+        "      <Table data={rows} idKey=\"id\" />",
+        "      <Table data={rows} idKey=\"id\" />",
+        '    </main>',
+        '  );',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    // The first Table's rows fit its scroll area; the second's run 80% past it.
+    fakePlaywright([[340, 343], [612, 343]]);
+    const r = /** @type {any} */ (await render('src/tables.tsx', {cwd: dir, out: 'tables.html', pictures: true}));
+    expect(r.data.pictures.wideTables).toEqual([{component: 'Table', at: ['tables.tsx:9'], rowsWidth: 612, shownWidth: 343}]);
+    fs.rmSync(path.dirname(r.data.pictures.phone), {recursive: true, force: true});
+    const cli = await runCli(['experimental', 'export', 'src/tables.tsx', '--out', 'tables2.html', '--pictures'], dir);
+    expect(cli.status).toBe(0);
+    expect(cli.stdout).toMatch(
+      /^wideTables:\s+Table at tables\.tsx:9 \(612 px of rows in 343 px\): a phone swipes sideways to see its last columns; for a page read on phones, show the rows as a List below a breakpoint \(astryx component Table, Best practices\)$/m,
+    );
+    const phone = /^phone:\s+(\S+)$/m.exec(cli.stdout)?.[1] ?? '';
+    fs.rmSync(path.dirname(phone), {recursive: true, force: true});
+  }, 120_000);
+
+  it('says nothing of Tables when none scrolls more than a little', async () => {
+    fakePlaywright([[400, 343]]);
+    const r = /** @type {any} */ (await render('src/page.tsx', {cwd: dir, out: 'narrow.html', pictures: true}));
+    expect('wideTables' in r.data.pictures).toBe(false);
+    fs.rmSync(path.dirname(r.data.pictures.phone), {recursive: true, force: true});
+  }, 120_000);
+
   it('refuses pictures with --reverse', async () => {
     await render('src/page.tsx', {cwd: dir, out: 'back.html'});
     /** @type {any} */
@@ -172,4 +214,23 @@ describe('render(): pictures of the written file', () => {
     const cli = await runCli(['experimental', 'export', 'src/page.tsx', '--out', 'plain2.html'], dir);
     expect(cli.stdout).not.toMatch(/^(Pictures|phone:|phoneDark:|desktop:|skipped:)/m);
   }, 120_000);
+});
+
+describe('wideTables', () => {
+  const sites = [
+    {file: 'page.tsx', line: 12},
+    {file: 'page.tsx', line: 40},
+  ];
+
+  it('names a Table more than 30% wider than it shows, at its own place when the counts match', () => {
+    expect(wideTables([[612, 343], [440, 343]], sites)).toEqual([
+      {component: 'Table', at: ['page.tsx:12'], rowsWidth: 612, shownWidth: 343},
+    ]);
+  });
+
+  it("names every Table's place when the picture's Tables and the files' do not match one to one", () => {
+    expect(wideTables([[612, 343]], sites)).toEqual([
+      {component: 'Table', at: ['page.tsx:12', 'page.tsx:40'], rowsWidth: 612, shownWidth: 343},
+    ]);
+  });
 });

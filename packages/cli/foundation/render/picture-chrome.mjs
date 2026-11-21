@@ -24,6 +24,7 @@ import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
 import {PART_BOXES_PREFIX, partBoxes} from './part-boxes.mjs';
+import {TABLE_WIDTHS_PREFIX, tableWidths} from './table-widths.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
@@ -39,7 +40,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [chrome, batch] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], tables?: boolean, window?: {width: number, height: number, mobile?: boolean}}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -160,10 +161,10 @@ function event(method, sessionId) {
 /**
  * One page of the batch in a tab of its own: drawn, pictured whole, and
  * measured. A job's `window` (a phone's) replaces the editor's window.
- * @param {{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}} job
+ * @param {{html: string, png: string, mode: string, boxes?: string[], tables?: boolean, window?: {width: number, height: number, mobile?: boolean}}} job
  * @param {number} i
  */
-async function picture({html, png, mode, boxes, window: view}, i) {
+async function picture({html, png, mode, boxes, tables, window: view}, i) {
   // Each page in a window of its own: a page in a background tab runs
   // no animation frames, so a chart drawn over frames never finishes.
   const {targetId} = await send('Target.createTarget', {url: 'about:blank', newWindow: true});
@@ -266,6 +267,16 @@ async function picture({html, png, mode, boxes, window: view}, i) {
     ).catch(() => null);
     if (sized?.result?.value && !sized.exceptionDetails)
       say(i, `${PART_BOXES_PREFIX}${JSON.stringify(sized.result.value)}`);
+  }
+  // How far each Table scrolls sideways, for a job that asks.
+  if (tables) {
+    const wide = await send(
+      'Runtime.evaluate',
+      {expression: `(${tableWidths})()`, returnByValue: true},
+      sessionId,
+    ).catch(() => null);
+    if (Array.isArray(wide?.result?.value) && !wide.exceptionDetails)
+      say(i, `${TABLE_WIDTHS_PREFIX}${JSON.stringify(wide.result.value)}`);
   }
   await send('Target.closeTarget', {targetId}).catch(() => {});
   say(i, PICTURE_TAKEN);

@@ -20,6 +20,7 @@ import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
 import {PART_BOXES_PREFIX, partBoxes} from './part-boxes.mjs';
+import {TABLE_WIDTHS_PREFIX, tableWidths} from './table-widths.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
@@ -34,7 +35,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [entry, batch, executablePath] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], tables?: boolean, window?: {width: number, height: number, mobile?: boolean}}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -51,7 +52,7 @@ try {
     await eachAtOnce(
       jobs,
       PICTURE_PAGES_AT_ONCE,
-      async ({html, png, mode, boxes, window: view}, i) => {
+      async ({html, png, mode, boxes, tables, window: view}, i) => {
         // A job's `window` (a phone's) replaces the editor's window.
         const page = await browser.newPage({
           viewport: {width: (view ?? PICTURE_WINDOW).width, height: (view ?? PICTURE_WINDOW).height},
@@ -117,6 +118,14 @@ try {
           try {
             const sized = await page.evaluate(partBoxes, boxes);
             say(i, `${PART_BOXES_PREFIX}${JSON.stringify(sized)}`);
+          } catch {
+            // Not measured.
+          }
+        // How far each Table scrolls sideways, for a job that asks.
+        if (tables)
+          try {
+            const wide = await page.evaluate(tableWidths);
+            say(i, `${TABLE_WIDTHS_PREFIX}${JSON.stringify(wide)}`);
           } catch {
             // Not measured.
           }

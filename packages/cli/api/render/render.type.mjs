@@ -24,7 +24,12 @@
  * paths of PNGs in a new folder of the system temp folder, or, when no
  * browser on the machine took them, why (`skipped`).
  * @experimental May change or be removed in a patch release.
- * @typedef {{phone: string, phoneDark: string, desktop: string} | {skipped: string}} RenderPictures
+ * `wideTables`: each Table the phone picture draws more than 30% wider than
+ * it shows, so a phone reader swipes to find its last columns, with where the
+ * page's files draw it (`at`: `file:line`; every Table's place when the
+ * picture's Tables cannot be matched one to one) and its two widths in CSS
+ * pixels; absent when there is none.
+ * @typedef {{phone: string, phoneDark: string, desktop: string, wideTables?: Array<{component: 'Table', at: string[], rowsWidth: number, shownWidth: number}>} | {skipped: string}} RenderPictures
  */
 
 /**

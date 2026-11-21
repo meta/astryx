@@ -14,6 +14,7 @@ import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   MODULE_EXTENSIONS,
@@ -858,7 +859,7 @@ export async function renderToFile({cwd, input, output, title, keepClassNames = 
     scriptModules: page.scriptModules ?? 0,
     checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
     ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
-    ...(pictures ? {pictures: await pagePictures(output, cwd, input)} : {}),
+    ...(pictures ? {pictures: await pagePictures(output, cwd, input, page.tableSites ?? [])} : {}),
   };
 }
 
@@ -878,9 +879,11 @@ const PHONE = Object.freeze({width: 375, height: 812, mobile: true});
  * @param {string} cwd
  * @param {string} input the page module, absolute: its folder finds the
  *   project's Playwright
+ * @param {Array<{file: string, line: number}>} tableSites where the page's
+ *   files draw a Table, to name one the phone has to swipe ({@link wideTables})
  * @returns {Promise<import('./render.type.mjs').RenderPictures>}
  */
-async function pagePictures(output, cwd, input) {
+async function pagePictures(output, cwd, input, tableSites) {
   const {takePictures} = await import('../../foundation/pictures/pictures.mjs');
   const stem = path.basename(output).replace(/\.html?$/i, '');
   // The system temp folder, as for a template's scratch copy: never a disk's
@@ -895,7 +898,7 @@ async function pagePictures(output, cwd, input) {
     return {skipped: `the system temp folder cannot be written (${/** @type {any} */ (e)?.code ?? e})`};
   }
   const jobs = [
-    {html: output, png: path.join(dir, `${stem}-phone.png`), mode: /** @type {const} */ ('light'), window: PHONE},
+    {html: output, png: path.join(dir, `${stem}-phone.png`), mode: /** @type {const} */ ('light'), window: PHONE, tables: true},
     {html: output, png: path.join(dir, `${stem}-phone-dark.png`), mode: /** @type {const} */ ('dark'), window: PHONE},
     {html: output, png: path.join(dir, `${stem}-desktop.png`), mode: /** @type {const} */ ('light')},
   ];
@@ -911,7 +914,39 @@ async function pagePictures(output, cwd, input) {
         : 'no browser was found; install Playwright with its browser, or Google Chrome or Chromium',
     };
   }
-  return {phone: jobs[0].png, phoneDark: jobs[1].png, desktop: jobs[2].png};
+  const phone = taken[0];
+  // The page's own file first, then the files it imports, each by line: the
+  // order a reader meets the Tables in on the page.
+  const page = path.basename(input);
+  const sites = [...tableSites].sort((x, y) => Number(y.file === page) - Number(x.file === page) || compareText(x.file, y.file) || x.line - y.line);
+  const wide = wideTables(phone?.ok && 'tables' in phone ? (phone.tables ?? []) : [], sites);
+  return {phone: jobs[0].png, phoneDark: jobs[1].png, desktop: jobs[2].png, ...(wide.length ? {wideTables: wide} : {})};
+}
+
+/**
+ * How much wider than its scroll area a Table's rows may be on the phone
+ * before the pictures name it: a little more is a column a reader barely
+ * misses; more than this is a column the reader has to swipe to find.
+ */
+const WIDE_TABLE_RATIO = 1.3;
+
+/**
+ * The Tables the phone picture draws wider than they show by more than
+ * WIDE_TABLE_RATIO, each with where the page's files draw it. The Tables a
+ * picture draws are matched to the files' Tables in source order when their
+ * counts agree; otherwise each wide one names every place a Table is drawn.
+ * @param {Array<[number, number]>} measured each drawn Table's `[rows width,
+ *   shown width]`, in page order
+ * @param {Array<{file: string, line: number}>} sites in source order
+ * @returns {Array<{component: 'Table', at: string[], rowsWidth: number, shownWidth: number}>}
+ */
+export function wideTables(measured, sites) {
+  const places = sites.map(s => `${s.file}:${s.line}`);
+  return measured.flatMap(([rowsWidth, shownWidth], i) =>
+    rowsWidth > shownWidth * WIDE_TABLE_RATIO
+      ? [{component: /** @type {const} */ ('Table'), at: measured.length === places.length ? [/** @type {string} */ (places[i])] : places, rowsWidth, shownWidth}]
+      : [],
+  );
 }
 
 /**
