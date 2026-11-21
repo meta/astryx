@@ -42,7 +42,6 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CheckboxList/CheckboxListItem.generated';
-import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 
 registerEnglishFallback(english);
 
@@ -53,9 +52,6 @@ registerEnglishFallback(english);
 const styles = stylex.create({
   selected: {
     backgroundColor: colorVars['--color-accent-muted'],
-    // Secondary text on the tint reads at 4.5:1 (selectedTintText.ts).
-    '--color-text-secondary':
-      selectedTintTextVars['--_selected-text-secondary'],
   },
 });
 

@@ -32,7 +32,6 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {LayoutContainerScope} from '../Layout/LayoutContainerScope';
 import type {CardVariantMap} from './index';
-import {selectedTintCardVars} from '../theme/selectedTintText.stylex';
 
 // =============================================================================
 // Variant type
@@ -122,8 +121,7 @@ const styles = stylex.create({
   },
 });
 
-// Background variant styles — each maps to a design token, with the secondary
-// text on the accent tint measured on that fill. Typed as PARTIAL
+// Background variant styles — each maps to a design token. Typed as PARTIAL
 // over CardVariant: a theme can add a variant, and the record deliberately has
 // no entry for it, so the lookup is undefined, StyleX drops it, and the card
 // takes base styles for the theme rule to paint over.
@@ -131,66 +129,42 @@ const variantStyles: Partial<Record<CardVariant, StyleXStyles>> = stylex.create(
   {
     default: {
       backgroundColor: colorVars['--color-background-card'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-default'],
     },
     transparent: {
       backgroundColor: 'transparent',
     },
     muted: {
       backgroundColor: colorVars['--color-background-muted'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-muted'],
     },
     blue: {
       backgroundColor: colorVars['--color-background-blue'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-blue'],
     },
     cyan: {
       backgroundColor: colorVars['--color-background-cyan'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-cyan'],
     },
     gray: {
       backgroundColor: colorVars['--color-background-gray'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-gray'],
     },
     green: {
       backgroundColor: colorVars['--color-background-green'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-green'],
     },
     orange: {
       backgroundColor: colorVars['--color-background-orange'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-orange'],
     },
     pink: {
       backgroundColor: colorVars['--color-background-pink'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-pink'],
     },
     purple: {
       backgroundColor: colorVars['--color-background-purple'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-purple'],
     },
     red: {
       backgroundColor: colorVars['--color-background-red'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-red'],
     },
     teal: {
       backgroundColor: colorVars['--color-background-teal'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-teal'],
     },
     yellow: {
       backgroundColor: colorVars['--color-background-yellow'],
-      '--_selected-text-secondary':
-        selectedTintCardVars['--_selected-text-secondary-yellow'],
     },
   },
 );

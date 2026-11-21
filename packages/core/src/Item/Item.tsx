@@ -92,7 +92,6 @@ import {
 // The deprecated path's row style: a row given `swipeActions` takes it from
 // its first render, as released.
 import {swipeHostStyles} from '../Swipe/swipeHost.stylex';
-import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 
 // The released loader: the deprecated `swipeActions` load the gesture and the
 // panels the first time a row has them. While the chunk loads the row is
@@ -479,9 +478,6 @@ const styles = stylex.create({
   },
   selected: {
     backgroundColor: colorVars['--color-accent-muted'],
-    // Secondary text on the tint reads at 4.5:1 (selectedTintText.ts).
-    '--color-text-secondary':
-      selectedTintTextVars['--_selected-text-secondary'],
   },
   disabled: {
     cursor: 'default',

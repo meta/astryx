@@ -316,6 +316,12 @@ export const OFFICIAL_NEUTRAL_STOPS: Readonly<
 /** The parts whose secondary text the official Neutral theme lifts, `[part, block]`. */
 export const OFFICIAL_NEUTRAL_LIFTED: ReadonlyArray<readonly [string, string]> =
   Object.freeze([
+    ['item', 'selected'],
+    ['tree-list-item', 'selected'],
+    ['table-row', 'selected'],
+    ['command-palette-item', 'selected'],
+    ['file-input', 'mode:dropzone'],
+    ['citation', 'variant:number'],
     ['segmented-control-item', 'base'],
     ['card', 'variant:blue'],
     ['card', 'variant:cyan'],
@@ -403,10 +409,9 @@ export const STATUS_MUTED = (
 export const ON_MUTED = officialStops('--color-on-info-muted');
 /**
  * The parts whose secondary text the official Neutral theme lifts, with
- * the block it lifts it in and what the text sits on: the translucent
- * neutral track under segmented-control labels (`--color-neutral`), or a
- * coloured card's own fill. Core measures the secondary text on the
- * accent tint itself, so no part on the tint is lifted here.
+ * the block it lifts it in and what the text sits on: the accent tint,
+ * except under segmented-control labels, which sit on the translucent
+ * neutral track (`--color-neutral`).
  */
 export const LIFT_PARTS: ReadonlyArray<[string, string, string]> =
   OFFICIAL_NEUTRAL_LIFTED.map(([part, block]) => [
@@ -415,19 +420,23 @@ export const LIFT_PARTS: ReadonlyArray<[string, string, string]> =
     liftGround(part, block),
   ]);
 /**
- * What a lifted block's secondary text sits on: the translucent neutral
- * track under segmented-control labels, else the card variant's own fill
- * (the card variant rule lifts it there).
+ * What a lifted block's secondary text sits on: a card's own fill for a
+ * card colour (the card variant rule lifts it there), the translucent
+ * neutral track under segmented-control labels, else the accent tint.
  */
 function liftGround(part: string, block: string): string {
   if (part === 'segmented-control-item') {
     return '--color-neutral';
   }
-  const color = /^variant:([\w-]+)$/.exec(block)?.[1] ?? block;
-  return `--color-background-${color}`;
+  const color = part === 'card' ? /^variant:([\w-]+)$/.exec(block)?.[1] : null;
+  return color ? `--color-background-${color}` : '--color-accent-muted';
 }
 /** What each lifted background is, and the parts on it, for notes. */
 export const LIFT_GROUNDS: Record<string, {what: string; parts: string}> = {
+  '--color-accent-muted': {
+    what: 'the accent tint',
+    parts: 'selected items, rows and commands, a dropzone, numbered citations',
+  },
   '--color-neutral': {
     what: 'the neutral track',
     parts: 'segmented-control labels',
@@ -1354,7 +1363,7 @@ export function mapPalette(
     }
 
     // The tint: the official stop, never the fill's own shade, see-through
-    // or not. Core measures the secondary text on the parts that sit on it.
+    // or not.
     const muted = each(m => {
       const i = side(m);
       const spec = word ? STATUS_MUTED[i] : ACCENT_MUTED[i];
@@ -1488,8 +1497,8 @@ export function mapPalette(
   }
 
   // Secondary text on the parts the official Neutral theme lifts it on
-  // (LIFT_PARTS), lifted the same way: for each background (the neutral
-  // track, a card fill), the gray shade nearest the secondary text's
+  // (LIFT_PARTS), lifted the same way: for each background (the accent
+  // tint, the neutral track), the gray shade nearest the secondary text's
   // own that reads at 4.5:1 on it and on it under a hover, over every
   // surface. The grays are the neutral color's, else a gray ramp grown
   // from the base theme's own secondary text. A mode where the theme sets

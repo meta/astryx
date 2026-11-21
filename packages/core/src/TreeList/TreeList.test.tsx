@@ -15,7 +15,6 @@ import type {ReactNode} from 'react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {TreeList} from './TreeList';
-import {readsTextOnTint} from '../__tests__/textOnTint';
 import type {TreeListItemData} from './TreeListTypes';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
@@ -581,20 +580,6 @@ describe('TreeList', () => {
   // ===========================================================================
   // Selected state
   // ===========================================================================
-
-  it('reads the secondary text Core measures on the tint on a selected row', () => {
-    const items: TreeListItemData[] = [
-      {id: 'a', label: 'Selected', isSelected: true},
-      {id: 'b', label: 'Resting'},
-    ];
-    render(<TreeList items={items} />);
-    expect(readsTextOnTint(screen.getByText('Selected').closest('li')!)).toBe(
-      true,
-    );
-    expect(readsTextOnTint(screen.getByText('Resting').closest('li')!)).toBe(
-      false,
-    );
-  });
 
   it('applies aria-selected when isSelected', () => {
     const items: TreeListItemData[] = [

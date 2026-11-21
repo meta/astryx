@@ -31,7 +31,7 @@ afterAll(() => {
 const MARKERS = [
   'astryx-oklch-v1',
   'Unknown palette recipe',
-  'segmented-control labels',
+  'the accent tint',
   'is not a palette key',
 ];
 

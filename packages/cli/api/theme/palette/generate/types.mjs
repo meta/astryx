@@ -117,7 +117,7 @@
  * @property {'theme-palette'} kind
  * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
  * @property {Readonly<Record<string, readonly [string, string]>>} tokens Each color token's `[light, dark]` value.
- * @property {Readonly< Record<string, Readonly<Record<string, PaletteLift>>> >} components Part styles that lift secondary text on the neutral track and the coloured cards, as the official themes do, by part and style key. Core measures the secondary text on the accent tint itself.
+ * @property {Readonly< Record<string, Readonly<Record<string, PaletteLift>>> >} components Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do, by part and style key.
  */
 
 export {};

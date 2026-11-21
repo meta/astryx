@@ -104,13 +104,14 @@ rendered light/dark evidence; shared color alone is not enough.
 
 Neutral's selected fill, `--color-accent-muted`, is `neutral.light[85]` /
 `neutral.dark[30]` (`#d4d4d4` / `#474747`). Text on it reads at 4.5:1 or more
-in both modes: Core measures the secondary text on that fill from Neutral's
-own colours (`architecture:theme-compilation` INV22), so Neutral states no
-secondary text for selected rows, numbered citations or dropzones. In dark
-mode Neutral lifts `--color-text-secondary` to `neutral.dark[80]` on every
-`segmented-control-item`, whose unselected label sits on the translucent track
-over the page surface, so that text clears 4.5:1 at rest and under the hover
-overlay. Neutral's syntax `comment`, `operator` and
+in both modes. In dark mode Neutral lifts `--color-text-secondary` to
+`neutral.dark[80]` on a selected `item`, `tree-list-item`, `table-row` or
+`command-palette-item` (a checked
+CheckboxListItem row reflects `selected` on its `item` target), on a
+`citation` with `variant:number`, on a `file-input` with `mode:dropzone`,
+whose drag-over fill has no state target, and on every `segmented-control-item`,
+whose unselected label sits on the translucent track over the page surface, so
+that text clears 4.5:1 at rest and under the hover overlay. Neutral's syntax `comment`, `operator` and
 `punctuation` colours are `neutral.light[35]` / `neutral.dark[75]`, so they
 read on a highlighted code line.
 

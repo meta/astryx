@@ -278,6 +278,42 @@ export const neutralTheme = defineTheme({
   },
 
   components: {
+    // In dark mode, secondary text falls under 4.5:1 on the selected fill
+    // and under its hover. Selected rows use the next stop that clears both.
+    item: {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    'table-row': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    'command-palette-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    // A dropzone's hint sits on the same fill while a file is dragged over.
+    // That state has no target, so the dropzone takes the lift at rest too.
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    // A numbered citation is a pill on the same fill.
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+
     button: {
       'variant:destructive': {
         backgroundColor: 'var(--color-error-muted)',

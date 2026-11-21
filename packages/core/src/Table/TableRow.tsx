@@ -25,7 +25,6 @@ import {glidingDividerStyles} from './glidingDivider';
 import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {selectionWashTextStyles} from '../privateAttributes/selectionWash.stylex';
 import {TableRowPlacementContext} from './TableRowPlacementContext';
 
 /** Props for TableRow — thin `<tr>` wrapper */
@@ -192,7 +191,7 @@ export function TableRow({
     );
   }
 
-  const rowStyles: StyleXStyles[] = [selectionWashTextStyles.row];
+  const rowStyles: StyleXStyles[] = [];
 
   // Striped + hover styling is for body rows only — the header row must not
   // pick up the hover highlight (or striping) even when hasHover/isStriped.

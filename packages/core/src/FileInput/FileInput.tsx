@@ -70,7 +70,6 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/FileInput/FileInput.generated';
-import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 
 registerEnglishFallback(english);
 function formatFileSize(bytes: number, t: TranslatorFn): string {
@@ -183,10 +182,6 @@ const styles = stylex.create({
   dropzoneActive: {
     borderColor: colorVars['--color-accent'],
     backgroundColor: colorVars['--color-accent-muted'],
-  },
-  // The drop hint on the tint reads at 4.5:1 (selectedTintText.ts).
-  placeholderOnTint: {
-    color: selectedTintTextVars['--_selected-text-secondary'],
   },
   dropzoneDisabled: {
     cursor: 'default',
@@ -878,11 +873,7 @@ export function FileInput({
           color="secondary"
           {...themeProps('file-input-icon', {mode})}
         />
-        <span
-          {...stylex.props(
-            styles.placeholderText,
-            isDragOver && !isSelectionDisabled && styles.placeholderOnTint,
-          )}>
+        <span {...stylex.props(styles.placeholderText)}>
           {isDragOver ? t('@astryx.fileInput.dropHint') : displayPlaceholder}
         </span>
         {tooltipStatus}

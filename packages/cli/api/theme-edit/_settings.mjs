@@ -7095,10 +7095,10 @@ export function compileTheme(ctx, data, base) {
   for (const [k, v] of Object.entries(pal?.tokens ?? {}))
     putTok(k, [v.light.color, v.dark.color]);
   // Secondary text lifted on the parts the official neutral theme lifts it
-  // on (the neutral track), each for what it sits on. It is written into
-  // the very block the base theme lifts it in, so it replaces the base's
-  // lift. A setting of it on the part (no --when or --state) wins there, per
-  // mode.
+  // on, each for what it sits on. It is written into the very block the
+  // base theme lifts it in, so it replaces the base's lift. A setting of it
+  // on the part (no --when or --state) wins there, per mode, so a numbered
+  // citation shows what `--on citation` set.
   // Without a color dial nothing is lifted, but an exact secondary text
   // still reaches those parts, and the base theme's own lift stays in the
   // mode it does not cover.
@@ -10634,106 +10634,6 @@ export async function resolvedTokens(ctx, slug) {
         if (k.startsWith('--') && typeof v === 'string')
           (parts[target] ??= {})[k] = v;
   Object.defineProperty(out, 'parts', {value: parts, enumerable: false});
-  // The secondary text Core measured for the accent tint (selected rows, a
-  // numbered citation, a dropzone's hint), as the build wrote it on the
-  // theme's root; else Core's own. Kept out of the modes too.
-  const css = readBuiltCss(f.css);
-  Object.defineProperty(out, 'onAccentTint', {
-    value: onAccentTint(ctx.project, css),
-    enumerable: false,
-  });
-  Object.defineProperty(out, 'onAccentTintParts', {
-    value: onAccentTintParts(css),
-    enumerable: false,
-  });
-  return out;
-}
-
-/** The theme's built stylesheet, or nothing for an unbuilt theme. @param {string} file */
-function readBuiltCss(file) {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
-/** The private variable Core sets for secondary text on the accent tint. */
-const ON_TINT_TEXT = '--_selected-text-secondary';
-
-/** @param {string | null | undefined} v */
-const modesOfValue = v => {
-  const m = v ? /^light-dark\((.*),\s*([^,]*)\)$/.exec(v.trim()) : null;
-  return m
-    ? {light: m[1].trim(), dark: m[2].trim()}
-    : {light: v ?? null, dark: v ?? null};
-};
-
-/**
- * Secondary text on the accent tint in each mode: the value the theme's
- * build measured and wrote on its root (`:scope`), else Core's precomputed
- * value. Null in a mode with none to read.
- * @param {any} project @param {string} css the built stylesheet
- * @returns {{light: string | null, dark: string | null}}
- */
-function onAccentTint(project, css) {
-  const root = [...css.matchAll(/:scope\s*\{([^}]*)\}/g)]
-    .map(m => new RegExp(`${ON_TINT_TEXT}:\\s*([^;]+);`).exec(m[1])?.[1])
-    .find(Boolean);
-  return modesOfValue(root ?? coreVarValues(project, ON_TINT_TEXT)[0]);
-}
-
-/**
- * Secondary text in a part's selected state, as the built stylesheet draws
- * it: the theme's own value where it keys one on that state, else the value
- * the build measured for the part's own rule. Parts with no selected rule
- * are left out (they read the root's value).
- * @param {string} css the built stylesheet
- * @returns {Record<string, {light: string | null, dark: string | null}>}
- */
-function onAccentTintParts(css) {
-  /** @type {Record<string, {light: string | null, dark: string | null}>} */
-  const out = {};
-  /**
-   * The modes a rule's selector names: one mode, both when it names none,
-   * or none for a copy whose mode its media query or a media surface says.
-   * @param {string} selector
-   * @returns {Array<'light' | 'dark'>}
-   */
-  const modesOf = selector => {
-    const named = /** @type {Array<'light' | 'dark'>} */ ([
-      'light',
-      'dark',
-    ]).filter(
-      mode =>
-        selector.includes(`:scope[data-theme="${mode}"]`) ||
-        selector.includes(`[data-astryx-scheme="${mode}"]`),
-    );
-    // (A copy for a media surface draws that surface's own mode.)
-    if (selector.includes('[data-astryx-media="')) return [];
-    if (named.length > 0) return named;
-    return /data-theme=|data-astryx-scheme/.test(selector)
-      ? []
-      : ['light', 'dark'];
-  };
-  for (const m of css.matchAll(
-    /\.astryx-([a-z0-9-]+)(?![\w-])([^{}]*\[data-selected="selected"\][^{}]*)\{([^}]*)\}/g,
-  )) {
-    const part = m[1];
-    const text = /--color-text-secondary:\s*([^;]+);/.exec(m[3])?.[1]?.trim();
-    if (!text) continue;
-    let value = text;
-    if (text === `var(${ON_TINT_TEXT})`) {
-      const measured = new RegExp(
-        `\\.astryx-${part}(?![\\w-])[^{}]*\\{[^}]*${ON_TINT_TEXT}:\\s*([^;]+);`,
-      ).exec(css)?.[1];
-      if (!measured) continue;
-      value = measured;
-    }
-    const both = modesOfValue(value);
-    out[part] ??= {light: null, dark: null};
-    for (const mode of modesOf(m[2])) out[part][mode] ??= both[mode];
-  }
   return out;
 }
 
@@ -10949,53 +10849,17 @@ export async function contrastProblems(ctx, data, res) {
       : side;
   };
   /**
-   * Text on a lifted background (the neutral track, a card fill) as the
-   * part sets it for itself: the official themes lift secondary text there,
-   * and so does a generated theme.
+   * Text on a lifted background (the accent tint, the neutral track) as
+   * the part sets it for itself: the official themes lift secondary text
+   * there, and so does a generated theme.
    * @param {TextPair} p @param {string} m
    */
   const onTint = (p, m) => {
     const tok = p.fg.tokens[0];
-    const ground = String(p.bg.tokens[0]);
-    if (!tok || !LIFT_GROUND_TOKENS.has(ground)) return accentTintText(p, m);
+    if (!tok || !LIFT_GROUND_TOKENS.has(String(p.bg.tokens[0]))) return null;
     const own = /** @type {any} */ (res).parts?.[p.fg.target ?? p.text]?.[tok];
-    return typeof own === 'string' ? inMode(own, m) : null;
-  };
-  /**
-   * Secondary text on the accent tint, as the build drew it: the theme's own
-   * selected-state value, else the value Core measured for the part's rule,
-   * else the root's. A resting value on the part yields to it. Null for any
-   * other text or ground.
-   * @param {TextPair} p @param {string} m
-   */
-  const accentTintText = (p, m) => {
-    if (
-      p.fg.tokens[0] !== '--color-text-secondary' ||
-      p.bg.tokens[0] !== '--color-accent-muted'
-    )
-      return null;
-    const mode = /** @type {'light' | 'dark'} */ (m);
-    return inMode(
-      /** @type {any} */ (res).onAccentTintParts?.[p.fg.target ?? p.text]?.[
-        mode
-      ] ?? /** @type {any} */ (res).onAccentTint?.[mode],
-      m,
-    );
-  };
-  /**
-   * The setting that draws a pair's text, unless the build replaced it: on
-   * the accent tint, a setting of the secondary text token yields to the
-   * text the build drew there (`accentTintText`).
-   * @param {TextPair} p @param {string} m
-   */
-  const textSetting = (p, m) => {
-    const hit = drawnBy(p, m);
-    const yields =
-      hit?.source === 'token' &&
-      hit.thing === '--color-text-secondary' &&
-      !hit.state &&
-      accentTintText(p, m) != null;
-    return yields ? null : hit;
+    if (typeof own !== 'string') return null;
+    return inMode(own, m);
   };
   /**
    * The state a pair is drawn in, when its fill is one its part draws only
@@ -11346,7 +11210,7 @@ export async function contrastProblems(ctx, data, res) {
     return (
       inMode(
         side === 'fg'
-          ? textSetting(p, m)?.value
+          ? drawnBy(p, m)?.value
           : (nearerFill(p, m) ??
               override(
                 s,
@@ -16015,12 +15879,9 @@ function partTokenValues(css) {
   if (!css) return out;
   try {
     postcss.parse(css).walkRules(rule => {
-      // On the root only the private values the build derives (text on the
-      // accent tint in each Card variant); the theme's tokens are listed from
-      // the resolved theme.
-      const root = /^(?::scope|:root|html\b)/.test(rule.selector.trim());
+      if (/^(?::scope|:root|html\b)/.test(rule.selector.trim())) return;
       rule.each(node => {
-        if (node.type === 'decl' && node.prop.startsWith(root ? '--_' : '--'))
+        if (node.type === 'decl' && node.prop.startsWith('--'))
           out.set(`${rule.selector}\u0000${node.prop}`, node.value);
       });
     });
@@ -16055,18 +15916,13 @@ function partTokenChanges(before, after, modes) {
   const order = modes.includes('light') ? ['light', 'dark'] : ['dark', 'light'];
   /** @type {string[]} */
   const out = [];
-  /** @type {string[]} */
-  const onRoot = [];
   for (const key of new Set([...was.keys(), ...now.keys()])) {
     const a = was.get(key);
     const b = now.get(key);
     if (String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase())
       continue;
     const [selector, prop] = key.split('\u0000');
-    const root = /^(?::scope|:root|html\b)/.test(selector.trim());
-    const where = root
-      ? 'the theme root'
-      : selector.replace(/\.astryx-/g, '').replace(/\s+/g, ' ');
+    const where = selector.replace(/\.astryx-/g, '').replace(/\s+/g, ' ');
     const [ha, hb] = [halves(a), halves(b)];
     const sides = order.filter(
       m =>
@@ -16075,20 +15931,11 @@ function partTokenChanges(before, after, modes) {
     const one =
       sides.length === 2 && ha.light === ha.dark && hb.light === hb.dark;
     for (const m of one ? [order[0]] : sides)
-      (root ? onRoot : out).push(
+      out.push(
         `${prop} on ${where}${one ? '' : ` (${m})`}: ${ha[m] ?? 'unset'} -> ${hb[m] ?? 'unset'}`,
       );
   }
-  // Parts first. The root's derived values (one per Card variant) fold into
-  // one line that names each once with the modes that moved, not a line per
-  // value and mode.
-  if (onRoot.length === 0) return out;
-  const names = [...new Set(onRoot.map(line => line.split(' ')[0]))];
-  const modesMoved = order.filter(m => onRoot.some(l => l.includes(`(${m})`)));
-  return [
-    ...out,
-    `${names.join(', ')} on the theme root${modesMoved.length > 0 ? ` (${modesMoved.join(', ')})` : ''}: moved`,
-  ];
+  return out;
 }
 
 /**

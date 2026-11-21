@@ -48,13 +48,6 @@ import {
   deriveStatusRoleTokens,
   resolveModes,
 } from './statusRoleDerivation';
-import {
-  CARD_FILLS,
-  SELECTED_TEXT_SECONDARY,
-  SELECTED_TINT_INPUTS,
-  deriveSelectedTintText,
-  type TintGround,
-} from './selectedTintText';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
@@ -78,7 +71,6 @@ import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
-import {SELECTION_WASH_SELECTOR} from '../privateAttributes/selectionWash';
 import {darkPageSides} from './invertedSurfaceSide';
 
 /**
@@ -1051,25 +1043,9 @@ export function generateThemeRules(
   const rootAliases =
     context?.rootAliases ??
     generatedScopedStatusRoleDefaults(theme.tokens, theme.localTokens, rules);
-  // The secondary text on the accent tint, measured on this theme's own
-  // colours, when it sets one the measurement reads (selectedTintText.ts).
-  const sets = new Set([
-    ...Object.keys(theme.tokens),
-    ...Object.keys(theme.localTokens ?? {}),
-  ]);
-  // Where it cannot be measured (a colour it cannot read, a see-through
-  // secondary), the theme's own secondary text stays there.
-  const selectedTintText = SELECTED_TINT_INPUTS.some(token => sets.has(token))
-    ? (deriveSelectedTintText(theme.tokens, theme.localTokens) ??
-      THEME_TINT_TEXT)
-    : null;
   const tokenRules = tokenBlock(theme, '', sink, [
     ...Object.entries(theme.tokens),
     ...rootAliases,
-    ...(selectedTintText === null
-      ? []
-      : [[SELECTED_TEXT_SECONDARY, selectedTintText] as [string, string]]),
-    ...cardTintTextEntries(theme, sets, selectedTintText !== null),
   ]);
   if (tokenRules !== null) {
     parts.push(tokenRules);
@@ -1096,9 +1072,9 @@ export function generateThemeRules(
       darkPageSides: darkPageSides(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
-      selectedTint: {tokens: theme.tokens, localTokens: theme.localTokens},
     });
   }
+
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
   generateProseRules(val, parts);
 
@@ -1227,15 +1203,6 @@ interface ComponentRuleOptions {
    * side, whose color-mode blocks follow that side there.
    */
   darkPageSides?: ReadonlySet<MediaSide>;
-  /**
-   * The theme's tokens. A rule that sets `--color-text-secondary` measures
-   * the secondary text on the accent tint again with its own tokens
-   * (selectedTintText.ts), so the text on a selected row inside it reads.
-   */
-  selectedTint?: {
-    tokens: Record<string, string>;
-    localTokens?: Record<string, string>;
-  };
 }
 
 /**
@@ -1252,7 +1219,6 @@ function generateComponentRules(
     sink = warnToConsole,
     location: locationPrefix = '',
     darkPageSides = new Set<MediaSide>(),
-    selectedTint,
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
@@ -1297,44 +1263,6 @@ function generateComponentRules(
           props,
           resetInheritedPaddingSpecificity,
         );
-        // A Card rule that is not one variant's is measured on each
-        // variant's fill, as the root's Card entries (cardTintTextEntries).
-        const cardWide = component === 'card' && !/^variant:[a-z]+$/.test(key);
-        if (
-          selectedTint !== undefined &&
-          !cardWide &&
-          props.some(([prop]) => prop === '--color-text-secondary')
-        ) {
-          const own = Object.fromEntries(
-            props.filter(([prop]) => prop.startsWith('--')),
-          );
-          // A variant's color-mode block reads on that variant's fill too.
-          const ground = ruleTintGround(component, key);
-          // A part's rule reads in a Card of any variant where one colour
-          // does; else on the page. Unmeasurable: the rule's own text stays.
-          const derived =
-            (ground.kind === 'page'
-              ? (deriveSelectedTintText(
-                  selectedTint.tokens,
-                  selectedTint.localTokens,
-                  own,
-                  {kind: 'page-and-cards'},
-                ) ??
-                deriveSelectedTintText(
-                  selectedTint.tokens,
-                  selectedTint.localTokens,
-                  own,
-                ))
-              : deriveSelectedTintText(
-                  selectedTint.tokens,
-                  selectedTint.localTokens,
-                  own,
-                  ground,
-                )) ?? own['--color-text-secondary'];
-          if (derived != null && !derived.includes('--color-text-secondary')) {
-            finalProps.push([SELECTED_TEXT_SECONDARY, derived]);
-          }
-        }
         if (finalProps.length > 0) {
           const declarations = joinDeclarations(
             finalProps,
@@ -1343,27 +1271,6 @@ function generateComponentRules(
             toKebabCase,
           );
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
-        }
-        // A theme rule that sets secondary text on a part Core tints keeps
-        // the measured text in the tinted state: the rule's own text is
-        // for the part at rest. A rule the theme keys on that state wins.
-        const tintState =
-          selectedTint === undefined ? undefined : TINT_STATES[component];
-        const tintSuffix =
-          tintState === undefined ||
-          themeSetsTintText(rules, tintState) ||
-          parseStyleKey(key).includes(parseStyleKey(tintState))
-            ? undefined
-            : `${parseStyleKey(tintState)}${TINT_PAINTED[component] ?? ''}`;
-        if (
-          tintSuffix !== undefined &&
-          props.some(([prop]) => prop === '--color-text-secondary')
-        ) {
-          parts.push(
-            wrap(
-              `  ${appendPseudoToSelectorList(selector, tintSuffix)} {\n${TINT_TEXT_DECLARATION}\n  }`,
-            ),
-          );
         }
         for (const [pseudo, pseudoStyles] of nested) {
           // A pseudo-class block expands like its resting rule. A hovered
@@ -1411,18 +1318,6 @@ function generateComponentRules(
             );
             for (const rule of pseudoRules(selector, pseudo, declarations)) {
               parts.push(wrap(rule));
-            }
-            if (
-              tintSuffix !== undefined &&
-              '--color-text-secondary' in pseudoStyles &&
-              !/^:(?:hover|active|focus)/.test(pseudo) &&
-              !pseudo.includes('::')
-            ) {
-              parts.push(
-                wrap(
-                  `  ${appendPseudoToSelectorList(selector, `${pseudo}${tintSuffix}`)} {\n${TINT_TEXT_DECLARATION}\n  }`,
-                ),
-              );
             }
           }
         }
@@ -1533,119 +1428,6 @@ function generateComponentRules(
 
 /** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
 const THEME_MODE_ATTR = 'data-theme';
-
-/**
- * The parts Core paints with the accent tint in a state, and that state's
- * key. Core sets their secondary text to `--_selected-text-secondary` there.
- */
-const TINT_STATES: Record<string, string> = {
-  item: 'selected',
-  // ListItem puts its target on the Item element that paints the tint.
-  'list-item': 'selected',
-  'tree-list-item': 'selected',
-  'table-row': 'selected',
-  'command-palette-item': 'selected',
-};
-
-/**
- * What else a part's tinted state needs before the tint is painted: a
- * selected table row paints it only while the table shows its selection wash.
- */
-const TINT_PAINTED: Record<string, string> = {
-  'table-row': SELECTION_WASH_SELECTOR,
-};
-
-/**
- * Whether a theme writes the secondary text of a part's tinted state itself,
- * in a rule keyed on that state: the theme's value wins there.
- */
-function themeSetsTintText(
-  rules: Record<string, StyleOverrides>,
-  state: string,
-): boolean {
-  const attribute = parseStyleKey(state);
-  return Object.entries(rules).some(
-    ([key, block]) =>
-      parseStyleKey(key).includes(attribute) &&
-      block != null &&
-      typeof block === 'object' &&
-      '--color-text-secondary' in block,
-  );
-}
-
-/**
- * The text on the tint inside each Card variant, for the theme root: Card
- * points `--_selected-text-secondary` at its variant's entry, so a Theme
- * nested in this one inherits them. Written for every variant when the theme
- * sets a colour the measurement reads, else only for a variant whose fill it
- * sets; a variant rule that sets its own secondary text measures it there.
- */
-function cardTintTextEntries(
-  theme: ThemeRuleSource,
-  sets: ReadonlySet<string>,
-  setsInput: boolean,
-): [string, string][] {
-  const cardRules = withoutUnsetComponents(theme.components)?.card ?? {};
-  const cardBase = Object.fromEntries(
-    Object.entries(cardRules.base ?? {}).filter(
-      (entry): entry is [string, string] =>
-        entry[0].startsWith('--') && typeof entry[1] === 'string',
-    ),
-  );
-  // Unmeasurable: a Card rule's own concrete text stays on the tint.
-  const ownText = cardBase['--color-text-secondary'];
-  const cardOwnText =
-    ownText != null && !ownText.includes('--color-text-secondary')
-      ? ownText
-      : undefined;
-  return Object.entries(CARD_FILLS).flatMap(([variant, fill]) => {
-    const own = cardRules[`variant:${variant}`];
-    if (
-      (!setsInput &&
-        !sets.has(fill) &&
-        !('--color-text-secondary' in cardBase)) ||
-      (own != null && '--color-text-secondary' in own)
-    ) {
-      return [];
-    }
-    // Readable on the card and on the page fills inside it, where one colour
-    // does both; else on the card alone.
-    const value =
-      deriveSelectedTintText(theme.tokens, theme.localTokens, cardBase, {
-        kind: 'fill-and-page',
-        fill,
-      }) ??
-      deriveSelectedTintText(theme.tokens, theme.localTokens, cardBase, {
-        kind: 'fill',
-        fill,
-      }) ??
-      cardOwnText ??
-      THEME_TINT_TEXT;
-    return [[`${SELECTED_TEXT_SECONDARY}-${variant}`, value]];
-  });
-}
-
-/**
- * The text on the tint where it cannot be measured: the theme's own secondary
- * text, resolved where it is declared (the scope root, a Card).
- */
-const THEME_TINT_TEXT = 'var(--color-text-secondary)';
-
-/** A declaration block that sets the secondary text on the tint. */
-const TINT_TEXT_DECLARATION = `    --color-text-secondary: var(${SELECTED_TEXT_SECONDARY});`;
-
-/**
- * Where a rule's own text is measured on the tint: a Card variant rule on
- * its variant's fill, other rules on the page grounds.
- */
-function ruleTintGround(component: string, key: string): TintGround {
-  const variant = /^variant:([a-z]+)$/.exec(key)?.[1];
-  const fill =
-    component === 'card' && variant !== undefined
-      ? CARD_FILLS[variant]
-      : undefined;
-  return fill === undefined ? {kind: 'page'} : {kind: 'fill', fill};
-}
 
 /**
  * How many media surfaces of alternating modes, one inside another, a

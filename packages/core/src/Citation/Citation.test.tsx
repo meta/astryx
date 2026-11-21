@@ -12,7 +12,6 @@ import {describe, it, expect} from 'vitest';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {Citation} from './Citation';
-import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 
 // StyleX emits one deterministic atomic class per property/value pair, so an
 // element carries a probe's class exactly when it has the same declaration.
@@ -20,7 +19,6 @@ import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
 // excluded from the comparison.
 const probe = stylex.create({
   secondaryText: {color: colorVars['--color-text-secondary']},
-  textOnTint: {color: selectedTintTextVars['--_selected-text-secondary']},
   accentText: {color: colorVars['--color-text-accent']},
   badgeBackground: {backgroundColor: colorVars['--color-accent-muted']},
   consumerOverride: {color: colorVars['--color-text-accent']},
@@ -178,7 +176,7 @@ describe('Citation', () => {
     }
   });
 
-  it('uses the secondary text on the tint, not accent, in the number variant', () => {
+  it('uses the secondary text color, not accent, in the number variant', () => {
     render(
       <Citation
         source={source}
@@ -188,7 +186,7 @@ describe('Citation', () => {
       />,
     );
     const el = screen.getByTestId('citation');
-    for (const cls of atomicClasses(probe.textOnTint)) {
+    for (const cls of atomicClasses(probe.secondaryText)) {
       expect(el.classList.contains(cls)).toBe(true);
     }
     for (const cls of atomicClasses(probe.accentText)) {

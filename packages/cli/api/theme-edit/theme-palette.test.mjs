@@ -920,7 +920,7 @@ describe('every color decision is generator config', () => {
     expect(notes).not.toContain('shade 50 (');
   });
 
-  it('finds the passing shade on either side, keeps the tint at its official stop, and leaves text on the tint to Core', () => {
+  it('finds the passing shade on either side, keeps the tint at its official stop, and lifts secondary text on it', () => {
     const dark = {
       '--color-background-surface': '#101314',
       '--color-background-body': '#101314',
@@ -991,19 +991,54 @@ describe('every color decision is generator config', () => {
     const lime = map([{thing: 'accent', value: '#ccff00'}]).tokens;
     expect(lime['--color-accent'].light.stop).toBe(85);
     expect(lime['--color-accent-muted'].light.stop).toBe(90);
-    // Secondary text on the tint is Core's: it measures it from the
-    // theme's colors (`--_selected-text-secondary`), so the generator lifts
-    // none there, with or without a neutral color.
-    for (const settings of [
-      [{thing: 'accent', value: '#00704a'}],
-      [
+    // Without a neutral color the lift comes from grays grown from the
+    // base theme's own secondary text, so every accent gets one.
+    for (const seed of ['#00704a', '#7c3aed']) {
+      const pal = map([{thing: 'accent', value: seed}]);
+      const tint = /** @type {any} */ (pal.lift)['--color-accent-muted'];
+      for (const mode of /** @type {const} */ (['light', 'dark'])) {
+        expect(tint[mode].family, seed).toBe('literal');
+        expect(
+          contrast(
+            tint[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
+          ),
+          `${seed} ${mode}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // With one, secondary text on the tinted parts is lifted until it reads
+    // at 4.5:1 on the tint and under a hover, as the official theme lifts
+    // it: Neutral's own gray lands on its dark 80.
+    for (const seed of ['#2563eb', '#00704a', '#1db954', '#aec6cf']) {
+      const pal = map([
         {thing: 'neutral', value: '#808080'},
-        {thing: 'accent', value: '#2563eb'},
-      ],
-    ])
-      expect(
-        /** @type {any} */ (map(settings).lift)?.['--color-accent-muted'],
-      ).toBeUndefined();
+        {thing: 'accent', value: seed},
+      ]);
+      const lift = /** @type {any} */ (pal.lift)['--color-accent-muted'];
+      for (const mode of /** @type {const} */ (['light', 'dark']))
+        expect(
+          contrast(
+            lift[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
+          ),
+          `${seed} ${mode}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      expect(lift.light.stop, seed).toBe(
+        pal.tokens['--color-text-secondary'].light.stop,
+      );
+    }
+    const gray = /** @type {any} */ (
+      map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: '#808080'},
+      ]).lift
+    );
+    expect(gray['--color-accent-muted'].dark.stop).toBe(80);
+    // Segmented-control labels sit on the neutral track, not the tint:
+    // their lift is picked against the track (here the base has no track
+    // color, so only the tint is lifted).
+    expect(Object.keys(gray)).toEqual(['--color-accent-muted']);
     const track = {
       light: {...withText.light, '--color-neutral': '#0000000f'},
       dark: {...withText.dark, '--color-neutral': '#ffffff1a'},
@@ -1512,25 +1547,31 @@ describe('color settings, refused well', () => {
 });
 
 describe('lifted text and see-through colors', () => {
-  it('writes no copy of the text on the accent tint, and measures see-through colors as they show', async () => {
+  it('lifts every accent, lets an exact secondary text win per mode and on a part, and measures see-through colors as they show', async () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
-    // Core measures secondary text on the accent tint; the theme writes no
-    // copy of it for the parts that sit there.
-    expect(read('p.settings.ts')).not.toMatch(
-      /"variant:number": \{\s*"--color-text-secondary"/,
+    // Without a neutral color the five parts still get a lift, written as
+    // colors into the blocks the base lifts them in.
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)"/,
     );
     await themeEditSet('p', 'neutral', '#64748b', {cwd});
+    // An exact secondary text for light only, one that reads on the tint,
+    // replaces the lift in light, and keeps it in dark.
     await themeEditSet('p', '--color-text-secondary', '#333333', {
       cwd,
       mode: 'light',
     });
-    expect(read('p.settings.ts')).not.toMatch(
-      /"selected": \{\s*"--color-text-secondary"/,
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#333333, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
     );
+    // On the part, it covers numbered citations too.
     await themeEditSet('p', '--color-text-secondary', '#123456', {
       cwd,
       on: 'citation',
     });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#123456, #123456\)"/,
+    );
     // A see-through hover is measured as it shows.
     const r = await themeEditSet('p', '--color-overlay-hover', '#ffffff33', {
       cwd,
@@ -1676,13 +1717,13 @@ describe('colors and type, final checks', () => {
     }
   });
 
-  it('copies an exact secondary text into no part on the accent tint: Core measures it there', async () => {
+  it('gives an exact secondary text to the lifted parts with no color dial', async () => {
     await themeEditSet('p', '--color-text-secondary', '#333333', {
       cwd,
       mode: 'light',
     });
-    expect(read('p.settings.ts')).not.toMatch(
-      /"variant:number": \{\s*"--color-text-secondary"/,
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#333333, [^"]+\)"/,
     );
     await themeEditUndo('p', {
       cwd,

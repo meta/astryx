@@ -187,7 +187,7 @@ export interface ThemePalette {
   readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
   /** Each color token's `[light, dark]` value. */
   readonly tokens: Readonly<Record<string, readonly [string, string]>>;
-  /** Part styles that lift secondary text on the neutral track and the coloured cards, as the official themes do, by part and style key. Core measures the secondary text on the accent tint itself. */
+  /** Part styles that lift secondary text on the accent tint, the neutral track and the coloured cards, as the official themes do, by part and style key. */
   readonly components: Readonly<
     Record<string, Readonly<Record<string, PaletteLift>>>
   >;

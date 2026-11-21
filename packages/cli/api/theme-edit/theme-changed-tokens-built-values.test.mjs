@@ -110,12 +110,7 @@ describe('changedTokens', () => {
         for (const prop of all)
           expect(
             changed.some(
-              x =>
-                x.startsWith(`${prop} `) ||
-                x.startsWith(`${prop}:`) ||
-                // The root's derived values share one line.
-                (x.includes(' on the theme root') &&
-                  x.split(' on the theme root')[0].split(', ').includes(prop)),
+              x => x.startsWith(`${prop} `) || x.startsWith(`${prop}:`),
             ) ||
               (isLookToken(prop) &&
                 changed.some(x =>
@@ -147,15 +142,14 @@ describe('changedTokens', () => {
     'names a token a part sets by its rule, in each mode that moved',
     async () => {
       // (A gray neutral at the default vibrancy, then a vivid one: the
-      // readable text color the stylesheet sets for selected rows in each
-      // card colour moves, a variable Core measures.)
+      // readable text color the stylesheet sets on selected rows moves.)
       await cli([...ED, 'undo', 't', 'neutral']);
       await cli([...ED, 'undo', 't', 'vibrancy']);
       const r = await cli([...ED, 'set', 't', 'vibrancy', '90']);
       const parts = /** @type {string[]} */ (r.data.changedPartTokens);
       expect(parts.length).toBeGreaterThan(0);
       expect(parts[0]).toMatch(
-        /^--[a-z0-9_-]+ on [a-z-]+\S* \((?:light|dark)\): \S+ -> \S+$/,
+        /^--[a-z0-9-]+ on [a-z-]+\S* \((?:light|dark)\): \S+ -> \S+$/,
       );
     },
     T,

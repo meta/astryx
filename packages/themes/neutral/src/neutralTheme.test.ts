@@ -371,14 +371,25 @@ describe('neutral selected fill', () => {
     }
     return [match[1], match[2]];
   };
-  // Core measures the secondary text on the tint from the theme's colours
-  // and writes it on the theme's scope (selectedTintText.ts).
-  const selectedText =
-    /--_selected-text-secondary: (light-dark\([^;]*\));/.exec(
-      generateThemeCSS(neutralTheme).component,
-    )?.[1];
   const foregrounds = {
-    'secondary text on the tint': pair(selectedText),
+    'item selected --color-text-secondary': pair(
+      neutralTheme.components?.item?.selected?.['--color-text-secondary'],
+    ),
+    'tree-list-item selected --color-text-secondary': pair(
+      neutralTheme.components?.['tree-list-item']?.selected?.[
+        '--color-text-secondary'
+      ],
+    ),
+    'citation variant:number --color-text-secondary': pair(
+      neutralTheme.components?.citation?.['variant:number']?.[
+        '--color-text-secondary'
+      ],
+    ),
+    'file-input mode:dropzone --color-text-secondary': pair(
+      neutralTheme.components?.['file-input']?.['mode:dropzone']?.[
+        '--color-text-secondary'
+      ],
+    ),
     '--color-syntax-comment': pair(
       neutralTheme.tokens['--color-syntax-comment'],
     ),
@@ -414,32 +425,45 @@ describe('neutral selected fill', () => {
 
   // A selected row also shows the hover overlay over its fill
   // (`--color-overlay-hover`: black at 0x0D in light, white at 0x0D in dark).
-  it.each(['secondary text on the tint'] as const)(
-    '%s reads at 4.5:1 on the hovered fill',
-    name => {
-      const [light, dark] = foregrounds[name];
-      const lightHovered = composite(
-        neutralPalettes.neutral.light[0],
-        0x0d,
-        lightFill,
-      );
-      const darkHovered = composite(
-        neutralPalettes.neutral.dark[100],
-        0x0d,
-        darkFill,
-      );
-      expect(contrastRatio(light, lightHovered)).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(dark, darkHovered)).toBeGreaterThanOrEqual(4.5);
-    },
-  );
+  it.each([
+    'item selected --color-text-secondary',
+    'tree-list-item selected --color-text-secondary',
+  ] as const)('%s reads at 4.5:1 on the hovered fill', name => {
+    const [light, dark] = foregrounds[name];
+    const lightHovered = composite(
+      neutralPalettes.neutral.light[0],
+      0x0d,
+      lightFill,
+    );
+    const darkHovered = composite(
+      neutralPalettes.neutral.dark[100],
+      0x0d,
+      darkFill,
+    );
+    expect(contrastRatio(light, lightHovered)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(dark, darkHovered)).toBeGreaterThanOrEqual(4.5);
+  });
 
-  it('leaves the text on the tint to Core: no part rule sets it', () => {
+  it('scopes the lifted secondary text to selected rows, numbered citations and dropzones in the generated CSS', () => {
     const css = generateThemeCSS(neutralTheme).component;
-    for (const target of ['item', 'tree-list-item', 'citation', 'file-input']) {
-      expect(css).not.toMatch(
-        new RegExp(`\\.astryx-${target}\\[[^{]*\\{[^}]*--color-text-secondary`),
+    for (const target of [
+      'item',
+      'tree-list-item',
+      'table-row',
+      'command-palette-item',
+    ]) {
+      expect(css).toMatch(
+        new RegExp(
+          `\\.astryx-${target}\\[data-selected="selected"\\][^{]*\\{[^}]*--color-text-secondary`,
+        ),
       );
     }
+    expect(css).toMatch(
+      /\.astryx-citation\[data-variant="number"\][^{]*\{[^}]*--color-text-secondary/,
+    );
+    expect(css).toMatch(
+      /\.astryx-file-input\[data-mode="dropzone"\][^{]*\{[^}]*--color-text-secondary/,
+    );
   });
   it.each(Object.entries(foregrounds))(
     '%s reads at 4.5:1 on the fill in both modes',

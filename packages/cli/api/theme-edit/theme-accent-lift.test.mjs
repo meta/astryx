@@ -33,7 +33,7 @@ beforeAll(async () => {
 }, 300_000);
 
 afterAll(() => removeLinkedFixture(cwd));
-it('keeps the official segmented-control lift on a new accent, and leaves text on the accent tint to Core', async test => {
+it('keeps the official secondary text lift on a new accent while it reads', async test => {
   if (unbuilt) {
     console.warn(`skipped: ${unbuilt}`);
     return test.skip();
@@ -53,14 +53,13 @@ it('keeps the official segmented-control lift on a new accent, and leaves text o
   const before = lifts(
     fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
   );
-  // Neutral lifts secondary text only on segmented-control labels; Core
-  // measures the text on the accent tint itself.
-  expect(before.length).toBe(1);
+  // The lifted parts (selected rows, a dropzone, a numbered citation) and
+  // any coloured card that sets its own secondary text.
+  expect(before.length).toBeGreaterThanOrEqual(5);
   const r = await themeEditSet('t', 'accent', '#E11D48', {cwd});
-  const css = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
-  const after = lifts(css);
+  const after = lifts(
+    fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
+  );
   expect(after).toEqual(before);
-  // The new accent's tint gets the secondary text Core measured for it.
-  expect(css).toMatch(/:scope \{[^}]*--_selected-text-secondary: light-dark\(/);
   expect(r.data.styled.filter(x => /color-text-secondary/.test(x))).toEqual([]);
 }, 240_000);

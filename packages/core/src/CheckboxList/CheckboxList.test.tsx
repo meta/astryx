@@ -22,7 +22,6 @@ import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {CheckboxList} from './CheckboxList';
 import {CheckboxListItem} from './CheckboxListItem';
-import {readsTextOnTint} from '../__tests__/textOnTint';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {List} from '../List/List';
@@ -93,17 +92,6 @@ function onApplePlatform(check: () => void): void {
 }
 
 describe('CheckboxList', () => {
-  it('reads the secondary text Core measures on the tint on a checked row', () => {
-    render(
-      <CheckboxList label="Alerts" value={['sms']} onChange={() => {}}>
-        <CheckboxListItem label="Email" value="email" data-testid="email" />
-        <CheckboxListItem label="SMS" value="sms" data-testid="sms" />
-      </CheckboxList>,
-    );
-    expect(readsTextOnTint(screen.getByTestId('sms'))).toBe(true);
-    expect(readsTextOnTint(screen.getByTestId('email'))).toBe(false);
-  });
-
   it("paints a primary mouse press on a row's box at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
     render(
       <CheckboxList label="Alerts" value={[]} onChange={() => {}}>

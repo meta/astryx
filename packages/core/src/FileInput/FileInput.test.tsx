@@ -21,7 +21,6 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FileInput} from './FileInput';
-import {readsTextOnTint} from '../__tests__/textOnTint';
 import {FormLayout} from '../FormLayout';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
@@ -1093,25 +1092,6 @@ describe('FileInput', () => {
       rerender(<FileInput {...props} />);
       fireEvent.change(input, {target: {files: [file]}});
       expect(onChange).toHaveBeenCalledExactlyOnceWith(file);
-    });
-
-    it('draws the drop hint in the text Core measures on the tint while a file is dragged over', () => {
-      render(
-        <FileInput
-          label="Upload"
-          value={null}
-          onChange={vi.fn()}
-          mode="dropzone"
-        />,
-      );
-      const trigger = screen.getByRole('button', {name: 'Upload'});
-      expect(readsTextOnTint(screen.getByText('Choose file'), 'color')).toBe(
-        false,
-      );
-      fireEvent.dragEnter(trigger);
-      expect(
-        readsTextOnTint(screen.getByText('Drop files here'), 'color'),
-      ).toBe(true);
     });
 
     it('discards drag feedback when loading starts and ignores new drags until idle', () => {

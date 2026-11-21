@@ -14,8 +14,6 @@ import userEvent from '@testing-library/user-event';
 import {Table} from '../../Table';
 import {useTableSelection} from './useTableSelection';
 import {colorVars} from '../../../theme/tokens.stylex';
-import * as stylex from '@stylexjs/stylex';
-import {selectionWashTextStyles} from '../../../privateAttributes/selectionWash.stylex';
 import {defineTheme} from '../../../theme/defineTheme';
 import {generateThemeCSS} from '../../../theme/generateThemeRules';
 import type {BodyRowRenderProps, TableColumn} from '../../types';
@@ -47,13 +45,11 @@ function SelectionTable({
   getIsItemEnabled,
   getRowLabel,
   hasRowHighlight,
-  isStriped,
 }: {
   getIsItemSelectable?: (item: SelectableUser) => boolean;
   getIsItemEnabled?: (item: SelectableUser) => boolean;
   getRowLabel?: (item: SelectableUser) => string;
   hasRowHighlight?: boolean;
-  isStriped?: boolean;
 }) {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
@@ -95,51 +91,16 @@ function SelectionTable({
       data={selectableUsers}
       columns={selectableColumns}
       idKey="id"
-      isStriped={isStriped}
       plugins={{selection: selectionPlugin}}
     />
   );
 }
-
-// The style TableRow spreads for a selected row's text on the wash.
-const textOnTintClasses = (
-  stylex.props(selectionWashTextStyles.row).className ?? ''
-)
-  .split(' ')
-  // Debug class names name their source file; only the atoms matter.
-  .filter(name => name !== '' && !name.includes('__'));
 
 // =============================================================================
 // Tests
 // =============================================================================
 
 describe('useTableSelection', () => {
-  it('keeps a selected row on the text Core measures on the tint when the striping changes', async () => {
-    const user = userEvent.setup();
-    const {rerender} = render(<SelectionTable />);
-    await user.click(screen.getAllByLabelText('Select row')[0]);
-    rerender(<SelectionTable isStriped />);
-    const row = screen.getByText('Alice').closest('tr')!;
-    expect(row).toHaveAttribute('aria-selected', 'true');
-    for (const name of textOnTintClasses) {
-      expect(row.classList.contains(name)).toBe(true);
-    }
-  });
-
-  it('marks a selected row for the text on the tint only while it paints the wash', async () => {
-    const user = userEvent.setup();
-    const {rerender} = render(<SelectionTable isStriped />);
-    await user.click(screen.getAllByLabelText('Select row')[1]);
-    const row = screen.getByText('Bob').closest('tr')!;
-    expect(row).toHaveAttribute('aria-selected', 'true');
-    expect(row).toHaveAttribute('data-astryx-selection-wash');
-    rerender(<SelectionTable isStriped hasRowHighlight={false} />);
-    // Still selected, but no wash: the row keeps its own secondary text.
-    expect(row).toHaveAttribute('aria-selected', 'true');
-    expect(row).not.toHaveAttribute('data-astryx-selection-wash');
-    expect(row.style.backgroundColor).toBe('');
-  });
-
   it('renders selection checkboxes in header and body rows', () => {
     render(<SelectionTable />);
     const checkboxes = screen.getAllByRole('checkbox');

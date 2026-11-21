@@ -25,7 +25,6 @@ import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
-import {readsTextOnTint} from '../__tests__/textOnTint';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import {createSwipe} from '../Swipe/createSwipe';
 import type {Swipe} from '../Swipe/swipeHost';
@@ -775,15 +774,6 @@ describe('Item', () => {
   // ===========================================================================
   // Selected state
   // ===========================================================================
-
-  it('reads the secondary text Core measures on the tint while selected', () => {
-    const {rerender} = render(
-      <Item label="Row" isSelected data-testid="item" />,
-    );
-    expect(readsTextOnTint(screen.getByTestId('item'))).toBe(true);
-    rerender(<Item label="Row" data-testid="item" />);
-    expect(readsTextOnTint(screen.getByTestId('item'))).toBe(false);
-  });
 
   it('conveys selection via aria-current on the default div root', () => {
     // aria-selected is invalid ARIA on a generic div (axe: aria-allowed-attr),

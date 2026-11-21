@@ -13,7 +13,6 @@ import {Dialog} from '../Dialog/Dialog';
 import {CommandPaletteContext} from './CommandPaletteContext';
 import type {CommandPaletteContextValue} from './CommandPaletteContext';
 import {CommandPaletteItem} from './CommandPaletteItem';
-import {readsTextOnTint} from '../__tests__/textOnTint';
 
 const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -233,17 +232,6 @@ describe('CommandPaletteItem', () => {
       </CommandPaletteItem>,
     );
     expect(screen.getByRole('option')).toHaveAttribute('aria-disabled', 'true');
-  });
-
-  it('reads the secondary text Core measures on the tint while selected', () => {
-    const {rerender} = render(
-      <CommandPaletteItem value="test" isSelected>
-        Item
-      </CommandPaletteItem>,
-    );
-    expect(readsTextOnTint(screen.getByRole('option'))).toBe(true);
-    rerender(<CommandPaletteItem value="test">Item</CommandPaletteItem>);
-    expect(readsTextOnTint(screen.getByRole('option'))).toBe(false);
   });
 
   it('sets aria-selected when selected (not highlighted)', () => {

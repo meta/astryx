@@ -8,6 +8,7 @@
  * The signature periwinkle and neon green remain exact anchors.
  */
 
+import {parseStyleKey} from '@astryxdesign/core/utils';
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
 import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {y2kIconRegistry} from './icons';
@@ -28,6 +29,16 @@ const {
 } = y2kPaletteRefs;
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
+
+/**
+ * Secondary text on the accent tint: a selected item, tree row, table row or
+ * command, a dropzone's hint and a numbered citation. On the page it is the
+ * nearest stop that reads on the tint at rest and under a hover, over the
+ * page, a card and the muted fill. Inside a coloured card it is a dark stop,
+ * like the rest of the card's ink.
+ */
+const LIFTED_ON_PAGE = `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`;
+const LIFTED_ON_COLOURED_CARD = `light-dark(${neutral.light[30]}, ${neutral.dark[35]})`;
 
 // The theme's own text and link colours, which a part that paints a fill
 // of its own sets again (OWN_FILL_RULES).
@@ -124,6 +135,44 @@ function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
   }
   return out;
 }
+
+/** The coloured card variants: a pastel fill with dark ink in both modes. */
+const COLOURED_CARDS = [
+  'blue',
+  'cyan',
+  'gray',
+  'green',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'teal',
+  'yellow',
+];
+
+/** The selector Core gives a part's rule key. */
+function ruleSelector(part: string, key: string): string {
+  return `.astryx-${part}${parseStyleKey(key)}`;
+}
+
+/**
+ * Inside a coloured card and not inside a part with a fill of its own
+ * between that card and the element: where a part draws on the card's
+ * pastel fill. A part with its own fill above the card does not count.
+ */
+const COLOURED_CARD = `:is(${COLOURED_CARDS.map(
+  variant => `.astryx-card[data-variant="${variant}"]`,
+).join(', ')})`;
+const OWN_FILL = `:is(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
+  .map(([part, key]) => ruleSelector(part, key))
+  .join(', ')})`;
+const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} *))`;
+/**
+ * The same one level down: a coloured card inside a part with its own fill
+ * that itself sits in a coloured card. The dark stop holds two coloured
+ * cards deep.
+ */
+const IN_NESTED_COLOURED_CARD = `:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} ${OWN_FILL} *))`;
 
 const y2kSyntax = defineSyntaxTheme({
   name: 'astryx-y2k',
@@ -417,6 +466,60 @@ export const y2kTheme = defineTheme({
   },
 
   components: withOwnFillText({
+    // In light mode, secondary text falls under 4.5:1 on the selected fill (the
+    // accent tint) and under its hover. Selected rows, a dropzone's hint and
+    // a numbered citation, all on that fill, use the nearest stop that clears
+    // both.
+    item: {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'table-row': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'command-palette-item': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+      },
+    },
     // Display sizes use a Crimson Text serif, distinct from the Poppins
     // used for body/headings.
     text: {

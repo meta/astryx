@@ -62,7 +62,6 @@ import {
 import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
 import {createSharedContext} from '../../../utils/sharedContext';
 import {themeDataAttributes} from '../../../utils/themeProps';
-import {markSelectionWash} from '../../../theme/selectionWash';
 
 registerEnglishFallback(english);
 import {registerFixedHeightColumn} from '../../tableColumnAdmission';
@@ -188,8 +187,6 @@ function applyRowSelectionStyle(
   if (el.style.backgroundColor !== wash) {
     el.style.backgroundColor = wash;
   }
-  // The secondary text measured on the tint applies only under the wash.
-  markSelectionWash(el, wash !== '');
   // A pinned column paints its own opaque background over the row, so the
   // wash alone stops at the freeze line. Publishing it as the row overlay is
   // what lets useTableStickyColumns replay it on those cells — the same
