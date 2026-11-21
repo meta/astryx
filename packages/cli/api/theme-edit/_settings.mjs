@@ -7730,6 +7730,21 @@ export function compileTheme(ctx, data, base) {
         );
       });
     };
+    // (A part whose plain resting image is Core's own, a tint, is no
+    // overlay part: the shorthand replaces that image in every state. A
+    // look under an attribute state, "aria-expanded", is no plain rest.)
+    const restingImage = Object.entries(at).some(([k, val]) => {
+      const [attrs, ...rest] = k.split(' ');
+      return (
+        !rest.join(' ').trim() &&
+        attrs
+          .split(',')
+          .every(a => /^(?:variant|size|elevation|shape|density)=/.test(a)) &&
+        !/^\s*none\s*$/i.test(String(val)) &&
+        inScope(attrs)
+      );
+    });
+    if (restingImage) return;
     for (const state of ['hover', 'active']) {
       const drawn = Object.entries(at).some(([k, val]) => {
         const [attrs, ...rest] = k.split(' ');

@@ -537,6 +537,16 @@ describe('a resting background shorthand', () => {
     );
   }, 240_000);
 
+  it("gives no overlay back on a part whose resting image is Core's own tint", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('ao', {cwd, like: 'neutral'});
+    await themeEditSet('ao', 'background', '#ff0000', {
+      cwd,
+      on: 'avatar-group-overflow',
+    });
+    expect(cssOf('ao')).not.toMatch(/revert-layer/);
+  }, 240_000);
+
   it('keeps a resting background image of its own in every state', async ctx => {
     if (needBases(ctx)) return;
     for (const [name, image] of [
