@@ -13,7 +13,7 @@
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {render, cleanup, screen} from '@testing-library/react';
-import {act, useRef, useState, type RefObject} from 'react';
+import {act, Profiler, useRef, useState, type RefObject} from 'react';
 import {Popover} from './Popover';
 
 afterEach(() => {
@@ -79,6 +79,35 @@ describe('Popover children mode', () => {
     }
 
     expect(clicks()).toBe(attachedAtMount);
+  });
+
+  it('settles in a bounded number of commits when its trigger text changes once', () => {
+    let commits = 0;
+    let setCount: (count: number) => void = () => {};
+    function Parent() {
+      const [count, setCountState] = useState(1);
+      setCount = setCountState;
+      return (
+        <Profiler
+          id="popover"
+          onRender={() => {
+            commits += 1;
+          }}>
+          <Popover content={<span>Filters</span>}>
+            <button type="button">{`Filters ${count}`}</button>
+          </Popover>
+        </Profiler>
+      );
+    }
+    render(<Parent />);
+    commits = 0;
+
+    act(() => setCount(2));
+
+    // The parent's commit, then at most one for the trigger text Popover
+    // reads after it.
+    expect(commits).toBeGreaterThan(0);
+    expect(commits).toBeLessThanOrEqual(2);
   });
 
   it('attaches a trigger that the caller swaps for another component', () => {
