@@ -9,22 +9,10 @@ import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Link} from '@astryxdesign/core/Link';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {components} from '../../../generated/componentRegistry';
 import {layout} from '../../../layout.stylex';
 import {ComponentsPreview} from './ComponentsPreview';
 import {CliPreview} from './CliPreview';
 import {ThemesPreview} from './ThemesPreview';
-
-// Count of public @astryxdesign/core components (excluding hooks and hidden entries).
-// Sourced from the generated registry so the number stays accurate as the
-// library grows.
-const CORE_COMPONENT_COUNT = (components['@astryxdesign/core'] ?? []).filter(
-  c => !c.hidden && !c.name.startsWith('use'),
-).length;
-// Round down to the nearest 10 for marketing copy ("Over X components"
-// reads better than "Over 87 components" and avoids the displayed number
-// going stale every time a single component lands.
-const CORE_COMPONENT_COUNT_ROUNDED = Math.floor(CORE_COMPONENT_COUNT / 10) * 10;
 
 const styles = stylex.create({
   // Bento CSS-grid layout. Each grid cell holds a full-height
@@ -355,9 +343,14 @@ type Feature = {
 // ordered array because the visual order in the grid is not the
 // same as any obvious data order — explicit slot mapping is clearer
 // than counting indices.
-const features: Record<string, Feature> = {
+const features: {
+  components: Omit<Feature, 'title'>;
+  themes: Feature;
+  templates: Feature;
+  cli: Feature;
+} = {
+  // FeaturesShowcase adds the title: its count comes from the server page.
   components: {
-    title: `Over ${CORE_COMPONENT_COUNT_ROUNDED} components`,
     description:
       'Accessible and themeable React components with built-in spacing, dark mode, and flexible styling.',
     href: '/components',
@@ -581,9 +574,12 @@ function HeadingBlock() {
 }
 
 export function FeaturesShowcase({
+  coreComponentCount,
   templatesPreview,
   themesStore,
 }: {
+  /** Public Core components, rounded down to the nearest 10. */
+  coreComponentCount: number;
   /** The templates card preview (TemplatesPreview). */
   templatesPreview: ReactNode;
   /** The themes card store snapshot (FrozenPreview), rendered on the server. */
@@ -634,7 +630,14 @@ export function FeaturesShowcase({
           />
         </VStack>
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
-          <FeatureCard feature={features.components} isFlex insetImage />
+          <FeatureCard
+            feature={{
+              ...features.components,
+              title: `Over ${coreComponentCount} components`,
+            }}
+            isFlex
+            insetImage
+          />
           <FeatureCard feature={features.cli} />
         </VStack>
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>

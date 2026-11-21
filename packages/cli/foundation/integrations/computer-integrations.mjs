@@ -207,6 +207,8 @@ function installedNames(root) {
 export function peerProblem(pkg, release) {
   const peers = pkg.peerDependencies;
   if (!peers || typeof peers !== 'object') return null;
+  /** @type {string[]} */
+  const excluding = [];
   for (const peer of RELEASE_PEERS) {
     const range = peers[peer];
     if (typeof range !== 'string') continue;
@@ -217,11 +219,11 @@ export function peerProblem(pkg, release) {
       // A range this CLI cannot read never keeps the integration out.
       admits = true;
     }
-    if (!admits) {
-      return `it needs ${peer} ${range}, and this computer's CLI is ${release}`;
-    }
+    if (!admits) excluding.push(`${peer} ${range}`);
   }
-  return null;
+  return excluding.length === 0
+    ? null
+    : `it needs ${excluding.join(' and ')}, and this computer's CLI is ${release}`;
 }
 
 /**

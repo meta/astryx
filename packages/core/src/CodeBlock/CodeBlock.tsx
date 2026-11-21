@@ -1148,7 +1148,7 @@ export function CodeBlock({
     : isDiff
       ? languageName === 'plaintext'
         ? 'diff'
-        : `${languageName} diff`
+        : t('@astryx.codeBlock.diffLabel', {language: languageName})
       : languageName !== 'plaintext'
         ? languageName
         : null;

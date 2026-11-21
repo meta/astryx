@@ -85,12 +85,12 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a family build drops the modules it loaded from require.cache when it ends",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a base theme package a theme imports whole, to name the themes it exports by name; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
       '.import() ×2',
       'createJiti ×7',
-      'import(<computed>) ×2',
+      'import(<computed>) ×3',
       'require(<computed>)',
       'require.cache',
       'withEmptyStylesheets ×6',
@@ -495,8 +495,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, and the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs",
-    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs, and a parse check of the page's script once it reads its images from the first paint",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl', 'vm.Script'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',

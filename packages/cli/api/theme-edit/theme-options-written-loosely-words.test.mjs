@@ -229,8 +229,8 @@ describe('options written loosely', () => {
         expect(r.suggestions[0].name, args.join(' ')).toMatch(want);
         expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       }
-      // The undo line is checked as undo checks it: --only does not fit
-      // card, so the line that works leaves it out.
+      // The undo line is checked as undo checks it: --only on card, a part
+      // styled on its own already, is taken, so the line keeps it.
       const u = await cli([
         ...ED,
         'undo',
@@ -241,7 +241,9 @@ describe('options written loosely', () => {
         '--olny',
       ]);
       expect(u.error).toContain('did you mean --only?');
-      expect(u.suggestions[0].name).toMatch(/ editor undo t border --on card$/);
+      expect(u.suggestions[0].name).toMatch(
+        / editor undo t border --on card --only$/,
+      );
     },
     T,
   );

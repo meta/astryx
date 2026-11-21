@@ -95,6 +95,7 @@ import {
   typedWordTest,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {isOutsideAnyPackage} from '../../foundation/env/project-scope.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
@@ -2676,6 +2677,7 @@ export async function integrationDocTypes(integration, cwd) {
   const checked = await checkDocTypes(files, {
     packageDir: packageDir ?? cwd,
     resolveFrom: [cwd, packageDir],
+    outsideAnyPackage: isOutsideAnyPackage(cwd),
   });
   // Test fixtures no reader serves don't ship as docs: only counted.
   const report =

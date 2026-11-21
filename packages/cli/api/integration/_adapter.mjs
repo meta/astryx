@@ -15,7 +15,11 @@ import {
   forEachIntegrationDoc,
   integrationSourceForDoc,
 } from '../../foundation/discovery/component-discovery.mjs';
-import {Project} from '../../foundation/config/project.mjs';
+import {
+  computerIntegrationCandidates,
+  Project,
+  providerLedgerOf,
+} from '../../foundation/config/project.mjs';
 import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {packageDocTargets} from '../docs/_adapter.mjs';
@@ -251,4 +255,44 @@ export async function loadExampleScope(pkg, cwd) {
  */
 export function integrationExampleCode(integration) {
   return exampleCodeCheck(integration);
+}
+
+/**
+ * The copy of `spec` that `cwd` loads outside a project, as doctor reports
+ * it: the folder of the folder's own source (`own`) or a package it lists or
+ * declares, loaded or not, else of the copy installed for the computer whose peer ranges
+ * admit this CLI (one that fails to load included); else the computer copy
+ * the folder skips for its peer ranges. Null when there is none.
+ * @param {string} spec
+ * @param {string} cwd
+ * @returns {Promise<{dir: string, own: boolean} | {skipped: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate} | null>}
+ */
+export async function loadedCopy(spec, cwd) {
+  try {
+    const project = await Project.load(cwd, {core: 'project'});
+    /** @type {Array<{name?: string, __packageDir?: string, __local?: boolean}>} */
+    const loaded = project.loadedIntegrations;
+    const entry = loaded.find(i => i.name === spec);
+    if (entry?.__packageDir) {
+      return {dir: entry.__packageDir, own: entry.__local === true};
+    }
+    // A copy that did not load still decides: Project.load keeps the
+    // computer's copy out when the folder claims the name, so a declared copy
+    // whose manifest throws is the one to check.
+    for (const claim of providerLedgerOf(project).values()) {
+      const {candidate} = claim;
+      if (candidate.spec === spec || candidate.integration?.name === spec) {
+        return {dir: claim.key, own: candidate.source === 'local'};
+      }
+    }
+  } catch {
+    // The folder's own integrations cannot be read; the computer's still can.
+  }
+  const computer = computerIntegrationCandidates(cwd).filter(
+    c => c.name === spec,
+  );
+  const usable = computer.find(c => !c.incompatible);
+  if (usable) return {dir: usable.packageDir, own: false};
+  const skipped = computer.find(c => c.incompatible);
+  return skipped ? {skipped} : null;
 }

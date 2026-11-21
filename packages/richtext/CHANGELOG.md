@@ -1,5 +1,38 @@
 # @astryxdesign/richtext
 
+# 0.7.17
+
+#### New Features
+
+- In `RichTextEditor`, a Markdown block marker typed at the start of a list item now re-marks it and keeps its text: `- `, `1. `, or `[ ] ` switches the item's list between bullets, numbers, and tasks, and `# ` or `> ` takes a top-level item out of its list as a heading or a quote, the rest of the list continuing after it. Each change is one undo step, back to the marker as typed.
+
+#### Fixes
+
+- In RichTextEditor and RichTextView, a code block's language label too long for its header wraps instead of being cut off, and the code starts below the taller header, as in Markdown, so a block is as tall in edit mode as in read mode.
+- Apps that install the rich text package no longer see "Warning: @astryxdesign/richtext has N integration issue(s)" on `astryx search`, `component`, `template`, `theme`, `discover` and `upgrade`. The editor's internal plugins now live in a folder the CLI does not read as components, so the integration check reports no issues. The public components and imports are unchanged.
+- RichText text reads the way it is written, in either document, and the shared first-strong classifier reads three Arabic marks, the Rumi numerals, and the digits of Devanagari, Bengali, Tamil, Thai and other scripts by their bidi class, which changes `Markdown` output too: a line opening `०१ שלום` now reads left-to-right where it read right-to-left before. `Badge`, `Token` and `InputGroupText` read the same strong set to decide whether their own text holds any right-to-left character, so the three Arabic marks — the semicolon, the question mark and tatweel — now count there too, wherever they sit in the label. A paragraph, heading, quote or list item takes the direction of its own text at any depth, so a Hebrew paragraph in an English document flushes right with its caret following the arrow keys instead of walking backwards, and an English paragraph, list item or table cell in a Hebrew document does the mirror. Each line of a fenced code block reads its own way too, so a Hebrew comment reads right-to-left while `const x = 1;` keeps its semicolon at the end. Top-level lists, tables and code blocks keep ordering their contents in the document's direction; a nested list follows the item that holds it. The stored value now drops a `dir` that arrives on them with pasted HTML or an older document.
+- A line break typed with Shift+Enter at the end of a paragraph, list item or quote no longer saves as a backslash that comes back as a literal `\` the next time the Markdown loads. Markdown has no line break at the end of a block, so the editor leaves it out of the Markdown; a line break inside a block still saves and loads as a line break.
+
+#### Documentation
+
+- RichText: the README says that server rendering outputs no document content, because `RichTextView` and `RichTextEditor` fill their blocks on the client, and points server HTML at core `Markdown`, which renders the same Markdown document on the server (affordances only RichText draws appear in their Markdown form), or at `@astryxdesign/richtext/markdown`.
+
+#### Other Changes
+
+- Internal: the toolbar's link popover, its URL form, the link address rule, and the toolbar's inline-format helpers move into modules RichText shares internally. Apps see no change.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+- @josephfarina
+- @potatowagon
+
+---
+
 # 0.7.16
 
 #### New Features
