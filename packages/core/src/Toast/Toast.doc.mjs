@@ -19,11 +19,12 @@ export const docs = {
   ],
 
   playground: {
-    // The values useToast()'s show function sets, so the playground's toast
-    // starts as a shown info toast does.
+    // The card stays shown: the docs playground and the theme editor's live
+    // preview page render it, and a toast that hides itself would leave
+    // them empty. autoHideDuration is the show function's 5000.
     defaults: {
       body: 'Changes saved',
-      isAutoHide: true,
+      isAutoHide: false,
       autoHideDuration: 5000,
     },
   },
