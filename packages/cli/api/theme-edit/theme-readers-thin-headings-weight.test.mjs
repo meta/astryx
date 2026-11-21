@@ -105,6 +105,9 @@ describe('wild wrong writes', () => {
     expect(lines).toEqual([
       `set ${t} accent '#4f46e5'`,
       `set ${t} --color-background-body '#f9fafb' --mode light`,
+      // (The page reaches the frame and main panel too.)
+      `set ${t} background-color '#f9fafb' --on app-shell --mode light`,
+      `set ${t} background-color '#f9fafb' --on layout-content --mode light`,
       `set ${t} --color-text-primary '#111827' --mode light`,
       `set ${t} corners 6px`,
     ]);
