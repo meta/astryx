@@ -733,7 +733,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   additive
   field `iconSets` (each `{set, unmappedDefinitions, suggestions,
 unchecked}`): the optional Astryx definitions a set leaves unmapped, printed
-  as "Unmapped icon definitions (optional)"; and what a check cannot judge,
+  as "Unmapped icon meanings (optional)"; and what a check cannot judge,
   each `{icon}`, `{adapter}`, or `{entry}` with its `reason`, printed under
   "Not checked" (`architecture:cli-surface` INV35, DEC-7): an icon export
   whose module is a package `exports` target not built yet; an icon or adapter
