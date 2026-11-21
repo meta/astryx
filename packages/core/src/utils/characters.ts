@@ -54,9 +54,9 @@ export function characterCount(str: string): number {
  */
 export function firstCharacter(str: string): string {
   if (characterSegmenter) {
-    // Below U+0300, no code unit joins the unit before it, except LF after CR.
-    // If the first unit and any next unit are below U+0300, and the first is not
-    // CR, the first unit is the whole first character.
+    // A unit below U+0300 never joins a unit before it that is also below U+0300,
+    // except LF after CR. When the first unit and any next unit are below U+0300
+    // and the first is not CR, the first unit is the whole first character.
     const unit = str.charCodeAt(0);
     if (
       unit < 0x300 &&
