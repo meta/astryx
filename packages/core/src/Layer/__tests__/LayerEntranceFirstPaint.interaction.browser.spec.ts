@@ -102,7 +102,12 @@ for (const route of routes) {
   for (const placement of ['above', 'below', 'start', 'end'] as const) {
     test(`${route.name} ${placement}: the first painted frame of the entrance has its landing side, on a slow CPU`, async ({
       page,
+      browserName,
     }) => {
+      test.skip(
+        browserName !== 'chromium',
+        'CPU throttling uses a CDP session, which only Chromium has',
+      );
       await openStory(page, storybook(), route.story, {placement});
       await page.addStyleTag({
         content:

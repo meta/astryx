@@ -200,22 +200,26 @@ export function writeLayerEntranceSide(
   layer: HTMLElement,
   side: LayerEntranceSide | null,
 ): void {
-  layer.style.setProperty(
-    LAYER_ENTER_X_PROPERTY,
-    side == null ? 'initial' : String(side.x),
-  );
-  layer.style.setProperty(
-    LAYER_ENTER_Y_PROPERTY,
-    side == null ? 'initial' : String(side.y),
-  );
-  layer.style.setProperty(
-    LAYER_ENTER_ORIGIN_PROPERTY,
-    side == null ? 'initial' : `${px(side.originX)} ${px(side.originY)}`,
-  );
   // Floored, so rounding never carries the step past the anchor's edge.
   const gap = side?.gap == null ? null : Math.floor(side.gap * 1000) / 1000;
-  layer.style.setProperty(
-    LAYER_ENTER_GAP_PROPERTY,
-    gap == null ? 'initial' : `${gap}px`,
-  );
+  const values: ReadonlyArray<readonly [string, string]> = [
+    [LAYER_ENTER_X_PROPERTY, side == null ? 'initial' : String(side.x)],
+    [LAYER_ENTER_Y_PROPERTY, side == null ? 'initial' : String(side.y)],
+    [
+      LAYER_ENTER_ORIGIN_PROPERTY,
+      side == null ? 'initial' : `${px(side.originX)} ${px(side.originY)}`,
+    ],
+    [LAYER_ENTER_GAP_PROPERTY, gap == null ? 'initial' : `${gap}px`],
+  ];
+  // The entrance plays on the layer or on its direct child. WebKit does not
+  // pass a registered, non-inherited property to a child that asks to
+  // inherit it, so each of those elements gets the side of its own.
+  for (const element of [layer, ...Array.from(layer.children)]) {
+    if (!(element instanceof HTMLElement)) {
+      continue;
+    }
+    for (const [name, value] of values) {
+      element.style.setProperty(name, value);
+    }
+  }
 }
