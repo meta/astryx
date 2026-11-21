@@ -18,7 +18,9 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   MODULE_EXTENSIONS,
   PAGE_EXTENSIONS,
+  REACT_UNKNOWN_PROP,
   RenderError,
+  pageOutputWarnings,
   renderPage,
 } from '../../foundation/render/render-page.mjs';
 import {
@@ -35,6 +37,7 @@ import {clip, locate, textEdits, textRuns} from '../../foundation/render/markup-
 import {isPackageName} from '../../foundation/identity/provider-identity.mjs';
 import {cliCommand} from '../../foundation/render/file-header.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
@@ -48,8 +51,7 @@ import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
-import {resolveProjectTypeScript} from '../../foundation/discovery/project-typescript.mjs';
-import {judgeCoreProps, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
+import {judgeCoreProps, projectTypeScript, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
@@ -664,12 +666,6 @@ function coreDocsReader(dir) {
   return {load, of};
 }
 
-/**
- * The console line React prints for a prop that reaches a DOM element it
- * does not know, with the prop's name.
- */
-const REACT_UNKNOWN_PROP = /React does not recognize the `([^`]+)` prop|Unknown event handler property `([^`]+)`/;
-
 /** How many of a component's props a warning names before it counts the rest. */
 const PROPS_LISTED = 12;
 
@@ -695,7 +691,7 @@ async function propNameWarnings(names, page, docsOf) {
   const dir = path.dirname(page);
   const projectDir = runChoice(dir).inProject ? (findPackageRoot(dir) ?? dir) : dir;
   const shown = (/** @type {string} */ file) => path.relative(dir, file).split(path.sep).join('/');
-  const {found} = await judgeCoreProps({
+  const {found, skipped, reason} = await judgeCoreProps({
     projectDir,
     uses: names.map(use => ({...use, file: shown(use.file), path: use.file})),
     pages: [...new Set(names.map(use => use.file))],
@@ -708,10 +704,7 @@ async function propNameWarnings(names, page, docsOf) {
       }
       return documented;
     },
-    typescript: () => {
-      const compiler = resolveProjectTypeScript([projectDir]);
-      return compiler?.ts ? {ts: compiler.ts} : {skipped: 'the project has no TypeScript to read the types with'};
-    },
+    typescript: () => projectTypeScript([projectDir]),
   });
   /** @type {Map<string, {line: number, column: number}>} */
   const elementOf = new Map(names.map(use => [`${shown(use.file)}\0${use.line}\0${use.column}`, use.element]));
@@ -733,10 +726,15 @@ async function propNameWarnings(names, page, docsOf) {
     if ([...props.values()].some(suggestion => suggestion === null)) {
       const takes = propNamesOf((await docsOf(name)) ?? []);
       const rest = takes.length - PROPS_LISTED;
-      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more` : ''}`;
+      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more (\`${getCliInvocation(dir)} component ${name} --package @astryxdesign/core\` lists them)` : ''}`;
     }
     warnings.push({code: 'unknown-prop', message: `${message}.`});
   }
+  // A check that could not run says so once, with doctor's reason and what
+  // to install: silence would read as every prop being right.
+  // Outside a project a step that installs into a project does not apply.
+  const why = runChoice(dir).inProject ? skipped : (reason ?? skipped);
+  if (why) warnings.push({code: 'props-not-checked', message: `Core prop names: ${why}`});
   return {warnings, props: new Set(found.map(use => use.prop))};
 }
 
@@ -785,11 +783,15 @@ export async function renderToFile({cwd, input, output, title, keepClassNames = 
     // The check only warns: a project whose types cannot be read still exports.
   }
   // React's own console line for a prop the warning names says less, cut
-  // short, so it goes.
-  page.warnings = page.warnings.filter(warning => {
-    const prop = warning.code === 'page-output' ? REACT_UNKNOWN_PROP.exec(warning.message) : null;
+  // short, so it goes, before the page output is capped: it never hides a
+  // line the page printed itself.
+  const kept = (page.logs ?? []).filter(log => {
+    const prop = REACT_UNKNOWN_PROP.exec(log.text);
     return !prop || !named.props.has(prop[1] ?? prop[2]);
   });
+  const at = page.warnings.findIndex(warning => warning.code === 'page-output');
+  page.warnings = page.warnings.filter(warning => warning.code !== 'page-output');
+  page.warnings.splice(at === -1 ? page.warnings.length : at, 0, ...pageOutputWarnings(kept));
   page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input, docsOf)), ...named.warnings);
   for (const {name, dir} of page.fromSet) {
     let version = null;
