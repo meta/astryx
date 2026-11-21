@@ -23,6 +23,8 @@ import {
   themeEditUndo,
 } from './theme-edit.mjs';
 import {withAccepted} from './_settings.mjs';
+import {editorKeptContrastAt} from './_adapter.mjs';
+import {acceptedContrastCheck} from '../doctor/theme-checks.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -235,6 +237,16 @@ describe('a contrast problem in one variant, kept as designed', () => {
           undo: 'astryx experimental theme editor set bv contrast-accepted none --on badge --when variant:info --ground badge --mode light',
         }),
       ]);
+      // doctor lists it too, read from the editor settings, with its variant.
+      expect(
+        acceptedContrastCheck(await editorKeptContrastAt(cwd)),
+      ).toMatchObject({
+        id: 'theme-accepted-contrast',
+        status: 'info',
+        message: expect.stringMatching(
+          /bv: badge \(variant info\) on badge in light at [\d.]+:1 \(matches the original's info label exactly\)/,
+        ),
+      });
     },
     T,
   );
@@ -249,6 +261,12 @@ describe('a contrast problem in one variant, kept as designed', () => {
         when: 'variant:info',
       });
       expect(info(await themeEditShow('bv', {cwd})).length).toBeGreaterThan(0);
+      // doctor says so too: the acceptance no longer holds.
+      expect(
+        acceptedContrastCheck(await editorKeptContrastAt(cwd))?.message,
+      ).toMatch(
+        /no longer holds?, because a color changed[^]*bv: badge \(variant info\)/,
+      );
       await themeEditUndo('bv', {cwd});
       expect(info(await themeEditShow('bv', {cwd}))).toEqual([]);
       // Taken back by its own undo line.

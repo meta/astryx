@@ -2444,6 +2444,38 @@ export async function checkAppThemes(cwd) {
   return checks;
 }
 
+/**
+ * The contrast problems the app's editor themes keep as designed, each with
+ * its variant, ratio and reason: listed, so an acceptance is never out of
+ * sight. One whose colors changed since covers nothing, and is named apart
+ * (the problem is open again). Null when none keeps one.
+ * @param {Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect?: boolean}>} kept
+ *   each acceptance, with its theme, as the editor reads it
+ * @returns {DoctorCheck | null}
+ */
+export function acceptedContrastCheck(kept) {
+  /** @param {typeof kept[number]} a */
+  const line = a =>
+    `${a.slug}: ${a.part}${a.when ? ` (${a.when.replace(/:/g, ' ').replace(/\+/g, ', ')})` : ''} on ${a.ground} in ${a.mode} at ${a.ratio}:1 (${a.reason})`;
+  const held = kept.filter(a => a.inEffect !== false).map(line);
+  const lapsed = kept.filter(a => a.inEffect === false).map(line);
+  if (!held.length && !lapsed.length) return null;
+  const parts = [
+    held.length
+      ? `${held.length} contrast problem${held.length > 1 ? 's are' : ' is'} kept as designed: ${held.join('; ')}`
+      : '',
+    lapsed.length
+      ? `${lapsed.length} kept contrast problem${lapsed.length > 1 ? 's' : ''} no longer ${lapsed.length > 1 ? 'hold' : 'holds'}, because a color changed, and ${lapsed.length > 1 ? 'are problems' : 'is a problem'} again: ${lapsed.join('; ')}`
+      : '',
+  ].filter(Boolean);
+  return {
+    id: 'theme-accepted-contrast',
+    label: 'Contrast kept as designed',
+    status: lapsed.length ? 'warn' : 'info',
+    message: parts.join('. '),
+  };
+}
+
 /** @param {string} file */
 function readPackageVersion(file) {
   const pkg = readPackageJson(file);
