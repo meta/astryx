@@ -105,19 +105,26 @@ export const luxTheme = defineTheme({extends: neutralTheme, name: 'lux', tokens:
     const warn = vi
       .spyOn(logger, 'warn')
       .mockImplementation(m => void warned.push(String(m)));
+    /** @type {any} */
+    let r;
     try {
-      const r = await themeBuild('lux.theme.mjs', {}, {cwd});
-      expect(r?.type).toBe('theme.build');
+      r = await themeBuild('lux.theme.mjs', {}, {cwd});
     } finally {
       warn.mockRestore();
     }
+    expect(r?.type).toBe('theme.build');
+    const line =
+      /^text in segmented-control-item \("Week"\) is 1\.47:1 in dark .*; fix: set --color-text-secondary to #[0-9a-f]{6} /;
+    // (In the receipt, for --json, and printed in every report.)
     expect(
-      warned.some(w =>
-        /^\[warn\] text in segmented-control-item \("Week"\) is 1\.47:1 in dark .*; fix: set --color-text-secondary to #[0-9a-f]{6} /.test(
-          w,
-        ),
-      ),
+      r.data.warnings.some((/** @type {string} */ w) => line.test(w)),
     ).toBe(true);
+    expect(warned.some(w => line.test(w.replace(/^Warning: /, '')))).toBe(true);
+    // (One line per fix: the texts it reads again are counted on it.)
+    const fixes = r.data.warnings
+      .filter((/** @type {string} */ w) => /^text in .*; fix: /.test(w))
+      .map((/** @type {string} */ w) => w.slice(w.indexOf('; fix: ')));
+    expect(new Set(fixes).size).toBe(fixes.length);
   }, 300_000);
 
   it('are a doctor warning for an added local theme', async () => {

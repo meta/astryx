@@ -2000,6 +2000,8 @@ export async function checkAppThemes(cwd) {
     const lines = [];
     /** @type {Set<string>} */
     const fixes = new Set();
+    /** The local themes the measurement did not read. @type {string[]} */
+    const unmeasured = [];
     for (const theme of localThemes) {
       const loaded = await resolveRecordedTheme(
         state.projectDir,
@@ -2011,31 +2013,47 @@ export async function checkAppThemes(cwd) {
           typeof v === 'object' &&
           typeof (/** @type {{name?: unknown}} */ (v).name) === 'string',
       );
-      if (!built) continue;
-      for (const p of await tokenContrastWarnings(
-        state.projectDir,
-        /** @type {any} */ (built),
-      )) {
+      const found = built
+        ? await tokenContrastWarnings(
+            state.projectDir,
+            /** @type {any} */ (built),
+          )
+        : null;
+      if (!found) {
+        unmeasured.push(theme.slug);
+        continue;
+      }
+      for (const p of found) {
         lines.push(`${theme.slug}: ${p.text}`);
         if (p.fix) fixes.add(`${theme.slug}: ${p.fix}`);
       }
     }
+    const notMeasured = unmeasured.length
+      ? `Not checked, because the theme editor's measurement could not read ${unmeasured.length === 1 ? 'it' : 'them'} here: ${unmeasured.join(', ')}.`
+      : '';
     checks.push(
       lines.length > 0
         ? {
             id: 'theme-contrast',
             label: 'Theme text contrast',
             status: 'warn',
-            message: `${lines.length} ${lines.length === 1 ? 'text reads' : 'texts read'} below 4.5:1 with the theme's color tokens: ${lines.join('; ')}.`,
+            message: `${lines.length} ${lines.length === 1 ? 'text reads' : 'texts read'} below 4.5:1 with the theme's color tokens: ${lines.join('; ')}.${notMeasured ? ` ${notMeasured}` : ''}`,
             ...(fixes.size ? {fix: `${[...fixes].join('; ')}.`} : {}),
           }
-        : {
-            id: 'theme-contrast',
-            label: 'Theme text contrast',
-            status: 'pass',
-            message:
-              'The color tokens of the added local themes keep their text at 4.5:1 or more.',
-          },
+        : unmeasured.length
+          ? {
+              id: 'theme-contrast',
+              label: 'Theme text contrast',
+              status: 'info',
+              message: notMeasured,
+            }
+          : {
+              id: 'theme-contrast',
+              label: 'Theme text contrast',
+              status: 'pass',
+              message:
+                'The color tokens of the added local themes keep their text at 4.5:1 or more.',
+            },
     );
   }
 

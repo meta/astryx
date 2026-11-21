@@ -6205,6 +6205,16 @@ async function themeBuildInternal(
     warningMessages.push(w);
     logger.warn(`Warning: ${w}`);
   }
+  // The text contrast the theme's color tokens give, measured as the theme
+  // editor's check measures a setting: a warning only, so the build's exit
+  // status stays the same.
+  for (const p of (await (
+    await import('../../theme-edit/_theme-contrast.mjs')
+  ).tokenContrastWarnings(cwd, resolvedTheme)) ?? []) {
+    const w = `${p.text}${p.fix ? `; fix: ${p.fix}` : ''}`;
+    warningMessages.push(w);
+    logger.warn(`Warning: ${w}`);
+  }
 
   // A named pipe, a device or a socket where an output goes is never read
   // or replaced: an open of one can wait for good. A check refuses it too.
@@ -6323,14 +6333,6 @@ async function themeBuildInternal(
       );
     }
   }
-  // The text contrast the theme's color tokens give, measured as the theme
-  // editor's check measures a setting: a warning only, so the build's exit
-  // status stays the same.
-  if (!report.compact)
-    for (const p of await (
-      await import('../../theme-edit/_theme-contrast.mjs')
-    ).tokenContrastWarnings(cwd, resolvedTheme))
-      logger.warn(`[warn] ${p.text}${p.fix ? `; fix: ${p.fix}` : ''}`);
 
   // From the outputs' project root, whatever folder the build ran in: the
   // snippet is relative to a file in that project's src/.

@@ -36,13 +36,13 @@ export function plainFix(fix) {
  * part census cannot be read gives none.
  * @param {string} cwd
  * @param {{name: string, tokens?: Record<string, unknown>, components?: Record<string, any>, __onDark?: {tokens?: Record<string, unknown>}}} theme
- * @returns {Promise<Array<{text: string, fix: string | null}>>}
+ * @returns {Promise<Array<{text: string, fix: string | null}> | null>}
  */
 export async function themeTokenContrast(cwd, theme) {
   const {context} = await import('./_context.mjs');
   const {contrastProblems, themeResolved} = await import('./_settings.mjs');
   const ctx = await context(cwd);
-  if (ctx.unchecked) return [];
+  if (ctx.unchecked) return null;
   const {core} = ctx.project;
   const defaults = core.defineTheme({name: 'astryx-defaults'});
   const base = {
@@ -71,27 +71,39 @@ export async function themeTokenContrast(cwd, theme) {
     res,
     {base},
   );
-  return found.flatMap(p =>
-    typeof p !== 'string' && /^text in /.test(p.text)
-      ? [{text: p.text, fix: plainFix(p.fix)}]
-      : [],
-  );
+  // (Texts one fix reads again are one line: the first text, and how many
+  // more there are.)
+  /** @type {Map<string, {text: string, fix: string | null, more: number}>} */
+  const byFix = new Map();
+  for (const p of found) {
+    if (typeof p === 'string' || !/^text in /.test(p.text)) continue;
+    const fix = plainFix(p.fix);
+    const seen = byFix.get(fix ?? p.text);
+    if (seen) seen.more++;
+    else byFix.set(fix ?? p.text, {text: p.text, fix, more: 0});
+  }
+  return [...byFix.values()].map(({text, fix, more}) => ({
+    text: more
+      ? `${text} (and ${more} more text${more === 1 ? '' : 's'} the same fix reads)`
+      : text,
+    fix,
+  }));
 }
 
 /**
  * The lines `theme build` and `doctor` show for a theme's token contrast.
  * They only warn, so nothing the measurement meets stops a build or a
  * doctor run: a project the editor cannot read, an old Core, a package the
- * editor needs that is not installed, or a token that is not text gives no
- * lines.
+ * editor needs that is not installed, or a token that is not text gives
+ * null, nothing measured.
  * @param {string} cwd
  * @param {Parameters<typeof themeTokenContrast>[1]} theme
- * @returns {Promise<Array<{text: string, fix: string | null}>>}
+ * @returns {Promise<Array<{text: string, fix: string | null}> | null>}
  */
 export async function tokenContrastWarnings(cwd, theme) {
   try {
     return await themeTokenContrast(cwd, theme);
   } catch {
-    return [];
+    return null;
   }
 }
