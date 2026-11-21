@@ -24,6 +24,9 @@ import {
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
 import {OVERRIDES} from './_part-words.mjs';
+import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
+import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
+import {outOfBounds, valueAsked} from './_how-values.mjs';
 import {
   BAR_PARTS,
   TEXT_LOOKS,
@@ -135,65 +138,6 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  */
 
 /**
- * Words of other languages the docs ship, and the English word each means.
- * Matched as whole words, or anywhere for scripts without spaces.
- * @type {Array<[RegExp, string]>}
- */
-const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
-  [
-    [
-      'botones?|boutons?|knöpfe|knopf|кнопк[аиу]|botões|botão|botao|pulsanti|bottoni|الأزرار|أزرار|زر|बटन',
-      '按钮|ボタン|버튼',
-      'buttons',
-    ],
-    [
-      'tarjetas?|cartes|karten?|карточк[аи]|schede|carte',
-      '卡片|カード|카드',
-      'cards',
-    ],
-    [
-      'redondead[oa]s?|redond[oa]s|arrondi[es]*|abgerundet\\p{L}*|скругл\\p{L}*|arredondad\\p{L}*|arrotondat\\p{L}*|مستدير\\p{L}*|गोल',
-      '圆|丸く|丸い|둥글게|둥근',
-      'rounded',
-    ],
-    // ("eckiger": more angular, a step, never all the way square.)
-    ['eckiger(?:e[nrs]?)?', '(?!)', 'sharper'],
-    ['cuadrad[oa]s|carrés|eckig(?:e\\p{L}*)?', '四角|方形|네모', 'square'],
-    ['esquinas?|coins|ecken|углы', '角', 'corners'],
-    [
-      'sombras?|ombres?|ombra|ombre|schatten|тен[ьи]|ظل',
-      '阴影|影|그림자',
-      'shadow',
-    ],
-    [
-      'entfernen|quitar|enlever|supprimer|убрать|togliere|rimuovere|remover|हटाओ',
-      '去掉|删除|消して|없애',
-      'remove',
-    ],
-    ['цвет\\p{L}*|colore|farbe', '颜色|色', 'color'],
-    ['акцент\\p{L}*', '强调', 'accent'],
-    ['más|mais|mehr|più|более', '更', 'more'],
-    // "sans" is a typeface word before serif or font.
-    [
-      'sin|sans(?![\\s-]*(serif|fonts?|typefaces?))|ohne|без|sem|senza',
-      '没有|无',
-      'without',
-    ],
-    [
-      'bordes?|bordures?|rand|rahmen|границ\\p{L}*|bordas?|bordi',
-      '边框|枠線',
-      'border',
-    ],
-    ['azul(es)?|bleus?|blaue?n?|син\\p{L}*|blu', '蓝色?|青い|青く|青', 'blue'],
-    ['rojos?|rouges?|rote?n?|красн\\p{L}*', '红色?|赤い', 'red'],
-    ['verdes?|verts?|grüne?n?|зелён\\p{L}*', '绿色?|緑', 'green'],
-  ].map(([words, cjk, en]) => [
-    new RegExp(`(?<!\\p{L})(?:${words})(?!\\p{L})|${cjk}`, 'gu'),
-    ` ${en} `,
-  ])
-);
-
-/**
  * Words a near miss is corrected to (one or two letters off), besides the
  * one-word target names Core's catalog gives (partLexicon): design words,
  * and the words the part overrides read.
@@ -202,46 +146,6 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
 const FONTSOURCE_NAMES = new Set(
   FONTSOURCE_FAMILIES.map(name => name.toLowerCase().replace(/\s+/g, ' ')),
 );
-
-const DESIGN_WORDS = [
-  'leading',
-  // A part's name, never a near miss of "radius".
-  'radio',
-  'radios',
-  'header',
-  'headers',
-  'input',
-  'inputs',
-  'checkbox',
-  'toggle',
-  'sidebar',
-  'progress',
-  'shadow',
-  'shadows',
-  'border',
-  'borders',
-  'background',
-  'rounded',
-  'rounder',
-  'corners',
-  'radius',
-  'padding',
-  'spacing',
-  'gradient',
-  'color',
-  'colour',
-  'bigger',
-  'smaller',
-  'darker',
-  'lighter',
-  'thicker',
-  'italic',
-  'uppercase',
-  'compact',
-  'accent',
-  'remove',
-  'outline',
-];
 
 /** Short forms people type, and the word each means. */
 const SHORT = wordTable(
@@ -427,73 +331,6 @@ function grayStop(family, stop) {
   );
 }
 
-/** Hues people name, as fills a part can take. */
-const HUES = wordTable(
-  /** @type {Record<string, string>} */ ({
-    red: '#dc2626',
-    orange: '#f97316',
-    amber: '#f59e0b',
-    yellow: '#eab308',
-    lime: '#65a30d',
-    green: '#16a34a',
-    mint: '#34d399',
-    minty: '#34d399',
-    teal: '#0d9488',
-    cyan: '#0891b2',
-    blue: '#2563eb',
-    navy: '#1e3a8a',
-    indigo: '#4f46e5',
-    purple: '#7c3aed',
-    charcoal: '#333333',
-    violet: '#7c3aed',
-    pink: '#db2777',
-    magenta: '#c026d3',
-    brown: '#92400e',
-    gray: '#9ca3af',
-    grey: '#9ca3af',
-    black: '#000000',
-    white: '#ffffff',
-    cream: '#fef3c7',
-    beige: '#f5f5dc',
-    silver: '#c0c0c0',
-    // (The color names designers use for a palette, beside the hues.)
-    terracotta: '#c2603d',
-    sage: '#87a96b',
-    rust: '#b7410e',
-    mustard: '#d4a017',
-    olive: '#6b8e23',
-    burgundy: '#800020',
-    maroon: '#7f1d1d',
-    coral: '#f87171',
-    salmon: '#fa8072',
-    sand: '#d6c6a5',
-    sky: '#38bdf8',
-    taupe: '#8b7d6b',
-    slate: '#64748b',
-    emerald: '#059669',
-    forest: '#166534',
-    ruby: '#be123c',
-    plum: '#7e22ce',
-    lavender: '#c4b5fd',
-    peach: '#fdba74',
-    ivory: '#fffff0',
-    khaki: '#c3b091',
-    ochre: '#cc7722',
-    copper: '#b87333',
-    gold: '#ca8a04',
-    bronze: '#a16207',
-    mauve: '#b784a7',
-    tan: '#d2b48c',
-    paper: '#f7f3e9',
-    // (Names said in two words, joined by the reader into one: "off-white",
-    // "ink blue", "grass green", "safety orange", "blue-gray".)
-    offwhite: '#faf8f3',
-    inkblue: '#1e3a5f',
-    grassgreen: '#4caf50',
-    safetyorange: '#ff6700',
-    bluegray: '#64748b',
-  }),
-);
 /**
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
@@ -607,116 +444,6 @@ function colorsIn(c) {
 }
 
 /**
- * The sides of one part's border said in a list joined as one ask: "a
- * border on top and sides", "the left and right edges", "a #ddd border on
- * top, left and right" (`top & left & right`), so no list or clause split
- * takes a side away. Only in a clause that names a border, an edge or an
- * outline: a list of padding sides is the spacing reader's.
- * @param {string} q
- * @returns {string}
- */
-function joinSideLists(q) {
-  // ("above and below" are the top and the bottom.)
-  const SIDE = String.raw`(?:top|bottom|left|right|sides|above|below)`;
-  return q.replace(
-    new RegExp(
-      // (Each side may take its own "on" and "the": "the top and the
-      // bottom", "on the left and on the right".)
-      String.raw`\b${SIDE}(?:(?:\s*,\s*and\s+|\s*,\s*|\s+and\s+)(?:on\s+)?(?:the\s+)?${SIDE}\b)+`,
-      'gi',
-    ),
-    (m, at, all) => {
-      // (The list's own clause: from the comma, semicolon or full stop
-      // before it to the one after it.)
-      const text = String(all);
-      const from =
-        Math.max(
-          text.lastIndexOf(',', at - 1),
-          text.lastIndexOf(';', at - 1),
-          text.lastIndexOf('.', at - 1),
-        ) + 1;
-      const after = text.slice(at + m.length).search(/[,;]|\.(?:\s|$)/);
-      const clause = text.slice(
-        from,
-        after < 0 ? undefined : at + m.length + after,
-      );
-      // (The list is the border's when the look it follows is a border,
-      // "a border on top and sides", or a border follows it, "top and
-      // bottom borders"; "a border and padding top and bottom 6px" lists
-      // the padding's sides.)
-      const before = clause
-        .slice(0, at - from)
-        .match(
-          /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
-        );
-      const owner = before?.at(-1) ?? '';
-      // (A look said right after the list is its own: "a border and top
-      // and bottom padding 6px" lists the padding's sides, and the clause
-      // keeps both.)
-      const next = text.slice(at + m.length).match(/^\s*([a-z]+)/i)?.[1] ?? '';
-      const nextLook =
-        /^(?:borders?|edges?|outlines?|lines?|padding|margins?|spacing|gaps?|radius|corners?|space)$/i.test(
-          next,
-        );
-      // (Only a border's or a padding's sides are listed: "corners on top
-      // and bottom" are every corner, read by the corner reader.)
-      const sided =
-        /^(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)$/i;
-      // (A comma or an "and" before the last side, with a look after it
-      // and another before the list, ends the first item there: "a border
-      // on top and bottom padding 8px" is the border's top and the
-      // padding's bottom. The sides before that comma are the earlier look's.)
-      const lastComma =
-        /(?:\s*,\s*(?:and\s+)?|\s+and\s+)(?:on\s+)?(?:the\s+)?[a-z]+$/i.exec(m);
-      // (Only a list said as where the earlier look goes, "on top", "along
-      // the top", "on its top", or right after it, "border top": "a border and top and bottom padding 6px"
-      // lists the padding's sides.)
-      const placed =
-        /\b(?:on|at|along|across|around|over|down|by)(?:\s+(?:the|its|their))?\s*$/i.test(
-          text.slice(0, at),
-        ) ||
-        /\b(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space|shadows?|glows?|gradients?|underlines?|corners?|text|bold|uppercase)\s*$/i.test(
-          text.slice(0, at),
-        );
-      // (Whatever look came before, a shadow or a glow too: only a border's
-      // or a spacing's sides are joined.)
-      // (Corners said on a side, "rounded corners on the left", are the
-      // corner reader's: the list stays as said.)
-      if (/^(?:corners?|radius)$/i.test(owner)) return m;
-      // (A width, style or color between the look and the side, "border
-      // 1px top, bottom padding 8px", is read as it always was: the list
-      // stays as said.)
-      if (
-        /\b(?:borders?|edges?|outlines?|lines?|padding|margins?)(?:\s+(?!(?:top|bottom|left|right|sides|above|below|and|or|on|at|along|across|around|over|down|by|the|its|their|with|of|to)\b)[#\w.%()-]+)+\s*$/i.test(
-          text.slice(0, at),
-        )
-      )
-        return m;
-      if (nextLook && placed && lastComma) {
-        const head = m.slice(0, lastComma.index);
-        const joinedHead = sided.test(owner)
-          ? head.replace(
-              /\s*,\s*(?:and\s+)?(?:on\s+)?(?:the\s+)?|\s+and\s+(?:on\s+)?(?:the\s+)?/gi,
-              ' & ',
-            )
-          : head;
-        return joinedHead + m.slice(lastComma.index);
-      }
-      // (Any look's list is kept whole, "top and bottom padding 6px", so
-      // each side said takes the look: the border reader and the padding
-      // reader each read the sides.)
-      const look = nextLook ? sided.test(next) : sided.test(owner);
-      return look
-        ? m.replace(
-            /\s*,\s*(?:and\s+)?(?:on\s+)?(?:the\s+)?|\s+and\s+(?:on\s+)?(?:the\s+)?/gi,
-            ' & ',
-          )
-        : m;
-    },
-  );
-}
-
-/**
  * The sides of the one side list a clause holds, joined by joinSideLists
  * ("top & bottom"), in the order said; a side word outside it, a part's
  * own name ("top nav"), is not one. Empty when the clause holds no list.
@@ -752,59 +479,6 @@ const SIDE_ORDER = /** @type {Record<number, string>} */ ({
   3: 'top, then left and right, then bottom',
   4: 'top, right, bottom, left',
 });
-
-/**
- * A border color written one per side, as CSS writes it (`#eee #eee #ddd`,
- * `rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25)`): two to four written
- * colors (hex or a color function) with nothing but spaces between them,
- * as typed; null for a clause without one, or with more than four.
- * @param {string} text a clause, as typed
- * @returns {string[] | null}
- */
-function sideColorsIn(text) {
-  const lower = text.toLowerCase();
-  // (A CSS keyword color in the run, "#ddd #ddd transparent", "white", is
-  // one of its sides, as typed; a run needs one written color, a hex or a
-  // color function, so a list of color words is never read as sides.)
-  const written = [
-    ...lower.matchAll(
-      /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)|\b[a-z]+\b/g,
-    ),
-  ]
-    .map(m => /** @type {[number, string]} */ ([m.index ?? 0, m[0]]))
-    .filter(
-      ([, v]) =>
-        /^[#a-z]/.test(v) &&
-        (v === 'transparent' || v === 'currentcolor' || parseColor(v) != null),
-    );
-  for (let i = 0; i < written.length;) {
-    let j = i;
-    while (
-      j + 1 < written.length &&
-      /^\s+$/.test(
-        lower.slice(written[j][0] + written[j][1].length, written[j + 1][0]),
-      )
-    )
-      j++;
-    const run = written.slice(i, j + 1);
-    // (A color word that names the next look, "#dddddd white background",
-    // is that look's color, never a side of the run.)
-    while (
-      run.length &&
-      /^[a-z]+$/.test(run[run.length - 1][1]) &&
-      /^\s+(?:backgrounds?|bg|fills?|text|fonts?|colou?rs?|links?|headings?|titles?|labels?|icons?|accents?)\b/.test(
-        lower.slice(run[run.length - 1][0] + run[run.length - 1][1].length),
-      )
-    )
-      run.pop();
-    if (run.length >= 2 && run.some(([, v]) => /^#|\(/.test(v)))
-      return run.length > 4
-        ? null
-        : run.map(([at, v]) => text.slice(at, at + v.length));
-    i = j + 1;
-  }
-  return null;
-}
 
 /** A pronoun or a chat word ("button it", "cards thx", "plz"). */
 const PRONOUN_WORD =
@@ -1215,56 +889,6 @@ const ROLE_VOCAB = ['success', 'warning', 'danger', 'info'].map(role => {
     .filter(Boolean);
   return [role, [role, ...vocab].map(w => w.replace(/s$/, ''))];
 });
-
-/**
- * A typed value no page could show, for the properties whose range is
- * plain: a line height that draws lines over each other (under 0.8) or
- * far apart (over 4), a padding, margin or gap wider than any screen
- * (over 512px), a font size under 6px or over 256px, a border over 64px.
- * The reason, or null for a value in range (and for any other property).
- * @param {{thing: string, value?: unknown}} st
- * @returns {string | null}
- */
-function outOfBounds(st) {
-  const v = String(st.value ?? '').trim();
-  const m = /^(-?\d*\.?\d+)(px|rem|em|%)?$/.exec(v);
-  if (!m) return null;
-  const n = Number(m[1]);
-  const unit = m[2] ?? '';
-  const px =
-    unit === 'rem' || unit === 'em' ? n * 16 : unit === 'px' ? n : null;
-  const thing = st.thing;
-  if (/^line-height$|^--text-[a-z0-9-]+-leading$/.test(thing)) {
-    const ratio = unit === '' ? n : unit === '%' ? n / 100 : null;
-    if (ratio != null && (ratio < 0.5 || ratio > 4))
-      return `a line height of ${v} ${ratio < 0.5 ? 'draws each line over the one before it' : 'leaves lines far apart'}; a line height reads between 0.5 and 4`;
-    return null;
-  }
-  if (
-    /^(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?$|^--spacing-/.test(
-      thing,
-    )
-  ) {
-    const each = v.split(/\s+/);
-    if (px != null && Math.abs(px) > 512)
-      return `${thing} ${v} is wider than any screen; a ${thing.replace(/^--/, '')} reads up to 512px`;
-    void each;
-    return null;
-  }
-  if (
-    /^font-size$|^--text-[a-z0-9-]+-size$/.test(thing) &&
-    px != null &&
-    (px < 6 || px > 256)
-  )
-    return `a font size of ${v} ${px < 6 ? 'cannot be read' : 'is wider than the screen for a word'}; a font size reads between 6px and 256px`;
-  if (
-    /^border(?:-[a-z]+)?-width$|^--border-width$/.test(thing) &&
-    px != null &&
-    px > 64
-  )
-    return `a border of ${v} covers the part; a border reads up to 64px`;
-  return null;
-}
 
 /**
  * A hex color written with the wrong number of digits ("#12345").
@@ -2869,66 +2493,6 @@ export function partLexicon(ctx) {
 /** Words for a color the theme generates. */
 const ROLE_WORDS =
   /\b(accent|brand|primary colou?r|main colou?r|key colou?r|errors?|danger|destructive|success|positive|warnings?|caution|info|notices?|neutrals?)\b|\bprimary\s*:?\s*(?=#|rgb|hsl|oklch)/;
-
-/** States a word names. */
-const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
-  [/\b(hover(ed|ing)?|mouse ?over)\b/, 'hover'],
-  [/\b(focus(ed|ing)?|on focus)\b/, 'focus'],
-  [/\b(disabled|inactive)\b/, 'disabled'],
-  // (A switch's "on color", "on state": its checked look.)
-  [
-    /\b(checked|ticked|when on|turned on|toggled on|is on|on[- ](?:colou?r|state|look))\b/,
-    'checked',
-  ],
-  [
-    /\b(selected|active (tab|nav|item|link|page))\b|\bactive\b(?=.*\b(nav|tab|item)\b)/,
-    'selected',
-  ],
-  // ("Pressed" is its own word: a toggle's pressed state, else active.)
-  [/\b(press(ed|es)?|on press)\b/, 'pressed'],
-  [
-    /\b(click(ed|s)?|tap(ped|s)?(?! targets?)|on click|when i click|active)\b/,
-    'active',
-  ],
-  [/\b(typing|type in|tab to|tabbing|keyboard focus)\b/, 'focus'],
-  [/\b(after i check|once checked|i check)\b/, 'checked'],
-  // ("Blue selection" said of a part: its selected items. The text
-  // highlight, said with no part, is read before states are.)
-  [/\b(picked|chosen|choose|pick|selections?)\b/, 'selected'],
-  [
-    /\b(invalid|errors? state|has an error|with an error|with errors|in (?:an )?error(?: state)?|erroring|errored)\b/,
-    'invalid',
-  ],
-  // ("valid inputs", "fields in a success state": the success status.)
-  [/\b(valid|validated|in (?:a )?success(?: state)?)\b/, 'valid'],
-  // ("after visiting", "once you've been there": the visited look.)
-  [
-    /\b(visited|(?:after|once|when) (?:i'?ve |you'?ve |they'?ve )?(?:visiting|visited|been (?:there|clicked)))\b/,
-    'visited',
-  ],
-  // ("The open select", "when open": a part shown open.)
-  [
-    /\bopened\b|\b(?:when|while|once|if) (?:it'?s |they'?re |it is |they are )?open\b|\bthe open\b/,
-    'open',
-  ],
-  [/\bexpanded\b/, 'expanded'],
-  // (The option a list points at, by keyboard or pointer.)
-  [/\b(highlighted|keyboard[- ]highlighted)\b/, 'highlighted'],
-  // (A page or step shown as the one you are on: aria-current.)
-  [/\bcurrent\b/, 'current'],
-  // Words for states a part may not have: the answer says so.
-  [/\bread-?only\b/, 'readonly'],
-  [/\bindeterminate\b/, 'indeterminate'],
-  [
-    /\bloading\b(?! (bars?|placeholders?|skeletons?|spinners?|states?|indicators?))/,
-    'loading',
-  ],
-  [
-    /\b(unchecked|not checked|unticked|when off|turned off|toggled off|switched off|is off)\b/,
-    'unchecked',
-  ],
-  [/\b(unselected|not selected|non-selected)\b/, 'unselected'],
-]);
 
 /**
  * One clause, read.
@@ -33240,59 +32804,6 @@ export function draftAnswer(ctx, env, question) {
     else result.splice(0, result.length, note);
   }
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
-}
-
-/**
- * The property a question asks the value of ("how much padding …", "how
- * rounded are …", "what color is …"), or null when it is not one.
- * @param {string} q
- * @returns {string | null}
- */
-export function valueAsked(q) {
-  // Only the question part ("how rounded are cards? make them 12px").
-  const t = q.toLowerCase().trim().split('?')[0];
-  if (
-    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped|strong|faint|soft|blurry)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill|focus ring|focus outline|ring|outline|height|width)s?|which (?:colou?r|font))\b/.test(
-      t,
-    )
-  )
-    return null;
-  // "what is the focus ring of inputs": the ring the part draws when
-  // focused (a box-shadow or an outline, as Core draws it there).
-  if (/\b(?:focus (?:ring|outline)|rings?|outlines?)\b/.test(t))
-    return 'focus-ring';
-  if (/\b(round|rounded|radius|corners?)\b/.test(t)) return 'border-radius';
-  if (/\b(opacity|transparent|opaque)\b/.test(t)) return 'opacity';
-  if (
-    /\b(font family|typeface)\b|\bwhat(?:'s| is)?(?: the| my)?(?: [a-z-]+)? font\b(?! size| weight)|\bwhich font\b/.test(
-      t,
-    )
-  )
-    return 'font-family';
-  if (/\bgap\b/.test(t)) return 'gap';
-  // "how tall are the buttons", "what is the height of buttons".
-  if (/\b(height|tall)\b/.test(t)) return 'height';
-  if (
-    /\b(padding|spacing|space|room|density|dense|roomy|spacious|compact|tight|airy|crowded|cramped)\b/.test(
-      t,
-    )
-  )
-    return 'padding';
-  if (/\bshadows?\b/.test(t)) return 'box-shadow';
-  if (/\b(background|fill|bg)\b/.test(t)) return 'background-color';
-  // (How strong or faint a border is, its color; how thick, its width.)
-  if (/\bborders?\b/.test(t))
-    return /\b(colou?r|strong|faint|dark|light|visible)\b/.test(t)
-      ? 'border-color'
-      : 'border-width';
-  if (/\bfont size|text size|how big\b/.test(t)) return 'font-size';
-  if (/\b(bold|weight)\b/.test(t)) return 'font-weight';
-  // "what color is the primary button": the color; which one (its fill or
-  // its text) the part decides (draftAnswer reads the part facts).
-  if (/\b(colou?r|dark|light)\b/.test(t)) return 'color';
-  // "how thick are dividers": a line's thickness is its border width.
-  if (/\bhow (?:thick|thin)\b|\bthickness\b/.test(t)) return 'border-width';
-  return null;
 }
 
 /** Words for the operating system's own font. */

@@ -54,7 +54,8 @@ import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
+import {draftAnswer, partLexicon} from './_how-question.mjs';
+import {valueAsked} from './_how-values.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
