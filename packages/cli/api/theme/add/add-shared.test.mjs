@@ -698,6 +698,25 @@ describe('theme add with a shared theme', () => {
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
   });
 
+  it('adds the theme but not editor state when a file stands where its folder goes, and says so', async () => {
+    fs.writeFileSync(path.join(app, 'themes'), 'not a folder\n');
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean', {editor: true});
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.workingFiles).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(/themes is a file, not a folder/),
+    });
+    expect(fs.readFileSync(path.join(app, 'themes'), 'utf8')).toBe(
+      'not a folder\n',
+    );
+    fs.rmSync(path.join(app, 'themes'));
+  });
+
   it('adds the theme but not editor state whose theme source has edits of its own, and says why', async () => {
     writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean', {editor: true});
     fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});

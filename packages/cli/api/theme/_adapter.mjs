@@ -2118,7 +2118,15 @@ export async function addSharedThemeToApp(source, options) {
             theme.exportName,
             name,
           ) ?? (await sharedEditorProblem(staged.editor.dir, name)));
+    // (A file where the editor's folder goes, a `themes` file at the app
+    // root, holds no folder to copy into: the theme is added without the
+    // editor state.)
+    const editorBlocked = [editorRoot, editorDir].find(
+      at => fs.existsSync(at) && !fs.statSync(at).isDirectory(),
+    );
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
+    else if (staged.editor && editorBlocked)
+      editorNote = `${relFrom(cwd, editorBlocked)} is a file, not a folder; it is left as it is`;
     else if (staged.editor) {
       // (Read before anything is moved, so a folder it cannot read leaves
       // the app as it was and adds the theme without the editor state.)
