@@ -27,6 +27,7 @@ import {
   CORE_GENERATED,
   CORE_SOURCES,
   coreBuildIsStale,
+  checkoutLockDir,
   coreBuildLockDir,
   coreRunLeaseDir,
   earlierLiveRuns,
@@ -325,6 +326,21 @@ describe('who runs the Core build helper', () => {
     };
     walk(path.join(REPO_ROOT, 'packages/cli'));
     expect(importers).toEqual([]);
+  });
+});
+
+describe('checkoutLockDir', () => {
+  it('names the same lock for every process of a checkout, whatever its temp folder', () => {
+    const before = process.env.TMPDIR;
+    try {
+      process.env.TMPDIR = path.join(os.tmpdir(), 'one');
+      const first = checkoutLockDir('/work/a', 'x.lock');
+      process.env.TMPDIR = path.join(os.tmpdir(), 'two');
+      expect(checkoutLockDir('/work/a', 'x.lock')).toBe(first);
+    } finally {
+      if (before === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = before;
+    }
   });
 });
 
