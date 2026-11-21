@@ -794,12 +794,13 @@ function keepAnchorClear(
  * stand when it left the layer in place; otherwise the side is read after
  * the placement. Only an anchored layer has a side.
  *
- * The write waits for the layer's first resize observation. It runs after
- * the next layout and before that frame's paint, also when the show runs in
- * an animation frame callback. So the entrance starts from its side, and the
- * read finds layout clean. A write in the show's own task would leave style
- * dirty for the reads that follow it there (moving focus in, measuring touch
- * targets), and each would restyle the layer once more.
+ * The write waits for the layer's next animation frame or its first resize
+ * observation, whichever comes first. Both run before that frame's paint;
+ * the resize observation also covers a show inside an animation frame
+ * callback. So the entrance starts from its side. A write in the show's own
+ * task would leave style dirty for the reads that follow it there (moving
+ * focus in, measuring touch targets), and each would restyle the layer once
+ * more.
  *
  * `observeResizeAfterLayout` cannot serve here, for two reasons. It answers
  * an element its shared observer already watches in a microtask, inside the
@@ -827,14 +828,28 @@ function writeEntranceSide(
       anchor == null ? null : (known ?? readLayerEntranceSide(layer, anchor)),
     );
   };
-  const Observer = layer.ownerDocument.defaultView?.ResizeObserver;
-  if (Observer == null) {
+  const view = layer.ownerDocument.defaultView;
+  const Observer = view?.ResizeObserver;
+  if (view == null || Observer == null) {
     write();
     return;
   }
-  const observer = new Observer(function writeEntranceSideOnResize() {
+  let isWritten = false;
+  const writeOnce = () => {
+    if (isWritten) {
+      return;
+    }
+    isWritten = true;
     observer.disconnect();
+    view.cancelAnimationFrame(frame);
     write();
+  };
+  // WebKit can deliver the first resize observation after a slow first
+  // frame's paint. The next animation frame runs before that paint, so the
+  // side reaches the first frame of a show from a press in every engine.
+  const frame = view.requestAnimationFrame(writeOnce);
+  const observer = new Observer(function writeEntranceSideOnResize() {
+    writeOnce();
   });
   observer.observe(layer);
 }
