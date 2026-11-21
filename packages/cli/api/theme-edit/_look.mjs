@@ -178,6 +178,39 @@ export function partValue(components, part, keys, m, when = null) {
 }
 
 /**
+ * The fill a part's own style paints in a block: a background image that
+ * is one opaque gradient (it paints over the color under it, and is
+ * measured where text sits), else its background color; null for none.
+ * @param {Look['components']} components
+ * @param {string | null | undefined} part @param {Mode} m
+ * @param {string | null} [block]
+ */
+function ownFill(components, part, m, block = null) {
+  if (!part) return null;
+  const color = partValue(
+    components,
+    part,
+    ['backgroundColor', 'background'],
+    m,
+    block,
+  );
+  const image = partValue(components, part, ['backgroundImage'], m, block);
+  // One opaque gradient paints over the color under it: text sits on it.
+  if (typeof image === 'string' && opaqueGradient(image)) return image;
+  return color;
+}
+
+/**
+ * Whether a background image is one linear or radial gradient of opaque
+ * stops: the contrast measure reads it where text sits.
+ * @param {string} image
+ */
+const opaqueGradient = image =>
+  /^(linear|radial)-gradient\(/.test(image.trim()) &&
+  (image.match(/gradient\(/g) ?? []).length === 1 &&
+  !/rgba?\([^)]*,\s*0?\.\d|hsla\(|transparent|#[0-9a-f]{8}\b/i.test(image);
+
+/**
  * The opaque color a value shows over the page, or null.
  * @param {string | null} v @param {Rgb | null} page
  * @returns {Rgb | null}
@@ -243,13 +276,15 @@ function textProblems(look) {
       const mode = /** @type {Mode} */ (m);
       const s = p[side];
       const block = pairBlock(look.map, p);
-      const own = partValue(
-        styles,
-        s.target,
-        side === 'fg' ? ['color'] : ['backgroundColor', 'background'],
-        mode,
-        block,
-      );
+      // The ground is the part's own fill, else the fill the text's own
+      // part paints under it (a header cell's on a card).
+      const own =
+        side === 'fg'
+          ? partValue(styles, s.target, ['color'], mode, block)
+          : (ownFill(styles, s.target, mode, block) ??
+            (p.fg.target !== s.target
+              ? ownFill(styles, p.fg.target, mode, block)
+              : null));
       if (own != null) return colorIn(own, tokens[mode], mode) ?? own;
       let tok = s.tokens[0];
       // Core's media surface (a toast, a lightbox) draws the text it holds
@@ -307,13 +342,15 @@ function textProblems(look) {
         }
       : null;
     const ownFg = partValue(components, p.fg.target, ['color'], mode, block);
-    const ownBg = partValue(
-      components,
-      p.bg.target,
-      ['backgroundColor', 'background'],
-      mode,
-      block,
-    );
+    const ownBg =
+      ownFill(components, p.bg.target, mode, block) ??
+      (p.fg.target !== p.bg.target
+        ? ownFill(components, p.fg.target, mode, block)
+        : null);
+    const bgPart =
+      ownFill(components, p.bg.target, mode, block) != null
+        ? p.bg.target
+        : p.fg.target;
     // A text token the text's part, or the part it sits on, sets for
     // itself draws it: the part's own line, not the theme's token.
     const tok = p.fg.tokens[0] ?? null;
@@ -324,7 +361,7 @@ function textProblems(look) {
           ) ?? null)
         : null;
     const part =
-      ownBg != null ? p.bg.target : ownFg != null ? p.fg.target : tokenPart;
+      ownBg != null ? bgPart : ownFg != null ? p.fg.target : tokenPart;
     const token = ownFg == null && !tokenPart ? tok : null;
     const on = ownBg == null ? (p.bg.tokens[0] ?? null) : null;
     // A record keeps only a color the theme's author set: a color the
@@ -757,6 +794,125 @@ function selectedProblems(look) {
   return [...out.values()];
 }
 
+/**
+ * Text on a hover fill a part's own style gives (`':hover':
+ * {backgroundColor}`): measured with the text the part draws there, in
+ * each mode, as Core's census measures it only at rest.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function hoverTextProblems(look) {
+  const {res, components, pairs} = look;
+  /** @type {Map<string, LookProblem>} */
+  const out = new Map();
+  for (const p of pairs) {
+    const part = p.fg.target;
+    if (!part || p.bg.target !== part) continue;
+    const block = pairBlock(look.map, p);
+    for (const m of look.modes) {
+      const fillValue = ownHover(components, part, m, block);
+      if (fillValue == null) continue;
+      // The tokens the part's own block sets, over the theme's.
+      /** @type {Record<string, string>} */
+      const tokens = {...res[m]};
+      for (const b of ['base', block])
+        for (const inner of [
+          b ? components?.[part]?.[b] : null,
+          b ? components?.[part]?.[b]?.[`@${m}`] : null,
+        ])
+          if (inner && typeof inner === 'object')
+            for (const [k, v] of Object.entries(inner))
+              if (k.startsWith('--') && typeof v === 'string') tokens[k] = v;
+      const page = shown(colorIn(`var(${PAGE})`, tokens, m), null);
+      const fill = shown(colorIn(fillValue, tokens, m), page);
+      const hover = /** @type {any} */ (
+        components?.[part]?.[block ?? 'base'] ?? components?.[part]?.base
+      )?.[':hover'];
+      const tok = p.fg.tokens[0];
+      const text =
+        (hover && typeof hover.color === 'string' ? hover.color : null) ??
+        partValue(components, part, ['color'], m, block) ??
+        (tok ? `var(${tok})` : null);
+      const fg = fill ? shown(colorIn(text, tokens, m), fill) : null;
+      if (!fill || !fg) continue;
+      const r = ratio(fg, fill);
+      if (r >= TEXT) continue;
+      const name = `${part}${block ? ` (${block})` : ''}`;
+      const key = `${name}|${m}`;
+      if (out.has(key)) continue;
+      out.set(key, {
+        kind: 'part-text',
+        mode: m,
+        part,
+        parts: [name],
+        ratio: fixed(r),
+        needs: TEXT,
+        message: `text on ${name}'s hover fill is ${fixed(r)}:1 in ${m} (needs ${TEXT}): give its ':hover' style text that reads, or a fill for each mode`,
+      });
+    }
+  }
+  return [...out.values()];
+}
+
+/**
+ * Whether a background value paints an image or a gradient: a `url()` or
+ * any gradient, each `var()` read from the theme's tokens (its own local
+ * ones included).
+ * @param {string} v @param {Record<string, string>} tokens
+ */
+function isPattern(v, tokens) {
+  let value = v;
+  for (let i = 0; i < 8 && /var\(--/.test(value); i++)
+    value = value.replace(
+      /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g,
+      (_, name, fallback) => tokens[name] ?? fallback ?? '',
+    );
+  return /url\(|gradient\(/.test(value);
+}
+
+/**
+ * Text on an image a part's own style paints (a `url()` background): it is
+ * not measured, so it is said, never passed as clean.
+ * @param {Look} look
+ * @returns {LookProblem[]}
+ */
+function partImageProblems(look) {
+  /** @type {LookProblem[]} */
+  const out = [];
+  for (const [part, blocks] of Object.entries(look.components ?? {})) {
+    if (!blocks || typeof blocks !== 'object') continue;
+    const v = partValue(
+      look.components,
+      part,
+      ['backgroundImage', 'background'],
+      'light',
+    );
+    if (typeof v !== 'string' || !isPattern(v, look.res.light)) continue;
+    // One opaque gradient is measured; a see-through sheen over a fill the
+    // part sets is measured on that fill.
+    if (!/url\(/.test(v) && opaqueGradient(v)) continue;
+    if (
+      !/url\(/.test(v) &&
+      Object.values(blocks).some(
+        (/** @type {any} */ b) =>
+          b &&
+          typeof b === 'object' &&
+          [b, b['@light'], b['@dark']].some(
+            x => x && typeof x === 'object' && x.backgroundColor != null,
+          ),
+      )
+    )
+      continue;
+    out.push({
+      kind: 'page-image',
+      mode: 'both',
+      part,
+      message: `${part} paints an image under its content; text on it is not measured: give text on it a plain fill, or check it by eye`,
+    });
+  }
+  return out;
+}
+
 /** The bars and panels a page is built from. */
 const PAGE_BARS = [
   'app-shell-header',
@@ -1120,7 +1276,17 @@ function chartProblems(look) {
   if (![PAGE, SURFACE, '--color-accent'].some(t => look.own.has(t))) return [];
   if ([...look.own].some(t => looks(t) && !coreCopy(look, t))) return [];
   const derived = Object.keys(filledColors(look)).filter(looks).sort();
-  if (!derived.length) return [];
+  // The palette cannot derive a set that reads and stays apart here: the
+  // charts still keep Core's colors, and only the author can choose them.
+  if (!derived.length)
+    return [
+      {
+        kind: 'charts',
+        mode: 'both',
+        token: '--color-data-categorical-blue',
+        message: `charts keep Core's own colors while the theme sets its own, and the theme's colors give no chart set that reads and stays apart: set the --color-data-categorical-* colors yourself`,
+      },
+    ];
   return [
     {
       kind: 'charts',
@@ -1145,6 +1311,8 @@ export function lookProblems(look) {
     ...text.problems,
     ...barTextProblems(look),
     ...selectedProblems(look),
+    ...hoverTextProblems(look),
+    ...partImageProblems(look),
     ...hoverProblems(look),
     ...fontProblems(look),
     ...chartProblems(look),
@@ -1274,7 +1442,7 @@ export function lookProblems(look) {
   }
   // Text on an image the app paints its page with is not measured: said,
   // never passed as clean.
-  if (app?.themed && app.pageImage)
+  if (app?.themed && app.pageImage && isPattern(app.pageImage.value, res.light))
     out.push({
       kind: 'page-image',
       mode: 'both',
@@ -1607,7 +1775,8 @@ export function lookRepair(look, problems) {
       .map(g => ({g, c: shown(colorIn(`var(${g})`, res[mode], mode), page)}))
       .filter(x => x.c != null);
     for (const t of p.parts ?? []) {
-      if (own.has(t)) continue;
+      // (A chart color the theme copied from Core's is Core's: it moves.)
+      if (own.has(t) && !coreCopy(look, t)) continue;
       const c = shown(colorIn(`var(${t})`, res[mode], mode), page);
       if (!c) continue;
       const moved = nearestLightness(c, f =>
@@ -1698,7 +1867,11 @@ export function lookRepair(look, problems) {
     // parts: a menu row's hover would show the bar's tint on the menu's
     // own fill. They take the theme's own tints from the same const.
     for (const tint of BAR_TINTS) {
-      if (partValue(look.components, p.part, [tint], 'light') == null) continue;
+      if (
+        partValue(look.components, p.part, [tint], 'light') == null &&
+        partValue(look.components, p.part, [tint], 'dark') == null
+      )
+        continue;
       const tl = colorIn(`var(${tint})`, res.light, 'light');
       const td = colorIn(`var(${tint})`, res.dark, 'dark');
       const own =
