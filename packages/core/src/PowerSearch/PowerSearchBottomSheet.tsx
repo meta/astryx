@@ -944,8 +944,8 @@ export function PowerSearchBottomSheet({
   const [fieldPickerOrigin, setFieldPickerOrigin] = useState<
     'manage' | 'trigger'
   >(() => (isOpen && isEntryAddFilter ? 'trigger' : 'manage'));
-  // The current step, read by the sheets' close reports and by a removal that
-  // decides where to speak.
+  // The current step, read by the sheets' close reports and by the discard
+  // confirmation's close.
   const stepRef = useRef(step);
   useLayoutEffect(() => {
     stepRef.current = step;
@@ -1060,14 +1060,19 @@ export function PowerSearchBottomSheet({
   // receives it even when the first move could not land. With no control
   // named, the closing steps return focus as the flow does.
   const stepReturnTargetRef = useRef<HTMLElement | null>(null);
+  // A flow that closed, however it closed, returns focus as the flow does:
+  // a target named before the close never carries past it.
+  const isFlowOpenRef = useCommittedRef(step != null);
   const stepFinalFocusRef = useMemo<React.RefObject<HTMLElement | null>>(
     () => ({
       get current() {
         const named = stepReturnTargetRef.current;
-        return named?.isConnected === true ? named : finalFocusRef.current;
+        return isFlowOpenRef.current && named?.isConnected === true
+          ? named
+          : finalFocusRef.current;
       },
     }),
-    [finalFocusRef],
+    [finalFocusRef, isFlowOpenRef],
   );
   const placeFocus = (element: HTMLElement | null | undefined) => {
     if (element == null) {

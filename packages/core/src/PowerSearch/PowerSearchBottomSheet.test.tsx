@@ -4258,6 +4258,28 @@ describe('PowerSearch step changes move focus and speak from the handler (archit
     expect(row).toHaveFocus();
   });
 
+  it('returns focus to the trigger when the field becomes disabled after a canceled creation from the entry Add filter', () => {
+    const {rerender} = setup({filters: []});
+    openSheet();
+    // Add filter opens directly: the field has no filters to manage.
+    tapRow('Author');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+    // Cancel returned to Add filter and named the Author row.
+    expect(within(sheet()).getByRole('button', {name: 'Author'})).toHaveFocus();
+    rerender(
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+        isDisabled
+      />,
+    );
+    settleSheets();
+    expect(isSheetOpen()).toBe(false);
+    expect(trigger()).toHaveFocus();
+  });
+
   it('moves focus once to a one-tap filter added from the keyboard, and speaks the addition once', async () => {
     const spy = mockModalDialogs();
     try {
