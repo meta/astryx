@@ -181,15 +181,14 @@ describe('a text size or weight on a part that holds its text', () => {
   );
 
   it(
-    'is refused with each token where the text reads several (a title and a subtitle)',
+    'goes into the main text token where the text reads several (a title and a subtitle)',
     async () => {
       fs.writeFileSync(file(), fresh);
       const r = await set(['font-size', '20px', '--on', 'top-nav-heading']);
-      expect(r.error).toMatch(/never reaches it/);
-      expect(lines(r)).toEqual([
-        "set t --text-large-size 20px --on top-nav-heading",
-        "set t --text-supporting-size 20px --on top-nav-heading",
-      ]);
+      expect(r.error).toBeUndefined();
+      expect(declsOn('.astryx-top-nav-heading')).toContain(
+        '--text-large-size: 20px',
+      );
     },
     T,
   );
