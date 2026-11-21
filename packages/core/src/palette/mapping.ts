@@ -1527,6 +1527,17 @@ export function mapPalette(
         return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
       }),
     );
+    // The inverted error fill (an error toast's), which the official theme
+    // leaves to Core: the danger color's shade nearest Core's own in each
+    // mode, so the toast follows the danger color as Core draws it (its
+    // text takes the readable side of Core's media surface).
+    if (word === 'error') {
+      put(
+        '--color-background-error-inverted',
+        f.id,
+        nearCore('--color-background-error-inverted', f.id),
+      );
+    }
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(
