@@ -6275,7 +6275,25 @@ async function changeOnce(
       );
     }
   }
-  const compiledBefore = compileTheme(ctx, data, base);
+  // (Settings whose colors were changed by hand away from a palette kept
+  // as saved cannot be built: a change that brings them back is the way
+  // back, compared with nothing built before.)
+  let beforeUnbuilt = false;
+  const compiledBefore = (() => {
+    try {
+      return compileTheme(ctx, data, base);
+    } catch (e) {
+      if (
+        /** @type {any} */ (e)?.code !== E.ERR_PALETTE_GENERATION ||
+        !paletteRecipeUnknown(ctx.project.cwd, slug)
+      )
+        throw e;
+      beforeUnbuilt = true;
+      return /** @type {ReturnType<typeof compileTheme>} */ (
+        /** @type {unknown} */ ({tokens: {}, components: {}})
+      );
+    }
+  })();
   // The build notes the theme had before this change: only new ones are
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
@@ -6348,7 +6366,9 @@ async function changeOnce(
           exactTokens(data),
         ).lines,
         changedPartTokens: r.changedParts ?? [],
-        styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
+        styled: beforeUnbuilt
+          ? []
+          : styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
         leftOut: [],
@@ -6750,7 +6770,8 @@ async function changeOnce(
     !alsoReplaced.length &&
     !covered.length &&
     !longhands.length &&
-    !covers.length
+    !covers.length &&
+    !beforeUnbuilt
   ) {
     const trial = compileTheme(ctx, data, base);
     const raw = styledChanges(compiledBefore, trial, base);
@@ -6784,12 +6805,11 @@ async function changeOnce(
   const sizeNotes =
     /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
       .sizeNotes ?? [];
-  const styled = styledChanges(
-    compiledBefore,
-    compiledAfter,
-    base,
-    drawnAtRest,
-  );
+  // (Nothing built before a change from unbuildable settings: no styles
+  // are compared.)
+  const styled = beforeUnbuilt
+    ? []
+    : styledChanges(compiledBefore, compiledAfter, base, drawnAtRest);
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
