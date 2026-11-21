@@ -21,6 +21,14 @@ import {
   userConfigDir,
 } from '../foundation/env/user-dirs.mjs';
 
+/** Package-manager folder settings that would point outside the run's home. */
+export const PACKAGE_MANAGER_HOMES = [
+  'PNPM_HOME',
+  'COREPACK_HOME',
+  'BUN_INSTALL',
+  'YARN_GLOBAL_FOLDER',
+];
+
 /** The environment variable that names the run's home folder to workers. */
 export const TEST_HOME_ENV = 'ASTRYX_TEST_HOME';
 
@@ -109,6 +117,9 @@ export function moveUserHome(home, tmp, env = process.env) {
   env.APPDATA = path.join(home, 'AppData', 'Roaming');
   env.LOCALAPPDATA = path.join(home, 'AppData', 'Local');
   env.npm_config_cache = path.join(home, '.npm');
+  // Package managers that keep folders of their own outside the settings
+  // above. Unset, each takes its default under the moved home folder.
+  for (const key of PACKAGE_MANAGER_HOMES) delete env[key];
   env.TMPDIR = tmp;
   env.TEMP = tmp;
   env.TMP = tmp;

@@ -13,6 +13,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {userCacheDir, userConfigDir} from '../foundation/env/user-dirs.mjs';
 import {tempFolderOf} from '../foundation/fs/path-safety.mjs';
 import {
+  PACKAGE_MANAGER_HOMES,
   TEST_HOME_ENV,
   foldersOutside,
   gitGlobalConfig,
@@ -30,6 +31,8 @@ describe('the run home folder', () => {
     const tmp = path.join(os.tmpdir(), 'made-up-tmp');
     /** @type {Record<string, string | undefined>} */
     const env = {
+      PNPM_HOME: '/somewhere/else/.local/share/pnpm',
+      BUN_INSTALL: '/somewhere/else/.bun',
       HOME: '/somewhere/else',
       USERPROFILE: '/somewhere/else',
       XDG_CACHE_HOME: '/somewhere/cache',
@@ -59,6 +62,8 @@ describe('the run home folder', () => {
       const rel = path.relative(home, String(env[key]));
       expect(rel.startsWith('..') || path.isAbsolute(rel)).toBe(false);
     }
+    // Each takes its default under the moved home folder.
+    for (const key of PACKAGE_MANAGER_HOMES) expect(env[key]).toBeUndefined();
   });
 
   it('sits beside the temp folder, which stays a temp folder', () => {
