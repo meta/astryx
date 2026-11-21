@@ -12084,8 +12084,17 @@ export function draftAnswer(ctx, env, question) {
     for (let k = i + 1; k < clauses.length; k++) {
       const o = clauses[k];
       if (joinOf.get(o)?.sep === 'break') break;
-      // (The next mode's head starts its own run.)
+      // (The next mode's head starts its own run, and a page head's run
+      // ends at a clause that names the other mode: what follows takes
+      // the nearer mode, as said.)
       if (MODE_PAGE_HEAD.test(o.text)) break;
+      if (
+        MODE_PAGE_HEAD.test(c.text) &&
+        o.mode &&
+        o.mode !== c.mode &&
+        !o.except
+      )
+        break;
       if (
         o.mode ||
         o.except ||
