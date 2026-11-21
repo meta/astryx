@@ -7141,22 +7141,37 @@ async function changeOnce(
     longhands.length ||
     alsoReplaced.length,
   );
+  // The entries this change removed that undo puts back: undo leaves out
+  // one the editor no longer accepts, so the note never promises it.
+  const removedBefore = [
+    ...new Set([...typedBefore, ...longhands, ...alsoReplaced]),
+  ];
+  const refusedBefore = new Set(
+    shorthand && removedBefore.length
+      ? storedProblems(ctx, slug, {...data, settings: removedBefore})
+          .filter(p => !p.noEffect)
+          .map(p => p.setting)
+      : [],
+  );
+  const bringsBack = removedBefore.filter(x => !refusedBefore.has(x));
   /** @type {string[]} */
   const notes = [
     ...(shorthand && !r.unchanged && sidesStep
       ? [
-          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${written.map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} ${[
-            sidesChanged.length === written.length
-              ? `takes back all ${written.length}`
-              : sidesChanged.length
-                ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes or moves`
+          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${written.map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} ${
+            [
+              sidesChanged.length === written.length
+                ? `takes back all ${written.length}`
+                : sidesChanged.length
+                  ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes or moves`
+                  : null,
+              bringsBack.length
+                ? `brings back ${bringsBack.map(describe).join(', ')}`
                 : null,
-            [...typedBefore, ...longhands, ...alsoReplaced].length
-              ? `brings back ${[...new Set([...typedBefore, ...longhands, ...alsoReplaced])].map(describe).join(', ')}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(' and ')}`,
+            ]
+              .filter(Boolean)
+              .join(' and ') || 'takes back this change'
+          }`,
         ]
       : []),
     ...(typedBefore.length

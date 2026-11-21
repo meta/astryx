@@ -486,4 +486,33 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'never promises undo brings back a hand-edited padding the editor refuses',
+    async () => {
+      const file = join(cwd, 'themes', 't', 't.settings.json');
+      const before = readFileSync(file, 'utf8');
+      const d = JSON.parse(before);
+      d.settings = [
+        {
+          thing: 'padding',
+          value: '2px 6px',
+          source: 'property',
+          on: 'dropdown-menu',
+        },
+      ];
+      writeFileSync(file, JSON.stringify(d, null, 2));
+      try {
+        const notes = (await set('2px 6px')).join('\n');
+        expect(saved()).toEqual(['padding-block 2px', 'padding-inline 6px']);
+        expect(notes).not.toMatch(/brings back padding = 2px 6px/);
+        expect(notes).toMatch(/undo t takes back all 2/);
+        await themeEditUndo('t', {cwd});
+        expect(saved()).toEqual([]);
+      } finally {
+        writeFileSync(file, before);
+      }
+    },
+    T,
+  );
 });
