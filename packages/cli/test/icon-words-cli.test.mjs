@@ -27,8 +27,12 @@ const RETIRED = [
   {word: 'icon pack', pattern: /\b(?:icon[- ])?packs?\b/i},
 ];
 
-/** The one sentence that says what a variant is. */
-const VARIANT_IS_A_LOOK = /\bA variant is a look\b/;
+/**
+ * The one sentence that says what a variant is, and "look words": the
+ * style, size and weight words in a library's export names, which are not
+ * a set's variants.
+ */
+const ALLOWED_LOOKS = /\bA variant is a look\b|\blook words?\b/g;
 
 /** Keys whose values are code, names or search words, not prose. */
 const NOT_PROSE = new Set([
@@ -80,7 +84,7 @@ describe('icon words in the icon commands', () => {
     for (const file of DOC_FILES) {
       const {doc} = await import(pathToFileURL(file).href);
       for (const text of proseOf(doc)) {
-        const rest = text.replace(VARIANT_IS_A_LOOK, '');
+        const rest = text.replace(ALLOWED_LOOKS, '');
         for (const {word, pattern} of RETIRED) {
           if (pattern.test(rest)) {
             found.push(

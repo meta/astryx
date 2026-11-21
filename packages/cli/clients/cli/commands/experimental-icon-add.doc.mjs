@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Add one icon you chose from a library to your icon set',
   description:
-    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without --definition it lists the icon meanings that fit and the command for each. With --definition it adds the icon and maps the meaning to it; --new-definition first adds your set's own icon meaning. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without --definition or --new-definition it lists the icon meanings that fit and the command for each. With --definition it adds the icon and maps the meaning to it; --new-definition first adds your set's own icon meaning. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
   fn: 'iconAdd',
   args: [{name: 'export', param: 'exportName', required: false}],
   options: [
