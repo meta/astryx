@@ -112,7 +112,7 @@ describe('show --png', () => {
       const dir = path.join(cwd, 'themes/t');
       await themeEditSet('t', 'flex-shrink', '0', {cwd, on: 'badge'});
       const touched = touchedFamilies(
-        (await context(cwd)).project,
+        await context(cwd),
         JSON.parse(fs.readFileSync(path.join(dir, 't.settings.json'), 'utf8')),
       );
       expect(touched).toEqual(['feedback']);
