@@ -126,6 +126,8 @@ import {
   borderParts,
   cornerParts,
   boxFrameOf,
+  givesEdge,
+  isRowFrame,
   rowFrameOf,
   focusStateOf,
   valueProblem,
@@ -9061,11 +9063,14 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     parts.some(t => cornerParts(ctx, t).some(x => x !== t))
   )
     return;
-  // An edge the theme gives the part itself shows its corners too.
+  // An edge the theme gives the part itself shows its corners too. (On a
+  // pager's row, only an edge that paints: "border none" there is none.)
+  const onRow = isRowFrame(ctx, parts[0]);
   const edged = data.settings.some(
     x =>
       x.source === 'property' &&
       /^(background|border|box-shadow|outline)/.test(x.thing) &&
+      (!onRow || givesEdge(x, true)) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
   if (edged) return;
@@ -9075,11 +9080,7 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   // (A border radius set on a pager goes on the row that frames its pages;
   // asked of that row, the same. With no edge there yet it shows nothing:
   // refused, with the row's lookup and the line that rounds each page.)
-  const frame =
-    boxFrameOf(ctx, s) ??
-    ([...ctx.project.target.keys()].some(k => rowFrameOf(ctx, k) === parts[0])
-      ? parts[0]
-      : null);
+  const frame = boxFrameOf(ctx, s) ?? (onRow ? parts[0] : null);
   if (frame) {
     const pager =
       frame === s.on
@@ -9087,9 +9088,21 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
             k => k !== frame && rowFrameOf(ctx, k) === frame,
           )
         : s.on;
-    const perPage = pager
-      ? `${P} set ${slug} corners ${s.value} --on ${pager}`
-      : null;
+    // (A corner named alone rounds that corner of each control; a whole
+    // radius, the corners dial on the pager.)
+    const whole = s.thing === 'border-radius' || s.thing === 'corners';
+    const cells = pager
+      ? cornerParts(ctx, pager).filter(k => k !== pager && k !== frame)
+      : [];
+    const perPage = !pager
+      ? null
+      : whole
+        ? setLine(slug, 'corners', String(s.value), {...s, on: pager})
+        : cells.length
+          ? cells
+              .map(k => setLine(slug, s.thing, String(s.value), {...s, on: k}))
+              .join(' && ')
+          : null;
     refuse(
       E.ERR_THEME_NO_EFFECT,
       `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s border radius goes on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners.${perPage ? ` To round each page on its own instead: ${perPage}.` : ''}`,

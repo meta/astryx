@@ -5273,12 +5273,32 @@ export function boxFrameOf(ctx, s) {
   const thing = kebab(String(s.thing ?? ''));
   // Only the whole outline goes on the row: a side's border is a rule
   // across the part, said of the part.
-  if (
-    !/^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius)$/.test(
-      thing,
-    )
-  )
-    return null;
+  if (!FRAME_THING.test(thing)) return null;
+  // (A piece of the frame set for one mode or variant goes where the frame
+  // it narrows draws, so every piece of one frame lands on one box: a
+  // dark-mode border color follows the border it colors.)
+  if (s.mode || s.when) {
+    const wider = (ctx.themeSettings ?? []).find(
+      x =>
+        x !== s &&
+        x.on === s.on &&
+        x.source === 'property' &&
+        !x.state &&
+        FRAME_THING.test(kebab(String(x.thing))) &&
+        (!x.mode || x.mode === s.mode) &&
+        whenCovers(x.when, s.when) &&
+        // (Strictly wider, so the search ends.)
+        (!!s.mode && !x.mode
+          ? true
+          : String(x.when ?? '')
+              .split('+')
+              .filter(Boolean).length <
+            String(s.when ?? '')
+              .split('+')
+              .filter(Boolean).length),
+    );
+    if (wider) return boxFrameOf(ctx, wider);
+  }
   // (On a part the theme fills, the fill is its box: its border, radius
   // and shadow stay on it, as they always did.)
   if (fillsPart(ctx.themeSettings ?? [], s.on, {mode: s.mode, when: s.when}))
@@ -15785,6 +15805,10 @@ export function fillsPart(settings, part, scope = {}) {
       givesEdge(x),
   );
 }
+
+/** A frame's whole outline: its border (and width, style, color), radius or shadow. */
+const FRAME_THING =
+  /^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius|border-(?:start|end)-(?:start|end)-radius)$/;
 
 /**
  * Whether a `--when` scope reaches where another draws: no scope reaches

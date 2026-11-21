@@ -89,8 +89,6 @@ import {
   cornerParts,
   rowFrameOf,
   fillsPart,
-  seeThrough,
-  whenCovers,
   givesEdge,
   isRowFrame,
   focusStateOf,
@@ -12545,16 +12543,29 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} part @param {string | null | undefined} mode @param {string | undefined} when
    */
   const filled = (part, mode, when) =>
-    clauses.some(
-      o =>
-        !o.state &&
-        !o.neg &&
-        !/\b(?:transparent|see-through|clear)\b/i.test(o.text) &&
-        !(o.colors.length && o.colors.every(v => seeThrough(v))) &&
-        (!o.mode || o.mode === mode) &&
-        o.aspects.includes('background') &&
-        o.parts.some(q => q.on === part && whenCovers(q.when, when)),
-    ) || fillsPart(env.data?.settings ?? [], part, {mode, when});
+    fillsPart(
+      [
+        ...(env.data?.settings ?? []),
+        // (The fills this ask says, read as the settings they write.)
+        ...clauses.flatMap(o =>
+          !o.state &&
+          !o.neg &&
+          o.aspects.includes('background') &&
+          !/\b(?:transparent|see-through|clear)\b/i.test(o.text)
+            ? o.parts.map(q => ({
+                source: /** @type {const} */ ('property'),
+                on: q.on,
+                thing: 'background',
+                value: o.colors[0] ?? 'currentColor',
+                mode: o.mode ?? undefined,
+                when: q.when,
+              }))
+            : [],
+        ),
+      ],
+      part,
+      {mode, when},
+    );
   for (const c of clauses)
     if (
       c.aspects.some(a =>

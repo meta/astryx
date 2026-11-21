@@ -329,8 +329,22 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
       on: 'pagination',
     });
     expect(variant.data.parts).toEqual(['pagination-list']);
-    // A fill for a variant reaches a narrower scope inside it.
-    const narrow = await themeEditSet('v', 'border', '1px solid #dddddd', {
+    // A narrower piece of that frame follows it onto the row.
+    const piece = await themeEditSet('v', 'border-color', '#6b7280', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:dots+size:sm',
+    });
+    expect(piece.data.parts).toEqual(['pagination-list']);
+    // With no wider frame saved, a fill for a variant reaches a narrower
+    // scope inside it.
+    await themeEditNew('v2', {cwd, like: 'neutral'});
+    await themeEditSet('v2', 'background-color', '#f8f9fa', {
+      cwd,
+      on: 'pagination',
+      when: 'variant:dots',
+    });
+    const narrow = await themeEditSet('v2', 'border', '1px solid #dddddd', {
       cwd,
       on: 'pagination',
       when: 'variant:dots+size:sm',
@@ -403,5 +417,46 @@ describe('a border, radius, shadow or corners on a row of joined controls', () =
     expect(undone.data.notes.join('\n')).toMatch(
       /border on pagination \(--when variant:dots\) draws on pagination-list now, not on pagination[^\n]*to put it back: [^\n]* set w background-color '?#f8f9fa'? --on pagination --when '?variant:dots'?/,
     );
+  }, 240_000);
+
+  it('lands every piece of one frame on one box per mode, and needs a painted edge on the row', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    // A dark-only fill leaves the bar unfilled in light mode: the border
+    // goes on the row, and a dark border color follows the border.
+    await themeEditNew('q', {cwd, like: 'neutral'});
+    await themeEditSet('q', 'background-color', '#222222', {
+      cwd,
+      on: 'pagination',
+      mode: 'dark',
+    });
+    const border = await themeEditSet('q', 'border', '1px solid #dee2e6', {
+      cwd,
+      on: 'pagination',
+    });
+    expect(border.data.parts).toEqual(['pagination-list']);
+    const color = await themeEditSet('q', 'border-color', '#6b7280', {
+      cwd,
+      on: 'pagination',
+      mode: 'dark',
+    });
+    expect(color.data.parts).toEqual(['pagination-list']);
+    // "border none" on the row is no edge: a radius there is refused.
+    await themeEditNew('z', {cwd, like: 'neutral'});
+    await themeEditSet('z', 'border', 'none', {cwd, on: 'pagination'});
+    await expect(
+      themeEditSet('z', 'border-radius', '4px', {cwd, on: 'pagination'}),
+    ).rejects.toThrow(/no border, fill or shadow yet/);
+    // A corner named alone is offered on each page, that corner only.
+    const refusal = await themeEditSet('z', 'border-top-left-radius', '4px', {
+      cwd,
+      on: 'pagination',
+    }).catch(e => e);
+    expect(refusal.message).toMatch(
+      /set z border-top-left-radius 4px --on pagination-item\b/,
+    );
+    expect(refusal.message).not.toMatch(/corners 4px --on pagination\b/);
   }, 240_000);
 });
