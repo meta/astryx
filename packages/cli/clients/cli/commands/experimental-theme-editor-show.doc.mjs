@@ -26,7 +26,7 @@ export const doc = {
       flag: '--on <part>',
       param: 'options.on',
       description:
-        "Only what one part shows, as a lookup that writes nothing: each CSS property the part reads, at rest and in each variant, with its final value (per mode when the modes differ), the declaration that gives it, the tokens it reads, and who decides it (`source`: core, the base theme it extends, or the theme's own file; `via`: a token, a dial, a rule on the part, or a plain value Core writes). The theme may be any theme the project builds: an editor theme, a local theme or an installed theme package (a slug two packages provide is the one the app records). The text lists the part at rest and the first four variant values that differ from it, with how many there are; --json carries every value. An editor theme is read from its saved settings: what its theme file adds by hand below them is not shown yet.",
+        "Only what one part shows, as a lookup that writes nothing: each CSS property the part reads, at rest and in each variant, with its final value (per mode when the modes differ), the declaration that gives it, the tokens it reads, and who decides it (`source`: core, the base theme it extends, or the theme's own file; which setting gives it is not shown yet). The theme may be any theme the project builds: an editor theme, a local theme or an installed theme package (a slug two packages provide is the one the app records). The text lists the part at rest and the first four variant values that differ from it, with how many there are; --json carries every value. An editor theme is read from its saved settings: what its theme file adds by hand below them is not shown yet.",
     },
     {
       flag: '--section <name>',

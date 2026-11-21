@@ -807,7 +807,6 @@ function partValueBlocks(d) {
       : [...new Set([...(v.tokens.light ?? []), ...(v.tokens.dark ?? [])])]
     ).join(' '),
     source: v.source,
-    via: v.via,
   });
   return [
     section(

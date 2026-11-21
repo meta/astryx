@@ -179,7 +179,7 @@
  * @property {string} data.theme
  * @property {'editor' | 'local' | 'package' | 'bundled'} data.kind - Where the theme comes from: the editor's themes/ folder, a local theme of the app, an installed package's theme, or a bundled theme package. An editor theme is read from its saved settings: what a person adds by hand below them in its theme file is not shown yet.
  * @property {string} data.part
- * @property {ThemeEditPartValue[]} data.values - Each CSS property the part reads, at rest (`when` null) and in each variant.
+ * @property {ThemeEditPartValue[]} data.values - Each CSS property the part reads, at rest (`when` null) and in each variant. Which setting gives a value (a token, a dial, a rule on the part) is not shown yet; `source` says whose it is.
  */
 
 /**
@@ -194,7 +194,6 @@
  * @property {string | {light?: string, dark?: string}} expression - The declaration that gives it, as written: Core's, or the rule on the part; per mode when a rule sets one mode (a one-mode theme, or a `--mode` setting).
  * @property {string[] | {light?: string[], dark?: string[]}} tokens - The tokens it reads, and the tokens those read in turn, in order; per mode when the modes read different ones.
  * @property {'core' | 'base' | 'theme'} source - Who decides the value (not a setting's source, as in `show`'s settings): Core's default, the base theme the theme extends, or the theme's own file, a setting on the part included.
- * @property {'token' | 'dial' | 'part' | 'value'} via - How: a token's value, a dial (an editor theme's), a rule on the part, or a plain value Core writes.
  */
 
 /**

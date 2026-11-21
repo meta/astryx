@@ -103,7 +103,6 @@ describe('show --on: what one part of a theme shows', () => {
     expect(valueOf(r, 'padding-block-start')).toMatchObject({
       value: '24px',
       source: 'theme',
-      via: 'part',
     });
     // The base's padding shorthand, which the theme's sides overwrite,
     // shows nothing of its own.
@@ -113,12 +112,10 @@ describe('show --on: what one part of a theme shows', () => {
       expression: 'var(--radius-container)',
       tokens: ['--radius-container'],
       source: 'theme',
-      via: 'dial',
     });
     // A token the base sets, with a value per mode.
     const fill = valueOf(r, 'background-color');
     expect(fill.source).toBe('base');
-    expect(fill.via).toBe('token');
     expect(fill.value).toEqual({
       light: expect.any(String),
       dark: expect.any(String),
@@ -146,11 +143,9 @@ describe('show --on: what one part of a theme shows', () => {
       expect(valueOf(r, 'padding-block-start')).toMatchObject({
         value: '24px',
         source: 'theme',
-        via: 'part',
       });
       expect(valueOf(r, 'border-radius')).toMatchObject({
         source: 'theme',
-        via: 'token',
       });
     } finally {
       fs.renameSync(aside, editorDir);
@@ -172,7 +167,7 @@ describe('show --on: what one part of a theme shows', () => {
     );
     expect(lines.length).toBeLessThanOrEqual(16);
     expect(text.stdout).toMatch(
-      /^border-radius +\S+ - --radius-container - theme - dial$/m,
+      /^border-radius +\S+ - --radius-container - theme$/m,
     );
     const json = await runCli(
       [
@@ -192,17 +187,16 @@ describe('show --on: what one part of a theme shows', () => {
     expect(r.data.values.length).toBeGreaterThan(lines.length);
   }, 120_000);
 
-  it('credits a value a part-scoped dial sets to the theme’s dial, not to Core', async () => {
+  it('reads a value a part-scoped dial sets as the theme’s, not Core’s', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('roomy', {cwd, on: 'card'})
     );
     const pad = valueOf(r, 'padding-top');
-    expect(pad).toMatchObject({source: 'theme', via: 'dial'});
+    expect(pad).toMatchObject({source: 'theme'});
     expect(pad.tokens).toContain('--spacing-4');
     // The spacing token the dial sets on the card, also named as the dial's.
     expect(valueOf(r, '--spacing-4')).toMatchObject({
       source: 'theme',
-      via: 'dial',
     });
     // Inside the card the dial's value shows, not the whole-theme value.
     const base = /** @type {any} */ (
@@ -215,16 +209,14 @@ describe('show --on: what one part of a theme shows', () => {
     // border-radius) reads as the part's: which dial is not shown yet.
     expect(valueOf(r, 'border-radius')).toMatchObject({
       source: 'theme',
-      via: 'part',
     });
     // A token the dials leave alone stays the base's.
     expect(valueOf(r, 'background-color')).toMatchObject({
       source: 'base',
-      via: 'token',
     });
   }, 120_000);
 
-  it('reads the card rules a whole-theme dial writes as the part’s (which dial is not shown yet), and a variant’s own property setting as the part’s', async () => {
+  it('reads the card rules a whole-theme dial writes as the theme’s, and a variant’s own property setting under its own condition', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('outlined', {cwd, on: 'card'})
     );
@@ -240,21 +232,18 @@ describe('show --on: what one part of a theme shows', () => {
     );
     expect(ruled.length).toBeGreaterThan(0);
     // (A whole-theme dial is not credited with a part rule yet.)
-    for (const v of ruled) expect(v.via).toBe('part');
     // A border color set on the card for one variant is that variant's
     // rule on the part; the card at rest still shows the dial's rule.
     expect(valueOf(r, 'border-color')).toMatchObject({
       source: 'theme',
-      via: 'part',
     });
     expect(valueOf(r, 'border-color', 'variant:muted')).toMatchObject({
       value: '#ff0000',
       source: 'theme',
-      via: 'part',
     });
   }, 120_000);
 
-  it('credits a property set on the part at rest to the part in every variant row that shows it, beside a whole-theme dial', async () => {
+  it('reads a property set on the part at rest as the theme’s in every variant row that shows it, beside a whole-theme dial', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('brand', {cwd, on: 'card'})
     );
@@ -268,8 +257,7 @@ describe('show --on: what one part of a theme shows', () => {
         v.value === '24px',
     );
     expect(rows.length).toBeGreaterThan(0);
-    for (const v of rows)
-      expect(v).toMatchObject({source: 'theme', via: 'part'});
+    for (const v of rows) expect(v).toMatchObject({source: 'theme'});
   }, 120_000);
 
   it('writes each variant row’s condition the way set takes it, and marks a condition set cannot name', async () => {
@@ -314,7 +302,7 @@ describe('show --on: what one part of a theme shows', () => {
           v.when === settable.when &&
           v.state === settable.state,
       ),
-    ).toMatchObject({value: '#123456', source: 'theme', via: 'part'});
+    ).toMatchObject({value: '#123456', source: 'theme'});
     // One condition reads as one row, whatever order Core writes it in.
     const ids = rows.map((/** @type {any} */ v) =>
       JSON.stringify([v.property, v.when, v.state, v.value, v.expression]),
@@ -322,7 +310,7 @@ describe('show --on: what one part of a theme shows', () => {
     expect(new Set(ids).size).toBe(ids.length);
   }, 120_000);
 
-  it('reads a state setting beside a dial as the part’s, once per condition, and a one-mode color into that mode’s value', async () => {
+  it('reads a state setting beside a dial as the theme’s, once per condition, and a one-mode color into that mode’s value', async () => {
     await themeEditNew('held', {cwd, like: 'neutral'});
     await themeEditSet('held', 'corners', 'pill', {cwd});
     await themeEditSet('held', 'background-color', '#123456', {
@@ -354,10 +342,10 @@ describe('show --on: what one part of a theme shows', () => {
       );
     // The setting's own --when and --state, beside the corners dial.
     expect(rowsAt(null, 'disabled')).toEqual([
-      expect.objectContaining({value: '#123456', source: 'theme', via: 'part'}),
+      expect.objectContaining({value: '#123456', source: 'theme'}),
     ]);
     expect(rowsAt('variant:secondary', 'expanded')).toEqual([
-      expect.objectContaining({value: '#654321', source: 'theme', via: 'part'}),
+      expect.objectContaining({value: '#654321', source: 'theme'}),
     ]);
     const card = /** @type {any} */ (
       await themeEditShow('held', {cwd, on: 'card'})
@@ -367,7 +355,6 @@ describe('show --on: what one part of a theme shows', () => {
     expect(valueOf(card, 'background-color', 'variant:default')).toMatchObject({
       value: {light: '#abcdef', dark: expect.any(String)},
       source: 'theme',
-      via: 'part',
     });
     expect(
       card.data.values.some((/** @type {any} */ v) =>
@@ -398,7 +385,7 @@ describe('show --on: what one part of a theme shows', () => {
       hover.length,
     );
     for (const v of hover) {
-      expect(v).toMatchObject({source: 'theme', via: 'part'});
+      expect(v).toMatchObject({source: 'theme'});
       expect(v.notSettable).toBeUndefined();
       expect(v.value.light).toBe('#123456');
       expect(v.expression.light).toBe('#123456');
@@ -447,7 +434,7 @@ describe('show --on: what one part of a theme shows', () => {
       await themeEditShow('lamp', {cwd, on: 'card'})
     );
     const fill = valueOf(r, 'background-color');
-    expect(fill).toMatchObject({source: 'theme', via: 'token'});
+    expect(fill).toMatchObject({source: 'theme'});
     expect(fill.value.light).toBe('#abcdef');
     expect(fill.value.dark).not.toBe('#abcdef');
     // The token's own row gives the light value and leaves the dark one
@@ -456,7 +443,7 @@ describe('show --on: what one part of a theme shows', () => {
     expect(own.value).toEqual({light: '#abcdef'});
   }, 120_000);
 
-  it('credits a variant-scoped token block only where it shows', async () => {
+  it('reads a variant-scoped token block as the theme’s only where it shows', async () => {
     await themeEditNew('scoped', {cwd, like: 'neutral'});
     await themeEditSet('scoped', '--color-background-muted', '#ff0000', {
       cwd,
@@ -500,6 +487,18 @@ describe('show --on: what one part of a theme shows', () => {
       const lines = JSON.stringify(err);
       expect(lines).not.toMatch(/editor show neutral(?! --on)["\s]/);
     }
+  }, 120_000);
+
+  it('gives no setting a value comes through (not shown yet), in the JSON or the text', async () => {
+    const r = /** @type {any} */ (
+      await themeEditShow('brand', {cwd, on: 'card'})
+    );
+    for (const v of r.data.values) expect(v).not.toHaveProperty('via');
+    const text = await runCli(
+      ['experimental', 'theme', 'editor', 'show', 'brand', '--on', 'card'],
+      {cwd},
+    );
+    expect(text.stdout).not.toMatch(/ - (?:dial|part|token|value)$/m);
   }, 120_000);
 
   it('gives a button’s corner radius once, not once per corner', async () => {

@@ -54,16 +54,7 @@ import {condition} from './_how.mjs';
  * @property {ModeTokens} parentTokens
  * @property {Record<string, any>} parentComponents
  * @property {ModeTokens} coreTokens - Core's own defaults
- * @property {(token: string, part: string, onPart: boolean) => 'token' | 'dial' | 'part'} [tokenVia] -
- *   for an editor theme: what writes a token, from its saved settings (an
- *   exact token setting, a dial, or a rule on the part); `onPart` when the
- *   part's own rule sets it
  * @property {(property: string, part: string, when: string, state: string) => {when: string | null, state: string | null, exact: boolean} | null} [settingAt] - The property setting that wrote the theme's rule on the part under a rule key (`when|state` as the build writes them), as `set` took it.
- * @property {(property: string, part: string, when: string, state: string) => 'dial' | 'part'} [propertyVia] -
- *   for an editor theme: what writes a CSS property the theme's own rule on
- *   the part sets under a condition (`when` as `set --when` takes it, null
- *   at rest): a property setting on the part for that condition that covers
- *   it, else a dial (on the part or on the whole theme)
  */
 
 /**
@@ -288,20 +279,7 @@ async function loadNamedTheme(ctx, cwd, name) {
       parentTokens: {light: base.light, dark: base.dark},
       parentComponents: base.components ?? {},
       coreTokens: {light: coreDefaults.light, dark: coreDefaults.dark},
-      tokenVia: (token, part, onPart) => {
-        const mine = data.settings.filter(st =>
-          onPart ? reaches(st, part) : st.on == null,
-        );
-        if (mine.some(st => st.source === 'token' && st.thing === token))
-          return 'token';
-        if (mine.some(st => st.source === 'dial')) return 'dial';
-        return onPart ? 'part' : 'token';
-      },
       settingAt,
-      // (A part rule no property setting on the part wrote reads `part`:
-      // which dial, or which other setting, wrote it there is not shown
-      // yet.)
-      propertyVia: () => 'part',
     };
   }
   const found = await findProjectTheme(cwd, name);
@@ -589,61 +567,24 @@ export async function themePartValues(cwd, name, part) {
       ...light.filter(t => a.light[t] !== b.light[t]),
       ...dark.filter(t => a.dark[t] !== b.dark[t]),
     ];
-    // Whether the part's own rule sets a token it reads (a part-scoped
-    // dial), at rest or under this condition.
-    const onPart = [...light, ...dark].some(t =>
-      [when, 'base'].some(w => own.has(`${w}||${t}`)),
-    );
     const mine = changed(at.theme, at.parent);
-    /** @type {PartValue['via']} */
-    const tokenVia = theme.tokenVia
-      ? theme.tokenVia(mine[0], key, onPart)
-      : onPart
-        ? 'part'
-        : 'token';
     /** @type {PartValue['source']} */
     let source = 'core';
-    /** @type {PartValue['via']} */
-    let via = light.length || dark.length ? 'token' : 'value';
     if (own.has(ruleKey) && own.get(ruleKey) === v.raw) {
       // A rule on the part: the theme's own, or the one it extends with
       // the tokens it reads changed inside the part.
       const inheritedRule = inherited.get(ruleKey) === v.raw;
-      if (!inheritedRule)
-        [source, via] = [
-          'theme',
-          // A token the part's rule sets, as the setting that wrote it.
-          property.startsWith('--') && theme.tokenVia
-            ? theme.tokenVia(property, key, true)
-            : theme.propertyVia
-              ? // A variant row with no rule of its own shows the rest rule:
-                // ask with the condition of the rule the value comes from.
-                ruleKey === k
-                ? theme.propertyVia(property, key, when, state)
-                : theme.propertyVia(property, key, 'base', '')
-              : 'part',
-        ];
-      else if (mine.length) [source, via] = ['theme', tokenVia];
-      else [source, via] = ['base', 'part'];
+      if (!inheritedRule) source = 'theme';
+      else source = mine.length ? 'theme' : 'base';
     } else if (mine.length) {
-      [source, via] = ['theme', tokenVia];
+      source = 'theme';
     } else if (changed(at.parent, theme.coreTokens).length) {
       source = 'base';
-      if (onPart) via = 'part';
     }
     // A value that reads a token a mode block sets on the part is the
     // theme's, through that token.
     const blockTokens = blockTokensAt(when);
-    if ([...light, ...dark].some(t => blockTokens.has(t))) {
-      source = 'theme';
-      via = theme.tokenVia
-        ? theme.tokenVia(
-            [...light, ...dark].find(t => blockTokens.has(t)) ?? '',
-            key,
-            true,
-          )
-        : 'token';
-    }
+    if ([...light, ...dark].some(t => blockTokens.has(t))) source = 'theme';
     const cond = condOf(when, state, own.has(k) ? property : null);
     const row = {
       property,
@@ -661,7 +602,6 @@ export async function themePartValues(cwd, name, part) {
       expression: v.raw,
       tokens: light.join(' ') === dark.join(' ') ? light : {light, dark},
       source,
-      via,
     };
     values.push(row);
     rawKey.set(row, {when, state, own: own.has(k)});
@@ -675,13 +615,6 @@ export async function themePartValues(cwd, name, part) {
     const at = inside(m.when);
     const shown = orNull(resolveIn(m.value, at.theme[m.mode], m.mode));
     const chain = tokenChain(m.value, at.theme[m.mode]);
-    // (A token a block sets is the setting that wrote it, as in a rule.)
-    const via =
-      m.property.startsWith('--') && theme.tokenVia
-        ? theme.tokenVia(m.property, key, true)
-        : theme.propertyVia
-          ? theme.propertyVia(m.property, key, m.when, m.state)
-          : 'part';
     /** @param {any} x @param {'light' | 'dark'} mode */
     const half = (x, mode) =>
       x && typeof x === 'object' && !Array.isArray(x) ? x[mode] : x;
@@ -733,7 +666,6 @@ export async function themePartValues(cwd, name, part) {
         expression: base ? half(base.expression, other) : '',
         tokens: base ? half(base.tokens, other) : [],
         source: 'theme',
-        via,
       };
       // (Filled in for this mode below, as for a row the block joins.)
       target.value = pair(null, target.value);
@@ -756,7 +688,6 @@ export async function themePartValues(cwd, name, part) {
     // base's.)
     const inherited = !ownBlock(m);
     target.source = inherited ? 'base' : 'theme';
-    target.via = inherited ? 'part' : via;
   }
   // At rest first, then each variant, in the order the part reads them.
   values.sort((a, b) => Number(a.when != null) - Number(b.when != null));
