@@ -1019,6 +1019,34 @@ function coreGeneric(look, t) {
 }
 
 /**
+ * The contrast a control edge needs on a surface in a mode: EDGE_SHARE of
+ * Core's own edge's on Core's same surface, and 3:1 always enough; null
+ * when either is not a color.
+ * @param {Look} look @param {string} g @param {Mode} m
+ */
+function edgeNeeds(look, g, m) {
+  const coreEdge = shown(colorIn(`var(${EDGE})`, look.base[m], m), null);
+  const coreGround = shown(colorIn(`var(${g})`, look.base[m], m), null);
+  if (!coreEdge || !coreGround) return null;
+  return Math.min(NON_TEXT, EDGE_SHARE * ratio(coreEdge, coreGround));
+}
+
+/**
+ * The contrast a chart color needs on a surface in a mode: 95% of Core's
+ * own color's on Core's same surface, and 3:1 always enough; null when
+ * either is not a color.
+ * @param {Look} look @param {string} t @param {string} g @param {Mode} m
+ */
+function chartFloor(look, t, g, m) {
+  const coreGround = shown(colorIn(`var(${g})`, look.base[m], m), null);
+  const core = coreGround
+    ? shown(colorIn(`var(${t})`, look.base[m], m), coreGround)
+    : null;
+  if (!core || !coreGround) return null;
+  return Math.min(NON_TEXT, EDGE_SHARE * ratio(core, coreGround));
+}
+
+/**
  * Chart series that do not show on the surfaces charts sit on (a card, the
  * page): each categorical color against each, below 95% of Core's own
  * color's contrast on Core's same surface, and 3:1 always enough.
@@ -1040,9 +1068,8 @@ function chartGroundProblems(look) {
       if (!ground || !coreGround) continue;
       const faint = series.filter(t => {
         const c = shown(colorIn(`var(${t})`, res[m], m), ground);
-        const core = shown(colorIn(`var(${t})`, base[m], m), coreGround);
-        if (!c || !core) return false;
-        const needs = Math.min(NON_TEXT, EDGE_SHARE * ratio(core, coreGround));
+        const needs = chartFloor(look, t, g, m);
+        if (!c || needs == null) return false;
         return ratio(c, ground) + 0.005 < needs;
       });
       if (!faint.length) continue;
@@ -1170,7 +1197,7 @@ export function lookProblems(look) {
         const coreGround = shown(colorIn(`var(${g})`, base[m], m), null);
         if (!ground || !coreEdge || !coreGround) continue;
         const core = ratio(coreEdge, coreGround);
-        const needs = Math.min(NON_TEXT, EDGE_SHARE * core);
+        const needs = /** @type {number} */ (edgeNeeds(look, g, m));
         const r = ratio(edge, ground);
         // (Within rounding of the second decimal the ratios print with.)
         if (r + 0.005 >= needs) continue;
@@ -1511,7 +1538,7 @@ export function lookRepair(look, problems) {
       // (Text the theme leaves unset moves too: Core's own value that does
       // not read on the theme's colors is written as the one that does.)
       ((p.kind === 'text' && DRAWN_AS_TEXT.test(p.token)) ||
-        (p.kind === 'edge' && filled.has(p.token)))
+        (p.kind === 'edge' && !own.has(p.token)))
     )
       nudge.set(`${p.token}|${p.mode}`, {
         token: p.token,
@@ -1536,7 +1563,27 @@ export function lookRepair(look, problems) {
     const side = sideOf(/^--color-on-/.test(token) ? (all[0] ?? page) : page);
     const grounds = all.filter(g => sideOf(g) === side);
     if (!grounds.length) continue;
-    (perMode[token] ??= {})[mode] = nearestReadingLightness(fg, grounds, needs);
+    if (token === EDGE) {
+      // An edge moves until it shows on every surface it sits on, each by
+      // its own share of Core's edge there, not only the ones it failed.
+      const each = GROUNDS.map(g => ({
+        c: shown(colorIn(`var(${g})`, res[mode], mode), page),
+        needs: edgeNeeds(look, g, mode),
+      })).filter(x => x.c != null && x.needs != null);
+      const moved = nearestLightness(fg, f =>
+        each.every(
+          x =>
+            ratio(f, /** @type {Rgb} */ (x.c)) + 0.005 >=
+            /** @type {number} */ (x.needs),
+        ),
+      );
+      if (moved) (perMode[token] ??= {})[mode] = hex(moved);
+    } else
+      (perMode[token] ??= {})[mode] = nearestReadingLightness(
+        fg,
+        grounds,
+        needs,
+      );
     why[token] = own.has(token)
       ? 'did not read on every surface it sits on'
       : filled.has(token)
@@ -1548,6 +1595,34 @@ export function lookRepair(look, problems) {
       for (const p of now)
         if (p.token === token && p.mode === mode && p.kind === 'text')
           (keep[token] ??= []).push(...(ACCEPT.get(p) ?? []));
+  }
+  // A chart color the theme leaves unset (or the fill made) that barely
+  // shows on the card or the page: its lightness moves to the nearest
+  // where it shows on both.
+  for (const p of now) {
+    if (p.kind !== 'chart-ground' || p.mode === 'both') continue;
+    const mode = p.mode;
+    const page = shown(colorIn(`var(${PAGE})`, res[mode], mode), null);
+    const grounds = [CARD, PAGE]
+      .map(g => ({g, c: shown(colorIn(`var(${g})`, res[mode], mode), page)}))
+      .filter(x => x.c != null);
+    for (const t of p.parts ?? []) {
+      if (own.has(t)) continue;
+      const c = shown(colorIn(`var(${t})`, res[mode], mode), page);
+      if (!c) continue;
+      const moved = nearestLightness(c, f =>
+        grounds.every(({g, c: ground}) => {
+          const needs = chartFloor(look, t, g, mode);
+          return (
+            needs == null || ratio(f, /** @type {Rgb} */ (ground)) >= needs
+          );
+        }),
+      );
+      if (!moved) continue;
+      (perMode[t] ??= {})[mode] = res[mode][t] = hex(moved);
+      why[t] =
+        `${filled.has(t) ? 'unset: filled, then' : "unset: Core's own"} moved until it shows on the card and the page`;
+    }
   }
   /** @type {Record<string, string | [string, string]>} */
   const tokens = {};
