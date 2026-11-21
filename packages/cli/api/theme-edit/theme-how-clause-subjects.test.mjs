@@ -389,6 +389,24 @@ const ROWS = [
     },
   ],
   [
+    'every part before the colon of a two-part list is a subject',
+    {
+      q: 'popover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a list with its colon after several parts keeps its items, never the app's part",
+    {
+      q: 'cards, dialogs: white background, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    'an item after a rewritten colon stays an item, never a theme-wide dial',
+    {q: 'dialogs: no border, title: bold', never: /^headings /},
+  ],
+  [
     'a head with its own colon keeps a button item, never every button',
     {
       q: 'toasts: dark, close button: white',

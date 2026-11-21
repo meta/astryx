@@ -10851,14 +10851,23 @@ export function draftAnswer(ctx, env, question) {
         .find(Boolean);
       const plural = !said || /s$/i.test(said);
       const colon = joinOf.get(c)?.list !== 'with';
-      // ("popover, tooltip and hover card: dark": a part said before the
-      // list's own colon is one of its subjects, never an item of the
-      // first. A head with a colon of its own, "cards: white background,
-      // header: navy", keeps its items.)
+      // ("popover, tooltip and hover card: dark": a part said before its
+      // sentence's first colon, as asked, is one of the list's subjects,
+      // never an item of the first. Read from the words as asked, so a
+      // reader's rewrite of the colon does not change it; a part said after
+      // that colon, "cards: white background, header: navy", stays an
+      // item.)
       const subjectOfColon =
-        !!head &&
-        !listSubjectOf.has(head) &&
-        (listSubjectOf.get(c)?.parts ?? []).some(p => p.on === c.parts[0]?.on);
+        !!said &&
+        asked0.split(/[.;!?\n]/).some(sentence => {
+          const colon = sentence.search(/:(?!\d)/);
+          const at = sentence.search(
+            new RegExp(
+              String.raw`\b${said.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`,
+            ),
+          );
+          return colon > 0 && at >= 0 && at < colon;
+        });
       if (
         holder &&
         head !== c &&
