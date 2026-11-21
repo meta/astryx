@@ -97,7 +97,7 @@ import {
   editorMadeFolder,
   loadTheme,
   acceptedContrast,
-  contrastPlace,
+  keptNow,
   contrastProblems,
   resolvedTokens,
   withAccepted,
@@ -1029,37 +1029,8 @@ export async function editorKeptContrastAt(cwd) {
           data,
           await contrastProblems(ctx, data, res),
           res,
-        ).map(p => ({accepted: Boolean(p.accepted), at: contrastPlace(p)}));
-        for (const a of kept) {
-          const here = now.filter(
-            ({at}) =>
-              at != null &&
-              at.part === a.part &&
-              at.ground === a.ground &&
-              at.when === (a.when ?? '') &&
-              at.mode === a.mode,
-          );
-          // (A failure the editor reports across several variants at once
-          // names no one variant: one at the same part, ground and mode
-          // still says the place is not passing.)
-          const near = now.filter(
-            ({at}) =>
-              at != null &&
-              at.part === a.part &&
-              at.ground === a.ground &&
-              at.when === '' &&
-              at.mode === a.mode,
-          );
-          const open = (here.length ? here : near).filter(x => !x.accepted);
-          out.push({
-            slug,
-            ...a,
-            inEffect: here.some(x => x.accepted),
-            ratioNow: open.length
-              ? Math.min(...open.map(x => Number(x.at?.ratio)))
-              : null,
-          });
-        }
+        );
+        for (const a of kept) out.push({slug, ...a, ...keptNow(a, now)});
       } catch {
         // A theme that cannot be read keeps nothing doctor can list.
       }
