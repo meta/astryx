@@ -12,7 +12,7 @@ import {HStack, VStack} from '@astryxdesign/core/Stack';
  * under Core/Indicator.
  */
 const meta: Meta<typeof RadioIndicator> = {
-  title: 'Core/Indicator/RadioIndicator',
+  title: 'Core/RadioIndicator',
   component: RadioIndicator,
   parameters: {layout: 'padded'},
 };
