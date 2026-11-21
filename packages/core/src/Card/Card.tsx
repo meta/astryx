@@ -311,6 +311,8 @@ export function Card({
 }: CardProps) {
   // Only enable scrolling when card has a fixed height (not null/undefined and not "auto")
   const hasFixedHeight = height != null && height !== 'auto';
+  const isSized =
+    width != null || height != null || maxWidth != null || minHeight != null;
 
   // When no explicit padding prop, use theme default (set via container tokens)
   const useThemeDefault = padding == null;
@@ -330,12 +332,15 @@ export function Card({
           variantStyles[variant],
           elevationStyles[elevation],
           hasFixedHeight && styles.scrollable,
-          dynamicStyles.sizing(
-            width ?? null,
-            height ?? null,
-            maxWidth ?? null,
-            minHeight ?? null,
-          ),
+          // A dynamic style is a new object on each call. That object misses
+          // StyleX's identity cache, and so does every style before it.
+          isSized &&
+            dynamicStyles.sizing(
+              width ?? null,
+              height ?? null,
+              maxWidth ?? null,
+              minHeight ?? null,
+            ),
           ...container(
             paddingToken == null
               ? {useThemeDefault: 'card'}
