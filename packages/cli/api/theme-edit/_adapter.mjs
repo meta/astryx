@@ -1041,7 +1041,18 @@ export async function editorKeptContrastAt(cwd) {
               at.when === (a.when ?? '') &&
               at.mode === a.mode,
           );
-          const open = here.filter(x => !x.accepted);
+          // (A failure the editor reports across several variants at once
+          // names no one variant: one at the same part, ground and mode
+          // still says the place is not passing.)
+          const near = now.filter(
+            ({at}) =>
+              at != null &&
+              at.part === a.part &&
+              at.ground === a.ground &&
+              at.when === '' &&
+              at.mode === a.mode,
+          );
+          const open = (here.length ? here : near).filter(x => !x.accepted);
           out.push({
             slug,
             ...a,
