@@ -333,6 +333,62 @@ describe('a top nav link colored for a dark bar', () => {
     expect(rules.some(r => /#bfbfbf/.test(r))).toBe(false);
   }, 240_000);
 
+  it('measures the selected link on the fill the build paints in the phone menu, per mode', async ctx => {
+    if (needBases(ctx)) return;
+    /** The phone-menu selected rules of a theme. @param {string} slug */
+    const drawerSelected = slug =>
+      (cssOf(slug).match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+        r =>
+          /top-nav-item/.test(r) &&
+          /drawer/.test(r) &&
+          /selected|aria-current/.test(r),
+      );
+    // (A light block set for the phone menu after a black one at rest:
+    // the light one is painted there, so the light link is not copied.)
+    await themeEditNew('pord', {cwd, like: 'neutral'});
+    await themeEditSet('pord', 'mode', 'light-only', {cwd});
+    await themeEditSet('pord', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pord', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pord', 'background-color', '#f0f0f0', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      when: 'mode:drawer',
+    });
+    await themeEditSet('pord', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    expect(drawerSelected('pord').some(r => /#bfbfbf/.test(r))).toBe(false);
+    // (A dark-only block in a theme with both modes: the copy takes dark's
+    // half there, and light keeps Core's color.)
+    await themeEditNew('pdm', {cwd, like: 'neutral'});
+    await themeEditSet('pdm', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pdm', 'background-color', '#ffffff', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      mode: 'dark',
+      only: true,
+    });
+    await themeEditSet('pdm', 'color', 'light-dark(#bfbfbf, #333333)', {
+      cwd,
+      on: 'top-nav-item',
+    });
+    // (Light keeps Core's selected color there, never the bar's light link.)
+    expect(drawerSelected('pdm').some(r => /light-dark\(#bfbfbf/.test(r))).toBe(
+      false,
+    );
+  }, 240_000);
+
   it('holds nothing for a text variant or a heading level', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('tx', {cwd, like: 'neutral'});

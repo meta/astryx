@@ -5094,6 +5094,27 @@ export function coreValueIn(ctx, part, prop, variant) {
 }
 
 /**
+ * The value Core draws a property with on a part in one variant and state
+ * (a top nav link's color when selected in the phone menu), else in the
+ * variant alone.
+ * @param {Ctx} ctx @param {string} part @param {string} prop
+ * @param {string} variant axis:value @param {string} state
+ * @returns {string | null}
+ */
+function coreStateValue(ctx, part, prop, variant, state) {
+  const at = /** @type {any} */ (ctx).C?.MAP?.[part]?.at?.[prop];
+  if (!at) return null;
+  const cond = variant.replace(':', '=');
+  const st = `${state}=${state}`;
+  return (
+    at[`${cond},${st}`] ??
+    at[`${st},${cond}`] ??
+    at[st] ??
+    coreValueIn(ctx, part, prop, variant)
+  );
+}
+
+/**
  * The variants of a part a setting on it would make unreadable while it
  * reads elsewhere: each new contrast problem on the part is matched to the
  * texts the census drew it with (by its sample and ground). A failing text
@@ -5290,18 +5311,33 @@ export function holdCopies(ctx, data, s) {
       });
       // (A copy per mode where the theme draws both, so each mode takes
       // its own fill and color, a pair's half included.)
+      const oneMode = ['light-only', 'dark-only'].includes(String(data.mode));
       const stateModes = mode
         ? [mode]
-        : modesOf(data).length > 1
-          ? modesOf(data)
-          : [undefined];
-      const seen = new Set();
+        : oneMode
+          ? [undefined]
+          : /** @type {Array<'light' | 'dark' | undefined>} */ ([
+              'light',
+              'dark',
+            ]);
+      const states = [...new Set(fills.map(x => String(x.state)))];
+      /** @type {Map<string, Set<string>>} the modes each state got a copy in */
+      const copied = new Map();
       for (const m of stateModes)
-        for (const x of fills) {
-          if (m && x.mode && x.mode !== m) continue;
-          const key = `${x.state}|${m ?? ''}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+        for (const st of states) {
+          /** @param {Setting} x */
+          const inMode = x => !m || !x.mode || x.mode === m;
+          // (The fill the build paints for that state in this placement and
+          // mode: one set for the placement wins over one set at rest, the
+          // later of each.)
+          const painted =
+            [...fills]
+              .reverse()
+              .find(x => x.state === st && x.when === variant && inMode(x)) ??
+            [...fills]
+              .reverse()
+              .find(x => x.state === st && !x.when && inMode(x));
+          if (!painted) continue;
           const own = [...data.settings]
             .reverse()
             .find(
@@ -5309,7 +5345,7 @@ export function holdCopies(ctx, data, s) {
                 y !== s &&
                 y.on &&
                 kebab(String(y.thing)) === kebab(String(s.thing)) &&
-                (y.state ?? '') === String(x.state) &&
+                (y.state ?? '') === st &&
                 (!y.when || y.when === variant) &&
                 (!y.mode || !m || y.mode === m) &&
                 partsOf(ctx, y).includes(String(s.on)),
@@ -5317,13 +5353,18 @@ export function holdCopies(ctx, data, s) {
           const value = String(own ? own.value : s.value);
           // (Only where that color reads 4.5:1 on the state's fill as built:
           // a light or see-through block keeps Core's color, the hold's.)
+          const checked = m
+            ? [m]
+            : oneMode
+              ? [String(data.mode).replace('-only', '')]
+              : ['light', 'dark'];
           if (
-            !(m ? [m] : modesOf(data)).every(mm =>
+            !checked.every(mm =>
               readsOn(
                 ctx,
                 data,
                 halfOf(value, mm),
-                halfOf(String(x.value), mm),
+                halfOf(String(painted.value), mm),
                 mm,
               ),
             )
@@ -5334,13 +5375,43 @@ export function holdCopies(ctx, data, s) {
             ...(m ? {mode: m} : {}),
             value: m ? halfOf(value, m) : value,
             when: variant,
-            state: String(x.state),
+            state: st,
             only: true,
             hold: undefined,
             keep: undefined,
             note: undefined,
           });
+          if (m) copied.set(st, (copied.get(st) ?? new Set()).add(m));
         }
+      // (Where the hold covers both modes, a state copied for one mode only
+      // keeps Core's color in the other: the build writes a one-mode value
+      // as a pair, and the setting's own color would fill the other half.)
+      for (const [st, got] of mode ? [] : copied) {
+        const core = coreStateValue(
+          ctx,
+          String(s.on),
+          kebab(s.thing),
+          variant,
+          st,
+        );
+        if (!core) continue;
+        for (const other of /** @type {Array<'light' | 'dark'>} */ ([
+          'light',
+          'dark',
+        ]))
+          if (!got.has(other))
+            out.push({
+              ...s,
+              mode: other,
+              value: halfOf(core, other),
+              when: variant,
+              state: st,
+              only: true,
+              hold: undefined,
+              keep: undefined,
+              note: undefined,
+            });
+      }
     }
   }
   return out;
