@@ -627,7 +627,7 @@ describe('MultiSelector', () => {
   });
 
   it('keeps a right-to-left label that starts with a Latin word in the page direction', () => {
-    const {container} = render(
+    render(
       <div dir="rtl">
         <MultiSelector
           label="Team"
@@ -638,7 +638,7 @@ describe('MultiSelector', () => {
         />
       </div>,
     );
-    const label = [...container.querySelectorAll('span')].find(
+    const label = [...screen.getByRole('combobox').querySelectorAll('span')].find(
       span => span.textContent === 'iPhone חדש',
     );
     // No `dir="auto"`: the first strong letter is Latin, which would lay the
@@ -647,7 +647,7 @@ describe('MultiSelector', () => {
   });
 
   it('gives the overflow count the locale direction, so a right-to-left locale keeps its form', () => {
-    const {container} = render(
+    render(
       <InternationalizationProvider locale="he-IL">
         <MultiSelector
           label="Team"
@@ -658,7 +658,7 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    const spans = [...container.querySelectorAll('span')].filter(span =>
+    const spans = [...screen.getByRole('combobox').querySelectorAll('span')].filter(span =>
       ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
     );
     expect(spans.map(span => span.getAttribute('dir'))).toEqual([
@@ -670,7 +670,7 @@ describe('MultiSelector', () => {
   });
 
   it('isolates each label and the overflow count, keeping the trigger text', () => {
-    const {container} = render(
+    render(
       <MultiSelector
         label="Team"
         options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
@@ -682,7 +682,7 @@ describe('MultiSelector', () => {
     expect(
       screen.getByText(textContentIs('Design, עיצוב, שיווק, +2')),
     ).toBeInTheDocument();
-    const isolated = [...container.querySelectorAll('span')]
+    const isolated = [...screen.getByRole('combobox').querySelectorAll('span')]
       .filter(span =>
         ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
       )
