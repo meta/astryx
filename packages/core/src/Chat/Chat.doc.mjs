@@ -15,6 +15,7 @@ export const docs = {
     targets: [
       {className: 'astryx-chat-layout', visualProps: ['density']},
       {className: 'astryx-chat-composer', visualProps: ['density']},
+      {className: 'astryx-chat-composer-body', visualProps: ['elevation']},
       {className: 'astryx-chat-composer-input'},
       {className: 'astryx-chat-composer-drawer', visualProps: ['collapsed']},
       {className: 'astryx-chat-message', visualProps: ['sender', 'density']},
