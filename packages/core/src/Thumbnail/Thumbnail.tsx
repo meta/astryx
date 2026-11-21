@@ -413,7 +413,7 @@ export function Thumbnail({
   });
   const accessibleName =
     label && alt
-      ? `${label} — ${alt}`
+      ? t('@astryx.thumbnail.nameWithAlt', {label, alt})
       : (label ?? alt ?? t('@astryx.thumbnail.fallbackName'));
 
   // Without `alt`, the image is explicitly decorative rather than silently

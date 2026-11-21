@@ -536,6 +536,10 @@ one removal merged ahead of the decision to allow it.
   every other command, `astryx search` and its discover line included, stay
   behind the icon feature gate. This exception ends when icon
   sets graduate or are removed.
+  A further named exception: one line of the agent docs block MAY name
+  `experimental export`, only when the project's installed CLI has it and only
+  for a request to share a page as one file; that exception ends when export
+  graduates or is removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the

@@ -414,21 +414,18 @@ export function Timestamp({
             )
           : '';
 
-  // Full absolute text for the tooltip (visible — keeps the compact timezone
-  // abbreviation) and for the AT-facing aria-label, which spells the timezone
-  // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
-  // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
-  // viewer's zone: the default hover-card row and the relative accessible name.
-  const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
-    : '';
-  const fullAbsoluteSpokenText = isValidDate
-    ? formatInstant(date, 'full', locale, {
-        timeZone: undefined,
-        timeZoneNameStyle: 'long',
-        calendar,
-      })
-    : '';
+  // The AT-facing aria-label of a relative timestamp spells the timezone out
+  // in full. Abbreviations like "PST" or "GMT+2" are unexpanded abbreviations
+  // to a screen-reader user (WCAG 3.1.4). It stays in the viewer's zone. Only
+  // a relative timestamp carries the name, so no other format builds it.
+  const fullAbsoluteSpokenText =
+    isValidDate && isRelativeFormat(effectiveFormat)
+      ? formatInstant(date, 'full', locale, {
+          timeZone: undefined,
+          timeZoneNameStyle: 'long',
+          calendar,
+        })
+      : '';
   // A relative name starts with the words the timestamp shows, then the full
   // date. A control named from its content then keeps its visible words in its
   // name, so voice control can find it (WCAG 2.5.3).
@@ -519,16 +516,27 @@ export function Timestamp({
     return null;
   }
 
+  // An unknown zone in an entry warns as the timestamp renders, before its
+  // card shows.
+  for (const entry of entries ?? []) {
+    resolveTimezoneID(entry.timezoneID);
+  }
+
   // The rows the hover card renders: the configured entries, or the single
   // default absolute line shown when none are set. Either way the surface is
-  // the same copyable card — the default line is a one-row card carrying the
-  // full absolute time, itself copyable, just like a configured entry.
-  const lines: ReadonlyArray<TimestampTooltipLine> =
+  // the same copyable card. The default line is a one-row card with the full
+  // absolute time in the viewer's zone and its compact abbreviation. It is
+  // copyable, just like a configured entry. The card reads them only while it
+  // shows, so a closed card formats nothing.
+  const getLines = (): ReadonlyArray<TimestampTooltipLine> =>
     entries === undefined
       ? [
           {
-            value: fullAbsoluteText,
-            zoneName: isValidDate ? formatZoneName(date, locale) : '',
+            value: formatInstant(date, 'full', locale, {
+              timeZone: undefined,
+              calendar,
+            }),
+            zoneName: formatZoneName(date, locale),
             isCopyable: true,
           },
         ]
@@ -588,7 +596,7 @@ export function Timestamp({
       {showTooltip && (
         <Suspense fallback={null}>
           <LazyTimestampHoverCard
-            lines={lines}
+            getLines={getLines}
             label={t('@astryx.timestamp.detailsLabel')}
             triggerRef={timeRef}
             onCardOpenChange={setOpenCardId}

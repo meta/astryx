@@ -10,7 +10,7 @@
  *   loads
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page, type Response} from '@playwright/test';
 import {components} from '../src/generated/componentRegistry';
 
 const SAMPLE_COUNT = 10;
@@ -51,18 +51,28 @@ async function loadedScripts(
   page: Page,
   path: string,
 ): Promise<LoadedScript[]> {
-  const scripts: Promise<LoadedScript>[] = [];
-  page.on('response', response => {
-    if (response.request().resourceType() === 'script' && response.ok()) {
-      scripts.push(
-        response
-          .text()
-          .then(text => ({path: new URL(response.url()).pathname, text})),
-      );
+  const reads: Promise<LoadedScript>[] = [];
+  const readScript = (response: Response) => {
+    if (response.request().resourceType() !== 'script' || !response.ok()) {
+      return;
     }
-  });
-  await page.goto(path, {waitUntil: 'networkidle'});
-  return Promise.all(scripts);
+    const read = response
+      .text()
+      .then(text => ({path: new URL(response.url()).pathname, text}));
+    // A read can still be in flight when the page closes, as after a failed
+    // navigation. Its rejection then reaches no one and fails the whole run.
+    void read.catch(() => undefined);
+    reads.push(read);
+  };
+  page.on('response', readScript);
+  try {
+    await page.goto(path, {waitUntil: 'networkidle'});
+  } finally {
+    // The reader stops here, so a script that answers later, as a prefetch
+    // can, starts no read that could outlive the page.
+    page.off('response', readScript);
+  }
+  return Promise.all(reads);
 }
 
 /**
@@ -98,6 +108,48 @@ test('the home page loads no script that holds the component registry', async ({
   await homePage.close();
   expect(homeScripts.length).toBeGreaterThan(0);
   expect(registryScripts(homeScripts, samples)).toEqual([]);
+});
+
+// A read that no one waits on fails the test when its page closes. Playwright
+// then stops the worker, so the test's next browser call fails too.
+test('the script reader leaves alone a script that answers after the network is idle', async ({
+  browser,
+}) => {
+  const page = await browser.newPage();
+  await page.route('**/late-script.js', route =>
+    route.fulfill({contentType: 'text/javascript', body: ''}),
+  );
+  const closed = page.waitForEvent('close');
+  let reading: Promise<unknown> = Promise.resolve();
+  let lateReads = 0;
+  // This listener comes before the reader's own. A read of the late script
+  // then waits until the page has closed, so it is in flight at the close.
+  page.on('response', response => {
+    if (new URL(response.url()).pathname !== '/late-script.js') {
+      return;
+    }
+    const text = response.text.bind(response);
+    response.text = async () => {
+      lateReads += 1;
+      const read = closed.then(text);
+      reading = read.catch(() => undefined);
+      return read;
+    };
+    void page.close();
+  });
+  await loadedScripts(page, '/');
+  await page.evaluate(() => {
+    const script = document.createElement('script');
+    script.src = '/late-script.js';
+    document.head.append(script);
+  });
+  await closed;
+  await reading;
+  // Node reports an unhandled rejection once the current task ends.
+  await new Promise(resolve => {
+    setImmediate(resolve);
+  });
+  expect(lateReads).toBe(0);
 });
 
 // home-component-count.test.tsx pins the rule of the count. This test proves
