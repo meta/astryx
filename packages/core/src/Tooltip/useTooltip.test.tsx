@@ -23,6 +23,7 @@ import {
 } from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {useLayer} from '../Layer/useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Suspense, startTransition, use, useState} from 'react';
@@ -97,6 +98,12 @@ function tick(ms: number) {
 }
 
 describe('useTooltip — a pointer that does not move', () => {
+  // These presses set the document's interaction modality, which outlives
+  // a test; later tests rely on the keyboard default.
+  afterEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
   it('a trigger that appears under a still mouse opens nothing until the mouse moves over it', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
