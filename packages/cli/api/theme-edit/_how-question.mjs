@@ -981,6 +981,17 @@ const LOOK_NOUNS = String.raw`(?:theme|look|vibe|aesthetic|palette)`;
  */
 const TELLING_COMPARATIVES = String.raw`(?:darker|lighter|brighter|duller|bigger|smaller|heavier|thinner)`;
 const MARK_VERBS = String.raw`(?:circle|highlight|mark|ring|outline|underline|show)`;
+/** Words that say the whole theme: "everywhere", "throughout", "the whole app". */
+const THEME_WIDE_WORDS =
+  /\b(?:everywhere|throughout|across the (?:app|board|site|theme)|all over|the whole (?:app|theme|site|ui))\b/;
+/** A likeness said of a part before its list's colon: "menus look like Slack's:", "alerts like Bootstrap 1:". */
+const LIKENESS_TAIL = /^(?:(?:look|looks|feel|feels)\s+)?like\b[^:]*$/;
+/** A side a corner, edge or border look is said of: "on top", "at the bottom", "bottom corners", "bottom border". */
+const SIDE_SAID =
+  /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b|\b(?:top|bottom|left|right)\s+(?:borders?|lines?)\b/;
+/** The app's text said as the thing to change: "make the text a bit larger", "all text". */
+const THE_TEXT_SAID =
+  /\b(?:make|set|turn)\s+(?:the|all)\s+text\b|\ball\s+(?:the\s+)?text\b|^(?:and\s+)?the\s+text\s+(?:a\s+bit\s+|slightly\s+|much\s+)?(?:larger|bigger|smaller|darker|lighter)\b/;
 const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?|tools?|products?|platforms?|portals?)`;
 
 /**
@@ -6368,7 +6379,9 @@ export function draftAnswer(ctx, env, question) {
     .split(
       /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
-    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
+    // (A list's marker, "1." or "2)", never a decimal's whole part: "1.5
+    // leading" is one value.)
+    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)](?!\d))\s*/, ''))
     .filter(x => x.trim());
   // "drop shadow: x 0, y 4, …", "card shadow: 0 1px …, 0 2px …": a label
   // with its value is one clause, commas and all.
@@ -7841,9 +7854,7 @@ export function draftAnswer(ctx, env, question) {
       const tail = lead.slice(m.index + m[0].length).trim();
       // (Or a likeness said of the part: "menus and popovers look like
       // Slack's: white, rounded, …".)
-      return (
-        !tail || /^(?:(?:look|looks|feel|feels)\s+)?like\b[^:]*$/.test(tail)
-      );
+      return !tail || LIKENESS_TAIL.test(tail);
     });
     if (!endsWithPart) return;
     const leadState = stateWord(lead);
@@ -8071,12 +8082,7 @@ export function draftAnswer(ctx, env, question) {
     // ("make headings semibold and make the text a bit larger": the text
     // said with its article as the thing to change, or "all text", is the
     // whole app's, never the part's before it.)
-    if (
-      /\b(?:make|set|turn)\s+(?:the|all)\s+text\b|\ball\s+(?:the\s+)?text\b|^(?:and\s+)?the\s+text\s+(?:a\s+bit\s+|slightly\s+|much\s+)?(?:larger|bigger|smaller|darker|lighter)\b/.test(
-        c.text,
-      )
-    )
-      return 'theme';
+    if (THE_TEXT_SAID.test(c.text)) return 'theme';
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
     // ("cards square on top, 6px rounded at the bottom", "input border
@@ -8085,9 +8091,7 @@ export function draftAnswer(ctx, env, question) {
     // a theme has no bottom border.)
     if (
       own.some(a => a === 'corners' || a === 'border') &&
-      /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b|\b(?:top|bottom|left|right)\s+(?:borders?|lines?)\b/.test(
-        c.text,
-      )
+      SIDE_SAID.test(c.text)
     )
       return 'inherit';
     const subject =
@@ -8554,7 +8558,13 @@ export function draftAnswer(ctx, env, question) {
     // neutral, where no part is named before it or right with it. A color
     // whose own clause says it as a look, "a cool slate palette", is the
     // theme's beside parts too.)
+    // (Or the whole theme said in words, "silver #c0c0c0 everywhere": the
+    // color is the theme's by its role.)
+    // ("don't use red everywhere", "less blue everywhere": a color taken
+    // away or turned down is never the theme's.)
+    const themeWide = !c.neg && !c.dir && THEME_WIDE_WORDS.test(c.text);
     const ownLook =
+      themeWide ||
       /\b(?:theme|look|feel|vibe|style|palette|scheme|branding)\b/.test(c.text);
     const grayLook = /\b(?:gr[ae]y|bluegray|slate)\b/.test(c.text);
     const next = clauses[i + 1];
@@ -8698,7 +8708,7 @@ export function draftAnswer(ctx, env, question) {
     const listLook =
       lookSaid ||
       (grayLook && q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3);
-    if (!listLook && (c.colors.length > 1 || !alone)) continue;
+    if (!listLook && !themeWide && (c.colors.length > 1 || !alone)) continue;
     // (A look's own colors, "a sand palette", paint no part: only a part's
     // paint keeps the color off the dials.)
     const paints = c.aspects.some(
@@ -8715,16 +8725,33 @@ export function draftAnswer(ctx, env, question) {
     let accentTaken = false;
     // (Only colors said by name: a typed value continues the ask before
     // it, "their brand blue, #0057ff".)
-    const named = colorsFound(c.text)
-      .filter(x => !x[2])
+    // (Said for the whole theme, a typed value is the color itself.)
+    // ("navy #000080 everywhere": the one value typed, whatever word is
+    // said with it.)
+    const typedHere = colorsFound(c.text)
+      .filter(x => x[2])
       .map(x => x[1]);
-    if (colorsFound(c.text).some(x => x[2])) continue;
+    const typedToo =
+      themeWide &&
+      (new Set(c.colors).size === 1 || new Set(typedHere).size === 1);
+    const named = typedToo
+      ? [...new Set(typedHere.length ? typedHere : c.colors)]
+      : colorsFound(c.text)
+          .filter(x => !x[2])
+          .map(x => x[1]);
+    if (!typedToo && colorsFound(c.text).some(x => x[2])) continue;
     for (const color of named) {
       const rgb = parseColor(color);
       if (!rgb) continue;
       const hi = Math.max(...rgb.slice(0, 3));
       const lo = Math.min(...rgb.slice(0, 3));
-      if (hi - lo < 12 && (lo > 235 || hi < 20)) continue;
+      if (hi - lo < 12 && (lo > 235 || hi < 20)) {
+        // (White or black for the whole theme is its page, never a brand:
+        // "white everywhere".)
+        const page = themeWide ? clausesOf(`page ${color}`, lex.parts) : [];
+        if (page.length === 1) dials.push(...page);
+        continue;
+      }
       const quiet = hi - lo < 64 && hi > 120;
       if (!quiet && accentTaken) continue;
       const dial = clausesOf(
@@ -8736,6 +8763,8 @@ export function draftAnswer(ctx, env, question) {
       dials.push(...dial);
     }
     if (!dials.length) continue;
+    // ("red everywhere in dark mode": the mode said with the color.)
+    if (c.mode && themeWide) for (const d of dials) d.mode = c.mode;
     if (!c.aspects.length && !c.dir) clauses.splice(i, 1, ...dials);
     else {
       c.colors = [];
@@ -9229,6 +9258,8 @@ export function draftAnswer(ctx, env, question) {
   const prohibited = [];
   /** The clause each draft answers. @type {WeakMap<Draft, Clause>} */
   const draftClause = new WeakMap();
+  /** Clauses a clash's choice answers ("8px … 2px corners"). @type {Set<unknown>} */
+  const clashClauses = new Set();
   /** Parts a symmetric "match" ask already answered for. @type {Set<string>} */
   const symDone = new Set();
   /** Places the question names that the editor cannot keep apart. @type {Array<{c: any, text: string}>} */
@@ -11835,10 +11866,29 @@ export function draftAnswer(ctx, env, question) {
           : null;
       // Only the aspects a length can set: "headings 32px bold, captions
       // 12px" gives captions a size, not the headings' bold.
-      if (from)
+      // (Never from the clause after it when that clause gives its look a
+      // value of its own: "16px, 1.5 leading" is a size and a leading,
+      // never two leadings.)
+      if (
+        from &&
+        !(
+          from === next &&
+          (/\d/.test(next.text) ||
+            next.aspects.some(a =>
+              ['leading', 'tracking', 'family'].includes(a),
+            ))
+        )
+      )
         c.aspects = from.aspects.filter(
           a => !['weight', 'italic', 'case', 'family'].includes(a),
         );
+      // (A bare size said beside the type's own looks, "16px, 1.5
+      // leading", is the type's size.)
+      else if (
+        from === next &&
+        next.aspects.some(a => ['leading', 'tracking', 'family'].includes(a))
+      )
+        c.aspects = ['fontsize'];
     }
     // "in dark mode, cards are #1c1c1e": a clause that only names the mode
     // gives it to the clauses after it.
@@ -28855,21 +28905,25 @@ export function draftAnswer(ctx, env, question) {
           last.delete(key);
           last.set(key, {step: merged, clause});
           continue;
-        } else clashes.push([prior.step, st]);
+        } else {
+          clashes.push([prior.step, st]);
+          clashClauses.add(prior.clause);
+          clashClauses.add(clause);
+        }
       }
       last.delete(key);
       last.set(key, {step: st, clause});
     }
   const MAX_STEPS = 12;
-  if (clashes.length) {
-    const [a, b] = clashes[0];
-    result.push({
-      text: `the question asks for ${a.thing} ${a.value} and ${b.thing} ${b.value}${a.on ? ` on ${a.on}` : ''}, which contradict each other; pick one`,
-      options: [[a], [b]],
-    });
-  } else if (last.size > 1 && clauses.length > 1) {
+  // (A clash holds back only its own two steps, named as a choice; every
+  // other clause of the ask is still answered and run in turn.)
+  const clashKeys = new Set(clashes.flatMap(([a, b]) => [idOf(a), idOf(b)]));
+  const unclashed = new Map(
+    [...last].filter(([, x]) => !clashKeys.has(idOf(x.step))),
+  );
+  if (unclashed.size > 1 && clauses.length > 1) {
     // The page never takes the color the text takes in the same mode.
-    const all = [...last.values()]
+    const all = [...unclashed.values()]
       .map(x => x.step)
       .filter(
         (st, i, list) =>
@@ -28925,7 +28979,9 @@ export function draftAnswer(ctx, env, question) {
     // clause's steps (its write and the keeps it needs, a status's border
     // written back) run together or not at all. The rest follow as the next
     // sequences, each runnable in turn.
-    const clauseOf = new Map([...last.values()].map(x => [x.step, x.clause]));
+    const clauseOf = new Map(
+      [...unclashed.values()].map(x => [x.step, x.clause]),
+    );
     /** @type {Step[][]} */
     let groups = [];
     for (const st of all) {
@@ -29007,6 +29063,12 @@ export function draftAnswer(ctx, env, question) {
         }),
       );
   }
+  // (Each clash its own choice, so none goes unanswered.)
+  for (const [a, b] of clashes)
+    result.push({
+      text: `the question asks for ${a.thing} ${a.value} and ${b.thing} ${b.value}${a.on ? ` on ${a.on}` : ''}, which contradict each other; pick one${unclashed.size ? ' (the rest of the ask is answered without them)' : ''}`,
+      options: [[a], [b]],
+    });
   // (A draft whose every step a later "then" clause replaces is not
   // offered: the sequence ends at the later value.)
   const replaced = new Set(
@@ -29048,7 +29110,33 @@ export function draftAnswer(ctx, env, question) {
         !/were said for the text/.test(d.text)
       )
         d.text += ` (${values.length === 2 ? 'two' : values.length} colors were said for the text, ${values.slice(0, -1).join(', ')} and ${values.at(-1)}; the last one, ${values.at(-1)}, is written)`;
-  result.push(...kept.slice(0, clashes.length ? 0 : undefined));
+  // (Every clause's own answer, without the clashing steps, which the
+  // choice above offers.)
+  result.push(
+    ...kept.flatMap(d => {
+      if (!clashes.length) return [d];
+      const options = d.options
+        .map(o => o.filter(st => !clashKeys.has(idOf(st))))
+        .filter(o => o.length);
+      // (An option the clash took whole means the other options write the
+      // same value another way: the clause is the choice's alone.)
+      if (options.length < d.options.length) return [];
+      if (
+        options.length === d.options.length &&
+        options.every((o, k) => o.length === d.options[k].length)
+      )
+        return [d];
+      return options.length
+        ? [
+            {
+              ...d,
+              text: `${d.text} (without the clashing values above)`,
+              options,
+            },
+          ]
+        : [];
+    }),
+  );
   // An undo of a setting the theme does not have ("…; also undo the
   // corners" with no corners set) is named as having nothing to take back;
   // the rest of the ask is written.
@@ -32278,6 +32366,16 @@ export function draftAnswer(ctx, env, question) {
             !lex.vocab.includes(w) &&
             !Object.hasOwn(HUES, w) &&
             !lex.parts.some(([re]) => re.test(` ${w} `)) &&
+            // ("title bars", "everywhere": read as a part's phrase or as the
+            // whole theme.)
+            !(
+              q.toLowerCase().match(new RegExp(THEME_WIDE_WORDS.source, 'g')) ??
+              []
+            ).some(m => m.split(/\s+/).includes(w)) &&
+            !lex.parts.some(([re]) => {
+              const m = re.exec(q.toLowerCase());
+              return Boolean(m && m[0].split(/\s+/).includes(w));
+            }) &&
             !aspectsOf(w).length &&
             stateWord(w) == null &&
             !colorsIn(w).length &&
@@ -32517,6 +32615,7 @@ export function draftAnswer(ctx, env, question) {
       ...result.map(d => draftClause.get(d)).filter(x => x != null),
       ...foldedClauses,
       ...answeredByUndo,
+      ...clashClauses,
     ]);
     const silent = clauses.filter(c => {
       const t = c.text.trim();
