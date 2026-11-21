@@ -382,6 +382,20 @@ const ROWS = [
     },
   ],
   [
+    "a head with its own colon keeps its items, never the app's part",
+    {
+      q: 'cards: white background, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    'a head with its own colon keeps a button item, never every button',
+    {
+      q: 'toasts: dark, close button: white',
+      never: /--on button\b|--when variant:(?:secondary|ghost)/,
+    },
+  ],
+  [
     'a part that paints no shadow takes the large shared shadow',
     {
       q: 'ugh the cards look so flat, fix it',

@@ -10852,11 +10852,13 @@ export function draftAnswer(ctx, env, question) {
       const plural = !said || /s$/i.test(said);
       const colon = joinOf.get(c)?.list !== 'with';
       // ("popover, tooltip and hover card: dark": a part said before the
-      // colon is one of the list's subjects, never an item of the first.)
+      // list's own colon is one of its subjects, never an item of the
+      // first. A head with a colon of its own, "cards: white background,
+      // header: navy", keeps its items.)
       const subjectOfColon =
-        !!said &&
-        /:/.test(c.text) &&
-        c.text.indexOf(said) < c.text.indexOf(':');
+        !!head &&
+        !listSubjectOf.has(head) &&
+        (listSubjectOf.get(c)?.parts ?? []).some(p => p.on === c.parts[0]?.on);
       if (
         holder &&
         head !== c &&
