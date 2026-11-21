@@ -909,10 +909,11 @@ async function pointed(first, program, findEntry, iconFeatures) {
  *   points at a command. `iconFeatures` says whether icon features are on;
  *   without it, they are off. `projectScript` finds the project's own script
  *   the word names; without it, no word names one
- * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, near?: true, fallback?: true} | null>}
+ * @returns {Promise<{word: string, message: string, suggestions: Array<{name: string, reason: string}>, near?: true, help?: {name: string, reason: string}, fallback?: true} | null>}
  *   null when no word names a command; `near` when the suggestions are the
- *   names of commands the word is a typo of; `fallback` when nothing fits and
- *   the one suggestion is the help
+ *   names of commands the word is a typo of, with `help`: the help run, with
+ *   the program options typed, for a printer that names only runs;
+ *   `fallback` when nothing fits and the one suggestion is the help
  */
 export async function unknownCommandAnswer(
   program,
@@ -974,6 +975,7 @@ export async function unknownCommandAnswer(
       message,
       suggestions: near.map(name => ({name, reason: 'did you mean this?'})),
       near: true,
+      help,
     };
   // When nothing fits, the help lists every command with what it does. A
   // bare list of names would put the first one (`init`, which writes files)

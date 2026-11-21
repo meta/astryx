@@ -659,6 +659,20 @@ describe('the CLI', () => {
     ).toEqual(['astryx --json theme eject --help']);
   });
 
+  it("keeps the program options the reader typed in the help named in place of a typo's command, beside an option the program does not take", async () => {
+    /** @param {string[]} words */
+    const suggested = async words =>
+      JSON.parse((await runCli(words)).stdout).suggestions.map(
+        (/** @type {{name: string}} */ s) => s.name,
+      );
+    const after = await suggested(['compnent', '--bogus', '--json']);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatch(/ help --json$/);
+    const before = await suggested(['--json', 'compnent', '--bogus']);
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatch(/ --json help$/);
+  });
+
   it('names the help, not a command that writes files, when nothing fits', async () => {
     const {status, stdout} = await runCli(['--json', 'frobnicate']);
     expect(status).toBe(1);
