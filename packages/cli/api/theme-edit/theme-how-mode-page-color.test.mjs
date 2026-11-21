@@ -223,6 +223,22 @@ describe('a color said for one mode is its page', () => {
         for (const l of buttons) expect(l, ask).toMatch(/--mode dark$/);
         expect(pageIn(lines, 'dark'), ask).not.toBeNull();
       }
+      // (A nearer mode said for a part, not a page, ends the page's run:
+      // the blue links are not kept to light mode.)
+      const nearer = /** @type {string[]} */ (
+        (
+          await themeEditHow(
+            'light mode is pale blush, dark mode gets gold buttons, blue links',
+            {cwd, theme: 'c'},
+          )
+        ).data.results ?? []
+      ).flatMap(r => r.commands ?? []);
+      const nearerAccent = nearer.filter(l =>
+        /--color-text-accent/.test(String(l)),
+      );
+      expect(nearerAccent.length).toBeGreaterThan(0);
+      for (const l of nearerAccent)
+        expect(String(l)).not.toMatch(/--mode light$/);
       const links = await first('dark mode is navy, with blue links');
       const accent = links.filter(l => /--color-text-accent/.test(l));
       expect(accent.length).toBeGreaterThan(0);
