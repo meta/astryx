@@ -101,6 +101,7 @@ import {
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {isHTMLElement} from '../utils/nodeType';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 
@@ -731,6 +732,36 @@ export function Dialog({
   const allowEscape = purpose !== 'required';
   const allowBackdropClick = purpose === 'info';
 
+  // Only a standard dialog with full motion travels in from its opener's side.
+  // A full-screen entrance fades in place, and a settled open does not animate.
+  const entersFromOpener = !isFullscreen && !opensSettled;
+
+  // Syncs the entrance offset in the dialog's style with the opener's
+  // position, before the Effect below opens the dialog. The layout effect
+  // above captured the trigger before any descendant effect could move focus.
+  // An entrance that does not travel does not read the opener's box.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (isInline || !isOpen || dialog == null || dialog.open) {
+      return;
+    }
+    const trigger = triggerElementRef.current;
+    const travels =
+      entersFromOpener &&
+      !matchesMediaQuery(
+        dialog.ownerDocument.defaultView,
+        '(prefers-reduced-motion: reduce)',
+      );
+    if (travels && trigger && trigger !== trigger.ownerDocument.body) {
+      const dir = getDialogDirection(trigger);
+      dialog.style.setProperty('--dialog-dir-x', `${dir.x}px`);
+      dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
+    } else {
+      dialog.style.setProperty('--dialog-dir-x', '0px');
+      dialog.style.setProperty('--dialog-dir-y', '16px');
+    }
+  }, [isOpen, isInline, entersFromOpener]);
+
   // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   // An inline dialog is not in the top layer, so it skips this.
   useEffect(() => {
@@ -743,19 +774,6 @@ export function Dialog({
     }
 
     if (isOpen) {
-      // Set directional CSS custom properties before opening. The trigger was
-      // captured by the layout effect above, before any descendant effect
-      // could move focus.
-      const trigger = triggerElementRef.current;
-      if (trigger && trigger !== trigger.ownerDocument.body) {
-        const dir = getDialogDirection(trigger);
-        dialog.style.setProperty('--dialog-dir-x', `${dir.x}px`);
-        dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
-      } else {
-        dialog.style.setProperty('--dialog-dir-x', '0px');
-        dialog.style.setProperty('--dialog-dir-y', '16px');
-      }
-
       if (!dialog.open) {
         dialog.showModal();
         // React's autoFocus calls .focus() during commit, before showModal()
