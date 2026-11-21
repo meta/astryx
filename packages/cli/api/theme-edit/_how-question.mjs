@@ -33168,8 +33168,27 @@ export function draftAnswer(ctx, env, question) {
   // color written for both that one mode's page makes hard to read says
   // so, with that mode, the ratio and the way to keep it readable there.
   // Only text on the page: a part that draws its own fill, a button,
-  // puts its text on that fill, never on the page.)
-  if (modal && asked0.replace(PLURAL_BOTH_MODES, pluralBothModesAt) !== asked0)
+  // puts its text on that fill, never on the page. The page is the one the
+  // answer leaves: a page color any of its lines writes counts over the
+  // saved one.)
+  if (
+    modal &&
+    asked0.replace(PLURAL_BOTH_MODES, pluralBothModesAt) !== asked0
+  ) {
+    const answered = result.flatMap(r => r.options.flat());
+    /** @param {'light' | 'dark'} m */
+    const pageIn = m => {
+      const said = (/** @type {string | null} */ mode) =>
+        answered.find(
+          st =>
+            st.verb === 'set' &&
+            st.thing === '--color-background-body' &&
+            (st.mode ?? null) === mode,
+        )?.value;
+      return String(
+        said(m) ?? said(null) ?? current('--color-background-body', m),
+      );
+    };
     for (const r of result) {
       /** @type {string[]} */
       const notes = [];
@@ -33186,7 +33205,7 @@ export function draftAnswer(ctx, env, question) {
         const rgb = parseColor(String(step.value));
         if (!rgb) continue;
         for (const m of /** @type {const} */ (['light', 'dark'])) {
-          const page = parseColor(current('--color-background-body', m));
+          const page = parseColor(pageIn(m));
           const read = page ? ratio(rgb, page) : Infinity;
           const note = `${step.value} reads ${read.toFixed(2)}:1 on the ${m} page (under 4.5:1); for ${m} mode, set a ${m === 'dark' ? 'lighter' : 'darker'} color with --mode ${m}`;
           if (read < 4.5 && !notes.includes(note)) notes.push(note);
@@ -33194,6 +33213,7 @@ export function draftAnswer(ctx, env, question) {
       }
       if (notes.length) r.text = `${r.text}; ${notes.join('; ')}`;
     }
+  }
   // Each file set aside is written back as typed, where an answer names or
   // writes it.
   if (urls.length)
