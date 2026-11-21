@@ -51,8 +51,11 @@ const QUERY_CONSTANTS: Readonly<Record<string, string>> = {
   REDUCED_MOTION_COARSE_QUERY: 'BottomSheet/BottomSheetPanel.tsx',
 };
 
-/** A quoted (any quote style) script spelling of the setting's query. */
-const SETTING_QUERY = /[`'"]\(prefers-reduced-motion/;
+/**
+ * A quoted (any quote style) script spelling of the setting's query, alone or
+ * inside a longer query.
+ */
+const SETTING_QUERY = /[`'"][^`'"]*\(prefers-reduced-motion/;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap(name => {
