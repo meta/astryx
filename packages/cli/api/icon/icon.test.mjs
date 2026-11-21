@@ -771,6 +771,90 @@ describe('a word matches whole words (FR6)', () => {
     ).toEqual(['brand', 'backup']);
   });
 
+  it('counts the words after the icon word that name a component only to break a tie', () => {
+    const set = setOf([
+      {id: 'info', words: ['info', 'information']},
+      {id: 'link'},
+      {id: 'table'},
+    ]);
+    const componentNames = () => ['Popover', 'Link', 'Table'];
+    /** @param {string} query @param {object} [options] */
+    const first = (query, options = {componentNames}) =>
+      answeringMatches(rankIcons([set], query, {words: true, ...options}))[0]
+        ?.id;
+    // `popover links` say where the icon goes, so `information` leads.
+    expect(first('information icon popover links')).toBe('info');
+    expect(first('information icon popover links', {})).toBe('link');
+    // With nothing named before the icon word, or `of` or `for` after it,
+    // every word says what the icon shows.
+    expect(first('icon popover links information')).toBe('link');
+    expect(first('information icon of popover links')).toBe('link');
+    // Only the words after the last icon word count as places.
+    expect(first('information icon links icon')).toBe('link');
+    // A name of several words counts as places only spelled out in full.
+    const blocks = setOf([{id: 'settings'}, {id: 'code'}, {id: 'block'}]);
+    const blockNames = () => ['Code', 'CodeBlock'];
+    /** @param {string} query */
+    const firstBlock = query =>
+      answeringMatches(
+        rankIcons([blocks], query, {words: true, componentNames: blockNames}),
+      )[0]?.id;
+    expect(firstBlock('settings icon code block')).toBe('settings');
+    expect(firstBlock('settings icon code blocks')).toBe('settings');
+    expect(firstBlock('settings icon block')).toBe('block');
+    // A word also written before the icon word keeps its full weight.
+    const charts = setOf([{id: 'table'}, {id: 'chart'}, {id: 'chart-bar'}]);
+    /** @param {string} query */
+    const firstChart = query =>
+      answeringMatches(
+        rankIcons([charts], query, {
+          words: true,
+          componentNames: () => ['Table'],
+        }),
+      )[0]?.id;
+    expect(firstChart('table chart icon table')).toBe('table');
+    expect(firstChart('chart icon table')).toBe('chart');
+  });
+
+  it('names the meaning import by the definition the query ranks first, with its place words', async () => {
+    const app = writeIconSetProject(path.join(tmp, 'boards'), {
+      packages: [
+        {
+          data: {
+            ...glyphsData(),
+            icons: [{id: 'board', export: 'BoardIcon', words: ['board']}],
+            map: {clipboard: 'board', list: 'board'},
+          },
+        },
+      ],
+    });
+    const found = await icon('clipboard icon list', {cwd: app});
+    expect(
+      found.type === 'icon.search' && found.data.matches[0]?.meaningImport,
+    ).toBe("import {BoardIcon as ClipboardIcon} from '@acme/glyphs';");
+  });
+
+  it("reads the names of the project's Core components for the words after the icon word", async () => {
+    const app = writeIconSetProject(path.join(tmp, 'places'), {
+      packages: [
+        {
+          data: {
+            ...glyphsData(),
+            icons: [
+              {id: 'info', export: 'InfoIcon', words: ['info', 'information']},
+              {id: 'link', export: 'LinkIcon', words: ['link']},
+            ],
+            map: {},
+          },
+        },
+      ],
+    });
+    const found = await icon('information icon popover links', {cwd: app});
+    expect(
+      found.type === 'icon.search' && found.data.matches.map(m => m.id),
+    ).toEqual(['info', 'link']);
+  });
+
   it('answers with word matches only when asked for them', () => {
     const set = setOf([{id: 'copy'}, {id: 'clipboard-copy'}]);
     expect(rankIcons([set], 'copy button clipboard')).toEqual([]);
