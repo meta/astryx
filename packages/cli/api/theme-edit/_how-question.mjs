@@ -33617,6 +33617,15 @@ export function draftAnswer(ctx, env, question) {
       const modeOnly =
         /^(?:(?:in|for|on)\s+)?(?:the\s+)?(dark|light)(?:[- ]mode)?$/.exec(t);
       if (modeOnly && steps.some(st => st.mode === modeOnly[1])) return false;
+      // ("overlays with a 1px border": the role word before the "with" is
+      // what the border reading narrowed to.)
+      if (
+        /^(?:the\s+|all\s+)?(?:controls?|overlays?|surfaces?|containers?)$/i.test(
+          t,
+        ) &&
+        steps.some(st => /^border/.test(String(st.thing)))
+      )
+        return false;
       if (
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),

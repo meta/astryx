@@ -149,6 +149,16 @@ describe('a whole-theme border said once', () => {
     const withForm = await commands('overlays with a 1px #4d4d4d border', 'br');
     expect(withForm.some(x => / --on popover$/.test(x))).toBe(true);
     expect(withForm.some(x => / --on button$/.test(x))).toBe(false);
+    // (The role word before "with" is what the border took: not "not used".)
+    for (const q of [
+      'overlays with a 1px #4d4d4d border',
+      'the overlays with a 1px #4d4d4d border',
+    ]) {
+      const said = (await themeEditHow(q, {cwd, theme: 'br'})).data.results
+        .map((/** @type {any} */ r) => r.text)
+        .join('\n');
+      expect(said, q).not.toMatch(/not used/);
+    }
   }, 240_000);
 });
 
