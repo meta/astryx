@@ -8061,7 +8061,12 @@ export function compileTheme(ctx, data, base) {
           }
         }
         if (kebab(s.thing) === 'color')
-          for (const tok of colorTokensReached(ctx.C, t))
+          for (const tok of colorTokensReached(
+            ctx.C,
+            t,
+            ctx.project,
+            /** @type {any} */ (ctx).parts?.pairs,
+          ))
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
               putComp(s, t, tok, s.value);
         // A padding on a part whose box reads Core's padding variables is
@@ -11499,9 +11504,12 @@ export async function contrastProblems(ctx, data, res) {
         ? tokens.includes(x.thing)
         : x.source === 'property' &&
           x.thing === 'color' &&
-          colorTokensReached(ctx.C, /** @type {string} */ (t)).some(k =>
-            tokens.includes(k),
-          ));
+          colorTokensReached(
+            ctx.C,
+            /** @type {string} */ (t),
+            ctx.project,
+            /** @type {any} */ (ctx).parts?.pairs,
+          ).some(k => tokens.includes(k)));
     // (On the part around it, a setting for that part's variant the text
     // sits on counts.)
     const viaGround = latest(
@@ -15258,9 +15266,15 @@ export function stateSlot(
  * @param {{MAP: Record<string, any>}} C
  * @param {string} part
  * @param {boolean} [deep]
+ * @param {(part: string) => boolean} [keep] which contained parts count, when deep
  * @returns {string[]}
  */
-export function innerTextTokens(C, part, deep = false) {
+export function innerTextTokens(
+  C,
+  part,
+  deep = false,
+  keep = (/** @type {string} */ _q) => true,
+) {
   const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
   /** @type {Set<string>} */
   const out = new Set();
@@ -15273,6 +15287,7 @@ export function innerTextTokens(C, part, deep = false) {
   add(rec?.inside);
   if (deep)
     for (const inner of rec?.contains ?? []) {
+      if (!keep(inner)) continue;
       const r = C.MAP[inner];
       add(r?.inside);
       // A part's own color counts where it reads the token always, or for
@@ -15486,12 +15501,62 @@ export function columnLineTokens(C, part, prop) {
  * it count, on the part alone.
  * @param {{MAP: Record<string, any>}} C
  * @param {string} part
+ * @param {{target?: Map<string, {component?: string}>}} [project]
+ * @param {Array<{text: string, within?: string[]}>} [pairs] the census's text pairs
  * @returns {string[]}
  */
-export function colorTokensReached(C, part) {
+export function colorTokensReached(C, part, project, pairs) {
   const inner = innerTextTokens(C, part);
-  if (inner.length || C.MAP[part]?.own?.color) return inner;
-  return innerTextTokens(C, part, true);
+  if (inner.length) return inner;
+  if (!C.MAP[part]?.own?.color) return innerTextTokens(C, part, true);
+  // A row drawn more than once inside another part (a select's option row,
+  // a menu's item) that draws no text itself, whose text is a label of its
+  // own component drawn inside it (the option's item): the color reaches
+  // the tokens that label reads. A part drawn on a kept part's element
+  // (the Item an option is drawn as, inside the row) counts as kept. A
+  // part with a color of its own that is not such a row (a table, a
+  // markdown block) keeps the color on itself: content an app puts inside
+  // it keeps its own.
+  const componentOf = (/** @type {string} */ q) =>
+    project?.target?.get(q)?.component;
+  const own = componentOf(part);
+  const listedRow = Object.values(C.MAP).some(r =>
+    (r?.listed ?? []).includes(part),
+  );
+  if (own == null || !listedRow || drawsOwnText(pairs, part)) return inner;
+  const ownParts = (C.MAP[part]?.contains ?? []).filter(
+    (/** @type {string} */ q) => componentOf(q) === own,
+  );
+  /** @param {string} q */
+  const drawnWith = q =>
+    ownParts.some((/** @type {string} */ k) =>
+      (C.MAP[k]?.drawnAs ?? []).includes(q),
+    ) ||
+    (C.MAP[q]?.drawnAs ?? []).some(
+      (/** @type {string} */ x) => componentOf(x) === own,
+    );
+  return innerTextTokens(
+    C,
+    part,
+    true,
+    q => componentOf(q) === own || drawnWith(q),
+  );
+}
+
+/**
+ * Whether a part draws text of its own, as the census draws it: false for a
+ * part whose every text is another part's inside it (a select's option row,
+ * whose label is an item), so a color set on it may reach the tokens those
+ * parts read. Without census pairs, true (the part's own color is its text).
+ * @param {Array<{text: string, within?: string[]}> | undefined} pairs
+ * @param {string} part
+ */
+function drawsOwnText(pairs, part) {
+  if (!Array.isArray(pairs)) return true;
+  return (
+    pairs.some(x => x.text === part) ||
+    !pairs.some(x => (x.within ?? []).includes(part))
+  );
 }
 
 /**
