@@ -218,6 +218,19 @@ describe('light and dark said as what the theme must work in', () => {
     expect(must.join('\n')).toMatch(
       /--color-text-primary '#111111' --mode light/,
     );
+    // (Said to be usable in both modes, a color one page makes hard to
+    // read is written for both, with a note naming that mode and the
+    // ratio.)
+    const links = await results(
+      'fresh',
+      'links that are usable in light and dark mode should be navy',
+    );
+    const linkLines = links.flatMap(r => r.commands).join('\n');
+    expect(linkLines).toMatch(/'#1e3a8a'/);
+    expect(linkLines).not.toMatch(/'#1e3a8a'[^\n]*--mode/);
+    expect(links.map(r => r.text).join('\n')).toMatch(
+      /#1e3a8a reads \d+\.\d\d:1 on the dark page \(under 4\.5:1\); for dark mode, set a lighter color with --mode dark/,
+    );
   }, 300_000);
   it('asks for nothing when "not" comes before it', async () => {
     for (const q of [
