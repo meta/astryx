@@ -206,7 +206,9 @@ describe('clone and blind asks', () => {
         "background-color '#2563eb' --on button --when variant:primary",
         "background-color '#2563eb' --on button --when variant:secondary",
         "background-color '#2563eb' --on button --when variant:ghost",
-        "color '#ffffff' --on button",
+        "color '#ffffff' --on button --when variant:primary",
+        "color '#ffffff' --on button --when variant:secondary",
+        "color '#ffffff' --on button --when variant:ghost",
       ]);
     },
     T,

@@ -106,7 +106,7 @@ describe("a toast's text", () => {
         on: 'toast',
       });
       const p = await toastProblems('g');
-      expect(p.map(x => x.problem).join('\n')).toMatch(/3\.95:1 in dark/);
+      expect(p.map(x => x.problem).join('\n')).toMatch(/3\.94:1 in dark/);
       expect(p[0].fix).toMatch(/set g color '#000000' --on toast --mode dark/);
       expect(new Set(toastSides('g'))).toEqual(new Set(['off']));
     },
