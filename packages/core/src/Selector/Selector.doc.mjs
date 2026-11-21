@@ -182,7 +182,7 @@ export const docs = {
     },
     {
       name: 'options',
-      type: 'SelectorOption[]',
+      type: 'SelectorOptionType[]',
       description:
         'Array of items: strings, objects with value/label/description/icon/disabled, dividers ({type: "divider"}), or sections ({type: "section", title, options}).',
       required: true,
