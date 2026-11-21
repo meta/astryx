@@ -46,7 +46,7 @@ const CASES = /** @type {[string, string[], object, number | null][]} */ ([
   ],
   [
     'the shortest start that counts',
-    ['complex', 'select'],
+    ['complex', 'selec'],
     {name: 'ComplexSelector', domain: 'component'},
     95,
   ],
