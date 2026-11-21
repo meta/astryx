@@ -16,6 +16,7 @@ const {
   resolveReviewApprovals,
   TRAINER_WAITING_TEXT,
   needsTrainerPass,
+  ownerRemovedLabelAtHead,
   trainerPassed,
   OWNER_CLEARED_TEXT,
 } = require('./review-signal-decision.cjs');
@@ -458,5 +459,86 @@ describe("a trainer pass for the review app's own pull requests", () => {
       true,
     );
     expect(TRAINER_WAITING_TEXT.length).toBeLessThanOrEqual(140);
+  });
+});
+
+describe('ownerRemovedLabelAtHead', () => {
+  const LABEL = 'needs:design-review';
+  const owners = ['engineer', 'designer'];
+  const at = minute => `2026-11-14T17:${String(minute).padStart(2, '0')}:00Z`;
+  // The head reached the pull request when review-signal first gated it.
+  const arrived = minute => ({
+    context: 'review-required',
+    creator: {login: 'github-actions[bot]'},
+    created_at: at(minute),
+  });
+  const removed = (login, minute, name = LABEL) => ({
+    event: 'unlabeled',
+    actor: {login},
+    label: {name},
+    created_at: at(minute),
+  });
+  // A pushed commit is listed by its committer date, which can be earlier
+  // than both its push and an owner's removal.
+  const committed = (minute, sha) => ({
+    event: 'committed',
+    sha,
+    committer: {date: at(minute)},
+  });
+  // The head commit is passed too, as a rule that reads the head from the
+  // timeline's commits would need it; this rule dates the head by its status.
+  const decide = (events, headStatuses) =>
+    ownerRemovedLabelAtHead({
+      events,
+      headStatuses,
+      label: LABEL,
+      owners,
+      headSha: head2,
+    });
+
+  it('sees an owner removal after the head arrived', () => {
+    expect(decide([removed('designer', 30)], [arrived(20)])).toEqual({
+      removedAtHead: true,
+      by: 'designer',
+    });
+    // An engineering owner counts too, and logins compare case-insensitively.
+    expect(decide([removed('Engineer', 30)], [arrived(20)]).removedAtHead).toBe(
+      true,
+    );
+  });
+
+  it('does not count a removal from before the head arrived, whatever the commit date', () => {
+    // As on a real timeline: a commit dated 17:05, pushed at 17:19, after an
+    // owner removed the label at 17:14 on the head before it.
+    expect(
+      decide([committed(5, head2), removed('designer', 14)], [arrived(19)]),
+    ).toEqual({removedAtHead: false, by: null});
+  });
+
+  it('does not count a removal by someone who is not an owner', () => {
+    expect(
+      decide([removed('contributor', 30)], [arrived(20)]).removedAtHead,
+    ).toBe(false);
+  });
+
+  it('counts only the label itself, and only trusted gate statuses for the arrival', () => {
+    expect(
+      decide([removed('designer', 30, 'needs:code-review')], [arrived(20)])
+        .removedAtHead,
+    ).toBe(false);
+    // No review-required status on the head: its arrival is unknown.
+    expect(decide([removed('designer', 30)], []).removedAtHead).toBe(false);
+    // A status another account wrote does not date the head.
+    expect(
+      decide(
+        [removed('designer', 30)],
+        [{...arrived(20), creator: {login: 'someone'}}],
+      ).removedAtHead,
+    ).toBe(false);
+    // The earliest gate status dates the head, not a later rewrite.
+    expect(
+      decide([removed('designer', 30)], [arrived(40), arrived(20)])
+        .removedAtHead,
+    ).toBe(true);
   });
 });

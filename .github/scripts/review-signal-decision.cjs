@@ -121,6 +121,46 @@ function resolveReviewApprovals({
   };
 }
 
+/**
+ * Whether an owner removed an advisory label at the current head: the newest
+ * removal of `label` by an engineering or design owner comes after the head
+ * reached the pull request. A pushed commit carries its committer date, not
+ * its push time, so the head's arrival is the earliest trusted
+ * `review-required` status on it, which review-signal writes for every new
+ * head. With no such status the head's arrival is unknown, and the removal
+ * does not count. Then the owner has seen this head, and the label is not
+ * added back to it.
+ * @param {object} options
+ * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, created_at?: string}>} options.events
+ *   the pull request's timeline
+ * @param {Array<{context?: string, creator?: {login?: string}, created_at?: string}>} options.headStatuses
+ *   the commit statuses on the current head
+ * @param {string} options.label
+ * @param {string[]} options.owners lowercase logins
+ * @returns {{removedAtHead: boolean, by: string | null}}
+ */
+function ownerRemovedLabelAtHead({events, headStatuses, label, owners}) {
+  const arrivals = trustedStatuses(headStatuses, REVIEW_GATE_CONTEXT)
+    .map(status => Date.parse(status.created_at ?? ''))
+    .filter(Number.isFinite);
+  if (arrivals.length === 0) return {removedAtHead: false, by: null};
+  const arrived = Math.min(...arrivals);
+  let removedAt = -Infinity;
+  let by = null;
+  for (const event of events) {
+    if (event.event !== 'unlabeled' || event.label?.name !== label) continue;
+    const login = event.actor?.login?.toLowerCase();
+    const at = Date.parse(event.created_at ?? '');
+    if (!login || !owners.includes(login) || !Number.isFinite(at)) continue;
+    if (at > removedAt) {
+      removedAt = at;
+      by = login;
+    }
+  }
+  const removedAtHead = removedAt > arrived;
+  return {removedAtHead, by: removedAtHead ? by : null};
+}
+
 // A pull request the review app opens is the app's own work, which it cannot
 // approve: its code review is a trainer pass, an engineering owner's approval
 // of its exact head. Other bots stay exempt.
@@ -369,6 +409,7 @@ module.exports = {
   isSafeSpace,
   needsTrainerPass,
   normalizeReviewApp,
+  ownerRemovedLabelAtHead,
   resolveReviewApprovals,
   trainerPassed,
 };
