@@ -31698,7 +31698,9 @@ export function draftAnswer(ctx, env, question) {
   // with a navy header": the cards, never the header). A color said with
   // its own shade word ("a light blue tint") names its shade already and
   // is written as said.
-  /** @type {Array<{parts: Set<string>, colors: number[][]}>} */
+  /** The look a fill is on: its part, variant and state. @param {Step} st */
+  const lookKey = st => [st.on, st.when ?? '', st.state ?? ''].join('\0');
+  /** @type {Array<{parts: Set<string>, colors: number[][], looks: Set<string>, modeSaid: boolean}>} */
   const tints = [];
   for (const d of result) {
     const c = draftClause.get(d);
@@ -31721,10 +31723,29 @@ export function draftAnswer(ctx, env, question) {
         ? c.parts.map(x => x.on)
         : d.options.flat().map(st => st.on))
         if (p) parts.add(p);
-    if (colors.length && parts.size) tints.push({parts, colors});
+    // (Only the looks this clause fills take its tint: "muted cards tinted
+    // blue, default cards blue" tints the muted card alone.)
+    // (The clause's own answers, an offer to change the other variants
+    // too included.)
+    const looks = new Set(
+      result
+        .filter(x => x === d || draftClause.get(x) === c || x.offer)
+        .flatMap(x => x.options.flat())
+        .filter(
+          st =>
+            st.on &&
+            parts.has(st.on) &&
+            /^background(?:-color)?$/.test(st.thing),
+        )
+        .map(lookKey),
+    );
+    if (colors.length && parts.size && looks.size)
+      tints.push({parts, colors, looks, modeSaid: Boolean(c.mode)});
   }
   /** The tint fills written, by part, state and variant: the text check below measures text on them. @type {Map<string, {light: string, dark: string}>} */
   const tintFills = new Map();
+  /** The same, by part and state only: text that names no variant reads on these. @type {Map<string, {light: string, dark: string}>} */
+  const tintFillsAnyLook = new Map();
   /** The fill steps a tint wrote, one a mode. @type {WeakSet<Step>} */
   const tintSteps = new WeakSet();
   const tintKey = (/** @type {Step} */ st) =>
@@ -31747,17 +31768,26 @@ export function draftAnswer(ctx, env, question) {
           !tints.some(
             t =>
               t.parts.has(String(st.on)) &&
+              t.looks.has(lookKey(st)) &&
               t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
           )
         )
           continue;
+        const tint = tints.find(
+          t =>
+            t.parts.has(String(st.on)) &&
+            t.looks.has(lookKey(st)) &&
+            t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
+        );
         const shades = tintShades(hex(v.slice(0, 3)));
         // (A color already as pale as its tint, "a cream tint", is written
         // as said: its tint would be darker than it.)
         if (!shades || luminance(hex(v.slice(0, 3))) >= luminance(shades.light))
           continue;
+        // (A mode the clause says is kept; one the light/dark rule gave a
+        // pale color is not: its tint has a deep dark half.)
         const modes = /** @type {Array<'light' | 'dark'>} */ (
-          st.mode ? [st.mode] : drawn
+          st.mode && tint?.modeSaid ? [st.mode] : drawn
         );
         o.splice(
           k,
@@ -31769,7 +31799,7 @@ export function draftAnswer(ctx, env, question) {
           }),
         );
         tintFills.set(tintKey(st), shades);
-        tintFills.set(tintKey({...st, when: undefined}), shades);
+        tintFillsAnyLook.set(tintKey({...st, when: undefined}), shades);
         const said = `a tint of ${st.value}`;
         if (!d.text.includes(said))
           d.text += ` (${said}: ${modes.map(m => `${shades[m]} in ${m} mode`).join(', ')}, from its palette ramp)`;
@@ -31788,7 +31818,7 @@ export function draftAnswer(ctx, env, question) {
           continue;
         const shades =
           tintFills.get(tintKey(st)) ??
-          tintFills.get(tintKey({...st, when: undefined}));
+          (st.when ? undefined : tintFillsAnyLook.get(tintKey(st)));
         const ink = parseColor(String(st.value ?? ''));
         if (!shades || !ink || alphaOf(String(st.value)) < 1) continue;
         const modes = /** @type {Array<'light' | 'dark'>} */ (
