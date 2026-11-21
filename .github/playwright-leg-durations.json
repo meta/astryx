@@ -82,6 +82,7 @@
     "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts": 29.3,
     "packages/core/src/SegmentedControl/__tests__/SegmentedControl.interaction.browser.spec.ts": 106,
     "packages/core/src/SegmentedControl/__tests__/SegmentedControlHitArea.interaction.browser.spec.ts": 4.2,
+    "packages/core/src/SegmentedControl/__tests__/SegmentedControlTextSize.interaction.browser.spec.ts": 7.2,
     "packages/core/src/SideNav/__tests__/SideNavRailMotion.interaction.browser.spec.ts": 15,
     "packages/core/src/SideNav/__tests__/SideNavTextSize.interaction.browser.spec.ts": 2.1,
     "packages/core/src/Slider/__tests__/SliderFinePointer.interaction.browser.spec.ts": 5,
