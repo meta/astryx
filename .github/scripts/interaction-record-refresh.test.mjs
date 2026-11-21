@@ -18,6 +18,7 @@ import {
   BRANCH,
   earlyWarning,
   medianTimes,
+  refreshRecord,
   refreshTimes,
   prBody,
   specCoverage,
@@ -96,6 +97,22 @@ describe('refreshTimes', () => {
     expect(
       Object.keys(refreshTimes({b: 1, B: 2}, [{a: 3}], ['a', 'b', 'B'])),
     ).toEqual(['B', 'a', 'b']);
+  });
+});
+
+describe('refreshRecord', () => {
+  it('writes the refreshed times and the spec files git tracks, sorted', () => {
+    expect(
+      refreshRecord(
+        {'interaction-chromium': {a: 4}, other: 1},
+        'interaction-chromium',
+        [{a: 5, b: 2}],
+        ['b', 'a'],
+      ),
+    ).toEqual({
+      'interaction-chromium': {a: 5, b: 2},
+      'interaction-specs-at-record': ['a', 'b'],
+    });
   });
 });
 

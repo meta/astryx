@@ -1127,7 +1127,12 @@ export function familyListMeant(value) {
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */
-const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
+export const BOX_SIDES = /** @type {const} */ ([
+  'top',
+  'right',
+  'bottom',
+  'left',
+]);
 
 /**
  * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's
@@ -1138,7 +1143,12 @@ const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
  * @returns {Record<string, string> | null}
  */
 export function sidesOf(prop, v) {
-  const direct = [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
+  // (A logical pair the property data lists no longhands for,
+  // `border-block-width`: its start and its end.)
+  const pair = /^(border-(?:block|inline))-(width|style|color)$/.exec(prop);
+  const direct = pair
+    ? [`${pair[1]}-start-${pair[2]}`, `${pair[1]}-end-${pair[2]}`]
+    : [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
   const w = splitTop(v.trim(), ' ').map(x => x.trim());
   if (!w.length || /!important/i.test(v)) return null;
   const start = direct.find(p => /-start(-|$)/.test(p));
