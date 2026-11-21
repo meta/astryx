@@ -265,8 +265,24 @@ describe('a contrast problem in one variant, kept as designed', () => {
       expect(
         acceptedContrastCheck(await editorKeptContrastAt(cwd))?.message,
       ).toMatch(
-        /no longer holds?, because a color changed[^]*bv: badge \(variant info\)/,
+        /no longer holds?, because a color changed[^]*bv: badge \(variant info\) on badge in light at [\d.]+:1, kept at/,
       );
+      await themeEditUndo('bv', {cwd});
+      // A fill that now passes leaves the acceptance with nothing to keep:
+      // doctor says it is no longer needed, never that it is a problem.
+      await themeEditSet('bv', 'background-color', '#0b4f5c', {
+        cwd,
+        on: 'badge',
+        when: 'variant:info',
+        mode: 'light',
+      });
+      expect(info(await themeEditShow('bv', {cwd}))).toEqual([]);
+      const passing = acceptedContrastCheck(await editorKeptContrastAt(cwd));
+      expect(passing?.status).toBe('info');
+      expect(passing?.message).toMatch(
+        /no longer needed: its colors changed and it now passes: bv: badge \(variant info\)/,
+      );
+      expect(passing?.message).not.toMatch(/a problem again/);
       await themeEditUndo('bv', {cwd});
       expect(info(await themeEditShow('bv', {cwd}))).toEqual([]);
       // Taken back by its own undo line.
