@@ -1961,6 +1961,47 @@ export const typoLimit = typed => {
   return n < 4 ? 0 : n <= 5 ? 1 : 2;
 };
 
+/** A bare ask for grays without a hue of their own, and nothing else. */
+const BARE_GRAYS = /^(?:neutral gr[ae]ys|untinted gr[ae]ys)$/;
+
+/**
+ * Whether a question holds a bare ask for neutral grays ("neutral grays",
+ * "neutral greys", "untinted grays", after a lead verb such as "use") as a
+ * clause of its own, beside clauses that each name a part, a dial or a
+ * value. The words are never rewritten: the caller flags that clause, so
+ * an ask typed in other words keeps its own reading. A word before or after
+ * the grays in their clause, or another clause that names no part, dial or
+ * value ("warm, neutral grays", "neutral grays, but darker"), is no bare
+ * ask.
+ * @param {string} question
+ * @param {(text: string) => boolean} [namesThing] - Whether a clause names a part, a dial or a value ("red buttons", "6px corners").
+ * @returns {boolean}
+ */
+export function bareNeutralGrays(question, namesThing = () => false) {
+  const clauses = question
+    .split(/[,;.!?\n]|\band\b/i)
+    .map(c => c.trim())
+    .filter(Boolean);
+  /** @param {string} c */
+  const bare = c =>
+    c
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, '');
+  const at = clauses.findIndex(c => BARE_GRAYS.test(bare(c)));
+  return at >= 0 && clauses.every((c, i) => i === at || namesThing(c));
+}
+
+/** Whether a clause is the bare neutral-grays ask, as `bareNeutralGrays` reads it. @param {string} text */
+export const isBareGraysClause = text =>
+  BARE_GRAYS.test(
+    String(text)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, ''),
+  );
+
 /**
  * Whether `word` is within the typo limit of `typed` (two letters swapped
  * count as one edit, as typed: flxe is flex).

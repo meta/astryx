@@ -1,0 +1,458 @@
+[
+  [
+    "neutral grays with blue accents",
+    "warm",
+    [
+      [
+        "accent: the editor makes its light and dark shades from #256",
+        ["set warm accent '#2563eb'", "set warm --color-accent '#2563eb'"]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays with blue accents",
+    "plain",
+    [
+      [
+        "accent: the editor makes its light and dark shades from #256",
+        ["set plain accent '#2563eb'", "set plain --color-accent '#2563eb'"]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays, but darker",
+    "warm",
+    [
+      [
+        "neutral is a gray (#78716c); a gray's shades run the same fr",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays, but darker",
+    "plain",
+    [
+      [
+        "neutral has no color of its own to make darker: --color-neut",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays",
+    "stony",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "warm toned neutral grays",
+    "warm",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #78",
+        ["set warm --color-neutral '#78716c0f'"]
+      ]
+    ]
+  ],
+  [
+    "warm toned neutral grays",
+    "plain",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #78",
+        ["set plain neutral '#78716c'", "set plain --color-neutral '#78716c0f'"]
+      ]
+    ]
+  ],
+  [
+    "cool toned neutral grays",
+    "warm",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #64",
+        ["set warm neutral '#64748b'", "set warm --color-neutral '#64748b0f'"]
+      ]
+    ]
+  ],
+  [
+    "cool toned neutral grays",
+    "plain",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #64",
+        ["set plain neutral '#64748b'", "set plain --color-neutral '#64748b0f'"]
+      ]
+    ]
+  ],
+  [
+    "pinkish neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "pinkish neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "yellowish neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "yellowish neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "reddish neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "reddish neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "purplish neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "purplish neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "warm, neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "warm, neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "subtle warm, neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"subtle warm\": no setting reads this as said; say ", []]
+    ]
+  ],
+  [
+    "subtle warm, neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ],
+      ["not used: \"subtle warm\": no setting reads this as said; say ", []]
+    ]
+  ],
+  [
+    "neutral grays, without any warm tint",
+    "warm",
+    [
+      [
+        "the hover wash every part shares (--color-overlay-hover), so",
+        [
+          "set warm --color-overlay-hover '#00000009' --mode light",
+          "set warm --color-overlay-hover '#ffffff09' --mode dark"
+        ]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays, without any warm tint",
+    "plain",
+    [
+      [
+        "the hover wash every part shares (--color-overlay-hover), so",
+        [
+          "set plain --color-overlay-hover '#00000009' --mode light",
+          "set plain --color-overlay-hover '#ffffff09' --mode dark"
+        ]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "make the grays neutral",
+    "warm",
+    [
+      [
+        "no part is called \"gray\". Name one of them, or list the part",
+        ["how --list parts"]
+      ]
+    ]
+  ],
+  [
+    "make the grays neutral",
+    "plain",
+    [
+      [
+        "no part is called \"gray\". Name one of them, or list the part",
+        ["how --list parts"]
+      ]
+    ]
+  ],
+  [
+    "pure neutral grays, no tint",
+    "warm",
+    [
+      [
+        "the hover wash every part shares (--color-overlay-hover), so",
+        [
+          "set warm --color-overlay-hover '#00000009' --mode light",
+          "set warm --color-overlay-hover '#ffffff09' --mode dark"
+        ]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "pure neutral grays, no tint",
+    "plain",
+    [
+      [
+        "the hover wash every part shares (--color-overlay-hover), so",
+        [
+          "set plain --color-overlay-hover '#00000009' --mode light",
+          "set plain --color-overlay-hover '#ffffff09' --mode dark"
+        ]
+      ],
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays",
+    "creamy",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "neutral grays",
+    "cream",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "untinted neutral grays",
+    "plain",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "untinted neutral grays",
+    "warm",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "untinted neutral grays",
+    "stony",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "untinted neutral grays",
+    "cream",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "untinted neutral grays",
+    "creamy",
+    [
+      [
+        "The gray of the theme: surfaces (cards, panels, popovers, mu",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "warm untinted neutral grays",
+    "plain",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #78",
+        ["set plain neutral '#78716c'", "set plain --color-neutral '#78716c0f'"]
+      ]
+    ]
+  ],
+  [
+    "warm untinted neutral grays",
+    "warm",
+    [
+      [
+        "neutral: the editor makes its light and dark shades from #78",
+        ["set warm --color-neutral '#78716c0f'"]
+      ]
+    ]
+  ],
+  [
+    "untinted neutral grays, but darker",
+    "warm",
+    [
+      [
+        "neutral is a gray (#78716c); a gray's shades run the same fr",
+        ["how neutral"]
+      ]
+    ]
+  ],
+  [
+    "untinted cards, 12px corners, bold headings, blue accent",
+    "plain",
+    [
+      [
+        "all of it, in order",
+        [
+          "set plain corners 12px",
+          "set plain headings bold",
+          "set plain accent '#2563eb'"
+        ]
+      ],
+      [
+        "corners for the whole theme: the corners dial (sets the corn",
+        ["set plain corners 12px"]
+      ],
+      [
+        "bold headings: the headings dial, or font-weight on the part",
+        ["set plain headings bold", "set plain font-weight 700 --on heading"]
+      ],
+      [
+        "accent: the editor makes its light and dark shades from #256",
+        ["set plain accent '#2563eb'", "set plain --color-accent '#2563eb'"]
+      ],
+      ["what card reads", ["how card"]],
+      ["not taken: \"untinted\": no setting reads this word; the looks", []]
+    ]
+  ],
+  [
+    "a calm untinted theme, rounder corners, bold text",
+    "plain",
+    [
+      [
+        "all of it, in order",
+        ["set plain corners more", "set plain --text-body-weight 700"]
+      ],
+      [
+        "corners for the whole theme: the corners dial (sets the corn",
+        ["set plain corners more"]
+      ],
+      [
+        "body text weight: --text-body-weight (now 400)",
+        ["set plain --text-body-weight 700"]
+      ],
+      ["not taken: \"calm\", \"untinted\": no setting reads these words;", []],
+      ["not used: \"a calm untinted theme\": no setting reads this as ", []]
+    ]
+  ]
+]
