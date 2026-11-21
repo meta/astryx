@@ -7,7 +7,9 @@
  * accept line, refused for a color the editor made and on an official
  * theme; kept, it leaves the problems, and show lists it apart
  * with its reason and contrast; a change to either color makes it a problem
- * again; one undo takes it back. No official theme carries one.
+ * again; one undo takes it back. A miss in one variant of a part (a badge's
+ * info label) is kept for that variant alone, named in the accept line,
+ * show. No official theme carries one.
  */
 
 import * as fs from 'node:fs';
@@ -51,8 +53,10 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
+// (The miss is in the primary variant, so the acceptance names it.)
 const PLACE = /** @type {const} */ ({
   on: 'button',
+  when: 'variant:primary',
   ground: 'button',
   mode: 'light',
 });
@@ -69,7 +73,7 @@ describe('a contrast problem kept as designed', () => {
       if (unbuilt) return;
       const [p] = primary(await themeEditShow('ac', {cwd}));
       expect(p.accept).toBe(
-        "astryx experimental theme editor set ac contrast-accepted '<why the original draws it so>' --on button --ground button --mode light",
+        "astryx experimental theme editor set ac contrast-accepted '<why the original draws it so>' --on button --when variant:primary --ground button --mode light",
       );
     },
     T,
@@ -93,6 +97,7 @@ describe('a contrast problem kept as designed', () => {
       expect(show.data.acceptedContrast).toEqual([
         expect.objectContaining({
           part: 'button',
+          when: 'variant:primary',
           ground: 'button',
           mode: 'light',
           ratio: expect.any(Number),
@@ -100,7 +105,7 @@ describe('a contrast problem kept as designed', () => {
           color: expect.stringMatching(/^#(?!17a2b8)[0-9a-f]{6}$/),
           groundColor: '#17a2b8',
           reason: "matches the original's info button label",
-          undo: 'astryx experimental theme editor set ac contrast-accepted none --on button --ground button --mode light',
+          undo: 'astryx experimental theme editor set ac contrast-accepted none --on button --when variant:primary --ground button --mode light',
         }),
       ]);
       expect(
@@ -169,6 +174,86 @@ describe('a contrast problem kept as designed', () => {
           {cwd, ...PLACE},
         ),
       ).rejects.toThrow(/a made color must pass/);
+    },
+    T,
+  );
+});
+
+describe('a contrast problem in one variant, kept as designed', () => {
+  const BADGE = /** @type {const} */ ({
+    on: 'badge',
+    when: 'variant:info',
+    ground: 'badge',
+    mode: 'light',
+  });
+  /** @param {any} r */
+  const info = r =>
+    /** @type {Array<{problem: string, fix: string | null, accept?: string}>} */ (
+      r.data.openProblems ?? r.data.newProblems
+    ).filter(p => /^text in badge \(variant info\)/.test(p.problem));
+
+  it(
+    'names the variant in its accept line and covers that variant only',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('bv', {cwd, like: 'neutral'});
+      // The original's info label: its fill, typed.
+      await themeEditSet('bv', 'background-color', '#5bc0de', {
+        cwd,
+        on: 'badge',
+        when: 'variant:info',
+      });
+      const [p] = info(await themeEditShow('bv', {cwd}));
+      expect(p.accept).toBe(
+        "astryx experimental theme editor set bv contrast-accepted '<why the original draws it so>' --on badge --when variant:info --ground badge --mode light",
+      );
+      // The badge as a whole has no such problem to keep.
+      await expect(
+        themeEditSet(
+          'bv',
+          'contrast-accepted',
+          "matches the original's info label exactly",
+          {cwd, on: 'badge', ground: 'badge', mode: 'light'},
+        ),
+      ).rejects.toThrow(/no contrast problem for badge on badge in light/);
+      await themeEditSet(
+        'bv',
+        'contrast-accepted',
+        "matches the original's info label exactly",
+        {cwd, ...BADGE},
+      );
+      const show = /** @type {any} */ (await themeEditShow('bv', {cwd}));
+      expect(info(show)).toEqual([]);
+      expect(show.data.acceptedContrast).toEqual([
+        expect.objectContaining({
+          part: 'badge',
+          when: 'variant:info',
+          ground: 'badge',
+          mode: 'light',
+          groundColor: '#5bc0de',
+          reason: "matches the original's info label exactly",
+          undo: 'astryx experimental theme editor set bv contrast-accepted none --on badge --when variant:info --ground badge --mode light',
+        }),
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'lapses when the variant fill changes',
+    async () => {
+      if (unbuilt) return;
+      await themeEditSet('bv', 'background-color', '#46b8da', {
+        cwd,
+        on: 'badge',
+        when: 'variant:info',
+      });
+      expect(info(await themeEditShow('bv', {cwd})).length).toBeGreaterThan(0);
+      await themeEditUndo('bv', {cwd});
+      expect(info(await themeEditShow('bv', {cwd}))).toEqual([]);
+      // Taken back by its own undo line.
+      await themeEditSet('bv', 'contrast-accepted', 'none', {cwd, ...BADGE});
+      expect(info(await themeEditShow('bv', {cwd})).length).toBeGreaterThan(0);
     },
     T,
   );
