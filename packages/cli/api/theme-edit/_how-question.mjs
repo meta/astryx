@@ -5144,11 +5144,34 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /(^|[.;,!?—\n]\s*)([a-z]+)[ \t]*:[ \t]*([a-z-]+)(?=[ \t]*(?:[.,;!\n]|$))/gim,
       (m, lead, label, value, at, whole) => {
-        // (A label after a part is named, "Card\nRadius: large" or
-        // "cards: white, radius: large", is that part's: left to the
-        // part's readers.)
-        const before = ` ${String(whole).slice(0, at).toLowerCase()} `;
-        if (partLexicon(ctx).parts.some(([re]) => re.test(before))) return m;
+        // (A label after a part named in its own sentence, "cards: white,
+        // radius: large", or under a part's heading line, "Card\nRadius:
+        // large", is that part's: left to the part's readers.)
+        const text = String(whole).toLowerCase();
+        // (From after the label's lead: the period or line break before it
+        // ends the sentence before.)
+        const said = text.slice(0, at + String(lead).length);
+        const sentence = said.split(/[;!?\n]|\.(?=\s|$)/).at(-1) ?? '';
+        const lines = said.split('\n');
+        // (The heading is the line above the run of label lines, numbered
+        // or not, past any blank line; "Cards:" ends in its colon.)
+        let k = lines.length - 2;
+        while (
+          k >= 0 &&
+          (!String(lines[k]).trim() ||
+            /^\s*(?:\d+[.)]\s*)?[a-z]+[ \t]*:[ \t]*\S/.test(String(lines[k])))
+        )
+          k--;
+        const heading = k >= 0 ? String(lines[k]).replace(/:\s*$/, '') : '';
+        const namesPart = (/** @type {string} */ t) =>
+          partLexicon(ctx).parts.some(([re]) => re.test(` ${t} `));
+        if (
+          namesPart(sentence) ||
+          (!/:/.test(heading) &&
+            heading.trim().split(/\s+/).length <= 3 &&
+            namesPart(heading))
+        )
+          return m;
         const l = String(label).toLowerCase();
         const v = String(value).toLowerCase();
         // (The label is the dial's own name, or a word only that dial has;
