@@ -61,6 +61,28 @@ const needsBases = test => {
 
 const T = 300_000;
 
+describe('a screen named by what it shows', () => {
+  // (No part to paint; its status colors by hue are the status colors.)
+  it(
+    'medical records table view: status colors by hue',
+    async test => {
+      needsBases(test);
+      const lines = await writes(
+        'medical records table view: clear status colors: green #15803d stable, amber #b45309 pending, red #b91c1c critical',
+      );
+      expect(lines.join(' ')).not.toMatch(/--on table/);
+      expect(lines).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/success '#15803d'/),
+          expect.stringMatching(/warning '#b45309'/),
+          expect.stringMatching(/danger '#b91c1c'/),
+        ]),
+      );
+    },
+    T,
+  );
+});
+
 describe('writes nothing', () => {
   it.each([
     "spacing is compact, isn't that so",
@@ -69,9 +91,6 @@ describe('writes nothing', () => {
     'yes because neon green links are SO professional',
     'had we gone with serif headings',
     'after the review, square the buttons',
-    'accent red; also undo the corners',
-    // (A screen named by what it shows is no part to paint.)
-    'medical records table view: clear status colors: green #15803d stable, amber #b45309 pending, red #b91c1c critical',
   ])(
     '%s',
     async (q, test) => {
@@ -83,6 +102,20 @@ describe('writes nothing', () => {
 });
 
 describe('still writes', () => {
+  // ("just do it" after an ask is the ask's own push, never a tag; the
+  // blue goes on the buttons, as one line or a line for each variant.)
+  it(
+    'make the buttons blue, just do it',
+    async test => {
+      needsBases(test);
+      expect(
+        (await writes('make the buttons blue, just do it')).some(l =>
+          /^background-color '#2563eb' --on button\b/.test(l),
+        ),
+      ).toBe(true);
+    },
+    T,
+  );
   it.each([
     [
       'square avatars please; is that even a thing?',
@@ -94,13 +127,10 @@ describe('still writes', () => {
     // (A focus ring draws no shadow: "no shadows" after it is the theme's.)
     ['visible thick focus ring, no shadows', '--shadow-low none'],
     ['boutons arrondis, sans ombre', 'box-shadow none --on button'],
-    // ("just do it" after an ask is the ask's own push, never a tag.)
-    [
-      'make the buttons blue, just do it',
-      "background-color '#2563eb' --on button",
-    ],
     // ("after that" is the ask's next step, never a later event.)
     ['Make it compact. After that, make headings bold.', 'headings bold'],
+    // (An undo with nothing to take back is named; the rest is written.)
+    ['accent red; also undo the corners', "accent '#dc2626'"],
   ])(
     '%s',
     async (q, line, test) => {

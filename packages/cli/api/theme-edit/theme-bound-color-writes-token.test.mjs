@@ -97,9 +97,15 @@ describe('a part in a container', () => {
     120_000,
   );
 
-  it('a container that does not hold the token is said, never a theme-wide write', async () => {
+  // (Links in a container are read as main reads them: the link token on
+  // the container, which the side nav never reads, so nothing is written
+  // and the answer says why.)
+  it('links in a container that holds only nav items take the link token on the container, as main reads them', async () => {
     const rs = await how('ne', 'make links in the sidebar green');
     expect(writes(rs)).toEqual([]);
+    expect(
+      rs.some(r => /side-nav never reads --color-text-accent/.test(r.text)),
+    ).toBe(true);
   }, 120_000);
 });
 
