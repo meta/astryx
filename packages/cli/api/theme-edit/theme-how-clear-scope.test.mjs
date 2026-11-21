@@ -10,6 +10,7 @@
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {clearTakesAway} from './_how-question.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -76,6 +77,7 @@ describe('a clause-leading clear', () => {
       'clear the card border and undo my heading edits',
       'clear the card shadow and keep the text dark',
       'clear the card shadow and let the page show',
+      'please clear the card shadow',
       'cards: clear the border',
       '- clear the card shadow',
       'make the text bigger\nclear the card shadow',
@@ -113,4 +115,34 @@ describe('a clause-leading clear', () => {
         /(?:border|box-shadow|text-decoration) none|transparent --on/,
       );
   }, 600_000);
+
+  it('leaves the ask as said wherever it is unsure', () => {
+    for (const ask of [
+      'clear the card shadow and the border color',
+      'clear the border colors and shadows on cards',
+      "clear the card's shadow and the card's border width",
+      'clear the card background so it is white',
+      'clear the card background to white',
+      'clear the button background to #ffffff',
+      'clear the card shadow, back to the default',
+      'clear the card shadow; back to the base value',
+      'clear the card shadow, as before',
+      'clear the card border, I added it by mistake',
+      'clear my custom card shadow',
+      'clear the added card border',
+      'clear the card border I created',
+      'clear the shadow my theme adds to cards',
+      'can you please clear the card shadow',
+      'how do I now clear the card shadow',
+      'clear my background and border changes',
+      'clear the border my teammate added to cards',
+      'how do I clear the card shadow',
+      'clear borders on cards',
+      'give inputs a clear border',
+    ])
+      expect(clearTakesAway(ask), ask).toBe(ask);
+    expect(clearTakesAway('clear the card shadow, then the border')).toBe(
+      'remove the card shadow, then the border',
+    );
+  });
 });

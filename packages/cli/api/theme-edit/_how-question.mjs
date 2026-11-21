@@ -2753,60 +2753,79 @@ const GOING_BACK =
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
 /**
- * Reads a "clear" that leads a clause as "remove" when its object is a
- * removable thing ("clear the dark mode card background"), and leaves it a
- * reset when the object is the person's edits or names a way back. The
- * reading takes its scope from the clause and the object, never from words
- * elsewhere in the ask.
- * - A clause ends at a punctuation mark, a line break, a list marker, or an
- *   "and" or "then" that does not go on with the object.
- * - The object starts with a determiner ("the", "my", "all the" ...). Its
- *   head is a removable thing that no property word follows ("the border",
- *   not "the border color").
- * - A purpose or reason ("so the page shows through") is not part of it.
- * - It stays a reset when it names edits (changes, tweaks, overrides ...),
- *   when what follows its head says someone made it (added, put on, set,
- *   applied ...), or when it names a way back (back, to the default).
+ * Reads a "clear" that leads an ask as "remove" when its object is a
+ * removable thing ("clear the dark mode card background"). Wherever the ask
+ * says or may say otherwise, it reads as on main: a reset.
+ * - An ask ends at the end of a sentence, a line break, a list marker, or
+ *   an "and" or "then" that does not go on with the object.
+ * - The object is the ask up to its first comma or purpose ("so ..."),
+ *   and starts with a determiner ("the", "my", "all the" ...). Each
+ *   removable thing in it is a head, not a property's owner: "the border",
+ *   not "the border color".
+ * - It stays as on main when the ask names edits (changes, tweaks ...),
+ *   says someone made the thing (added, put on, my custom ...), names a way
+ *   back (back, as before, the default ...), or names a color or a value.
  * @param {string} text
  * @returns {string}
  */
-function clearTakesAway(text) {
+export function clearTakesAway(text) {
   const det =
     /^\s+(?:all\s+(?:of\s+)?the|the|my|our|their|its|this|that|these|those|all|any|every)\b/i;
   const goesOn = new RegExp(
     String.raw`^\s*(?:the|my|our|their|its|this|that|these|those|all|any|${REMOVABLE}|${EDIT_NOUNS})\b`,
     'i',
   );
-  const head = new RegExp(
-    String.raw`\b${REMOVABLE}\b(?!\s+(?:colou?rs?|widths?|styles?|thickness|opacity|sizes?|tints?|shades?|values?)\b)`,
-    'i',
-  );
+  const removable = new RegExp(String.raw`\b${REMOVABLE}\b`, 'gi');
+  const property =
+    /^(?:'s)?\s+(?:colou?rs?|widths?|styles?|thickness|opacity|sizes?|tints?|shades?|values?|offsets?|spread)\b/i;
   const editNoun = new RegExp(String.raw`\b${EDIT_NOUNS}\b`, 'i');
-  const madeOrBack =
-    /\b(?:added|applied|put|set|gave|given|made|tweaked|changed|chose|chosen|picked|customi[sz]ed|modified|adjusted|edited|styled|back|original|base\s+value|to\s+(?:the\s+)?(?:base|default|original)|the\s+way\s+(?:it|they)\s+(?:was|were)|as\s+before)\b/i;
+  const made =
+    /\b(?:added|adds?|applied|put|set|gave|given|made|tweaked|changed|chose|chosen|picked|created|wrote|written|custom|customi[sz]ed|modified|adjusted|edited|styled|base\s+value)\b/i;
+  const value = /#[0-9a-f]{3,8}\b|\b\d+(?:\.\d+)?\s*(?:px|rem|em|%)/i;
   const lead =
-    /(^|[.;:!?,\n]\s*|^[ \t]*(?:[-*\u2022]|\d+[.)])[ \t]+|\b(?:please|and|then|also|now)\s+)(clear)\b/gim;
-  return text.replace(lead, (m, before, word, at) => {
-    let rest = text.slice(at + m.length);
-    const hard = rest.search(/[.;:!?,\n]/);
-    if (hard >= 0) rest = rest.slice(0, hard);
+    /(^|[.;:!?,\n][ \t]*|^[ \t]*(?:[-*\u2022]|\d+[.)])[ \t]+|\b(?:and|then|also)\s+)(please\s+)?(clear)\b/gim;
+  return text.replace(lead, (m, before, please, word, at) => {
+    let ask = text.slice(at + m.length);
+    const end = ask.search(/[.!?\n]/);
+    if (end >= 0) ask = ask.slice(0, end);
     // (An "and" or "then" that does not go on with the object starts
     // another ask.)
-    const joins = [...rest.matchAll(/\s(?:and|then)\b/gi)];
-    for (const j of joins)
-      if (!goesOn.test(rest.slice(Number(j.index) + j[0].length))) {
-        rest = rest.slice(0, j.index);
+    for (const j of ask.matchAll(/\s(?:and|then)\b/gi))
+      if (!goesOn.test(ask.slice(Number(j.index) + j[0].length))) {
+        ask = ask.slice(0, j.index);
         break;
       }
-    const why = rest.search(
-      /\s(?:so|so\s+that|to\s+let|to\s+show|letting|because|since|while)\b/i,
+    let object = ask;
+    const cut = object.search(
+      /[,;:]|\s(?:so|so\s+that|to\s+let|to\s+show|letting|because|since|while)\b/i,
     );
-    if (why >= 0) rest = rest.slice(0, why);
-    if (!det.test(rest)) return m;
-    const h = head.exec(rest);
-    if (!h || editNoun.test(rest)) return m;
-    if (madeOrBack.test(rest.slice(h.index + h[0].length))) return m;
-    return `${before}${word === 'Clear' ? 'Remove' : word === 'CLEAR' ? 'REMOVE' : 'remove'}`;
+    if (cut >= 0) object = object.slice(0, cut);
+    if (!det.test(object)) return m;
+    const heads = [...object.matchAll(removable)];
+    if (
+      !heads.length ||
+      heads.some(h =>
+        property.test(object.slice(Number(h.index) + h[0].length)),
+      )
+    )
+      return m;
+    // (A default named right after the determiner is the part's own look,
+    // "the default card shadow"; anywhere else it is a way back.)
+    const said = ask
+      .replace(
+        /\b(the|my|our|their|its|this|that|these|those)\s+default\b/gi,
+        '$1',
+      )
+      .toLowerCase();
+    if (
+      editNoun.test(said) ||
+      made.test(said) ||
+      GOING_BACK.test(said) ||
+      value.test(said) ||
+      colorsIn(said).length
+    )
+      return m;
+    return `${before}${please ?? ''}${word === 'Clear' ? 'Remove' : word === 'CLEAR' ? 'REMOVE' : 'remove'}`;
   });
 }
 /** Nouns for the person's own edits: "clear my border changes" is a reset. */
