@@ -12669,7 +12669,8 @@ export function draftAnswer(ctx, env, question) {
   };
   /**
    * The text size in pixels another clause of the question says ("13px
-   * text", "font size 13px"), for a leading said in pixels beside it.
+   * text", "font size 13px", "Type: Helvetica 13px"), for a leading said
+   * in pixels beside it.
    * Null when no clause says one.
    * @param {Clause} c the leading's own clause
    * @returns {number | null}
@@ -12680,6 +12681,19 @@ export function draftAnswer(ctx, env, question) {
     for (const o of [c, ...clauses.filter(x => x !== c)]) {
       const m = re.exec(o.text);
       if (m) return Number(m[1] ?? m[2]);
+    }
+    // (Or the whole theme's text size another clause asks, "Type:
+    // Helvetica 13px".)
+    for (const o of clauses) {
+      if (
+        o === c ||
+        o.parts.length ||
+        !o.aspects.includes('fontsize') ||
+        /\b(?:line[- ]?height|leading)\b/i.test(o.text)
+      )
+        continue;
+      const m = /\b(\d+(?:\.\d+)?)\s?px\b/i.exec(o.text);
+      if (m) return Number(m[1]);
     }
     return null;
   };

@@ -3394,6 +3394,7 @@ const QUESTIONS_J = [
     {top: /^set q text-size 13 && set q --text-body-leading 1\.385$/},
   ],
   ['18px leading', {top: /^set q --text-body-leading 1\.286$/}],
+  ['Type: Helvetica 13px, 18px leading', {top: /--text-body-leading 1\.385$/}],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],
