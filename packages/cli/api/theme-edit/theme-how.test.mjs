@@ -975,6 +975,10 @@ describe('zebra rows beside a row metric', () => {
     ],
     ['add taller zebra rows', /--when parity:even|--color-background-muted/],
     [
+      'a table with taller zebra rows',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
       'i want zebra rows that are taller',
       /--when parity:even|--color-background-muted/,
     ],

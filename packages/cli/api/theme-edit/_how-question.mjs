@@ -11323,9 +11323,11 @@ export function draftAnswer(ctx, env, question) {
     const others = c.aspects.filter(x => x !== 'background');
     if (
       !fillSaid &&
-      // ("add taller zebra rows", "I want zebra rows that are taller": an
-      // ask for zebra rows keeps them.)
-      !/\b(?:add|want|need|give|with|like)\b[^,;.]*\bzebra\b/.test(c.text) &&
+      // ("add taller zebra rows", "I want zebra rows that are taller", "a
+      // table with taller zebra rows": an ask for zebra rows keeps them. A
+      // clause the reader starts at "with" has it in its joint.)
+      !/\b(?:add|want|need|give|like)\b[^,;.]*\bzebra\b/.test(c.text) &&
+      !/\bwith\b/.test(String(c.joint ?? '')) &&
       // (Another clause that asks a fill, "…and more vibrant", is the
       // stripes'.)
       !clauses.some(k => k !== c && k.aspects.includes('background')) &&
