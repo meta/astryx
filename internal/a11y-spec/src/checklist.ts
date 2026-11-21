@@ -102,7 +102,7 @@ export const CHECKLIST_DIMENSIONS = [
     id: '1.4.11-non-text-contrast',
     source: 'WCAG 2.2 1.4.11 Non-text Contrast (AA)',
     outcome:
-      'Controls, states, and meaningful graphics meet non-text contrast.',
+      'Visual information required to identify controls and states, and parts of graphics required to understand content, meet applicable non-text contrast; design:non-text-contrast decides which treatments carry that information.',
     usualOwnership: 'Component and theme',
   },
   {
