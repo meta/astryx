@@ -20,12 +20,11 @@ const names = new Map();
  * @returns {unknown}
  */
 export function packageNameAt(file) {
-  const stamp = fileStamp(file);
   const kept = names.get(file);
-  if (kept?.stamp === stamp) {
-    recordContentRead(file);
-    return kept.name;
-  }
+  // Recorded before the stamp is compared: a write after it shows as a change.
+  if (kept) recordContentRead(file);
+  const stamp = fileStamp(file);
+  if (kept?.stamp === stamp) return kept.name;
   let name;
   try {
     name = JSON.parse(fs.readFileSync(file, 'utf-8'))?.name;

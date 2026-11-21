@@ -30,12 +30,17 @@ it('reads a name once while the file is unchanged, again after a change', () => 
   expect(packageNameAt(absent)).toBeUndefined();
 });
 
-it('counts a kept name as a read of the file, absent or present', () => {
-  const read = () => [packageNameAt(file), packageNameAt(absent)];
+it('records a kept name as a fresh read records it, present or absent', () => {
+  const other = path.join(dir, 'other', 'package.json');
+  const gone = path.join(dir, 'gone', 'package.json');
+  fs.mkdirSync(path.dirname(other));
+  fs.writeFileSync(other, '{"name": "other"}');
+  const read = () => [packageNameAt(other), packageNameAt(gone)];
   const fresh = new Map();
   const kept = new Map();
-  recordReads(fresh, read);
-  recordReads(kept, read);
+  expect(recordReads(fresh, read)).toEqual(['other', undefined]);
+  expect(recordReads(kept, read)).toEqual(['other', undefined]);
+  expect([...fresh.keys()]).toEqual([other, gone]);
+  expect(fresh.get(gone)).toBe('-');
   expect([...kept]).toEqual([...fresh]);
-  expect([...fresh.keys()]).toEqual(expect.arrayContaining([file]));
 });
