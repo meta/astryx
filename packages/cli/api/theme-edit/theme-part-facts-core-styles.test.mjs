@@ -104,7 +104,8 @@ describe('part facts from Core styles', () => {
       themeEditSet('h', 'background-color', '#eeeeff', {
         cwd,
         on: 'table-row',
-        state: 'checked',
+        // (A state with no other word for one of the row's.)
+        state: 'indeterminate',
       }),
     );
     expect(r.message).toContain(`States: ${data.states.join(', ')}.`);

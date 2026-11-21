@@ -29,7 +29,11 @@
  * - /packages/core/src/Timestamp/Timestamp.test.tsx
  */
 
-import {SHARED_DATE_FORMAT_OPTIONS, getWallClock} from '../utils/plainDate';
+import {
+  SHARED_DATE_FORMAT_OPTIONS,
+  dateTimeFormatAtCall,
+  getWallClock,
+} from '../utils/plainDate';
 import {
   formatCalendarInstant,
   type CalendarSystem,
@@ -147,7 +151,7 @@ export function formatZoneName(
   timeZone?: string,
 ): string {
   return (
-    new Intl.DateTimeFormat(locale, {
+    dateTimeFormatAtCall(locale, {
       timeZoneName: 'long',
       ...(timeZone === undefined ? {} : {timeZone}),
     })
@@ -223,7 +227,7 @@ export function formatInstant(
       );
 
     case 'time':
-      return new Intl.DateTimeFormat(locale, {
+      return dateTimeFormatAtCall(locale, {
         ...TIME_OPTIONS,
         ...zoneName,
         ...zone,
