@@ -14,6 +14,13 @@
  * several is pinned under each parent that resolves it (`parent@version`, or
  * the parent's own entry when the parent has one version).
  *
+ * What stays unpinned: npm skips a `parent@version` entry where a nearer
+ * override already pins that parent by name, so the parent's own children
+ * with several versions resolve from the registry, within the lockfile's
+ * ranges. Today that is `domelementtype` (`^3.0.0`) under `css-select`'s
+ * `domhandler@6.0.1` and `domutils@4.0.2`. Nesting those pins under
+ * `css-select` does not help: npm 11 then builds an invalid tree.
+ *
  * @input the text of a pnpm lockfile (v9); the importers to pin, with their package names
  * @output an npm `overrides` object
  * @position docsite build — read by build-mcp-runtime.mjs
@@ -34,7 +41,8 @@ function bareVersion(version) {
 
 /**
  * The npm overrides that pin every registry dependency the importers reach,
- * directly or through other packages, to the lockfile's version.
+ * directly or through other packages, to the lockfile's version (npm applies
+ * all of them but the nested case the file header names).
  * @param {string} lockText the pnpm-lock.yaml text
  * @param {{path: string, name: string}[]} importers lockfile importer paths
  *   (`packages/cli`) and the names they publish under (`@astryxdesign/cli`)

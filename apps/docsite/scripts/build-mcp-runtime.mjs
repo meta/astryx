@@ -14,10 +14,11 @@
  * a reader has one. next.config.mjs traces it into the /mcp function.
  *
  * It installs outside the repository and then copies the folder in place: npm
- * refuses to run under the root manifest's `devEngines`. The install pins every
- * registry dependency to the version the lockfile resolved (npm `overrides`,
+ * refuses to run under the root manifest's `devEngines`. The install pins the
+ * registry dependencies to the versions the lockfile resolved (npm `overrides`,
  * lockfile-overrides.mjs), so a release published moments earlier cannot break
- * or change it. Before that, it calls
+ * or change them; lockfile-overrides.mjs names the one nested case npm leaves
+ * to the registry, within the lockfile's range. Before that, it calls
  * every tool the folder's server lists, and fails unless each one answers for
  * the documented Core.
  *

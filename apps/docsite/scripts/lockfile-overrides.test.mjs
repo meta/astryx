@@ -3,9 +3,9 @@
 /**
  * @file lockfile-overrides.test.mjs
  * @input lockfile-overrides.mjs; a fixture lockfile; the repository's pnpm-lock.yaml
- * @output The MCP folder's npm install pins every registry dependency of the
- *   packed CLI and Core to the lockfile's version, a name with several versions
- *   under each parent, so a release published moments earlier cannot change it.
+ * @output The overrides pin every registry dependency of the packed CLI and
+ *   Core to the lockfile's version, a name with several versions under each
+ *   parent; npm applies all but the nested case lockfile-overrides.mjs names.
  * @position A Node test; it reads files and runs no install
  */
 
