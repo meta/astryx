@@ -52,7 +52,7 @@ export const docsDense = {
       content: [
         {
           type: 'prose',
-          text: 'what a part draws in a theme (card padding, button corners/colors): experimental theme editor show <theme> --on <part>, not package source; each value per mode + token + who sets it (core/base/theme); writes nothing; any theme the app has.',
+          text: 'before changing a part in a theme, what it draws now (card padding, button corners/colors): experimental theme editor show <theme> --on <part>, not package source; each value per mode + token + who sets it (core/base/theme); writes nothing.',
         },
       ],
     },

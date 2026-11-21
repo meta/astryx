@@ -71,7 +71,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "To learn what a part draws in a theme (a card's padding, a button's corners and colors), ask the CLI, not the package source: `astryx experimental theme editor show <theme> --on <part>` gives each value, per mode where the modes differ, with the token behind it and whether Core, the base theme or the theme itself sets it. It writes nothing and takes any theme the app has: neutral, a local theme or one from an installed package.",
+          text: "Before you change a part in a theme, see what it draws now (a card's padding, a button's corners and colors) with the CLI, not the package source: `astryx experimental theme editor show <theme> --on <part>` gives each value, per mode where the modes differ, with the token behind it and whether Core, the base theme or the theme itself sets it. It writes nothing.",
         },
       ],
     },
