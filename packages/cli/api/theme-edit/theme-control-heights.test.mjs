@@ -907,8 +907,23 @@ describe('one control height per size', () => {
       )
       .map((/** @type {any} */ x) => String(x.on));
     expect(copied).toContain('selector');
+    // (Each copy is marked as the group's height.)
+    for (const on of copied)
+      expect(settings, on).toContainEqual(
+        expect.objectContaining({thing: 'height', on, narrowed: true}),
+      );
     // A later shared height joins them, never as their own size tokens.
-    await themeEditSet('ownnarrow', 'height', '32px', {cwd, on: 'button'});
+    const joined = /** @type {any} */ (
+      await themeEditSet('ownnarrow', 'height', '32px', {cwd, on: 'button'})
+    );
+    // (What stays at the other sizes is the inputs' height, never the
+    // text input's own.)
+    expect(joined.data.notes.join('\n')).toMatch(
+      /31px stays every control's height at/,
+    );
+    expect(joined.data.notes.join('\n')).not.toMatch(
+      /40px[^;]*stays every control's height/,
+    );
     const after = saved('ownnarrow').settings;
     for (const on of copied)
       expect(
@@ -962,6 +977,47 @@ describe('one control height per size', () => {
     expect(left.length).toBeGreaterThan(0);
     const listed = (await heightMisses('narrowundo')).map(m => m.part);
     for (const on of left) expect(listed, on).toContain(on);
+  }, 240_000);
+
+  it("two heights an older editor saved alike with --only stay each control's own", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('oldtwo', {cwd, like: 'neutral'});
+    const data = saved('oldtwo');
+    for (const on of ['selector', 'number-input'])
+      data.settings.push({
+        thing: 'height',
+        value: '40px',
+        source: 'property',
+        on,
+        only: true,
+      });
+    data.settings.push({
+      thing: '--size-element-md',
+      value: '44px',
+      source: 'token',
+      on: 'text-input',
+      only: true,
+    });
+    save('oldtwo', data);
+    await themeEditSet('oldtwo', 'height', '32px', {cwd, on: 'button'});
+    const settings = saved('oldtwo').settings;
+    for (const on of ['selector', 'number-input'])
+      expect(
+        Object.fromEntries(
+          settings
+            .filter(
+              (/** @type {any} */ x) =>
+                x.on === on && /^--size-element-(?:sm|lg)$/.test(x.thing),
+            )
+            .map((/** @type {any} */ x) => [x.thing, x.value]),
+        ),
+        on,
+      ).toEqual({'--size-element-sm': '40px', '--size-element-lg': '40px'});
+    expect(
+      settings.some(
+        (/** @type {any} */ x) => x.on === 'controls' && x.value === '40px',
+      ),
+    ).toBe(false);
   }, 240_000);
 
   it('a height an older editor saved on one input with --only stays its own at the other sizes', async ctx => {
