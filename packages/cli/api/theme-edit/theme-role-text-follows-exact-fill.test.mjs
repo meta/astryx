@@ -52,7 +52,7 @@ describe('role text after an exact fill in one mode', () => {
       n.startsWith('--color-text-warning light:'),
     );
     expect(note).toMatch(/your exact color \(#c2690a\)/);
-    expect(note).toMatch(/so warning text and icons use shade/);
+    expect(note).toMatch(/so warning text uses shade/);
     expect(note).not.toMatch(/#f59e0b|links and accent text/);
   }, 120_000);
 });

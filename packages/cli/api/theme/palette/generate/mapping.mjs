@@ -94,7 +94,7 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
- * @property {PaletteEditorRules} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category and chart colors, the status roles a theme leaves unset, code colors) and a base theme's own pairs kept readable for those colors. They never change a token `themePalette()` maps. The editor passes its own rules module (editor-look) here, so an app that imports only `themePalette()` ships none of them.
+ * @property {PaletteEditorRules} [editor] * The rules for the colors a look grows beyond the seeds' own (category, chart and code colors, the status roles a theme leaves unset) and a base theme's own pairs kept readable for those colors: the editor-look module, which `themePalette()` and the theme editor both pass. A mapping without it maps the seeds' own tokens only.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {Readonly<Record<string, unknown>>} [defaults] Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness.
  * @property {PaletteColorReader} reader
@@ -382,6 +382,17 @@ export const NEUTRAL_STOPS = ownTable({
   ),
 });
 /**
+ * Neutral tokens a tinted gray draws inside its ramp too: its inks.
+ * @type {ReadonlyArray<string>}
+ */
+const TINTED_INK = Object.freeze([
+  '--color-text-primary',
+  '--color-icon-primary',
+  // Text on a dark surface (a toast, a card over the scrim): tinted with
+  // the surface it sits on.
+  '--color-on-dark',
+]);
+/**
  * Neutral tokens whose shade stays inside the ramp, off its white and black ends.
  * @type {ReadonlyArray<string>}
  */
@@ -429,11 +440,11 @@ export const ON_MUTED = officialStops('--color-on-info-muted');
  * neutral track (`--color-neutral`).
  * @type {ReadonlyArray<[string, string, string]>}
  */
-export const LIFT_PARTS = OFFICIAL_NEUTRAL_LIFTED.map(([part, block]) => [
-  part,
-  block,
-  liftGround(part, block),
-]);
+export const LIFT_PARTS = OFFICIAL_NEUTRAL_LIFTED.filter(
+  // A coloured card's own secondary text is that card's ink, which the
+  // base theme draws for its fill: a palette leaves it, never lifts it.
+  ([part, block]) => !(part === 'card' && block.startsWith('variant:')),
+).map(([part, block]) => [part, block, liftGround(part, block)]);
 /**
  * What a lifted block's secondary text sits on: a card's own fill for a
  * card colour (the card variant rule lifts it there), the translucent
@@ -1156,6 +1167,17 @@ export const round2 =
    */
   n => Math.round(n * 100) / 100;
 /**
+ * The text set exactly that sits on the accent tint and is not lifted there
+ * (secondary text is, see `lift`): links and accent text on a selected
+ * preset or row.
+ */
+const TINT_READERS = ['--color-text-accent'];
+/** The stops the accent tint may take, by mode: it stays a tint. */
+const ACCENT_TINT_WINDOW = /** @type {const} */ ({
+  light: [75, 95],
+  dark: [10, 40],
+});
+/**
  * The token mapping of a generated palette: each color token's stop in
  * light and dark, as the official Neutral theme maps its families, with the
  * contrast checks behind each choice.
@@ -1291,8 +1313,43 @@ export function mapPalette(candidate, dials, fills, context) {
       }
       return ref(id, m, b.stop);
     };
+  /**
+   * A token the official theme leaves to Core, at a family's shade nearest
+   * Core's own color for it in each mode: it follows the family at the
+   * lightness Core gives it.
+   */
+  const nearCore =
+    /**
+     * @param {string} token
+     * @param {string} id
+     * @returns {Partial<Record<PaletteMode, StopRef>>}
+     */
+    (token, id) => {
+      const raw = context.defaults?.[token];
+      const core = (typeof raw === 'string' ? raw : '').trim();
+      const halves = /^light-dark\((.*)\)$/i.exec(core);
+      const parts = halves ? splitTopComma(halves[1]) : [core];
+      return each(m => {
+        const target = parseColor(
+          (parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+        );
+        const best = target
+          ? stops.reduce((x, y) =>
+              perceptualDelta(ref(id, m, y).color, hex(target)) <
+              perceptualDelta(ref(id, m, x).color, hex(target))
+                ? y
+                : x,
+            )
+          : stops[Math.floor(stops.length / 2)];
+        return ref(id, m, best);
+      });
+    };
   const neutral = dials.find(f => f.id === 'neutral');
   if (neutral) {
+    // The track of a slider, which the official theme leaves to Core's
+    // blue gray: the neutral color's shade nearest it, so a warm or cool
+    // gray reaches it as it reaches the surfaces.
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -1300,7 +1357,13 @@ export function mapPalette(candidate, dials, fills, context) {
       ) {
         continue;
       }
-      const shadeAt = NEUTRAL_INSIDE.includes(token) ? atInside : at;
+      // Primary text and icons of a tinted gray carry its tint: the shade
+      // inside the ramp's black and white ends, which always reads.
+      const shadeAt =
+        NEUTRAL_INSIDE.includes(token) ||
+        (TINTED_INK.includes(token) && !isGray(neutral.seed))
+          ? atInside
+          : at;
       put(
         token,
         'neutral',
@@ -1551,6 +1614,30 @@ export function mapPalette(candidate, dials, fills, context) {
           (Math.sign(b - a) === usual ? 1 : -1),
       );
       const away = order.filter(x => x !== fill[m]?.stop);
+      // Accent text set exactly that sits on the accent tint (a selected
+      // preset's) keeps reading: the tint takes the nearest stop, still a
+      // tint, under which it reads.
+      const readers = word
+        ? []
+        : TINT_READERS.map(k => exactOf(k, m)).filter(
+            /**
+             * @returns {v is string}
+             */
+            v => Boolean(v && parseColor(v) && alphaOf(v) >= 1),
+          );
+      if (readers.length) {
+        const [lo, hi] = ACCENT_TINT_WINDOW[m];
+        const reads = away
+          .filter(x => x >= lo && x <= hi)
+          .find(x =>
+            over(names.muted, ref(f.id, m, x, alpha), surfaces(m, f.id)).every(
+              ([, bg]) => readers.every(c => contrast(c, bg) >= TEXT),
+            ),
+          );
+        if (reads != null) {
+          return ref(f.id, m, reads, alpha);
+        }
+      }
       return ref(f.id, m, away[0] ?? order[0], alpha);
     });
     put(names.muted, f.id, muted);
@@ -1579,8 +1666,8 @@ export function mapPalette(candidate, dials, fills, context) {
               surfaces(m, f.id),
             );
       };
-    // Accent text and icons are the color given where it reads on what
-    // they sit on (the surfaces and the tint), in each mode its fill is
+    // Accent text is the color given where it reads on what it sits on
+    // on (the surfaces and the tint), in each mode its fill is
     // the exact color; only where it does not do they move, to the nearest
     // shade that reads, and the check says so.
     const text = each(m => {
@@ -1637,14 +1724,44 @@ export function mapPalette(candidate, dials, fills, context) {
             .map(([n, x]) => `${round(x)}:1 on ${n}`)
             .join(
               ', ',
-            )} (text needs ${TEXT}:1), so ${f.id === 'accent' ? 'links and accent text' : `${f.id} text and icons`} use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
+            )} (text needs ${TEXT}:1), so ${f.id === 'accent' ? 'links and accent text use' : `${f.id} text uses`} shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
         }
         return moved;
       }
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    put(names.icon, f.id, text);
+    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
+    // text's 4.5:1: they take the shade nearest the role's own fill that
+    // reads at 3:1 on what they sit on, so a warning dot stays amber where
+    // warning text must deepen to brown.
+    put(
+      names.icon,
+      f.id,
+      each(m => {
+        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+        const from = /** @type {StopRef} */ (fill[m]);
+        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+        if (
+          own &&
+          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
+        ) {
+          return {...from, color: own};
+        }
+        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+      }),
+    );
+    // The inverted error fill (an error toast's), which the official theme
+    // leaves to Core: the danger color's shade nearest Core's own in each
+    // mode, so the toast follows the danger color as Core draws it (its
+    // text takes the readable side of Core's media surface).
+    if (word === 'error') {
+      put(
+        '--color-background-error-inverted',
+        f.id,
+        nearCore('--color-background-error-inverted', f.id),
+      );
+    }
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(

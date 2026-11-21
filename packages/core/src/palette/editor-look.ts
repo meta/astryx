@@ -3,10 +3,10 @@
 /**
  * @file editor-look.ts
  * @input The token mapping `mapPalette` has made, and its palette
- * @output The colors the theme editor grows beyond `themePalette()`'s
- *   mapping
- * @position The theme editor's own rules, its `context.editor`. Its own
- *   module, so an app that imports only `themePalette()` ships none of it
+ * @output The colors a look grows beyond the seeds' own: category, chart
+ *   and code colors, and the status roles a theme leaves unset
+ * @position The palette mapping's `context.editor`, which `themePalette()`
+ *   and the theme editor both pass
  */
 
 import {compositeOver} from './color';
@@ -290,8 +290,8 @@ export function grownFamilies(
 }
 
 /**
- * The colors the theme editor grows beyond `themePalette()`'s mapping,
- * written into `tokens` as shades of the palette.
+ * The colors a look grows beyond the seeds' own, written into `tokens`
+ * as shades of the palette.
  */
 export function growLook(input: EditorLookInput): EditorLookResult {
   const {candidate, dials, context, tokens, modes, setExactly, t} = input;

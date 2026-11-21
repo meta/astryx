@@ -11,6 +11,7 @@
  */
 
 import {tokenDefaults} from '../theme/tokenDefaults';
+import * as editorLook from './editor-look';
 import {resolveDefaultTokens} from '../theme/tokenValues';
 import {parseColor} from '../utils/color';
 import {
@@ -136,11 +137,22 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
   const context: PaletteMappingContext = {
     base: defaultBase(),
     has: token => Object.hasOwn(tokenDefaults, token),
+    defaults: tokenDefaults,
+    // The colors a palette grows beyond the seeds' own: the category,
+    // chart and code colors, and the status roles the input leaves unset.
+    editor: editorLook,
     reader: coreReader,
   };
   const plan = planPaletteRequest(dials, {recipe, vibrancy}, context);
   if (!plan) {
     throw new TypeError('themePalette() needs at least one seed color.');
+  }
+  // The look's category and chart hues, and the status roles the input
+  // leaves unset, grow as families beside the seeds' own.
+  for (const family of editorLook.grownFamilies(dials, context)) {
+    if (!plan.config.families.some(f => f?.id === family.id)) {
+      plan.config.families.push(family);
+    }
   }
   const candidate = generateTonalPalette(plan.config as never);
   const mapping = mapPalette(candidate, dials, plan.fills, context);
