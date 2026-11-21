@@ -74,6 +74,7 @@ import {
   keyOf,
   sharedControlHeight,
   setsControlHeight,
+  narrowedGroupHeight,
   CONTROL_SIZES,
   partHasWhen,
   isControlHeight,
@@ -6934,6 +6935,7 @@ async function changeOnce(
               x.when == null) ||
               (x.source === 'property' &&
                 x.only === true &&
+                !narrowedGroupHeight(x) &&
                 isControlHeight(ctx, x) &&
                 (x.when == null || x.when === `size:${sharedHeight.size}`))),
         )
@@ -6997,7 +6999,10 @@ async function changeOnce(
             /** @type {import('./_settings.mjs').Setting} */ ({
               ...x,
               on: t,
-              ...(onlyMeans(t) === 'member' ? {only: true} : {}),
+              // (Marked as the group's height, never one kept on t.)
+              ...(onlyMeans(t) === 'member'
+                ? {only: true, narrowed: true}
+                : {}),
             }),
         );
       ownNarrowed.push(...others.map(o => String(o.on)));
@@ -7599,7 +7604,7 @@ async function changeOnce(
                     ? `; at ${left.join(' and ')} the controls keep their own heights (set one with --when size:${left[0]})`
                     : '';
                 })()
-          }${heightsReplaced.length ? `; it replaces ${heightsReplaced.map(describe).join(', ')} at ${sharedHeight.size}` : ''}${ownHeightsReplaced.length ? `; it replaces ${ownHeightsReplaced.map(x => `${x.source === 'token' ? 'height' : x.thing} = ${x.value} on ${x.on}, which was kept on ${x.on} alone`).join('; ')}` : ''}${heightsKept.length ? `, which stays every control's height at ${[...new Set(heightsKept)].join(' and ')}` : ''}${heightsLeftOn.length ? `; ${heightsLeftOn.map(x => `${x.on} keeps ${x.value}`).join(', ')}, as ${heightsLeftOn.length === 1 ? 'it is not a control' : 'they are not controls'}` : ''}${(() => {
+          }${heightsReplaced.length ? `; it replaces ${heightsReplaced.map(describe).join(', ')} at ${sharedHeight.size}` : ''}${heightsKept.length && lastEverySize ? `; ${carried(String(lastEverySize.value)) ?? lastEverySize.value} stays every control's height at ${[...new Set(heightsKept)].join(' and ')}` : ''}${ownHeightsReplaced.length ? `; it replaces ${ownHeightsReplaced.map(x => `${x.source === 'token' ? 'height' : x.thing} = ${x.value} on ${x.on}, which was kept on ${x.on} alone`).join('; ')}` : ''}${heightsLeftOn.length ? `; ${heightsLeftOn.map(x => `${x.on} keeps ${x.value}`).join(', ')}, as ${heightsLeftOn.length === 1 ? 'it is not a control' : 'they are not controls'}` : ''}${(() => {
             const notControls = notControlsReached(ctx, heightAsked);
             return notControls.length
               ? `; ${notControls.join(', ')} ${notControls.length === 1 ? 'is not a control and keeps its' : 'are not controls and keep their'} own height (for this height there too: ${notControls.map(t => `${P} set ${slug} height ${heightAsked.value} --on ${t}${heightAsked.when ? ` --when ${heightAsked.when}` : ''}`).join(', ')})`
