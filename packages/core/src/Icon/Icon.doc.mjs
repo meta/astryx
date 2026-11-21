@@ -21,7 +21,6 @@ export const docs = {
     'built-in meaning',
     'semantic icon',
     'semantic icon name',
-    'icon registry',
     'theme icons',
     'glyph',
     'symbol',
