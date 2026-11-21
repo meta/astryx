@@ -22308,16 +22308,35 @@ export function draftAnswer(ctx, env, question) {
               : textPx
                 ? String(Number((leadPx / textPx).toFixed(3)))
                 : null;
-        // An amount ("1.5x", "half") or a percent ("150%": of the line
-        // height there now) is a factor, never a typed number.
+        // A percent said as the line height ("line height 150%") is that
+        // share of the text size, as CSS reads it: 1.5. A percent said as a
+        // change ("50% taller", "increase it by 50%") and an amount ("1.5x",
+        // "half") scale the line height there now.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
+        const pct = pctLeading ? Number(pctLeading[1]) / 100 : null;
+        const asChange =
+          /\b(?:by|increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
+            c.text,
+          );
+        const factorSaid = pxRatio != null ? null : exactFactor(c.text);
+        const pctAbsolute =
+          pxRatio == null && factorSaid == null && pct != null && !asChange
+            ? String(Number(pct.toFixed(3)))
+            : null;
         const leadFactor =
-          pxRatio != null
+          pxRatio != null || pctAbsolute != null
             ? null
-            : (exactFactor(c.text) ??
-              (pctLeading ? Number(pctLeading[1]) / 100 : null));
+            : (factorSaid ??
+              (pct == null
+                ? null
+                : /\bby\b/i.test(c.text)
+                  ? c.dir === 'less'
+                    ? 1 - pct
+                    : 1 + pct
+                  : pct));
         const n =
           pxRatio ??
+          pctAbsolute ??
           (leadFactor != null
             ? null
             : (/\b(normal)\b/.exec(c.text)?.[1] ??
