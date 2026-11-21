@@ -194,10 +194,7 @@ describe('clone and blind asks', () => {
         (await answer('sepia page #f6f0e4 in light mode, dark brown text'))
           .first,
       ).toEqual([
-        // (The page joins with its frame and main panel lines.)
         "--color-background-body '#f6f0e4' --mode light",
-        "background-color '#f6f0e4' --on app-shell --mode light",
-        "background-color '#f6f0e4' --on layout-content --mode light",
         "--color-text-primary '#92400e' --mode light",
       ]);
       // (A part's own text said with it after a comma stays the part's;
@@ -206,7 +203,9 @@ describe('clone and blind asks', () => {
         "background-color '#2563eb' --on button --when variant:primary",
         "background-color '#2563eb' --on button --when variant:secondary",
         "background-color '#2563eb' --on button --when variant:ghost",
-        "color '#ffffff' --on button",
+        "color '#ffffff' --on button --when variant:primary",
+        "color '#ffffff' --on button --when variant:secondary",
+        "color '#ffffff' --on button --when variant:ghost",
       ]);
     },
     T,

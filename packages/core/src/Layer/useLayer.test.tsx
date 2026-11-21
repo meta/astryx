@@ -3559,7 +3559,7 @@ describe('a touch that pans outside an open light-dismiss layer', () => {
     const layer = useLayerInternal({
       mode: 'context',
       lightDismiss: true,
-      watchesOutsidePans: ownsOutsidePan ? undefined : watchOutsidePans,
+      watchesOutside: ownsOutsidePan ? undefined : watchOutsidePans,
     });
     return (
       <>
@@ -4261,6 +4261,54 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       expect(layer).toHaveAttribute('data-open', 'true');
       expect(placedAfresh()).toBeGreaterThan(0);
     });
+  });
+
+  it('moves the owner\u2019s outside watch to a layer element remounted while open', async () => {
+    const started: Element[] = [];
+    const stopped: Element[] = [];
+    const watchesOutside = (layerElement: HTMLElement) => {
+      started.push(layerElement);
+      return () => stopped.push(layerElement);
+    };
+    function MovingWatchHarness({isMoved}: {isMoved: boolean}) {
+      const layer = useLayerInternal({mode: 'context', watchesOutside});
+      const rendered = layer.render(<span>Layer content</span>);
+      return (
+        <>
+          <button type="button" ref={layer.ref} onClick={layer.show}>
+            Trigger
+          </button>
+          {isMoved ? (
+            <section data-testid="second-host">{rendered}</section>
+          ) : (
+            <div data-testid="first-host">{rendered}</div>
+          )}
+        </>
+      );
+    }
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      this.dataset.open = 'true';
+    });
+    const {container, getByRole, rerender} = render(
+      <MovingWatchHarness isMoved={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    const first = await waitFor(() => {
+      const layer = container.querySelector('[popover]');
+      expect(layer).toHaveAttribute('data-open', 'true');
+      return layer;
+    });
+    expect(started).toEqual([first]);
+
+    rerender(<MovingWatchHarness isMoved />);
+
+    await waitFor(() => {
+      const layer = container.querySelector('[popover]');
+      expect(layer).not.toBe(first);
+      expect(layer).toHaveAttribute('data-open', 'true');
+      expect(started).toEqual([first, layer]);
+    });
+    expect(stopped).toEqual([first]);
   });
 
   it('leaves a standard layer on the standard list alone', async () => {
