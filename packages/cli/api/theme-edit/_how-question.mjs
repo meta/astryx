@@ -10665,12 +10665,19 @@ export function draftAnswer(ctx, env, question) {
       // words the rewrite keeps.)
       const byPosition =
         sentences.length === breaks + 1 ? sentences[breaksBefore] : undefined;
+      // (Else the sentences that hold the clause as typed, "gray header",
+      // so a part word another sentence also says, "Header: navy, e.g. …",
+      // never frees it; only a clause a reader rewrote falls back to the
+      // words the rewrite keeps.)
+      const holding = sentences.filter(x => x.includes(lowered));
       const ownSentences =
         byPosition && (!keptWords || byPosition.includes(keptWords))
           ? [byPosition]
-          : keptWords
-            ? sentences.filter(x => x.includes(keptWords))
-            : [];
+          : holding.length
+            ? holding
+            : keptWords
+              ? sentences.filter(x => x.includes(keptWords))
+              : [];
       const subjectOfColon =
         !!said &&
         ownSentences.some(sentence => {
