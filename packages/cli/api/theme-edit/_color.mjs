@@ -352,7 +352,7 @@ export function plainOn(rgb) {
 }
 
 /** How far apart the lightness steps of {@link nearestReadingLightness} are. */
-export const LIGHTNESS_STEP = 0.005;
+const LIGHTNESS_STEP = 0.005;
 
 /**
  * A color with only its lightness moved, its hue and chroma kept (as the
@@ -365,19 +365,31 @@ export const LIGHTNESS_STEP = 0.005;
  * @returns {string}
  */
 export function nearestReadingLightness(from, grounds, need) {
+  const moved = nearestLightness(from, c =>
+    grounds.every(g => ratio(c, g) >= need),
+  );
+  return moved ? hex(moved) : plainOn(grounds[0]);
+}
+
+/**
+ * The nearest lightness of a color (hue and chroma kept, as the gamut
+ * allows) that passes a test, searched both ways from its own; null when
+ * none does.
+ * @param {[number, number, number]} from
+ * @param {(c: [number, number, number]) => boolean} test
+ * @returns {[number, number, number] | null}
+ */
+export function nearestLightness(from, test) {
   const {L, C, H} = hexToOklch(hex(from));
-  /** @param {string} c */
-  const reads = c => {
-    const rgb = /** @type {[number, number, number]} */ (parseColor(c));
-    return grounds.every(g => ratio(rgb, g) >= need);
-  };
   for (let d = 0; d <= 1; d += LIGHTNESS_STEP)
     for (const at of [L - d, L + d]) {
       if (at < 0 || at > 1) continue;
-      const c = oklchClampedHex(at, C, H);
-      if (reads(c)) return c;
+      const c = /** @type {[number, number, number]} */ (
+        parseColor(oklchClampedHex(at, C, H))
+      );
+      if (test(c)) return c;
     }
-  return plainOn(grounds[0]);
+  return null;
 }
 
 /**

@@ -127,6 +127,7 @@ const MEDIA_RULE_TOKENS = [
 ];
 import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 import {
+  PAGE_CSS,
   appThemeUse,
   paintAppPage,
   pinAppMode,
@@ -2239,6 +2240,16 @@ export async function themeEditCheck(target, options = {}) {
     path.relative(from, path.resolve(root, f)).split(path.sep).join('/');
   if (options.fix) {
     const repair = lookRepair(look, problems);
+    // Every app file the repair can write is classified first: a protection
+    // source that cannot be read stops the run before anything is written.
+    if (app)
+      for (const f of [
+        ...(repair.pin ? app.elements.map(e => e.file) : []),
+        ...(repair.paint && app.entry
+          ? [app.entry, path.join(path.dirname(app.entry), PAGE_CSS)]
+          : []),
+      ])
+        protectedBy(root, f);
     const tree = /** @type {import('./_source-values.mjs').ValueTree} */ ({
       ...(Object.keys(repair.tokens).length ? {tokens: repair.tokens} : {}),
       ...(Object.keys(repair.components).length
