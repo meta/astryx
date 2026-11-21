@@ -196,6 +196,27 @@ describe('a saved setting and how far it reaches', () => {
     const data = saved('fam');
     delete data.reached;
     save('fam', data);
+    // (Set again before any build records it: its family's new parts are
+    // taken, a change, never "no change".)
+    await themeEditNew('fam2', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'fam2',
+      'background-image',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {cwd, on: 'button'},
+    );
+    const d2 = saved('fam2');
+    delete d2.reached;
+    save('fam2', d2);
+    const once = /** @type {any} */ (
+      await themeEditSet(
+        'fam2',
+        'background-image',
+        'linear-gradient(#ffffff, #e6e6e6)',
+        {cwd, on: 'button'},
+      )
+    );
+    expect(once.data.notes.join('\n')).not.toMatch(/^no change: /m);
     const r = /** @type {any} */ (
       await themeEditSet('fam', 'corners', '4px', {cwd})
     );
@@ -205,6 +226,17 @@ describe('a saved setting and how far it reaches', () => {
     expect(offered).toHaveLength(1);
     expect(offered[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
     expect(offered[0].run).toMatch(/--on button$/);
+    // (The same setting again takes the offered parts: a change, never
+    // "nothing changed".)
+    const again = /** @type {any} */ (
+      await themeEditSet(
+        'fam',
+        'background-image',
+        'linear-gradient(#ffffff, #e6e6e6)',
+        {cwd, on: 'button'},
+      )
+    );
+    expect(again.data.notes.join('\n')).not.toMatch(/^no change: /m);
   }, 240_000);
 
   it('a family setting an earlier editor saved keeps its own part; its family is offered', async ctx => {
