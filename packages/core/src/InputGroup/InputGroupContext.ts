@@ -11,6 +11,7 @@
 
 import {use} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import type {InputStatusType} from '../Field/types';
 
 export interface InputGroupContextValue {
   isInGroup: true;
@@ -18,6 +19,12 @@ export interface InputGroupContextValue {
   labelID: string;
   /** IDs of helper/status text owned by the group, for aria-describedby composition. */
   describedByIDs?: string;
+  /**
+   * Status type owned by the group, so grouped inputs can reflect a group
+   * error as their own invalid state. The message never crosses the context;
+   * Field renders it detached from the group.
+   */
+  statusType?: InputStatusType;
 }
 
 export const InputGroupContext =

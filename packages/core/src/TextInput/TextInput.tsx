@@ -414,7 +414,7 @@ export function TextInput({
     !inputGroup && status?.type === 'error' && !status.message;
   useDevWarning('TextInput', WARN_MESSAGELESS_ERROR, hasMessagelessError);
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -430,6 +430,7 @@ export function TextInput({
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the input together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -574,7 +575,7 @@ export function TextInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}

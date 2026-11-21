@@ -856,7 +856,7 @@ export function NumberInput({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -872,6 +872,7 @@ export function NumberInput({
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the input together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -1441,11 +1442,7 @@ export function NumberInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          fieldStatus?.type === 'error' || shownEntryError != null
-            ? 'true'
-            : undefined
-        }
+        aria-invalid={isInvalid || shownEntryError != null ? 'true' : undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,

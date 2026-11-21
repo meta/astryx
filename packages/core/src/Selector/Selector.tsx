@@ -1336,7 +1336,7 @@ export function Selector<T extends SelectorOptionType>(
     isEnabled: effectiveStatusVariant === 'tooltip' && !!status?.message,
   });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelId,
     [
       description ? descriptionId : null,
@@ -1350,6 +1350,7 @@ export function Selector<T extends SelectorOptionType>(
       isEffectivelyReadOnly ? readOnlyDescriptionId : null,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the trigger together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -2303,8 +2304,8 @@ export function Selector<T extends SelectorOptionType>(
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
+    'aria-invalid': isInvalid ? 'true' : undefined,
     'aria-required': ariaRequired,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
     // it leaves uncancelled. A caller `onClick` arrives through `rest` and

@@ -609,7 +609,7 @@ function TimeField({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -623,6 +623,7 @@ function TimeField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the control together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -870,7 +871,9 @@ function TimeField({
           isFocusableDisabled
           isEffectivelyRequired={isEffectivelyRequired}
           isBusy={isBusy}
-          statusType={fieldStatus?.type}
+          // The native picker marks for an error of its own or of the group;
+          // rejection marks through the segment's own validity instead.
+          statusType={isInvalid ? 'error' : undefined}
           ariaDescribedBy={ariaDescribedBy}
           isRejected={typedTime.isSurfaceRejectionShown}
           onRejectedChange={typedTime.setSurfaceRejected}
@@ -917,9 +920,7 @@ function TimeField({
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={
-              fieldStatus?.type === 'error' || typedTime.isRejected
-                ? 'true'
-                : undefined
+              isInvalid || typedTime.isRejected ? 'true' : undefined
             }
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}

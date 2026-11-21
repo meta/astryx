@@ -10,6 +10,7 @@ describe('getInputARIA', () => {
     ).toEqual({
       ariaLabelledBy: undefined,
       ariaDescribedBy: 'input-help input-error',
+      isInvalid: false,
     });
   });
 
@@ -22,6 +23,7 @@ describe('getInputARIA', () => {
     ).toEqual({
       ariaLabelledBy: 'group-label input-label',
       ariaDescribedBy: 'group-help group-error input-help',
+      isInvalid: false,
     });
   });
 
@@ -34,6 +36,60 @@ describe('getInputARIA', () => {
     ).toEqual({
       ariaLabelledBy: 'group-label',
       ariaDescribedBy: 'shared group-error input-help',
+      isInvalid: false,
     });
+  });
+
+  it('marks a standalone input invalid from its own error status only', () => {
+    expect(getInputARIA('input-label', [], null, 'error').isInvalid).toBe(true);
+    expect(getInputARIA('input-label', [], null, 'warning').isInvalid).toBe(
+      false,
+    );
+    expect(getInputARIA('input-label', [], null, 'success').isInvalid).toBe(
+      false,
+    );
+    expect(getInputARIA('input-label', [], null).isInvalid).toBe(false);
+  });
+
+  it('marks a grouped input invalid from the group error status only', () => {
+    expect(
+      getInputARIA('input-label', [], {
+        labelID: 'group-label',
+        statusType: 'error',
+      }).isInvalid,
+    ).toBe(true);
+    expect(
+      getInputARIA('input-label', [], {
+        labelID: 'group-label',
+        statusType: 'warning',
+      }).isInvalid,
+    ).toBe(false);
+    expect(
+      getInputARIA('input-label', [], {
+        labelID: 'group-label',
+        statusType: 'success',
+      }).isInvalid,
+    ).toBe(false);
+    expect(
+      getInputARIA('input-label', [], {labelID: 'group-label'}).isInvalid,
+    ).toBe(false);
+  });
+
+  it('marks a grouped input invalid when either the group or the input has an error', () => {
+    expect(
+      getInputARIA('input-label', [], {labelID: 'group-label'}, 'error')
+        .isInvalid,
+    ).toBe(true);
+    expect(
+      getInputARIA(
+        'input-label',
+        [],
+        {
+          labelID: 'group-label',
+          statusType: 'error',
+        },
+        'warning',
+      ).isInvalid,
+    ).toBe(true);
   });
 });

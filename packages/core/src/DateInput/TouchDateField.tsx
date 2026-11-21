@@ -664,7 +664,7 @@ export function TouchDateField({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -674,6 +674,7 @@ export function TouchDateField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -1412,7 +1413,7 @@ export function TouchDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

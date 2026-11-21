@@ -1298,7 +1298,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     isEnabled: effectiveStatusVariant === 'tooltip' && !!status?.message,
   });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelId,
     [
       description ? descriptionId : null,
@@ -1312,6 +1312,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       isEffectivelyReadOnly ? readOnlyDescriptionId : null,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the trigger together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -2573,8 +2574,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         .filter(Boolean)
         .join(' ') || undefined,
     'aria-labelledby': triggerLabelledBy,
+    'aria-invalid': isInvalid ? 'true' : undefined,
     'aria-required': ariaRequired,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // Newly forwarded handlers compose component first: the built-in toggle
     // and keyboard model always run. `onFocus` keeps its existing caller-first
