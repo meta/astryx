@@ -123,7 +123,7 @@ public behavior and evidence, without privately replacing the Table renderer.
   pagination row takes only the space they leave, so the pane needs no outer
   scroll. A Table whose box gets no definite block size is unchanged, and so is a
   row-windowed Table's block sizing: a block container with a definite height
-  bounds it (FR26), so it has no compatibility change. Migration: attach those listeners to the
+  bounds it when it is the container's only child (FR26), so it has no compatibility change. Migration: attach those listeners to the
   Table's Scroll region through its scroll-wrapper HTML attributes (FR1), or
   remove the parent's definite block size to keep the previous page-level
   scrolling.
