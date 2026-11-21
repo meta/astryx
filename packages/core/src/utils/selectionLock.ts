@@ -275,15 +275,14 @@ export function selectionRangesOf(
   view: Window | null | undefined,
 ): ReadonlyArray<AbstractRange> {
   const selection = view?.getSelection();
-  if (selection == null) {
+  // In Chromium, getComposedRanges brings pending styles up to date, also for
+  // an empty selection. So an empty or collapsed selection returns before it.
+  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
     return [];
   }
   const composed = composedRangesOf(selection, []);
   if (composed != null) {
     return composed.filter(range => !range.collapsed).map(liveWhereItCan);
-  }
-  if (selection.isCollapsed) {
-    return [];
   }
   const ranges: Range[] = [];
   for (let index = 0; index < selection.rangeCount; index++) {

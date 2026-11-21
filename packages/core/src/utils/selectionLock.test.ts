@@ -148,6 +148,35 @@ function select(node: Node): Selection {
   return selection;
 }
 
+describe('selectionRangesOf', () => {
+  it('reads no composed ranges for an empty or a collapsed selection, and reads them for a selected range', () => {
+    const get = mount('<p id="text">Text the page selected</p>');
+    const proto = Selection.prototype as Selection & {
+      getComposedRanges?: () => StaticRange[];
+    };
+    const original = proto.getComposedRanges;
+    const composed = vi.fn(function (this: Selection) {
+      return this.rangeCount === 0 || this.isCollapsed
+        ? []
+        : [new StaticRange(this.getRangeAt(0))];
+    });
+    proto.getComposedRanges = composed;
+    try {
+      const selection = window.getSelection() as Selection;
+      selection.removeAllRanges();
+      expect(selectionRangesOf(window)).toEqual([]);
+      select(get('text')).collapseToStart();
+      expect(selectionRangesOf(window)).toEqual([]);
+      expect(composed).not.toHaveBeenCalled();
+      select(get('text'));
+      expect(selectionRangesOf(window)).toHaveLength(1);
+      expect(composed).toHaveBeenCalled();
+    } finally {
+      proto.getComposedRanges = original;
+    }
+  });
+});
+
 describe('lockDragSelection (spec:AST-094 FR41)', () => {
   it('keeps the selection the press began with: what replaces it goes back, a new one is refused on the elements and the document, and the document refuses one until a task after the lift', async () => {
     const get = mount(
