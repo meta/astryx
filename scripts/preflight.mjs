@@ -478,13 +478,11 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
 const MISSING_BUILDS =
   'skipped, workspace builds missing; run `pnpm build` first';
 
-/**
- * A missing module that a run without `pnpm build` lacks: any workspace
- * package import (`@astryxdesign/<pkg>`, bare or by subpath; its exports name
- * build output), or a relative path into a `dist` folder.
- */
-const BUILD_OUTPUT =
-  /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+|\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?)'/;
+/** An unresolved module and its specifier. */
+const UNRESOLVED = /error TS2307: Cannot find module '([^']+)'/;
+
+/** A relative path into a `dist` folder: a workspace package's build output. */
+const DIST_PATH = /^\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?$/;
 
 /** An implicit-any error, which an unresolved import causes in its own file. */
 const IMPLICIT_ANY = /error TS(?:7006|7031):/;
@@ -493,27 +491,85 @@ const IMPLICIT_ANY = /error TS(?:7006|7031):/;
 const errorFile = line =>
   line.match(/^(.*?)\(\d+,\d+\): error TS/)?.[1] ?? null;
 
+/** The workspace package folders, as `pnpm-workspace.yaml` lists them. */
+const WORKSPACE_FOLDERS = ['apps', 'packages', 'packages/themes', 'internal'];
+
+/**
+ * Whether a workspace package's `exports` declares an import specifier. Only
+ * a declared entry is a build output that `pnpm build` writes; an unknown
+ * package or an undeclared subpath is a real error.
+ * @param {string} root the repository root
+ * @returns {(specifier: string) => boolean}
+ */
+export function workspaceExports(root = ROOT) {
+  /** @type {Map<string, string[]>} */
+  const keys = new Map();
+  for (const folder of WORKSPACE_FOLDERS) {
+    const dir = path.join(root, folder);
+    if (!fs.existsSync(dir)) continue;
+    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+      const file = path.join(dir, entry.name, 'package.json');
+      if (!entry.isDirectory() || !fs.existsSync(file)) continue;
+      const {name, exports} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!name?.startsWith('@astryxdesign/')) continue;
+      const declared =
+        exports && typeof exports === 'object'
+          ? Object.keys(exports).filter(key => key.startsWith('.'))
+          : [];
+      keys.set(name, declared.length ? declared : exports ? ['.'] : []);
+    }
+  }
+  return specifier => {
+    const [, name, subpath] =
+      specifier.match(/^(@astryxdesign\/[^/]+)(?:\/(.+))?$/) ?? [];
+    const declared = name ? keys.get(name) : undefined;
+    if (!declared) return false;
+    const wanted = subpath ? `./${subpath}` : '.';
+    return declared.some(key =>
+      key.includes('*')
+        ? new RegExp(
+            `^${key
+              .split('*')
+              .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+              .join('.+')}$`,
+          ).test(wanted)
+        : key === wanted,
+    );
+  };
+}
+
+let defaultExports;
+
 /**
  * Why a failed typecheck is skipped, or null: every TypeScript error is a
  * missing build output, or an implicit-any error (TS7006, TS7031) in a file
- * that also has a missing build output. An implicit-any error in any other
- * file, or any other error, is real. A third-party package's `dist` subpath is
- * not a build output.
+ * that also has a missing build output. A missing build output is an
+ * unresolved import that a workspace package's `exports` declares, or a
+ * relative path into a `dist` folder. An undeclared subpath, an unknown
+ * package, a third-party module, an implicit-any error in any other file, and
+ * any other error are real.
  * @param {string} text the typecheck's output
+ * @param {{declares?: (specifier: string) => boolean}} [options]
  * @returns {string | null}
  */
-export function missingBuilds(text) {
+export function missingBuilds(text, {declares} = {}) {
   const errors = text.split('\n').filter(line => /error TS\d+/.test(line));
   if (errors.length === 0) return null;
-  const unresolved = new Set(
-    errors.filter(line => BUILD_OUTPUT.test(line)).map(errorFile),
-  );
+  const isDeclared = declares ?? (defaultExports ??= workspaceExports());
+  const missing = line => {
+    const specifier = line.match(UNRESOLVED)?.[1];
+    return (
+      specifier != null &&
+      (DIST_PATH.test(specifier) ||
+        (specifier.startsWith('@astryxdesign/') && isDeclared(specifier)))
+    );
+  };
+  const unresolved = new Set(errors.filter(missing).map(errorFile));
   const followOn = line =>
     IMPLICIT_ANY.test(line) &&
     errorFile(line) != null &&
     unresolved.has(errorFile(line));
-  if (!errors.every(line => BUILD_OUTPUT.test(line) || followOn(line)))
-    return null;
+  if (!errors.every(line => missing(line) || followOn(line))) return null;
   return MISSING_BUILDS;
 }
 

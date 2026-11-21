@@ -25,6 +25,7 @@ import {
   planChecks,
   runChecks,
   stopReason,
+  workspaceExports,
 } from './preflight.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -370,6 +371,32 @@ describe('--quick with workspace builds missing', () => {
       );
     // A package outside the workspace scope is still a real error.
     expect(missingBuilds(unresolved('src/a.ts', '@astryx/other'))).toBeNull();
+  });
+
+  it('still fails on a workspace subpath no package exports, or an unknown package', () => {
+    // A typo that a build never fixes.
+    expect(
+      missingBuilds(unresolved('src/a.ts', '@astryxdesign/core/utilz')),
+    ).toBeNull();
+    expect(
+      missingBuilds(unresolved('src/a.ts', '@astryxdesign/no-such-package')),
+    ).toBeNull();
+  });
+
+  it("reads each workspace package's declared exports, wildcards included", () => {
+    const declares = workspaceExports();
+    expect(declares('@astryxdesign/core')).toBe(true);
+    expect(declares('@astryxdesign/core/utils')).toBe(true);
+    expect(declares('@astryxdesign/core/locales/pseudo.json')).toBe(true);
+    expect(declares('@astryxdesign/theme-neutral/built')).toBe(true);
+    expect(declares('@astryxdesign/core/utilz')).toBe(false);
+    expect(declares('@astryxdesign/no-such-package')).toBe(false);
+    // An injected reader decides alone.
+    expect(
+      missingBuilds(unresolved('src/a.ts', '@astryxdesign/core/utilz'), {
+        declares: () => true,
+      }),
+    ).toBe(SKIPPED);
   });
 
   it('treats implicit-any errors in a file with an unresolved workspace import as follow-ons', () => {
