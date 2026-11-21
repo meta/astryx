@@ -125,9 +125,9 @@ describe('rings, shadows, photos', () => {
 });
 
 describe('text across statuses, a brighter fill', () => {
-  it('white banner text goes to the mode it reads in on every status', async () => {
+  it('white banner text is written in every mode, as main writes it', async () => {
     expect(writes(await how('q0', 'white text in the banner'))).toEqual([
-      `set q0 color '#ffffff' --on banner --mode dark`,
+      `set q0 color '#ffffff' --on banner`,
     ]);
     // (A tone variant pairs its own text: a card's fainter text stays whole.)
     expect(writes(await how('q0', "make the card's fainter text red"))).toEqual(

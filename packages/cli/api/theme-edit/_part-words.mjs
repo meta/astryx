@@ -67,7 +67,7 @@ export const OVERRIDES = [
   [/\b(status dots?)\b/, {on: 'status-dot'}],
   // (Its indicator too: "the progress indicator".)
   [
-    /\b(progress( bar)?( fill| indicators?)?|loading bar)\b/,
+    /\b(progress( bars?)?( fill| indicators?)?|loading bar)\b/,
     {on: 'progress-bar-fill'},
   ],
   [

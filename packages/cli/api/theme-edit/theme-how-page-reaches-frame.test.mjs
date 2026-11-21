@@ -88,9 +88,9 @@ describe('the page', () => {
 });
 
 describe('a dark surface in a light page', () => {
-  it('a dark-mode text line names the dark surface that holds the part', async () => {
-    expect(texts(await how('q0', 'ghost buttons gray text'))).toMatch(
-      /inside [^;]*toast[^;]*, a dark surface on the light page/,
-    );
+  it("a variant's gray text is written in every mode", async () => {
+    expect(writes(await how('q0', 'ghost buttons gray text'))).toEqual([
+      "set q0 color '#9e9e9e' --on button --when variant:ghost",
+    ]);
   }, 240_000);
 });

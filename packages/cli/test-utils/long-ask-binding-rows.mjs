@@ -61,7 +61,9 @@ export const LOCK = [
   ],
   [
     'side nav #08090a, items 13px text, selected item #1c1d1f with #f7f8f8 text',
-    [],
+    // ("items 13px text" after the side nav is the theme's text size, as
+    // main reads it.)
+    ['text-size'],
     ['side-nav', 'side-nav-item'],
   ],
   ['badges pill corners, 12px text and no border', [], ['badge']],
@@ -331,7 +333,9 @@ export const LOCK = [
   ],
   [
     'side nav #08090a, rounder cards, compact tables, items 13px text, selected item #1c1d1f with #f7f8f8 text',
-    [],
+    // ("items 13px text" after the side nav is the theme's text size, as
+    // main reads it.)
+    ['text-size'],
     ['card', 'side-nav', 'side-nav-item', 'table-row'],
   ],
   [

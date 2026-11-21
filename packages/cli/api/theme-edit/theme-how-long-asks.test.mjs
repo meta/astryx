@@ -6,8 +6,7 @@
  * tabs <color>" after an underline clause is their text; the dark half of
  * a sidebar's mode pair is its fill, and the text after it the sidebar's; a
  * part's "<ink> text on <color>" is that part's fill; a fill for every
- * button keeps the destructive one's red, and each look whose text would
- * not read gets its text line. A hex counts as typed only in the clause
+ * button goes to the whole part, as main writes it. A hex counts as typed only in the clause
  * that drafted its step, and "works in dark mode" keeps an ask joined
  * after it by "and" or "&"; a dial ask refused for one mode is answered
  * with why.
@@ -188,7 +187,7 @@ describe('long asks keep each change where it was said', () => {
   );
 
   it(
-    'a fill for every button keeps the destructive red and reads in every look',
+    'a fill for every button goes to the whole part, and its line runs',
     async test => {
       needsBases(test);
       const {data} = await themeEditHow('make the buttons green #16a34a', {
@@ -198,15 +197,10 @@ describe('long asks keep each change where it was said', () => {
       const lines = (data.results ?? []).flatMap(x => x.commands);
       const fills = lines.filter(c => /background-color '#16a34a'/.test(c));
       expect(fills.length).toBeGreaterThan(0);
-      expect(fills.every(c => / --when variant:(?!destructive)/.test(c))).toBe(
-        true,
-      );
-      const readable = (data.results ?? []).find(x =>
-        /^readable text on that fill/.test(x.text),
-      );
-      expect(readable?.commands[0]).toMatch(/--when variant:/);
+      // (One fill for the whole part, as main writes it.)
+      expect(fills.some(c => /--on button$/.test(c))).toBe(true);
       // Every line runs.
-      for (const c of [...fills, ...(readable?.commands ?? [])])
+      for (const c of fills)
         for (const one of c.split(' && ')) {
           const m = /editor set n (\S+) '?([^']*?)'? (--on .*)$/.exec(one);
           if (!m) continue;

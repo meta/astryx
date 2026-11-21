@@ -7,7 +7,7 @@
 - `astryx experimental theme editor how` now binds each clause of a long ask to its own part:
 
 - A part word in a clause wins over a part carried from before.
-- A part said in one clause reaches a clause that names none of its own only when that clause comes right after it. A part a list is led by reaches all of the list's items, until another part is said. A part carried once is carried no further.
+- A part said in one clause reaches a clause that names none of its own only when that clause comes right after it. A part a list is led by reaches the list's looks, until another part is said. A part carried once is carried no further.
 - A look out of that reach is never written on a part said further back: a look with a whole-theme meaning (a dial's or a theme token's) goes to the whole theme, and any other look is named in its own words.
 - A mode pair stays on one part: "borders #d5dbe1 in light mode and #30313d in dark mode" in an inputs list writes both halves on the inputs.
 - A bare color said of a part that paints no fill of its own (a tab, a side nav item at rest), in an ask that speaks of that part's text elsewhere, is its text color: "tabs 14px text, …, other tabs #666666".
@@ -21,7 +21,7 @@
 - A part word right before another part word names a kind of that part: "label badges: …" writes on badges alone, never on form field labels too. A part that holds the other still reads as the place ("dialog buttons").
 - "underline nav" is a row of tabs, and "navigation rail" is the side nav, in the one part-words table.
 - A color said with a state and no look word ("…, and a #f8f9fa hover") is the part's fill in that state, never the line color a clause before it named.
-- A product label that ends in a product word ("live sports scores page: …") is the product, never the page part. "team colors red #c8102e and blue #003da5 as accents" makes the first color the accent and names the second, since a theme has one accent.
+- A product label that ends in a product word ("live sports scores page: …") is the product, never the page part. "team colors red #c8102e and blue #003da5 as accents" makes the last color the accent, as before, and names the other as not used, since a theme has one accent.
 - "serif headings with a sans-serif body" sets the body's font, with no false contradiction on the headings.
 
 - In `astryx experimental theme editor how`, "their" and "its" point back to the part said last ("make dialogs wider, their titles bigger" sizes the dialogs' titles, not every heading). A color said of one side with no fill word ("hovered tabs with a #0969da bottom", "… and rgba(0,0,0,0.25) on the bottom") is that side's line, never the part's fill.

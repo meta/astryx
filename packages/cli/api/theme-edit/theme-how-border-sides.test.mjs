@@ -639,6 +639,29 @@ describe('per-side border asks', () => {
       expect(await first('cards with a line top, bottom padding 8px')).toEqual([
         'padding-bottom 8px --on card',
       ]);
+      // (After any look: a shadow on top, then the padding's bottom.)
+      for (const look of ['a shadow', 'a glow', 'an underline'])
+        expect(
+          (await first(`cards with ${look} on top, bottom padding 8px`)).at(-1),
+          look,
+        ).toBe('padding-bottom 8px --on card');
+      // (A corner word earlier in the clause leaves a border's list whole.)
+      for (const ask of [
+        'cards with rounded corners and a #ddd border on top, left and right',
+        'rounded cards with a #ddd border on top, left and right',
+      ])
+        expect(
+          (await first(ask)).filter(l => /^border-(top|left|right) /.test(l)),
+          ask,
+        ).toHaveLength(3);
+      // (A gradient's color stops are never a side's line.)
+      expect(
+        (
+          await first(
+            'cards with a gradient from blue to white on top, bottom padding 8px',
+          )
+        ).some(l => /^border-top /.test(l)),
+      ).toBe(false);
       // (Two sides of one look stay a list.)
       expect(await first('cards with a border on top and bottom')).toEqual([
         "border-top '1px solid var(--color-border)' --on card",

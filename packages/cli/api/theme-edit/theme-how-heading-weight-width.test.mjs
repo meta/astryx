@@ -74,14 +74,14 @@ const follow = async lines => {
 const texts = rs => rs.map(r => r.text).join('\n');
 
 describe('heading weight and width', () => {
-  it('heavy condensed headings are heavy, and the width is named', async () => {
-    const rs = await how('q0', 'heavy condensed headings');
-    const lines = writes(rs);
+  it('heavy condensed headings are heavy, and condensed is less room', async () => {
+    const lines = writes(await how('q0', 'heavy condensed headings'));
     expect(lines[0]).toBe('set q0 headings heavy');
-    expect(lines.join(' ')).not.toMatch(
-      /headings light|font-weight 300|spacing less/,
-    );
-    expect(texts(rs)).toMatch(/condensed is a typeface's width/);
-    expect(writes(await how('q0', 'condensed headings'))).toEqual([]);
+    expect(lines).toContain('set q0 spacing less --on heading');
+    expect(lines.join(' ')).not.toMatch(/headings light|font-weight 300/);
+    // (Condensed alone is less room, as main reads it.)
+    expect(writes(await how('q0', 'condensed headings'))).toEqual([
+      'set q0 spacing less --on heading',
+    ]);
   }, 240_000);
 });

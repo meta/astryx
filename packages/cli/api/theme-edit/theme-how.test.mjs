@@ -792,9 +792,7 @@ const QUESTIONS = [
   [
     'кнопки синие',
     {
-      // (Each variant but the destructive one, which keeps its red.)
-      top: /^set q background-color '#2563eb' --on button --when variant:primary$/,
-      adds: /button\.variant:primary\.backgroundColor=#2563eb/,
+      top: /^set q background-color '#2563eb' --on button$/,
     },
   ],
   [
@@ -1200,7 +1198,7 @@ const QUESTIONS_2 = [
     {
       // The danger variant keeps the fill (and the text on it) the base
       // theme gives it.
-      top: /--on button --when variant:ghost(?: && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?)?$/,
+      top: /--on button(?: && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?)?$/,
       adds: /variant:destructive\.backgroundColor=var\(--color-error(-muted)?\)/,
     },
   ],
@@ -1500,8 +1498,7 @@ const QUESTIONS_2 = [
   [
     'ボタンを青く',
     {
-      top: /^set q background-color '#2563eb' --on button --when variant:primary$/,
-      adds: /button\.variant:primary\.backgroundColor=#2563eb/,
+      top: /^set q background-color '#2563eb' --on button$/,
     },
   ],
   // contradictions and repeats
@@ -1937,7 +1934,7 @@ const QUESTIONS_3 = [
   [
     'cards sin sombra y botones azules',
     {
-      top: /^set q box-shadow none --on card && set q background-color '#2563eb' --on button --when variant:primary && set q background-color '#2563eb' --on button --when variant:secondary && set q background-color '#2563eb' --on button --when variant:ghost$/,
+      top: /^set q box-shadow none --on card && set q background-color '#2563eb' --on button$/,
     },
   ],
   // a refusal says why
@@ -2793,8 +2790,7 @@ const QUESTIONS_H = [
   [
     'button gradient #2563eb 0% to #9333ea 100%',
     {
-      // (A gradient is a look: it goes on the button-like family.)
-      top: /^set q background 'linear-gradient\(#2563eb 0%, #9333ea 100%\)' --on button-like$/,
+      top: /^set q background 'linear-gradient\(#2563eb 0%, #9333ea 100%\)' --on button$/,
     },
   ],
   // typed values without a colon

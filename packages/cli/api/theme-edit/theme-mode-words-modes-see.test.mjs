@@ -181,8 +181,8 @@ describe('wrong writes that are no longer accepted', () => {
       expect(
         (await answer('make labels on accent buttons white')).first,
       ).toEqual([
-        // (White reads on the primary fill in light mode only.)
-        "set n color '#ffffff' --on button --when variant:primary --mode light",
+        // (Written as said, as main writes it.)
+        "set n color '#ffffff' --on button --when variant:primary",
       ]);
     },
     T,

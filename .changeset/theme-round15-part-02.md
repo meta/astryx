@@ -8,7 +8,7 @@
 
 - `astryx experimental theme editor how`: "the active nav item should be a #e8def8 pill" again gives pill corners on the selected item only. There is now a single reader for a color and shape, so the item's state is kept.
 
-- `astryx experimental theme editor how` now gives a text color asked together with a fill for a part's variants ("gold buttons with black text", "buttons with a navy background in dark mode and white text") to each variant only in the modes where it reads on that fill. It measures against the fill the same answer gives it, or see-through fills over the page. Variants it can't read on keep their own text, and the answer says which.
+- `astryx experimental theme editor how` now gives a text color asked together with a fill for a part's variants ("gold buttons with black text", "buttons with a navy background in dark mode and white text") to each variant that fill reaches; a variant the fill does not reach keeps its own text. A typed text color that does not read on the typed fill is written as typed, and the answer gives the ratio.
 
 Other fixes:
 
@@ -19,7 +19,7 @@ Other fixes:
 
 - `astryx experimental theme editor`: a part Core marks open is drawn open, so `--state expanded` reaches a dropdown menu's submenu row (open while its flyout is, though it is highlighted too) and a top nav's menu trigger (a control on the page, now kept as drawn open).
 
-- `astryx experimental theme editor`: the states Core marks on a part's own element are the part's to set. A list item (and so a checkbox list's row) takes `--state selected`, written as the attribute Core marks; a checkbox's or radio's box takes `--state hover` and the other moment states, shown from the part holding its invisible input instead of refused; and a part the drawing shows open in an overlay records its open state for `--state expanded`.
+- `astryx experimental theme editor`: the states Core marks on a part's own element are the part's to set. A list item (and so a checkbox list's row) takes `--state selected`, written as the attribute Core marks; and a part the drawing shows open in an overlay records its open state for `--state expanded`.
 
 - `astryx experimental theme editor show` draws a doc sample's plain HTML text field as the theme's own text input, a submenu's flyout once beside the menu it opens from instead of a second time below it, a control drawn pressed at the moment of its press (a press flash no longer fades back to rest), a command palette with an item highlighted on the open states page, and the mobile navigation drawer's panel inside its cell.
 

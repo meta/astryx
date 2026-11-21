@@ -297,8 +297,13 @@ describe('the corners an ask names', () => {
     expect(
       cornersNamed('tabs rounded on top and bottom', 'tab')?.corners,
     ).toEqual(['start-start', 'start-end', 'end-start', 'end-end']);
-    expect(await writes('tabs rounded on top and bottom')).toEqual([]);
-    expect(await writes('tabs rounded on the left and right')).toEqual([]);
+    // (Every corner named is the corners dial, as before.)
+    expect(await writes('tabs rounded on top and bottom')).toEqual([
+      'corners round --on tab',
+    ]);
+    expect(await writes('tabs rounded on the left and right')).toEqual([
+      'corners round --on tab',
+    ]);
     // (A part name that starts with a side word is a part, never a side:
     // "top nav darker" is its own ask.)
     expect(
@@ -323,8 +328,14 @@ describe('the corners an ask names', () => {
         "border-radius 'var(--radius-element) var(--radius-element) 0 0' --on tab",
       );
     }
+    // (A "with" leaves an empty clause: no other change, so the top
+    // corners alone.)
+    expect(
+      await writes('bottom sheets with rounded top corners'),
+    ).not.toContain('corners round --on bottom-sheet');
     expect(await writes('4px corners on top and bottom of cards')).toEqual([
       'border-radius 4px --on card',
+      'corners 4px --on card',
     ]);
     // (An except after "on <part>" is the corners' except, never a part.)
     expect(await writes('4px corners on tabs except the bottom')).toEqual([
@@ -650,11 +661,13 @@ describe('the corners an ask names', () => {
         .flatMap(r => r.commands)
         .filter(c => / editor set /.test(c))
         .map(c => c.replace(/^.*? editor set k /, ''));
-    // (The 2px is the whole border's, never the corners' radius nor one
-    // side's border: the corner ask ends at its second side.)
+    // (The 2px is the border's, never the corners' radius; "bottom 2px
+    // border" is read as the bottom border, as before.)
     const border = await all('cards rounded on top and bottom 2px border');
     expect(border.some(c => /radius 2px/.test(c))).toBe(false);
-    expect(border).toContain('border-width 2px --on card');
+    expect(border).toContain(
+      "border-bottom '2px solid var(--color-border)' --on card",
+    );
     // ("right-click menus" is the context menu: "right" names no corner.)
     expect(
       cornersNamed('square corners on right-click menus', 'context-menu', [
@@ -690,7 +703,7 @@ describe('the corners an ask names', () => {
       ).toBe(false);
     expect(
       await all('tabs rounded on top and bottom 8px blue border'),
-    ).toContain("border '8px solid #2563eb' --on tab");
+    ).toContain("border-bottom '8px solid #2563eb' --on tab");
     // ("top nav" is a part: "top" names no corner, so every corner is
     // squared.)
     const nav = await all('square corners on the top nav');

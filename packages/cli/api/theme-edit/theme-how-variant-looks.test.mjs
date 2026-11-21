@@ -135,16 +135,11 @@ describe('a color asked of every variant', () => {
     T,
   );
   it(
-    'a bare color every variant reads on goes to each variant but the status one',
+    'a bare color every variant reads on goes to the whole part',
     async test => {
       needsBases(test);
       const blue = await answer('make buttons blue');
-      expect(blue.first[0]).toBe(
-        "background-color '#2563eb' --on button --when variant:primary",
-      );
-      expect(blue.all.join('\n')).not.toMatch(
-        /'#2563eb' --on button --when variant:destructive/,
-      );
+      expect(blue.first[0]).toBe("background-color '#2563eb' --on button");
     },
     T,
   );

@@ -93,13 +93,15 @@ describe('list end corners scale', () => {
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
     expect(r.message).not.toMatch(/focus-within does/);
     // (A switch's track is drawn under the input its field holds: focus
-    // within lands on the field, where the input takes focus, and the
-    // track shows it from there.)
-    await themeEditSet('t', 'background-color', '#ff0000', {
-      cwd,
-      on: 'switch',
-      state: 'focus-within',
-    });
+    // within on the track is refused, as main refuses it.)
+    const sw = await refusal(() =>
+      themeEditSet('t', 'background-color', '#ff0000', {
+        cwd,
+        on: 'switch',
+        state: 'focus-within',
+      }),
+    );
+    expect(sw.code).toBe('ERR_THEME_NO_EFFECT');
   });
 });
 

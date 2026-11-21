@@ -62,6 +62,47 @@ const first = async q => {
  */
 const ROWS = [
   [
+    'an "and" item of a colon list a state leads is in that state',
+    {
+      q: 'selected tabs: bold text and a #0069d6 fill',
+      has: [
+        'font-weight 700 --on tab --state selected',
+        "background-color '#0069d6' --on tab --state selected",
+      ],
+      never: /--on tab$/,
+    },
+  ],
+  [
+    'a hovered list paints no resting button',
+    {
+      q: 'hovered buttons: a shadow and a #eeeeee fill',
+      has: [
+        "box-shadow 'var(--shadow-med)' --on button --state hover",
+        "background-color '#eeeeee' --on button --state hover --mode light",
+      ],
+      never: /--on button(?: --when \S+)?(?: --mode \S+)?$/,
+    },
+  ],
+  [
+    'a disabled list fills only disabled buttons',
+    {
+      q: 'disabled buttons: gray text and a #eeeeee fill',
+      has: ["background-color '#eeeeee' --on button --state disabled"],
+      never: /--on button(?: --when \S+)?(?: --mode \S+)?$/,
+    },
+  ],
+  [
+    "a selected item's list keeps its text in the state",
+    {
+      q: 'selected side nav items: a #0069d6 fill and white text',
+      has: [
+        "background-color '#0069d6' --on side-nav-item --state selected",
+        "color '#ffffff' --on side-nav-item --state selected",
+      ],
+      never: /--on side-nav-item$/,
+    },
+  ],
+  [
     'a kind of the part ("filled buttons") keeps the list\'s text size on the part',
     {
       q: 'filled buttons: pill shaped, 40px tall, 14px medium text, 24px horizontal padding',
@@ -122,6 +163,27 @@ describe("a part's colon list owns its items", () => {
     const lines = await first(row.q);
     for (const line of row.has) expect(lines, row.q).toContain(line);
     for (const line of lines) expect(line, row.q).not.toMatch(row.never);
+  });
+
+  it('names two text colors said in a state list, never as a "then" step', async () => {
+    if (unbuilt) return;
+    const {data} = await themeEditHow(
+      'hovered tabs: white text and gray text',
+      {
+        cwd,
+        theme: 'n',
+      },
+    );
+    const r = data.results?.[0];
+    expect(
+      r.commands.some(c =>
+        c.endsWith("color '#9e9e9e' --on tab --state hover"),
+      ),
+    ).toBe(true);
+    expect(r.text).toContain(
+      'two colors were said for the text, #ffffff and #9e9e9e; the later one, #9e9e9e, is written',
+    );
+    expect(r.text).not.toMatch(/"then"/);
   });
 
   it('reads "the active page in pagination" as its current page cell', async () => {

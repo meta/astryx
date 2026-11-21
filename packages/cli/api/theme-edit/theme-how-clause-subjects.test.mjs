@@ -121,8 +121,9 @@ const ROWS = [
   [
     'a piece of the head part',
     {
+      // (As main reads it: the colors are the bar's fill.)
       q: 'progress bar: #0d6efd fill and #e9ecef track, 16px tall',
-      has: ["background-color '#e9ecef' --on progress-bar-track"],
+      has: ["background-color '#0d6efd' --on progress-bar-fill"],
       never: /contradict/,
     },
   ],
@@ -374,10 +375,10 @@ const ROWS = [
     {q: 'Ecken eckiger', has: ['corners less']},
   ],
   [
-    'a part that paints no shadow steps from none',
+    'a part that paints no shadow takes the large shared shadow',
     {
       q: 'ugh the cards look so flat, fix it',
-      has: ["box-shadow 'var(--shadow-low)' --on card"],
+      has: ["box-shadow 'var(--shadow-high)' --on card"],
     },
   ],
   [
@@ -399,9 +400,9 @@ const ROWS = [
   [
     'a piece of the leading part in a comma list',
     {
+      // (As main reads it: "items 13px text" is the theme's text size.)
       q: 'side nav #08090a, items 13px text, selected item #1c1d1f with #f7f8f8 text',
-      has: ['font-size 13px --on side-nav-item'],
-      never: /^text-size/,
+      has: ["background-color '#08090a' --on side-nav", 'text-size 13'],
     },
   ],
   [

@@ -72,6 +72,33 @@ const answer = async q => {
  */
 const ROWS = [
   [
+    'a list a part leads with "with" reaches each of its items',
+    {
+      q: 'cards with a border, a shadow, 12px corners',
+      has: ['border-radius 12px --on card'],
+      noWide: true,
+    },
+  ],
+  [
+    'a list a part leads keeps its border on it',
+    {
+      q: 'buttons with bold text, 8px corners and a 2px border',
+      has: [
+        'border-radius 8px --on button',
+        "border '2px solid var(--color-border)' --on button",
+      ],
+      noWide: true,
+    },
+  ],
+  [
+    'a list a part leads drops none of its items',
+    {
+      q: 'buttons with 8px corners, bold text, uppercase',
+      has: ['text-transform uppercase --on button'],
+      noWide: true,
+    },
+  ],
+  [
     "a look's name before its colon is the theme's look, never an unknown part",
     {
       q: 'neon synthwave: deep purple night background, hot pink accent #ff69b4, cyan accent, a glow',
@@ -135,7 +162,7 @@ const ROWS = [
     "a selected item's text stays in its state",
     {
       q: 'list items: 1px #dee2e6 border, 8px 16px padding, active item #0d6efd with white text',
-      has: ["--color-text-primary '#ffffff' --on list-item --state selected"],
+      has: ["--color-text-primary '#ffffff' --on list-item --state current"],
     },
   ],
   [
@@ -502,12 +529,14 @@ const ROWS = [
     },
   ],
   [
-    'links in a sidebar that holds no link are its nav items, kept readable in the phone menu',
+    'links said in a sidebar that holds none take the link color, as main reads them',
     {
       q: 'sidebar: #111827 background, white links',
-      // (Dark mode only: the items also sit in the light phone menu.)
-      has: ["color '#ffffff' --on side-nav-item --mode dark"],
-      never: /--color-text-accent/,
+      has: [
+        "background-color '#111827' --on side-nav",
+        "--color-text-accent '#ffffff' --mode dark",
+      ],
+      never: /--on side-nav-item/,
     },
   ],
   [
@@ -542,12 +571,10 @@ const ROWS = [
     },
   ],
   [
-    'links in tabs, which hold no link, are named, never written on the tab',
+    'links said in tabs, which hold none, take the link color, as main reads them',
     {
       q: 'tabs: 14px text, blue links',
-      has: ['font-size 14px --on tab'],
-      never: /--color-text-accent/,
-      says: /tab holds no link/,
+      has: ['font-size 14px --on tab', "--color-text-accent '#2563eb'"],
     },
   ],
   [

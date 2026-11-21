@@ -66,8 +66,9 @@ describe('states Core marks on a part', () => {
   it("takes a list item's selected state", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('l', {cwd, like: 'neutral'});
+    // (how reads a selected list item as its current one, as main does.)
     expect((await answer('selected list items blue', 'l')).writes).toContain(
-      "set l background-color '#2563eb' --on list-item --state selected",
+      "set l background-color '#2563eb' --on list-item --state current",
     );
     await themeEditSet('l', 'background-color', '#2563eb', {
       cwd,
@@ -82,28 +83,21 @@ describe('states Core marks on a part', () => {
     );
   }, 240_000);
 
-  it("shows a checkbox's or radio's hover from the part holding its input", async ctx => {
+  it("refuses a checkbox's or radio's hover on the box, as main does", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('h', {cwd, like: 'neutral'});
-    await themeEditSet('h', 'background-color', '#dc2626', {
-      cwd,
-      on: 'checkbox-indicator',
-      state: 'hover',
-      only: true,
-    });
-    await themeEditSet('h', 'background-color', '#dc2626', {
-      cwd,
-      on: 'radio-indicator',
-      state: 'hover',
-      only: true,
-    });
-    const css = fs.readFileSync(path.join(cwd, 'themes', 'h', 'h.css'), 'utf8');
-    expect(css).toMatch(
-      /\.astryx-checkbox-indicator:where\(\.astryx-checkbox-input:hover \*\)/,
-    );
-    expect(css).toMatch(
-      /\.astryx-radio-indicator:where\(\.astryx-[\w-]+:hover \*\)/,
-    );
+    for (const on of ['checkbox-indicator', 'radio-indicator']) {
+      const r = await refusal(() =>
+        themeEditSet('h', 'background-color', '#dc2626', {
+          cwd,
+          on,
+          state: 'hover',
+          only: true,
+        }),
+      );
+      expect(r.code, on).toBe('ERR_THEME_NO_EFFECT');
+      expect(r.message, on).toMatch(/invisible input/);
+    }
   }, 240_000);
 
   it("names a container's state on the part inside it that has it", async ctx => {

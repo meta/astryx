@@ -71,24 +71,20 @@ const follow = async lines => {
 };
 
 describe('a variant on its own fill', () => {
-  it('white text on destructive buttons goes to the mode the drawn fill reads in', async () => {
+  it('white text on destructive buttons is written as said, as main writes it', async () => {
     const lines = writes(await how('q0', 'white text on destructive buttons'));
-    // (The neutral theme draws destructive buttons on the pale muted error
-    // fill in light mode: white reads only in dark mode.)
     expect(lines).toEqual([
-      "set q0 color '#ffffff' --on button --when variant:destructive --mode dark",
+      "set q0 color '#ffffff' --on button --when variant:destructive",
     ]);
     await follow(lines);
   }, 240_000);
 
-  it('white text on every button is light mode on primary, secondary and destructive', async () => {
-    // (Known gap, fixed in a follow-up: main also writes these in dark mode,
-    // where white on the destructive button reads at 10.5:1.)
+  it('white text on every button writes the lines main writes', async () => {
     const lines = writes(await how('q0', 'white text on buttons'));
     expect(lines).toEqual([
-      "set q0 color '#ffffff' --on button --when variant:primary --mode light",
-      "set q0 color '#ffffff' --on button --when variant:secondary --mode light",
-      "set q0 color '#ffffff' --on button --when variant:destructive --mode light",
+      "set q0 color '#ffffff' --on button --when variant:primary",
+      "set q0 color '#ffffff' --on button --when variant:secondary",
+      "set q0 color '#ffffff' --on button --when variant:destructive",
     ]);
   }, 240_000);
 });
