@@ -29148,9 +29148,10 @@ export function draftAnswer(ctx, env, question) {
     // read for sure: nothing is taken back, and the answer says so.
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
+    // (A phrase naming another part's change, "and the card corners
+    // change", is part of the undo too: never a new change.)
     const alsoNamed =
       next &&
-      !next.aspects?.length &&
       !next.colors?.length &&
       /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
         String(next.text ?? ''),
@@ -29228,13 +29229,57 @@ export function draftAnswer(ctx, env, question) {
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
     if (unsure) {
+      // (A part the undo names that had no change earlier gets nothing.)
+      const unchanged = several
+        ? [...(uc?.parts ?? []), ...(alsoNamed ? (next.parts ?? []) : [])]
+            .map((/** @type {{on: string}} */ p) => p.on)
+            .filter(
+              on =>
+                !result.some(d => {
+                  const c = /** @type {any} */ (draftClause.get(d));
+                  return (
+                    d !== unmet &&
+                    !d.unmet &&
+                    c &&
+                    clauses.indexOf(c) < undoAt &&
+                    c.parts?.some(
+                      (/** @type {{on: string}} */ p) => p.on === on,
+                    )
+                  );
+                }),
+            )
+        : [];
       unmet.text = several
-        ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
+        ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time${unchanged.length ? `; no ${unchanged.join(' or ')} change was said earlier, so nothing is written for it` : ''}`
         : loose
           ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
           : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
       if (uc) answeredByUndo.add(uc);
-      if (alsoNamed) answeredByUndo.add(next);
+      if (alsoNamed) {
+        // (The phrase is the undo's, never an ask of its own: its lines
+        // leave the answer, the whole one included.)
+        const own = result.filter(
+          d => /** @type {any} */ (draftClause.get(d))?.text === next.text,
+        );
+        const gone = own.flatMap(d => d.options[0] ?? []);
+        for (const d of result)
+          if (!draftClause.get(d) && d.options.length)
+            d.options = d.options
+              .map(o =>
+                o.filter(
+                  st =>
+                    !gone.some(g => JSON.stringify(g) === JSON.stringify(st)),
+                ),
+              )
+              .filter(o => o.length);
+        result.splice(
+          0,
+          result.length,
+          ...result.filter(d => !own.includes(d)),
+        );
+        for (const c of clauses)
+          if (c.text === next.text) answeredByUndo.add(c);
+      }
       continue;
     }
     // (A whole answer that holds every line, "all of it, in order", loses

@@ -324,6 +324,22 @@ const ROWS = [
     },
   ],
   [
+    'a phrase after the undo naming another part is never a new change',
+    {
+      q: 'Make the headings bold. Undo the heading change and the card corners change.',
+      never: /--on card\b/,
+      says: /no card change was said earlier, so nothing is written for it/,
+    },
+  ],
+  [
+    'a phrase after the undo naming a look of a part with no change writes nothing',
+    {
+      q: 'Make the cards blue. Undo the card change and the heading weight change.',
+      never: /^headings bold$|--on heading\b/,
+      says: /no heading change was said earlier/,
+    },
+  ],
+  [
     'an undo that names a look takes back only that look',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
