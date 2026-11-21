@@ -11,7 +11,8 @@
  *   folder, the temp folder and every per-user folder at folders of this run
  *   and names the repository's package manager as the run's launcher, once,
  *   before any test worker forks. Its teardown fails the run when a test
- *   wrote into the checkout.
+ *   wrote into the checkout, or, on CI, changed the real cache or
+ *   configuration folder.
  * @position Referenced by vitest.config.ts's `node` project. The build-theme
  *   suites need a compiled Core; the Sandbox route contract imports generated
  *   template metadata and scans ignored wrappers that do not exist in a fresh
@@ -38,7 +39,15 @@ import {
   writtenSince,
 } from './packages/cli/test-utils/checkout-writes.mjs';
 import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
-import {moveUserHome} from './packages/cli/test-utils/test-home.mjs';
+import {
+  userCacheDir,
+  userConfigDir,
+} from './packages/cli/foundation/env/user-dirs.mjs';
+import {
+  changedSince,
+  folderState,
+  moveUserHome,
+} from './packages/cli/test-utils/test-home.mjs';
 import {repositoryUserAgent} from './packages/cli/test-utils/test-launcher.mjs';
 import {
   sweepTrash,
@@ -93,6 +102,10 @@ export default async function setup(project) {
     // The run's temp folder sits beside its home folder, not around it, as
     // on a developer's computer.
     const runTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-test-tmp-'));
+    // The developer's real cache and configuration folders, read before the
+    // home folder moves, for the teardown's check.
+    const realFolders = [userCacheDir(), userConfigDir()];
+    const realBefore = folderState(realFolders);
     moveUserHome(userHome, runTmp);
     // Tests read the package manager that started them from its user agent.
     // The run names the repository's own, so a run started with `node` or
@@ -168,6 +181,24 @@ export default async function setup(project) {
         process.once('exit', () => (process.exitCode = 1));
         throw new Error(
           `tests wrote into the checkout (every fixture belongs in a temp folder): ${written.slice(0, 10).join('; ')}`,
+        );
+      }
+      // On CI the run is the only writer of these folders, so a change is a
+      // test's and fails the run. On a developer's computer another process
+      // (the developer's own CLI, another checkout's run) may write them too,
+      // so a change is reported, not failed.
+      const touched = changedSince(realBefore, folderState(realFolders));
+      if (touched.length) {
+        const list = touched.slice(0, 10).join('; ');
+        if (process.env.CI) {
+          endRun();
+          process.once('exit', () => (process.exitCode = 1));
+          throw new Error(
+            `tests changed the real per-user folders (every test runs in the run's home folder): ${list}`,
+          );
+        }
+        console.warn(
+          `The real per-user folders changed during the run, by a test or by another process on this computer: ${list}`,
         );
       }
       endRun();

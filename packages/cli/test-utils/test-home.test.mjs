@@ -14,6 +14,8 @@ import {userCacheDir, userConfigDir} from '../foundation/env/user-dirs.mjs';
 import {tempFolderOf} from '../foundation/fs/path-safety.mjs';
 import {
   TEST_HOME_ENV,
+  changedSince,
+  folderState,
   foldersOutside,
   gitGlobalConfig,
   moveUserHome,
@@ -133,6 +135,35 @@ describe("the developer's git configuration", () => {
       expect(gitGlobalConfig({}, home)).toBe(path.join(home, '.gitconfig'));
     } finally {
       fs.rmSync(home, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('the real per-user folders', () => {
+  it('shows a file a test adds, changes or removes there, and a folder it creates', () => {
+    const real = fs.mkdtempSync(path.join(os.tmpdir(), 'made-up-real-'));
+    try {
+      const cache = path.join(real, 'cache');
+      const config = path.join(real, 'config');
+      fs.mkdirSync(cache);
+      fs.writeFileSync(path.join(cache, 'kept.json'), '{}');
+      fs.writeFileSync(path.join(cache, 'gone.json'), '{}');
+      const before = folderState([cache, config]);
+      expect(changedSince(before, folderState([cache, config]))).toEqual([]);
+      fs.writeFileSync(path.join(cache, 'kept.json'), '{"a": 1}');
+      fs.rmSync(path.join(cache, 'gone.json'));
+      fs.mkdirSync(config);
+      fs.writeFileSync(path.join(config, 'new.json'), '{}');
+      expect(changedSince(before, folderState([cache, config]))).toEqual(
+        expect.arrayContaining([
+          path.join(cache, 'kept.json'),
+          path.join(cache, 'gone.json'),
+          config,
+          path.join(config, 'new.json'),
+        ]),
+      );
+    } finally {
+      fs.rmSync(real, {recursive: true, force: true});
     }
   });
 });
