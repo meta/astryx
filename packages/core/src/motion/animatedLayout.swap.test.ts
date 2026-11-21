@@ -74,7 +74,11 @@ beforeEach(() => {
           entry.finish = listener;
         }
       },
-      set startTime(value: number) {
+      // A start time reads back as it was set, as a browser's does.
+      get startTime() {
+        return entry.startTime;
+      },
+      set startTime(value: number | null) {
         entry.startTime = value;
       },
     } as unknown as Animation;

@@ -751,8 +751,9 @@ function safeAnimate(
   // glide keeps moving through the frame it is replaced in, and a part keeps
   // the clock of the glide it rides. A change made from rest starts with the
   // first frame drawn after its task (startWaiting). Until then its animation
-  // holds its first keyframe, the content's old place. So the rest of that
-  // task, however long it runs, delays the motion instead of skipping it.
+  // holds its first keyframe, the content's old place (holdForFirstFrame). So
+  // the rest of that task, however long it runs, delays the motion instead of
+  // skipping it.
   const now = doc.timeline?.currentTime;
   if (now != null) {
     // The start of the change it is part of, captured when that change made
@@ -763,6 +764,7 @@ function safeAnimate(
         : startFor(doc, Number(now));
     start.last = clockOf(doc);
     if (start.waiting != null) {
+      holdForFirstFrame(animation, Number(now));
       start.waiting.add(animation);
     } else {
       startAt(animation, start.at, Number(now));
@@ -830,8 +832,9 @@ function trackRunning(doc: Document, animation: Animation): void {
 }
 
 /**
- * Whether one of this module's motions runs in `doc`, a waiting one
- * included. A change made now then continues motion on the screen.
+ * Whether one of this module's motions runs in `doc`. A change made now then
+ * continues motion on the screen. A motion that holds its first keyframe has
+ * not moved yet, so it does not count.
  */
 function isMotionRunning(doc: Document): boolean {
   const running = runningIn.get(doc);
@@ -839,6 +842,9 @@ function isMotionRunning(doc: Document): boolean {
     return false;
   }
   for (const animation of running) {
+    if (holds.has(animation)) {
+      continue;
+    }
     if (animation.playState === 'running') {
       return true;
     }
@@ -865,6 +871,50 @@ function startAt(animation: Animation, at: number, frame: number): void {
 }
 
 /**
+ * How far ahead of the timeline a waiting animation's start time is held, ms.
+ * A start that far ahead shows the first keyframe for days.
+ */
+const HOLD_AHEAD_MS = 1e9;
+
+/** Each waiting animation's held start time and the fill it had before. */
+const holds = sharedWeakMap<
+  Animation,
+  {readonly startTime: number; readonly fill: FillMode | undefined}
+>('motion/animated-layout/holds', 1);
+
+/**
+ * Hold `animation` at its first keyframe until the first frame drawn after
+ * its change's task. A start time far ahead of `now`, the timeline's time,
+ * holds it. A set start time also cancels the animation's pending play task.
+ * An engine can run that task before the frame, on a clock from before a long
+ * task, and the motion then skips ahead.
+ */
+function holdForFirstFrame(animation: Animation, now: number): void {
+  const fill = animation.effect?.getTiming?.().fill;
+  const startTime = now + HOLD_AHEAD_MS;
+  holds.set(animation, {startTime, fill});
+  animation.startTime = startTime;
+  animation.effect?.updateTiming?.({
+    fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
+  });
+}
+
+/**
+ * Whether `animation` still holds the start time `held`. Code that paused,
+ * sought, finished or cancelled it since then changed that start time. An
+ * engine can round a start time it keeps, so a difference under 1 ms counts
+ * as the same.
+ */
+function isStillHeld(animation: Animation, held: number): boolean {
+  const {startTime} = animation;
+  return (
+    animation.playState !== 'idle' &&
+    startTime != null &&
+    Math.abs(Number(startTime) - held) < 1
+  );
+}
+
+/**
  * Start the animations a change made from rest holds, at the first frame
  * drawn after the change's task, all at one moment. That moment is the
  * frame's time. After a long task, a frame can carry the time of a frame
@@ -885,13 +935,17 @@ function startWaiting(doc: Document, start: ChangeStart): void {
   const now = clockOf(doc);
   start.at = now - frame <= LATE_START_MS ? frame : now;
   for (const animation of waiting) {
-    const {playState} = animation;
-    const isStopped =
-      playState === 'paused' ||
-      playState === 'idle' ||
-      playState === 'finished';
-    if (!isStopped && animation.startTime == null) {
-      startAt(animation, start.at, frame);
+    const hold = holds.get(animation);
+    holds.delete(animation);
+    if (hold == null || !isStillHeld(animation, hold.startTime)) {
+      continue;
+    }
+    animation.startTime = start.at;
+    // A start on the frame's own time needs the fill no longer. A later
+    // start keeps it, so the first keyframe shows until the timeline gets
+    // there.
+    if (start.at === frame && hold.fill != null) {
+      animation.effect?.updateTiming?.({fill: hold.fill});
     }
   }
 }
@@ -918,12 +972,15 @@ function clockOf(doc: Document): number {
  * the same frame: through the task that made it and the microtasks after it.
  * A change that begins after a block takes a start of its own (beginChange).
  * A change made from rest, with none of this module's motions running, waits
- * for the first frame drawn after its task (startWaiting).
+ * for the first frame drawn after its task (startWaiting). A change made
+ * before that frame joins it.
  */
 function startFor(doc: Document, frame: number): ChangeStart {
   const now = clockOf(doc);
   const held = changeStarts.get(doc);
-  if (held != null && held.frame === frame) {
+  // A start that waits for its first frame takes every animation made before
+  // that frame. None of them has moved yet, so they all start together.
+  if (held != null && (held.frame === frame || held.waiting != null)) {
     held.last = now;
     return held;
   }
@@ -958,7 +1015,13 @@ function startFor(doc: Document, frame: number): ChangeStart {
  */
 function beginChange(doc: Document): void {
   const held = changeStarts.get(doc);
-  if (held != null && clockOf(doc) - held.last > LATE_START_MS) {
+  // A start that waits for its first frame takes its moment there, so a
+  // block before that frame does not make it late.
+  if (
+    held != null &&
+    held.waiting == null &&
+    clockOf(doc) - held.last > LATE_START_MS
+  ) {
     changeStarts.delete(doc);
   }
 }

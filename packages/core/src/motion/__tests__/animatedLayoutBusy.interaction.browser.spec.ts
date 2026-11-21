@@ -114,9 +114,9 @@ async function openStory(page: Page, story: string): Promise<void> {
  * a task queued in a frame after the click. A round trip from the test could
  * miss most of the glide. The block waits until each glide that carries
  * `follower` was present at the frame before and has run 16 ms, as
- * `blockMainThread` waits. A glide made from rest stays pending until the
- * first frame drawn after its change starts it. The frame in between hands
- * the glides to the compositor. Just before the block, the page reads those
+ * `blockMainThread` waits. A glide made from rest holds its first keyframe
+ * until the first frame drawn after its change starts it. The frame in
+ * between hands the glides to the compositor. Just before the block, the page reads those
  * glides, for the judgment's expected positions. With no such glide within
  * 5 s of the click, it reports none. A glide that never qualifies fails by
  * name.
