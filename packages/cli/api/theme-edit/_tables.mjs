@@ -695,7 +695,7 @@ export const DIALS = wordTable({
     words: 'base start starting built-in extends foundation',
   },
   focus: {
-    help: "How keyboard focus looks on every focusable part at once. ring: Core's focus ring, a solid accent outline set off from the part (the default). glow: a soft halo hugging the part, the accent at a quarter strength (the look of Bootstrap's focus). Fields take the same look on focus. The focus tokens (--focus-outline-color, --focus-outline-width, --focus-outline-offset) tune it further. Feel: ring feels precise; glow feels soft and friendly.",
+    help: "How keyboard focus looks on every focusable part at once. ring: Core's focus ring, a solid accent outline set off from the part (the default). glow: a soft halo hugging the part, the accent as faint as it can be while it still reads at 3:1 on the page, a surface, a card and a menu (the look of Bootstrap's focus); where even the full accent does not read, the theme's own ring color stays. Fields take the same look on focus. The focus tokens (--focus-outline-color, --focus-outline-width, --focus-outline-offset) tune it further. Feel: ring feels precise; glow feels soft and friendly.",
     values: 'ring|glow',
     examples: ['set my focus glow', 'set my focus ring'],
     words: 'focus focused keyboard glow halo focus-ring outline',
