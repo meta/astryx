@@ -3161,6 +3161,22 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string} [within] - a container the clause's links are drawn in ("links on cards"): the token a link reads is set there
  */
 
+/** Words that ask for a part's fill ("transparent" is read apart: on one
+ * side of a border color it is that side's line). */
+const FILL_WORDS = /\b(background|bg|fill(ed)?|gradient|glossy|tint(ed)?)\b/;
+/** A row metric a clause can ask of zebra rows. */
+const ROW_METRICS = [
+  'size',
+  'spacing',
+  'weight',
+  'fontsize',
+  'italic',
+  'case',
+  'leading',
+  'tracking',
+  'family',
+];
+
 /**
  * The aspects a clause asks about, by its words. Order is the answer order.
  * @param {string} text
@@ -3361,9 +3377,8 @@ function aspectsOf(text) {
     x => x.toLowerCase() === 'transparent',
   );
   if (
-    /\b(background|bg|fill(ed)?|gradient|glossy|tint(ed)?|stripes|striped|zebra)\b/.test(
-      c,
-    ) ||
+    FILL_WORDS.test(c) ||
+    /\b(stripes|striped|zebra)\b/.test(c) ||
     (!seeThroughSide && /\btransparent\b/.test(c))
   )
     add('background');
@@ -11521,6 +11536,37 @@ export function draftAnswer(ctx, env, question) {
       stripeNamesOf(ctx.project)(c.text)
     )
       c.aspects = ['background'];
+  // "zebra rows taller", "zebra rows bold": the rows' size or weight, with
+  // no stripe, when "zebra" only names the rows and nothing in the ask is
+  // about a fill: no color, and no word of a color, fill, shading, stripe
+  // or lightness stem.
+  // (Read by word stems, so every form counts: "colored", "backgrounds",
+  // "darken", "shading"; a tone word, "more subtle", "warmer", is the
+  // stripes' too.)
+  const fillSaid =
+    colorsIn(asked0).length > 0 ||
+    FILL_WORDS.test(asked0) ||
+    /\btransparent\b/.test(asked0) ||
+    /\b(?:colou?r|fill|background|shad|tint|band|strip|dark|light|bright|pale|deep|warm|cool|subtle|mute|soft|vivid|vibran|saturat|intens|contrast)\w*/.test(
+      asked0,
+    );
+  for (const c of clauses) {
+    const others = c.aspects.filter(x => x !== 'background');
+    if (
+      !fillSaid &&
+      // ("add taller zebra rows", "I want zebra rows that are taller": an
+      // ask for zebra rows keeps them.)
+      !/\b(?:add|want|need|give|with|like)\b[^,;.]*\bzebra\b/.test(c.text) &&
+      // (Another clause that asks a fill, "…and more vibrant", is the
+      // stripes'.)
+      !clauses.some(k => k !== c && k.aspects.includes('background')) &&
+      others.length &&
+      others.length < c.aspects.length &&
+      others.every(x => ROW_METRICS.includes(x)) &&
+      /\bzebra\s+(?:table\s+)?(?:rows?|tables?)\b/.test(c.text)
+    )
+      c.aspects = others;
+  }
   // "shadow opacity 0.2", "card shadows with 30% alpha", "dialog shadows
   // 50% transparent": the layer's alpha is the ask, not the layer.
   for (const c of clauses)
