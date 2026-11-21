@@ -7,8 +7,12 @@
  */
 import type {ReactNode} from 'react';
 import type {TableColumn} from './types';
+import {sharedWeakMap} from '../utils/sharedRealm';
 const heightSafe = new WeakMap<object, boolean>();
-const fallbackReasons = new WeakMap<object, string>();
+const fallbackReasons = sharedWeakMap<object, string>(
+  'table/table-column-admission/fallback-reasons',
+  1,
+);
 const logicalRenderers = new WeakMap<
   object,
   (logicalIndex: number) => ReactNode

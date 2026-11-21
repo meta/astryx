@@ -610,9 +610,6 @@ const MemoizedTableRow = memo(TableRowInner, areRowPropsEqual) as <
 // =============================================================================
 
 /**
- * Inner BaseTable implementation (generic-preserving).
- */
-/**
  * The development warning's reason for a column that turns row windowing off:
  * the first-party plugin's own reason, or a caller's renderCell and its remedy.
  */
@@ -626,6 +623,9 @@ function describeCustomCellFallback<T extends Record<string, unknown>>(
   return `column "${column.key}" has a custom renderCell, which Table cannot check keeps the fixed row height, so row virtualization is off for this table. Columns without renderCell, the selection column and a row-number column that counts from 1 stay windowed; render this column's value without renderCell to window the rows`;
 }
 
+/**
+ * Inner BaseTable implementation (generic-preserving).
+ */
 function BaseTableInner<T extends Record<string, unknown>>({
   data,
   columns: columnsProp,
