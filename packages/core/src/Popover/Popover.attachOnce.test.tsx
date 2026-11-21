@@ -169,6 +169,37 @@ describe('Popover children mode', () => {
   });
 });
 
+describe('Popover trigger mode change', () => {
+  it('keeps the render-prop trigger as its anchor after children change from an element to a render function', () => {
+    let useRenderProp: () => void = () => {};
+    function Parent() {
+      const [isRenderProp, setIsRenderProp] = useState(false);
+      useRenderProp = () => setIsRenderProp(true);
+      return (
+        <Popover content={<span>Shortcuts</span>} label="Shortcuts">
+          {isRenderProp ? (
+            ({ref, onClick, ...aria}) => (
+              <button ref={ref} type="button" onClick={onClick} {...aria}>
+                Render trigger
+              </button>
+            )
+          ) : (
+            <button type="button">Element trigger</button>
+          )}
+        </Popover>
+      );
+    }
+    render(<Parent />);
+
+    act(() => useRenderProp());
+
+    const trigger = screen.getByRole('button', {name: 'Render trigger'});
+    expect(trigger.style.getPropertyValue('anchor-name')).toMatch(
+      /^--astryx-layer-/,
+    );
+  });
+});
+
 describe('Popover sibling mode', () => {
   it('attaches the button anchorRef holds after that button remounts', () => {
     let remount: () => void = () => {};
