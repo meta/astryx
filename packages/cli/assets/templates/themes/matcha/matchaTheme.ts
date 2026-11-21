@@ -363,5 +363,14 @@ export const matchaTheme = defineTheme({
     },
   },
 
+  // On a light media surface, such as the dark mode's tooltip, the light
+  // mode's secondary text falls below 4.5:1. This is the lightest neutral stop
+  // that reaches 4.5:1 there.
+  onLight: {
+    tokens: {
+      '--color-text-secondary': neutral.light[20],
+    },
+  },
+
   icons: matchaIconRegistry,
 });

@@ -47,6 +47,7 @@ import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
+import {TooltipMediaContent} from './TooltipMediaContent';
 import {
   colorVars,
   radiusVars,
@@ -1002,7 +1003,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // document listeners still see it.
         // The hold's announcement reads this element's text.
         <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {children}
+          {typeof children === 'string' || typeof children === 'number' ? (
+            // Plain text reads no tokens, so it renders as before.
+            children
+          ) : (
+            <TooltipMediaContent surfaceRef={contentRef} isShown={isLayerOpen}>
+              {children}
+            </TooltipMediaContent>
+          )}
         </div>,
         renderProps,
       );
@@ -1015,6 +1023,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       cancelHide,
       scheduleHide,
       contentRefs,
+      contentRef,
+      isLayerOpen,
     ],
   );
 
