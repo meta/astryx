@@ -1858,10 +1858,11 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
  * gives it), the string each attribute is written as (null for one written
  * as an expression), and the offset just after the element's name, where an
  * attribute can be added. `Name` is a runtime import of `name` from one of
- * `sources` (renames included).
+ * `sources` (renames included). A value that picks a member of a binding
+ * (`themes[slug]`) names where that binding is declared (`memberOf`).
  * @param {string} file
  * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
- * @returns {Array<{origin: {file: string, name: string} | null, attributes: Record<string, string | null>, nameEnd: number}>}
+ * @returns {Array<{origin: {file: string, name: string} | null, memberOf?: {file: string, name: string} | null, attributes: Record<string, string | null>, nameEnd: number}>}
  */
 export function renderedElements(file, {sources, name, prop, unwrap}) {
   let ast;
@@ -1890,8 +1891,16 @@ export function renderedElements(file, {sources, name, prop, unwrap}) {
         value?.type === 'Identifier'
           ? bindingOrigin(ast, file, value.name, new Set())
           : null;
+      // A member of a binding (`themes[slug]`): where the binding it picks
+      // from is declared.
+      const map =
+        value?.type === 'MemberExpression' &&
+        value.object?.type === 'Identifier'
+          ? bindingOrigin(ast, file, value.object.name, new Set())
+          : null;
       return {
         origin: binding ? aliasedOrigin(binding, new Set(), unwrap) : null,
+        ...(map ? {memberOf: aliasedOrigin(map, new Set())} : {}),
         attributes,
         nameEnd: element.name.end,
       };

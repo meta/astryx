@@ -739,6 +739,98 @@ export const officialTheme = defineTheme({name: 'official', extends: neutralThem
   );
 
   it(
+    "measures text a part draws in the theme's local tokens, and a menu that opens inside a bar",
+    async () => {
+      // White text, from a local token, on the selected item's pale pill.
+      const local = themeFile('localtext', READABLE);
+      const localPath = path.join(cwd, local);
+      fs.writeFileSync(
+        localPath,
+        fs
+          .readFileSync(localPath, 'utf8')
+          .replace(
+            '  tokens: {',
+            "  localTokens: {'--color-banner-text': '#ffffff'},\n  components: {'top-nav-item': {base: {color: 'var(--color-banner-text)'}}},\n  tokens: {",
+          ),
+      );
+      const d = await check(local);
+      expect(
+        d.problems.some(
+          p => p.kind === 'part-text' && p.part === 'top-nav-item',
+        ),
+      ).toBe(true);
+      // A header that sets white text: a menu opened from it draws that
+      // text on its own white fill.
+      const header = await check(
+        themeFile('header', READABLE, {
+          'app-shell-header': {
+            base: {
+              '--color-text-primary': '#ffffff',
+              '--color-overlay-hover': '#ffffff1a',
+              backgroundColor: '#101010',
+            },
+          },
+        }),
+      );
+      expect(
+        header.problems.some(
+          p =>
+            p.kind === 'bar-text' && (p.parts ?? []).includes('dropdown-menu'),
+        ),
+      ).toBe(true);
+      const fixed = await check('header/headerTheme.ts', {fix: true});
+      expect(fixed.problems.some(p => p.kind === 'bar-text')).toBe(false);
+      // The bar's pointer tint reaches the menu too: the theme's own tint
+      // goes back in the same const.
+      expect(
+        fs.readFileSync(path.join(cwd, 'header', 'headerTheme.ts'), 'utf8'),
+      ).toMatch(
+        /const appShellHeaderInsideText = \{[^}]*'--color-overlay-hover'/,
+      );
+    },
+    T,
+  );
+
+  it(
+    "says when the app paints its page with an image, and finds charts a theme copied from Core's",
+    async () => {
+      const root = app('dither', {painted: true});
+      fs.appendFileSync(
+        path.join(root, 'src', 'index.css'),
+        'body { background-image: radial-gradient(circle, black 25%, transparent 30%); }\n',
+      );
+      const src = themeFile('dither', READABLE);
+      fs.renameSync(
+        path.join(cwd, src),
+        path.join(root, 'src', 'ditherTheme.ts'),
+      );
+      // The app picks its theme from a map of the themes it holds.
+      fs.writeFileSync(
+        path.join(root, 'src', 'astryx-themes.ts'),
+        "import {ditherTheme as _theme0} from './ditherTheme';\nexport const themes = {dither: _theme0} as const;\n",
+      );
+      fs.writeFileSync(
+        path.join(root, 'src', 'main.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nimport './index.css';\nimport {Theme} from '@astryxdesign/core/theme';\nimport {themes} from './astryx-themes';\n\nexport const App = () => <Theme theme={themes['dither']}><main /></Theme>;\n",
+      );
+      const d = (await themeEditCheck('src/ditherTheme.ts', {cwd: root})).data;
+      expect(d.problems.find(p => p.kind === 'page-image')?.message).toMatch(
+        /src\/index\.css paints the page with an image/,
+      );
+      // Core's own chart blue, copied into the theme: still Core's.
+      const copied = await check(
+        themeFile('copied', {
+          ...READABLE,
+          '--color-accent': ['#0f7b6c', '#5fd3bf'],
+          '--color-data-categorical-blue': '#0171E3',
+        }),
+      );
+      expect(copied.problems.some(p => p.kind === 'charts')).toBe(true);
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */
