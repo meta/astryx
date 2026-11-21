@@ -4,9 +4,9 @@
  * @file The category colors (Badge, Token and Card tints) and the chart
  * colors follow a theme's look: the editor grows them from Core's hues at
  * the accent's strength and the palette's vibrancy, keeps card tints pale
- * enough for the theme's text, keeps the hues apart (a look that would draw
- * two alike keeps the base theme's, and says why), lets an exact setting
- * win, and says what moved in one line each.
+ * enough for the theme's text, keeps the hues apart (a color drawn like an
+ * earlier one moves to the nearest shade apart, and every set is written),
+ * lets an exact setting win, and says what moved in one line each.
  */
 
 import fs from 'node:fs';
@@ -174,13 +174,28 @@ describe('category and chart colors follow the look', () => {
   it('gives a dusty accent dusty category tints', async () => {
     await themeEditNew('dusty', {cwd, like: 'neutral'});
     await themeEditSet('dusty', 'accent', '#7d7590', {cwd});
+    // (A tint moved apart from another, or from the page, takes another
+    // stop and may be stronger: the tints at the same stop in both looks
+    // are measured.)
+    /** @param {string} slug @param {string} h */
+    const stopOf = (slug, h) =>
+      new RegExp(
+        String.raw`"--color-background-${h}": \[\s*palette\.${h === 'gray' ? 'neutral' : h}\.light\[(\d+)\]`,
+      ).exec(
+        fs.readFileSync(
+          path.join(cwd, 'themes', slug, `${slug}.settings.ts`),
+          'utf8',
+        ),
+      )?.[1];
+    const same = HUES.filter(h => stopOf('dusty', h) === stopOf('vivid', h));
+    expect(same.length).toBeGreaterThan(HUES.length / 2);
     /** @param {string} slug */
     const strength = slug =>
-      HUES.reduce(
+      same.reduce(
         (sum, h) =>
           sum + hexToOklch(halves(slug, `--color-background-${h}`)[0]).C,
         0,
-      ) / HUES.length;
+      ) / same.length;
     expect(strength('dusty')).toBeLessThan(strength('vivid') * 0.75);
   }, 240_000);
 
@@ -200,6 +215,34 @@ describe('category and chart colors follow the look', () => {
     }
     expect(css('vivid')).toMatch(/--color-data-blue-1: light-dark\(/);
   });
+
+  it('writes every chart series when a quiet look would draw two alike, and says which moved', async () => {
+    await themeEditNew('quiet', {cwd, like: 'neutral'});
+    await themeEditSet('quiet', 'neutral', '#7a5c3e', {cwd});
+    await themeEditSet('quiet', 'accent', '#c4a073', {cwd});
+    await themeEditSet('quiet', 'vibrancy', '40', {cwd});
+    for (const [i] of ['light', 'dark'].entries()) {
+      const page = halves('quiet', '--color-background-body')[i];
+      const series = SERIES.map(
+        h => halves('quiet', `--color-data-categorical-${h}`)[i],
+      );
+      for (const c of series)
+        expect(contrast(c, page)).toBeGreaterThanOrEqual(3);
+      for (let a = 0; a < series.length; a++)
+        for (let b = a + 1; b < series.length; b++)
+          expect(perceptualDelta(series[a], series[b])).toBeGreaterThanOrEqual(
+            2,
+          );
+    }
+    const r = /** @type {any} */ (await themeEditShow('quiet', {cwd}));
+    expect(
+      /** @type {string[]} */ (r.data.colorNotes).some(n =>
+        /^category and chart colors follow your look: .*takes a (?:deeper|paler) (?:shade|tint) in (?:light|dark), apart from \w+/.test(
+          n,
+        ),
+      ),
+    ).toBe(true);
+  }, 240_000);
 
   it('lets an exact category setting win', async () => {
     await themeEditSet('vivid', '--color-background-blue', '#ffeeaa', {
@@ -223,25 +266,48 @@ describe('category and chart colors follow the look', () => {
     ).toBeGreaterThan(0);
   }, 240_000);
 
-  it('keeps the base theme’s category colors when the look would draw two hues alike, and says so', async () => {
+  it('writes every category color when the look would draw two hues alike, and says which moved', async () => {
     await themeEditNew('calm', {cwd, like: 'neutral'});
     await themeEditSet('calm', 'accent', '#8a8f94', {cwd});
-    const before = halves('calm', '--color-background-red');
     await themeEditSet('calm', 'vibrancy', '0', {cwd});
     const r = /** @type {any} */ (await themeEditShow('calm', {cwd}));
     const notes = /** @type {string[]} */ (r.data.colorNotes);
     expect(
       notes.some(n =>
-        /^category colors \(badges, tokens and card tints\) keep the base theme's: your look would draw .* alike/.test(
+        /^category and chart colors follow your look: .*--color-background-\w+ (?:takes a (?:deeper|paler) tint|is drawn like \w+) in (?:light|dark)/.test(
           n,
         ),
       ),
     ).toBe(true);
-    // Core's red, not a gray.
+    // The look's gray, not Core's red.
     expect(
       hexToOklch(halves('calm', '--color-background-red')[0]).C,
-    ).toBeGreaterThan(0.04);
-    expect(before).not.toEqual(halves('calm', '--color-background-red'));
+    ).toBeLessThan(0.04);
+    // The advice is a higher vibrancy; a command it names runs.
+    const line = notes.find(n => /^category and chart colors/.test(n)) ?? '';
+    expect(line).toMatch(/a higher vibrancy draws the hues apart/);
+    if (/vibrancy more/.test(line))
+      await expect(
+        themeEditSet('calm', 'vibrancy', 'more', {cwd}),
+      ).resolves.toBeTruthy();
+  }, 240_000);
+
+  it('names the vibrancy command only where set takes it', async () => {
+    // An accent set as a token is no seed vibrancy moves; a gray neutral
+    // is none either, so set refuses vibrancy here.
+    await themeEditNew('q', {cwd, like: 'neutral'});
+    await themeEditSet('q', 'neutral', '#7a5c3e', {cwd});
+    await themeEditSet('q', 'vibrancy', '0', {cwd});
+    await themeEditSet('q', '--color-accent', '#7c3aed', {cwd});
+    const r = /** @type {any} */ (
+      await themeEditSet('q', 'neutral', '#808080', {cwd})
+    );
+    const shown = /** @type {any} */ (await themeEditShow('q', {cwd}));
+    for (const n of [
+      .../** @type {string[]} */ (r.data.notes),
+      .../** @type {string[]} */ (shown.data.colorNotes),
+    ])
+      expect(n).not.toMatch(/vibrancy more/);
   }, 240_000);
 });
 
