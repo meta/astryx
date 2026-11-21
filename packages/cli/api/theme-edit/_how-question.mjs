@@ -491,6 +491,8 @@ const isHue = w => Object.hasOwn(HUES, w);
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
+/** A mode's page said as a sentence head, "dark mode: page plum". */
+const MODE_PAGE_HEAD = /^\s*(?:light|dark)[- ]mode\s*:\s*page\b/i;
 const PALETTE_NAMES = new Set([
   'sky',
   'tan',
@@ -12195,13 +12197,16 @@ export function draftAnswer(ctx, env, question) {
         );
     }
     // "in dark mode, cards are #1c1c1e": a clause that only names the mode
-    // gives it to the clauses after it.
+    // gives it to the clauses after it. A mode's page said as its head,
+    // "dark mode: page plum. gold buttons", gives it the same way.
     // (Never to an ask that is the same in both modes, "and rounder": a
     // mode said of a color does not reach the corners.)
     if (
       !c.mode &&
       prev?.mode &&
-      (!c.parts.length || (!prev.parts.length && !prev.aspects.length)) &&
+      (!c.parts.length ||
+        (!prev.parts.length && !prev.aspects.length) ||
+        MODE_PAGE_HEAD.test(prev.text)) &&
       !(
         c.aspects.length &&
         c.aspects.every(a =>
@@ -12320,6 +12325,8 @@ export function draftAnswer(ctx, env, question) {
     for (let k = i + 1; k < clauses.length; k++) {
       const o = clauses[k];
       if (joinOf.get(o)?.sep === 'break') break;
+      // (The next mode's head starts its own run.)
+      if (MODE_PAGE_HEAD.test(o.text)) break;
       if (
         o.mode ||
         o.except ||
