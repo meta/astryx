@@ -36,10 +36,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {
-  localeTextDirection,
-  localeTextStyles,
-} from '../utils/localeTextDirection';
+import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
 import type {ThemeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {

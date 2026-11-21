@@ -80,10 +80,7 @@ import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
 import {formatLocaleTime, resolveHourFormat} from '../utils/timeFormat';
-import {
-  localeTextDirection,
-  localeTextStyles,
-} from '../utils/localeTextDirection';
+import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {NativeTimeSegment} from '../DateTimeInput/NativeTimeSegment';

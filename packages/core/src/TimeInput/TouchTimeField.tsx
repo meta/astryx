@@ -50,10 +50,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {
-  localeTextDirection,
-  localeTextStyles,
-} from '../utils/localeTextDirection';
+import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
 import {spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';

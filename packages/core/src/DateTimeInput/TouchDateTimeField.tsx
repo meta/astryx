@@ -72,10 +72,7 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {
-  localeTextDirection,
-  localeTextStyles,
-} from '../utils/localeTextDirection';
+import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
   formatISOTime,

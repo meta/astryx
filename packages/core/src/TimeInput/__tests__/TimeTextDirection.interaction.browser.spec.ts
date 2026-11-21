@@ -35,7 +35,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
 }
 
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`the native time field reads left to right on a ${direction} page, at the page's start`, async ({
+  test(`the native time field's drawn time reads left to right on a ${direction} page, at the page's start`, async ({
     page,
   }) => {
     await page.goto(
@@ -43,12 +43,15 @@ for (const direction of ['ltr', 'rtl'] as const) {
     );
     const field = page.locator('input[type="time"]');
     await expect(field).toHaveValue('14:30');
-    const style = await field.evaluate(element => {
-      const value = getComputedStyle(element, '::-webkit-date-and-time-value');
-      return {
-        direction: getComputedStyle(element).direction,
-        textAlign: value.textAlign,
-      };
+    // The field draws the locale's time in an overlay over the native input,
+    // which a time input already lays out left to right on its own.
+    const overlay = field.locator(
+      'xpath=following-sibling::span[@aria-hidden="true"]',
+    );
+    await expect(overlay).toHaveText('2:30 PM');
+    const style = await overlay.evaluate(element => {
+      const computed = getComputedStyle(element);
+      return {direction: computed.direction, textAlign: computed.textAlign};
     });
     expect(style.direction).toBe('ltr');
     expect(style.textAlign).toBe(direction === 'rtl' ? 'right' : 'left');

@@ -114,10 +114,7 @@ import {
   parseLocaleTime,
   resolveHourFormat,
 } from '../utils/timeFormat';
-import {
-  localeTextDirection,
-  localeTextStyles,
-} from '../utils/localeTextDirection';
+import {localeTextDirection, localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';

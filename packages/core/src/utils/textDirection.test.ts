@@ -8,7 +8,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {textDirectionProps} from './textDirection';
+import {localeTextDirection, textDirectionProps} from './textDirection';
 
 describe('textDirectionProps', () => {
   it('lays out plain text with no right-to-left letter left to right', () => {
@@ -59,5 +59,24 @@ describe('textDirectionProps', () => {
     expect(textDirectionProps(null)).toEqual({});
     expect(textDirectionProps(undefined)).toEqual({});
     expect(textDirectionProps(['a', 'b'])).toEqual({});
+  });
+});
+
+describe('localeTextDirection', () => {
+  it.each([
+    ['en-US', 'ltr'],
+    ['de-DE', 'ltr'],
+    ['ja-JP', 'ltr'],
+    ['ar-EG', 'rtl'],
+    ['he-IL', 'rtl'],
+    ['fa-IR', 'rtl'],
+    ['ur-PK', 'rtl'],
+    ['ar', 'rtl'],
+  ])('reads %s text as %s', (locale, direction) => {
+    expect(localeTextDirection(locale)).toBe(direction);
+  });
+
+  it('reads left to right when the tag does not parse', () => {
+    expect(localeTextDirection('not a locale')).toBe('ltr');
   });
 });
