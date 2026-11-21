@@ -133,6 +133,7 @@ import {
   columnLineTokens,
   mainTextSizeToken,
   namesToken,
+  heldSizeTokenFor,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -7950,6 +7951,24 @@ function checkOne(
                 ),
           ]),
       );
+      // (A text size token said for one part that reads no size token,
+      // whose held parts read one, a tab list's tabs: the value goes into
+      // that token on the part; the build reads it the same way.)
+      if (results.length === 1 && results[0][1] && !results[0][1].soft) {
+        const held = heldSizeTokenFor(
+          C,
+          s,
+          results[0][0],
+          thing,
+          v,
+          results[0][1],
+        );
+        if (held) {
+          results[0][1] = null;
+          const said = `${results[0][0]} never reads ${thing}: its text reads ${held}, so the value goes into ${held} on ${results[0][0]}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+        }
+      }
       const recorded = results.filter(([, r]) => !r?.soft);
       const hard = recorded.filter(([, r]) => r);
       const spread = Boolean(
