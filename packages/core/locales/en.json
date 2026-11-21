@@ -357,27 +357,27 @@
   },
   "@astryx.powersearch.sheet.relativeDaysAgo": {
     "defaultMessage": "{count, number} {count, plural, one {day} other {days}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeDaysFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {day} other {days}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeWeeksAgo": {
     "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeWeeksFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeMonthsAgo": {
     "defaultMessage": "{count, number} {count, plural, one {month} other {months}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeMonthsFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {month} other {months}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.fieldOperator": {
     "defaultMessage": "{field} {operator}",
