@@ -5,12 +5,18 @@
  * see-through region (a top nav item in a translucent top bar) over the
  * region blended onto the page, never over the region's color taken as
  * solid; a fill color and its on-color set inside a part are measured as
- * that part draws them; and a floating panel drawn with the popover's fill
- * needs an edge against the page and what sits on it.
+ * that part draws them; a floating panel drawn with the popover's fill needs
+ * an edge against the page and what sits on it; and a one-mode theme lists
+ * other-mode changes only where Core draws that mode.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
+import {
+  themeEditNew,
+  themeEditSet,
+  themeEditShow,
+  themeEditUndo,
+} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -329,6 +335,59 @@ describe('contrast measures what is drawn', () => {
           ...(raised.data.notes ?? []),
         ].some((/** @type {string} */ t) => /^the banner /.test(t)),
       ).toBe(false);
+    },
+    T,
+  );
+
+  it(
+    'lists a dark-only theme light changes only where Core draws light',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('dk', {cwd, like: 'neutral'});
+      await themeEditSet('dk', 'mode', 'dark-only', {cwd});
+      const r = /** @type {any} */ (
+        await themeEditSet('dk', 'neutral', '#78716c', {cwd})
+      ).data;
+      const light = [...r.changedTokens, ...r.changedPartTokens].filter(
+        (/** @type {string} */ l) => / \(light\):/.test(l),
+      );
+      // (A toast is drawn light: its text tokens are named.)
+      expect(
+        light.some((/** @type {string} */ l) =>
+          /^--color-text-secondary \(light\)/.test(l),
+        ),
+      ).toBe(true);
+      // (Core's media surface draws the accent and the main text from its
+      // on-color: an accent change is never drawn light there.)
+      const accent = /** @type {any} */ (
+        await themeEditSet('dk', 'accent', '#7c3aed', {cwd})
+      ).data;
+      expect(
+        [...accent.changedTokens, ...(accent.changedPartTokens ?? [])].filter(
+          (/** @type {string} */ l) => /^--color-accent \(light\)/.test(l),
+        ),
+      ).toEqual([]);
+      // (An undo that takes away a light setting lists the value removed.)
+      await themeEditSet('dk', '--color-text-disabled', '#5f6368', {
+        cwd,
+        mode: 'light',
+      });
+      const undone = /** @type {any} */ (await themeEditUndo('dk', {cwd})).data;
+      expect(
+        undone.changedTokens.some((/** @type {string} */ l) =>
+          /^--color-text-disabled \(light\)/.test(l),
+        ),
+      ).toBe(true);
+      // (The page and a selected row are never drawn light here, nor the
+      // lightbox, dark on every theme, nor a toast's own card, drawn on the
+      // dark page.)
+      expect(
+        light.filter((/** @type {string} */ l) =>
+          /^(--color-background-body|--color-text-disabled|--color-background-inverted) \(light\)| on item\[/.test(
+            l,
+          ),
+        ),
+      ).toEqual([]);
     },
     T,
   );

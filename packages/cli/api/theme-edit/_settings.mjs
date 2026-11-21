@@ -18189,15 +18189,62 @@ function partTokenValues(css) {
 }
 
 /**
+ * Where a one-mode theme's other mode is seen: inside a surface Core draws
+ * in a scheme of its own that can be that mode (a toast's card, which
+ * follows what is painted behind it, or a surface fixed to that side). A
+ * surface fixed to the theme's own side (a lightbox, dark on every theme)
+ * shows none of it, and a surface's own fill is drawn in the page's mode:
+ * only what it holds counts.
+ * @param {Ctx} ctx
+ * @param {'light' | 'dark'} other the mode the theme does not have
+ * @returns {{parts: Set<string>, tokens: Set<string>}} the parts held, and
+ *   every token they or the surface's own elements read
+ */
+function otherModeSeen(ctx, other) {
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  /** @type {Set<string>} */
+  const parts = new Set();
+  /** @type {Set<string>} */
+  const tokens = new Set();
+  for (const t of Object.keys(map)) {
+    if (!map[t]?.media) continue;
+    const sides = map[t]?.mediaSides ?? [];
+    if (!autoMediaPart(ctx, t) && !sides.includes(other)) continue;
+    for (const k of Object.keys(map[t]?.inside ?? {})) tokens.add(k);
+    for (const held of map[t]?.contains ?? []) {
+      parts.add(held);
+      for (const k of ctx.C.allReads(held)) tokens.add(k);
+    }
+  }
+  // (Core's media surface points these at its on-color for everything it
+  // holds, in either scheme: the theme's own values are never drawn there.)
+  for (const k of MEDIA_SURFACE_TOKENS) tokens.delete(k);
+  return {parts, tokens};
+}
+
+/**
+ * The tokens Core's media surface (a toast's card, a lightbox) sets from
+ * its on-color for what it holds (Core's onMediaTokens).
+ */
+const MEDIA_SURFACE_TOKENS = [
+  '--color-accent',
+  '--color-text-primary',
+  '--color-icon-primary',
+];
+
+/**
  * Each part token whose built value changed between two stylesheets, as a
  * changedTokens line: the property, the rule it is set on, and each mode
  * whose half moved (the theme's own mode first).
  * @param {string | null} before
  * @param {string | null} after
  * @param {Array<'light' | 'dark'>} modes the modes the theme has
+ * @param {Set<string>} [otherDrawn] the parts Core draws in a mode the
+ *   theme does not have (a toast, a lightbox, and what they hold): a rule
+ *   on another part changes nothing seen in that mode, so it is left out
  * @returns {string[]}
  */
-function partTokenChanges(before, after, modes) {
+function partTokenChanges(before, after, modes, otherDrawn = new Set()) {
   if (!before || !after) return [];
   const was = partTokenValues(before);
   const now = partTokenValues(after);
@@ -18227,10 +18274,13 @@ function partTokenChanges(before, after, modes) {
     );
     const one =
       sides.length === 2 && ha.light === ha.dark && hb.light === hb.dark;
-    for (const m of one ? [order[0]] : sides)
+    const part = /\.astryx-([a-z][\w-]*)/.exec(selector)?.[1] ?? '';
+    for (const m of one ? [order[0]] : sides) {
+      if (!one && !modes.includes(m) && !otherDrawn.has(part)) continue;
       out.push(
         `${prop} on ${where}${one ? '' : ` (${m})`}: ${ha[m] ?? 'unset'} -> ${hb[m] ?? 'unset'}`,
       );
+    }
   }
   return out;
 }
@@ -18258,6 +18308,16 @@ export async function commitTheme(
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
   await refuseThemeSource(cwd, slug);
+  /** The settings as they were before this change. @type {Setting[]} */
+  const settingsBefore = (() => {
+    try {
+      return (
+        /** @type {any} */ (settingsBeforeChange(cwd, slug))?.settings ?? []
+      );
+    } catch {
+      return [];
+    }
+  })();
   // The settings are written as they are now read (a saved state in the
   // part's own spelling): the build is stamped with what is written.
   for (const s of data.settings) LOADED_STATE.delete(s);
@@ -18632,6 +18692,12 @@ export async function commitTheme(
   try {
     res = await resolvedTokens(ctx, slug);
     const modes = modesOf(data);
+    // (The mode a one-mode theme does not have, and where it is seen.)
+    const other = /** @type {'light' | 'dark'} */ (
+      modes.includes('light') ? 'dark' : 'light'
+    );
+    /** @type {{parts: Set<string>, tokens: Set<string>} | null} */
+    let otherSeen = null;
     if (resBefore) {
       /** @param {unknown} a @param {unknown} b */
       const same = (a, b) =>
@@ -18644,6 +18710,24 @@ export async function commitTheme(
       const order = modes.includes('light')
         ? ['light', 'dark']
         : ['dark', 'light'];
+      // A one-mode theme draws the other mode only where Core draws it
+      // (inside a toast's card; a lightbox on a light-only theme): a change
+      // there is seen only in what is drawn there, or in a token set for
+      // that mode.
+      // (A setting for that mode counts before the change as after it: an
+      // undo that takes one away lists the value it removes.)
+      const seenInOther = (
+        /** @type {string} */ k,
+        /** @type {string} */ m,
+      ) => {
+        otherSeen ??= otherModeSeen(ctx, other);
+        return (
+          otherSeen.tokens.has(k) ||
+          [...data.settings, ...settingsBefore].some(
+            s => s.thing === k && s.mode === m,
+          )
+        );
+      };
       for (const m of order) {
         const own = modes.includes(m);
         for (const k of Object.keys(res[m])) {
@@ -18651,6 +18735,7 @@ export async function commitTheme(
           if (same(resBefore[m][k], res[m][k])) continue;
           const modal = MODAL.has(ctx.C.typeOf(k));
           if (!modal && m === 'dark') continue;
+          if (modal && !own && !seenInOther(k, m)) continue;
           // A one-mode theme writes its mode on both sides: the other side
           // that moved with it says nothing new. A setting for the other
           // mode applies where Core draws that mode, so its change is named.
@@ -18671,7 +18756,14 @@ export async function commitTheme(
     // on a selected row, a dropzone) moves with the dials too: each one
     // whose built value changed is listed, by its rule, in each mode.
     if (resBefore)
-      changedParts.push(...partTokenChanges(cssBefore, cssNow(), modes));
+      changedParts.push(
+        ...partTokenChanges(
+          cssBefore,
+          cssNow(),
+          modes,
+          (otherSeen ??= otherModeSeen(ctx, other)).parts,
+        ),
+      );
     const found = await contrastProblems(ctx, data, res);
     problemList = found.filter(x => !isCheckNote(x));
     problems = problemList.map(x => x.text);
