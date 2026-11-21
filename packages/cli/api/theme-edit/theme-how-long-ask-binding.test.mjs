@@ -151,6 +151,10 @@ const ROWS = [
     {q: 'Card\nPadding: roomy\nRadius: large', never: /^corners large$/},
   ],
   [
+    'a label after an earlier part sentence still sets its dial',
+    {q: 'soft shadows on cards. Radius: small.', has: ['corners small']},
+  ],
+  [
     "a label in a part's colon list stays the part's",
     {q: 'cards: white background, radius: large', never: /^corners large$/},
   ],
