@@ -465,7 +465,7 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/pictures/pictures.mjs': {
-    runs: "the picture process for a Playwright the project has installed, or a Chrome found on the machine, for the theme editor's pictures (--png), and a require at the project's folder to find that Playwright",
+    runs: "the picture process for a Playwright the project has installed, or a Chrome found on the machine, for the theme editor's pictures (--png) and an export's (--pictures), and a require at the project's folder to find that Playwright",
     sites: ['child_process.spawn', 'createRequire'],
   },
   'foundation/render/page-worker.mjs': {

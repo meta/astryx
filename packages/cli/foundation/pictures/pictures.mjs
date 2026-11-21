@@ -5,10 +5,12 @@
  * the project's Playwright, else a Chrome or Chromium. Each browser runs as
  * its own process group with its own temp folder, time bound and stop.
  * @input the project (its folder and its require), and each page's .html,
- *   picture .png and color mode
+ *   picture .png, color mode and, optionally, its window and the parts whose
+ *   sizes it measures
  * @output each picture taken, with what the browser measured in it, or why
  *   none was, with the facts a caller words its own advice from
- * @position used by the theme editor's previews (api/theme-edit/_preview.mjs);
+ * @position used by the theme editor's previews (api/theme-edit/_preview.mjs)
+ *   and by `astryx experimental export --pictures` (api/render/_adapter.mjs);
  *   runs the picture scripts in foundation/render (picture-playwright.mjs,
  *   picture-chrome.mjs)
  */
@@ -87,8 +89,10 @@ const PAGE_BOUND_MS = 20_000;
  *   project: its folder, whose path no reason shows, and the require that
  *   finds its Playwright (`req`), or a file whose folder it resolves from
  *   (`from`)
- * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[]}>} jobs
- *   absolute paths; `boxes`: parts whose drawn sizes the picture measures
+ * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} jobs
+ *   absolute paths; `boxes`: parts whose drawn sizes the picture measures;
+ *   a job's `window` replaces the editor's window (picture-window.mjs), such
+ *   as a phone's
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
  * @returns {Promise<TakenPicture[]>}
