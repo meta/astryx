@@ -2015,13 +2015,20 @@ const TONE_WORDS = new Set([
  * part, role or token word ("a red accent", "blue links", "red for
  * errors"), one a "with", "and" or "but" goes on from, and a gray said
  * for everything (the theme's neutral), are left as said. A gray said for
- * one mode ("dark mode is gray") is that mode's page.
+ * one mode ("dark mode is gray") is that mode's page on a theme that draws
+ * both modes; on a theme of one mode it stays the theme's neutral, as said.
  * @param {string} question
  * @param {(word: string) => boolean} isHue
  * @param {(word: string) => boolean} isShade the color reader's shade words
+ * @param {boolean} [grayPages] whether the theme draws both modes
  * @returns {string}
  */
-export function colorsSaidForPages(question, isHue, isShade) {
+export function colorsSaidForPages(
+  question,
+  isHue,
+  isShade,
+  grayPages = false,
+) {
   /** @param {string} words */
   const wordsOf = words =>
     words
@@ -2050,7 +2057,7 @@ export function colorsSaidForPages(question, isHue, isShade) {
             wordsOf(String(phrase)).every(
               w => hue(w) || isShade(w) || TONE_WORDS.has(w),
             )
-          : colorAlone(String(phrase), true);
+          : colorAlone(String(phrase), grayPages);
         return said
           ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}`
           : m;

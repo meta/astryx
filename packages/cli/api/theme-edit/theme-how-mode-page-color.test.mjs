@@ -11,7 +11,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {colorsSaidForPages} from './_normal.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
@@ -75,6 +75,24 @@ const hueGap = (a, b) =>
 const T = 300_000;
 
 describe('a color said for one mode is its page', () => {
+  it(
+    "a gray said for a dark-only theme's mode stays the neutral: no page pair written",
+    async test => {
+      needsBases(test);
+      await themeEditNew('d1', {cwd, like: 'neutral'});
+      await themeEditSet('d1', 'mode', 'dark-only', {cwd});
+      const {data} = await themeEditHow('dark mode is gray', {
+        cwd,
+        theme: 'd1',
+      });
+      const lines = /** @type {string[]} */ (
+        (data.results ?? []).flatMap(r => r.commands ?? [])
+      );
+      expect(lines.join('\n')).not.toMatch(/--color-background-body/);
+    },
+    T,
+  );
+
   it(
     "a gray dark mode: the dark page in a neutral gray at that page's lightness",
     async test => {
@@ -215,7 +233,10 @@ describe('a color said for one mode is its page', () => {
       ),
     ).toBe('calm and minimal\n- dark mode: page deep dark plum');
     // (A gray said for one mode is that mode's page.)
-    expect(colorsSaidForPages('dark mode is gray', isHue, isShade)).toBe(
+    expect(colorsSaidForPages('dark mode is gray', isHue, isShade, false)).toBe(
+      'dark mode is gray',
+    );
+    expect(colorsSaidForPages('dark mode is gray', isHue, isShade, true)).toBe(
       'dark mode: page gray',
     );
     // (The color reader's shade words count as tone words too.)

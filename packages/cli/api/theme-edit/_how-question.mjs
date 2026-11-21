@@ -5518,6 +5518,7 @@ export function draftAnswer(ctx, env, question) {
     question,
     w => Object.hasOwn(HUES, w),
     w => new RegExp(`^(?:${SHADE_WORDS})$`).test(w),
+    env.data?.mode === 'both',
   );
   question = question
     // ("dark purple theme", "moody dark purple": dark said of a whole look
