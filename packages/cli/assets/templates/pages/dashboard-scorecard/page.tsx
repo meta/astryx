@@ -174,16 +174,17 @@ const KPIS: Kpi[] = [
   },
 ];
 
-// The scorecard is one flat grid of 6 tiles: 2 columns (small and medium),
-// 3 (large) — i.e. 2x3, 2x3, 3x2. On a small screen a tile is at least
-// 5.5rem of content plus its own inset (the tile's `padding={5}`), so a
-// narrow phone, a theme with a wide inset or larger text falls back to one
-// tile per row. This is Grid's capped auto-fit track, written here because
-// Grid's `minWidth` takes pixels only and the tiers below replace Grid's track
-// template through `xstyle`. The medium and large tiers are pinned to
-// viewport width rather than derived from tile width via auto-fill, so the
-// breakpoints are explicit. The ranges are non-overlapping, so exactly one ever matches and the result
-// can't depend on StyleX's at-rule ordering or on source order.
+// The scorecard is one flat grid of 6 tiles: 2 columns (small and medium), 3
+// (large) — i.e. 2x3, 2x3, 3x2. On a small screen a tile is at least four times
+// the value's type size plus its own inset (the tile's `padding={5}`), so a
+// narrow phone, a theme with a wide inset or a larger text size (the browser's
+// or the phone's) falls back to one tile per row. This is Grid's capped
+// auto-fit track, written here because Grid's `minWidth` takes pixels only, not
+// a type size, and the tiers below replace Grid's track template through
+// `xstyle`. The medium and large tiers are pinned to viewport width rather than
+// derived from tile width via auto-fill, so the breakpoints are explicit. The
+// ranges are non-overlapping, so exactly one ever matches and the result can't
+// depend on StyleX's at-rule ordering or on source order.
 const SCORECARD_MEDIUM = '@media (min-width: 768px) and (max-width: 1199.98px)';
 const SCORECARD_LARGE = '@media (min-width: 1200px)';
 
@@ -193,7 +194,7 @@ const scorecardStyles = stylex.create({
   grid: {
     gridTemplateColumns: {
       default:
-        'repeat(auto-fit, minmax(min(100%, max(calc(5.5rem + 2 * var(--spacing-5)), calc(50% - var(--spacing-2) / 2))), 1fr))',
+        'repeat(auto-fit, minmax(min(100%, max(calc(4 * var(--text-heading-2-size) + 2 * var(--spacing-5)), calc(50% - var(--spacing-2) / 2))), 1fr))',
       [SCORECARD_MEDIUM]: 'repeat(2, 1fr)',
       [SCORECARD_LARGE]: 'repeat(3, 1fr)',
     },
