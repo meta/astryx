@@ -212,7 +212,7 @@ const meta: Meta<ChartStoryArgs> = {
     revenueMark: 'bar',
     trendMark: 'line',
     seriesLayout: 'grouped',
-    curve: 'monotone',
+    curve: 'linear',
     lineDots: false,
     hasTooltip: true,
     hoverIndicator: true,
