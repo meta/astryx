@@ -179,14 +179,14 @@ const KPIS: Kpi[] = [
 // the value's type size plus its own inset (the tile's `padding={5}`), so a
 // narrow phone, a theme with a wide inset or a larger text size (the browser's
 // or the phone's) falls back to one tile per row. Five covers the widest sample
-// value, `$58.1M`, in the widest theme heading face; raise it for longer
-// figures. This is Grid's capped auto-fit track, written here because Grid's
-// `minWidth` takes pixels only, not a type size, and the tiers below replace
-// Grid's track template through `xstyle`. The medium and large tiers are pinned
-// to viewport width rather than derived from tile width via auto-fill, so the
-// breakpoints are explicit. The ranges are non-overlapping, so exactly one ever
-// matches and the result can't depend on StyleX's at-rule ordering or on source
-// order.
+// value, `$4.82M` (headings use proportional figures), in the widest theme
+// heading face; raise it for longer figures. This is Grid's capped auto-fit
+// track, written here because Grid's `minWidth` takes pixels only, not a type
+// size, and the tiers below replace Grid's track template through `xstyle`. The
+// medium and large tiers are pinned to viewport width rather than derived from
+// tile width via auto-fill, so the breakpoints are explicit. The ranges are
+// non-overlapping, so exactly one ever matches and the result can't depend on
+// StyleX's at-rule ordering or on source order.
 const SCORECARD_MEDIUM = '@media (min-width: 768px) and (max-width: 1199.98px)';
 const SCORECARD_LARGE = '@media (min-width: 1200px)';
 
