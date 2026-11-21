@@ -7269,7 +7269,14 @@ export function draftAnswer(ctx, env, question) {
   }
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
+  // A file named in url() is kept as typed, its case, dots and words: set
+  // aside while the words are read, and put back once they are lowercased.
+  const urls = /** @type {string[]} */ ([]);
   let q = question
+    .replace(/url\([^()]*\)/gi, m => {
+      urls.push(m);
+      return ` uu${urls.length - 1}uu `;
+    })
     .normalize('NFKC')
     // The possessive reader: a part's possessive before a thing it has, or
     // a list of such possessives before it ("the cards' and buttons'
@@ -7606,6 +7613,7 @@ export function draftAnswer(ctx, env, question) {
       '$1$2$3px',
     )
     .toLowerCase()
+    .replace(/\s*uu(\d+)uu\s*/g, (_, n) => ` ${urls[Number(n)]} `)
     .replace(/[\u2018\u2019]/g, "'")
     // CSS property names read as their words.
     .replace(
@@ -32415,7 +32423,10 @@ export function draftAnswer(ctx, env, question) {
   // start from; what the words beside it ask is kept.
   const pictureLook =
     // (The file is read as typed: the reader drops its dot.)
-    /(?:^|[\s(])\S+\.(?:png|jpe?g|webp|gif|avif|heic)\b/i.test(question) ||
+    // (A file inside url() is a value to write, never a look to match.)
+    /(?:^|[\s(])\S+\.(?:png|jpe?g|webp|gif|avif|heic)\b/i.test(
+      question.replace(/url\([^()]*\)/gi, ' '),
+    ) ||
     /\b(?:like|match(?:es|ing)?|copy|as in|the look of|looks? of|(?:look|style|colou?rs?|palette|theme|vibe)\s+from)\s+(?:this|that|the|my|our|a|an|these|those)\s+(?:pictures?|screenshots?|images?|photos?|mock-?ups?|png|jpe?g|screen ?caps?|snapshots?)\b/.test(
       q,
     );
