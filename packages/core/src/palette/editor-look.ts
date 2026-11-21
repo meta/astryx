@@ -367,8 +367,7 @@ export function growLook(input: EditorLookInput): EditorLookResult {
   /**
    * The status roles the theme leaves unset, from the palette's families of
    * them (deriveStatusColors), written as its shades; a token set by hand
-   * keeps its value, and a role that cannot be drawn readable and apart
-   * from the accent keeps the base theme's.
+   * keeps its value, and every other one is written.
    */
   function mapStatuses(): PaletteMapping['statuses'] {
     const pal = candidate.palette as unknown as Record<
@@ -379,7 +378,7 @@ export function growLook(input: EditorLookInput): EditorLookResult {
       d => !dials.some(f => f.id === d) && pal[d],
     );
     if (!roles.length) {
-      return {roles: {}, why: []};
+      return {roles: {}, why: [], short: []};
     }
     const derived = deriveStatusColors({
       palette: pal,
@@ -395,11 +394,12 @@ export function growLook(input: EditorLookInput): EditorLookResult {
         })),
       accent: m => tokens['--color-accent']?.[m]?.color ?? null,
       wanted: k => has(k) && !setExactly(k),
+      ...(context.shown ? {shown: context.shown} : {}),
     });
     for (const [k, v] of Object.entries(derived.tokens)) {
       tokens[k] = {family: v.family, light: v.light, dark: v.dark};
     }
-    return {roles: derived.roles, why: derived.why};
+    return {roles: derived.roles, why: derived.why, short: derived.short};
   }
   /**
    * The code colors and the overlay scrim, from the palette
@@ -447,8 +447,7 @@ export function growLook(input: EditorLookInput): EditorLookResult {
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token
-   * the theme sets by hand keeps its value; a set the palette cannot
-   * draw readable and apart keeps the base theme's.
+   * the theme sets by hand keeps its value; every other one is written.
    */
   function mapCategories(): PaletteMapping['categories'] {
     const derived = deriveLookColors({
@@ -462,6 +461,7 @@ export function growLook(input: EditorLookInput): EditorLookResult {
       text: m => lookColors(LOOK_TEXT, m),
       grounds: m => lookColors(LOOK_GROUNDS, m),
       wanted: k => has(k) && !setExactly(k),
+      ...(context.shown ? {shown: context.shown} : {}),
       accent: dials.find(f => f.id === 'accent')?.seed ?? null,
     });
     for (const [k, v] of Object.entries(derived.tokens)) {
@@ -470,11 +470,10 @@ export function growLook(input: EditorLookInput): EditorLookResult {
     return {
       badges: derived.badges,
       chart: derived.chart,
-      merged: derived.merged,
-      unreadable: derived.unreadable.map(
-        u =>
-          `${u.token} reads at only ${u.ratio}:1 in ${u.mode} (needs ${u.needs}:1)`,
-      ),
+      limits: derived.limits,
+      moved: derived.moved,
+      alike: derived.alike,
+      unread: derived.unread,
     };
   }
   return {categories, statuses, code, cvd, keptAtBase};

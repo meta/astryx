@@ -90,6 +90,7 @@ import {packageImportTarget} from '../../foundation/discovery/package-exports.mj
 import {
   OTHER_JSX_RUNTIME,
   judgeCoreProps,
+  projectTypeScript,
   readCoreDocs,
   widensJsx,
 } from '../../foundation/discovery/unknown-core-props.mjs';
@@ -106,11 +107,6 @@ export {
   projectImportsModule,
   specifierTargets,
 } from '../../foundation/fs/project-sources.mjs';
-import {
-  resolveProjectTypeScript,
-  TYPESCRIPT_FIX,
-  unusableTypeScriptReason,
-} from '../../foundation/discovery/project-typescript.mjs';
 import {
   existingFile,
   pathsFor,
@@ -813,24 +809,9 @@ export async function findUnknownCoreProps(projectDir) {
   // component.
   if (files.length >= SOURCE_FILE_LIMIT)
     return notChecked('the project has more source files than doctor reads');
-  const compiler = resolveProjectTypeScript([projectDir]);
-  if (compiler === null) {
-    return {
-      found: [],
-      uses: 0,
-      skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`,
-    };
-  }
-  if (compiler.ts === null) {
-    return {
-      found: [],
-      uses: 0,
-      skipped: unusableTypeScriptReason(
-        compiler.version,
-        'the props were not checked',
-      ),
-    };
-  }
+  const compiler = projectTypeScript([projectDir]);
+  if (!('ts' in compiler))
+    return {found: [], uses: 0, skipped: compiler.skipped};
   const {ts} = compiler;
   const relative = (/** @type {string} */ file) =>
     path.relative(projectDir, file).split(path.sep).join('/');
