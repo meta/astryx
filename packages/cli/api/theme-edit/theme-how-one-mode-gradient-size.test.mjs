@@ -164,6 +164,7 @@ it('a size right after a gradient with no position is a new ask', async () => {
     'header background linear-gradient(#ffffff, #eeeeee) / 12px radius on cards',
   );
   expect(lines.some(l => /\/ 12px/.test(l))).toBe(false);
+  expect(lines.some(l => /--on card\b/.test(l))).toBe(true);
 }, 240_000);
 
 it('a trailing mode after a gradient with a nested stop reads as that mode', async () => {
@@ -175,3 +176,16 @@ it('a trailing mode after a gradient with a nested stop reads as that mode', asy
     "set pg background 'linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
   );
 }, 240_000);
+
+it.each([
+  'dark mode header background linear-gradient(transparent calc(100% - 1px), #dddddd 1px) 0 0 / 24px 24px',
+  'header background linear-gradient(transparent calc(100% - 1px), #dddddd 1px) 0 0 / 24px 24px in dark mode',
+])(
+  '%s: a stop with calc() is written as typed',
+  async ask => {
+    expect(await commands(ask)).toContain(
+      "set pg background 'linear-gradient(transparent calc(100% - 1px), #dddddd 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+    );
+  },
+  240_000,
+);

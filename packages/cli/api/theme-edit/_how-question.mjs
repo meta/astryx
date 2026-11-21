@@ -4632,13 +4632,6 @@ function clauseBefore(text, at) {
 }
 
 /**
- * Answer a plain-words question with drafts of commands.
- * @param {import('./_settings.mjs').Ctx} ctx
- * @param {import('./_how-commands.mjs').HowTheme} env
- * @param {string} question
- * @returns {{parts: string[], aspects: string[], drafts: Draft[]}}
- */
-/**
  * The slash before a gradient's length size, right after the `background`
  * word and the gradient's position ("background linear-gradient(…) 0 0 /
  * 24px 24px"): part of the value, never a break between asks.
@@ -4648,6 +4641,13 @@ const PATTERN_SIZE_SLASH = new RegExp(
   'i',
 );
 
+/**
+ * Answer a plain-words question with drafts of commands.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {string} question
+ * @returns {{parts: string[], aspects: string[], drafts: Draft[]}}
+ */
 export function draftAnswer(ctx, env, question) {
   // The theme's own neutral, as its seed is set: what a near color off a
   // pure one is tinted with, so it reads as the theme's (none: a plain
@@ -6607,10 +6607,13 @@ export function draftAnswer(ctx, env, question) {
   )
     segments.splice(0, segments.length, question);
   // (A pattern said with its size keeps the slash before its size in its
-  // value; the asks around it are rejoined with commas, so each is a clause
-  // of its own.)
+  // value; any other slash between asks becomes a comma, so each ask is a
+  // clause of its own and every value stays as typed.)
   if (segments.length > 1 && PATTERN_SIZE_SLASH.test(question))
-    question = segments.join(', ');
+    question = question
+      .replace(new RegExp(PATTERN_SIZE_SLASH.source, 'gi'), ' \u2e35 ')
+      .replace(/\s\/\s(?![^(]*\))/g, ', ')
+      .replace(/ \u2e35 /g, ' / ');
   // A clause writes only when it reads as a direct ask: an imperative, a
   // request, or a thing with a value or a direction; a condition, an
   // indirect question, a double negative or a statement of fact gets the
