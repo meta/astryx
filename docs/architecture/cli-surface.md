@@ -90,10 +90,10 @@ theme matcha` is `theme add matcha`) and the table of their words in
    uses it and no word is a command or a command's plural. A word that points
    at nothing names the commands it is a typo of (one edit in a word of up to
    four letters, two in a longer one, two swapped letters counting as one),
-   else `help`, which lists every command with what it does; a help run it
-   names keeps the program options the reader typed (`--json`). A word that
-   names a script in the project's package.json names that script's run
-   first, with the project's package manager. The answer only
+   else `help`, which lists every command with what it does. Every help run
+   the answer names keeps the program options the reader typed (`--json`). A
+   word that names a script in the project's package.json names that
+   script's run first, with the project's package manager. The answer only
    suggests: it runs nothing and names no experimental command, except that a
    share word (`export`, `render`, `share`, `bundle`, `snapshot`,
    `standalone`) names `experimental export` under `spec:AST-017` FR27's

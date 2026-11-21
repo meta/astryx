@@ -201,8 +201,12 @@ describe('the command the words point at', () => {
     ]);
     // An option the program does not take is left out.
     expect(await names(['frobnicate', '--bogus'])).toEqual(['astryx help']);
-    // After `--`, a word that looks like an option is a word, not an option.
+    // After `--`, every word is a word: none is kept as an option, whether
+    // the `--` comes after the word or before it.
     expect(await names(['frobnicate', '--', '--json'])).toEqual([
+      'astryx help',
+    ]);
+    expect(await names(['--', 'frobnicate', '--json'])).toEqual([
       'astryx help',
     ]);
   });
@@ -211,6 +215,13 @@ describe('the command the words point at', () => {
     // A group with no list: its help.
     expect(await names(['integrations', 'list', '--json'])).toEqual([
       'astryx integration --help --json',
+    ]);
+    expect(await names(['--', 'integrations', 'list', '--json'])).toEqual([
+      'astryx integration --help',
+    ]);
+    // A run of the command itself reads the words after `--` as it did.
+    expect(await names(['migrate', '--', '--from', '0.6.0'])).toEqual([
+      'astryx upgrade --from 0.6.0',
     ]);
   });
 

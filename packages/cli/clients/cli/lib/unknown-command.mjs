@@ -172,10 +172,11 @@ function everyCommand(program) {
 
 /**
  * The first word that is not an option or the value of one of the program's
- * options, with the words before and after it.
+ * options, with the words before and after it. `operands` when it follows
+ * `--`, after which every word is a word.
  * @param {string[]} words
  * @param {CommandLike} program
- * @returns {{word: string, before: string[], after: string[]} | null}
+ * @returns {{word: string, before: string[], after: string[], operands?: true} | null}
  */
 export function firstWord(words, program) {
   for (let i = 0; i < words.length; i += 1) {
@@ -187,6 +188,7 @@ export function firstWord(words, program) {
             word: words[i + 1],
             before: words.slice(0, i),
             after: words.slice(i + 2),
+            operands: true,
           }
         : null;
     if (word.startsWith('-')) {
@@ -199,6 +201,20 @@ export function firstWord(words, program) {
     return {word, before: words.slice(0, i), after: words.slice(i + 1)};
   }
   return null;
+}
+
+/**
+ * The words after the word that a help run takes the program options from:
+ * those before a `--`, and none when the word itself follows `--`, since
+ * every word after `--` is a word.
+ * @param {{operands?: true}} first
+ * @param {string[]} words
+ * @returns {string[]}
+ */
+function optionWords(first, words) {
+  if (first.operands) return [];
+  const end = words.indexOf('--');
+  return end < 0 ? words : words.slice(0, end);
 }
 
 /**
@@ -325,11 +341,6 @@ function fitWords(cmd, words) {
   const takesPath = declared.some(a => a.name?.() === 'path');
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i];
-    // After `--`, a word that looks like an option is a word.
-    if (word === '--') {
-      args.push(...words.slice(i + 1));
-      break;
-    }
     if (!word.startsWith('-')) {
       args.push(word);
       continue;
@@ -588,13 +599,15 @@ function plainAt(cmd, words) {
  * finder asks for that subcommand's help. With neither, the guide comes first, then the finder's
  * help. Where icon features are off, the answer names no experimental
  * command (spec:AST-084 FR0).
- * @param {{word: string, before: string[], after: string[]}} run the word,
- *   and the words of the run before and after it
+ * @param {{word: string, before: string[], after: string[], operands?: true}} first
+ *   the word, the words of the run before and after it, and whether it
+ *   follows `--`
  * @param {CommandLike} program
  * @param {IconFeatures} iconFeatures
  * @returns {Promise<Array<{words: string[], reason: string}>>}
  */
-async function iconRuns({before, after: rest}, program, iconFeatures) {
+async function iconRuns(first, program, iconFeatures) {
+  const {before, after: rest} = first;
   /** @param {string[]} parts @param {string} reason */
   const run = (parts, reason) => ({words: [...before, ...parts], reason});
   // The guide keeps only the program's own options written after the word
@@ -627,12 +640,17 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
   // (`icon add trash`, `icon search use lucide`, `icon --json map pin`) runs
   // that subcommand, which may need inputs or write files: the answer names
   // its help, never a run of it.
-  const first = plainWords(finderCmd, words)[0]?.toLowerCase();
-  const sub = visible(finderCmd).find(c => c.name() === first);
+  const lookFor = plainWords(finderCmd, words)[0]?.toLowerCase();
+  const sub = visible(finderCmd).find(c => c.name() === lookFor);
   if (sub)
     return [
       run(
-        [...finder, sub.name(), '--help', ...fitWords(program, rest)],
+        [
+          ...finder,
+          sub.name(),
+          '--help',
+          ...fitWords(program, optionWords(first, rest)),
+        ],
         `the command is experimental icon ${sub.name()} (experimental); its help says what it takes`,
       ),
       guide,
@@ -651,7 +669,10 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
     ];
   return [
     guide,
-    run([...finder, '--help', ...fitWords(program, rest)], reason),
+    run(
+      [...finder, '--help', ...fitWords(program, optionWords(first, rest))],
+      reason,
+    ),
   ];
 }
 
@@ -672,19 +693,16 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
  * the tree (`verify` is `integration verify`, `themes` is `theme list`), or its hyphenated parts name that command (`validate-integration`
  * is `doctor integration validate`); the next word, else the word itself,
  * is a name another command reads (`info Text` is `component Text`).
- * @param {{word: string, before: string[], after: string[]}} run the word,
- *   and the words of the run before and after it
+ * @param {{word: string, before: string[], after: string[], operands?: true}} first
+ *   the word, the words of the run before and after it, and whether it
+ *   follows `--`
  * @param {CommandLike} program
  * @param {FindEntry} findEntry
  * @param {IconFeatures} iconFeatures
  * @returns {Promise<Array<{words: string[], reason: string}>>}
  */
-async function pointed(
-  {word, before, after: rest},
-  program,
-  findEntry,
-  iconFeatures,
-) {
+async function pointed(first, program, findEntry, iconFeatures) {
+  const {word, before, after: rest} = first;
   const top = visible(program);
   const topNames = top.map(c => c.name());
   /** @param {string[]} parts @param {string} reason */
@@ -695,7 +713,7 @@ async function pointed(
   const help = (command, given = rest) => [
     ...command,
     '--help',
-    ...fitWords(program, given),
+    ...fitWords(program, optionWords(first, given)),
   ];
   // An option written after `--`, where it reads as a word
   // (`astryx -- --help`).
@@ -710,7 +728,7 @@ async function pointed(
       run([...parts, ...rest], 'the words of one command, passed as one word'),
     ];
   if (spellings(word).includes('icon'))
-    return iconRuns({word, before, after: rest}, program, iconFeatures);
+    return iconRuns(first, program, iconFeatures);
   // A borrowed run that does not parse leaves the word to the rules below
   // (`info theme` names a group alone, so it is `component Theme`).
   const borrowed = (
@@ -927,7 +945,7 @@ export async function unknownCommandAnswer(
       ...[
         ...fitWords(program, first.before),
         'help',
-        ...fitWords(program, first.after),
+        ...fitWords(program, optionWords(first, first.after)),
       ].map(w => quoteCommandArgument(w)),
     ].join(' '),
     reason: 'every command, with what it does',
