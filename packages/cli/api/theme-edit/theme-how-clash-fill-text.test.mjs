@@ -66,6 +66,8 @@ describe("a clash with a see-through fill or another look's text", () => {
       const {choice, results} = await choiceFor(q);
       const blue = choice?.commands.find(c => /'#0069d6'/.test(c)) ?? '';
       expect(blue, q).toMatch(/ && .* color '#ffffff' /);
+      const clear = choice?.commands.find(c => /'#0069d61a'/.test(c)) ?? '';
+      expect(clear, q).not.toMatch(/&&/);
       expect(
         results.some(r => /^readable text on that fill/.test(r.text)),
       ).toBe(false);
@@ -83,6 +85,13 @@ describe("a clash with a see-through fill or another look's text", () => {
     );
     expect(results.some(r => /^readable text on that fill/.test(r.text))).toBe(
       false,
+    );
+    const commands = results.flatMap(r => r.commands).join('\n');
+    expect(commands).toMatch(
+      /background-color '#0000ff' --on button --when variant:primary && .* color '#ffffff' /,
+    );
+    expect(commands).toMatch(
+      /background-color '#ffff00' --on button --when variant:primary && .* color '#000000' /,
     );
   });
 });

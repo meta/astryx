@@ -32157,10 +32157,9 @@ export function draftAnswer(ctx, env, question) {
     const rgb = parseColor(raw);
     return rgb && alphaOf(raw) >= 1 ? rgb : null;
   };
-  // (The parts whose text the ask itself colors, before any line here adds
-  // a text color.)
-  // Keyed by part and look: a text color said for the part's other look
-  // ("secondary buttons white text") leaves this look's clash alone.
+  // (Each part and look whose text the ask itself colors, before any line
+  // here adds a text color: a text color said for the part's other look,
+  // "secondary buttons white text", leaves this look's clash alone.)
   const saidText = new Set(
     result
       .flatMap(x => x.options.flat())
@@ -32196,10 +32195,10 @@ export function draftAnswer(ctx, env, question) {
       d.options.every(o => o.length === 1) &&
       d.options[0].length === 1 &&
       fillSteps.includes(d.options[0][0]);
-    // (A clash: the choice's fills differ, "a #0069d6 fill and a #eeeeee
-    // fill", and no clause of the ask says the part's text itself.)
-    // (Every option is one fill on the part, measurable or see-through: the
-    // ones that can't be measured get no text line.)
+    // (A clash: one fill each on the same part and look, the fills differ,
+    // "a #0069d6 fill and a #eeeeee fill", and the ask says no text for that
+    // look or the whole part. A see-through fill stays in the choice with no
+    // text line.)
     const clash =
       d.options.length > 1 &&
       d.options.every(
