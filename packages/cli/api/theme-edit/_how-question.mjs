@@ -137,7 +137,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean, joined?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, takesBack?: string, offer?: boolean, already?: boolean, joined?: boolean}} Draft
  */
 
 /** The words a badge style ask is made of when the style is all it asks. */
@@ -12319,7 +12319,10 @@ export function draftAnswer(ctx, env, question) {
       !c.except &&
       !c.parts.length &&
       !c.aspects.length &&
-      !c.colors.length
+      !c.colors.length &&
+      // (A clause that takes a change back, "undo the light mode accent
+      // change", asks for that undo: it rules no mode out.)
+      !(c.neg && /\b(?:revert|undo|take back)\b/.test(c.text))
     ) {
       // "don't touch dark mode, …": the other mode.
       const scope = c.neg ? (c.mode === 'dark' ? 'light' : 'dark') : c.mode;
@@ -14130,6 +14133,7 @@ export function draftAnswer(ctx, env, question) {
           : {}
       ),
       ...(input.unmet ? {unmet: input.unmet} : {}),
+      ...(input.takesBack ? {takesBack: input.takesBack} : {}),
       ...(d.offer || input.offer ? {offer: true} : {}),
       ...(d.already || input.already ? {already: true} : {}),
     };
@@ -19654,9 +19658,19 @@ export function draftAnswer(ctx, env, question) {
         (st.on ?? '') === (on ?? ''),
     );
     const what = role ? role[1] : (c.aspects[0] ?? 'everything');
-    if (!matches.length)
+    // ("undo the light mode accent change": a setting of that mode only. A
+    // setting saved for both modes has no light half to take back alone.)
+    const ofMode = c.mode ? matches.filter(st => st.mode === c.mode) : matches;
+    const bothModes = matches.filter(st => !st.mode);
+    if (c.mode && !ofMode.length && bothModes.length)
       return {
-        text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}, so it already uses the base value`,
+        text: `${env.slug} sets ${what}${on ? ` on ${on}` : ''} the same in both modes, so it cannot be taken back in ${c.mode} mode only; an undo that names no mode takes it back in both`,
+        options: [],
+        takesBack: `${what}${on ? ` on ${on}` : ''}`,
+      };
+    if (!ofMode.length)
+      return {
+        text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}${c.mode ? ` in ${c.mode} mode` : ''}, so it already uses the base value`,
         options: [],
         // (What the ask takes for granted, a setting to take back, that the
         // theme does not have.)
@@ -19665,7 +19679,7 @@ export function draftAnswer(ctx, env, question) {
     return {
       text: `take back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}: undo restores the base value`,
       options: [
-        matches.map(
+        ofMode.map(
           st =>
             /** @type {Step} */ ({
               verb: 'undo',
@@ -19677,7 +19691,10 @@ export function draftAnswer(ctx, env, question) {
             }),
         ),
       ],
-      sequence: matches.length > 1,
+      sequence: ofMode.length > 1,
+      // (What it takes back, for a change said earlier in the same ask,
+      // which that undo means first.)
+      takesBack: `${what}${on ? ` on ${on}` : ''}`,
     };
   }
 
@@ -29462,40 +29479,56 @@ export function draftAnswer(ctx, env, question) {
   // rest of the ask stands. Only a change of what the undo names: "Reset
   // the card shadows" takes back a card shadow, never "cards rounder", and
   // never a change said after it. Each undo is read in turn.)
-  for (const unmet of result.filter(d => d.unmet)) {
+  // (An undo the theme's saved settings could answer means a change said
+  // earlier in the same ask first: "make the accent red in light mode. undo
+  // the light mode accent change" keeps the theme as it was.)
+  for (const unmet of result.filter(d => d.unmet || d.takesBack)) {
+    const saved = !unmet.unmet;
     const [, what, part] =
-      /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
+      /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(
+        String(unmet.unmet ?? unmet.takesBack ?? ''),
+      ) ?? [];
     const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
     // ("Undo the button color change": a part's color is its fill and its
     // text, and the readable text a fill brings.)
     const colorSaid = /\bcolou?rs?\b/i.test(
       String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
     );
-    const undone = result.filter(d => {
-      const c = /** @type {any} */ (draftClause.get(d));
-      if (d === unmet || d.unmet || !d.options.length || !c) return false;
-      if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
-      // (Of the part the undo names; with no part, of the whole theme.)
-      const onPart = part
-        ? c.parts?.some(
-            (/** @type {{on: string}} */ p) =>
-              p.on === part || (FAMILIES[part] ?? []).includes(p.on),
-          )
-        : !c.parts?.length;
-      return (
-        onPart &&
-        (what === 'everything' ||
-          c.aspects?.includes(what) ||
-          (colorSaid &&
-            ['text', 'background'].some(a => c.aspects?.includes(a))) ||
-          d.options
-            .flat()
-            .some(
-              (/** @type {Step} */ st) =>
-                st.thing === what || String(st.thing).includes(what),
-            ))
-      );
-    });
+    const undoMode = /** @type {any} */ (draftClause.get(unmet))?.mode;
+    /** @param {boolean} anyMode */
+    const undoneIn = anyMode =>
+      result.filter(d => {
+        const c = /** @type {any} */ (draftClause.get(d));
+        if (d === unmet || d.unmet || d.takesBack || !d.options.length || !c)
+          return false;
+        if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
+        // (An undo that names a mode takes back a change of that mode only.)
+        if (!anyMode && undoMode && c.mode !== undoMode) return false;
+        // (Of the part the undo names; with no part, of the whole theme.)
+        const onPart = part
+          ? c.parts?.some(
+              (/** @type {{on: string}} */ p) =>
+                p.on === part || (FAMILIES[part] ?? []).includes(p.on),
+            )
+          : !c.parts?.length;
+        return (
+          onPart &&
+          (what === 'everything' ||
+            c.aspects?.includes(what) ||
+            (colorSaid &&
+              ['text', 'background'].some(a => c.aspects?.includes(a))) ||
+            d.options
+              .flat()
+              .some(
+                (/** @type {Step} */ st) =>
+                  st.thing === what || String(st.thing).includes(what),
+              ))
+        );
+      });
+    const undone = undoneIn(false);
+    // ("make the accent red. undo the light mode accent change": the change
+    // is for both modes, so a one-mode undo cannot take it back.)
+    const otherMode = !undone.length && undoMode ? undoneIn(true) : [];
     // An undo that names more than one change ("Undo the card change and
     // the heading change"), or a look that more than one earlier change
     // could be ("the heading size change" after a size and a bold), is not
@@ -29537,12 +29570,20 @@ export function draftAnswer(ctx, env, question) {
         return (
           d !== unmet &&
           !d.unmet &&
+          !d.takesBack &&
           d.options.length &&
           c &&
           (undoAt < 0 || clauses.indexOf(c) < undoAt) &&
           looksSaid.some(a => lookOf(d).includes(a))
         );
       });
+    if (otherMode.length && !saved) {
+      const saidFor = /** @type {any} */ (draftClause.get(otherMode[0]))?.mode;
+      unmet.text = `the undo names ${undoMode} mode, but the change said earlier in this ask is for ${saidFor ? `${saidFor} mode` : 'both modes'}, so nothing is taken back and it stays written`;
+      const uc0 = /** @type {any} */ (draftClause.get(unmet));
+      if (uc0) answeredByUndo.add(uc0);
+      continue;
+    }
     if (!undone.length && !several && !loose) continue;
     const unsure =
       several ||
@@ -29550,6 +29591,9 @@ export function draftAnswer(ctx, env, question) {
       (looksSaid.length > 0 &&
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
+    // (Unsure or with nothing said earlier, an undo the saved settings answer
+    // stays that undo.)
+    if (saved && (unsure || !undone.length)) continue;
     if (unsure) {
       unmet.text = several
         ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
@@ -29563,9 +29607,14 @@ export function draftAnswer(ctx, env, question) {
     // (A whole answer that holds every line, "all of it, in order", loses
     // each line taken back once; a later clause that says the change again
     // keeps it.)
-    const gone = undone.flatMap(d => d.options[0] ?? []);
+    const gone = [
+      ...undone.flatMap(d => d.options[0] ?? []),
+      ...(saved ? unmet.options.flat() : []),
+    ];
+    /** Whole answers the take-back left with no line. @type {Set<Draft>} */
+    const emptied = new Set();
     for (const d of result)
-      if (!draftClause.get(d) && d.options.length)
+      if (!draftClause.get(d) && d.options.length) {
         d.options = d.options
           .map(o => {
             const left = [...o];
@@ -29578,10 +29627,14 @@ export function draftAnswer(ctx, env, question) {
             return left;
           })
           .filter(o => o.length);
+        if (!d.options.length) emptied.add(d);
+      }
     result.splice(
       0,
       result.length,
-      ...result.filter(d => d !== unmet && !undone.includes(d)),
+      ...result.filter(
+        d => d !== unmet && !undone.includes(d) && !emptied.has(d),
+      ),
     );
     // (A color taken back leaves no line of it anywhere: the fill, its text
     // and the readable text the fill brought.)

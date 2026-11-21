@@ -17,7 +17,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {linesBeyond} from '../../test-utils/long-ask-binding-rows.mjs';
 import {
   makeLinkedFixture,
@@ -624,6 +624,30 @@ const ROWS = [
     },
   ],
   [
+    'an undo of a one-mode change takes it back and rules no mode out',
+    {
+      q: 'make the accent red in light mode. undo the light mode accent change',
+      never: /--color-accent/,
+      says: /taken back by its undo/,
+    },
+  ],
+  [
+    'an undo of one mode leaves a change said for the other mode',
+    {
+      q: 'make the accent red in dark mode. undo the light mode accent change',
+      has: ["--color-accent '#dc2626' --mode dark"],
+      says: /is for dark mode, so nothing is taken back/,
+    },
+  ],
+  [
+    'an undo of one mode leaves a change said for both modes',
+    {
+      q: 'make the accent red. undo the light mode accent change',
+      has: ["accent '#dc2626'"],
+      says: /is for both modes, so nothing is taken back/,
+    },
+  ],
+  [
     'a change said again after its undo is written',
     {
       q: 'Make the cards rounder. Undo the card change. Make the cards rounder.',
@@ -932,5 +956,61 @@ describe('icons in a container', () => {
     const all = JSON.stringify(data);
     expect(all).toContain("--color-icon-secondary '#dc2626' --on card");
     expect(all).toContain("--color-icon-primary '#dc2626' --on card");
+  }, 300_000);
+});
+
+describe('an undo that names a mode, on a theme that sets the thing', () => {
+  /** Every set and undo line of every answer. @param {string} theme @param {string} q */
+  const lines = async (theme, q) => {
+    const {data} = await themeEditHow(q, {cwd, theme});
+    const results = /** @type {Array<{text: string, commands: string[]}>} */ (
+      data.results ?? []
+    );
+    return {
+      writes: results
+        .flatMap(r => r.commands)
+        .filter(c => / editor (?:set|undo) /.test(c))
+        .map(c => c.replace(/^.* editor /, '')),
+      text: results.map(r => r.text).join('\n'),
+    };
+  };
+  const RED =
+    'make the accent red in light mode. undo the light mode accent change';
+
+  it('takes back the change said earlier and keeps the saved one, whatever mode it is for', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    for (const [theme, mode] of [
+      ['md', 'dark'],
+      ['ml', 'light'],
+      ['mb', undefined],
+    ]) {
+      await themeEditNew(theme, {cwd, like: 'neutral'});
+      await themeEditSet(theme, '--color-accent', '#2563eb', {cwd, mode});
+      const r = await lines(theme, RED);
+      expect(r.writes, theme).toEqual([]);
+      expect(r.text, theme).toMatch(/taken back by its undo/);
+    }
+  }, 300_000);
+
+  it('on its own, takes back only a setting of that mode', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    const q = 'undo the light mode accent change';
+    expect((await lines('ml', q)).writes).toEqual([
+      'undo ml --color-accent --mode light',
+    ]);
+    const dark = await lines('md', q);
+    expect(dark.writes).toEqual([]);
+    expect(dark.text).toMatch(/sets nothing for accent in light mode/);
+    const both = await lines('mb', q);
+    expect(both.writes).toEqual([]);
+    expect(both.text).toMatch(
+      /the same in both modes, so it cannot be taken back in light mode only/,
+    );
   }, 300_000);
 });
