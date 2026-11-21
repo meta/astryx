@@ -159,6 +159,12 @@ describe('template path safety', () => {
           'write the page where you named it, from its folder',
           'print the source and write nothing',
         ]);
+        // The message names that way too, and does not say the page can be
+        // written only inside the project just above it.
+        expect(err.message).toContain(
+          "The template is written only inside the folder the command runs in. Give a path inside the project, run the command from the destination's folder, or print the source.",
+        );
+        expect(err.message).not.toContain('only inside the project');
         expect(err.suggestions[1].name).toBe(
           `cd '${elsewhere.replace(/'/g, `'\\''`)}' && astryx template blank ./pages/blank.tsx`,
         );

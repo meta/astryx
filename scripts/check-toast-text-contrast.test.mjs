@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Toast text contrast: in every first-party theme and color mode, the
- * text a toast card draws (its info and error surfaces) reaches WCAG 2.2 AA
- * for normal-size text, 4.5:1 (SC 1.4.3), on the card.
+ * @file Toast text contrast: in Core's defaults and every first-party theme,
+ * in each color mode, the text a toast card draws (its info and error
+ * surfaces) reaches WCAG 2.2 AA for normal-size text, 4.5:1 (SC 1.4.3), on
+ * the card. On a media side the card's text is that side's on-color (FR14).
  * @input The first-party themes, Core's token defaults for the surfaces a
  *   theme does not set, and Toast's side rule (pickInvertedSide).
  * @output A failure naming the theme, mode, surface and ratio.
@@ -29,9 +30,17 @@ const SURFACES = {
   error: '--color-background-error-inverted',
 };
 
+const SOURCES = {
+  'Core defaults': null,
+  ...FIRST_PARTY_THEMES,
+};
+
 describe('toast text contrast', () => {
-  for (const [name, theme] of Object.entries(FIRST_PARTY_THEMES)) {
-    const tokens = {...tokenDefaults, ...themeTokens(withEmittedTokens(theme))};
+  for (const [name, theme] of Object.entries(SOURCES)) {
+    const tokens =
+      theme === null
+        ? {...tokenDefaults}
+        : {...tokenDefaults, ...themeTokens(withEmittedTokens(theme))};
     MODES.forEach((mode, modeIndex) => {
       for (const [type, surface] of Object.entries(SURFACES)) {
         it(`${name} ${mode} ${type} toast text reaches ${AA_NORMAL}:1`, () => {

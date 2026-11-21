@@ -248,7 +248,7 @@ export const doc = {
     {
       value: 'ERR_DEP_MISSING',
       description:
-        'A required external dependency (e.g. jscodeshift) is missing.',
+        'A required external dependency (e.g. jscodeshift) is missing, or an installed package needs a package it declares that is not installed (a broken install; installing again repairs it).',
     },
 
     // GitHub CLI
