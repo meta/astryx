@@ -71,9 +71,7 @@ describe('a panel floating over the page', () => {
 
   it('flat and the plain base draw no floating panel without an edge', async () => {
     expect(
-      (await problems('fl')).some(p =>
-        /floating over the page/.test(p.problem),
-      ),
+      (await problems('fl')).some(p => /no edge to be seen by/.test(p.problem)),
     ).toBe(false);
   }, 120_000);
 
