@@ -15,7 +15,13 @@
  * - /packages/core/src/Popover/popoverSurfaceFrame.ts
  */
 
+import {devWarn} from '../utils/devWarning';
+import {isHTMLElement} from '../utils/nodeType';
 import {settledBox} from './settledBox';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /** A horizontal step toward the anchor: -1 left, 0, or 1 right. */
 export const LAYER_ENTER_X_PROPERTY = '--_astryx-layer-enter-x';
@@ -137,6 +143,50 @@ export function readLayerEntranceSide(
   return layerEntranceSide(settledBox(layer), anchorBox);
 }
 
+/**
+ * Registers the side properties as not inherited. A write then restyles
+ * only the elements it writes, the layer and its direct children, and not
+ * the content inside them. The registration belongs to the document that
+ * loads Astryx. useLayer calls it as its module loads, before any layer
+ * shows. Without
+ * `CSS.registerProperty` (a server, an older browser) the properties
+ * inherit, and the entrance is the same. It never throws: a name another
+ * copy registered first is expected, and any other failure costs only the
+ * restyle saving, so it warns in development.
+ */
+export function registerLayerEntranceProperties(): void {
+  if (
+    typeof CSS === 'undefined' ||
+    typeof CSS.registerProperty !== 'function'
+  ) {
+    return;
+  }
+  for (const name of [
+    LAYER_ENTER_X_PROPERTY,
+    LAYER_ENTER_Y_PROPERTY,
+    LAYER_ENTER_ORIGIN_PROPERTY,
+    LAYER_ENTER_GAP_PROPERTY,
+  ]) {
+    try {
+      CSS.registerProperty({name, syntax: '*', inherits: false});
+    } catch (error) {
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        !(
+          error instanceof DOMException &&
+          error.name === 'InvalidModificationError'
+        )
+      ) {
+        devWarn(
+          'Layer',
+          `could not register ${name}; its writes restyle the layer's content.`,
+          error,
+        );
+      }
+    }
+  }
+}
+
 const px = (value: number) => `${Math.round(value * 1000) / 1000}px`;
 
 /**
@@ -152,22 +202,26 @@ export function writeLayerEntranceSide(
   layer: HTMLElement,
   side: LayerEntranceSide | null,
 ): void {
-  layer.style.setProperty(
-    LAYER_ENTER_X_PROPERTY,
-    side == null ? 'initial' : String(side.x),
-  );
-  layer.style.setProperty(
-    LAYER_ENTER_Y_PROPERTY,
-    side == null ? 'initial' : String(side.y),
-  );
-  layer.style.setProperty(
-    LAYER_ENTER_ORIGIN_PROPERTY,
-    side == null ? 'initial' : `${px(side.originX)} ${px(side.originY)}`,
-  );
   // Floored, so rounding never carries the step past the anchor's edge.
   const gap = side?.gap == null ? null : Math.floor(side.gap * 1000) / 1000;
-  layer.style.setProperty(
-    LAYER_ENTER_GAP_PROPERTY,
-    gap == null ? 'initial' : `${gap}px`,
-  );
+  const values: ReadonlyArray<readonly [string, string]> = [
+    [LAYER_ENTER_X_PROPERTY, side == null ? 'initial' : String(side.x)],
+    [LAYER_ENTER_Y_PROPERTY, side == null ? 'initial' : String(side.y)],
+    [
+      LAYER_ENTER_ORIGIN_PROPERTY,
+      side == null ? 'initial' : `${px(side.originX)} ${px(side.originY)}`,
+    ],
+    [LAYER_ENTER_GAP_PROPERTY, gap == null ? 'initial' : `${gap}px`],
+  ];
+  // The entrance plays on the layer or on its direct child. WebKit does not
+  // pass a registered, non-inherited property to a child that asks to
+  // inherit it, so each of those elements gets the side of its own.
+  for (const element of [layer, ...Array.from(layer.children)]) {
+    if (!isHTMLElement(element)) {
+      continue;
+    }
+    for (const [name, value] of values) {
+      element.style.setProperty(name, value);
+    }
+  }
 }

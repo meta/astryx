@@ -731,7 +731,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
   anchor, on the anchor's center line. A layer
   that covers its anchor's center has no side: its entrance scales about
   that center and does not slide. A show that leaves the layer in place
-  reads the side in its one measurement pass. Popover's touch growth starts
+  reads the side in its one measurement pass. `layerAnimations` reads the
+  side on the layer element or its direct child. Popover's touch growth starts
   from the same point. Over its anchor's center it has no side to lengthen
   along, so it only scales.
 

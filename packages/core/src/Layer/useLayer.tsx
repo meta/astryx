@@ -48,6 +48,7 @@ import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
 import {
   layerEntranceSide,
   readLayerEntranceSide,
+  registerLayerEntranceProperties,
   writeLayerEntranceSide,
 } from './layerEntranceSide';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
@@ -82,6 +83,12 @@ import {
   isShownAsPopover,
 } from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
+
+// The entrance side properties restyle only the elements they are written on
+// when they change (layerEntranceSide.ts). The package lists only style files as side
+// effects. A call in a module imported only for its values can be dropped.
+// Every layer runs this module, so it registers them here.
+registerLayerEntranceProperties();
 
 // The keyboard lift every block inset reads (`LAYER_LIFT_PROPERTY` in
 // layerSlideRules.ts). StyleX resolves only constants defined in this file.
@@ -803,6 +810,10 @@ function keepAnchorClear(
  * Gives a shown layer's entrance its side. The boxes `keepAnchorClear` read
  * stand when it left the layer in place; otherwise the side is read here,
  * after the placement. Only an anchored layer has a side.
+ *
+ * The write runs in the show's own task, before the entrance starts. WebKit
+ * resolves an entrance's keyframes when it starts and does not update them
+ * for a later change of the side.
  */
 function writeEntranceSide(
   layer: HTMLElement,
