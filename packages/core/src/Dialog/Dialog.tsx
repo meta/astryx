@@ -732,14 +732,16 @@ export function Dialog({
   const allowEscape = purpose !== 'required';
   const allowBackdropClick = purpose === 'info';
 
-  // Only a standard dialog with full motion travels in from its opener's side.
-  // A full-screen entrance fades in place, and a settled open does not animate.
-  const entersFromOpener = !isFullscreen && !opensSettled;
+  // A full-screen entrance fades in place, and a settled open does not
+  // animate. The other entrances travel in from the opener's side, under full
+  // motion only.
+  const variantTravels = !isFullscreen && !opensSettled;
 
   // Syncs the entrance offset in the dialog's style with the opener's
   // position, before the Effect below opens the dialog. The layout effect
   // above captured the trigger before any descendant effect could move focus.
-  // An entrance that does not travel does not read the opener's box.
+  // Only the travelling keyframes use the offset, so the other entrances skip
+  // the read, which can force layout.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (isInline || !isOpen || dialog == null || dialog.open) {
@@ -747,7 +749,7 @@ export function Dialog({
     }
     const trigger = triggerElementRef.current;
     const travels =
-      entersFromOpener &&
+      variantTravels &&
       !matchesMediaQuery(
         dialog.ownerDocument.defaultView,
         '(prefers-reduced-motion: reduce)',
@@ -760,7 +762,7 @@ export function Dialog({
       dialog.style.setProperty('--dialog-dir-x', '0px');
       dialog.style.setProperty('--dialog-dir-y', '16px');
     }
-  }, [isOpen, isInline, entersFromOpener]);
+  }, [isOpen, isInline, variantTravels]);
 
   // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   // An inline dialog is not in the top layer, so it skips this.
