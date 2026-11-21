@@ -28,6 +28,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {expandWorkspaceDirs} from './lib/workspace-globs.mjs';
+
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -491,50 +493,69 @@ const IMPLICIT_ANY = /error TS(?:7006|7031):/;
 const errorFile = line =>
   line.match(/^(.*?)\(\d+,\d+\): error TS/)?.[1] ?? null;
 
-/** The workspace package folders, as `pnpm-workspace.yaml` lists them. */
-const WORKSPACE_FOLDERS = ['apps', 'packages', 'packages/themes', 'internal'];
+/**
+ * The file an `exports` entry names for type checking: its `types` target,
+ * else its `default`, `import` or `require` target (conditions may nest).
+ * @param {unknown} target
+ * @returns {string | null}
+ */
+function typesTarget(target) {
+  if (typeof target === 'string') return target;
+  if (!target || typeof target !== 'object') return null;
+  for (const condition of ['types', 'default', 'import', 'require']) {
+    const file = typesTarget(target[condition]);
+    if (file) return file;
+  }
+  return null;
+}
 
 /**
- * Whether a workspace package's `exports` declares an import specifier. Only
- * a declared entry is a build output that `pnpm build` writes; an unknown
- * package or an undeclared subpath is a real error.
+ * Whether an unresolved workspace import is a build that `pnpm build` writes:
+ * its package (a folder `pnpm-workspace.yaml` lists) declares the entry in
+ * `exports`, and the file that entry names for types is absent. An unknown
+ * package, an undeclared subpath, or an entry whose file exists (an import
+ * from a package the importer does not depend on) is a real error.
  * @param {string} root the repository root
  * @returns {(specifier: string) => boolean}
  */
 export function workspaceExports(root = ROOT) {
-  /** @type {Map<string, string[]>} */
-  const keys = new Map();
-  for (const folder of WORKSPACE_FOLDERS) {
-    const dir = path.join(root, folder);
-    if (!fs.existsSync(dir)) continue;
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-      const file = path.join(dir, entry.name, 'package.json');
-      if (!entry.isDirectory() || !fs.existsSync(file)) continue;
-      const {name, exports} = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (!name?.startsWith('@astryxdesign/')) continue;
-      const declared =
-        exports && typeof exports === 'object'
-          ? Object.keys(exports).filter(key => key.startsWith('.'))
-          : [];
-      keys.set(name, declared.length ? declared : exports ? ['.'] : []);
-    }
+  /** @type {Map<string, {dir: string, exports: unknown}>} */
+  const packages = new Map();
+  for (const dir of expandWorkspaceDirs(root)) {
+    const file = path.join(dir, 'package.json');
+    if (!fs.existsSync(file)) continue;
+    const {name, exports} = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (name?.startsWith('@astryxdesign/')) packages.set(name, {dir, exports});
   }
   return specifier => {
     const [, name, subpath] =
       specifier.match(/^(@astryxdesign\/[^/]+)(?:\/(.+))?$/) ?? [];
-    const declared = name ? keys.get(name) : undefined;
-    if (!declared) return false;
+    const found = name ? packages.get(name) : undefined;
+    if (!found?.exports) return false;
     const wanted = subpath ? `./${subpath}` : '.';
-    return declared.some(key =>
-      key.includes('*')
-        ? new RegExp(
-            `^${key
-              .split('*')
-              .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-              .join('.+')}$`,
-          ).test(wanted)
-        : key === wanted,
-    );
+    const entries =
+      typeof found.exports === 'object' &&
+      Object.keys(found.exports).some(key => key.startsWith('.'))
+        ? Object.entries(found.exports)
+        : [['.', found.exports]];
+    for (const [key, target] of entries) {
+      const [head, tail] = key.split('*');
+      const matched =
+        tail === undefined
+          ? key === wanted && ''
+          : wanted.length > head.length + tail.length &&
+              wanted.startsWith(head) &&
+              wanted.endsWith(tail)
+            ? wanted.slice(head.length, wanted.length - tail.length)
+            : false;
+      if (matched === false) continue;
+      const file = typesTarget(target);
+      if (!file) return false;
+      return !fs.existsSync(
+        path.join(found.dir, file.split('*').join(matched)),
+      );
+    }
+    return false;
   };
 }
 
