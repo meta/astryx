@@ -96,16 +96,16 @@ they are separately named.
   surface with a concrete check owner and dependency boundary. The initial
   taxonomy and current owners are:
 
-  | Surface             | Positive path ownership                                                                                                            | Current check owners                                                                                                                                             |
-  | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `knowledge`         | canonical system, family, design, theme, component, and module records                                                             | knowledge validation, spec-owner approval of the current spec content, and the Vitest tests that read a changed record, directly or through a module they import |
-  | `docsite`           | the docsite application                                                                                                            | docsite generation and tests                                                                                                                                     |
-  | `node-tooling`      | admitted operational Node tooling whose consumers are covered by Node contract tests                                               | Node Vitest, repository guardrails, and ESLint                                                                                                                   |
-  | `node-times`        | the recorded Node test times (`scripts/vitest-node-durations*.json`)                                                               | the Node leg plan's check (budget, and a record it cannot read), the Vitest tests that read the times, and the test join                                         |
-  | `runtime:<package>` | public source and package contract for Core, Lab, Charts, Rich Text, Vega, CLI, and Build                                          | the package's unit/type checks plus current broad build and downstream consumer checks; Build's owner includes production CSS-layer browser behavior             |
-  | `theme-build`       | shipped theme packages and theme compilation outputs                                                                               | theme tests, theme package builds, theme-family browser behavior, and stable visual evidence where applicable                                                    |
-  | `storybook-visual`  | Storybook stories/configuration and visual, accessibility, or RTL audit infrastructure                                             | Storybook build, preview/visual-report publication, and the applicable browser, visual, accessibility, and RTL checks                                            |
-  | `shared-or-unknown` | shared configuration, dependency graphs, workflows, classifiers, generated ownership, ambiguous paths, and every unclassified path | all applicable pull-request CI checks                                                                                                                            |
+  | Surface             | Positive path ownership                                                                                                                             | Current check owners                                                                                                                                             |
+  | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `knowledge`         | canonical system, family, design, theme, component, and module records                                                                              | knowledge validation, spec-owner approval of the current spec content, and the Vitest tests that read a changed record, directly or through a module they import |
+  | `docsite`           | the docsite application                                                                                                                             | docsite generation and tests                                                                                                                                     |
+  | `node-tooling`      | admitted operational Node tooling whose consumers are covered by Node contract tests                                                                | Node Vitest, repository guardrails, and ESLint                                                                                                                   |
+  | `node-times`        | the recorded test times of the Node legs (`scripts/vitest-node-durations*.json`) and the interaction legs (`.github/playwright-leg-durations.json`) | the Node leg plan's check (budget, and a record it cannot read), the Vitest tests that read the times, and the test join                                         |
+  | `runtime:<package>` | public source and package contract for Core, Lab, Charts, Rich Text, Vega, CLI, and Build                                                           | the package's unit/type checks plus current broad build and downstream consumer checks; Build's owner includes production CSS-layer browser behavior             |
+  | `theme-build`       | shipped theme packages and theme compilation outputs                                                                                                | theme tests, theme package builds, theme-family browser behavior, and stable visual evidence where applicable                                                    |
+  | `storybook-visual`  | Storybook stories/configuration and visual, accessibility, or RTL audit infrastructure                                                              | Storybook build, preview/visual-report publication, and the applicable browser, visual, accessibility, and RTL checks                                            |
+  | `shared-or-unknown` | shared configuration, dependency graphs, workflows, classifiers, generated ownership, ambiguous paths, and every unclassified path                  | all applicable pull-request CI checks                                                                                                                            |
 
   A category does not earn a specialized lane merely by existing in this table.
   Until every selected surface has an admitted, complete specialized owner route,
@@ -333,12 +333,13 @@ they are separately named.
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
   `node-tooling` paths (FR8 keeps their whole Node project), and every other
-  `shared-or-unknown` path. A change only to the recorded Node test times
-  (`node-times`) takes the knowledge lane: it runs the Node leg plan's
-  check, which fails on a plan past its budget or a record it cannot read, and
-  the Vitest tests that read the times, and the test join still requires every
-  test owner's outcome. The times decide how Node legs are scheduled, never
-  what a test checks; beside any other change they run the full suite, and
+  `shared-or-unknown` path. A change only to the recorded test times
+  (`node-times`: the Node legs' and the interaction legs') takes the knowledge
+  lane: it runs the Node leg plan's check, which fails on a plan past its
+  budget or a record it cannot read, and the Vitest tests that read the times,
+  and the test join still requires every test owner's outcome. The times
+  decide how legs are scheduled, never what a test checks; beside any other
+  change they run the full suite, and
   keep a labelled visual plan broad, as test configuration. Changesets are excepted, and so, in a Lab-only
   change, are a carried Lab component's entry files (FR26), the route lock
   under `internal/` included. The interaction harness

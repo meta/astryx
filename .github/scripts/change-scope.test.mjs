@@ -92,6 +92,12 @@ describe('spec-only change scope', () => {
         'scripts/vitest-node-durations.json',
         'scripts/vitest-node-durations.min-node.json',
       ],
+      // The recorded interaction test times: planning data the same way.
+      ['.github/playwright-leg-durations.json'],
+      [
+        '.github/playwright-leg-durations.json',
+        'scripts/vitest-node-durations.json',
+      ],
     ]) {
       const result = classifyChanges(
         files.map(filename => ({filename, status: 'M'})),
@@ -119,6 +125,23 @@ describe('spec-only change scope', () => {
         {filename: other, status: 'M'},
       ]);
       expect(result.specOnly).toBe(false);
+      expect(result.timesOnly).toBe(false);
+      expect(result.fullSuite).toBe(true);
+      expect(result.vitestFullSuite).toBe(true);
+    },
+  );
+
+  it.each([
+    'packages/core/src/Button/Button.tsx',
+    'docs/specs/AST-030/spec.md',
+    '.github/scripts/playwright-legs.mjs',
+  ])(
+    'runs the recorded interaction test times beside %s as test configuration: the full suite',
+    other => {
+      const result = classifyChanges([
+        {filename: '.github/playwright-leg-durations.json', status: 'M'},
+        {filename: other, status: 'M'},
+      ]);
       expect(result.timesOnly).toBe(false);
       expect(result.fullSuite).toBe(true);
       expect(result.vitestFullSuite).toBe(true);
