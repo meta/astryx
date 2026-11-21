@@ -118,6 +118,7 @@ const NO_TEMPLATE_RESULTS = new Set([
   'theme.build',
   'theme.build.check',
   'theme.build.batch',
+  'themeEdit.check',
   'themeEdit.how',
   'themeEdit.new',
   'themeEdit.set',

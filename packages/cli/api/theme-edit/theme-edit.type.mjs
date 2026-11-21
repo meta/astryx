@@ -339,4 +339,44 @@
  * @property {{kind: 'part' | 'group' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, results?: ThemeEditHowResult[], [key: string]: any}} data
  */
 
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCheckOptions
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); the check acts on the Astryx project at or above it, and a theme file is named from here.
+ * @property {boolean} [fix] - Write the repair into the theme source (and pin or paint the app), then check again. Default false.
+ */
+
+/**
+ * One problem `experimental theme check` found.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCheckProblem
+ * @property {'text' | 'part-text' | 'bar-text' | 'see-through' | 'blend' | 'edge' | 'half-painted' | 'one-look' | 'page' | 'hover' | 'font' | 'charts'} kind - What is broken: text that does not read (on a token, or on a part's own style), a bar's text inside its menus and fields, see-through menus, menus that blend into the page (by the shadow tokens or a menu's own style), control edges that do not show, a surface on the other side of light and dark from the page, one look for both modes the app does not pin, an app page nobody paints, a part that looks the same under the pointer as at rest where Core's changes, a font nothing loads with no generic family after it, or charts left at Core's own colors while the theme sets its own.
+ * @property {'light' | 'dark' | 'both'} mode - The mode it shows in.
+ * @property {string} message - What a person sees, in one sentence.
+ * @property {string} [token] - The token that draws it.
+ * @property {string} [on] - The token it sits on.
+ * @property {string} [part] - The part whose own style draws it.
+ * @property {string[]} [parts] - The parts where it shows.
+ * @property {number} [ratio] - The contrast now.
+ * @property {number} [needs] - The contrast it needs.
+ */
+
+/**
+ * `astryx --json experimental theme check <theme> [--fix]`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditCheckResponse
+ * @property {'themeEdit.check'} type
+ * @property {object} data
+ * @property {string} data.file - The theme source checked.
+ * @property {Array<'light' | 'dark'>} data.modes - The modes checked: both, or the one the app pins.
+ * @property {ThemeEditCheckProblem[]} data.problems - What a person would see as broken (after the repair, with fix); empty when nothing is.
+ * @property {number} data.accepted - Measured pairs the theme's `accepted` records keep as designed (a sibling `<theme>.accepted.json`): left as they are, not problems.
+ * @property {Array<{token?: string, part?: string, group?: string, parts?: string[], value: string | [string, string], why: string, from?: string | [string, string], accept?: Array<{part: string, ground: string, when?: string, mode: 'light' | 'dark', ratio: number, color?: string, groundColor?: string, reason: string}>}>} data.fixed - Each value fix wrote: a token; a text token set again on a group of parts inside a bar (`group`, its member `parts`); or the app's mode or page; a [light, dark] pair when the modes differ. A color the author set that fix moved names its old value (`from`) and the records that would keep it as designed instead (`accept`, its `reason` left to write).
+ * @property {string[]} data.files - The files fix wrote, named from the folder the command ran in, as `file` is.
+ * @property {string[]} data.notes - What else to know, such as an app change fix did not make and why.
+ * @property {Array<{file: string, declaration: string}>} data.protectedFiles - App files fix did not change because the project protects them (generated, ignored, a dependency), each with the declaration that protects it.
+ * @property {'ERR_CODEMOD_PROTECTED'} [data.code] - Set while a protected file kept a repair back (exit 1).
+ * @property {{code: string, cause: string}} [data.unmeasured] - Set when Core's components could not be drawn, so text on them was not measured (exit 1).
+ */
+
 export {};

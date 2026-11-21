@@ -585,7 +585,7 @@ function sourceBuildOf(root) {
  * @param {string} root
  * @returns {{file: string | null, unparsed: number}}
  */
-function coreStylesheetLoad(root) {
+export function coreStylesheetLoad(root) {
   let unparsed = 0;
   for (const file of listProjectSourceFiles(root, '', {
     stylesheets: true,

@@ -1847,32 +1847,56 @@ export function rendersElement(file, {sources, name}) {
  * @returns {Array<{file: string, name: string} | null>}
  */
 export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
+  return renderedElements(file, {sources, name, prop, unwrap})
+    .filter(element => Object.hasOwn(element.attributes, prop))
+    .map(element => element.origin);
+}
+
+/**
+ * Each `<Name …>` element of a module, read without running anything: where
+ * the value its `prop` passes is declared (as {@link elementPropOrigins}
+ * gives it), the string each attribute is written as (null for one written
+ * as an expression), and the offset just after the element's name, where an
+ * attribute can be added. `Name` is a runtime import of `name` from one of
+ * `sources` (renames included).
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
+ * @returns {Array<{origin: {file: string, name: string} | null, attributes: Record<string, string | null>, nameEnd: number}>}
+ */
+export function renderedElements(file, {sources, name, prop, unwrap}) {
   let ast;
   try {
     ast = parseModule(file);
   } catch {
     return [];
   }
-  /** @type {Array<{file: string, name: string} | null>} */
-  const origins = [];
-  for (const element of importedElements(ast, sources, name)) {
-    const attribute = (element.attributes ?? []).find(
-      (/** @type {any} */ item) =>
-        item.type === 'JSXAttribute' && item.name?.name === prop,
-    );
-    if (!attribute) continue;
-    const value =
-      attribute.value?.type === 'JSXExpressionContainer'
-        ? withoutTypeWrappers(attribute.value.expression)
-        : null;
-    if (value?.type !== 'Identifier') {
-      origins.push(null);
-      continue;
-    }
-    const binding = bindingOrigin(ast, file, value.name, new Set());
-    origins.push(binding ? aliasedOrigin(binding, new Set(), unwrap) : null);
-  }
-  return origins;
+  return importedElements(ast, sources, name).map(
+    (/** @type {any} */ element) => {
+      /** @type {Record<string, string | null>} */
+      const attributes = {};
+      for (const item of element.attributes ?? [])
+        if (item.type === 'JSXAttribute' && item.name?.type === 'JSXIdentifier')
+          attributes[item.name.name] =
+            item.value?.type === 'StringLiteral' ? item.value.value : null;
+      const attribute = (element.attributes ?? []).find(
+        (/** @type {any} */ item) =>
+          item.type === 'JSXAttribute' && item.name?.name === prop,
+      );
+      const value =
+        attribute?.value?.type === 'JSXExpressionContainer'
+          ? withoutTypeWrappers(attribute.value.expression)
+          : null;
+      const binding =
+        value?.type === 'Identifier'
+          ? bindingOrigin(ast, file, value.name, new Set())
+          : null;
+      return {
+        origin: binding ? aliasedOrigin(binding, new Set(), unwrap) : null,
+        attributes,
+        nameEnd: element.name.end,
+      };
+    },
+  );
 }
 
 /**

@@ -13,6 +13,7 @@
  *   themeEditPreviewAdd('a sales dashboard')            themeEdit.previewAdd
  *   themeEditPreviewApp('theme-app')                    themeEdit.previewApp
  *   themeEditHow('banner')                              themeEdit.how
+ *   themeEditCheck('brand', {fix: true})                themeEdit.check
  *
  * Every change is checked first against what the installed Core's parts
  * really read; a change that cannot take effect is refused and nothing is
@@ -34,3 +35,4 @@ export {themeEditPreviewApp} from './preview-app/preview-app.mjs';
 export {themeEditPreviewList} from './preview-list/preview-list.mjs';
 export {themeEditPreviewRemove} from './preview-remove/preview-remove.mjs';
 export {themeEditHow} from './how/how.mjs';
+export {themeEditCheck} from './check/check.mjs';

@@ -137,6 +137,7 @@ export const JSON_SUPPORTED = new Set([
   'experimental theme preview list',
   'experimental theme preview remove',
   'experimental theme compile',
+  'experimental theme check',
   'experimental theme list',
   'experimental theme add',
   'experimental theme remove',
