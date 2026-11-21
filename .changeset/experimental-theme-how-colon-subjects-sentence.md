@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor how` reads a colon list's subjects in the clause's own sentence, found by its position in the ask, so a part another sentence names before its colon ("Header: navy. Cards: white background, gray header.") stays an item of this list, and the cards get the white background the ask names.
+
+@josephfarina
