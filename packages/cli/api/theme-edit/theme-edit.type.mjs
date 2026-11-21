@@ -99,7 +99,7 @@
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
  * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
  * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`. The category colors (badges, tokens, card tints) and chart colors that moved with the look are counted in one line each.
- * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved.
+ * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved; a one-mode theme lists its other mode only where that mode is drawn.
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
