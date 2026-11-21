@@ -95,7 +95,7 @@ import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
   widthBelowFeature,
-} from '../theme/themeAdaptations';
+} from '../theme/breakpoints';
 import type {AppShellVariantMap} from './index';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
