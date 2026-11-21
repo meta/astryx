@@ -159,8 +159,9 @@ describe('Core in esbuild bundles', () => {
         metafile: true,
       });
       const {outputs} = result.metafile;
-      const entry = Object.keys(outputs).find(
-        file => outputs[file].entryPoint != null,
+      // Core's lazy modules are entry points too, so pick the app's own.
+      const entry = Object.keys(outputs).find(file =>
+        outputs[file].entryPoint?.endsWith('main.jsx'),
       );
       const startup = new Set([entry]);
       const queue = [entry];

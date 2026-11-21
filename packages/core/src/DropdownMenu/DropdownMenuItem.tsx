@@ -35,8 +35,8 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {renderIconSlot, type IconType} from '../Icon';
-import {Item} from '../Item';
+import {renderIconSlot, type IconType} from '../Icon/Icon';
+import {Item} from '../Item/Item';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   colorVars,
@@ -45,7 +45,8 @@ import {
   typeScaleVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {composeEventHandlers, mergeProps} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuContext} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';

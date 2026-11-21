@@ -401,7 +401,11 @@ describe('the allowlist', () => {
         entries: ['Button', 'IconButton'],
       },
       {from: 'Link/Link', to: 'Tooltip', entries: ['Link']},
-      {from: 'Table/tableContextMenu', to: 'ContextMenu', entries: ['Table']},
+      {
+        from: 'Table/TableCellContextMenu',
+        to: 'Layer/gestureCounter',
+        entries: ['Table'],
+      },
       {
         from: 'Table/BaseTable',
         to: 'Table/plugins/virtualization/useTableWindow',

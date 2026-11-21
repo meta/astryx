@@ -43,7 +43,7 @@ import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
-import {resolveContextActions} from '../../tableContextMenu';
+import {resolveContextActions} from '../../tableContextActions';
 import {useTableContext} from '../../useTableCellStyles';
 import {rtlStyles} from '../../../utils';
 import {

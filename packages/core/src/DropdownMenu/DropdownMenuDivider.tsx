@@ -24,7 +24,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {Divider} from '../Divider';
+import {Divider} from '../Divider/Divider';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';

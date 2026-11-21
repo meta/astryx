@@ -20,7 +20,7 @@ import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
-import {resolveContextActions} from '../../tableContextMenu';
+import {resolveContextActions} from '../../tableContextActions';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
