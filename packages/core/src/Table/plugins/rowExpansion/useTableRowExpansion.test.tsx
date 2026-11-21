@@ -247,6 +247,121 @@ describe('useTableRowExpansion (detail panel)', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('re-renders no other row when one row toggles', () => {
+    type Row = {id: string; name: string};
+    const rows: Row[] = Array.from({length: 40}, (_, i) => ({
+      id: `r${i}`,
+      name: `Row ${i}`,
+    }));
+    let cellRenders = 0;
+    const cols: TableColumn<Row>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: item => {
+          cellRenders++;
+          return item.name;
+        },
+      },
+    ];
+    const getRowKey = (item: Row) => item.id;
+    const renderExpanded = (item: Row) => <div>Detail for {item.name}</div>;
+    function Harness() {
+      const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+        () => new Set(),
+      );
+      const [onToggle] = useState(() => (key: string) => {
+        setExpandedKeys(prev => {
+          const next = new Set(prev);
+          if (next.has(key)) {
+            next.delete(key);
+          } else {
+            next.add(key);
+          }
+          return next;
+        });
+      });
+      const expansion = useTableRowExpansion<Row>({
+        expandedKeys,
+        onToggle,
+        getRowKey,
+        renderExpanded,
+      });
+      return (
+        <Table data={rows} columns={cols} idKey="id" plugins={{expansion}} />
+      );
+    }
+    render(<Harness />);
+    const chevrons = screen.getAllByRole('button', {name: 'Expand row'});
+    cellRenders = 0;
+    fireEvent.click(chevrons[3]);
+    expect(screen.getByText('Detail for Row 3')).toBeInTheDocument();
+    expect(chevrons[3]).toHaveAttribute('aria-expanded', 'true');
+    // The toggle reaches only the chevron and the panel: no row renders its
+    // cells again.
+    expect(cellRenders).toBe(0);
+    fireEvent.click(chevrons[3]);
+    expect(screen.queryByText('Detail for Row 3')).toBeNull();
+    expect(chevrons[3]).toHaveAttribute('aria-expanded', 'false');
+    expect(cellRenders).toBe(0);
+  });
+
+  it('re-renders no other row when the callbacks are written inline', () => {
+    type Row = {id: string; name: string};
+    const rows: Row[] = Array.from({length: 40}, (_, i) => ({
+      id: `r${i}`,
+      name: `Row ${i}`,
+    }));
+    let cellRenders = 0;
+    const cols: TableColumn<Row>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: item => {
+          cellRenders++;
+          return item.name;
+        },
+      },
+    ];
+    function Harness() {
+      const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+        () => new Set(),
+      );
+      const expansion = useTableRowExpansion<Row>({
+        expandedKeys,
+        onToggle: key =>
+          setExpandedKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+              next.delete(key);
+            } else {
+              next.add(key);
+            }
+            return next;
+          }),
+        getRowKey: item => item.id,
+        renderExpanded: item => (
+          <div>
+            Detail for {item.name}, {expandedKeys.size} open
+          </div>
+        ),
+      });
+      return (
+        <Table data={rows} columns={cols} idKey="id" plugins={{expansion}} />
+      );
+    }
+    render(<Harness />);
+    const chevrons = screen.getAllByRole('button', {name: 'Expand row'});
+    cellRenders = 0;
+    fireEvent.click(chevrons[3]);
+    expect(screen.getByText('Detail for Row 3, 1 open')).toBeInTheDocument();
+    fireEvent.click(chevrons[5]);
+    // An open panel shows the caller's latest content.
+    expect(screen.getByText('Detail for Row 3, 2 open')).toBeInTheDocument();
+    expect(screen.getByText('Detail for Row 5, 2 open')).toBeInTheDocument();
+    expect(cellRenders).toBe(0);
+  });
+
   it('does not render the detail panel while collapsed', () => {
     render(<Harness />);
     expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
