@@ -300,6 +300,16 @@ describe('an icon word', () => {
       'astryx experimental icon use --help',
       'astryx docs icons',
     ]);
+    // An option before a look or list word leaves that word out of the
+    // search, as when the word comes first.
+    expect(await names(['icon', '--json', 'list'], on)).toEqual([
+      'astryx experimental icon --list --json',
+      'astryx docs icons --json',
+    ]);
+    expect(await names(['icon', '--json', 'search', 'trash'], on)).toEqual([
+      'astryx experimental icon --json trash',
+      'astryx docs icons --json',
+    ]);
     // So does the first word to look for, after a look word or an option.
     expect(await names(['icon', 'search', 'use', 'lucide'], on)).toEqual([
       'astryx experimental icon use --help',

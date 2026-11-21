@@ -533,16 +533,27 @@ async function otherCliWords({word, before, after: rest}, program, findEntry) {
  * @returns {string[]}
  */
 function plainWords(cmd, words) {
+  return plainAt(cmd, words).map(i => words[i]);
+}
+
+/**
+ * Where the words of a run that are neither options of `cmd` nor their
+ * values stand in it.
+ * @param {CommandLike} cmd
+ * @param {string[]} words
+ * @returns {number[]}
+ */
+function plainAt(cmd, words) {
   const options = optionsInReach(
     /** @type {any} */ (cmd),
     (/** @type {OptionLike} */ o) => !o.hidden,
   );
-  /** @type {string[]} */
+  /** @type {number[]} */
   const plain = [];
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i];
     if (!word.startsWith('-')) {
-      plain.push(word);
+      plain.push(i);
       continue;
     }
     const [flag, inline] = word.split(/=(.*)/s);
@@ -598,10 +609,15 @@ async function iconRuns({before, after: rest}, program, iconFeatures) {
       ),
     ).find(c => c.name() === finder[1])
   );
-  const [lead, ...more] = rest;
-  const lower = lead?.toLowerCase() ?? '';
+  // The first plain word decides, wherever the options stand (`icon --json
+  // list` asks for the list as `icon list --json` does).
+  const [at] = plainAt(finderCmd, rest);
+  const lower = at === undefined ? '' : rest[at].toLowerCase();
   const listWord = LIST_WORDS.has(lower);
-  const words = listWord || LOOK_WORDS.has(lower) ? more : rest;
+  const words =
+    listWord || LOOK_WORDS.has(lower)
+      ? [...rest.slice(0, at), ...rest.slice(at + 1)]
+      : rest;
   // A first word to look for that names one of the finder's subcommands
   // (`icon add trash`, `icon search use lucide`, `icon --json map pin`) runs
   // that subcommand, which may need inputs or write files: the answer names
