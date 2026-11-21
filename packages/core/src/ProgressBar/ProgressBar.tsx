@@ -4,7 +4,8 @@
 
 /**
  * @file ProgressBar.tsx
- * @input Uses React, useId, stylex, tokens, ProgressBarTouch and resolveMotion
+ * @input Uses React, useId, stylex, tokens, ProgressBarTouch, resolveMotion
+ *   and the shared percentage formatter
  * @output Exports ProgressBar component, ProgressBarProps, ProgressBarVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -38,6 +39,8 @@ import type {ProgressBarVariantMap} from './index';
 import {useProgressBarTouch} from './ProgressBarTouch';
 import {formatMotionRoleValue} from '../motion/roles';
 import {resolveMotion} from '../motion/resolveMotion';
+import {useLocale} from '../i18n/useLocale';
+import {formatPercent} from '../NumberInput/numberParser';
 import {progressBar} from '../motion/uikit/progressBar';
 import {timing} from '../motion/uikit/timing';
 
@@ -109,7 +112,7 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
   hasValueLabel?: boolean;
   /**
    * Custom formatter for the value label.
-   * @default (value, max) => `${Math.round((value / max) * 100)}%`
+   * @default the rounded percentage in the provider locale (`45%` in English)
    */
   formatValueLabel?: (value: number, max: number) => string;
   /**
@@ -558,11 +561,6 @@ function pulseStyle(element: Element | null): PulseStyle {
   };
 }
 
-function defaultFormatValueLabel(value: number, max: number): string {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return `${pct}%`;
-}
-
 /**
  * A progress bar for displaying determinate or indeterminate progress.
  *
@@ -611,7 +609,7 @@ export function ProgressBar({
   label,
   isLabelHidden = false,
   hasValueLabel = false,
-  formatValueLabel = defaultFormatValueLabel,
+  formatValueLabel,
   variant = 'accent',
   isIndeterminate = false,
   isDisabled = false,
@@ -632,7 +630,10 @@ export function ProgressBar({
   const safeMax = Number.isFinite(max) ? max : 0;
   const clampedValue = Math.min(Math.max(0, safeValue), safeMax);
   const percentage = safeMax > 0 ? (clampedValue / safeMax) * 100 : 0;
-  const valueText = formatValueLabel(clampedValue, safeMax);
+  const locale = useLocale();
+  const valueText = formatValueLabel
+    ? formatValueLabel(clampedValue, safeMax)
+    : formatPercent(Math.round(percentage), locale);
 
   const showValueLabel = hasValueLabel && !isIndeterminate;
 

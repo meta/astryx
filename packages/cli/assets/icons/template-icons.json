@@ -73,6 +73,11 @@
     "arrowsUpDown": {
       "heroicons": "ArrowsUpDownIcon"
     },
+    "article": {
+      "heroicons": "NewspaperIcon",
+      "lucide": "Newspaper",
+      "fallback": "document"
+    },
     "attach": {
       "heroicons": "PaperClipIcon"
     },
