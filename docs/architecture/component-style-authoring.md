@@ -233,7 +233,8 @@ This record does not absorb adjacent audit rules:
 - **React module boundaries.** A separate current RSC/module-boundary owner must
   define client entry points, directive placement, mixed/server-safe barrels,
   built-output preservation, and RSC-usable exports. This record does not turn
-  `'use client'` placement into style policy.
+  `'use client'` placement into style policy. The draft `spec:AST-113` states
+  these boundaries.
   Which modules a public import reaches eagerly, including surfaces revealed by
   interaction and opt-in capabilities, is `architecture:component-import-boundaries`.
 
