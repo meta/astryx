@@ -419,6 +419,8 @@ export const samples = {
     ].join('\n');
     return React.createElement(C, {file: parse(patch)[0]});
   },
+  lab__Rating: ({C, React}) =>
+    React.createElement(C, {label: 'Rating', value: 3, onChange: noop}),
   lab__ListInput: ({C, React, Core}) =>
     React.createElement(C, {
       label: 'Tags',

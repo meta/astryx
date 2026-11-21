@@ -122,6 +122,9 @@ export {
   type TourDismissSource,
 } from './Tour';
 
+// Rating - a star rating: a radio group to pick one, or an image to show one
+export {Rating, type RatingProps, type RatingSize} from './Rating';
+
 // Stat — experimental KPI/metric display
 export {
   Stat,
