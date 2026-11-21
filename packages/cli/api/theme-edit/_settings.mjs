@@ -12751,8 +12751,9 @@ function scopedFillPairProblems(ctx, data, res) {
       (map[t]?.contains ?? []).includes(x.on);
     // (A part inside this one that holds a reader, the top nav in the top
     // bar, sets the color its readers draw as much as the reader does.)
+    const held = /** @type {string[]} */ (map[x.on]?.contains ?? []);
     const holdsReader = (/** @type {string} */ t) =>
-      (map[x.on]?.contains ?? []).includes(t) &&
+      held.includes(t) &&
       (map[t]?.contains ?? []).some((/** @type {string} */ c) =>
         readers.includes(c),
       );
