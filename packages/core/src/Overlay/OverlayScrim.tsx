@@ -48,15 +48,11 @@ export interface OverlayScrimProps {
 // =============================================================================
 
 const FADE = durationVars['--duration-fast'];
-// The delays follow the transition order: opacity, visibility, transform,
-// clip path, pointer events. On hide, the clip path applies when the fade
-// ends, and pointer events stop at once.
-const DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE + ', 0s';
-// On a hover reveal, the clip path lifts after about one frame, so the overlay
-// paints from its first faded-in frame. Pointer events start at half the fade,
-// so the action takes a click only when it is mostly opaque.
-const DELAY_ON_HOVER =
-  '0s, 0s, 0s, calc(' + FADE + ' / 8), calc(' + FADE + ' / 2)';
+// On hide, the clip path applies when the fade ends. On a hover reveal it
+// lifts after about one frame, so the overlay fades in from its first frame
+// and takes no click before it paints.
+const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE;
+const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, calc(' + FADE + ' / 8)';
 
 const styles = stylex.create({
   base: {
@@ -66,14 +62,13 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     padding: spacingVars['--spacing-3'],
     pointerEvents: 'none',
-    transitionProperty:
-      'opacity, visibility, transform, clip-path, pointer-events',
+    transitionProperty: 'opacity, visibility, transform, clip-path',
     transitionDuration: {
-      default: FADE + ', ' + FADE + ', ' + FADE + ', 0s, 0s',
+      default: FADE + ', ' + FADE + ', ' + FADE + ', 0s',
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
-    // The clip path and pointer events are discrete. Their delays time them
-    // against the fade.
+    // The clip path of a CSS-driven reveal is discrete. It waits for the fade
+    // on hide, so content fades out before the clip removes it.
     transitionBehavior: 'allow-discrete',
     transitionTimingFunction: easeVars['--ease-standard'],
   },
@@ -137,12 +132,12 @@ const styles = stylex.create({
       [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
     },
     transitionDelay: {
-      default: DELAY_ON_HIDE,
+      default: CLIP_DELAY_ON_HIDE,
       // The two media keys never match together, so their order does not
       // matter.
       [stylex.when.ancestor(':hover', overlayScope)]: {
         '@media (hover: hover) and (prefers-reduced-motion: no-preference)':
-          DELAY_ON_HOVER,
+          CLIP_DELAY_ON_HOVER,
         '@media (hover: hover) and (prefers-reduced-motion: reduce)': '0s',
       },
       [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
@@ -191,7 +186,7 @@ const styles = stylex.create({
       [stylex.when.ancestor(':focus-within', overlayScope)]: 'none',
     },
     transitionDelay: {
-      default: DELAY_ON_HIDE,
+      default: CLIP_DELAY_ON_HIDE,
       [stylex.when.ancestor(':focus-within', overlayScope)]: '0s',
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
