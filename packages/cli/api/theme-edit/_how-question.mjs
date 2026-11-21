@@ -10916,10 +10916,48 @@ export function draftAnswer(ctx, env, question) {
         .find(Boolean);
       const plural = !said || /s$/i.test(said);
       const colon = joinOf.get(c)?.list !== 'with';
+      // ("popover, tooltip and hover card: dark": a part named as a whole
+      // item before the first colon of the clause's own sentence, as
+      // asked, is one of the list's subjects, never an item of the first.
+      // Read from the words as asked, so a reader's rewrite of the colon
+      // does not change it; a part said after that colon, "cards: white
+      // background, header: navy", or inside a longer name, "icon
+      // buttons: … blue icon", stays an item.)
+      // (The sentence is found by words a reader's rewrite keeps: the look
+      // after the clause's own colon, else the clause from the part on.)
+      const lowered = c.text.toLowerCase();
+      const ownColon = lowered.search(/:(?!\d)/);
+      const keptWords = (
+        ownColon >= 0
+          ? lowered.slice(ownColon + 1)
+          : said
+            ? lowered.slice(Math.max(0, lowered.indexOf(said.toLowerCase())))
+            : lowered
+      ).trim();
+      const subjectOfColon =
+        !!said &&
+        !!keptWords &&
+        asked0
+          .split(/[;!?\n]|\.(?!\d)/)
+          .filter(sentence => sentence.includes(keptWords))
+          .some(sentence => {
+            const colon = sentence.search(/:(?!\d)/);
+            if (colon < 0) return false;
+            return sentence
+              .slice(0, colon)
+              .split(/,|&|\band\b/)
+              .map(item =>
+                item
+                  .trim()
+                  .replace(/^(?:the|all|every|each|our|my|your|any)\s+/, ''),
+              )
+              .includes(said.toLowerCase());
+          });
       if (
         holder &&
         head !== c &&
         inWith &&
+        !subjectOfColon &&
         C.MAP[holder] &&
         !c.parts.some(
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),
