@@ -19,7 +19,7 @@
  * @property {string} [state] - Only that state.
  * @property {'light' | 'dark'} [mode] - Only that color mode.
  * @property {boolean} [only] - On that part alone, not the group or family a setting on it reaches.
- * @property {string[]} [hold] - Variants of its part (axis:value, such as mode:drawer for a top nav link in the phone menu) drawn on another ground, where it would make text unreadable: they keep Core's look; the editor writes it.
+ * @property {string[]} [hold] - Variants of its part (axis:value, such as mode:drawer for a top nav link in the phone menu) drawn on another ground, where it would make text unreadable: they keep Core's look, apart from a state the theme fills where the color reads (a selected link's block); the editor writes it.
  * @property {string[]} [keep] - Members of the group or family it reaches that keep their own look, because it would make their text unreadable; the editor writes it.
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note] - What the check found worth saying (what the token feeds, parts it misses).
