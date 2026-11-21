@@ -2072,7 +2072,30 @@ export async function addSharedThemeToApp(source, options) {
       ? previous.madeRoot === true
       : !fs.existsSync(root);
     if (fs.existsSync(target)) {
-      const changed = previous ? changedSharedFiles(target, previous) : [];
+      let changed = previous ? changedSharedFiles(target, previous) : [];
+      // (A built file of the copy that holds exactly what the editor builds
+      // from the working files this add copied, still unchanged, is the
+      // editor's own, which a re-add replaces. The copy's descriptor and font
+      // stylesheet, and any change beside changed working files, stop it.)
+      const working = sharedEditorFiles(
+        previous,
+        path.join(projectDir, 'themes', name),
+      );
+      if (
+        changed.length &&
+        working &&
+        Object.keys(working).length &&
+        !changedSharedFiles(path.join(projectDir, 'themes', name), {
+          files: working,
+        }).length
+      ) {
+        await import('../theme-edit/_adapter.mjs');
+        const {appCopyBuiltIsCurrent} =
+          await import('../theme-edit/_preview.mjs');
+        changed = changed.filter(
+          file => !appCopyBuiltIsCurrent(projectDir, name, file),
+        );
+      }
       if (!previous || changed.length > 0) {
         throw new AstryxError(
           previous
