@@ -841,7 +841,7 @@ function printThemeApp(result) {
             text(
               copy.editor.files.length
                 ? `[ok] Kept the shared theme's working files from ${copy.editor.from} in ${copy.editor.outputDir}.`
-                : `[note] The shared theme carries the theme editor's saved state (${copy.editor.from}), not copied: ${copy.editor.notCopied}.`,
+                : `[note] The shared theme carries working files (${copy.editor.from}), not copied: ${copy.editor.notCopied}.`,
             ),
           ]
         : []),

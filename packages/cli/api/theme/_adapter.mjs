@@ -1886,14 +1886,17 @@ async function sharedEditorProblem(dir, slug) {
   const file = path.join(dir, `${slug}.settings.json`);
   if (fs.statSync(file).size > EDITOR_SETTINGS_MAX_BYTES)
     return `its ${slug}.settings.json is larger than ${EDITOR_SETTINGS_MAX_BYTES / 1024} KB, more than editor settings hold`;
-  // (Loaded here: the editor's settings module builds on this adapter.)
+  // (Loaded here, through the editor's adapter, which finds the built-in
+  // themes its settings reader checks against: the editor's settings module
+  // builds on this adapter.)
+  await import('../theme-edit/_adapter.mjs');
   const {settingsJson, settingsProblem} =
     await import('../theme-edit/_settings.mjs');
   const data = settingsJson(fs.readFileSync(file, 'utf-8'));
   if (data === undefined) return `its ${slug}.settings.json is not JSON`;
   const problem = settingsProblem(data);
   if (problem)
-    return `its ${slug}.settings.json is not editor settings this CLI reads (${problem})`;
+    return `its ${slug}.settings.json is not settings this CLI reads (${problem})`;
   const paletteFile = path.join(dir, 'palette.config.json');
   if (fs.existsSync(paletteFile)) {
     /** @type {any} */
@@ -1906,7 +1909,7 @@ async function sharedEditorProblem(dir, slug) {
     const recipe = palette?.recipe;
     if (recipe != null && !PALETTE_RECIPES.includes(recipe))
       return newerRecipe(recipe)
-        ? `it was made with the palette recipe ${String(recipe)}, which a newer CLI than this one (${cliVersion()}) makes; update the CLI, then add the theme again to keep its editor state`
+        ? `it was made with the palette recipe ${String(recipe)}, which a newer CLI than this one (${cliVersion()}) makes; update the CLI, then add the theme again to keep its working files`
         : `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
   }
   return null;
@@ -2092,7 +2095,7 @@ export async function addSharedThemeToApp(source, options) {
         )
           editorPlan = 'replace';
         else
-          editorNote = `${relFrom(cwd, editorDir)} already holds editor state that theme add did not write, or that changed since; it is left as it is`;
+          editorNote = `${relFrom(cwd, editorDir)} already holds files that theme add did not write, or that changed since; it is left as it is`;
       } catch {
         editorNote = `${relFrom(cwd, editorDir)} could not be read; it is left as it is`;
       }

@@ -119,7 +119,7 @@ export async function stageSharedTheme(arg, cwd) {
       editor = {
         dir: null,
         folder: folders.join(', '),
-        notCopied: `${arg} holds ${editors.length} folders with ${slug}.settings.json (${folders.join(', ')}), and theme add keeps one theme editor state; keep the one you want and add the theme again`,
+        notCopied: `${arg} holds ${editors.length} folders with ${slug}.settings.json (${folders.join(', ')}), and theme add keeps one; keep the one you want and add the theme again`,
       };
     }
     return {

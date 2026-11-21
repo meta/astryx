@@ -432,8 +432,11 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   copied and is
   named, and the theme is still added; nor is it
   copied into a folder that already holds editor state the add did not
-  write, which is left in place and named. The receipt lists the files
-  copied, and `theme remove` takes back the unchanged ones.
+  write, which is left in place and named. With that state copied, the app
+  copy's descriptor is the one the editor writes for its app copy (marked
+  `maintained: false`, under the editor's mark), so the editor's next builds
+  keep the copy current. The receipt lists the files copied, and
+  `theme remove` takes back the unchanged ones.
 
 ### Platform support
 

@@ -654,7 +654,7 @@ describe('theme add with a shared theme', () => {
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
     expect(result.data.copy?.editor).toMatchObject({
       files: [],
-      notCopied: expect.stringMatching(/already holds editor state/),
+      notCopied: expect.stringMatching(/already holds files/),
     });
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
     await themeRemove('ocean', {cwd: app});
@@ -667,7 +667,7 @@ describe('theme add with a shared theme', () => {
       'not editor settings',
       JSON.stringify({name: 'ocean', settings: 'all of them'}),
       null,
-      /is not editor settings this CLI reads/,
+      /is not settings this CLI reads/,
     ],
     [
       'made with a palette recipe this CLI does not know',

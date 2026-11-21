@@ -111,3 +111,26 @@ it('the stable add names no experimental command when it keeps editor state', as
   expect(stdout).toMatch(/Kept the shared theme's working files/);
   expect(stdout).not.toMatch(/experimental/);
 }, 300_000);
+
+it('the stable add names no experimental surface when it leaves editor state out', async () => {
+  const broken = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-editor-bad-'));
+  fs.cpSync(bundle, broken, {recursive: true});
+  fs.writeFileSync(
+    path.join(broken, 'editor', 'sunset.settings.json'),
+    'not json',
+  );
+  const fresh = makeLinkedFixture(
+    'astryx-theme-add-editor-bad-',
+    FIXTURE_PACKAGES,
+  );
+  writeFixtureBaseTheme(fresh, 'neutral');
+  const {status, stdout, stderr} = await runCli(
+    ['theme', 'add', broken, '--json'],
+    fresh,
+  );
+  removeLinkedFixture(fresh);
+  fs.rmSync(broken, {recursive: true, force: true});
+  expect(status, stdout + stderr).toBe(0);
+  expect(stdout).toMatch(/notCopied/);
+  expect(stdout).not.toMatch(/experimental|theme editor/);
+}, 300_000);
