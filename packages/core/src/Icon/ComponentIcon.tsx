@@ -14,13 +14,11 @@
 
 import type {ReactNode} from 'react';
 import type {StyleXStyles} from '@stylexjs/stylex';
-import {useThemeDefinition} from '../theme/useTheme';
 import {Icon, type IconColor} from './Icon';
-import {
-  hasComponentIconSlot,
-  type ComponentIconFallback,
-  type ComponentIconSlotState,
-  type NamespacedIconName,
+import type {
+  ComponentIconFallback,
+  ComponentIconSlotState,
+  NamespacedIconName,
 } from './globalIconRegistry';
 import type {ComponentIconSlotName, IconVariant} from './index';
 import {useComponentIcon} from './useIcon';
@@ -73,23 +71,12 @@ function SlotIcon<Slot extends ComponentIconSlotName>({
   color,
   xstyle,
 }: Omit<ComponentIconProps<Slot>, 'content'>): ReactNode {
-  const theme = useThemeDefinition();
-  const {icon, variant, size} = useComponentIcon(slot, state, fallback);
-  if (extensionKey != null && !hasComponentIconSlot(slot, theme)) {
-    const own =
-      fallback === null || typeof fallback === 'string'
-        ? {icon: fallback}
-        : fallback;
-    return (
-      <Icon
-        icon={extensionKey}
-        variant={own.variant}
-        size={own.size}
-        color={color}
-        xstyle={xstyle}
-      />
-    );
-  }
+  const {icon, variant, size} = useComponentIcon(
+    slot,
+    state,
+    fallback,
+    extensionKey,
+  );
   if (icon == null) {
     return null;
   }

@@ -438,9 +438,13 @@ export type ComponentIconFallback =
   | null
   | Readonly<{icon: IconName | null; variant?: IconVariant; size?: IconSize}>;
 
-/** A slot resolved to what the component renders through `Icon`. */
+/**
+ * A slot resolved to what the component renders through `Icon`. `icon` is a
+ * namespaced key only when the caller passed an extension key and the theme
+ * sets no value for the slot.
+ */
 export type ResolvedComponentIcon = Readonly<{
-  icon: IconName | null;
+  icon: IconName | NamespacedIconName | null;
   variant?: string;
   size?: IconSize;
 }>;
@@ -467,18 +471,6 @@ function getThemeComponentIcons(
     return null;
   }
   return theme.__componentIcons ?? theme.componentIcons ?? null;
-}
-
-/**
- * Report whether the theme sets this slot. A function entry counts. The slot
- * function stays uncalled.
- * @internal
- */
-export function hasComponentIconSlot(
-  slot: string,
-  source: IconRegistrySource,
-): boolean {
-  return getThemeComponentIcons(getTheme(source))?.[slot] !== undefined;
 }
 
 function warnMalformedRequest(
@@ -559,6 +551,9 @@ function applyComponentIconRequest(
  * state and returns a request whose result is final: `null` hides the icon,
  * `undefined` changes nothing.
  *
+ * `extensionKey` is returned when the theme sets no value for the slot. A
+ * mapping uses the fallback instead, including a mapping that omits the icon.
+ *
  * This is the only caller of a theme's slot functions. Caller-supplied icon
  * content wins before resolution, so a component does not resolve the slot
  * when its caller passed content.
@@ -569,6 +564,7 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
   state: ComponentIconSlotState<Slot>,
   fallback: ComponentIconFallback,
   source: IconRegistrySource,
+  extensionKey?: NamespacedIconName,
 ): ResolvedComponentIcon {
   const own: ResolvedComponentIcon =
     fallback === null || typeof fallback === 'string'
@@ -577,7 +573,7 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
   const theme = getTheme(source);
   const value = getThemeComponentIcons(theme)?.[slot];
   if (value === undefined) {
-    return own;
+    return extensionKey != null ? {...own, icon: extensionKey} : own;
   }
   if (typeof value === 'function') {
     const result: unknown = (value as (state: unknown) => unknown)(state);

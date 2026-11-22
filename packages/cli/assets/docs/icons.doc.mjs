@@ -243,27 +243,27 @@ export const brandTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: "NumberInput's steppers draw the `number-input-stepper` slot. Map the slot to a shared icon name, or to a function of `direction` (`increment` or `decrement`). A mapping that omits the icon uses `chevronDown`. With no mapping, both steppers still draw the `numberInput:stepperDown` key, including a theme or `registerIcons` override of that key. The increment button mirrors the glyph. Mapping the slot replaces the key for NumberInput only. Replacing a shared name in `icons` changes every component that draws that name.",
+          text: "NumberInput's steppers draw the `number-input-stepper` slot. Map the slot to one shared icon name that points down. The increment button turns that glyph to point up, including a glyph the slot resolves. A mapping that omits the icon uses `chevronDown`. With no mapping, both steppers still draw the `numberInput:stepperDown` key, including a theme or `registerIcons` override of that key. Mapping the slot replaces the key for NumberInput only. Replacing a shared name in `icons` changes every component that draws that name.",
         },
         {
           type: 'code',
           lang: 'tsx',
-          label: 'Moving a namespaced override to its slot',
-          code: `// Before: the stepper key, overridden through \`icons\`.
-export const brandTheme = defineTheme({
+          label: 'Before: the stepper key',
+          code: `export const brandTheme = defineTheme({
   name: 'brand',
   icons: {
     'numberInput:stepperDown': <CaretDownFilledIcon />,
   },
-});
-
-// After: the slot selects shared names for NumberInput only.
-export const brandTheme = defineTheme({
+});`,
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'After: the stepper slot',
+          code: `export const brandTheme = defineTheme({
   name: 'brand',
   componentIcons: {
-    'number-input-stepper': ({direction}) => ({
-      icon: direction === 'increment' ? 'arrowUp' : 'arrowDown',
-    }),
+    'number-input-stepper': 'chevronDown',
   },
 });`,
         },

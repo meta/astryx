@@ -219,6 +219,104 @@ describe('component icon slot resolution', () => {
   });
 });
 
+describe('an unmapped slot with an extension key', () => {
+  const STEPPER = 'number-input-stepper';
+  const KEY = 'numberInput:stepperDown';
+  const FALLBACK = {icon: 'chevronDown', size: 'xsm'} as const;
+
+  beforeEach(() => {
+    resetThemes();
+  });
+
+  it('returns the extension key when the theme sets no slot', () => {
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'increment'},
+        FALLBACK,
+        null,
+        KEY,
+      ),
+    ).toEqual({icon: KEY, size: 'xsm'});
+  });
+
+  it('returns the fallback when no extension key is passed', () => {
+    expect(
+      resolveComponentIcon(STEPPER, {direction: 'decrement'}, FALLBACK, null),
+    ).toEqual(FALLBACK);
+  });
+
+  it('lets a mapped name win over the extension key', () => {
+    const theme = defineTheme({
+      name: 'stepper-slot-wins',
+      componentIcons: {[STEPPER]: 'arrowUp'},
+    });
+
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'increment'},
+        FALLBACK,
+        theme,
+        KEY,
+      ).icon,
+    ).toBe('arrowUp');
+  });
+
+  it('uses the fallback icon when a mapping omits it', () => {
+    const theme = defineTheme({
+      name: 'stepper-size-only',
+      componentIcons: {[STEPPER]: {size: 'lg'}},
+    });
+
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'decrement'},
+        FALLBACK,
+        theme,
+        KEY,
+      ),
+    ).toEqual({icon: 'chevronDown', size: 'lg'});
+  });
+
+  it('hides the icon when the mapping is null', () => {
+    const theme = defineTheme({
+      name: 'stepper-null',
+      componentIcons: {[STEPPER]: null},
+    });
+
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'increment'},
+        FALLBACK,
+        theme,
+        KEY,
+      ).icon,
+    ).toBeNull();
+  });
+
+  it('keeps the fallback when a slot function returns undefined', () => {
+    const theme = defineTheme({
+      name: 'stepper-undefined',
+      componentIcons: {
+        [STEPPER]: () => undefined,
+      },
+    });
+
+    expect(
+      resolveComponentIcon(
+        STEPPER,
+        {direction: 'increment'},
+        FALLBACK,
+        theme,
+        KEY,
+      ),
+    ).toEqual(FALLBACK);
+  });
+});
+
 describe('defineTheme({componentIcons})', () => {
   beforeEach(() => {
     resetThemes();

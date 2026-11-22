@@ -208,8 +208,8 @@ const styles = stylex.create({
     borderBlockStartColor: colorVars['--color-border-emphasized'],
   },
   /*
-   * Both steppers draw the one downward-chevron key, so the increment button
-   * mirrors its glyph. A theme's slot artwork points up there too.
+   * Both steppers draw one downward glyph. The increment button turns it to
+   * point up, and it turns a theme's slot glyph too.
    */
   incrementGlyph: {
     display: 'inline-flex',
