@@ -248,9 +248,9 @@ describe('new-set --from a library of looks', () => {
     expect(data.map).toMatchObject({arrowDown: 'arrow-down', star: 'star'});
     const notes = body.data.notes.join('\n');
     expect(notes).toContain(
-      'Found 6 icons in @acme/vector-icons, each drawn in several styles, sizes and weights (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
+      'Found 6 icons in @acme/vector-icons, each drawn in several looks (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
     );
-    expect(notes).toContain('as its outline 24 wght400 export');
+    expect(notes).toContain('in the outline 24 wght400 look');
     expect(body.data.suggestions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({definition: 'close', icon: 'x'}),
@@ -1494,7 +1494,7 @@ describe('the default variant on every path', () => {
         ? looks.drawn
         : looks.other;
     const withLook = command
-      .replaceAll('<variant>', another)
+      .replaceAll('<look>', another)
       .replaceAll('<name>', another)
       .replaceAll('<default>', looks.drawn);
     const variant = /--variant (\S+)/u.exec(withLook)?.[1] ?? looks.other;
@@ -1908,7 +1908,7 @@ describe('the default variant on every path', () => {
         // Every icon's own export comes from this module: the variant is
         // the look they draw now, the default the set must declare.
         expect(res.body.error).toBe(
-          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports already draw those icons as "${looks.drawn}", so "${looks.drawn}" can't be another variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the look they draw now, so "${looks.drawn}" is that look and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
         );
         expect(suggestions).toEqual([
           `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,

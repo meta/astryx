@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] The icon commands' and Doctor's messages about a set's looks say "variant" (`new-set`, `add --variant`, `use --variant`, the default-variant checks), and a set with no variants is described plainly. Commands, flags, error codes and JSON keys do not change.
+[experimental] The icon commands' messages call the style, size and weight words in a library's export names "look words" (`new-set --from` and its default-look checks). Commands, flags, error codes and JSON keys do not change.
 
 @josephfarina
