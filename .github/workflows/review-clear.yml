@@ -198,10 +198,14 @@ jobs:
               const reviews = await github.paginate(github.rest.pulls.listReviews, {
                 owner, repo, pull_number: prNumber, per_page: 100,
               });
+              const headPushedAt = await decision.readHeadPushedAt({
+                github, owner, repo, sha: headSha,
+              });
               ({codeApproved, codeApprovedBy, codeWithdrawn} =
                 decision.resolveReviewApprovals({
                   reviews,
                   headSha,
+                  headPushedAt,
                   engOwners: [...codeApprovers],
                   designOwners: [],
                   reviewApp,

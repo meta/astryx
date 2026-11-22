@@ -7,7 +7,8 @@
  * @output textDirectionProps (`dir="ltr"` for plain text with no
  *   right-to-left letter), withTextDirection (that text in a `dir` span),
  *   isolatedText (one item's text in its own isolated span), and
- *   localeTextStyles (`pageAlign` for a field that shows locale text)
+ *   localeTextStyles and truncatedTextStyles (`pageAlign` for an element
+ *   with its own `dir`)
  * @position Core-internal helper, not exported from the package: the one
  *   owner of direction decisions for caller text and locale-formatted text
  */
@@ -92,3 +93,17 @@ export function isolatedText(
     text,
   );
 }
+
+/**
+ * For an element that cuts its own text with an ellipsis. The element's own
+ * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
+ * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
+ * a right-to-left letter keeps the page's direction and is cut at its own
+ * end. Put `pageAlign` beside the `dir` so the element keeps the page's
+ * alignment.
+ */
+export const truncatedTextStyles = stylex.create({
+  pageAlign: {
+    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
+  },
+});
