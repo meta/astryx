@@ -290,31 +290,6 @@ export interface TooltipReturn {
 }
 
 /**
- * Hook for tooltip behavior with hover/focus triggers.
- *
- * Builds on useLayer to add:
- * - Hover triggers with configurable delay
- * - Focus triggers with auto-detection for focusable elements
- * - Tap triggers on touch, where there is no hover (see useTouchTrigger)
- * - Inverted color palette for high contrast
- *
- * Unlike HoverCard, tooltips:
- * - Don't stay open when hovering the tooltip content
- * - Have shorter delays
- * - Use inverted colors (dark background, light text)
- * - Are typically used for short, non-interactive text
- *
- * @example
- * ```
- * const tooltip = useTooltip({ placement: 'above' });
- * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy || undefined}>
- *   Hover me
- * </Button>
- * {tooltip.renderTooltip('Helpful tooltip text')}
- * ```
- */
-
-/**
  * The trigger's description until the layer first mounts: a hidden copy of
  * the tooltip text (the `hidden` attribute). `aria-describedby` reads a hidden
  * node it names directly, and browse mode skips it. It is a sibling after the
@@ -383,6 +358,30 @@ function hasComponent(node: ReactNode): boolean {
   return hasComponent((node.props as {children?: ReactNode}).children);
 }
 
+/**
+ * Hook for tooltip behavior with hover/focus triggers.
+ *
+ * Builds on useLayer to add:
+ * - Hover triggers with configurable delay
+ * - Focus triggers with auto-detection for focusable elements
+ * - Tap triggers on touch, where there is no hover (see useTouchTrigger)
+ * - Inverted color palette for high contrast
+ *
+ * Unlike HoverCard, tooltips:
+ * - Don't stay open when hovering the tooltip content
+ * - Have shorter delays
+ * - Use inverted colors (dark background, light text)
+ * - Are typically used for short, non-interactive text
+ *
+ * @example
+ * ```
+ * const tooltip = useTooltip({ placement: 'above' });
+ * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy || undefined}>
+ *   Hover me
+ * </Button>
+ * {tooltip.renderTooltip('Helpful tooltip text')}
+ * ```
+ */
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
