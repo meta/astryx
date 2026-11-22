@@ -410,10 +410,12 @@ describe('a top nav link colored for a dark bar', () => {
       await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
     );
     expect(drawerSelected('pgr').some(r => /#bfbfbf/.test(r))).toBe(true);
-    // (It is measured on the link's own block, not the group fill.)
+    // (It is measured on the link's own block, not the group fill, in the
+    // phone menu and at rest.)
     expect(JSON.stringify(g.data.newProblems ?? [])).not.toMatch(
       /top-nav-item \(mode drawer, selected\)/,
     );
+    expect(JSON.stringify(g.data.newProblems ?? [])).not.toMatch(/1\.61:1/);
     // (A group color set after the link's own `--only` selected color is not
     // written on the link either: the copy keeps the link's own white.)
     await themeEditNew('pgc', {cwd, like: 'neutral'});

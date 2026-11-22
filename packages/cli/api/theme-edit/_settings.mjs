@@ -13610,6 +13610,17 @@ export async function contrastProblems(ctx, data, res) {
     }
     return found;
   };
+  /** @type {Map<Setting, string[]>} */
+  const writtenBy = new Map();
+  /** The parts the build writes a setting on, read once. @param {Setting} x */
+  const written = x => {
+    let found = writtenBy.get(x);
+    if (found === undefined) {
+      found = writtenPartsOf(ctx, data, x);
+      writtenBy.set(x, found);
+    }
+    return found;
+  };
   /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string | null} [when] @param {string | null} [state] the state the pair is drawn in */
   const override = (side, _which, m, when, state = null) => {
     if (!side.target) return null;
@@ -13620,7 +13631,9 @@ export async function contrastProblems(ctx, data, res) {
       .sort((a, b) => Number(!!b.state) - Number(!!a.state))
       .find(
         x =>
-          parts(x).includes(/** @type {string} */ (side.target)) &&
+          // (Only a fill the build writes on the part: a part's own `--only`
+          // fill keeps it under a later group one.)
+          written(x).includes(/** @type {string} */ (side.target)) &&
           (!x.when || x.when === when) &&
           (!x.state || (state != null && x.state === state)) &&
           (!x.mode || x.mode === m) &&
@@ -13931,7 +13944,7 @@ export async function contrastProblems(ctx, data, res) {
             test(x),
         ) ?? null;
     /** @param {Setting} x @param {string | null} t */
-    const on = (x, t) => t != null && parts(x).includes(t);
+    const on = (x, t) => t != null && written(x).includes(t);
     const own = p.fg.target;
     const around = p.bg.target !== own ? p.bg.target : null;
     const tokens = textTokens(p, m, value);
