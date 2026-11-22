@@ -19,6 +19,7 @@
 import type {ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {TopNavSlotContext} from './TopNavContext';
@@ -275,13 +276,9 @@ export function TopNav({
         {...props}>
         {isRenderable(heading) && (
           <div {...stylex.props(styles.mobileBarHeading)}>
-            {typeof heading === 'string' || typeof heading === 'number' ? (
-              <span {...stylex.props(styles.mobileBarHeadingText)}>
-                {heading}
-              </span>
-            ) : (
-              heading
-            )}
+            {typeof heading === 'string' || typeof heading === 'number'
+              ? cutText(heading, styles.mobileBarHeadingText)
+              : heading}
           </div>
         )}
         <div {...stylex.props(styles.mobileBarEnd)}>
