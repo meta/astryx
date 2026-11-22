@@ -234,6 +234,51 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
   ];
   const read = file => sources[file] ?? '';
 
+  it('lists the tests that read the recorded Node test times for a change to them', () => {
+    const timesSources = {
+      'scripts/plan.mjs':
+        "import fs from 'node:fs';\nexport const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');",
+      'scripts/plan.test.mjs': "import {DURATIONS} from './plan.mjs';",
+      'scripts/other.test.mjs':
+        "import fs from 'node:fs';\nfs.readFileSync('scripts/other.json');",
+    };
+    const timesFiles = [
+      ...Object.keys(timesSources),
+      'scripts/vitest-node-durations.json',
+      'scripts/other.json',
+    ];
+    expect(
+      specReaderTests(timesFiles, file => timesSources[file] ?? '', [
+        'scripts/vitest-node-durations.json',
+      ]),
+    ).toEqual(['scripts/plan.test.mjs']);
+  });
+
+  it('lists the tests that read the recorded interaction test times for a change to them', () => {
+    const timesSources = {
+      '.github/scripts/legs.mjs':
+        "import fs from 'node:fs';\nexport const DURATIONS = path.join(ROOT, '.github/playwright-leg-durations.json');",
+      '.github/scripts/legs.test.mjs': "import {DURATIONS} from './legs.mjs';",
+      '.github/scripts/refresh.mjs': "import {DURATIONS} from './legs.mjs';",
+      '.github/scripts/refresh.test.mjs': "import {x} from './refresh.mjs';",
+      '.github/scripts/other.test.mjs':
+        "import fs from 'node:fs';\nfs.readFileSync('.github/other.json');",
+    };
+    const timesFiles = [
+      ...Object.keys(timesSources),
+      '.github/playwright-leg-durations.json',
+      '.github/other.json',
+    ];
+    expect(
+      specReaderTests(timesFiles, file => timesSources[file] ?? '', [
+        '.github/playwright-leg-durations.json',
+      ]),
+    ).toEqual([
+      '.github/scripts/legs.test.mjs',
+      '.github/scripts/refresh.test.mjs',
+    ]);
+  });
+
   it('lists every test whose imports read files and name a spec path in code', () => {
     expect(specReaderTests(files, read)).toEqual([
       'packages/core/src/motion/roles.test.ts',

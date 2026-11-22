@@ -46,6 +46,7 @@ import {MobileNav} from './MobileNav';
 import {AppShell} from '../AppShell/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
 import {stubMatchMedia} from '../__tests__/stubMatchMedia';
+import {loadMobileNavDrawer} from './MobileNavToggle';
 
 beforeAll(() => {
   // Model the dialog focusing steps: showModal() moves focus into the dialog.
@@ -232,6 +233,12 @@ function openFromTrigger(): HTMLElement {
 function clickDrawerClose() {
   fireEvent.click(screen.getByRole('button', {name: /close navigation/i}));
 }
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
+});
 
 describe('MobileNav focus restoration', () => {
   it('returns focus to the trigger when the drawer closes (standalone)', () => {

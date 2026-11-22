@@ -40,6 +40,7 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {isElement} from '../utils/nodeType';
 
 /**
  * Size of the radio controls, matching CheckboxInput sizes.
@@ -367,6 +368,66 @@ export function RadioList({
     [value],
   );
 
+  // Puts back the tab indexes that the last Tab press took away. It runs
+  // after that press, and also before the next press and when focus leaves
+  // the group, so a second press never saves the temporary values.
+  const pendingTabRestoreRef = useRef<(() => void) | null>(null);
+  const restoreTabIndexes = useCallback(() => {
+    const restore = pendingTabRestoreRef.current;
+    pendingTabRestoreRef.current = null;
+    restore?.();
+  }, []);
+
+  // A radio group is one Tab stop. Chromium moves Tab from a radio that
+  // script focused to the group's checked radio when that radio comes next in
+  // order. For this one key press the other radios leave the Tab order, so Tab
+  // leaves the group. They return to the order after the press.
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Tab' || e.ctrlKey || e.metaKey) {
+        return;
+      }
+      restoreTabIndexes();
+      const group = groupRef.current;
+      const from = e.target;
+      // A RadioList inside another one's option bubbles its key presses to the
+      // outer group. Each group acts only on its own radios. The check does not
+      // use `instanceof`: a group can render in another window, such as a
+      // same-origin iframe, where that window's element classes apply.
+      if (
+        group == null ||
+        !isElement(from) ||
+        !from.matches('input[type="radio"]') ||
+        (from as HTMLInputElement).name !== name
+      ) {
+        return;
+      }
+      const others = Array.from(
+        group.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+      ).filter(radio => radio !== from && radio.name === name);
+      if (others.length === 0) {
+        return;
+      }
+      const savedTabIndexes = others.map(
+        radio => [radio, radio.getAttribute('tabindex')] as const,
+      );
+      for (const radio of others) {
+        radio.tabIndex = -1;
+      }
+      pendingTabRestoreRef.current = () => {
+        for (const [radio, tabIndex] of savedTabIndexes) {
+          if (tabIndex == null) {
+            radio.removeAttribute('tabindex');
+          } else {
+            radio.setAttribute('tabindex', tabIndex);
+          }
+        }
+      };
+      setTimeout(restoreTabIndexes, 0);
+    },
+    [name, restoreTabIndexes],
+  );
+
   return (
     <Field
       {...container}
@@ -414,6 +475,8 @@ export function RadioList({
         // A caller aria-labelledby names the group together with its label.
         aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
         onFocus={composeEventHandlers(handleFocus, onFocus)}
+        onKeyDown={composeEventHandlers(handleKeyDown, rest.onKeyDown)}
+        onBlur={composeEventHandlers(restoreTabIndexes, rest.onBlur)}
         aria-describedby={
           [
             ariaDescribedByProp,

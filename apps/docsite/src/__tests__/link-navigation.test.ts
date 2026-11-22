@@ -1,21 +1,26 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {createElement} from 'react';
+import {createElement, type ElementType} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import NextLink from 'next/link';
 import {describe, expect, it} from 'vitest';
 import {LinkProvider} from '../../../../packages/core/src/Link/LinkProvider';
 import {useLinkComponent} from '../../../../packages/core/src/Link/useLinkComponent';
+import {IntentPrefetchLink} from '../components/IntentPrefetchLink';
 
 function Navigation({href, to}: {href: unknown; to?: unknown}) {
   const Link = useLinkComponent();
   return createElement(Link, {href, to, 'data-testid': 'destination'}, 'Go');
 }
 
-function renderNavigation(href: unknown, to?: unknown) {
+function renderNavigation(
+  href: unknown,
+  to?: unknown,
+  component: ElementType = NextLink,
+) {
   return renderToStaticMarkup(
     createElement(LinkProvider, {
-      component: NextLink,
+      component,
       children: createElement(Navigation, {href, to}),
     }),
   );
@@ -62,5 +67,24 @@ describe('LinkProvider with the actual Next.js Link during SSR', () => {
     [{pathname: '/docs', query: {page: '2'}, hash: 'top'}, '/docs?page=2#top'],
   ])('retains Next navigation for %j', (href, expected) => {
     expect(renderNavigation(href)).toContain(`href="${expected}"`);
+  });
+});
+
+describe('LinkProvider with the docsite link during SSR', () => {
+  it.each([
+    '/docs',
+    '#section',
+    'https://example.com/docs',
+    {pathname: '/docs', query: {page: '2'}, hash: 'top'},
+  ])('renders %j as the Next.js Link renders it', href => {
+    expect(renderNavigation(href, undefined, IntentPrefetchLink)).toBe(
+      renderNavigation(href),
+    );
+  });
+
+  it('renders a rejected destination inertly', () => {
+    expect(
+      renderNavigation('javascript:alert(1)', undefined, IntentPrefetchLink),
+    ).toBe('<a data-testid="destination">Go</a>');
   });
 });

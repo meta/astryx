@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {act, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTable} from './BaseTable';
 import {Table} from './Table';
@@ -26,10 +26,85 @@ import {
   resolveColumnWidths,
   resolveTableMinWidth,
   capitalize,
+  defaultCellRenderer,
+  isInvalidDate,
   DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH,
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
 import type {TablePlugin, TableColumn, ProportionalWidth} from './types';
+import type * as ModuleLoaderModule from '../utils/moduleLoader';
+import {Text} from '../Text/Text';
+
+/**
+ * A fresh Table module graph whose own Tooltip loads are counted, and frames
+ * held until `releaseFrames` runs them.
+ */
+async function freshTableWithCountedTooltip() {
+  vi.resetModules();
+  // Counts the Tooltip module loads that this table's own loaders make. An
+  // earlier test's page-wide preload runs from its own module graph, and on
+  // a busy runner its import can resolve in this registry at any time. So
+  // the count reads this graph's loaders, not the Tooltip module itself.
+  const loads = {count: 0};
+  const counted = new WeakSet<object>();
+  vi.doMock('../utils/moduleLoader', async importOriginal => {
+    const actual = await importOriginal<typeof ModuleLoaderModule>();
+    return {
+      ...actual,
+      createModuleLoader: <T,>(importModule: () => Promise<T>) =>
+        actual.createModuleLoader(async () => {
+          const loaded = await importModule();
+          // The after-paint preload resolves through the Tooltip loader, so
+          // one module counts once.
+          if (
+            typeof loaded === 'object' &&
+            loaded !== null &&
+            'Tooltip' in loaded &&
+            !counted.has(loaded)
+          ) {
+            counted.add(loaded);
+            loads.count += 1;
+          }
+          return loaded;
+        }),
+    };
+  });
+  // These tests count the cells' Tooltip load. A truncating header cell's
+  // keyboard cut-text loads its own module, which also imports Tooltip, on
+  // its own schedule with its own tests, so it is left out here.
+  const noCutText = () => ({
+    tooltip: null,
+    onFocus: () => {},
+    onBlur: () => {},
+    onPointerDown: () => {},
+  });
+  vi.doMock('../Text/cutTextOnKeyboardFocus', () => ({
+    useCutTextOnKeyboardFocus: noCutText,
+  }));
+  const held: FrameRequestCallback[] = [];
+  const frame = vi
+    .spyOn(window, 'requestAnimationFrame')
+    .mockImplementation(callback => {
+      held.push(callback);
+      return held.length;
+    });
+  const {Table: FreshTable} = await import('./Table');
+  return {
+    FreshTable,
+    loads,
+    releaseFrames() {
+      frame.mockRestore();
+      for (const callback of held.splice(0)) {
+        callback(performance.now());
+      }
+    },
+    restore() {
+      frame.mockRestore();
+      vi.doUnmock('../utils/moduleLoader');
+      vi.doUnmock('../Text/cutTextOnKeyboardFocus');
+    },
+  };
+}
 
 // =============================================================================
 // Test Data
@@ -102,6 +177,25 @@ describe('columnUtils', () => {
       // Deseret 𐐨 (U+10428) uppercases to 𐐀 (U+10400); charAt(0) would grab
       // half the surrogate pair and leave the string unchanged.
       expect(capitalize('\u{10428}pple')).toBe('\u{10400}pple');
+    });
+  });
+
+  describe('defaultCellRenderer', () => {
+    it('renders an Invalid Date as an empty cell, like null', () => {
+      expect(defaultCellRenderer({at: new Date('not a date')}, 'at')).toBe('');
+      expect(defaultCellRenderer({at: null}, 'at')).toBe('');
+    });
+
+    it('still renders a valid Date as its ISO text', () => {
+      expect(
+        defaultCellRenderer({at: new Date('2024-01-01T00:00:00Z')}, 'at'),
+      ).toBe('2024-01-01T00:00:00.000Z');
+    });
+
+    it('tells an Invalid Date from a valid one', () => {
+      expect(isInvalidDate(new Date('not a date'))).toBe(true);
+      expect(isInvalidDate(new Date(0))).toBe(false);
+      expect(isInvalidDate('not a date')).toBe(false);
     });
   });
 
@@ -1409,6 +1503,153 @@ describe('Table', () => {
     const textEl = cells[0].querySelector('span');
     expect(textEl).toBeTruthy();
     expect(textEl).toHaveTextContent('Alice');
+  });
+
+  it('measures no default cell when it mounts, and marks the cell text with no extra attribute', () => {
+    const proto = window.HTMLElement.prototype;
+    const original = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    let reads = 0;
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get() {
+        reads += 1;
+        return 0;
+      },
+    });
+    try {
+      render(<Table data={users} columns={columns} textOverflow="truncate" />);
+    } finally {
+      if (original) {
+        Object.defineProperty(proto, 'scrollWidth', original);
+      }
+    }
+    // Each cell measures on its first hover, tap or focus instead.
+    expect(reads).toBe(0);
+    const cellText = screen.getAllByRole('cell')[0].querySelector('span')!;
+    const {container} = render(
+      <Text type="body" maxLines={1}>
+        Alice
+      </Text>,
+    );
+    const plainText = container.querySelector('span')!;
+    const names = (element: Element) =>
+      [...element.attributes].map(attribute => attribute.name).sort();
+    expect(names(cellText)).toEqual(names(plainText));
+  });
+
+  it('counts no Tooltip load that an earlier module graph makes after the count starts', async () => {
+    // An earlier test's page-wide preload runs from its own module graph.
+    // On a busy runner its import can resolve only after this count starts.
+    const {createModuleLoader} = await import('../utils/moduleLoader');
+    const earlierTooltip = createModuleLoader(
+      async () => import('../Tooltip/Tooltip'),
+    );
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      await earlierTooltip.load();
+      expect(fresh.loads.count).toBe(0);
+    } finally {
+      fresh.restore();
+    }
+  });
+
+  it('loads the Tooltip module after a table of default cells paints, with no interaction', async () => {
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      render(
+        <fresh.FreshTable
+          data={users}
+          columns={columns}
+          textOverflow="truncate"
+        />,
+      );
+      // No load starts until the page's next frame runs.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      expect(fresh.loads.count).toBe(0);
+      act(() => fresh.releaseFrames());
+      await waitFor(
+        () => {
+          expect(fresh.loads.count).toBe(1);
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      fresh.restore();
+    }
+  });
+
+  it('starts no Tooltip load sooner for a hover on a cut-off cell before the page paints', async () => {
+    const proto = window.HTMLElement.prototype;
+    const original = {
+      scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
+      offsetWidth: Object.getOwnPropertyDescriptor(proto, 'offsetWidth'),
+    };
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
+    });
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      render(
+        <fresh.FreshTable
+          data={users}
+          columns={columns}
+          textOverflow="truncate"
+        />,
+      );
+      const cellText = screen.getAllByRole('cell')[0].querySelector('span')!;
+      fireEvent.pointerEnter(cellText, {pointerType: 'mouse'});
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      // The hover measured the cell as cut off, but the load still waits.
+      expect(fresh.loads.count).toBe(0);
+      act(() => fresh.releaseFrames());
+      await waitFor(
+        () => {
+          expect(fresh.loads.count).toBe(1);
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      fresh.restore();
+      if (original.scrollWidth) {
+        Object.defineProperty(proto, 'scrollWidth', original.scrollWidth);
+      }
+      if (original.offsetWidth) {
+        Object.defineProperty(proto, 'offsetWidth', original.offsetWidth);
+      }
+    }
+  });
+
+  it('schedules one after-paint preload for the page, whatever the number of cells', async () => {
+    async function framesForRows(count: number) {
+      vi.resetModules();
+      const frame = vi.spyOn(window, 'requestAnimationFrame');
+      try {
+        const {Table: FreshTable} = await import('./Table');
+        const rows = Array.from({length: count}, (_, index) => ({
+          ...users[index % users.length],
+          name: `${users[index % users.length].name} ${index}`,
+        }));
+        const {unmount} = render(
+          <FreshTable data={rows} columns={columns} textOverflow="truncate" />,
+        );
+        const calls = frame.mock.calls.length;
+        unmount();
+        return calls;
+      } finally {
+        frame.mockRestore();
+      }
+    }
+    // Forty rows of default cells ask for no more frames than three rows do.
+    expect(await framesForRows(40)).toBe(await framesForRows(3));
   });
 
   it('does not wrap renderCell content in Text when truncating', () => {

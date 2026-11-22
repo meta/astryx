@@ -633,10 +633,11 @@ describe('CheckboxInput', () => {
         </>,
       );
       const checkbox = screen.getByRole('checkbox');
-      const tooltip = screen.getByRole('tooltip', h);
       const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toContain('terms-hint');
-      expect(ids).toContain(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Required before checkout Terms are managed by your administrator',
+      );
     });
 
     it('does not render a tooltip when disabled without a reason', () => {
@@ -666,7 +667,23 @@ describe('CheckboxInput', () => {
       expect(checkbox).toHaveAttribute('aria-disabled', 'true');
     });
 
-    it('links the reason tooltip via aria-describedby', () => {
+    it('describes the checkbox with the reason exactly once', () => {
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Terms are managed by your administrator"
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
+    });
+
+    it('renders the reason once, in the tooltip, after mount', async () => {
       render(
         <CheckboxInput
           label="Accept terms"
@@ -678,7 +695,25 @@ describe('CheckboxInput', () => {
       );
       const checkbox = screen.getByRole('checkbox', h);
       const tooltip = screen.getByRole('tooltip', h);
-      expect(checkbox.getAttribute('aria-describedby')).toContain(tooltip.id);
+      await waitFor(() =>
+        expect(
+          screen.getAllByText('Terms are managed by your administrator', {
+            ignore: false,
+          }),
+        ).toHaveLength(1),
+      );
+      const describedBy = checkbox.getAttribute('aria-describedby') ?? '';
+      const reason = describedBy
+        .split(' ')
+        .map(id => document.getElementById(id))
+        .find(
+          element =>
+            element?.textContent === 'Terms are managed by your administrator',
+        );
+      expect(tooltip.contains(reason ?? null)).toBe(true);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
     });
 
     it('blocks toggling while focusable-disabled', async () => {

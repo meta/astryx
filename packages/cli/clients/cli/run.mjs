@@ -15,6 +15,32 @@
  */
 
 /**
+ * Make stdout and stderr block on write when they are pipes, before the run
+ * prints anything.
+ *
+ * Node writes to a file or a terminal synchronously, but on POSIX it writes to
+ * a pipe asynchronously. A run that ends in `process.exit` while a pipe write
+ * waits for a slow reader loses that output: the reader gets the first 64 KiB
+ * (the pipe buffer), and a --json caller gets invalid JSON. When the pipe
+ * blocks, each write is complete when it returns, so every exit keeps all its
+ * output, in order. A write that fits in the pipe buffer returns at once, as
+ * before. It runs here, not in the bin, so a run that a host starts gets it
+ * too. The stream's libuv handle sets the blocking mode; Node makes the same
+ * call for a terminal and for a Windows pipe, which already block. A file
+ * stream has no such handle and already writes synchronously.
+ */
+function blockPipedOutput() {
+  if (process.platform === 'win32') return;
+  for (const stream of [process.stdout, process.stderr]) {
+    if (stream.isTTY) continue;
+    const handle = /** @type {{setBlocking?: (on: boolean) => number}} */ (
+      /** @type {any} */ (stream)._handle
+    );
+    handle?.setBlocking?.(true);
+  }
+}
+
+/**
  * Run the CLI once in this process.
  *
  * Every import here is dynamic: modules that load `styleText` must load only
@@ -28,6 +54,7 @@
  *   when, in a hosted run, that release's host entry answered
  */
 export async function runCli({cliRoot, argv, declinedProjectCli}) {
+  blockPipedOutput();
   // A folder deleted under the shell (another terminal, `git clean`): every
   // command reads the working folder first, so say so once, plainly, in
   // text and in --json, instead of a stack trace.
@@ -85,8 +112,19 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     createProgram,
     loadProjectDebugHandler,
     loadProjectForHelp,
+    refuseHelpWithoutBase,
     handleVersionJsonPreflight,
   } = await import('./index.mjs');
+  // The base every project load reads, the one in createProgram included.
+  const {setRequestedBase} = await import('../../foundation/bases/state.mjs');
+  const {scanRootArgs} = await import('./lib/root-args.mjs');
+  const base = scanRootArgs(
+    process.argv.slice(2),
+    [{long: '--base', required: true}],
+    {unknown: 'skip', pastOperand: true},
+  ).values.get('--base');
+  setRequestedBase(typeof base === 'string' ? base : null);
+
   // Only the commands these arguments need load, before anything below runs,
   // as the full program did.
   const program = await createProgram({argv: process.argv.slice(2)});
@@ -170,7 +208,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
   await loadProjectDebugHandler();
   // Help prints its commands while Commander parses, so a help run reads the
   // project's declared `cliCommand` here.
-  await loadProjectForHelp();
+  await loadProjectForHelp(process.argv.slice(2), program);
+  await refuseHelpWithoutBase(process.argv.slice(2), program);
 
   // `--version --json` answers and exits without Commander, so it runs here —
   // after the handler exists, or the run would go unrecorded.

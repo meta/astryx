@@ -62,12 +62,18 @@ import {
   easeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
 import {Heading} from '../Heading/Heading';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {
+  MAX_CLOSE_DELAY_MS,
+  useAppShellMobile,
+} from '../AppShell/AppShellMobileContext';
+
+export {MAX_CLOSE_DELAY_MS};
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -181,6 +187,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     boxSizing: 'border-box',
     overflow: 'hidden',
     transitionProperty: 'transform',
@@ -281,15 +291,6 @@ const dynamicStyles = stylex.create({
 // Close timing
 // =============================================================================
 
-/**
- * Longest the drawer will wait before closing, however long the hold is.
- *
- * Exported so `AppShell` can defer hiding this drawer's `Activity` boundary
- * by at least this long too (`ACTIVITY_HIDE_BUFFER_MS` in AppShell.tsx) —
- * otherwise Activity's `display: none !important` lands before this delay's
- * own scheduled `dialog.close()` has a chance to run (#5701).
- */
-export const MAX_CLOSE_DELAY_MS = 250;
 /**
  * Longest the drawer slides in or out for, in ms. Both run for the theme's
  * `--duration-medium`: 410 ms by default, and at most 545 ms on the default
@@ -498,6 +499,7 @@ export function MobileNav({
   className,
   style,
   onClick: onClickProp,
+  id: idProp,
   ref,
   ...rest
 }: MobileNavProps) {
@@ -572,7 +574,7 @@ export function MobileNav({
         active !== null &&
         active !== document.body &&
         !dialogRef.current?.contains(active);
-      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const dialogIds = [dialogId, dialogRef.current?.id, idProp];
       const trigger =
         hasOpenerFocus && active
           ? active
@@ -727,7 +729,7 @@ export function MobileNav({
   return (
     <dialog
       ref={useMergedRefs(ref, dialogRef)}
-      id={dialogId}
+      id={idProp ?? dialogId}
       {...mergeProps(
         themeProps('mobile-nav', {side: resolvedSide}),
         stylex.props(
@@ -760,13 +762,16 @@ export function MobileNav({
             <div
               ref={drawerRef}
               tabIndex={-1}
-              {...stylex.props(
-                styles.drawer,
-                dynamicStyles.width(width),
-                isStart && styles.drawerStart,
-                isStart && isOpen && styles.drawerStartOpen,
-                !isStart && styles.drawerEnd,
-                !isStart && isOpen && styles.drawerEndOpen,
+              {...mergeProps(
+                themeProps('mobile-nav-drawer', {side: resolvedSide}),
+                stylex.props(
+                  styles.drawer,
+                  dynamicStyles.width(width),
+                  isStart && styles.drawerStart,
+                  isStart && isOpen && styles.drawerStartOpen,
+                  !isStart && styles.drawerEnd,
+                  !isStart && isOpen && styles.drawerEndOpen,
+                ),
               )}>
               {/* Header — content + close button */}
               <div

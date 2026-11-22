@@ -78,7 +78,11 @@ export const docs = {
       },
     ],
     derived: [
-      {property: 'borderRadius', vars: ['--_dropdown-menu-radius']},
+      {
+        property: 'borderRadius',
+        vars: ['--_dropdown-menu-radius'],
+        corners: true,
+      },
       {property: 'padding', vars: ['--_dropdown-menu-padding']},
     ],
   },

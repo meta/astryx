@@ -42,7 +42,9 @@ const CLASSIFIER_FILES = new Set([
 ]);
 const RELEASE_PATHS_FILE = 'scripts/release/release-paths.mjs';
 const AUDIT_FILE = '.github/scripts/component-audit-scope.cjs';
-const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
+// The CLI derives this list when it is packed; a branch cut while it was
+// committed may still edit it.
+const OLD_OFFICIAL_LIST = 'packages/cli/assets/discover/official-packages.json';
 
 function pullRequestContext(baseRef = 'main') {
   return {
@@ -106,8 +108,7 @@ async function decide({
         const known =
           CLASSIFIER_FILES.has(file) ||
           file === RELEASE_PATHS_FILE ||
-          file === AUDIT_FILE ||
-          file === OFFICIAL_PACKAGES;
+          file === AUDIT_FILE;
         const text = ref === BASE_SHA && known ? policyText(file) : null;
         repository[key] =
           text == null ? null : {text, isTruncated: truncated.includes(file)};
@@ -183,6 +184,7 @@ describe('per-job scope step', () => {
         'lab_specs_path',
         'release_bump',
         'spec_only',
+        'times_only',
         'tooling_only',
         'touches',
         'truncated',
@@ -217,6 +219,7 @@ describe('per-job scope step', () => {
         'packages/core/package.json',
         'packages/cli/assets/codemods/__tests__/registry.test.mjs',
         'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
+        'docs/specs/AST-057-row-actions/spec.md',
       ),
     });
     expect(outputs).toMatchObject({
@@ -307,7 +310,6 @@ describe('per-job scope step', () => {
       f1: `${BASE_SHA}:.github/scripts/knowledge-paths.cjs`,
       f2: `${BASE_SHA}:scripts/component-packages.cjs`,
       f3: `${BASE_SHA}:${AUDIT_FILE}`,
-      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
     });
     expect(contentCalls.filter(call => call.rest)).toEqual([]);
   });
@@ -763,34 +765,39 @@ describe('a new Lab component (spec:AST-030 FR26)', () => {
       "+import {Text} from '@astryxdesign/core/Text';",
     ].join('\n'),
   };
-  const officialLines = fs
-    .readFileSync(path.join(root, OFFICIAL_PACKAGES), 'utf8')
-    .split('\n');
-  const labLine =
-    officialLines.findIndex(line =>
-      line.includes('"package": "@astryxdesign/lab"'),
-    ) + 1;
-  const official = at => ({
-    filename: OFFICIAL_PACKAGES,
+  // An edit a branch cut before the list was derived may still carry.
+  const oldListEdit = {
+    filename: OLD_OFFICIAL_LIST,
     status: 'modified',
     patch: [
-      `@@ -${at},3 +${at},7 @@`,
-      ` ${officialLines[at - 1]}`,
+      '@@ -15,2 +15,6 @@',
       '+        {',
       '+          "kind": "component",',
       '+          "name": "CommentPin"',
       '+        },',
-      ` ${officialLines[at]}`,
-      ` ${officialLines[at + 1]}`,
     ].join('\n'),
-  });
+  };
 
-  it('stays in the Lab-only lane with its routes, discovery entry and story', async () => {
-    const {outputs} = await decide({
-      files: [...component, routes, labStory, official(labLine + 6)],
+  it('stays in the Lab-only lane with its routes and story, reading no CLI list from the base', async () => {
+    const {outputs, messages, graphqlCalls} = await decide({
+      files: [...component, routes, labStory],
     });
     expect(outputs.lab_only).toBe('true');
     expect(outputs.full_suite).toBe('false');
+    expect(JSON.stringify(graphqlCalls[0].variables)).not.toContain(
+      OLD_OFFICIAL_LIST,
+    );
+    expect(messages.warning.join('\n')).not.toContain('everything is in scope');
+    expect(messages.failed).toEqual([]);
+  });
+
+  it('runs full CI for a branch that still edits the old official list', async () => {
+    const {outputs, messages} = await decide({
+      files: [...component, routes, labStory, oldListEdit],
+    });
+    expect(outputs.lab_only).toBe('false');
+    expect(messages.warning.join('\n')).not.toContain('everything is in scope');
+    expect(messages.failed).toEqual([]);
   });
 
   it('runs full CI when a core story changes with it', async () => {
@@ -809,16 +816,13 @@ describe('a new Lab component (spec:AST-030 FR26)', () => {
     expect(outputs.lab_only).toBe('false');
   });
 
-  it("runs full CI when a route names another component, or the discovery edit is outside Lab's entry", async () => {
+  it('runs full CI when a route names another component', async () => {
     const otherRoute = {
       ...routes,
       patch: routes.patch.replaceAll('comment-pin', 'button'),
     };
     expect(
       (await decide({files: [...component, otherRoute]})).outputs.lab_only,
-    ).toBe('false');
-    expect(
-      (await decide({files: [...component, official(10)]})).outputs.lab_only,
     ).toBe('false');
   });
 

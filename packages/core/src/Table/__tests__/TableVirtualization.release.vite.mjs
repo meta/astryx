@@ -13,7 +13,6 @@ export default defineConfig({
       libraryPattern: 'packages/',
       stylexOptions: {
         dev: false,
-        styleResolution: 'application-order',
         unstable_moduleResolution: resolution.stylexModuleResolution,
       },
     }),

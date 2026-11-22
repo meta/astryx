@@ -85,6 +85,6 @@ describe('cli postinstall — inside a monorepo package', () => {
   it('still nudges when no folder up to the repository root ran init', () => {
     const r = install();
     expect(r.status).toBe(0);
-    expect(r.stdout).toMatch(/finish setup and install the Astryx agent prompt/);
+    expect(r.stdout).toMatch(/prints the getting-started steps, and saves the Astryx guide to AGENTS\.md/);
   });
 });

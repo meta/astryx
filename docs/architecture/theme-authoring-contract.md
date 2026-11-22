@@ -97,6 +97,9 @@ source configuration independently.
 
 - a name and optional normalized base theme;
 - higher-order color, typography, radius, and motion configuration;
+- an optional `palette` made by `themePalette()` from
+  `@astryxdesign/core/palette` (`spec:AST-008` FR19): resolved color tokens and
+  the part styles that lift secondary text, never seeds or palette metadata;
 - explicit semantic token overrides;
 - optional theme-family-local token declarations;
 - component target/style-key overrides, each optionally with `@light` and
@@ -115,12 +118,14 @@ Normalization follows one precedence order:
 
 1. the resolved base theme;
 2. values generated from color, typography, radius, and motion configuration;
-3. explicit token overrides;
-4. generated component typography followed by explicit component overrides;
-5. inherited and explicit media-surface overrides;
-6. inherited and explicit theme-local declarations, validated against the
+3. the palette's color tokens;
+4. explicit token overrides;
+5. generated component typography, then the palette's part styles, then
+   explicit component overrides;
+6. inherited and explicit media-surface overrides;
+7. inherited and explicit theme-local declarations, validated against the
    resolved token, component, and media surfaces; and
-7. inherited and explicit icon/indicator registry entries, `componentIcons`
+8. inherited and explicit icon/indicator registry entries, `componentIcons`
    entries, and the `iconVariants` list.
 
 Explicit values win within their surface. Component maps merge by component,

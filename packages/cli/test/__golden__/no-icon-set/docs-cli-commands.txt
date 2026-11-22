@@ -24,6 +24,7 @@ integration-check              <text>
 integration-pack               <text>
 integration-verify             <text>
 manifest                       <text>
+mcp                            <text>
 postinstall                    <text>
 search                         <text>
 swizzle                        <text>

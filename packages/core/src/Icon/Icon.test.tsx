@@ -10,7 +10,7 @@
  * SYNC: When Icon.tsx changes, update tests to match new behavior
  */
 
-import {createRef} from 'react';
+import {createRef, memo} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
@@ -1113,5 +1113,76 @@ describe('Icon', () => {
       expect(icon.getAttribute('class')).toBe(refIcon.getAttribute('class'));
       expect(icon.getAttribute('style')).toBe(refIcon.getAttribute('style'));
     });
+  });
+});
+
+describe('Icon given its glyph as name', () => {
+  it('renders the registry glyph, keeps name off the DOM, and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Other icon libraries call the glyph prop `name`.
+    const props = {
+      name: 'check',
+      'data-testid': 'named',
+    } as unknown as Parameters<typeof Icon>[0];
+    render(<Icon {...props} />);
+    const icon = screen.getByTestId('named');
+    expect(icon.querySelector('svg')).not.toBeNull();
+    expect(icon).not.toHaveAttribute('name');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain(
+      'Icon: takes its glyph in `icon`, not `name`.',
+    );
+    warn.mockRestore();
+  });
+
+  it('renders an icon component given as name', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {
+      name: TestIcon,
+      'data-testid': 'component',
+    } as unknown as Parameters<typeof Icon>[0];
+    render(<Icon {...props} />);
+    expect(screen.getByTestId('component').tagName.toLowerCase()).toBe('svg');
+    warn.mockRestore();
+  });
+
+  it('renders forwardRef and memo icon components given as name', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const [id, component] of [
+      ['forward-ref', CheckCircleIcon],
+      ['memo', memo(CheckCircleIcon)],
+    ] as const) {
+      const props = {
+        name: component,
+        'data-testid': id,
+      } as unknown as Parameters<typeof Icon>[0];
+      render(<Icon {...props} />);
+      expect(screen.getByTestId(id).tagName.toLowerCase()).toBe('svg');
+    }
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it('passes name through untouched when icon is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {
+      icon: 'check',
+      name: 'status',
+      'data-testid': 'with-name',
+    } as unknown as Parameters<typeof Icon>[0];
+    render(<Icon {...props} />);
+    const icon = screen.getByTestId('with-name');
+    expect(icon.querySelector('svg')).not.toBeNull();
+    expect(icon).toHaveAttribute('name', 'status');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('prefers icon and does not warn when icon is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<Icon icon="check" data-testid="both" />);
+    expect(screen.getByTestId('both').querySelector('svg')).not.toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

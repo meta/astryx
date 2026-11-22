@@ -12,6 +12,7 @@ const sampleItems = [
 const meta: Meta<typeof ChartLegend> = {
   title: 'Charts/Chrome/Legend',
   component: ChartLegend,
+  tags: ['autodocs'],
   argTypes: {
     position: {
       control: 'inline-radio',

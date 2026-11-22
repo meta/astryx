@@ -70,6 +70,10 @@ describe('guards', () => {
       for (const [q, word] of [
         ['make the zorp padding bigger', 'zorp'],
         ['remove the shadow from the blorp', 'blorp'],
+        // (A piece of a part's hyphenated name, alone, names no part.)
+        ['white text on thumbs', 'thumb'],
+        ['white text on triggers', 'trigger'],
+        ['white text on overflows', 'overflow'],
       ]) {
         const r = await answer(q);
         expect(r.all, q).toEqual([]);
@@ -123,7 +127,7 @@ describe('guards', () => {
   );
 });
 
-describe('chaos42', () => {
+describe('cases', () => {
   it(
     'roles, keeps, grounds and shapes stay where they are said',
     async test => {
