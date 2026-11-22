@@ -93,12 +93,13 @@ for (const dir of ['ltr', 'rtl'] as const) {
     );
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    // Rounded, so an engine that keeps cos 90° as a tiny number still
-    // matches; `+ 0` turns -0 into 0.
+    // Rounded to three decimals, so an engine that keeps cos 90° as a tiny
+    // number still matches, and a turn still in flight does not; `+ 0` turns
+    // -0 into 0.
     const turn = (t?: string) =>
       (t?.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/g) ?? [])
         .slice(0, 4)
-        .map(n => Math.round(Number(n)) + 0);
+        .map(n => Math.round(Number(n) * 1000) / 1000 + 0);
     await expect
       .poll(async () => turn((await boxes())[0]?.transform))
       .toEqual(dir === 'rtl' ? [0, 1, 1, 0] : [0, 1, -1, 0]);
