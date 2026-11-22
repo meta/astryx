@@ -228,6 +228,29 @@ describe('layer focus return', () => {
     }
   });
 
+  it('leaves focus to the next control when a native blur listener closes the layer', () => {
+    const opener = document.createElement('button');
+    const layer = document.createElement('div');
+    const inside = document.createElement('button');
+    const elsewhere = document.createElement('button');
+    layer.append(inside);
+    document.body.append(opener, layer, elsewhere);
+    try {
+      opener.focus();
+      const record = trackLayerFocus({getLayer: () => layer, opener});
+      inside.focus();
+      inside.addEventListener('blur', () => restoreLayerFocus(record), {
+        once: true,
+      });
+      elsewhere.focus();
+      expect(elsewhere).toHaveFocus();
+    } finally {
+      opener.remove();
+      layer.remove();
+      elsewhere.remove();
+    }
+  });
+
   it('still returns focus that the close strands when no control takes it', () => {
     const opener = document.createElement('button');
     const layer = document.createElement('div');

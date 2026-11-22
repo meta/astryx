@@ -321,7 +321,7 @@ export interface LayerFocusRecord {
   awaitsFocus: boolean;
   /**
    * The element outside the layer that focus is moving to, while the move
-   * is in progress: from the layer's `focusout` to the next `focusin`.
+   * is in progress: from the layer's `blur` to the next `focusin`.
    */
   focusMovingTo: Element | null;
   isClosing: boolean;
@@ -463,10 +463,10 @@ export function trackLayerFocus(
       record.awaitsFocus = false;
     }
   };
-  // A close that runs while focus leaves the layer for another control (a
-  // blur handler, or a press on another field) sees nothing focused for the
-  // length of the move. The move is not a stranded focus: the control takes
-  // focus at its end.
+  // A close during a focus move sees nothing focused. The control outside the
+  // layer takes focus when the move ends, so focus is not stranded. The
+  // capture-phase `blur` reaches the document before the element's own `blur`
+  // and `focusout` listeners, so a close from either sees the note.
   const markFocusMoving = (event: FocusEvent) => {
     const next = event.relatedTarget;
     const layer = record.getLayer();
@@ -478,7 +478,8 @@ export function trackLayerFocus(
       !layer.contains(next)
     ) {
       record.focusMovingTo = next;
-      // A move that the page cancels fires no focusin.
+      // A target that cannot take focus when the move ends gets no focusin.
+      // Clear the note after one task.
       setTimeout(() => {
         if (record.focusMovingTo === next) {
           record.focusMovingTo = null;
@@ -494,12 +495,12 @@ export function trackLayerFocus(
   }
   for (const each of docs) {
     each.addEventListener('focusin', markFocusInside, true);
-    each.addEventListener('focusout', markFocusMoving, true);
+    each.addEventListener('blur', markFocusMoving, true);
   }
   record.stopListening = () => {
     for (const each of docs) {
       each.removeEventListener('focusin', markFocusInside, true);
-      each.removeEventListener('focusout', markFocusMoving, true);
+      each.removeEventListener('blur', markFocusMoving, true);
     }
   };
   openLayerRecords.add(record);

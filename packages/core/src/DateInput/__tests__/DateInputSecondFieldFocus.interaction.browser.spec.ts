@@ -43,11 +43,12 @@ test('a press in another field from a focused grid day keeps focus in that field
 }) => {
   const {fields} = await focusFirstGridDay(page);
   const second = fields.nth(1);
+  const before = await second.inputValue();
   await second.click();
   await expect(fields.first()).toHaveAttribute('aria-expanded', 'false');
   await expect(second).toBeFocused();
-  await page.keyboard.type('1');
-  await expect(second).toHaveValue(/1/);
+  await page.keyboard.type('x');
+  await expect(second).not.toHaveValue(before);
 });
 
 test('Escape from a focused grid day returns focus to the calendar button', async ({
