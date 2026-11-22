@@ -3511,7 +3511,7 @@ const QUESTIONS_J = [
   ],
   [
     'font size 16px line height 150%',
-    {top: /^set q --text-body-leading 2\.14$/},
+    {top: /^set q --text-body-leading 1\.5$/},
   ],
   [
     'font size 16px line height normal',
@@ -3536,6 +3536,18 @@ const QUESTIONS_J = [
   ],
   ['headings 32px line height', {top: /^set q line-height 32px --on heading$/}],
   ['Type: Helvetica 13px, 18px leading', {top: /--text-body-leading 1\.385$/}],
+  // a percent said as the line height is a share of the text size, as CSS
+  // reads it; a percent said as a change scales the line height now
+  ['line height 150%', {top: /^set q --text-body-leading 1\.5$/}],
+  ['line height 50% taller', {top: /^set q --text-body-leading 2\.14$/}],
+  [
+    'increase the line height by 50%',
+    {top: /^set q --text-body-leading 2\.14$/},
+  ],
+  ['drop the line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
+  ['tighten line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
+  ['change the line height by 10%', {top: null}],
+  ['line height 150% by default', {top: /^set q --text-body-leading 1\.5$/}],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],

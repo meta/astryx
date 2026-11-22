@@ -2181,6 +2181,17 @@ export function exactFactor(text) {
     const f = fraction(cut[2]);
     if (f != null) return by(f, !/^(increase|raise|grow)$/.test(cut[1]));
   }
+  // "drop the line height by 10%", "increase it by 50%": a change by a
+  // percent the verb says the way of.
+  const cutPct =
+    /\b(cut|reduce|lower|shrink|decrease|drop|lessen|compress|tighten|increase|raise|grow|loosen|expand)\b[^.]*?\bby (\d{1,3}(?:\.\d+)?)\s?%/.exec(
+      t,
+    );
+  if (cutPct && Number(cutPct[2]) > 0)
+    return by(
+      Number(cutPct[2]) / 100,
+      !/^(increase|raise|grow|loosen|expand)$/.test(cutPct[1]),
+    );
   // "+50%", "-25%", "50% bigger", "100% smaller".
   const signed = /(^|[\s(])([+-])\s?(\d{1,3}(?:\.\d+)?)\s?%/.exec(t);
   if (signed) return by(Number(signed[3]) / 100, signed[2] === '-');
@@ -22996,16 +23007,46 @@ export function draftAnswer(ctx, env, question) {
               : textPx
                 ? String(Number((leadPx / textPx).toFixed(3)))
                 : null;
-        // An amount ("1.5x", "half") or a percent ("150%": of the line
-        // height there now) is a factor, never a typed number.
+        // A percent said as the line height ("line height 150%") is that
+        // share of the text size, as CSS reads it: 1.5. A percent said as a
+        // change ("50% taller", "increase it by 50%") and an amount ("1.5x",
+        // "half") scale the line height there now.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
+        const pct = pctLeading ? Number(pctLeading[1]) / 100 : null;
+        const byPct = /\bby\s+\d{1,3}(?:\.\d+)?\s?%/i.test(c.text);
+        const asChange =
+          byPct ||
+          /\b(?:increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
+            c.text,
+          );
+        const factorSaid =
+          pxRatio != null ? null : exactFactor(c.text);
+        const pctAbsolute =
+          pxRatio == null &&
+          factorSaid == null &&
+          pct != null &&
+          !asChange
+            ? String(Number(pct.toFixed(3)))
+            : null;
+        // (A change "by N%" with no way said writes nothing and asks which
+        // way.)
+        if (
+          byPct &&
+          factorSaid == null &&
+          pctAbsolute == null &&
+          pxRatio == null
+        )
+          return {
+            text: `the line height${on ? ` on ${on}` : ''} by ${pctLeading?.[0] ?? 'that much'}, but which way? Say "raise the line height by ${pctLeading?.[0] ?? '10%'}" or "drop the line height by ${pctLeading?.[0] ?? '10%'}"`,
+            options: [],
+          };
         const leadFactor =
-          pxRatio != null
+          pxRatio != null || pctAbsolute != null
             ? null
-            : (exactFactor(c.text) ??
-              (pctLeading ? Number(pctLeading[1]) / 100 : null));
+            : (factorSaid ?? (pct == null || byPct ? null : pct));
         const n =
           pxRatio ??
+          pctAbsolute ??
           (leadFactor != null
             ? null
             : (/\b(normal)\b/.exec(c.text)?.[1] ??
