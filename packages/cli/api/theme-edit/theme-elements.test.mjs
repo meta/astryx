@@ -133,6 +133,7 @@ describe('an element named in a part', () => {
         .commands,
     ).toEqual([
       "set e background-color '#2563eb' --on selector-option-row --state highlighted",
+      "set e color '#ffffff' --on selector-option-row --state highlighted --mode light",
     ]);
   }, 240_000);
 });

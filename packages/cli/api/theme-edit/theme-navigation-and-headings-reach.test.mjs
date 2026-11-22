@@ -79,6 +79,7 @@ describe('navigation and headings', () => {
     expect(sel.writes).toEqual([
       "set n background-color '#ffffff' --on side-nav --mode light",
       "set n background-color '#2563eb' --on side-nav-item --state selected",
+      "set n color '#ffffff' --on side-nav-item --state selected --mode light",
     ]);
     const brand = await answer(
       'Give the top bar our brand color #1E3A8A with white text.',

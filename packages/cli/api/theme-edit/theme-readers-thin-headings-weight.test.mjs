@@ -190,19 +190,17 @@ describe('clones', () => {
 });
 
 describe('a fill and its text', () => {
-  it('a fill whose text would not read takes a readable-text line beside it', async () => {
+  it('a fill whose text would not read carries a readable-text line in its answer', async () => {
     const t = await fresh('f1');
     const rs = await how(t, 'make the primary button #0064E0');
     expect(rs[0].commands.filter(c => /^set /.test(c))).toEqual([
       `set ${t} background-color '#0064e0' --on button --when variant:primary`,
-    ]);
-    expect(rs[1].text).toMatch(/^readable text on that fill/);
-    expect(rs[1].commands.filter(c => /^set /.test(c))).toEqual([
       `set ${t} color '#ffffff' --on button --when variant:primary --mode dark`,
     ]);
-    await follow(
-      [...rs[0].commands, ...rs[1].commands].filter(c => /^set /.test(c)),
+    expect(rs.some(r => /^readable text on that fill/.test(r.text))).toBe(
+      false,
     );
+    await follow(rs[0].commands.filter(c => /^set /.test(c)));
     const reads = await how(t, 'make the cards red');
     expect(reads.some(r => /^readable text on that fill/.test(r.text))).toBe(
       false,

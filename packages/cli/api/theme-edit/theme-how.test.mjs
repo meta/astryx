@@ -1485,7 +1485,7 @@ const QUESTIONS_2 = [
   [
     'the sidebar is #111827 and nav items are #9ca3af',
     {
-      top: /--on side-nav && set q background-color '#9ca3af' --on side-nav-item$/,
+      top: /--on side-nav && set q background-color '#9ca3af' --on side-nav-item && set q color '#000000' --on side-nav-item --mode dark$/,
       adds: /side-nav-item\.base\.backgroundColor=#9ca3af/,
     },
   ],
@@ -1866,7 +1866,7 @@ const QUESTIONS_3 = [
   [
     'brand colors: primary #ff5a1f, secondary #1f2937',
     {
-      top: /^set q accent '#ff5a1f' && set q background-color '#1f2937' --on button --when variant:secondary$/,
+      top: /^set q accent '#ff5a1f' && set q background-color '#1f2937' --on button --when variant:secondary && set q color '#ffffff' --on button --when variant:secondary --mode light$/,
       adds: /--color-accent[^\n]*=#ff5a1f/,
     },
   ],
@@ -2081,7 +2081,7 @@ const QUESTIONS_3 = [
   [
     'cards sin sombra y botones azules',
     {
-      top: /^set q box-shadow none --on card && set q background-color '#2563eb' --on button$/,
+      top: /^set q box-shadow none --on card && set q background-color '#2563eb' --on button && set q color '#ffffff' --on button --when variant:secondary --mode light && set q color '#ffffff' --on button --when variant:ghost --mode light && set q color '#ffffff' --on button --when variant:destructive --mode dark$/,
     },
   ],
   // a refusal says why
@@ -3761,7 +3761,7 @@ const QUESTIONS_L = [
   ],
   [
     'tooltips and toasts black',
-    /^set q background-color '#000000' --on tooltip && set q background-color '#000000' --on toast$/,
+    /^set q background-color '#000000' --on tooltip && set q color '#ffffff' --on tooltip --mode dark && set q background-color '#000000' --on toast$/,
   ],
   [
     'less padding on cards but more on buttons',
@@ -3816,13 +3816,15 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
       'I look at it all day, please make the cards rounder',
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'q'});
-      // (The readable-text line beside a fill is measured per mode.)
+      // (The readable text a fill's answer carries is measured per mode.)
       expect(
         JSON.stringify(
-          data.results.filter(
-            (/** @type {any} */ r) =>
-              !/^readable text on that fill/.test(r.text),
-          ),
+          data.results.map((/** @type {any} */ r) => ({
+            text: r.text.split('; its text would not read')[0],
+            commands: r.commands.filter(
+              (/** @type {string} */ c) => !/ color '/.test(c),
+            ),
+          })),
         ),
         q,
       ).not.toMatch(/--mode light|light mode only/);

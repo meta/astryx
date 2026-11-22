@@ -95,7 +95,9 @@ describe('a page or surface color, by mode', () => {
         "background-color '#ffffff' --on card --when variant:muted --mode light",
       ]);
       // (An inverted surface, a tooltip, is dark in light mode by design.)
-      for (const c of (await answer('make tooltips black')).first)
+      for (const c of (await answer('make tooltips black')).first.filter(
+        c => !/^color /.test(c),
+      ))
         expect(c).not.toMatch(/--mode dark/);
     },
     T,
@@ -224,6 +226,7 @@ describe('clone and blind asks', () => {
         expect(c).not.toMatch(/--when size:/);
       expect((await answer('make small buttons red')).first).toEqual([
         "background-color '#dc2626' --on button --when size:sm",
+        "color '#ffffff' --on button --when size:sm --mode dark",
       ]);
     },
     T,

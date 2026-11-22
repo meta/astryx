@@ -96,6 +96,7 @@ describe('a part named as the color', () => {
     );
     expect(err).toEqual([
       `set ${t} background-color 'var(--color-error-muted)' --on button`,
+      `set ${t} color 'var(--color-on-error-muted)' --on button --when variant:primary --mode light`,
     ]);
     await follow(err);
     expect(
@@ -106,6 +107,8 @@ describe('a part named as the color', () => {
         ),
       ),
     ).toEqual([
+      // (The primary label written above, the muted error text, reads on
+      // the muted success fill too: no new text line.)
       `set ${t} background-color 'var(--color-success-muted)' --on button`,
     ]);
     // (Neutral writes its destructive button's own fill: the muted error.)
@@ -113,6 +116,9 @@ describe('a part named as the color', () => {
       writes(await how(t, 'make the badges the color of the danger buttons')),
     ).toEqual([
       `set ${t} background-color 'var(--color-error-muted)' --on badge`,
+      `set ${t} color 'var(--color-on-error-muted)' --on badge --when variant:info --mode light`,
+      `set ${t} color 'var(--color-on-error-muted)' --on badge --when variant:success --mode light`,
+      `set ${t} color 'var(--color-on-error-muted)' --on badge --when variant:error --mode light`,
     ]);
   }, 240_000);
 

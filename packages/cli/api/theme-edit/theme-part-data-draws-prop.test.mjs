@@ -111,6 +111,7 @@ describe('pieces and words', () => {
       (await top('make indeterminate checkboxes red', 'i')).commands,
     ).toEqual([
       "set i background-color '#dc2626' --on checkbox-indicator --when checked:indeterminate --only",
+      "set i color '#ffffff' --on checkbox-indicator --when checked:indeterminate --mode dark --only",
     ]);
   }, 240_000);
 
@@ -121,6 +122,7 @@ describe('pieces and words', () => {
       (await top('make toggle buttons red when selected', 't')).commands,
     ).toEqual([
       "set t background-color '#dc2626' --on toggle-button --state isPressed",
+      "set t color '#ffffff' --on toggle-button --state isPressed --mode light",
     ]);
   }, 240_000);
 

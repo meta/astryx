@@ -146,6 +146,7 @@ const PART = [
       q: 'primary buttons #303030, Inter font, compact spacing',
       first: [
         "background-color '#303030' --on button --when variant:primary",
+        "color '#ffffff' --on button --when variant:primary --mode dark",
         'font inter',
         'spacing compact',
       ],

@@ -138,6 +138,7 @@ describe('states by the one table of words for them', () => {
     );
     expect(pressed).toEqual([
       `set ${t} background-color '#dc2626' --on toggle-button --state isPressed`,
+      `set ${t} color '#ffffff' --on toggle-button --state isPressed --mode light`,
     ]);
     // (A button's press is still its active state.)
     const press = writes(await how(t, 'make buttons darker when pressed'));
@@ -166,9 +167,17 @@ describe('questions and words', () => {
       ['button background red (drak)', 'dark'],
       ['button background red [dark only]', 'dark'],
     ]) {
-      expect(writes(await how('q0', q)), q).toEqual([
+      const w = writes(await how('q0', q));
+      expect(w[0], q).toBe(
         `set q0 background-color '#dc2626' --on button --mode ${mode}`,
-      ]);
+      );
+      // (The fill's answer carries the readable text, in that mode only.)
+      for (const l of w.slice(1))
+        expect(l, q).toMatch(
+          new RegExp(
+            `^set q0 color '#[0-9a-f]{6}' --on button .*--mode ${mode}$`,
+          ),
+        );
     }
   }, 240_000);
 

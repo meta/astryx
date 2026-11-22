@@ -97,7 +97,9 @@ describe('a text part like a filled part', () => {
       await how(t, 'make the links the same color as the danger buttons'),
     );
     // (The links alone: their color prop's token, on links.)
-    expect(link).toEqual([`set ${t} color 'var(--color-error-muted)' --on link`]);
+    expect(link).toEqual([
+      `set ${t} color 'var(--color-error-muted)' --on link`,
+    ]);
     await follow(link);
     const div = writes(
       await how(t, "make the dividers the color of the error inputs' border"),
@@ -117,6 +119,7 @@ describe('words that name which parts', () => {
     const lines = writes(await how(t, 'make the transparent buttons red'));
     expect(lines).toEqual([
       `set ${t} background-color '#dc2626' --on button --when variant:ghost`,
+      `set ${t} color '#ffffff' --on button --when variant:ghost --mode light`,
     ]);
     await follow(lines);
     expect(writes(await how(t, 'make the transparent cards red'))).toEqual([

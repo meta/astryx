@@ -172,10 +172,13 @@ describe('colors and complaints', () => {
 
   it('a status fill on one part offers its dial too', async () => {
     const rs = await how('q0', 'make the info banner navy');
-    expect(rs[0].commands.filter(c => /^set /.test(c))).toEqual([
-      `set q0 background-color '#1e3a8a' --on banner --when status:info`,
-      `set q0 info '#1e3a8a'`,
-    ]);
+    const w = rs[0].commands.filter(c => /^set /.test(c));
+    expect(w).toHaveLength(2);
+    // (The fill's line carries the text that reads on it.)
+    expect(w[0]).toMatch(
+      /^set q0 background-color '#1e3a8a' --on banner --when status:info && .* set q0 color '#ffffff' --on banner --when status:info --mode light$/,
+    );
+    expect(w[1]).toBe(`set q0 info '#1e3a8a'`);
   }, 240_000);
 });
 
