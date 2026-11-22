@@ -29843,6 +29843,9 @@ export function draftAnswer(ctx, env, question) {
         String(st.thing).includes(what) ||
         st.thing === roleToken) &&
       (!undoMode || !st.mode || st.mode === undoMode);
+    // (With a mode said, one side of the clash is of that mode.)
+    const clashOfMode = (/** @type {Draft} */ d) =>
+      !undoMode || d.options.flat().some(st => st.mode === undoMode);
     const clashGone = undone.length
       ? []
       : result.filter(
@@ -29850,7 +29853,8 @@ export function draftAnswer(ctx, env, question) {
             typeof d.clash === 'number' &&
             d.clash >= 0 &&
             (undoAt < 0 || d.clash < undoAt) &&
-            d.options.flat().every(ofUndo),
+            d.options.flat().every(ofUndo) &&
+            clashOfMode(d),
         );
     if (clashGone.length) {
       result.splice(
@@ -30007,9 +30011,11 @@ export function draftAnswer(ctx, env, question) {
     if (colorSaid && part) {
       const COLOR_THINGS =
         /^(?:color|background|background-color|--color-(?:text|background)-[a-z0-9-]+)$/;
+      // (Of the undo's mode only, when it says one.)
       const onIt = (/** @type {Step} */ st) =>
         (st.on === part || (FAMILIES[part] ?? []).includes(String(st.on))) &&
-        COLOR_THINGS.test(String(st.thing));
+        COLOR_THINGS.test(String(st.thing)) &&
+        (!undoMode || st.mode === undoMode);
       for (const d of result)
         if (d.options.length)
           d.options = d.options
@@ -30022,9 +30028,11 @@ export function draftAnswer(ctx, env, question) {
           d =>
             d.options.length ||
             d.unmet ||
-            !/^(?:readable text on that fill|the background on|text color on)/.test(
-              d.text,
-            ),
+            // (A whole-ask sequence the sweep empties goes too.)
+            (!d.batch &&
+              !/^(?:readable text on that fill|the background on|text color on)/.test(
+                d.text,
+              )),
         ),
       );
     }
@@ -30033,7 +30041,7 @@ export function draftAnswer(ctx, env, question) {
       if (c) answeredByUndo.add(c);
     }
     // (With a change of another mode left, the line says which went.)
-    const left = matched.filter(d => !undone.includes(d));
+    const left = undoMode ? matched.filter(d => !undone.includes(d)) : [];
     result.push({
       text: `the ${part ? `${part} ` : ''}change said earlier in this ask${left.length ? ` for ${undoMode} mode` : ''} is taken back by its undo, so it is not written${left.length ? `; the change said for ${left.some(d => !(/** @type {any} */ (draftClause.get(d))?.mode)) ? 'both modes' : 'the other mode'} stays written` : ''}`,
       options: [],

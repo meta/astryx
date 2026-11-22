@@ -129,6 +129,29 @@ const ROWS = [
     },
   ],
   [
+    'an undo of a look with no mode names no mode',
+    {
+      q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
+      saysNot: /null mode|stays written/,
+    },
+  ],
+  [
+    "a color undo of one mode leaves the other mode's color",
+    {
+      q: 'make the card background blue in light mode. make the card background red in dark mode. undo the light mode card color change',
+      has: [
+        "background-color '#dc2626' --on card --when variant:default --mode dark",
+      ],
+    },
+  ],
+  [
+    "a clash with no side of the undo's mode keeps its choice",
+    {
+      q: 'make the accent red. make the accent blue. undo the light mode accent change',
+      says: /contradict each other/,
+    },
+  ],
+  [
     'a clash said after the undo keeps its choice',
     {
       q: 'undo the light mode accent change. make the accent red in light mode. make the accent blue in light mode',
