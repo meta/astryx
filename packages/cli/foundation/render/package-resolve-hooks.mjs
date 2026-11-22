@@ -9,9 +9,9 @@
  *   specified ES module import between two files of one installed package,
  *   or of one linked package (one a bare import reached outside
  *   node_modules), with the file's URL, and a package name or a `#` import
- *   from a folder it was already resolved from, with the answer it got
- *   there; every other import goes on to the next resolver, and its answer
- *   is returned as it is.
+ *   that an ES module imports from a folder it was already resolved from,
+ *   with the answer it got there; every other import goes on to the next
+ *   resolver, and its answer is returned as it is.
  * @position foundation/render. Node reads the nearest package.json of each
  *   module it resolves and loads, and it reads a package's whole manifest
  *   again for each module, so a package of hundreds of modules (Core) reads
@@ -169,14 +169,16 @@ const isBare = specifier =>
 
 /**
  * The key of an import whose answer is the same from every file of one
- * folder: a package name or a `#` import, from a file. Node finds a package
- * name in the node_modules folders above the importing file's folder, a
- * self-reference by the package scope of that folder, and a `#` import in
- * that scope's `imports`; the folder fixes all three, so its conditions, in
- * order, and its import attributes are all else that decides the answer.
- * Import attributes with the same entries in another order give another
- * key: that costs a second resolution, never a wrong answer. Null for any
- * other import.
+ * folder: a package name or a `#` import that an ES module imports from a
+ * file. Node finds a package name in the node_modules folders above the
+ * importing file's folder, a self-reference by the package scope of that
+ * folder, and a `#` import in that scope's `imports`; the folder fixes all
+ * three, so its conditions, in order, and its import attributes are all else
+ * that decides the answer. Import attributes with the same entries in
+ * another order give another key: that costs a second resolution, never a
+ * wrong answer. Null for any other import, and for every CommonJS
+ * resolution: `require.resolve` with its `paths` option reaches the hook
+ * without them, so the folder does not fix its answer.
  * @param {string} specifier
  * @param {{parentURL?: string, conditions?: readonly string[], importAttributes?: object}} context
  * @returns {string | null}
@@ -185,6 +187,7 @@ function folderKey(specifier, context) {
   const parent = context.parentURL;
   if (parent === undefined || !parent.startsWith('file:')) return null;
   if (!isBare(specifier) && !specifier.startsWith('#')) return null;
+  if (context.conditions?.includes('require')) return null;
   return JSON.stringify([
     path.dirname(fileURLToPath(parent)),
     specifier,
@@ -261,8 +264,8 @@ export function packageModuleUrl(specifier, parent, lookups) {
 
 /**
  * Module hooks that resolve imports between the files of an installed or a
- * linked package by path, and each package name or `#` import once for each
- * folder it is imported from. What the next resolvers answered there
+ * linked package by path, and each package name or `#` import that ES
+ * modules import once for each folder it is imported from. What the next resolvers answered there
  * (single-copy-hooks.mjs among them, which decides by the name) is the
  * answer kept.
  * @param {PackageLookups} [lookups]

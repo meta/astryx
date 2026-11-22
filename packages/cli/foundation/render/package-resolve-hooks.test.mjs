@@ -1,10 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for the export worker's package resolve hook: it answers only
- * a relative, fully specified ES module import between two files of one
- * installed package, as Node resolves it, and every other import resolves as
- * Node resolves it with no hook.
+ * @file Tests for the export worker's package resolve hook: it answers a
+ * relative, fully specified ES module import between two files of one
+ * installed or linked package, as Node resolves it, and a package name or a
+ * `#` import that an ES module imports again from one folder, with the
+ * answer Node gave there; every import resolves as Node resolves it with no
+ * hook.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -191,6 +193,21 @@ beforeAll(() => {
   put(
     'folders/inner/c.js',
     "export {v} from 'shared';\nexport {d} from '#dep';\nexport {s} from 'inner';\n",
+  );
+  // A CommonJS file of the same folder resolves the same name with and
+  // without `paths`, in both orders.
+  put(
+    'folders/r.cjs',
+    [
+      "const path = require('node:path');",
+      'const at = file => path.relative(__dirname, file);',
+      "const inner = [path.join(__dirname, 'inner')];",
+      "const plain = at(require.resolve('shared'));",
+      "const viaPaths = at(require.resolve('shared', {paths: inner}));",
+      "const plainAgain = at(require.resolve('shared'));",
+      'module.exports = {plain, viaPaths, plainAgain};',
+      '',
+    ].join('\n'),
   );
 });
 
@@ -482,6 +499,25 @@ describe.skipIf(!hasHooks)('a package name or a `#` import through the hook', ()
     // the nested folder, with its own scope, resolved its own.
     expect(hooked.byPath).toBe(2);
     expect(plain.byPath).toBe(0);
+  }, 60_000);
+
+  it('leaves CommonJS resolution to Node, `require.resolve` with `paths` included', () => {
+    const file = pathToFileURL(path.join(dir, 'folders', 'r.cjs')).href;
+    const plain = JSON.parse(resolutionsIn([file], false));
+    const hooked = JSON.parse(resolutionsIn([file], true));
+    expect(hooked.seen).toEqual(plain.seen);
+    const gave = plain.seen.find(
+      (/** @type {unknown[]} */ s) => s[0] === file && s.length === 2,
+    );
+    const [, exports] = JSON.parse(gave[1]).find(
+      (/** @type {[string, unknown]} */ [name]) => name === 'default',
+    );
+    expect(exports).toEqual({
+      plain: path.join('node_modules', 'shared', 'index.js'),
+      viaPaths: path.join('inner', 'node_modules', 'shared', 'index.js'),
+      plainAgain: path.join('node_modules', 'shared', 'index.js'),
+    });
+    expect(hooked.byPath).toBe(0);
   }, 60_000);
 });
 
