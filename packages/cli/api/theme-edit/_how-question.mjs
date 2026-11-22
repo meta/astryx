@@ -112,6 +112,7 @@ import {
   codeBlocksOnSurface,
   ownSourceTokenValues,
   shadeAt,
+  familyKind,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -34185,10 +34186,36 @@ function fontIn(cl, question) {
       `(?:^|[\\s,;:])${NAME}\\s+(?:as|for|everywhere|throughout|across)\\b`,
       'g',
     ),
+    // ("MS Sans Serif-like pixel sans"): a family a font is said to be like
+    // is that family, written as typed. (Before a font word the question
+    // already drops the suffix.)
+    new RegExp(`(?:^|[\\s,;:])${NAME}-(?:like|style|esque)\\b`, 'g'),
   ]) {
     for (const m of question.matchAll(re)) {
-      const name = m[1].replace(/ (Font|Typeface)$/, '');
+      const name = m[1]
+        .replace(/ (Font|Typeface)$/, '')
+        .replace(/-(?:like|style|esque)$/i, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
+      if (/-(?:like|style|esque)\b/i.test(m[0])) {
+        // (A kind the rest of the clause names as a whole word, "NYT-style
+        // serif headings", wins over the family's own kind: the kind said
+        // is written, as before.)
+        const rest = c.replace(name.toLowerCase(), '');
+        const said = /\bmono(?:space|spaced)?\b|\bcode\b/.test(rest)
+          ? 'mono'
+          : /(?<!sans[\s-])\bserif\b/.test(rest)
+            ? 'serif'
+            : null;
+        if (said && said !== familyKind(name)) continue;
+        // (A shipped font whose family the name begins, "Comic Sans-like",
+        // is that font, with its own fallbacks.)
+        const shipped = known
+          ? String(FONTS[known]?.[0] ?? OPEN_FONTS[known]?.family ?? '')
+              .replace(/"/g, '')
+              .toLowerCase()
+          : '';
+        if (shipped.startsWith(name.toLowerCase())) continue;
+      }
       // ("titles in All Caps", "body text in Sentence Case": a casing said
       // in words is the text's case, never a family.)
       if (
