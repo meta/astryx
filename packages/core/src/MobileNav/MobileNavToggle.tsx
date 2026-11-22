@@ -21,7 +21,6 @@
  */
 
 import React, {
-  createContext,
   startTransition,
   use,
   useEffect,
@@ -34,6 +33,8 @@ import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import type {BaseProps} from '../BaseProps';
 import {composeEventHandlers} from '../utils';
 import {createModuleLoader} from '../utils/moduleLoader';
+import {createSharedContext} from '../utils/sharedContext';
+import {sharedState} from '../utils/sharedRealm';
 import {warnOnce} from '../utils/devWarning';
 import type * as MobileNavModule from './MobileNav';
 import type {MobileNavProps} from './MobileNav';
@@ -51,7 +52,11 @@ registerEnglishFallback(english);
 const drawerModule = createModuleLoader<typeof MobileNavModule>(
   async () => import('./MobileNav'),
 );
-const drawerListeners = new Set<() => void>();
+const drawerListeners = sharedState(
+  'MobileNav/MobileNavToggle/drawerListeners',
+  1,
+  () => new Set<() => void>(),
+);
 
 function subscribeToDrawer(listener: () => void): () => void {
   drawerListeners.add(listener);
@@ -120,7 +125,11 @@ function useLoadedDrawer(isListening: boolean): Drawer | null {
 }
 
 // Undefined outside an AppShell, which provides it.
-const LoadedDrawerContext = createContext<Drawer | null | undefined>(undefined);
+const LoadedDrawerContext = createSharedContext<Drawer | null | undefined>(
+  'MobileNav/MobileNavToggle/LoadedDrawerContext',
+  1,
+  undefined,
+);
 LoadedDrawerContext.displayName = 'MobileNavLoadedDrawerContext';
 
 /**
