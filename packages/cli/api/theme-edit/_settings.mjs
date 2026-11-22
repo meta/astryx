@@ -13162,6 +13162,29 @@ export async function contrastProblems(ctx, data, res) {
     }
     return out;
   };
+  const keptRecords = acceptedContrast(data);
+  /**
+   * Whether a failure is the very pair a kept record names: the same place
+   * and the same two colors.
+   * @param {{x: any, problem: ThemeProblem}} it
+   */
+  const keptAsDesigned = it => {
+    const at = contrastPlace(it.problem);
+    const pair = at ? drawnPair(it.problem, res, at.mode) : null;
+    return (
+      at != null &&
+      pair != null &&
+      keptRecords.some(
+        a =>
+          a.part === at.part &&
+          a.ground === at.ground &&
+          (a.when ?? '') === at.when &&
+          a.mode === at.mode &&
+          a.color === pair.color &&
+          a.groundColor === pair.groundColor,
+      )
+    );
+  };
   /**
    * The base theme's own failures of one cause (the same text color on the
    * same ground color, in the same variant and mode, on whichever parts) as
@@ -13185,6 +13208,9 @@ export async function contrastProblems(ctx, data, res) {
       const onVariant = String(it.x.pair?.groundWhen ?? it.x.when ?? '');
       if (
         !it.x.base &&
+        // (A pair the theme keeps as designed stays its own problem, so the
+        // record still covers it while other variants fail beside it.)
+        !keptAsDesigned(it) &&
         /^variant:/.test(onVariant) &&
         it.x.fgToken &&
         it.x.bgPart &&
@@ -13959,6 +13985,68 @@ export function contrastPlace(p) {
     return {part: k[2], ground: k[1], when: '', mode, ratio: ratioNow};
   }
   return null;
+}
+
+/**
+ * How a kept contrast problem stands among the problems drawn now: whether
+ * it still covers one, and the ratio its place is drawn at when it does
+ * not (null where nothing at its place fails). A failure the editor reports
+ * across several variants at once counts at each variant it names.
+ * @param {AcceptedContrast} a
+ * @param {ThemeProblem[]} now the problems drawn now, acceptances applied
+ * @returns {{inEffect: boolean, ratioNow: number | null}}
+ */
+export function keptNow(a, now) {
+  const seen = now
+    .filter(p => !p.note || p.accepted)
+    .map(p => ({
+      accepted: Boolean(p.accepted),
+      at: contrastPlace(p),
+      across: acrossVariants(p),
+    }));
+  const here = seen.filter(
+    ({at, across}) =>
+      (at != null &&
+        at.part === a.part &&
+        at.ground === a.ground &&
+        at.when === (a.when ?? '') &&
+        at.mode === a.mode) ||
+      (across != null &&
+        across.part === a.part &&
+        across.ground === a.ground &&
+        across.mode === a.mode &&
+        (!a.when || across.variants.includes(a.when.replace(/^variant:/, '')))),
+  );
+  const open = here.filter(x => !x.accepted);
+  return {
+    inEffect: here.some(x => x.accepted),
+    ratioNow: open.length
+      ? Math.min(...open.map(x => Number(x.at?.ratio ?? x.across?.ratio)))
+      : null,
+  };
+}
+
+/**
+ * The place of one failure the editor reports across three or more of a
+ * ground's variants, read from its key: the text part, the ground, the
+ * mode, the variants named and the lowest ratio; null for any other
+ * problem.
+ * @param {ThemeProblem} p
+ * @returns {{part: string, ground: string, mode: string, variants: string[], ratio: number} | null}
+ */
+function acrossVariants(p) {
+  const k = String(p.key ?? '').split('|');
+  if (k[0] !== 'variants' || k.length < 8) return null;
+  const ratio = Number(/ is ([\d.]+)(?:–[\d.]+)?:1\b/.exec(p.text)?.[1]);
+  const named = / variants \(([^)]*)\)/.exec(p.text)?.[1] ?? '';
+  if (!Number.isFinite(ratio)) return null;
+  return {
+    part: k[3],
+    ground: k[4],
+    mode: k[6],
+    variants: named.split(/,\s*/).map(v => v.replace(/ and \d+ more$/, '')),
+    ratio,
+  };
 }
 
 /**

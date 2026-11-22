@@ -22,7 +22,9 @@ import {
   themeEditShow,
   themeEditUndo,
 } from './theme-edit.mjs';
-import {withAccepted} from './_settings.mjs';
+import {keptNow, withAccepted} from './_settings.mjs';
+import {editorKeptContrastAt} from './_adapter.mjs';
+import {acceptedContrastCheck} from '../doctor/theme-checks.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -235,6 +237,58 @@ describe('a contrast problem in one variant, kept as designed', () => {
           undo: 'astryx experimental theme editor set bv contrast-accepted none --on badge --when variant:info --ground badge --mode light',
         }),
       ]);
+      // doctor lists it too, read from the editor settings, with its variant.
+      expect(
+        acceptedContrastCheck(await editorKeptContrastAt(cwd)),
+      ).toMatchObject({
+        id: 'theme-accepted-contrast',
+        status: 'info',
+        message: expect.stringMatching(
+          /bv: badge \(variant info\) on badge in light at [\d.]+:1 \(matches the original's info label exactly\)/,
+        ),
+      });
+    },
+    T,
+  );
+
+  it(
+    'still covers its pair when other variants take the same fill',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('cg', {cwd, like: 'neutral'});
+      await themeEditSet('cg', 'background-color', '#333333', {
+        cwd,
+        on: 'card',
+        when: 'variant:blue',
+      });
+      await themeEditSet(
+        'cg',
+        'contrast-accepted',
+        'the original card heading',
+        {
+          cwd,
+          on: 'heading',
+          ground: 'card',
+          mode: 'light',
+        },
+      );
+      // Five more variants in the same fill: the heading is drawn in the same
+      // pair on each, so the record still covers it, never "a color changed".
+      for (const v of ['green', 'purple', 'orange', 'red', 'teal'])
+        await themeEditSet('cg', 'background-color', '#333333', {
+          cwd,
+          on: 'card',
+          when: `variant:${v}`,
+        });
+      const check = acceptedContrastCheck(
+        (await editorKeptContrastAt(cwd)).filter(
+          (/** @type {{slug: string}} */ a) => a.slug === 'cg',
+        ),
+      );
+      expect(check?.message).toMatch(
+        /1 contrast problem is kept as designed: cg: heading on card in light at 1\.66:1/,
+      );
+      expect(check?.message).not.toMatch(/no longer/);
     },
     T,
   );
@@ -249,6 +303,28 @@ describe('a contrast problem in one variant, kept as designed', () => {
         when: 'variant:info',
       });
       expect(info(await themeEditShow('bv', {cwd})).length).toBeGreaterThan(0);
+      // doctor says so too: the acceptance no longer holds.
+      expect(
+        acceptedContrastCheck(await editorKeptContrastAt(cwd))?.message,
+      ).toMatch(
+        /no longer holds?, because a color changed[^]*bv: badge \(variant info\) on badge in light at [\d.]+:1, kept at/,
+      );
+      await themeEditUndo('bv', {cwd});
+      // A fill that now passes leaves the acceptance with nothing to keep:
+      // doctor says it is no longer needed, never that it is a problem.
+      await themeEditSet('bv', 'background-color', '#0b4f5c', {
+        cwd,
+        on: 'badge',
+        when: 'variant:info',
+        mode: 'light',
+      });
+      expect(info(await themeEditShow('bv', {cwd}))).toEqual([]);
+      const passing = acceptedContrastCheck(await editorKeptContrastAt(cwd));
+      expect(passing?.status).toBe('info');
+      expect(passing?.message).toMatch(
+        /no longer needed: its colors changed and it now passes: bv: badge \(variant info\)/,
+      );
+      expect(passing?.message).not.toMatch(/a problem again/);
       await themeEditUndo('bv', {cwd});
       expect(info(await themeEditShow('bv', {cwd}))).toEqual([]);
       // Taken back by its own undo line.
@@ -484,5 +560,38 @@ describe('a kept pair, measured alone', () => {
   });
   it('lapses when the same pair is drawn lower (a see-through fill over a darker part)', () => {
     expect(problem('#17a2b8', '3.10').note).toBeUndefined();
+  });
+});
+
+describe('a kept problem, read against what is drawn now', () => {
+  const kept = /** @type {any} */ ({
+    part: 'heading',
+    ground: 'card',
+    when: 'variant:blue',
+    mode: 'light',
+    ratio: 3,
+    reason: 'r s t',
+  });
+  it('is not called passing while one failure across its variants still names it', () => {
+    // (The shape the editor reports: its key names the text part, the
+    // ground and the mode; its text names the variants.)
+    const grouped = /** @type {any} */ ({
+      key: 'variants|--color-text-primary|#1e293b|heading|card|This week|light|lines',
+      text: 'text ("This week") in heading on 3 card variants (blue, green, purple) is 1.17:1 in light (#1e293b on each variant\'s fill); text needs 4.5:1',
+    });
+    expect(keptNow(kept, [grouped])).toEqual({inEffect: false, ratioNow: 1.17});
+  });
+  it('takes no failure on another ground for its own place', () => {
+    const elsewhere = /** @type {any} */ ({
+      key: 'text|heading|heading|--color-text-primary|page|||Title|light',
+      text: 'text in heading ("Title") is 2.10:1 in light (#1e293b on the page\'s #333333); text needs 4.5:1',
+    });
+    expect(keptNow(kept, [elsewhere])).toEqual({
+      inEffect: false,
+      ratioNow: null,
+    });
+  });
+  it('is no longer needed where nothing at its place fails', () => {
+    expect(keptNow(kept, [])).toEqual({inEffect: false, ratioNow: null});
   });
 });

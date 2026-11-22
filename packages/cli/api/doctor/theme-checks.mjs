@@ -2444,6 +2444,61 @@ export async function checkAppThemes(cwd) {
   return checks;
 }
 
+/**
+ * The contrast problems the app's editor themes keep as designed, each with
+ * its variant, ratio and reason: listed, so an acceptance is never out of
+ * sight. One whose colors changed since covers nothing and is named apart:
+ * a problem again at the ratio drawn now, or no longer needed where its
+ * place now passes. Null when none keeps one.
+ * @param {Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect?: boolean, ratioNow?: number | null}>} kept
+ *   each acceptance, with its theme, as the editor reads it
+ * @returns {DoctorCheck | null}
+ */
+export function acceptedContrastCheck(kept) {
+  if (!kept.length) return null;
+  /** @param {typeof kept[number]} a */
+  const place = a =>
+    `${a.slug}: ${a.part}${a.when ? ` (${a.when.replace(/:/g, ' ').replace(/\+/g, ', ')})` : ''} on ${a.ground} in ${a.mode}`;
+  const held = kept
+    .filter(a => a.inEffect !== false)
+    .map(a => `${place(a)} at ${a.ratio}:1 (${a.reason})`);
+  const open = kept
+    .filter(a => a.inEffect === false && a.ratioNow != null)
+    .map(a => `${place(a)} at ${a.ratioNow}:1, kept at ${a.ratio}:1`);
+  const passes = kept
+    .filter(a => a.inEffect === false && a.ratioNow == null)
+    .map(place);
+  /** @param {string[]} xs @param {string} one @param {string} many */
+  const said = (xs, one, many) =>
+    xs.length
+      ? `${xs.length} ${xs.length > 1 ? many : one}: ${xs.join('; ')}`
+      : '';
+  return {
+    id: 'theme-accepted-contrast',
+    label: 'Contrast kept as designed',
+    status: 'info',
+    message: [
+      said(
+        held,
+        'contrast problem is kept as designed',
+        'contrast problems are kept as designed',
+      ),
+      said(
+        open,
+        'kept contrast problem no longer holds, because a color changed, and is a problem again',
+        'kept contrast problems no longer hold, because a color changed, and are problems again',
+      ),
+      said(
+        passes,
+        'kept contrast problem is no longer needed: its colors changed and it now passes',
+        'kept contrast problems are no longer needed: their colors changed and they now pass',
+      ),
+    ]
+      .filter(Boolean)
+      .join('. '),
+  };
+}
+
 /** @param {string} file */
 function readPackageVersion(file) {
   const pkg = readPackageJson(file);
