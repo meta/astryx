@@ -15,6 +15,7 @@ import {subscriberGrowthData, visitsByDeviceData} from './_data';
 const meta: Meta<typeof Chart> = {
   title: 'Charts/Marks/Area',
   component: Chart,
+  tags: ['autodocs'],
 };
 export default meta;
 

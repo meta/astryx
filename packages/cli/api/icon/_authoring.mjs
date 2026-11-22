@@ -33,6 +33,7 @@ import {
   definitionFile,
   findLocalIconSet,
   generatedModulePath,
+  ownModuleOf,
   generatedModuleText,
   generatedOrigins,
   sameIconModule,
@@ -594,7 +595,7 @@ export async function addIconSet(name, options) {
       ...(missingNotice ? [missingNotice.note] : []),
       ...mappedNotes(map, name),
       ...suggestionNotes(suggestions, name),
-      'Run `astryx integration check` to see the icon definitions still to map.',
+      'Run `astryx integration check` to see the icon meanings still to map.',
       ...(isPrivate
         ? [
             `When \`integration check\` passes, turn the set on in the app: \`astryx experimental icon use ${name}\`. Run it in the app's folder; when this package is not the app, install it in the app first.`,
@@ -700,7 +701,12 @@ async function redeclareIconSet(
     const drawn =
       given && set.data.icons.length > 0
         ? drawnLooks(set, packageDir, module =>
-            libraryPositions(module, where, Boolean(set.data.adapter)),
+            libraryPositions(
+              module,
+              where,
+              Boolean(set.data.adapter),
+              ownModuleOf(set, packageDir),
+            ),
           )
         : null;
     const {looks} = resolveDefaultLook({
@@ -900,7 +906,7 @@ function suggestionNotes(suggestions, name) {
   if (suggestions.length === 0) return [];
   const count = new Set(suggestions.map(each => each.definition)).size;
   return [
-    `${count} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
+    `${count} unmapped icon meanings have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
   ];
 }
 
@@ -913,7 +919,7 @@ function mappedNotes(map, name) {
   const count = Object.keys(map).length;
   if (count === 0) return [];
   return [
-    `${count} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
+    `${count} icon meanings were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
   ];
 }
 
@@ -981,13 +987,15 @@ function variantOptions(options) {
  * @param {string} module
  * @param {{packageDir: string, pkg: Record<string, any>}} where
  * @param {boolean} adapter
+ * @param {string} own the set's generated module, never read as the library's
  * @returns {Array<Set<string>> | null}
  */
-function libraryPositions(module, where, adapter) {
+function libraryPositions(module, where, adapter, own) {
   try {
     const source = resolveIconSource(module, where);
     return moduleNaming(source.file, {
       adapter,
+      own,
       module,
       progress: line => logger.warn(line),
     }).positions;
@@ -1130,6 +1138,7 @@ async function refreshIconSet(
     const everyIcon = everyLibraryIcon(source.file, {
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
+      own: ownModuleOf(set, packageDir),
       module: source.module,
       progress: line => logger.warn(line),
     });
@@ -1562,8 +1571,8 @@ async function refreshIconSet(
           ]
         : []),
       astryxIconDefinitions().definitions.every(({doc}) => map[doc.name])
-        ? 'Every Astryx icon definition is mapped.'
-        : 'Run `astryx integration check` to see the icon definitions still to map.',
+        ? 'Every Astryx icon meaning is mapped.'
+        : 'Run `astryx integration check` to see the icon meanings still to map.',
     ];
     return result;
   });

@@ -89,6 +89,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Button/Button.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 registerEnglishFallback(english);
 
@@ -1080,7 +1081,10 @@ export function Button({
           </span>
         )}
         {isIconOnly ? null : (
-          <span ref={labelRef} {...stylex.props(styles.labelText)}>
+          <span
+            ref={labelRef}
+            {...textDirectionProps(children ?? label)}
+            {...stylex.props(styles.labelText, truncatedTextStyles.pageAlign)}>
             {children ?? label}
           </span>
         )}
