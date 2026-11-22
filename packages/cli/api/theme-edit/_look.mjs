@@ -326,6 +326,11 @@ const fixed = r => Number(r.toFixed(2));
  * @returns {Set<string>}
  */
 function inside(map, part) {
+  // (Asked for every text pair a check measures: worked out once per map.)
+  let memo = INSIDE.get(map);
+  if (!memo) INSIDE.set(map, (memo = new Map()));
+  const known = memo.get(part);
+  if (known) return known;
   const within = new Set(map[part]?.contains ?? []);
   // A page bar holds whatever controls an app puts in it (a filter's
   // segmented control, tabs, badges), and what they hold.
@@ -337,8 +342,15 @@ function inside(map, part) {
   if ([...within].some(q => MENU_OPENERS.includes(q)))
     for (const {part: menu} of menuParts(map))
       for (const q of [menu, ...(map[menu]?.contains ?? [])]) within.add(q);
+  memo.set(part, within);
   return within;
 }
+
+/** The parts inside each part, by part map. @type {WeakMap<object, Map<string, Set<string>>>} */
+const INSIDE = new WeakMap();
+
+/** The menu parts, by part map. @type {WeakMap<object, Array<{part: string, shadows: string[]}>>} */
+const MENUS = new WeakMap();
 
 /** Parts that open a menu where they stand. */
 const MENU_OPENERS = ['button', 'top-nav-item', 'selector', 'multi-selector'];
@@ -514,6 +526,8 @@ function textProblems(look) {
  * @returns {Array<{part: string, shadows: string[]}>}
  */
 function menuParts(map) {
+  const known = MENUS.get(map);
+  if (known) return known;
   /** @type {Array<{part: string, shadows: string[]}>} */
   const out = [];
   for (const [part, rec] of Object.entries(map)) {
@@ -527,6 +541,7 @@ function menuParts(map) {
         shadows: Object.keys(own['box-shadow']?.tokens ?? {}).sort(),
       });
   }
+  MENUS.set(map, out);
   return out;
 }
 
@@ -1255,6 +1270,13 @@ function ownHover(components, part, m, block, state = ':hover') {
 }
 
 /**
+ * Core's own rest and hover paint, by Core's token defaults (one object per
+ * Core), then by part, state key, mode and block.
+ * @type {WeakMap<object, Map<string, {d: number, rest: Rgb, hover: Rgb, alpha: number} | null>>}
+ */
+const CORE_PAINTS = new WeakMap();
+
+/**
  * Hover that shows nothing: a part Core paints differently under the
  * pointer (its own hover fill, or the hover overlay over its fill) that the
  * theme paints the same as at rest. Read from the states the part data
@@ -1267,10 +1289,25 @@ function hoverProblems(look) {
   const {res, base, components, map} = look;
   /** @type {Map<string, LookProblem>} */
   const out = new Map();
+  /** The parts that hold each part, in the part data's order. */
+  /** @type {Map<string, string[]>} */
+  const holders = new Map();
+  for (const [outer, rec] of Object.entries(map))
+    for (const q of rec?.contains ?? [])
+      holders.set(q, [...(holders.get(q) ?? []), outer]);
+  /** @type {Map<string, any>} */
+  const memo = new Map();
+  /** @template T @param {string} key @param {() => T} make @returns {T} */
+  const once = (key, make) => {
+    if (!memo.has(key)) memo.set(key, make());
+    return memo.get(key);
+  };
   /** The painted part a part sits in, its fill. @param {string} part @param {Mode} m */
-  const around = (part, m) => {
-    for (const [outer, rec] of Object.entries(map)) {
-      if (!(rec?.contains ?? []).includes(part)) continue;
+  const around = (part, m) =>
+    once(`fill|${part}|${m}`, () => aroundFill(part, m));
+  /** @param {string} part @param {Mode} m */
+  const aroundFill = (part, m) => {
+    for (const outer of holders.get(part) ?? []) {
       const v = partValue(
         components,
         outer,
@@ -1287,9 +1324,11 @@ function hoverProblems(look) {
    * hover tint) over the theme's.
    * @param {string} part @param {Mode} m
    */
-  const aroundTokens = (part, m) => {
-    for (const [outer, rec] of Object.entries(map)) {
-      if (!(rec?.contains ?? []).includes(part)) continue;
+  const aroundTokens = (part, m) =>
+    once(`tokens|${part}|${m}`, () => tokensAround(part, m));
+  /** @param {string} part @param {Mode} m */
+  const tokensAround = (part, m) => {
+    for (const outer of holders.get(part) ?? []) {
       const style = components?.[outer]?.base;
       if (!style || typeof style !== 'object') continue;
       /** @type {Record<string, string>} */
@@ -1378,7 +1417,14 @@ function hoverProblems(look) {
           components,
           around(part, m),
         );
-        const core = paints(base, {}, null);
+        // (Core's own paint is the same for every theme on one Core.)
+        const coreKey = `${part}|${key}|${m}|${block ?? ''}|${layer}`;
+        let corePaints = CORE_PAINTS.get(look.defaults);
+        if (!corePaints)
+          CORE_PAINTS.set(look.defaults, (corePaints = new Map()));
+        if (!corePaints.has(coreKey))
+          corePaints.set(coreKey, paints(base, {}, null));
+        const core = corePaints.get(coreKey);
         if (theme == null || core == null) continue;
         // Text on the state's fill, as the theme draws it: it read at rest
         // and must read under the pointer or the press too.
@@ -1856,6 +1902,50 @@ function colorlessValue(res, t, raw = undefined) {
  * @returns {Record<string, Partial<Record<Mode, string>>>}
  */
 function filledColors(look) {
+  let fills = FILLED.get(look);
+  if (fills) return fills;
+  // With one Core, the fills follow from the tokens the theme sets and its
+  // own local tokens (Core resolves every other token from those): a check
+  // and the check again after --fix, or themes that differ only in their
+  // part styles, share them.
+  /** @param {Mode} m */
+  const inputs = m =>
+    Object.entries(look.res[m]).filter(
+      ([t]) => look.own.has(t) || !(t in look.defaults),
+    );
+  const key = JSON.stringify([look.modes, inputs('light'), inputs('dark')]);
+  let byInputs = FILLED_BY_INPUTS.get(look.defaults);
+  if (!byInputs) FILLED_BY_INPUTS.set(look.defaults, (byInputs = new Map()));
+  fills = byInputs.get(key);
+  if (!fills) {
+    fills = paletteFills(look);
+    if (byInputs.size >= 64) byInputs.clear();
+    byInputs.set(key, fills);
+  }
+  FILLED.set(look, fills);
+  return fills;
+}
+
+/**
+ * The palette fills by Core's token defaults (one object per Core), then by
+ * the theme's inputs.
+ * @type {WeakMap<object, Map<string, Record<string, Partial<Record<Mode, string>>>>>}
+ */
+const FILLED_BY_INPUTS = new WeakMap();
+
+/**
+ * The palette fills by look: the check and the repair both read them for
+ * one look, and they are the same each time.
+ * @type {WeakMap<Look, Record<string, Partial<Record<Mode, string>>>>}
+ */
+const FILLED = new WeakMap();
+
+/**
+ * The palette fills for a look, as {@link filledColors} returns them.
+ * @param {Look} look
+ * @returns {Record<string, Partial<Record<Mode, string>>>}
+ */
+function paletteFills(look) {
   const {res, own, modes, base, defaults} = look;
   const page = (/** @type {Mode} */ m) =>
     shown(colorIn(`var(${PAGE})`, res[m], m), null);
