@@ -284,7 +284,8 @@ export const docs = {
       {
         slot: 'number-input-stepper',
         description: 'The glyph inside a stepper button.',
-        fallback: '`numberInput:stepperDown`; the increment button mirrors it',
+        fallback:
+          '`numberInput:stepperDown` when the theme maps no slot; `chevronDown` when a mapping omits the icon. The increment button mirrors the glyph',
         state: [
           {
             name: 'direction',
@@ -626,7 +627,8 @@ export const docsZh = {
       {
         slot: 'number-input-stepper',
         description: '步进按钮内的图标。',
-        fallback: '`numberInput:stepperDown`；递增按钮将其镜像',
+        fallback:
+          '主题未映射该插槽时为 `numberInput:stepperDown`；映射省略图标时为 `chevronDown`。递增按钮镜像该图标',
         state: [
           {
             name: 'direction',

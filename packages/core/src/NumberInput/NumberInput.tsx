@@ -52,7 +52,8 @@ import {
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
 } from '../Field';
-import {renderIconSlot, type IconType, ComponentIcon} from '../Icon';
+import {renderIconSlot, type IconType} from '../Icon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
@@ -1530,6 +1531,7 @@ export function NumberInput({
               slot="number-input-stepper"
               state={{direction: 'increment'}}
               fallback={{icon: 'chevronDown', size: 'xsm'}}
+              extensionKey="numberInput:stepperDown"
               color="inherit"
               xstyle={styles.incrementGlyph}
             />
@@ -1583,6 +1585,7 @@ export function NumberInput({
               slot="number-input-stepper"
               state={{direction: 'decrement'}}
               fallback={{icon: 'chevronDown', size: 'xsm'}}
+              extensionKey="numberInput:stepperDown"
               color="inherit"
             />
           </button>

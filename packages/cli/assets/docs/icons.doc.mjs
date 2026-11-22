@@ -243,13 +243,13 @@ export const brandTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: "A component whose own glyph a theme used to override by a namespaced key is moving to a slot. NumberInput's steppers are the first: map `number-input-stepper` in `componentIcons`. The `numberInput:stepperDown` key keeps rendering, and a theme that still sets it gets one development warning naming the slot, so nothing changes on screen until that key is removed.",
+          text: "NumberInput's steppers draw the `number-input-stepper` slot. Map the slot to a shared icon name, or to a function of `direction` (`increment` or `decrement`). A mapping that omits the icon uses `chevronDown`. With no mapping, both steppers still draw the `numberInput:stepperDown` key, including a theme or `registerIcons` override of that key. The increment button mirrors the glyph. Mapping the slot replaces the key for NumberInput only. Replacing a shared name in `icons` changes every component that draws that name.",
         },
         {
           type: 'code',
           lang: 'tsx',
           label: 'Moving a namespaced override to its slot',
-          code: `// Before: one key, overridden through \`icons\`.
+          code: `// Before: the stepper key, overridden through \`icons\`.
 export const brandTheme = defineTheme({
   name: 'brand',
   icons: {
@@ -257,14 +257,13 @@ export const brandTheme = defineTheme({
   },
 });
 
-// After: the slot, so the icon follows the number-input-stepper role.
+// After: the slot selects shared names for NumberInput only.
 export const brandTheme = defineTheme({
   name: 'brand',
   componentIcons: {
-    'number-input-stepper': 'chevronDown',
-  },
-  icons: {
-    chevronDown: <CaretDownFilledIcon />,
+    'number-input-stepper': ({direction}) => ({
+      icon: direction === 'increment' ? 'arrowUp' : 'arrowDown',
+    }),
   },
 });`,
         },

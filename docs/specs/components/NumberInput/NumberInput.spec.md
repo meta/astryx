@@ -94,8 +94,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Stepping by keyboard, wheel, and steppers, and the stepping grid.
 - Formatted display at rest and the form value it submits.
 - Units text, the invalid-entry announcement, and the steppers.
-- The stepper icon's `numberInput:stepperDown` extension key, which
-  `architecture:icon-resolution-and-component-slots` hands to NumberInput.
+- The `number-input-stepper` icon slot, and the `numberInput:stepperDown`
+  extension key that draws an unmapped stepper.
+  `architecture:icon-resolution-and-component-slots` records that key path.
 - Disabled, disabled-reason, and read-only behavior; the `number-input`
   target; its grouped adaptation.
 
@@ -261,12 +262,14 @@ anatomy-theming map.
   shown only by color and an icon (WCAG 2.2 3.3.1), the color-only `detached` status without a message (WCAG 2.2 1.4.1),
   and the grouped description reference that `component:TextInput` records
   apply here.
-- **Stepper icon key.** The steppers resolve their icon through the
-  `number-input-stepper` component slot, with `direction` state (`increment` /
-  `decrement`) and a `chevronDown` fallback, rather than the
-  `numberInput:stepperDown` extension key. The extension key remains supported
-  through INV10 until a compatibility decision changes it.
-  it exits under that record's exit condition.
+- **Stepper icon.** Both stepper buttons draw the `number-input-stepper` slot.
+  The slot state is `direction`: `increment` or `decrement`. A `componentIcons`
+  mapping for the slot wins. A mapping that omits the icon uses the shared name
+  `chevronDown`. With no mapping, both buttons resolve the
+  `numberInput:stepperDown` extension key, and a theme or registry override of
+  that key still draws. The increment button mirrors the glyph. The key path
+  is the known deviation `architecture:icon-resolution-and-component-slots`
+  names, and it exits under that record's exit condition.
 
 ## Decision log
 

@@ -432,10 +432,6 @@ export type ComponentIconSlotState<Slot extends ComponentIconSlotName> =
 /**
  * What a component renders for a slot when the theme maps nothing: its own
  * icon name (or `null` for none), and optionally its own variant and size.
- *
- * The name may be a namespaced extension key, so a component that ships its
- * own glyph keeps drawing it through the shared registry until a theme maps
- * the slot.
  */
 export type ComponentIconFallback =
   | IconName
@@ -471,6 +467,18 @@ function getThemeComponentIcons(
     return null;
   }
   return theme.__componentIcons ?? theme.componentIcons ?? null;
+}
+
+/**
+ * Report whether the theme sets this slot. A function entry counts. The slot
+ * function stays uncalled.
+ * @internal
+ */
+export function hasComponentIconSlot(
+  slot: string,
+  source: IconRegistrySource,
+): boolean {
+  return getThemeComponentIcons(getTheme(source))?.[slot] !== undefined;
 }
 
 function warnMalformedRequest(
@@ -550,11 +558,6 @@ function applyComponentIconRequest(
  * icon, a request applies field by field, and a slot function receives the
  * state and returns a request whose result is final: `null` hides the icon,
  * `undefined` changes nothing.
- *
- * A fallback that is a namespaced extension key keeps resolving through the
- * shared registry, so a theme's override of that key still draws until the slot
- * is mapped. Resolution therefore runs the slot first, then the key, then the
- * component's own default artwork.
  *
  * This is the only caller of a theme's slot functions. Caller-supplied icon
  * content wins before resolution, so a component does not resolve the slot
