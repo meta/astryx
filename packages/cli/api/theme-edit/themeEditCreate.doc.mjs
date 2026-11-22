@@ -49,11 +49,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: "the traits are not valid JSON, name a field the traits do not take, give a field a value it does not take, or name a token or part this Core does not have; or the name is not a theme name, or is a bundled theme's",
+      when: "the traits are not valid JSON, name a field the traits do not take, give a field a value it does not take, set a component's private `--_` variable, or name a token or part this Core does not have; or the name is not a theme name, or is a bundled theme's",
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a theme file is at the path already, or the theme editor has a theme with that name',
+      when: "a theme file is at the path already, the theme editor has a theme with that name, or a file of the app's is where the theme's stylesheet would go (the build's refusal; what create wrote is removed)",
     },
     {
       code: 'ERR_PATH_TRAVERSAL',

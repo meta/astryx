@@ -566,6 +566,19 @@ describe('flat surfaces on a colored card', () => {
   }, 120_000);
 });
 
+describe("a component's private variable", () => {
+  it('is refused before anything is written', async () => {
+    await expect(
+      themeEditCreate(
+        'privvar',
+        {components: {button: {base: {'--_gap': '4px'}}}},
+        {cwd},
+      ),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+    expect(fs.existsSync(path.join(cwd, 'src/themes/privvar'))).toBe(false);
+  });
+});
+
 describe('a build that refuses', () => {
   it('leaves nothing of the theme behind, so the name is free again', async () => {
     const dir = path.join(cwd, 'src/themes/blocked');
@@ -574,7 +587,7 @@ describe('a build that refuses', () => {
     fs.writeFileSync(path.join(dir, 'blocked.css'), 'body {}\n');
     await expect(
       themeEditCreate('blocked', {accent: '#c2410c'}, {cwd}),
-    ).rejects.toBeTruthy();
+    ).rejects.toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(fs.readdirSync(dir)).toEqual(['blocked.css']);
     fs.rmSync(dir, {recursive: true});
   }, 120_000);

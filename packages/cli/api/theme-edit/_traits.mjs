@@ -343,6 +343,11 @@ function exactComponents(value) {
         );
       out[part][key] = {};
       for (const [prop, v] of Object.entries(css)) {
+        // A component's private variables are not part of a theme.
+        if (prop.startsWith('--_'))
+          refuse(
+            `"components.${part}.${key}.${prop}" is a component's private variable; a theme sets public tokens and CSS properties.`,
+          );
         if (typeof v !== 'string' && typeof v !== 'number')
           refuse(
             `"components.${part}.${key}.${prop}" takes a CSS value; got ${JSON.stringify(v)}.`,
