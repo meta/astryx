@@ -678,8 +678,9 @@ function tintedColors(c) {
  * Where the part's text would not read at 4.5:1 on that stop, the tint is
  * the nearest stop of the same ramp where it does (white text deepens a
  * light tint; gray text deepens a dark one), never past the color itself
- * (no darker than it in light mode, no lighter in dark mode); the default
- * stop when none does. `pale` is the light mode's default stop.
+ * (no darker than it in light mode, no lighter in dark mode) and never a
+ * ramp's end (white or black, which no hue keeps); the default stop when
+ * none does. `pale` is the light mode's default stop.
  * @param {string} seed a hex color
  * @param {Record<'light' | 'dark', number[][]>} [inks] the part's text colors in each mode
  * @returns {{light: string, dark: string, pale: string} | null}
@@ -703,6 +704,7 @@ function tintShades(seed, inks = {light: [], dark: []}) {
       const stops = Object.keys(ramp)
         .map(Number)
         .filter(x => {
+          if (x <= 0 || x >= 100) return false;
           const l = luminance(String(ramp[x]));
           return m === 'light' ? l >= own : l <= own;
         })
@@ -32341,9 +32343,9 @@ export function draftAnswer(ctx, env, question) {
           )
         )
           continue;
-        // (The text on the part picks a stop it reads on: the text the ask
-        // writes there, else the two text colors the part and the parts
-        // inside it read.)
+        // (The text on this fill picks a stop it reads on, in each mode: the
+        // text the ask writes for the same part, state and look, else the
+        // text colors the part and the parts inside it draw with.)
         /** @type {Record<'light' | 'dark', number[][]>} */
         const inks = {light: [], dark: []};
         for (const r of result)
@@ -32351,6 +32353,8 @@ export function draftAnswer(ctx, env, question) {
             for (const x of opt)
               if (
                 x.on === st.on &&
+                (x.state ?? '') === (st.state ?? '') &&
+                (!x.when || !st.when || x.when === st.when) &&
                 (x.thing === 'color' || /^--color-text-/.test(x.thing))
               ) {
                 const c = parseColor(String(x.value ?? ''));
@@ -32358,13 +32362,19 @@ export function draftAnswer(ctx, env, question) {
                 for (const m of /** @type {const} */ (['light', 'dark']))
                   if (!x.mode || x.mode === m) inks[m].push(c.slice(0, 3));
               }
-        const asked = inks.light.length + inks.dark.length > 0;
-        if (!asked)
-          for (const token of [
-            '--color-text-primary',
-            '--color-text-secondary',
-          ])
-            for (const m of /** @type {const} */ (['light', 'dark'])) {
+        const own = restRead(
+          C.partReads(one(String(st.on)), 'text') ?? [],
+          st.when ? String(st.when) : '',
+        );
+        const drawnWith = [
+          ...new Set([
+            ...(own ? [own] : []),
+            ...innerTextTokens(C, one(String(st.on)), true),
+          ]),
+        ];
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          if (!inks[m].length)
+            for (const token of drawnWith) {
               const now = String(current(token, m) ?? '');
               const c = parseColor(now);
               if (c && alphaOf(now) >= 1) inks[m].push(c.slice(0, 3));

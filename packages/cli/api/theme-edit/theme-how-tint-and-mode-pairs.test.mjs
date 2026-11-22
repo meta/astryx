@@ -227,13 +227,13 @@ describe('a tint word', () => {
         expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(24);
       }
       // (The primary button's own light label does not read on the pale
-      // tint in light mode: a readable text line comes with it.)
+      // tint: the light tint deepens until it does, and the label stays.)
       const primary = await lines('primary buttons tinted blue');
-      expect(primary).toContain(
+      expect(primary).not.toContain(
         "background-color '#bfd5ff' --on button --when variant:primary --mode light",
       );
-      expect(primary).toContain(
-        "color '#000000' --on button --when variant:primary --mode light",
+      expect(primary.join('\n')).not.toMatch(
+        /color '#000000' --on button --when variant:primary --mode light/,
       );
     },
     T,
@@ -278,6 +278,28 @@ describe('a tint word', () => {
       expect(await lines('cards with a cream tint')).toContain(
         "background-color '#fef3c7' --on card --when variant:default --mode light",
       );
+    },
+    T,
+  );
+
+  it(
+    'says why text asked with a tint is not written where no stop of the ramp reads it, with no command',
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow('cards tinted blue with #767676 text', {
+        cwd,
+        theme: 'n',
+      });
+      const lines = (data.results ?? []).flatMap(r => r.commands ?? []);
+      // (No stop is white or black: the tint stays a tint of blue.)
+      expect(lines.join('\n')).not.toMatch(/'#(?:ffffff|000000)' --on card/);
+      const text = (data.results ?? []).find(r =>
+        /^text color on card/.test(r.text),
+      );
+      expect(text?.text).toMatch(/so it is not written/);
+      expect(
+        (text?.commands ?? []).filter(c => / editor set /.test(c)),
+      ).toEqual([]);
     },
     T,
   );
