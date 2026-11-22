@@ -109,7 +109,7 @@ draws each meaning a bundled template imports.
   - the guides and schemas live under `cli/experimental` (the guide, the
     `icon-set-files` reference of the descriptor, data file, and definition
     schemas, which the stable field reference never lists, and the
-    `icon-definitions` namespace); the reference docs of the experimental
+    `icon-meanings` namespace); the reference docs of the experimental
     commands and API functions live with every other command and function
     reference (`cli/api/functions/...` and the command docs), listed only in
     the `astryx docs cli` listing, the same exception this requirement makes
@@ -231,7 +231,7 @@ draws each meaning a bundled template imports.
   definition needs no change to Astryx and maps only within that set;
   proposing it for every set is a pull request that copies its file into the
   CLI's folder. When names collide, Astryx's wins. The experimental
-  `icon-definitions` namespace lists Astryx's definitions and, where icon
+  `icon-meanings` namespace lists Astryx's definitions and, where icon
   features are on, each installed set's own. A definition may name a
   camelCase `group`: the family of related definitions it belongs to
   (`notifications` for `notification`, `notificationActive`, and
@@ -952,7 +952,7 @@ message}`) names each template or namespace doc that sets `stability`, and
 - `contributing:cli-conventions`: `IconSetDoc`, `IconSetData`, and
   `IconDefinitionDoc` join the authoring types.
 - Consumer docs: `cli/experimental/icon-sets`,
-  `cli/experimental/icon-set-files`, and `cli/experimental/icon-definitions`.
+  `cli/experimental/icon-set-files`, and `cli/experimental/icon-meanings`.
 - `spec:AST-051`: discover's `icon-set` kind, read in full only where icon
   features are on; elsewhere discover lists the icon-set packages a project
   could add, marked experimental (FR5, FR7).

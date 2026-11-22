@@ -67,7 +67,7 @@ export async function iconMap(definition, icon, options = {}) {
         'Name the icon meaning to map',
         [
           {
-            name: 'astryx docs cli/experimental/icon-definitions',
+            name: 'astryx docs cli/experimental/icon-meanings',
             reason: 'every icon meaning',
           },
         ],

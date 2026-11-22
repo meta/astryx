@@ -330,7 +330,7 @@ export function writeIconSetData(set, next, {extraDefinitions = []} = {}) {
   for (const name of Object.keys(parsed.map ?? {})) {
     if (!known.has(name)) {
       throw new IconSetAuthoringError(
-        `"${name}" is not an icon meaning. Use an Astryx icon meaning (astryx docs cli/experimental/icon-definitions), or add your own.`,
+        `"${name}" is not an icon meaning. Use an Astryx icon meaning (astryx docs cli/experimental/icon-meanings), or add your own.`,
         'ERR_INVALID_ARGUMENT',
         [
           ...closestNames(name, [...known]).map(each => ({

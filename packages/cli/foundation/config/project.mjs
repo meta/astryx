@@ -1319,7 +1319,7 @@ export class Project {
 
       // Where icon features are on (`iconSets()` reads no set otherwise), each installed
       // icon set's own icon definitions join Astryx's under the
-      // `icon-definitions` namespace, marked with their package.
+      // `icon-meanings` namespace, marked with their package.
       const {sets, choice} = await this.iconSets();
       // The project's set adds one section to `icons`, in the name of the
       // package that ships it: how to find an icon from that set.

@@ -525,7 +525,7 @@ async function searchGolden(query, cwd, run = cliRun) {
     );
     expect(
       [result.name, result.command, result.route, result.parent].join(' '),
-    ).not.toMatch(/experimental|icon-definitions|icon-sets?\b/u);
+    ).not.toMatch(/experimental|icon-meanings|icon-sets?\b/u);
   }
   body.data.results = body.data.results.map((/** @type {any} */ result) => ({
     ...skeleton(result),

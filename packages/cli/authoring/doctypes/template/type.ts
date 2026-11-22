@@ -65,7 +65,7 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  (`{Trash as TrashIcon}` is `Trash`) or a default import's local name
    *  (`import DeleteIcon from …` is `DeleteIcon`). When the project has an
    *  icon set, each declared icon is replaced by the icon for that
-   *  definition (`astryx docs cli/experimental/icon-definitions`) from the
+   *  definition (`astryx docs cli/experimental/icon-meanings`) from the
    *  first set in the project's list that maps it, or by a placeholder the
    *  copied file declares when no set does, and every key is reported as mapped, a
    *  placeholder, or kept. A name imported from two modules

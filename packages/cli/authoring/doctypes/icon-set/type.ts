@@ -163,7 +163,7 @@ export interface IconSetData {
   themeMap?: string;
   /**
    * Which of this set's icons draws each icon definition, by definition name:
-   * Astryx's (`astryx docs cli/experimental/icon-definitions`) or one the set declares in its
+   * Astryx's (`astryx docs cli/experimental/icon-meanings`) or one the set declares in its
    * `definitions` folder. One icon may draw several definitions; each
    * definition maps to one icon.
    */

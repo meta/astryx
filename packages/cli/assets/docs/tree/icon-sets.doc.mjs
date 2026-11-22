@@ -44,7 +44,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Astryx owns the meanings; libraries own the drawings. Astryx ships one icon definition per meaning, like `close`, `delete` or `search`: a camelCase name, one sentence that says the job the icon does, and a few words people use for it (`astryx docs cli/experimental/icon-definitions`). A definition names no library and no drawing, so any library can draw it its own way.',
+          text: 'Astryx owns the meanings; libraries own the drawings. Astryx ships one icon definition per meaning, like `close`, `delete` or `search`: a camelCase name, one sentence that says the job the icon does, and a few words people use for it (`astryx docs cli/experimental/icon-meanings`). A definition names no library and no drawing, so any library can draw it its own way.',
         },
         {
           type: 'prose',

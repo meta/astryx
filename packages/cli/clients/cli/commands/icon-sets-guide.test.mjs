@@ -54,8 +54,8 @@ describe('icon-set guide', () => {
         ...(await topDoc(query, withoutSet)),
         ...(await topDoc(query, withSet)),
       ]) {
-        expect(result.name).not.toMatch(/experimental|icon-definitions/);
-        expect(result.command).not.toMatch(/experimental|icon-definitions/);
+        expect(result.name).not.toMatch(/experimental|icon-meanings/);
+        expect(result.command).not.toMatch(/experimental|icon-meanings/);
         expect(result.section ?? '').not.toMatch(/^icon-(set|definition)/);
       }
     }
@@ -72,7 +72,7 @@ describe('icon-set guide', () => {
         'experimental icon add Bin --from @acme/glyph-library --definition delete',
       ),
       '--new-definition',
-      formatCliCommand('docs cli/experimental/icon-definitions'),
+      formatCliCommand('docs cli/experimental/icon-meanings'),
       'icon_builtin_definition_missing',
       'Unmapped icon meanings (optional)',
       'unmappedDefinitions',
@@ -128,7 +128,7 @@ describe('icon-set guide', () => {
     for (const route of [
       'cli/experimental',
       GUIDE,
-      'cli/experimental/icon-definitions',
+      'cli/experimental/icon-meanings',
       'cli/commands/experimental-icon',
       'cli/commands/experimental-icon-new-set',
     ]) {
@@ -185,7 +185,7 @@ export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Lau
     /** @param {string} cwd */
     const routes = async cwd => {
       const {status, stdout} = await runCli(
-        ['docs', 'cli/experimental/icon-definitions', '--json'],
+        ['docs', 'cli/experimental/icon-meanings', '--json'],
         cwd,
       );
       expect(status).toBe(0);

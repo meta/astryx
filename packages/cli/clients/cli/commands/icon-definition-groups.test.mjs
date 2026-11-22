@@ -192,7 +192,7 @@ describe("a definition's docs page names its group", () => {
     async () => {
       const cwd = writeIconSetProject(path.join(tmp, 'docs'), {packages: []});
       const res = await runCli(
-        ['docs', 'cli/experimental/icon-definitions/user-add'],
+        ['docs', 'cli/experimental/icon-meanings/user-add'],
         cwd,
       );
       expect(res.code).toBe(0);
@@ -201,19 +201,19 @@ describe("a definition's docs page names its group", () => {
         /^Group \| `people`: `user`, `userCircle`, `userRemove`, `users`\s*$/u,
       );
       expect(res.stdout).toContain(
-        `${formatCliCommand('docs cli/experimental/icon-definitions/user-remove')}\``,
+        `${formatCliCommand('docs cli/experimental/icon-meanings/user-remove')}\``,
       );
       const json = JSON.parse(
         (
           await runCli(
-            ['docs', 'cli/experimental/icon-definitions/user-add', '--json'],
+            ['docs', 'cli/experimental/icon-meanings/user-add', '--json'],
             cwd,
           )
         ).stdout,
       );
       expect(JSON.stringify(json)).toContain('"Group"');
       const home = await runCli(
-        ['docs', 'cli/experimental/icon-definitions/home'],
+        ['docs', 'cli/experimental/icon-meanings/home'],
         cwd,
       );
       expect(home.stdout).not.toContain('Group');

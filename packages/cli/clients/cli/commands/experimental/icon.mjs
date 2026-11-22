@@ -779,7 +779,7 @@ export function registerExperimentalIcon(group, program) {
                   ]
                 : []),
               text(
-                `All icon meanings: ${cli} docs cli/experimental/icon-definitions`,
+                `All icon meanings: ${cli} docs cli/experimental/icon-meanings`,
               ),
             );
             return;

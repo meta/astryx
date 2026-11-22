@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/experimental/icon-definitions`: every icon
+ * @file `astryx docs cli/experimental/icon-meanings`: every icon
  * definition, Astryx's and, in a project that installs an icon-set package
  * or sets `experimental.iconSet`, each installed icon set's own. Experimental
  * (spec:AST-017 FR27), with the icon sets that use them.
@@ -13,7 +13,7 @@
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */
 export const docs = {
   type: 'namespace',
-  name: 'icon-definitions',
+  name: 'icon-meanings',
   placement: {parent: 'namespace:experimental', slot: 'guides', order: 20},
   stability: 'experimental',
   title: 'Icon definitions',
