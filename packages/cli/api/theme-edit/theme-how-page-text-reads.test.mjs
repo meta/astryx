@@ -68,9 +68,9 @@ const follow = async lines => {
 
 describe('page text reads', () => {
   it('a dark page the secondary text would not read on gets a readable secondary text line', async () => {
-    const rs = await how(
-      'cream/beige background, dark mode should be chocolate brown',
-    );
+    // (An exact color is the page as typed; a color word for a mode's page
+    // takes the page's own lightness there, so it reads.)
+    const rs = await how('cream/beige background, dark mode page #92400e');
     const readable = rs.find(r => /^readable text on that page/.test(r.text));
     expect(readable?.text).toMatch(/--color-text-secondary .*#92400e/);
     expect(readable?.commands).toEqual([
