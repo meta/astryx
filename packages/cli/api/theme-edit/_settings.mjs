@@ -13597,9 +13597,6 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  * @returns {Promise<ThemeProblem[]>}
  */
 export async function contrastProblems(ctx, data, res) {
-  // (The theme's own settings, before the held copies: the build reads what
-  // each setting is written on from these.)
-  const themeData = data;
   // (Measured as built: a held variant keeps Core's look there.)
   data = {
     ...data,
@@ -14559,7 +14556,7 @@ export async function contrastProblems(ctx, data, res) {
     const k = `${w.thing}|${x.mode}`;
     wholeGrounds.set(k, [...(wholeGrounds.get(k) ?? []), x.ground]);
   }
-  const scoped = scopedTextProblems(ctx, data, res, themeData);
+  const scoped = scopedTextProblems(ctx, data, res);
   /**
    * A destructive button a person cannot tell from the primary one: their
    * fills, as drawn, close in OKLab in a mode. A note (it fails no
@@ -16851,10 +16848,9 @@ function badgeStyleProblems(ctx, data, res, base) {
  * @param {Ctx} ctx
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
- * @param {ThemeData} [own] the theme's own settings, before the held copies
  * @returns {{problems: ThemeProblem[], unmeasured: Setting[]}}
  */
-function scopedTextProblems(ctx, data, res, own = data) {
+function scopedTextProblems(ctx, data, res) {
   const modes = modesOf(data);
   const modeFlag = (/** @type {string} */ m) =>
     modes.length > 1 ? ` --mode ${m}` : '';
@@ -16919,22 +16915,6 @@ function scopedTextProblems(ctx, data, res, own = data) {
       /** The latest setting matching, scoped first, then at rest. @param {(y: Setting) => boolean} test @param {string} m */
       const latest = (test, m) =>
         [...data.settings].reverse().find(y => test(y) && here(y, m, true)) ??
-        // (A state within a placement, a selected link in the phone menu,
-        // draws the fill set for the state alone.)
-        (st && when
-          ? [...data.settings].reverse().find(
-              y =>
-                test(y) &&
-                Boolean(y.on) &&
-                (!y.mode || y.mode === m) &&
-                (y.state ?? null) === st &&
-                !y.when &&
-                // (Only what the build writes on the part, read from the
-                // theme's own settings: its own `--only` state look keeps
-                // it under a later group one.)
-                writtenPartsOf(ctx, own, y).includes(t),
-            )
-          : null) ??
         [...data.settings].reverse().find(y => test(y) && here(y, m, false)) ??
         null;
       /** The value of a token on this part in this scope, in a mode. @param {string} tok @param {'light' | 'dark'} m */
