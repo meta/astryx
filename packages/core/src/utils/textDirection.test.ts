@@ -116,7 +116,7 @@ describe('cutText', () => {
 });
 
 describe('cutTextDirection', () => {
-  it('reads a cut label\'s direction from its own content, on any page', () => {
+  it("reads a cut label's direction from its own content, on any page", () => {
     expect(cutTextDirection('Monthly')).toEqual({dir: 'ltr'});
     expect(cutTextDirection(30)).toEqual({dir: 'ltr'});
     expect(cutTextDirection('חודשי')).toEqual({dir: 'rtl'});
