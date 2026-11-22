@@ -1,0 +1,75 @@
+{
+  "$comment": "The Firefox hover specs' known failures (FIREFOX_HOVER_SPECS in .github/scripts/lib/a11y-spec-files.mjs). Each one passes in Chromium on the same build. `tracking` names the issue it is filed under; failures with one cause share it. The Firefox report (.github/scripts/firefox-hover-report.mjs) counts these as known and every other failure as new. Remove an entry when its fix lands; the report names each known failure that now passes.",
+  "failures": [
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuAudit.a11y.chromium.spec.ts",
+      "title": "captures DropdownMenu states 4/4 with sensor receipts",
+      "tracking": "firefox-hover-specs-other-3"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuItemAudit.a11y.chromium.spec.ts",
+      "title": "narrow-light",
+      "tracking": "firefox-hover-specs-other-3"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "butter-light-open",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "neutral-dark-hover",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "neutral-dark-open",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "neutral-dark-pressed",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "neutral-light-hover",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "neutral-light-open",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "neutral-light-pressed",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
+      "title": "rtl-light-open",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/DropdownMenu/__tests__/SubMenuHeaderFooter.a11y.chromium.spec.ts",
+      "title": "a header with a choice › a flyout the pointer has left stays open while an arrow moves the choice in its header",
+      "tracking": "firefox-submenu-pointer-left-focus"
+    },
+    {
+      "file": "packages/core/src/HoverCard/__tests__/HoverCardAudit.a11y.chromium.spec.ts",
+      "title": "manifest is complete",
+      "tracking": "firefox-hover-placement-anchor"
+    },
+    {
+      "file": "packages/core/src/HoverCard/__tests__/HoverCardSecondDocument.a11y.chromium.spec.ts",
+      "title": "Escape pressed in a Picture-in-Picture window closes the card there, and focus returns to its trigger",
+      "tracking": "firefox-hover-specs-other-3"
+    },
+    {
+      "file": "packages/core/src/Tooltip/__tests__/TooltipTallContent.a11y.browser.spec.ts",
+      "title": "phone: with no room beside, it opens above when above has more room",
+      "tracking": "firefox-hover-placement-anchor"
+    }
+  ]
+}
