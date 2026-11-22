@@ -402,7 +402,54 @@ if (clipboard == null) {
 }
 }`;
 
-/** The namespace of the module that fills in what a viewer's frame blocks (storage and the clipboard) and moves a link to a place in the page. */
+/**
+ * Printing for a page in a viewer's frame that blocks it. A frame without
+ * allow-modals ignores `print()`: it returns at once and fires no
+ * `beforeprint` event. The page's call always goes to the browser's own
+ * `print()` first. Only when that call fires no `beforeprint` does the page
+ * show a notice that says to open the file in its own tab, where printing
+ * works. The notice uses Core's surface tokens, so it follows the page's
+ * theme, and a button closes it. A file in its own tab never shows it.
+ */
+export const VIEWER_PRINT = `if (window !== window.top) {
+const print = window.print;
+let notice = null;
+const show = () => {
+  if (notice?.isConnected) return;
+  notice = document.createElement('div');
+  notice.setAttribute('role', 'status');
+  notice.style.cssText = 'position:fixed;inset-block-end:16px;inset-inline:16px;margin-inline:auto;z-index:2147483647;' +
+    'box-sizing:border-box;max-width:400px;display:flex;align-items:center;gap:12px;padding:16px;' +
+    'border-radius:var(--radius-container,8px);box-shadow:var(--shadow-med,0 4px 12px rgb(0 0 0/.2));' +
+    'background:var(--color-background-surface,Canvas);color:var(--color-text-primary,CanvasText);' +
+    'font-family:var(--font-family-body,system-ui,sans-serif);font-size:var(--text-body-size,14px);line-height:var(--text-body-leading,1.4)';
+  const text = document.createElement('span');
+  text.style.flex = '1';
+  text.textContent = 'Printing works when this file is opened in its own browser tab.';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = 'Dismiss';
+  close.style.cssText = 'font:inherit;color:inherit;background:none;border:0;padding:4px 8px;cursor:pointer;text-decoration:underline';
+  close.addEventListener('click', () => notice.remove());
+  notice.append(text, close);
+  document.body.append(notice);
+};
+window.print = function () {
+  let printing = false;
+  const started = () => {
+    printing = true;
+  };
+  window.addEventListener('beforeprint', started, true);
+  try {
+    return print.call(window);
+  } finally {
+    window.removeEventListener('beforeprint', started, true);
+    if (!printing) show();
+  }
+};
+}`;
+
+/** The namespace of the module that fills in what a viewer's frame blocks (storage, the clipboard and printing) and moves a link to a place in the page. */
 const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
@@ -800,7 +847,7 @@ export async function bundleForBrowser({
       }));
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
       build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
-      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}\n${VIEWER_MOVES}`, loader: 'js'}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}\n${VIEWER_PRINT}\n${VIEWER_MOVES}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',

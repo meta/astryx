@@ -1445,6 +1445,68 @@ import '@astryxdesign/core/astryx.css';
     expect(asked).toEqual(['a,b\n1,2']);
   }, 120_000);
 
+  it('calls the browser\u2019s print first, and shows a notice only in a frame that ignores it', async () => {
+    put(
+      'src/print.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <button type="button" onClick={() => window.print()}>Print</button>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/print.tsx', {cwd: dir, out: 'print.html'});
+    /**
+     * @param {{framed: boolean, prints: boolean}} how whether the page is in a
+     *   frame, and whether the browser's print runs (fires beforeprint)
+     */
+    const open = async ({framed, prints}) => {
+      let calls = 0;
+      const dom = await pageDom(read('print.html'), {
+        beforeParse(window) {
+          // JSDOM's `top` cannot be redefined; its getter reads `_top`.
+          if (framed) window._top = {};
+          window.print = () => {
+            calls += 1;
+            if (prints) {
+              window.dispatchEvent(new window.Event('beforeprint'));
+              window.dispatchEvent(new window.Event('afterprint'));
+            }
+          };
+        },
+      });
+      await pageDrawn(dom);
+      dom.window.document.querySelector('button')?.click();
+      const notice = dom.window.document.querySelector('[role="status"]');
+      return {dom, calls, notice};
+    };
+    const refused = await open({framed: true, prints: false});
+    expect(refused.calls).toBe(1);
+    expect(refused.notice?.textContent).toContain(
+      'Printing works when this file is opened in its own browser tab.',
+    );
+    /** @type {HTMLButtonElement | null | undefined} */ (
+      refused.notice?.querySelector('button')
+    )?.click();
+    expect(refused.dom.window.document.querySelector('[role="status"]')).toBeNull();
+    refused.dom.window.close();
+    // A frame that lets the page print, and a file in its own tab, print as
+    // the browser does and show nothing more.
+    for (const how of [
+      {framed: true, prints: true},
+      {framed: false, prints: false},
+      {framed: false, prints: true},
+    ]) {
+      const page = await open(how);
+      expect(page.calls, JSON.stringify(how)).toBe(1);
+      expect(page.notice, JSON.stringify(how)).toBeNull();
+      page.dom.window.close();
+    }
+  }, 120_000);
+
   it('gives a page storage that lasts until it closes in a frame that blocks storage, and keeps real storage elsewhere', async () => {
     put(
       'src/filter.tsx',
