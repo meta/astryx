@@ -12694,6 +12694,7 @@ export function draftAnswer(ctx, env, question) {
     // pixel size to divide by.)
     const asTyped = (/** @type {Clause} */ o) =>
       o.lengths.every(l => /^\d+(?:\.\d+)?px$/i.test(String(l).trim())) &&
+      !/\d\s?(?:pt|rem|em)\b/i.test(o.text) &&
       !/\b(?:bigger|smaller|larger|more|less|up|down|increase\w*|decrease\w*|by)\b/i.test(
         o.text,
       );
@@ -22270,7 +22271,7 @@ export function draftAnswer(ctx, env, question) {
         // 150%", nor beside a line height said another way.)
         const pxLeading =
           pxLengths.length === 1 &&
-          !/\b(?:text|font)[- ]size\s*:?\s*\d+(?:\.\d+)?\s?px\b/i.test(c.text) &&
+          !/\b(?:text|font|copy|type)\b/i.test(c.text) &&
           !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(?:\d+(?:\.\d+)?(?!\s?px\b|[\d.])|normal\b|tight\w*|loose\w*|more\b|less\b)/i.test(
             c.text,
           )

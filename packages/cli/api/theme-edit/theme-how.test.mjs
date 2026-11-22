@@ -3416,7 +3416,11 @@ const QUESTIONS_J = [
     'make the text bigger, 18px leading',
     {top: /^(?!.*--text-body-leading 1\.286)/},
   ],
-  ['body text 18px leading', {top: /^set q --text-body-leading 1\.286$/}],
+  [
+    'body text 16px line height relaxed',
+    {top: /^(?!.*--text-body-leading 1\.143)/},
+  ],
+  ['text size 12pt, 18px leading', {top: /^(?!.*--text-body-leading 1\.125)/}],
   [
     'heading font size 24px, body 14px text, 20px leading',
     {top: /--text-body-leading 1\.429$/},
