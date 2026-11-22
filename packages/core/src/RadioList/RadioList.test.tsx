@@ -23,6 +23,7 @@ import {
 } from '../__tests__/pressState';
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
+import {FormLayout} from '../FormLayout/FormLayout';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -1440,5 +1441,216 @@ describe('RadioList group disabled state', () => {
       'aria-disabled',
       'true',
     );
+  });
+});
+
+describe('RadioList record contract', () => {
+  it('orders the group description: caller ids, description, status message, then the disabled reason (FR1)', () => {
+    render(
+      <>
+        <p id="caller-note">Changes apply next week</p>
+        <RadioList
+          label="Preference"
+          value="a"
+          onChange={() => {}}
+          aria-describedby="caller-note"
+          description="Pick one"
+          status={{type: 'warning', message: 'Check your plan'}}
+          isDisabled
+          disabledMessage="Locked by your admin">
+          <RadioListItem label="Option A" value="a" />
+        </RadioList>
+      </>,
+    );
+    const ids =
+      screen
+        .getByRole('radiogroup')
+        .getAttribute('aria-describedby')
+        ?.split(' ') ?? [];
+    expect(ids).toHaveLength(4);
+    expect(ids[0]).toBe('caller-note');
+    expect(document.getElementById(ids[1])).toHaveTextContent('Pick one');
+    expect(document.getElementById(ids[2])).toHaveTextContent(
+      'Check your plan',
+    );
+    // The reason's id is the one each radio of the group adds.
+    expect(ids[3]).toBe(
+      screen.getByRole('radio').getAttribute('aria-describedby'),
+    );
+  });
+
+  it('renders the label tooltip as a button named after the group label (FR1)', () => {
+    render(
+      <RadioList
+        label="Preference"
+        labelTooltip="How we use it"
+        value=""
+        onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" />
+      </RadioList>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'About Preference'}),
+    ).toBeInTheDocument();
+  });
+
+  it('calls onChange once for a click on an option label or description (FR3)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RadioList label="Preference" value="" onChange={onChange}>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" description="Second" />
+      </RadioList>,
+    );
+    await user.click(screen.getByText('Option A'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith('a');
+    await user.click(screen.getByText('Second'));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith('b');
+  });
+
+  it('enters an empty group disabled with a reason on its first radio (FR4)', () => {
+    render(
+      <>
+        <button type="button">Before</button>
+        <RadioList
+          label="Preference"
+          value=""
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Locked">
+          <RadioListItem label="Option A" value="a" />
+          <RadioListItem label="Option B" value="b" />
+          <RadioListItem label="Option C" value="c" />
+        </RadioList>
+      </>,
+    );
+    const radios = screen.getAllByRole('radio');
+    screen.getByRole('button', {name: 'Before'}).focus();
+    // A browser that lands mid-group on entry.
+    radios[1].focus();
+    expect(radios[0]).toHaveFocus();
+    expect(radios[0]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('runs a caller onFocus after its entry handling (FR4, FR8)', () => {
+    const focusedAtCall: Element[] = [];
+    render(
+      <>
+        <button type="button">Before</button>
+        <RadioList
+          label="Preference"
+          value=""
+          onChange={() => {}}
+          onFocus={() => {
+            if (document.activeElement) {
+              focusedAtCall.push(document.activeElement);
+            }
+          }}>
+          <RadioListItem label="Option A" value="a" />
+          <RadioListItem label="Option B" value="b" />
+          <RadioListItem label="Option C" value="c" />
+        </RadioList>
+      </>,
+    );
+    const radios = screen.getAllByRole('radio');
+    screen.getByRole('button', {name: 'Before'}).focus();
+    radios[1].focus();
+    expect(radios[0]).toHaveFocus();
+    // The caller first runs once the entry redirect has moved focus.
+    expect(focusedAtCall[0]).toBe(radios[0]);
+  });
+
+  it('submits no value for a disabled option or a group disabled without a reason (FR5)', () => {
+    const {container} = render(
+      <>
+        <form data-testid="item-disabled">
+          <RadioList label="Plan" htmlName="plan" value="b" onChange={() => {}}>
+            <RadioListItem label="Option A" value="a" />
+            <RadioListItem label="Option B" value="b" isDisabled />
+          </RadioList>
+        </form>
+        <form data-testid="group-disabled">
+          <RadioList
+            label="Region"
+            htmlName="region"
+            value="a"
+            onChange={() => {}}
+            isDisabled>
+            <RadioListItem label="Option A" value="a" />
+          </RadioList>
+        </form>
+      </>,
+    );
+    for (const form of Array.from(container.querySelectorAll('form'))) {
+      expect([...new FormData(form).keys()]).toEqual([]);
+    }
+  });
+
+  it('exposes a form-level required default only through aria-required (FR6)', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <RadioList label="Preference" value="" onChange={() => {}}>
+          <RadioListItem label="Option A" value="a" />
+          <RadioListItem label="Option B" value="b" />
+        </RadioList>
+      </FormLayout>,
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'aria-required',
+      'true',
+    );
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).not.toBeRequired();
+    }
+  });
+
+  it('puts the radio-list target with orientation and size on the radiogroup, and the size on every item (FR7, FR9)', () => {
+    const {rerender} = render(
+      <RadioList label="Preference" value="" onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" />
+      </RadioList>,
+    );
+    const group = screen.getByRole('radiogroup');
+    expect(group).toHaveClass('astryx-radio-list');
+    expect(group).toHaveAttribute('data-orientation', 'vertical');
+    expect(group).toHaveAttribute('data-size', 'md');
+    rerender(
+      <RadioList
+        label="Preference"
+        value=""
+        onChange={() => {}}
+        orientation="horizontal"
+        size="sm">
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'data-orientation',
+      'horizontal',
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('data-size', 'sm');
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio.closest('.astryx-radio-list-item')).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+    }
+  });
+
+  it('puts data-testid on the radiogroup (FR8)', () => {
+    render(
+      <RadioList
+        label="Preference"
+        value=""
+        onChange={() => {}}
+        data-testid="group">
+        <RadioListItem label="Option A" value="a" />
+      </RadioList>,
+    );
+    expect(screen.getByTestId('group')).toBe(screen.getByRole('radiogroup'));
   });
 });
