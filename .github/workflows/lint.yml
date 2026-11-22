@@ -338,6 +338,10 @@ jobs:
           set -eu
           git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- '*.ts' '*.tsx' '*.md' \
             > "$RUNNER_TEMP/changed-files"
+          if [ ! -s "$RUNNER_TEMP/changed-files" ]; then
+            echo 'No changed TypeScript or Markdown files.'
+            exit 0
+          fi
           prettier=./node_modules/.bin/prettier
           if [ ! -x "$prettier" ]; then
             version=$(awk '/^importers:/ {i = 1} i && /^  \.:$/ {r = 1; next} r && /^  [^ ]/ {exit} r && /^      prettier:$/ {p = 1; next} p && /version:/ {print $2; exit}' pnpm-lock.yaml | sed 's/(.*//')
@@ -345,8 +349,11 @@ jobs:
               echo '::error title=Prettier version::pnpm-lock.yaml pins no Prettier version for the root package.'
               exit 1
             fi
-            npm install --no-save --no-package-lock --ignore-scripts --silent \
-              --prefix "$RUNNER_TEMP/prettier" "prettier@$version"
+            npm install --no-save --no-package-lock --ignore-scripts --loglevel=error \
+              --prefix "$RUNNER_TEMP/prettier" "prettier@$version" || {
+              echo "::error title=Prettier install::Prettier $version could not be installed; npm's error is above."
+              exit 1
+            }
             prettier="$RUNNER_TEMP/prettier/node_modules/.bin/prettier"
           fi
           status=0

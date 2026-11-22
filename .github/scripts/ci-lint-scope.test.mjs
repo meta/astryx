@@ -400,8 +400,13 @@ describe('formatting of changed files', () => {
    * dependencies, as the spec lane has. A stand-in `npm` records what the step
    * installs and links the repository's own Prettier in its place.
    * @param {string} spec the changed record's text
+   * @param {{file?: string, npmFails?: boolean}} [options] the changed file,
+   *   and whether the stand-in npm fails as a failed download does
    */
-  function checkSpecOnly(spec) {
+  function checkSpecOnly(
+    spec,
+    {file = 'docs/specs/AST-999-example/spec.md', npmFails = false} = {},
+  ) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-format-'));
     scratch.push(dir);
     const workspace = path.join(dir, 'ws');
@@ -414,7 +419,7 @@ describe('formatting of changed files', () => {
     git(workspace, 'init', '-q');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '-m', 'base');
-    write(workspace, 'docs/specs/AST-999-example/spec.md', spec);
+    write(workspace, file, spec);
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '-m', 'the pull request');
     const bin = path.join(dir, 'bin');
@@ -424,6 +429,7 @@ describe('formatting of changed files', () => {
       [
         '#!/bin/bash',
         `echo "$*" > ${JSON.stringify(path.join(dir, 'npm-args'))}`,
+        ...(npmFails ? ['exit 1'] : []),
         'while [ $# -gt 0 ]; do [ "$1" = --prefix ] && prefix=$2; shift; done',
         'mkdir -p "$prefix/node_modules/.bin"',
         `ln -s ${JSON.stringify(prettierPackage)} "$prefix/node_modules/prettier"`,
@@ -469,5 +475,24 @@ describe('formatting of changed files', () => {
     const result = checkSpecOnly('# Example\n\nA formatted record.\n');
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).toContain('Every changed file is formatted.');
+  });
+
+  it('installs nothing when no TypeScript or Markdown file changed', () => {
+    const result = checkSpecOnly('{"a": 1}\n', {
+      file: 'scripts/vitest-node-durations.json',
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.npmArgs).toBe('');
+    expect(result.stdout).toContain('No changed TypeScript or Markdown files.');
+  });
+
+  it('names a failed Prettier install with an error annotation', () => {
+    const result = checkSpecOnly('# Example\n\nA formatted record.\n', {
+      npmFails: true,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      `::error title=Prettier install::Prettier ${lockedPrettier} could not be installed`,
+    );
   });
 });
