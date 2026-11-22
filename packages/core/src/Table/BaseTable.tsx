@@ -45,6 +45,7 @@ import {
   getLogicalPositionRenderer,
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
+import {cutHeadingStyles} from './table.stylex';
 import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 import {isRenderable} from '../utils/isRenderable';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
@@ -159,16 +160,6 @@ const styles = stylex.create({
     minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-  },
-  // A truncating plain-text label beside an overlay alone (a resize
-  // boundary) is cut by its own box. The cell lets the overlay reach past its
-  // edge, so it does not cut the label. The box can also take the text's
-  // direction without moving the overlay.
-  cutHeaderLabel: {
-    display: 'block',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
   },
 });
 
@@ -1006,9 +997,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
       const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
       const hasBelow = isRenderable(below);
 
-      // With no slot beside the label, a truncating label cuts in its own
-      // box. Otherwise the label stays inline, so the cell's text-overflow
-      // still reaches it.
+      // The resize boundary makes the cell's overflow visible, so the cell
+      // cannot cut the label. A plain-text label with no before or after slot
+      // cuts in its own box.
       const cutsOwnLabel =
         textOverflow === 'truncate' &&
         (typeof resolvedContent === 'string' ||
@@ -1025,7 +1016,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
               ? {
                   ...labelDirection,
                   ...stylex.props(
-                    styles.cutHeaderLabel,
+                    cutHeadingStyles.label,
                     labelDirection.dir != null && truncatedTextStyles.pageAlign,
                   ),
                 }
