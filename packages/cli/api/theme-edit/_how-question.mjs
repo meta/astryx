@@ -137,7 +137,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, offer?: boolean, already?: boolean, joined?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, clash?: boolean, batch?: {leftOut: string}, offer?: boolean, already?: boolean, joined?: boolean}} Draft
  */
 
 /** The words a badge style ask is made of when the style is all it asks. */
@@ -2256,6 +2256,18 @@ const PLACE_ONLY =
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
+/**
+ * The label of whole-ask sequence `i` of `n`: `size` of the `total`
+ * changes, in order.
+ * @param {number} i @param {number} n @param {number} size
+ * @param {number} total @param {string} leftOut
+ */
+const batchLabel = (i, n, size, total, leftOut) =>
+  n === 1
+    ? `all of it, in order${leftOut ? `; left out: ${leftOut}` : ''}`
+    : i === 0
+      ? `the first ${size} of ${total} changes, in order (whole asks only); then the next ${n > 2 ? 'sequences' : 'sequence'} below`
+      : `then, after the ${i === 1 ? 'first' : 'one before'}, the next ${size} of ${total} changes, in order`;
 /** The looks that are the same in both modes. */
 const MODE_FREE_LOOKS = [
   'corners',
@@ -12427,23 +12439,7 @@ export function draftAnswer(ctx, env, question) {
         (prev.parts.length || prev.aspects.length || prev.colors.length)
       ) &&
       (!c.parts.length || (!prev.parts.length && !prev.aspects.length)) &&
-      !(
-        c.aspects.length &&
-        c.aspects.every(a =>
-          [
-            'corners',
-            'spacing',
-            'size',
-            'fontsize',
-            'weight',
-            'family',
-            'case',
-            'italic',
-            'leading',
-            'tracking',
-          ].includes(a),
-        )
-      )
+      !(c.aspects.length && c.aspects.every(a => MODE_FREE_LOOKS.includes(a)))
     ) {
       c.mode = prev.mode;
       // (A clause that says nothing but the mode is read by the ones it
@@ -12556,21 +12552,7 @@ export function draftAnswer(ctx, env, question) {
       if (
         o.mode ||
         o.except ||
-        (o.aspects.length &&
-          o.aspects.every(a =>
-            [
-              'corners',
-              'spacing',
-              'size',
-              'fontsize',
-              'weight',
-              'family',
-              'case',
-              'italic',
-              'leading',
-              'tracking',
-            ].includes(a),
-          ))
+        (o.aspects.length && o.aspects.every(a => MODE_FREE_LOOKS.includes(a)))
       )
         continue;
       o.mode = c.mode;
@@ -29667,14 +29649,16 @@ export function draftAnswer(ctx, env, question) {
     if (!drafts.some(d => d.options.some(sameAs)))
       batches.forEach((b, i) =>
         result.push({
-          text:
-            batches.length === 1
-              ? `all of it, in order${leftOut.length ? `; left out: ${leftOut.join(' ')}` : ''}`
-              : i === 0
-                ? `the first ${b.length} of ${all.length} changes, in order (whole asks only); then the next ${batches.length > 2 ? 'sequences' : 'sequence'} below`
-                : `then, after the ${i === 1 ? 'first' : 'one before'}, the next ${b.length} of ${all.length} changes, in order`,
+          text: batchLabel(
+            i,
+            batches.length,
+            b.length,
+            all.length,
+            leftOut.join(' '),
+          ),
           options: [b],
           sequence: true,
+          batch: {leftOut: leftOut.join(' ')},
           // Every kept scope measures unchanged after the whole sequence.
           ...(heldKeeps.length
             ? {
@@ -29699,6 +29683,7 @@ export function draftAnswer(ctx, env, question) {
     result.push({
       text: `the question asks for ${a.thing} ${a.value} and ${b.thing} ${b.value}${a.on ? ` on ${a.on}` : ''}, which contradict each other; pick one${unclashed.size ? ' (the rest of the ask is answered without them)' : ''}`,
       options: [[a], [b]],
+      clash: true,
     });
   // (A draft whose every step a later "then" clause replaces is not
   // offered: the sequence ends at the later value.)
@@ -29837,6 +29822,36 @@ export function draftAnswer(ctx, env, question) {
       );
     };
     const undone = matched.filter(ofMode);
+    // ("Make the cards rounder. Make the card corners round. Undo the card
+    // change.": changes of what the undo names that clash are taken back
+    // with the choice between them.)
+    /** @param {Step} st */
+    const ofUndo = st =>
+      (part
+        ? st.on === part || (FAMILIES[part] ?? []).includes(String(st.on))
+        : !st.on) &&
+      (what === 'everything' ||
+        st.thing === what ||
+        String(st.thing).includes(what) ||
+        st.thing === roleToken) &&
+      (!undoMode || !st.mode || st.mode === undoMode);
+    const clashGone = undone.length
+      ? []
+      : result.filter(d => d.clash && d.options.flat().every(ofUndo));
+    if (clashGone.length) {
+      result.splice(
+        0,
+        result.length,
+        ...result.filter(d => d !== unmet && !clashGone.includes(d)),
+      );
+      const uc0 = draftClause.get(unmet);
+      if (uc0) answeredByUndo.add(uc0);
+      result.push({
+        text: `the ${part ? `${part} ` : ''}changes said earlier in this ask, which clash, are taken back by its undo, so neither is written`,
+        options: [],
+      });
+      continue;
+    }
     if (!undone.length && matched.length) {
       const modes = new Set(
         matched.map(d => /** @type {any} */ (draftClause.get(d))?.mode),
@@ -30008,6 +30023,20 @@ export function draftAnswer(ctx, env, question) {
     result.push({
       text: `the ${part ? `${part} ` : ''}change said earlier in this ask${left.length ? ` for ${undoMode} mode` : ''} is taken back by its undo, so it is not written${left.length ? `; the change said for ${left.some(d => !(/** @type {any} */ (draftClause.get(d))?.mode)) ? 'both modes' : 'the other mode'} stays written` : ''}`,
       options: [],
+    });
+  }
+  // (Whole-ask sequences a take-back changed are counted again.)
+  if (answeredByUndo.size) {
+    const seqs = result.filter(d => d.batch && d.options.length);
+    const total = seqs.reduce((n, d) => n + (d.options[0]?.length ?? 0), 0);
+    seqs.forEach((d, i) => {
+      d.text = batchLabel(
+        i,
+        seqs.length,
+        d.options[0]?.length ?? 0,
+        total,
+        d.batch?.leftOut ?? '',
+      );
     });
   }
   // ("Make the cards rounder. Reset the card shadows.", with no card

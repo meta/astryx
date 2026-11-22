@@ -117,6 +117,15 @@ const ROWS = [
     {
       q: 'make the accent red in light mode. make the card background darker in dark mode. undo the accent change',
       never: /--color-accent/,
+      says: /^all of it, in order$/m,
+    },
+  ],
+  [
+    "a change of the undo's mode in a clash is taken back with its choice",
+    {
+      q: 'make the accent red in light mode. make the accent blue. undo the light mode accent change',
+      never: /--color-accent/,
+      says: /which clash, are taken back/,
     },
   ],
   [
