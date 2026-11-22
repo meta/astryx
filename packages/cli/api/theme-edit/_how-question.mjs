@@ -5055,14 +5055,35 @@ export function draftAnswer(ctx, env, question) {
         /\bthem\b\s*[.!]?$/i.test(m) &&
         !/\b(?:but|then)\b/i.test(said)
       ) {
-        const hit = partLexicon(ctx)
-          .parts.map(([re]) => re.exec(` ${said.toLowerCase()} `))
-          .filter(x => x != null)
+        const found2 = partLexicon(ctx)
+          .parts.map(([re, p]) => ({
+            hit: re.exec(` ${said.toLowerCase()} `),
+            on: /** @type {any} */ (p).on,
+          }))
+          .filter(x => x.hit != null)
           .sort(
             (x, y) =>
-              /** @type {RegExpExecArray} */ (y)[0].length -
-              /** @type {RegExpExecArray} */ (x)[0].length,
+              /** @type {RegExpExecArray} */ (y.hit)[0].length -
+              /** @type {RegExpExecArray} */ (x.hit)[0].length,
           )[0];
+        const hit = /** @type {RegExpExecArray | undefined} */ (found2?.hit);
+        // (A word just before the part that is one of its variant values,
+        // "strong dividers", keeps the earlier reading.)
+        const wordBefore = hit
+          ? said
+              .toLowerCase()
+              .slice(0, Math.max(0, hit.index - 1))
+              .trim()
+              .split(/\s+/)
+              .pop()
+          : '';
+        if (
+          wordBefore &&
+          Object.values(ctx.C.variantValues(found2?.on) ?? {})
+            .flat()
+            .some(v => String(v).toLowerCase() === wordBefore)
+        )
+          return m;
         // (A look word inside the part's own name, "outline indicator", is
         // no look said.)
         const from = hit ? hit.index - 1 : 0;

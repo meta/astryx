@@ -679,6 +679,17 @@ describe('two looks taken away by a pronoun', () => {
     },
     T,
   );
+
+  it(
+    'keeps the earlier reading when a variant word comes just before the part',
+    async () => {
+      const q =
+        'the border and shadow on strong dividers are ugly, remove them';
+      const lines = (first(await answer(q)) ?? []).join('\n');
+      expect(lines, q).not.toMatch(/border none --on divider$/m);
+    },
+    T,
+  );
 });
 
 describe('a nav said as a bar', () => {
