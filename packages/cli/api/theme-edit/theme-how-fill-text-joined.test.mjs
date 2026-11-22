@@ -3,7 +3,7 @@
 /**
  * @file A fill said with no mode on a part's look carries, in its own
  * answer, the text color that reads on it in each mode the part's text
- * would not: following the answer never leaves the text unreadable.
+ * would not.
  */
 
 import {afterAll, beforeAll, expect, it, vi} from 'vitest';

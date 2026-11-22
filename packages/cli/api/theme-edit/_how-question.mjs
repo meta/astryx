@@ -33429,8 +33429,8 @@ export function draftAnswer(ctx, env, question) {
         d.text = `${d.text}; its text would not read on that fill${at}, so the answer also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on} (${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value})`;
       }
       // (In a whole ask, the answer that runs it in order carries those
-      // text lines right after the fill too, so running it never leaves the
-      // text unreadable; a state fill's own line, a theme color's only.)
+      // text lines right after the fill too; a state fill's own line, a
+      // theme color's only.)
       if (!ownLine || /^var\(/.test(String(st.value ?? '').trim()))
         for (const seq of result) {
           if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
