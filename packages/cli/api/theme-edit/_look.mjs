@@ -658,7 +658,7 @@ function barTextProblems(look) {
   const onBar = (bar, p) => {
     if (inMenu(p)) return false;
     const q = String(p.bg.target);
-    const held = map[bar]?.contains ?? [];
+    const held = [...(map[bar]?.contains ?? []), ...(BAR_LISTS[bar] ?? [])];
     return (
       !menuHeld.has(q) ||
       FREE_PARTS.includes(q) ||
@@ -1198,6 +1198,11 @@ function partImageProblems(look) {
   }
   return out;
 }
+
+/** The lists a page bar holds besides its own parts (a panel's navigation list). */
+const BAR_LISTS = /** @type {Record<string, string[]>} */ ({
+  'layout-panel': ['list', 'list-item', 'item'],
+});
 
 /** Controls an app may put in any bar of the page. */
 const FREE_PARTS = [
@@ -2106,6 +2111,10 @@ export function lookRepair(look, problems) {
         grounds,
         needs,
       );
+    // What reads the theme's colors after this (a bar's shared const)
+    // takes the moved one.
+    const movedTo = perMode[token]?.[mode];
+    if (movedTo) res[mode][token] = movedTo;
     why[token] = own.has(token)
       ? 'did not read on every surface it sits on'
       : filled.has(token)

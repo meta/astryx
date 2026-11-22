@@ -1718,6 +1718,56 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
   );
 
   it(
+    "reads lists in a side panel, and a bar's shared const takes a color --fix moved",
+    async () => {
+      // A List in a dark layout panel: its item labels sit on the panel.
+      const panel = await check(
+        themeFile('panellist', READABLE, {
+          'layout-panel': {
+            base: {
+              backgroundColor: '#101010',
+              '--color-text-primary': '#ffffff',
+            },
+          },
+        }),
+      );
+      expect(
+        panel.problems.some(
+          p =>
+            p.part === 'layout-panel' &&
+            (p.parts ?? []).some(q => /^(item|list-item)$/.test(q)),
+        ),
+      ).toBe(true);
+      // A text token --fix moves and a bar's const repeats: one value.
+      const file = themeFile(
+        'samemove',
+        {...READABLE, '--color-text-secondary': ['#444444', '#6a6a6a']},
+        {
+          card: {
+            base: {
+              backgroundColor: '#101010',
+              '--color-text-primary': '#ffffff',
+              '--color-text-secondary': '#dddddd',
+            },
+          },
+        },
+      );
+      await check(file, {fix: true});
+      const text = fs.readFileSync(path.join(cwd, file), 'utf8');
+      const line = /\n\s+'--color-text-secondary': \['[^']+', '([^']+)'\]/.exec(
+        text,
+      )?.[1];
+      const inConst =
+        /InsideText = \{[^}]*'--color-text-secondary': 'light-dark\([^,]+, ([^)]+)\)'/.exec(
+          text,
+        )?.[1];
+      expect(line).toBeTruthy();
+      expect(inConst).toBe(line);
+    },
+    T,
+  );
+
+  it(
     'refuses what it cannot check, with the documented codes, and changes nothing',
     async () => {
       /** @param {Promise<unknown>} p */
