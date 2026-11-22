@@ -114,6 +114,21 @@ async function renderShell() {
 }
 
 describe('the AppShell drawer before it has loaded', () => {
+  it('shows a drawer another copy of Core loaded, before its own copy loads one', async () => {
+    const {dialog} = await renderShell();
+    // A second module graph stands in for a second copy of Core, such as a
+    // swizzled SideNav inside the package AppShell.
+    vi.resetModules();
+    const otherCopy = await import('./MobileNavToggle');
+    await act(async () => {
+      expect(await otherCopy.loadMobileNavDrawer()).toBe(true);
+    });
+    expect(
+      await screen.findByText('Home', undefined, LOAD),
+    ).toBeInTheDocument();
+    expect(dialog()).not.toHaveAttribute('open');
+  });
+
   it('is an empty, closed dialog that the toggle names', async () => {
     const {toggle, dialog} = await renderShell();
     const placeholder = dialog();

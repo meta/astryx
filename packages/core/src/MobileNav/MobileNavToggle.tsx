@@ -52,20 +52,22 @@ registerEnglishFallback(english);
 const drawerModule = createModuleLoader<typeof MobileNavModule>(
   async () => import('./MobileNav'),
 );
+type Drawer = (typeof MobileNavModule)['MobileNav'];
+
+// Shared by every copy of Core. Each listener takes the drawer that loaded:
+// a copy whose own loader has not run still shows another copy's drawer.
 const drawerListeners = sharedState(
   'MobileNav/MobileNavToggle/drawerListeners',
-  1,
-  () => new Set<() => void>(),
+  2,
+  () => new Set<(drawer: Drawer) => void>(),
 );
 
-function subscribeToDrawer(listener: () => void): () => void {
+function subscribeToDrawer(listener: (drawer: Drawer) => void): () => void {
   drawerListeners.add(listener);
   return () => {
     drawerListeners.delete(listener);
   };
 }
-
-type Drawer = (typeof MobileNavModule)['MobileNav'];
 
 const loadedDrawer = () => drawerModule.loaded()?.MobileNav ?? null;
 
@@ -74,8 +76,9 @@ const loadedDrawer = () => drawerModule.loaded()?.MobileNav ?? null;
  * toggle and the page keep working, and a later intent tries again. Internal.
  */
 export async function loadMobileNavDrawer(): Promise<boolean> {
+  let drawer: Drawer;
   try {
-    await drawerModule.load();
+    drawer = (await drawerModule.load()).MobileNav;
   } catch {
     warnOnce(
       'mobile-nav:drawer-load-failed',
@@ -85,7 +88,7 @@ export async function loadMobileNavDrawer(): Promise<boolean> {
     return false;
   }
   for (const listener of drawerListeners) {
-    listener();
+    listener(drawer);
   }
   return true;
 }
@@ -113,12 +116,12 @@ function useLoadedDrawer(isListening: boolean): Drawer | null {
     if (!isListening) {
       return;
     }
-    const update = () => {
+    const update = (loaded: Drawer | null) => {
       startTransition(() => {
-        setDrawer(() => loadedDrawer());
+        setDrawer(() => loaded);
       });
     };
-    update();
+    update(loadedDrawer());
     return subscribeToDrawer(update);
   }, [isListening]);
   return drawer;
@@ -136,8 +139,8 @@ LoadedDrawerContext.displayName = 'MobileNavLoadedDrawerContext';
  * Re-renders the drawer slot when the drawer loads. AppShell renders it
  * outside the `Activity` boundary that hides a closed drawer: a hidden
  * subtree runs no Effects, but it does take a new context value. So the
- * drawer mounts while it is still closed, as it did before it loaded on
- * demand, and its slide-in starts from the closed state. Internal.
+ * drawer mounts while it is still closed, and its slide-in starts from the
+ * closed state. Internal.
  */
 export function MobileNavDrawerLoad({children}: {children: ReactNode}) {
   const drawer = useLoadedDrawer(true);
@@ -159,9 +162,9 @@ export function MobileNavDrawer(props: MobileNavProps) {
   const isOpen = props.isOpen ?? isMobileNavOpen;
   // Syncs the drawer module with an open request, controlled or not. A
   // failed load drops the open, so the toggle does not report a drawer that
-  // never shows. A result that arrives after this run ended (the drawer
-  // closed, or the handler changed) is ignored, so a closed drawer is never
-  // closed again.
+  // never shows. This run ignores a result that arrives after it ends: the
+  // drawer closed, or the handler changed. So it never closes a closed
+  // drawer.
   useEffect(() => {
     if (!isOpen || Drawer != null) {
       return;
