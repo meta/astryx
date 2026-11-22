@@ -41,6 +41,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -61,6 +62,18 @@ export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
    */
   contextMenuActions?: TableContextActions;
 }
+
+// A plain-text heading that truncates is cut by its own box, so the box can
+// take the text's direction (textDirectionProps) without moving the cell's
+// padding or dividers.
+const cutHeadingStyles = stylex.create({
+  label: {
+    display: 'block',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+});
 
 // The end padding is also the room header content may grow into before its
 // label wraps or truncates (BaseTable, sort plugin). The last column takes the
@@ -208,8 +221,22 @@ export function TableHeaderCell({
   // interacts with its padding / content. No-op when no actions. Inside a
   // Table the wrapper stays unpositioned, so a header plugin's overlay, such
   // as a resize boundary, positions against the cell and sits on its edge.
+  const cutDirection = truncates ? textDirectionProps(children).dir : undefined;
+  const heading =
+    cutDirection == null ? (
+      children
+    ) : (
+      <span
+        dir={cutDirection}
+        {...stylex.props(
+          cutHeadingStyles.label,
+          truncatedTextStyles.pageAlign,
+        )}>
+        {children}
+      </span>
+    );
   const content = wrapInTableContextMenu(
-    children,
+    heading,
     contextMenuActions,
     ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined,
   );
