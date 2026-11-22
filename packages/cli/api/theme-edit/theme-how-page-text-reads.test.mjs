@@ -125,4 +125,47 @@ describe('page text reads', () => {
     );
     expect(lines.some(c => /--mode dark/.test(c))).toBe(false);
   }, 240_000);
+
+  it('a status color other parts fill or edge with is made readable on the part whose text fails, never on the whole theme', async () => {
+    const lines = (await how('silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    // (The destructive menu item's red label, on the silver menu.)
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^set q0 --color-text-error '#[0-9a-f]{6}' --on dropdown-menu-item --mode light$/,
+      ),
+    );
+    // (No whole-theme line: the error red still edges invalid inputs as it
+    // did.)
+    expect(
+      lines.filter(c =>
+        /^set q0 --color-text-error '[^']*'( --mode \w+)?$/.test(c),
+      ),
+    ).toEqual([]);
+    // (A secondary selector's light wash over silver, #474747 at 4.48:1
+    // where the blend is drawn one step darker.)
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^set q0 --color-text-secondary '#[0-9a-f]{6}' --on selector --when variant:secondary --mode light/,
+      ),
+    );
+  }, 240_000);
+
+  it("text on a part's own see-through fill is measured on the fill over the page", async () => {
+    const lines = (await how('gray #b8b8b8 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^set q0 --color-text-secondary '#[0-9a-f]{6}' --on selector --when variant:secondary --mode light/,
+      ),
+    );
+    expect(
+      lines.some(c =>
+        /^set q0 --color-text-secondary '[^']*' --mode light$/.test(c),
+      ),
+    ).toBe(false);
+    await follow(lines);
+  }, 240_000);
 });

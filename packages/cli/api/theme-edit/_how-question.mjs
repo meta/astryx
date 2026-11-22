@@ -33159,15 +33159,15 @@ export function draftAnswer(ctx, env, question) {
   // block's title) the nearest shade that reads.
   /** @type {string[] | null} */
   let onPageText = null;
+  const GROUND = new Set([
+    '--color-background-body',
+    '--color-background-surface',
+    '--color-background-card',
+  ]);
+  /** The colors some part fills or edges with. @type {Set<string>} */
+  const fills = new Set();
   const pageTextTokens = () => {
     if (onPageText) return onPageText;
-    const GROUND = new Set([
-      '--color-background-body',
-      '--color-background-surface',
-      '--color-background-card',
-    ]);
-    /** @type {Set<string>} */
-    const fills = new Set();
     /** @type {Set<string>} */
     const texts = new Set();
     for (const part of Object.keys(C.MAP)) {
@@ -33190,6 +33190,86 @@ export function draftAnswer(ctx, env, question) {
         !/^--color-on-|disabled|overlay|tint|icon/.test(t),
     );
     return onPageText;
+  };
+  // (A part draws some text where the global text colors cannot reach it
+  // alone: on a see-through fill of its own over the page (a secondary
+  // selector's light gray wash), or in a color other parts also fill or
+  // edge with (the error red of a destructive menu item, which also edges
+  // invalid inputs). There the text is measured on what it sits on, and
+  // the shade that reads is written on that part only, so the shared
+  // color keeps its other uses.)
+  /**
+   * @param {number[]} ground the new page color
+   * @param {'light' | 'dark'} m
+   * @param {boolean} moded
+   * @param {Step[]} fixed the whole-theme text lines already written
+   * @param {Step[]} steps the answer's lines: colors are read as they build
+   * @returns {Step[]}
+   */
+  const partTextFixes = (ground, m, moded, fixed, steps) => {
+    pageTextTokens();
+    /** @type {Map<string, string>} */
+    const built = new Map();
+    const after = (/** @type {string} */ token) => {
+      if (!built.has(token))
+        built.set(
+          token,
+          env.tokenAfter([...steps, ...fixed], token)?.[m] ??
+            String(current(token, m) ?? ''),
+        );
+      return /** @type {string} */ (built.get(token));
+    };
+    /** @type {Map<string, Step>} */
+    const out = new Map();
+    for (const part of Object.keys(C.MAP)) {
+      const bg = (C.partReads(part, 'background') ?? []).filter(
+        r => !/overlay|tint/.test(r.token),
+      );
+      for (const r of C.partReads(part, 'text') ?? []) {
+        if (!/^--color-text-/.test(r.token) || /disabled/.test(r.token))
+          continue;
+        for (const w of r.when ?? ['']) {
+          // (A state's look, hover or press, is not where text rests.)
+          if (/:/.test(w)) continue;
+          const own = bg.find(b => (b.when ?? []).includes(w));
+          let under = ground;
+          let washed = false;
+          if (own && !GROUND.has(own.token)) {
+            const raw = after(own.token);
+            const fill = parseColor(raw);
+            if (!fill || alphaOf(raw) >= 1) continue;
+            // (A browser draws the blend to a whole channel value, one step
+            // either way: the text is held to the step it reads worse on.)
+            const blend = compositeOver(
+              /** @type {[number, number, number]} */ (fill.slice(0, 3)),
+              alphaOf(raw),
+              /** @type {[number, number, number]} */ (ground),
+            );
+            const ink = parseColor(after(r.token));
+            const drawn = [Math.floor, Math.ceil].map(f => blend.map(f));
+            under = ink
+              ? drawn.reduce((a, b) => (ratio(ink, b) < ratio(ink, a) ? b : a))
+              : blend;
+            washed = true;
+          }
+          if (!washed && !fills.has(r.token)) continue;
+          const now = after(r.token);
+          const ink = parseColor(now);
+          if (!ink || alphaOf(now) < 1 || ratio(ink, under) >= 4.5) continue;
+          const to = shadeAt(hex(ink.slice(0, 3)), hex(under), 4.5);
+          if (!to) continue;
+          const variant = /(?:^|\s)variant=(\S+)/.exec(w)?.[1];
+          const when = washed && variant ? `variant:${variant}` : undefined;
+          const key = [part, r.token, when ?? ''].join('\0');
+          if (!out.has(key))
+            out.set(
+              key,
+              set(r.token, to, {on: part, when, ...(moded ? {mode: m} : {})}),
+            );
+        }
+      }
+    }
+    return [...out.values()];
   };
   for (const [di, d] of [...result.entries()].reverse()) {
     // (A page answer's own second line, the frame and the main panel, is
@@ -33313,6 +33393,18 @@ export function draftAnswer(ctx, env, question) {
             }),
           );
         }
+      if (everyGround)
+        for (const m of modes)
+          for (const f of partTextFixes(
+            ground,
+            m,
+            modes.length > 1 || !!st.mode,
+            fixes,
+            d.options[0],
+          )) {
+            unread.add(String(st.value));
+            fixes.push(f);
+          }
     }
     if (!fixes.length || !env.check([...d.options[0], ...fixes]).ok) continue;
     const at = [...new Set(fixes.map(x => x.mode).filter(Boolean))]
