@@ -208,6 +208,26 @@ describe('useTooltip — a pointer that does not move', () => {
     expect(onShow).toHaveBeenCalledTimes(1);
   });
 
+  it('the mounted triggers keep one window pointermove listener, removed with the last', () => {
+    const pointermoves = (calls: unknown[][]) =>
+      calls.filter(
+        ([type, , options]) =>
+          type === 'pointermove' &&
+          (options as AddEventListenerOptions | undefined)?.capture === true,
+      ).length;
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const first = render(<Harness />);
+    const second = render(<Harness />);
+    expect(pointermoves(add.mock.calls)).toBe(1);
+    first.unmount();
+    expect(pointermoves(remove.mock.calls)).toBe(0);
+    second.unmount();
+    expect(pointermoves(remove.mock.calls)).toBe(1);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
   it('a press on a trigger that appeared under a still mouse keeps it closed on the next move', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);

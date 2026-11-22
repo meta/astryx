@@ -28,7 +28,7 @@ import {
   subscribeInput,
   type MousePoint,
 } from '../utils/inputStream';
-import {sharedWeakSet} from '../utils/sharedRealm';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -62,17 +62,47 @@ import {
 } from '../theme/tokens.stylex';
 
 /**
- * The windows whose input stream hears mouse moves for the tooltips, so a
+ * Per window: how many tooltip triggers are mounted, and the one subscription
+ * that keeps the window's input stream hearing mouse moves for them, so a
  * trigger can tell where the mouse last moved before it arrived.
  */
-const restingMouseViews = sharedWeakSet<Window>('tooltip/resting-mouse', 1);
+const restingMouseTracking = sharedWeakMap<
+  Window,
+  {count: number; unsubscribe: () => void}
+>('tooltip/resting-mouse-subscriptions', 1);
 
-function trackRestingMouse(view: Window): void {
-  if (restingMouseViews.has(view)) {
-    return;
+/**
+ * Keeps `view`'s input stream hearing mouse moves while a trigger is
+ * mounted. Returns the release; the subscription ends with the last one.
+ */
+function trackRestingMouse(view: Window): () => void {
+  let entry = restingMouseTracking.get(view);
+  if (entry == null) {
+    // The stream itself stores each move's point before any subscriber runs;
+    // this subscriber only keeps it listening, and reads no layout.
+    entry = {
+      count: 0,
+      unsubscribe: subscribeInput(view, 'pointermove', () => {}),
+    };
+    restingMouseTracking.set(view, entry);
   }
-  restingMouseViews.add(view);
-  subscribeInput(view, 'pointermove', () => {});
+  entry.count += 1;
+  let isReleased = false;
+  return () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    const current = restingMouseTracking.get(view);
+    if (current == null) {
+      return;
+    }
+    current.count -= 1;
+    if (current.count === 0) {
+      current.unsubscribe();
+      restingMouseTracking.delete(view);
+    }
+  };
 }
 
 /**
@@ -845,7 +875,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       detachTriggerRef.current?.();
       const latest = () => handlersRef.current;
-      trackRestingMouse(el.ownerDocument.defaultView ?? window);
+      const releaseRestingMouse = trackRestingMouse(
+        el.ownerDocument.defaultView ?? window,
+      );
       // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
       // which is what lets the hover path know it is looking at a finger.
       const onPointerEnter = (e: PointerEvent) =>
@@ -932,6 +964,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         if (detachTriggerRef.current === detach) {
           detachTriggerRef.current = null;
         }
+        releaseRestingMouse();
         el.removeEventListener('pointerenter', onPointerEnter);
         el.removeEventListener('mouseenter', onMouseEnter);
         el.removeEventListener('pointermove', onPointerMove);
