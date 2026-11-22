@@ -4881,20 +4881,32 @@ export function draftAnswer(ctx, env, question) {
       // "but" or "then" keeps the reading it has without the pronoun.)
       const JUDGING =
         /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
-      const joins = [...said.matchAll(/\b(?:and|but|then)\s+/gi)];
+      // ("the card border is ugly and thick, hide it": words joined after
+      // the look that only judge it are the look's own, never an ask.)
+      const sj = said.replace(
+        /\s+\b(?:and|but)\s+([a-z' ]+)$/i,
+        (/** @type {string} */ x, /** @type {string} */ words) =>
+          words
+            .split(/[^a-z]+/)
+            .filter(Boolean)
+            .every(w => JUDGING.test(w))
+            ? ` ${words}`
+            : x,
+      );
+      const joins = [...sj.matchAll(/\b(?:and|but|then)\s+/gi)];
       if (joins.length) {
         // ("make the buttons blue and the border is ugly, hide it": a bare
         // look with words that only judge it, after another ask, is never
         // that ask's part. Nothing is written for it, and the answer asks
         // for the part.)
         const j = joins[joins.length - 1];
-        const after = said.slice(/** @type {number} */ (j.index) + j[0].length);
+        const after = sj.slice(/** @type {number} */ (j.index) + j[0].length);
         const bare = after
           .toLowerCase()
           .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
           .split(/[^a-z]+/)
           .filter(Boolean);
-        const before = said.slice(0, j.index);
+        const before = sj.slice(0, j.index);
         const partIn = (/** @type {string} */ t) =>
           partLexicon(ctx).parts.some(([re]) =>
             re.test(` ${t.toLowerCase()} `),
@@ -4929,13 +4941,13 @@ export function draftAnswer(ctx, env, question) {
         joins.length === 1 &&
         at > /** @type {number} */ (j.index) &&
         /\b(?:make|set|use|give|add|change|turn|want|need)\b/i.test(
-          said.slice(0, j.index),
+          sj.slice(0, j.index),
         );
       if (joins.length && !joinedAsk) return m;
       const kept = joinedAsk
-        ? said.slice(0, /** @type {number} */ (j.index) + j[0].length)
+        ? sj.slice(0, /** @type {number} */ (j.index) + j[0].length)
         : '';
-      const own = said.slice(kept.length);
+      const own = sj.slice(kept.length);
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
         .parts.map(([re, p]) => ({
