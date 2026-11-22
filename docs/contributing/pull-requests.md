@@ -164,11 +164,15 @@ ESLint on the changed files, the changed test files alone, `pnpm check:knowledge
 and `pnpm check:changesets`, in minutes. It is not CI-equivalent: it builds
 nothing, leaves out dependent packages, the tests the change reaches through an
 import, and the guards, and it ends with "run `pnpm preflight` before you flip"
-rather than "ready to flip". When every typecheck error names a workspace
-package's build output (`@astryxdesign/<package>/built` or a relative `dist` path), the
-typecheck reports SKIP ("workspace builds missing; run `pnpm build` first"),
-and the run ends "not checked" rather than a pass; any other TypeScript error
-fails it. A skipped typecheck checked nothing: run `pnpm build`, then run
+rather than "ready to flip". When every typecheck error is a missing workspace
+build, the typecheck reports SKIP ("workspace builds missing; run `pnpm build`
+first"), and the run ends "not checked" rather than a pass. A missing build is
+an unresolved import that a workspace package's `exports` declares and whose
+types file is absent (such as `@astryxdesign/core/utils` or
+`@astryxdesign/<package>/built` before a build), or a relative `dist` path; an implicit-any error (TS7006, TS7031) in a file with such an
+import counts with it. Any other TypeScript error fails the typecheck: an
+undeclared subpath, an entry whose file exists, an implicit-any error in another
+file, or any other error code. A skipped typecheck checked nothing: run `pnpm build`, then run
 preflight again.
 
 Preflight is not a required step. It reproduces the pre-review checklist and

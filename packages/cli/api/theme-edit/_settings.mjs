@@ -11019,13 +11019,12 @@ async function buildThemeSteps(ctx, slug, data) {
     // The preview's and the sheets' pictures (a section's, `sheet-inputs.png`,
     // included), in each mode: none shows the look this build makes.
     const pictures = fs.existsSync(f.dir)
-      ? fs
-          .readdirSync(f.dir)
-          .filter(
-            n =>
-              /^(preview(-dark)?|sheet(-[a-z][a-z-]*)?)\.png$/.test(n) &&
-              editorRecorded(cwd, slug, path.join(f.dir, n)),
-          )
+      ? fs.readdirSync(f.dir).filter(
+          n =>
+            // A picture cut from a tall one too (sheet-inputs-2.png).
+            /^(preview(-dark)?|sheet(-[a-z][a-z-]*)?(-\d+)?)\.png$/.test(n) &&
+            editorRecorded(cwd, slug, path.join(f.dir, n)),
+        )
       : [];
     removedPictures = pictures.map(n =>
       path.relative(cwd, path.join(f.dir, n)).split(path.sep).join('/'),
@@ -11226,8 +11225,12 @@ async function buildThemeSteps(ctx, slug, data) {
         )
       : [],
   );
+  // A picture cut from one taken again (sheet-inputs-2.png) is taken again.
   removedPictures = removedPictures.filter(
-    p => !retaken.has(p.slice(p.lastIndexOf('/') + 1)),
+    p =>
+      !retaken.has(
+        p.slice(p.lastIndexOf('/') + 1).replace(/-\d+(?=\.png$)/, ''),
+      ),
   );
   if (removedPictures.length)
     notes = [
@@ -13244,6 +13247,8 @@ export async function contrastProblems(ctx, data, res) {
     ),
     ...borderContrastProblems(ctx, data, res, base),
     ...trackContrastProblems(ctx, data, res, base),
+    ...scopedFillPairProblems(ctx, data, res),
+    ...layerTextProblems(ctx, data, res),
     ...floatingEdgeProblems(ctx, data, res, base),
     ...scoped.problems,
     ...buttonStyleProblems(ctx, data, res),
@@ -13466,6 +13471,273 @@ function nearestReading(from, grounds, need) {
     if (grounds.every(g => ratio(c, g) >= need)) return hex(c);
   }
   return to;
+}
+
+/**
+ * A fill color and the text drawn on it, set inside a part (a white accent
+ * on the top bar): whatever that part holds filled with the color (a
+ * primary button, a badge) draws the on-color on it there. The pair is
+ * measured as that part's scope resolves it, in each mode it is set for:
+ * the theme's setting on the part, else the theme's color. Below 4.5:1 is
+ * a problem, fixed with the nearest on-color that reads, set on the same
+ * part. Only a part that holds a part reading the on-color is measured,
+ * and only where the theme sets that on-color on no part around it or
+ * inside it, and for no variant or state there: a
+ * part that reads it itself is the text pairs' to measure, and one that
+ * holds no reader draws no such text. A see-through fill is left out: what
+ * shows under it is the part, not one known color.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function scopedFillPairProblems(ctx, data, res) {
+  const defaults = ctx.project.core.tokenDefaults ?? {};
+  /** The fill a token pairs with its on-color: --color-accent and --color-on-accent. @param {string} tok */
+  const pairOf = tok => {
+    const on = /^--color-on-([\w-]+)$/.exec(tok);
+    if (on && Object.hasOwn(defaults, `--color-${on[1]}`))
+      return {fill: `--color-${on[1]}`, on: tok};
+    const fill = /^--color-([\w-]+)$/.exec(tok);
+    if (fill && Object.hasOwn(defaults, `--color-on-${fill[1]}`))
+      return {fill: tok, on: `--color-on-${fill[1]}`};
+    return null;
+  };
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const lightDark = /^light-dark\((.*)\)$/is.exec(x);
+      if (lightDark) {
+        const halves = splitTop(lightDark[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  /** @type {Set<string>} */
+  const done = new Set();
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  /** Whether a part's own rules, or its elements', read a token. @param {string} t @param {string} tok */
+  const readsItself = (t, tok) =>
+    Object.values(map[t]?.own ?? {}).some(
+      (/** @type {any} */ v) => tok in (v?.tokens ?? {}),
+    ) || tok in (map[t]?.inside ?? {});
+  for (const x of data.settings) {
+    if (x.source !== 'token' || !x.on || x.state || x.when) continue;
+    const pair = pairOf(x.thing);
+    if (!pair) continue;
+    const readers = (map[x.on]?.contains ?? []).filter(
+      (/** @type {string} */ c) => readsItself(c, pair.on),
+    );
+    // (An on-color the theme sets on this part through a group, on a part
+    // around it, on a reader inside it or a part holding one (by the parts
+    // a group names), or for one variant or state of those parts, is drawn
+    // there as set, in the modes it is set for: this part's scope alone
+    // does not say what its readers draw there. One set for the whole
+    // theme, or on parts elsewhere, is what the scope reads.)
+    const around = (/** @type {string} */ t) =>
+      (map[t]?.contains ?? []).includes(x.on);
+    // (A part inside this one that holds a reader, the top nav in the top
+    // bar, sets the color its readers draw as much as the reader does.)
+    const held = /** @type {string[]} */ (map[x.on]?.contains ?? []);
+    const holdsReader = (/** @type {string} */ t) =>
+      held.includes(t) &&
+      (map[t]?.contains ?? []).some((/** @type {string} */ c) =>
+        readers.includes(c),
+      );
+    const touches = (/** @type {Setting} */ y) =>
+      y.on == null
+        ? Boolean(y.when || y.state)
+        : partsOf(ctx, y).some(
+            t =>
+              around(t) ||
+              readers.includes(t) ||
+              holdsReader(t) ||
+              (t === x.on && (y.on !== x.on || y.when || y.state)),
+          );
+    if (readsItself(x.on, pair.on) || !readers.length) continue;
+    const drawnElsewhere = data.settings.filter(
+      y => y.source === 'token' && y.thing === pair.on && touches(y),
+    );
+    for (const m0 of modes) {
+      const m = /** @type {'light' | 'dark'} */ (m0);
+      if (x.mode && x.mode !== m) continue;
+      if (drawnElsewhere.some(y => !y.mode || y.mode === m)) continue;
+      const key = `scoped-fill|${x.on}|${pair.fill}|${m}`;
+      if (done.has(key)) continue;
+      done.add(key);
+      /** The token as the part's scope draws it. @param {string} tok */
+      const inScope = tok => {
+        const set = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              y.source === 'token' &&
+              y.thing === tok &&
+              y.on === x.on &&
+              !y.state &&
+              !y.when &&
+              (!y.mode || y.mode === m),
+          );
+        return inMode(set ? set.value : `var(${tok})`, m);
+      };
+      const fillValue = inScope(pair.fill);
+      const onValue = inScope(pair.on);
+      const page =
+        parseColor(inMode('var(--color-background-body)', m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const fillRgb = parseColor(fillValue);
+      const onRgb = parseColor(onValue);
+      if (!fillRgb || !onRgb || alphaOf(fillValue) < 1) continue;
+      const fill = compositeOver(
+        fillRgb,
+        alphaOf(fillValue),
+        /** @type {[number, number, number]} */ (page),
+      );
+      const text = compositeOver(onRgb, alphaOf(onValue), fill);
+      const r = ratio(text, fill);
+      if (r >= 4.5) continue;
+      out.push({
+        key,
+        text: `inside ${x.on}, ${pair.on} (${hex(text)}) on ${pair.fill} (${hex(fill)}) is ${ratioWords(r)}:1 in ${m}: what it holds filled with ${pair.fill} (${readers.slice(0, 2).join(', ')}) draws its text at that; text needs 4.5:1`,
+        fix: `${P} set ${data.name} ${pair.on} '${nearestReading(text, [fill], 4.5)}' --on ${x.on}${modeFlag(m)}`,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * A text or icon token set on a bar (white text on the app's header or its
+ * top nav) also reaches the menus and popovers its items open: Core draws
+ * a layer inside the element that opens it, so the layer inherits the
+ * bar's tokens. Its surface still paints the popover fill, which the bar
+ * does not change. The token is measured, as the bar's scope resolves it,
+ * on the popover fill there. Below 4.5:1 is a problem, fixed with the token
+ * on the overlays, at the value the theme gives it elsewhere: a token
+ * declared on the popover beats the inherited one. A bar is a part that
+ * holds a bar row, or that row (see barRows). A setting for the part alone
+ * (`--only`), and a token the theme sets on the popover already, are drawn
+ * there as set.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function layerTextProblems(ctx, data, res) {
+  const map = /** @type {Record<string, any>} */ (ctx.C.MAP);
+  if (!map.popover) return [];
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  const FILL = '--color-background-popover';
+  /** The bars: the parts that hold a bar row, and those rows. */
+  const bars = new Set(
+    Object.keys(map).flatMap(h => {
+      const rows = barRows(map, h);
+      return rows.length ? [h, ...rows] : [];
+    }),
+  );
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const lightDark = /^light-dark\((.*)\)$/is.exec(x);
+      if (lightDark) {
+        const halves = splitTop(lightDark[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** The token as a part's own scope draws it in a mode. @param {string} on @param {string} tok @param {'light' | 'dark'} m */
+  const inScope = (on, tok, m) => {
+    const set = [...data.settings]
+      .reverse()
+      .find(
+        y =>
+          y.source === 'token' &&
+          y.thing === tok &&
+          y.on === on &&
+          !y.state &&
+          !y.when &&
+          (!y.mode || y.mode === m),
+      );
+    return inMode(set ? set.value : `var(${tok})`, m);
+  };
+  /** @type {Map<string, {tok: string, m: 'light' | 'dark', parts: string[], text: [number, number, number], fill: [number, number, number], r: number}>} */
+  const found = new Map();
+  for (const x of data.settings) {
+    if (x.source !== 'token' || !x.on || x.state || x.when || x.only) continue;
+    // (Disabled text is exempt from 4.5:1, as in the text pairs' check.)
+    if (
+      !/^--color-(?:text|icon)-[\w-]+$/.test(x.thing) ||
+      /^--color-(?:text|icon)-disabled$/.test(x.thing)
+    )
+      continue;
+    const own = partsOf(ctx, x);
+    if (own.includes('popover') || !bars.has(x.on)) continue;
+    for (const m0 of modes) {
+      const m = /** @type {'light' | 'dark'} */ (m0);
+      if (x.mode && x.mode !== m) continue;
+      const onPopover = data.settings.some(
+        y =>
+          y.source === 'token' &&
+          y.thing === x.thing &&
+          !y.state &&
+          !y.when &&
+          (!y.mode || y.mode === m) &&
+          partsOf(ctx, y).includes('popover'),
+      );
+      if (onPopover) continue;
+      const page =
+        parseColor(inMode('var(--color-background-body)', m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const fillValue = inScope(x.on, FILL, m);
+      const textValue = inScope(x.on, x.thing, m);
+      const fillRgb = parseColor(fillValue);
+      const textRgb = parseColor(textValue);
+      if (!fillRgb || !textRgb || alphaOf(fillValue) < 1) continue;
+      const fill = compositeOver(
+        fillRgb,
+        1,
+        /** @type {[number, number, number]} */ (page),
+      );
+      const text = compositeOver(textRgb, alphaOf(textValue), fill);
+      const r = ratio(text, fill);
+      if (r >= 4.5) continue;
+      const key = `layer-text|${x.thing}|${m}`;
+      const seen = found.get(key);
+      if (seen) {
+        if (!seen.parts.includes(x.on)) seen.parts.push(x.on);
+        if (r < seen.r) Object.assign(seen, {text, fill, r});
+      } else found.set(key, {tok: x.thing, m, parts: [x.on], text, fill, r});
+    }
+  }
+  return [...found.entries()].map(([key, f]) => {
+    const elsewhere = parseColor(inMode(`var(${f.tok})`, f.m));
+    const value =
+      elsewhere && ratio(compositeOver(elsewhere, 1, f.fill), f.fill) >= 4.5
+        ? hex(/** @type {[number, number, number]} */ (elsewhere))
+        : nearestReading(f.text, [f.fill], 4.5);
+    return {
+      key,
+      text: `a menu or popover opened from ${f.parts.slice(0, 3).join(', ')}${f.parts.length > 3 ? ` and ${f.parts.length - 3} more` : ''} draws its ${f.tok} (${hex(f.text)}) on the popover fill (${hex(f.fill)}): ${ratioWords(f.r)}:1 in ${f.m}; text needs 4.5:1`,
+      fix: `${P} set ${data.name} ${f.tok} '${value}' --on overlays${modeFlag(f.m)}`,
+    };
+  });
 }
 
 /**

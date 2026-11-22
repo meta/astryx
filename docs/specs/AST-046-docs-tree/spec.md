@@ -143,7 +143,12 @@ and references from other packages are an open question (OQ2).
   route MUST fail with `ERR_UNKNOWN_TOPIC` and suggest the children of the
   deepest namespace the route reaches, closest first by each child's route,
   title, and declared keywords; the child that its route words alone put first
-  stays first when the typed text holds every word of its route. Any other
+  stays first when the typed text holds every word of its route. When the rest
+  of the route after that namespace has the words of exactly one doc further
+  below it, by that doc's last route segment or title, that doc is suggested
+  too: right after the child that stays first, or first when no child does.
+  When that doc is the child that stays first, it is listed once, first. An
+  experimental doc is never suggested this way. Any other
   text that names no doc MUST fail with `ERR_UNKNOWN_TOPIC` too. It suggests
   the docs whose own name it is, or whose route it spells with hyphens, when
   any exist. Otherwise, when no other command's entry matches the text

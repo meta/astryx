@@ -5,9 +5,10 @@
  * @input Uses vitest, @testing-library/react, Table, useTableSortable
  * @output Unit tests for the tooltip that shows a header cell's heading when
  *   its column cuts it short
- * @position Testing; validates that a cut heading shows in full on hover and,
- *   where the header is interactive, on keyboard focus, that it adds no
- *   description, and that a heading that fits shows no tooltip
+ * @position Testing; validates that a cut heading shows in full on keyboard
+ *   focus where the header is interactive and on no hover (no native title
+ *   either), that it adds no description, and that a heading that fits shows
+ *   no tooltip
  *
  * SYNC: When TableHeaderCell.tsx changes, update tests to match new behavior
  */
@@ -169,6 +170,23 @@ describe('TableHeaderCell truncation tooltip', () => {
     });
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(tooltip()).toBeNull();
+    // A native title is a hover disclosure too, and the browser shows it.
+    expect(header.closest('[title]')).toBeNull();
+    expect(header.querySelector('[title]')).toBeNull();
+  });
+
+  it('puts no native title on a string heading when it truncates', () => {
+    render(<Table textOverflow="truncate" data={rows} columns={columns} />);
+    const header = screen.getByRole('columnheader');
+    expect(header.hasAttribute('title')).toBe(false);
+    expect(header.querySelector('[title]')).toBeNull();
+  });
+
+  it('keeps the native title on a string heading when it wraps', () => {
+    render(<Table textOverflow="wrap" data={rows} columns={columns} />);
+    expect(screen.getByRole('columnheader').getAttribute('title')).toBe(
+      HEADING,
+    );
   });
 
   it('shows the full heading on keyboard focus of a sortable header', async () => {
