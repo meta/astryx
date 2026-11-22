@@ -512,6 +512,7 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
       job.steps?.some(isCaps),
     );
     expect(heavyJobs.map(([id]) => id).sort()).toEqual([
+      'pr-firefox-hover',
       'pr-interaction',
       'pr-interaction-webkit',
       'test-build',
