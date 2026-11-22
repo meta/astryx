@@ -5291,10 +5291,10 @@ export function draftAnswer(ctx, env, question) {
         return `${r} color ${typed ?? color}`;
       },
     )
-    // ("… and the card change too", "… The card change too.": "too" adds
-    // nothing to a "the … change" an undo names.)
+    // ("… and the card change too", "…, the card change too", "… Also the
+    // card change too.": "too" adds nothing to a "the … change" phrase.)
     .replace(
-      /((?:^|[.;!?]\s*|\band\s+(?:also\s+)?)the (?:[\w-]+\s+)+?changes?)\s+too\b/gi,
+      /((?:^|[,.;!?]\s*|\band\s+)(?:also\s+)?the (?:[\w-]+\s+)+?changes?)\s+too\b/gi,
       '$1',
     )
     // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with
@@ -12109,8 +12109,7 @@ export function draftAnswer(ctx, env, question) {
   // ("Undo the heading change and the card corners change": each "the …
   // change" said after an undo, naming a part of its own and no mode, is an
   // undo of its own. It takes back that change, or names that there is
-  // none; it never asks for a change. Any other phrase is read with the
-  // undo before it, which then names more than one change.)
+  // none; it never asks for a change. Any other phrase reads as before.)
   for (let i = 1; i < clauses.length; i++) {
     const c = clauses[i];
     if (
@@ -29969,10 +29968,10 @@ export function draftAnswer(ctx, env, question) {
       if (uc0) answeredByUndo.add(uc0);
       continue;
     }
-    // An undo that names more than one change ("Undo the heading change
-    // and the corner change", a phrase that is no undo of its own), or a
-    // look that more than one earlier change could be, is not read for
-    // sure: nothing is taken back, and the answer says so. A bare "size" or
+    // An undo followed by a "the … change" phrase that is no undo of its
+    // own ("… and the light mode card change", beside a mode), or a look
+    // that more than one earlier change could be, is not read for sure:
+    // nothing is taken back, and the answer says so. A bare "size" or
     // "weights" said alone is read below. ("Undo the card change and the
     // heading change" is two undos, each read in turn.)
     const uc = /** @type {any} */ (draftClause.get(unmet));
@@ -30016,8 +30015,8 @@ export function draftAnswer(ctx, env, question) {
           : []),
       ]),
     ];
-    // (Only an undo said alone: one followed by another "… change" phrase
-    // reads as before.)
+    // (Only an undo said alone: one followed by a "… change" phrase that
+    // is no undo of its own reads as before.)
     const followed =
       next &&
       !GOING_BACK.test(String(next.text ?? '')) &&
