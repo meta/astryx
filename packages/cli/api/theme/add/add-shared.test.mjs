@@ -853,7 +853,7 @@ describe('theme add with a shared theme', () => {
       'made with a newer palette recipe whose saved palette it does not carry',
       null,
       JSON.stringify({recipe: 'astryx-oklch-v99'}),
-      /palette recipe astryx-oklch-v99, which a newer CLI makes, is not in the form the palette generator writes; theme add copies no code/,
+      /palette recipe astryx-oklch-v99, which a newer CLI makes, and carries no saved palette \(tokens\/ocean\.palette\.ts\)/,
     ],
     [
       'made with a palette recipe no Astryx CLI makes',
