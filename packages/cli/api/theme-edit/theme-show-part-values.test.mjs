@@ -600,6 +600,19 @@ describe('show --on: what one part of a theme shows', () => {
         (await refusal(() => themeEditShow('handy', {cwd, on: 'card'}))).code,
       ).toBe('ERR_THEME_INVALID');
     }
+    // A null token, which a build writes as it is and warns, is read
+    // without it: the answer does not crash.
+    fs.writeFileSync(
+      file,
+      source.replace(
+        "'--color-background-card': '#0a0b0c'",
+        "'--color-background-card': '#0a0b0c', '--color-text-primary': null",
+      ),
+    );
+    const withNull = /** @type {any} */ (
+      await themeEditShow('handy', {cwd, on: 'card'})
+    );
+    expect(valueOf(withNull, 'background-color').value).toBe('#0a0b0c');
     fs.writeFileSync(file, source);
     // A theme file that no longer loads is refused, as show refuses it.
     fs.writeFileSync(

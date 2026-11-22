@@ -11702,8 +11702,8 @@ export async function resolvedTokens(ctx, slug) {
  * @param {any} theme
  * @returns {any}
  */
-function withoutNullTokens(theme) {
-  const MAPS = ['tokens', 'localTokens'];
+export function withoutNullTokens(theme) {
+  const MAPS = ['tokens', 'localTokens', '__inputTokens'];
   const SURFACES = ['onDark', 'onLight', '__onDark', '__onLight'];
   /** @param {any} map */
   const hasNull = map =>

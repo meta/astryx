@@ -34,6 +34,7 @@ import {
   refuseThemeSource,
   sourceChangedReason,
   staleBuild,
+  withoutNullTokens,
   stateSlot,
 } from './_settings.mjs';
 import {censusStatesOf} from './_parts.mjs';
@@ -326,9 +327,12 @@ async function loadNamedTheme(ctx, cwd, name) {
           ERROR_CODES.ERR_THEME_INVALID,
         );
       }
+      // (A null token is written as it is and warned by a build; Core
+      // cannot resolve one, so it is read without it.)
+      const drawn = withoutNullTokens(loaded.theme);
       tokens = {
-        light: core.resolveThemeTokens(loaded.theme, {mode: 'light'}),
-        dark: core.resolveThemeTokens(loaded.theme, {mode: 'dark'}),
+        light: core.resolveThemeTokens(drawn, {mode: 'light'}),
+        dark: core.resolveThemeTokens(drawn, {mode: 'dark'}),
       };
       components = loaded.theme.components ?? {};
     }
