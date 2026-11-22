@@ -4,8 +4,9 @@
  * @file Contrast is measured on the color drawn under the text: text in a
  * see-through region (a top nav item in a translucent top bar) over the
  * region blended onto the page, never over the region's color taken as
- * solid; and a fill color and its on-color set inside a part are measured as
- * that part draws them.
+ * solid; a fill color and its on-color set inside a part are measured as
+ * that part draws them; and a floating panel drawn with the popover's fill
+ * needs an edge against the page and what sits on it.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -261,6 +262,73 @@ describe('contrast measures what is drawn', () => {
       expect(
         texts(glass).filter(p => /^inside app-shell-header/.test(p.problem)),
       ).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'names an open list or menu with no edge against the page or a surface',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('sf', {cwd, like: 'neutral'});
+      for (const tok of ['--shadow-low', '--shadow-med', '--shadow-high'])
+        await themeEditSet('sf', tok, 'none', {cwd});
+      const open = texts(await themeEditShow('sf', {cwd})).filter(p =>
+        /with no border or shadow: a panel floating over it/.test(p.problem),
+      );
+      for (const part of ['popover', 'context-menu', 'multi-selector-popup'])
+        expect(
+          open.find(p => p.problem.startsWith(`the ${part} `)),
+          part,
+        ).toMatchObject({
+          problem: expect.stringMatching(
+            / on a surface \(#[0-9a-f]{6}\) in light/,
+          ),
+          fix: expect.stringMatching(
+            new RegExp(
+              ` set sf border '1px solid var\\(--color-border\\)' --on ${part}$`,
+            ),
+          ),
+        });
+      // A border the built theme draws on a panel is its edge, whatever
+      // wrote it; one taken away again is not.
+      await themeEditSet('sf', 'border', '1px solid var(--color-border)', {
+        cwd,
+        on: 'popover',
+      });
+      const edged = texts(await themeEditShow('sf', {cwd}));
+      expect(edged.some(p => p.problem.startsWith('the popover '))).toBe(false);
+      expect(edged.some(p => p.problem.startsWith('the context-menu '))).toBe(
+        true,
+      );
+      await themeEditSet('sf', 'border', 'none', {cwd, on: 'popover'});
+      expect(
+        texts(await themeEditShow('sf', {cwd})).some(p =>
+          p.problem.startsWith('the popover '),
+        ),
+      ).toBe(true);
+      // The surfaces dial draws its edge on the surface parts only: a
+      // context menu under it keeps Core's edge, here none.
+      await themeEditSet('sf', 'surfaces', 'outlined', {cwd});
+      expect(
+        texts(await themeEditShow('sf', {cwd})).some(p =>
+          p.problem.startsWith('the context-menu '),
+        ),
+      ).toBe(true);
+      // Raised, the dial's shadow on a banner (the part inside its frame
+      // that paints the fill) is the banner's edge.
+      await themeEditSet('sf', 'surfaces', 'raised', {cwd});
+      await themeEditSet('sf', 'background-color', '#fdfdfd', {
+        cwd,
+        on: 'banner',
+      });
+      const raised = /** @type {any} */ (await themeEditShow('sf', {cwd}));
+      expect(
+        [
+          ...texts(raised).map(p => p.problem),
+          ...(raised.data.notes ?? []),
+        ].some((/** @type {string} */ t) => /^the banner /.test(t)),
+      ).toBe(false);
     },
     T,
   );
