@@ -780,7 +780,7 @@ export function Dialog({
       return;
     }
     return watchReduceMotionSetting(dialog.ownerDocument.defaultView, isOn => {
-      if (!isOn) {
+      if (!isOn && !themeReducesMotion(dialog)) {
         aimAtOpener();
       }
     });
