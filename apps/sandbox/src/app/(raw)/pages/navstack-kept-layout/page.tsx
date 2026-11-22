@@ -9,13 +9,14 @@
  *   work when a chat mounts, 80 by default)
  * @output A full-page NavigationStack of chats with long transcripts. The
  *   readout names each push fresh (a mount), retained (a popped screen kept
- *   laid out) or prepared, with lift to its first moved frame
+ *   laid out) or prepared, with its commit to its first moved frame and the
+ *   lift to that frame
  * @position A raw page for retained and prepared screens staying laid out,
  *   filmed on a physical phone: lift to the first moved frame of a fresh
  *   push, of a retained screen's re-push and of a prepared push
  */
 
-import {Suspense, useEffect, useRef, useState} from 'react';
+import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
 import {
   NavigationScreen,
@@ -66,12 +67,15 @@ function KeptLayoutCell() {
     return () => document.removeEventListener('pointerup', onUp, true);
   }, []);
 
-  useEffect(() => {
+  // Runs in the commit that applies the push, after the screens' own layout
+  // effects, so its time is that commit's end.
+  useLayoutEffect(() => {
     const push = pending.current;
     if (push == null) {
       return undefined;
     }
     pending.current = null;
+    const committed = performance.now();
     return watchFirstMove(
       push.entry,
       lift.current,
@@ -79,7 +83,7 @@ function KeptLayoutCell() {
       () => 0,
       move =>
         addLine(
-          `${push.entry} (${push.kind}): lift → first moved frame ${move.ms} ms, at ${Math.round(move.travel * 100)}% (page clock)`,
+          `${push.entry} (${push.kind}): commit → first moved frame ${Math.round((move.at - committed) * 10) / 10} ms; lift → first moved frame ${move.ms} ms, at ${Math.round(move.travel * 100)}% (page clock)`,
         ),
     );
   }, [path, addLine]);

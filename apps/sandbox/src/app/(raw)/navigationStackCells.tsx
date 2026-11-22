@@ -68,6 +68,8 @@ export interface FirstMove {
   ms: number;
   /** How far the card had travelled at that frame: 0 at rest, 1 at its end. */
   travel: number;
+  /** The frame's callback time on the page clock. */
+  at: number;
 }
 
 /**
@@ -99,6 +101,7 @@ export function watchFirstMove(
       if (Math.abs(x - from) > 0.5) {
         onMove({
           ms: Math.round((time - since) * 10) / 10,
+          at: time,
           travel: Math.round(((x - from) / (to - from)) * 1000) / 1000,
         });
         return;

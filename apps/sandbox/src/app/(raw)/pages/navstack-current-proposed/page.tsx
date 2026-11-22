@@ -174,7 +174,7 @@ function NewChatButton({mode}: {mode: Mode}) {
         );
         document
           .querySelector<HTMLInputElement>(
-            '[data-navigation-screen="New chat"] input',
+            '[data-navigation-screen="screen-New chat"] input',
           )
           ?.focus();
       }}
