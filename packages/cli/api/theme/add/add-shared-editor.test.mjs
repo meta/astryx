@@ -319,6 +319,24 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
       {recursive: true},
     );
 
+    // (The newer CLI picked its own shade for one token: the copy shows the
+    // palette's accent at stop 90 where this CLI would pick another.)
+    const stop90 =
+      /"accent": \{[\s\S]*?"light": \{[\s\S]*?"90": "(#[0-9a-f]{6})"/.exec(
+        saved,
+      )?.[1];
+    expect(stop90).toBeTruthy();
+    const sharedCss = path.join(shared, 'app-copy/harbor.css');
+    fs.writeFileSync(
+      sharedCss,
+      fs
+        .readFileSync(sharedCss, 'utf-8')
+        .replace(
+          /(--color-accent-muted\s*:\s*light-dark\()\s*#[0-9a-fA-F]+/,
+          `$1${stop90}`,
+        ),
+    );
+
     const added = await themeAdd(shared, {cwd: app});
     expect(added.data.copy?.workingFiles).toMatchObject({
       keptPalette: recipe,
@@ -332,9 +350,30 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
     const kept = path.join(app, 'themes/harbor/tokens/harbor.palette.ts');
     expect(fs.readFileSync(kept, 'utf-8')).toBe(saved);
 
-    // (A change that does not remake the colors saves; one that does is
-    // refused with the recipe's words, and the colors stay as saved.)
+    // (A change that does not remake the colors saves, and every shade the
+    // copy showed stays; one that does is refused with the recipe's words,
+    // and the colors stay as saved.)
+    const copyCss = path.join(app, 'src/themes/harbor/harbor.css');
+    /** @param {string} css */
+    const shades = css =>
+      Object.fromEntries(
+        [
+          ...css.matchAll(
+            /(--color-[\w-]+)\s*:\s*(light-dark\([^)]*\)|#[0-9a-fA-F]+)\s*;/g,
+          ),
+        ]
+          .reverse()
+          .map(m => [m[1], m[2].replace(/\s/g, '').toLowerCase()]),
+      );
+    const shown = shades(fs.readFileSync(copyCss, 'utf-8'));
+    expect(shown['--color-accent-muted']).toMatch(
+      new RegExp(`^light-dark\\(${stop90}`),
+    );
     await themeEditSet('harbor', 'corners', 'square', {cwd: app});
+    const after = shades(fs.readFileSync(copyCss, 'utf-8'));
+    expect(
+      Object.keys(shown).filter(k => k in after && after[k] !== shown[k]),
+    ).toEqual([]);
     await expect(
       themeEditSet('harbor', 'accent', '#ff0000', {cwd: app}),
     ).rejects.toThrow(/astryx-oklch-v99 recipe, which this Astryx CLI/);

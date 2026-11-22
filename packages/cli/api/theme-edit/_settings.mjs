@@ -135,6 +135,7 @@ import {
   paletteMapping,
   paletteKeptAsSaved,
   paletteRecipeUnknown,
+  keptPaletteColors,
   paletteColorKey,
   noteSavedColors,
   syncPalette,
@@ -5824,6 +5825,64 @@ function paletteStopsOnly(kept, d, module = null) {
 /** The settings module line a kept palette's module carries (see paletteStopsOnly). */
 const KEPT_PAIRS_LINE =
   '// Palette kept as saved: a palette token a setting covers is written as a pair.';
+
+/**
+ * The shades a palette kept as saved shows in the theme's app copy, for a
+ * theme this editor has not built yet (added from a shared theme with its
+ * working files, whose built settings module is code and stays behind):
+ * each color token, light and dark, as the palette stop that holds its
+ * color, else as the color. The copy's stylesheet is read as text, and the
+ * first declaration of each token counts. Null when the theme has no app
+ * copy, or no palette kept as saved.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Record<string, Record<'light' | 'dark', KeptHalf>> | null}
+ */
+function stopsShownInCopy(cwd, slug) {
+  const kept = keptPaletteColors(cwd, slug);
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(
+      path.join(cwd, 'src', 'themes', slug, `${slug}.css`),
+      'utf8',
+    );
+  } catch {
+    return null;
+  }
+  if (!kept) return null;
+  /** @param {string} color @param {'light' | 'dark'} m @returns {KeptHalf} */
+  const half = (color, m) => {
+    const c = color.toLowerCase();
+    if (c === String(kept.white).toLowerCase())
+      return {family: 'white', stop: 100};
+    if (c === String(kept.black).toLowerCase())
+      return {family: 'black', stop: 0};
+    // (The mode's own ramp first: a color in both ramps is the mode's.)
+    for (const side of [m, m === 'light' ? 'dark' : 'light'])
+      for (const [family, f] of Object.entries(kept.palette ?? {}))
+        for (const [stop, value] of Object.entries(
+          /** @type {any} */ (f)?.[side] ?? {},
+        ))
+          if (side === m && String(value).toLowerCase() === c)
+            return {family, stop: Number(stop)};
+    return {family: 'literal', stop: 0, color};
+  };
+  /** @type {Record<string, Record<'light' | 'dark', KeptHalf>>} */
+  const out = {};
+  const hexColor = String.raw`#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?`;
+  const decl = new RegExp(
+    String.raw`(--color-[\w-]+)\s*:\s*(?:light-dark\(\s*(${hexColor})\s*,\s*(${hexColor})\s*\)|(${hexColor}))\s*;`,
+    'g',
+  );
+  for (const m of css.matchAll(decl)) {
+    if (out[m[1]]) continue;
+    const light = m[2] ?? m[4];
+    const dark = m[3] ?? m[4];
+    out[m[1]] = {light: half(light, 'light'), dark: half(dark, 'dark')};
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 /**
  * The kept stops of a module built from other settings than the file holds
@@ -18054,7 +18113,9 @@ export async function commitTheme(
   const stopsNow =
     keptPalette && moduleNow && moduleUnedited(moduleNow) !== false
       ? paletteStopsOnly(stopsIn(moduleNow, true), before, moduleNow)
-      : null;
+      : keptPalette && !moduleNow
+        ? paletteStopsOnly(stopsShownInCopy(cwd, slug), before)
+        : null;
   // (A kept palette always keeps what its module showed, less what a token
   // setting wrote: `stopsNow`.)
   ctx.keepStops =

@@ -925,6 +925,22 @@ export function paletteRecipeUnknown(cwd, slug) {
 }
 
 /**
+ * The colors of a palette kept as saved (made with a recipe a newer CLI
+ * knows), as its module holds them; null for any other palette.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{palette: any, black: string, white: string} | null}
+ */
+export function keptPaletteColors(cwd, slug) {
+  const config = readConfig(path.join(cwd, paletteFiles(slug).config));
+  if (newerRecipe(config?.recipe) == null) return null;
+  const stored = storedCandidate(cwd, slug, config);
+  return stored
+    ? {palette: stored.palette, black: stored.black, white: stored.white}
+    : null;
+}
+
+/**
  * What a palette kept as saved is, in words: whose colors use which recipe,
  * that this CLI does not make it, and what still works. No update step: a
  * CLI that makes the recipe may not be released yet.
