@@ -90,7 +90,7 @@ export const doc = {
     {
       type: 'theme.build.check',
       description:
-        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), the full list of checked paths, when stale, code ERR_THEME_STALE, and, when there are any, settingIssues as on the build receipt and notices (one per generated file whose settings do not show). Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
+        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), the full list of checked paths, when stale, code ERR_THEME_STALE, and, when there are any, settingIssues as on the build receipt, notices (one per generated file whose settings do not show) and contrast as on the build receipt. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
     },
   ],
   throws: [

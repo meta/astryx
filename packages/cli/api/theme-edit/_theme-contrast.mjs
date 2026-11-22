@@ -11,6 +11,8 @@
  * @position api/theme-edit — read by `theme build` and `doctor`.
  */
 
+import {toAscii} from '../../assets/codemods/term-log.mjs';
+
 /**
  * Text as plain ASCII, as the CLI prints: a sample the census read from a
  * page ("Delete item…") keeps its words.
@@ -18,14 +20,7 @@
  * @returns {string}
  */
 function plainAscii(text) {
-  return text
-    .replace(/[\u2014\u2013]/g, '-')
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/\u2026/g, '...')
-    .replace(/\u2192/g, '->')
-    .replace(/\u00a0/g, ' ')
-    .replace(/[^\x20-\x7e]/g, '?');
+  return toAscii(text).replace(/[^\x20-\x7e]/g, '?');
 }
 
 /**
