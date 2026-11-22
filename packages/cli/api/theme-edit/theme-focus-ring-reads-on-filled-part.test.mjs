@@ -67,7 +67,7 @@ const ownAndHeld = (slug, part) => {
     'utf8',
   );
   const rule = new RegExp(
-    `\\.astryx-${part}(?![\\w-])\\)?([^{,]*)\\{[^}]*--focus-outline-color: ([^;]+);`,
+    `\\.astryx-${part}(?![\\w-])\\)?([^{]*)\\{[^}]*--focus-outline-color: ([^;]+);`,
     'g',
   );
   const rings = [...css.matchAll(rule)];
@@ -213,29 +213,23 @@ describe('a focus ring inside a part the theme fills', () => {
       on: 'card',
       mode: 'light',
     });
-    expect(headerRings('sc', 'card')).toContain('#ffffff');
+    expect(ownAndHeld('sc', 'card').held).toContain('#ffffff');
     expect(headerRings('sc', 'checkbox-indicator')).toEqual([]);
   }, 240_000);
 
-  it('keeps the theme ring on a filled part that rings itself on the page', async ctx => {
+  it('gives a filled part that rings around itself the ring around it back', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('fb', {cwd, like: 'neutral'});
-    await themeEditSet('fb', 'background-color', '#2d4373', {
-      cwd,
-      on: 'button',
-      mode: 'light',
-    });
-    const {own} = ownAndHeld('fb', 'button');
-    expect(own.length).toBeGreaterThan(0);
-    expect(own).not.toContain('#ffffff');
-  }, 240_000);
-
-  it('gives what a filled popup holds the picked ring, and the popup its own ring back', async ctx => {
-    if (needBases(ctx)) return;
-    for (const [slug, part] of [
-      ['po', 'popover'],
-      ['sp', 'selector-popup'],
+    // (A button and a popup ring on their own focus; a clickable card, a
+    // token and a selector's trigger on the focus of the control inside.)
+    for (const part of [
+      'button',
+      'popover',
+      'selector-popup',
+      'card',
+      'token',
+      'selector',
     ]) {
+      const slug = `fo-${part}`;
       await themeEditNew(slug, {cwd, like: 'neutral'});
       await themeEditSet(slug, 'background-color', '#2d4373', {
         cwd,
@@ -243,9 +237,9 @@ describe('a focus ring inside a part the theme fills', () => {
         mode: 'light',
       });
       const {own, held} = ownAndHeld(slug, part);
-      expect(held).toContain('#ffffff');
-      expect(own.length).toBeGreaterThan(0);
-      expect(own).not.toContain('#ffffff');
+      expect(own.length, part).toBeGreaterThan(0);
+      expect(new Set(own), part).toEqual(new Set(['inherit']));
+      expect(held, part).toContain('#ffffff');
     }
   }, 240_000);
 });

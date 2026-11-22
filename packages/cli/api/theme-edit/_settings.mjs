@@ -9679,10 +9679,11 @@ export function compileTheme(ctx, data, base) {
   // part points the focus ring color of what it holds at a color that reads
   // on its fill at 3:1: its own text color first, else white or black. A
   // part that draws a focus ring itself lies on what is around it, so its
-  // own ring keeps the theme's color: a part that rings when it has focus
-  // (a button, a popover) gets the theme's color back on that focus, and a
-  // part that rings in another shape (a switch's track) is not given one.
-  // The picked color is never on what a part draws itself. A part inside
+  // own ring takes the color around it: a part that rings around itself
+  // (a button, a popover, a clickable card) gets that color back where it
+  // rings, and a part that rings in another shape (a switch's track) is not
+  // given one. The picked color is never on what a part draws around
+  // itself. A part inside
   // that paints its own box (a card in a filled content area, a banner, a
   // white top bar in a filled shell) gets a ring color that reads on its
   // own fill again, the theme's first, unless it draws a ring itself. Each
@@ -9719,7 +9720,7 @@ export function compileTheme(ctx, data, base) {
       const rest = Object.keys(at).find(k => !k.includes(' '));
       return rest == null ? null : opaque(at[rest], m);
     };
-    /** Whether a part draws a focus ring itself, by its own rules, in whatever shape (a button's outline, a switch's track), but not a frame's ring for the control inside it (a card's), which is read for what it holds. @param {string} target */
+    /** Whether a part draws a focus ring itself, by its own rules, in whatever shape (a button's outline, a switch's track), but not a frame's ring for the control that owns its focus (a clickable card's), which reads what the frame holds until `ownRingStates` gives it back. @param {string} target */
     const drawsRing = target =>
       // (An indicator drawn under a native input, a checkbox's box, rings
       // where that input has focus: on an element of its own, around it.)
@@ -9729,17 +9730,35 @@ export function compileTheme(ctx, data, base) {
           v?.tokens?.['--focus-outline-color'] ?? []
         ).some(w => !/:has\(>\s*\[data-astryx-focus-owner\]/.test(w)),
       );
-    /** Whether a part draws its focus ring only when it has focus itself (a button, a popover), so its own rule can give the ring back. @param {string} target */
-    const ringsOnFocus = target => {
-      const rings = Object.values(ctx.C.MAP[target]?.own ?? {}).flatMap(
+    /**
+     * The selectors under which a part draws its own ring around itself:
+     * its own focus (a button, a popover), or the focus of the control that
+     * owns its focus (a clickable card, a token, a selector's trigger).
+     * Null for a part that rings in another shape (a switch's track) or
+     * under a native input.
+     * @param {string} target
+     */
+    const ownRingStates = target => {
+      const states = Object.values(ctx.C.MAP[target]?.own ?? {}).flatMap(
         (/** @type {any} */ v) =>
-          /** @type {string[]} */ (v?.tokens?.['--focus-outline-color'] ?? []),
+          /** @type {string[]} */ (
+            v?.tokens?.['--focus-outline-color'] ?? []
+          ).map(w => w.trim().replace(/^[^\s:()]+=\S*\s+/, '')),
       );
-      return (
-        ctx.C.MAP[target]?.underInput == null &&
-        rings.length > 0 &&
-        rings.every(w => /(?:^|\s):focus-visible$/.test(w.trim()))
+      const around = states.every(
+        w =>
+          w === ':focus-visible' ||
+          /^:has\(>\s*\[data-astryx-focus-owner\]/.test(w),
       );
+      return ctx.C.MAP[target]?.underInput == null && states.length && around
+        ? [...new Set(states)]
+        : null;
+    };
+    /** The ring a part draws around itself takes the color around it. @param {Setting} at @param {string} target @param {'light' | 'dark'} m */
+    const ringAroundStays = (at, target, m) => {
+      for (const state of ownRingStates(target) ?? [])
+        (modeBlock(at, target, m)[state] ??= {})['--focus-outline-color'] =
+          'inherit';
     };
     /** Whether the theme sets a focus ring color on a part. @param {string} target */
     const ringSet = target =>
@@ -9763,7 +9782,7 @@ export function compileTheme(ctx, data, base) {
           t =>
             (ctx.C.MAP[t]?.contains ?? []).length &&
             !ringSet(t) &&
-            (!drawsRing(t) || ringsOnFocus(t)),
+            (!drawsRing(t) || ownRingStates(t)),
         ),
     );
     for (const target of filled)
@@ -9782,10 +9801,7 @@ export function compileTheme(ctx, data, base) {
         if (!picked) continue;
         const at = {...set, state: undefined, when: undefined};
         modeBlock(at, target, m)['--focus-outline-color'] = picked;
-        if (ringsOnFocus(target))
-          modeBlock({...at, state: 'focus-visible'}, target, m)[
-            '--focus-outline-color'
-          ] = ring;
+        ringAroundStays(at, target, m);
         (ctx.compileNotes ??= []).push(
           `${target} in ${m}: the focus ring of what it holds is ${picked}, so keyboard focus reads on its ${fill} fill (the theme's ring color, ${ring}, does not)`,
         );
@@ -9797,7 +9813,9 @@ export function compileTheme(ctx, data, base) {
             [ring, '#000000', '#ffffff'].find(
               c => ratio(rgbOf(c), rgbOf(own)) >= 3,
             ) ?? null;
-          if (back) modeBlock(at, inner, m)['--focus-outline-color'] = back;
+          if (!back) continue;
+          modeBlock(at, inner, m)['--focus-outline-color'] = back;
+          ringAroundStays(at, inner, m);
         }
       }
   }
