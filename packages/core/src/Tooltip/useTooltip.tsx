@@ -793,9 +793,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     settleDetach();
   });
 
-  // Keeps the trigger's window's input stream hearing mouse moves
-  // (isMouseMove) while a hover can open this tooltip: a trigger is
-  // attached, and the tooltip is enabled and not controlled by `isOpen`.
+  // Keeps the input stream of the trigger's window hearing mouse moves
+  // (isMouseMove) while a hover can open this tooltip. A hover can open it
+  // when a trigger is attached, the tooltip is enabled, and `isOpen` does not
+  // control it.
   const mouseMoveHoldRef = useRef<{
     view: Window;
     release: () => void;
@@ -943,7 +944,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         stopPressTrackingRef.current?.();
         if (triggerRef.current === el) {
           triggerRef.current = null;
-          syncMouseMoveHold();
+          // React re-attaches a trigger whose ref changes identity in the
+          // same commit. The release waits for that, so the window keeps the
+          // mouse's last point.
+          queueMicrotask(syncMouseMoveHold);
         }
         // This cleanup runs before the commit's insertion Effects write the
         // flags, so the detach settles once they are written.

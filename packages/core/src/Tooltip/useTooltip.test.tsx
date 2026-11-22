@@ -322,6 +322,45 @@ describe('useTooltip — a pointer that does not move', () => {
     frame.remove();
   });
 
+  it('keeps the hold across a re-render that re-attaches the trigger', async () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const pointermoves = (calls: unknown[][]) =>
+      calls.filter(
+        ([type, , options]) =>
+          type === 'pointermove' &&
+          (options as EventListenerOptions | undefined)?.capture === true,
+      ).length;
+    // A caller's inline ref changes identity on every render, so React
+    // detaches and re-attaches the trigger in each commit.
+    function Inline({label}: {label: string}) {
+      const tooltip = useTooltip({});
+      return (
+        <>
+          <button type="button" ref={el => tooltip.ref(el)}>
+            {label}
+          </button>
+          {tooltip.renderTooltip('Helpful text')}
+        </>
+      );
+    }
+    const view = render(<Inline label="Trigger" />);
+    expect(pointermoves(add.mock.calls)).toBe(1);
+    view.rerender(<Inline label="Trigger again" />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(pointermoves(remove.mock.calls)).toBe(0);
+    expect(pointermoves(add.mock.calls)).toBe(1);
+    view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(pointermoves(remove.mock.calls)).toBe(1);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
   it('a press on a trigger that appeared under a still mouse keeps it closed on the next move', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
