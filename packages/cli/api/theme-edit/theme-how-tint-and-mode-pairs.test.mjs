@@ -10,6 +10,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {parseColor, ratio} from './_color.mjs';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -102,7 +103,7 @@ describe('a color said for one part', () => {
       // (A light tint of the blue in each mode, from its palette ramp.)
       for (const c of cards)
         expect(c).toMatch(
-          /'#bfd5ff' --on card .*--mode light$|'#0e3384' --on card .*--mode dark$/,
+          /'#bfd5ff' --on card .*--mode light$|'#072872' --on card .*--mode dark$/,
         );
       // (A header line, where the answer writes one, is the navy.)
       for (const c of fills.filter(c => /header\b/.test(c)))
@@ -252,11 +253,15 @@ describe('a tint word', () => {
       );
       expect(navy.length).toBeGreaterThan(0);
       for (const c of navy) expect(c).toMatch(/--mode light$/);
-      const white = (await lines('cards tinted blue with white text')).filter(
-        c => /^--color-text-primary '#ffffff' --on card/.test(c),
+      // (White text deepens the light tint until it reads, so it is written
+      // in both modes.)
+      const whiteAsk = await lines('cards tinted blue with white text');
+      const white = whiteAsk.filter(c =>
+        /^--color-text-primary '#ffffff' --on card/.test(c),
       );
       expect(white.length).toBeGreaterThan(0);
-      for (const c of white) expect(c).toMatch(/--mode dark$/);
+      expect(white.some(c => !/--mode dark$/.test(c))).toBe(true);
+      expect(whiteAsk.join('\n')).not.toMatch(/'#bfd5ff'/);
       // (A part another clause also fills is written as said: a tint on one
       // of its looks is not shown yet.)
       const two = await lines(
@@ -278,22 +283,38 @@ describe('a tint word', () => {
   );
 
   it(
-    'says why text asked with a tint is not written when it reads in no mode, with no command',
+    'picks, in each mode, the tint stop the text on the part reads on: the text the ask says, else the theme’s',
     async test => {
       needsBases(test);
-      const {data} = await themeEditHow('cards tinted blue with #808080 text', {
-        cwd,
-        theme: 'n',
-      });
-      // (The text clause's own answer.)
-      const text = (data.results ?? []).find(r =>
-        /^text color on card/.test(r.text),
+      /** @param {string} q */
+      const lines = async q =>
+        ((await themeEditHow(q, {cwd, theme: 'n'})).data.results ?? [])
+          .slice(0, 1)
+          .flatMap(r => r.commands ?? [])
+          .map(c => c.replace(/^.* editor set \S+ /, ''));
+      /** @param {string[]} all @param {RegExp} re */
+      const fill = (all, re) =>
+        /** @type {[number, number, number]} */ (
+          parseColor(
+            /'(#[0-9a-f]{6})'/.exec(all.find(c => re.test(c)) ?? '')?.[1],
+          )
+        );
+      // (Said white text on a primary button: the light tint deepens until
+      // white reads, and the label stays white.)
+      const buttons = await lines('buttons tinted blue with white text');
+      const light = fill(
+        buttons,
+        /--on button --when variant:primary --mode light$/,
       );
-      expect(text?.text).toMatch(/so it is not written/);
-      expect(text?.text).not.toMatch(/nothing to change/);
-      expect(
-        (text?.commands ?? []).filter(c => / editor set /.test(c)),
-      ).toEqual([]);
+      expect(ratio([255, 255, 255], light)).toBeGreaterThanOrEqual(4.5);
+      expect(buttons.join('\n')).not.toMatch(/'#000000'/);
+      // (The theme's secondary text on a dark tinted card reads.)
+      const cards = await lines('cards tinted blue with a navy header');
+      const dark = fill(cards, /--on card --when variant:default --mode dark$/);
+      expect(ratio([0x9e, 0x9e, 0x9e], dark)).toBeGreaterThanOrEqual(4.5);
+      expect(cards).toContain(
+        "background-color '#bfd5ff' --on card --when variant:default --mode light",
+      );
     },
     T,
   );

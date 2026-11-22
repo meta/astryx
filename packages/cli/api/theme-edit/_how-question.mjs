@@ -675,10 +675,16 @@ function tintedColors(c) {
  * A color's light tint in each mode, from the palette generator's default
  * ramp for it (a gray grows as a neutral family, so it stays gray), at the
  * stops Core's card tints use; null when no ramp can be drawn from it.
+ * Where the part's text would not read at 4.5:1 on that stop, the tint is
+ * the nearest stop of the same ramp where it does (white text deepens a
+ * light tint; gray text deepens a dark one), never past the color itself
+ * (no darker than it in light mode, no lighter in dark mode); the default
+ * stop when none does. `pale` is the light mode's default stop.
  * @param {string} seed a hex color
- * @returns {{light: string, dark: string} | null}
+ * @param {Record<'light' | 'dark', number[][]>} [inks] the part's text colors in each mode
+ * @returns {{light: string, dark: string, pale: string} | null}
  */
-function tintShades(seed) {
+function tintShades(seed, inks = {light: [], dark: []}) {
   try {
     const gray = isGraySeed(seed);
     const p = generateTonalPalette({
@@ -688,9 +694,31 @@ function tintShades(seed) {
       ...(gray ? {neutralProfile: 'custom'} : {}),
     }).palette.tint;
     const [lightStop, darkStop] = CATEGORY_STOPS.background;
-    const light = /** @type {any} */ (p).light?.[lightStop];
-    const dark = /** @type {any} */ (p).dark?.[darkStop];
-    return light && dark ? {light: String(light), dark: String(dark)} : null;
+    /** @param {'light' | 'dark'} m @param {number} from */
+    const readable = (m, from) => {
+      const ramp = /** @type {Record<string, string>} */ (
+        /** @type {any} */ (p)[m] ?? {}
+      );
+      const own = luminance(seed);
+      const stops = Object.keys(ramp)
+        .map(Number)
+        .filter(x => {
+          const l = luminance(String(ramp[x]));
+          return m === 'light' ? l >= own : l <= own;
+        })
+        .sort((a, b) => Math.abs(a - from) - Math.abs(b - from));
+      const reads = (/** @type {number} */ x) => {
+        const fill = parseColor(String(ramp[x]));
+        return fill != null && inks[m].every(c => ratio(c, fill) >= 4.5);
+      };
+      return ramp[stops.find(reads) ?? from];
+    };
+    const light = readable('light', lightStop);
+    const dark = readable('dark', darkStop);
+    const pale = /** @type {any} */ (p).light?.[lightStop];
+    return light && dark && pale
+      ? {light: String(light), dark: String(dark), pale: String(pale)}
+      : null;
   } catch {
     return null;
   }
@@ -32313,10 +32341,38 @@ export function draftAnswer(ctx, env, question) {
           )
         )
           continue;
-        const shades = tintShades(hex(v.slice(0, 3)));
+        // (The text on the part picks a stop it reads on: the text the ask
+        // writes there, else the two text colors the part and the parts
+        // inside it read.)
+        /** @type {Record<'light' | 'dark', number[][]>} */
+        const inks = {light: [], dark: []};
+        for (const r of result)
+          for (const opt of r.options)
+            for (const x of opt)
+              if (
+                x.on === st.on &&
+                (x.thing === 'color' || /^--color-text-/.test(x.thing))
+              ) {
+                const c = parseColor(String(x.value ?? ''));
+                if (!c || alphaOf(String(x.value)) < 1) continue;
+                for (const m of /** @type {const} */ (['light', 'dark']))
+                  if (!x.mode || x.mode === m) inks[m].push(c.slice(0, 3));
+              }
+        const asked = inks.light.length + inks.dark.length > 0;
+        if (!asked)
+          for (const token of [
+            '--color-text-primary',
+            '--color-text-secondary',
+          ])
+            for (const m of /** @type {const} */ (['light', 'dark'])) {
+              const now = String(current(token, m) ?? '');
+              const c = parseColor(now);
+              if (c && alphaOf(now) >= 1) inks[m].push(c.slice(0, 3));
+            }
+        const shades = tintShades(hex(v.slice(0, 3)), inks);
         // (A color already as pale as its tint, "a cream tint", is written
         // as said: its tint would be darker than it.)
-        if (!shades || luminance(hex(v.slice(0, 3))) >= luminance(shades.light))
+        if (!shades || luminance(hex(v.slice(0, 3))) >= luminance(shades.pale))
           continue;
         const modes = /** @type {Array<'light' | 'dark'>} */ (
           st.mode ? [st.mode] : drawn
