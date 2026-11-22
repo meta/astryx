@@ -124,6 +124,17 @@ describe('a look named for the whole theme, said bare', () => {
     );
     expect(a.sets).toEqual([]);
   }, 240_000);
+
+  it('"make it look like Bootstrap" asks for its colors and writes nothing', async ctx => {
+    if (unbuilt) return ctx.skip();
+    const a = await answer('make it look like Bootstrap');
+    expect(a.text).toMatch(
+      /how does not know what "bootstrap" looks like and never guesses a brand's colors: say its colors/,
+    );
+    expect(a.text).toMatch(/for a screenshot of it, how <picture file>/);
+    expect(a.text).not.toMatch(/not taken: "bootstrap"/);
+    expect(a.sets).toEqual([]);
+  }, 240_000);
 });
 
 describe('a built-in theme named as the look', () => {
