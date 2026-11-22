@@ -72,6 +72,7 @@ export {FireIcon as FireIcon} from '@heroicons/react/20/solid';
 export {FlagIcon as FlagIcon} from '@heroicons/react/20/solid';
 export {FolderIcon as FolderIcon} from '@heroicons/react/20/solid';
 export {FolderPlusIcon as FolderAddIcon} from '@heroicons/react/20/solid';
+export {ArrowsPointingOutIcon as FullScreenIcon} from '@heroicons/react/20/solid';
 export {FunnelIcon as FunnelIcon} from '@heroicons/react/20/solid';
 export {GiftIcon as GiftIcon} from '@heroicons/react/20/solid';
 export {GlobeAltIcon as GlobeIcon} from '@heroicons/react/20/solid';

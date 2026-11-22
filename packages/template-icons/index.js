@@ -72,6 +72,7 @@ export {FireIcon as FireIcon} from '@heroicons/react/24/outline';
 export {FlagIcon as FlagIcon} from '@heroicons/react/24/outline';
 export {FolderIcon as FolderIcon} from '@heroicons/react/24/outline';
 export {FolderPlusIcon as FolderAddIcon} from '@heroicons/react/24/outline';
+export {ArrowsPointingOutIcon as FullScreenIcon} from '@heroicons/react/24/outline';
 export {FunnelIcon as FunnelIcon} from '@heroicons/react/24/outline';
 export {GiftIcon as GiftIcon} from '@heroicons/react/24/outline';
 export {GlobeAltIcon as GlobeIcon} from '@heroicons/react/24/outline';
