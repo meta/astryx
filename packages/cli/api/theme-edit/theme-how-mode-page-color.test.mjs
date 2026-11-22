@@ -276,6 +276,34 @@ describe('a color said for one mode is its page', () => {
   );
 
   it(
+    'a page said for one mode keeps its mode beside an ask said for both modes',
+    async test => {
+      needsBases(test);
+      const lines = /** @type {string[]} */ (
+        (
+          await themeEditHow('dark mode is navy, same accent in both modes', {
+            cwd,
+            theme: 'c',
+          })
+        ).data.results ?? []
+      )
+        .flatMap(r => r.commands ?? [])
+        .map(x =>
+          String(x)
+            .replace(/^.* editor /, '')
+            .replace(/^set c /, ''),
+        );
+      // (The navy is the dark page, toned; the light page is untouched.)
+      expect(pageIn(lines, 'dark')).not.toBeNull();
+      expect(pageIn(lines, 'dark')).not.toBe('#1e3a8a');
+      expect(lines.some(l => /^--color-background-body '[^']+'$/.test(l))).toBe(
+        false,
+      );
+    },
+    T,
+  );
+
+  it(
     'reads "bluish" as bluish, never as the new blush',
     async test => {
       needsBases(test);

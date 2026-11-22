@@ -12867,13 +12867,14 @@ export function draftAnswer(ctx, env, question) {
       c.parts = [];
       c.text = '';
     }
-  // "the same accent in light and dark": every mode, so no mode.
-  if (
-    /\b(light and dark|dark and light|both modes|every mode|all modes|same in (both|light and dark))\b/.test(
-      q,
-    )
-  )
-    for (const c of clauses) c.mode = null;
+  // "the same accent in light and dark": every mode, so no mode. (A page
+  // the page reading wrote for one mode, "dark mode is navy, same accent
+  // in both modes", keeps its mode; the clause that says both modes takes
+  // none.)
+  const bothModes =
+    /\b(light and dark|dark and light|both modes|every mode|all modes|same in (both|light and dark))\b/;
+  if (bothModes.test(q))
+    for (const c of clauses) if (!writtenHead(c.text)) c.mode = null;
   // "in dark mode: page #202020, cards #2b2b2b, card border #1d1d1d,
   // accent #4cc2ff": a mode said at the head of a sentence, before its
   // colon, is the mode of every clause in that sentence (an ask that is
@@ -12900,6 +12901,7 @@ export function draftAnswer(ctx, env, question) {
       // before.)
       if (writtenHead(c.text) && o.mode && o.mode !== c.mode && !o.except)
         break;
+      if (writtenHead(c.text) && bothModes.test(o.text)) continue;
       if (
         o.mode ||
         o.except ||
