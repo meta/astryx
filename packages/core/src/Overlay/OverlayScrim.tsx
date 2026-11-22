@@ -55,7 +55,7 @@ const FADE_UNLESS_REDUCED = `calc(${FADE} * ${reducedMotionTransform.factor})`;
 // lifts one frame after the fade starts. The first paint and the first click
 // then happen on the same frame, at any fade length.
 const CLIP_DELAY_ON_HIDE = '0s, 0s, 0s, ' + FADE_UNLESS_REDUCED;
-const CLIP_DELAY_ON_HOVER = '0s, 0s, 0s, 1ms';
+const CLIP_DELAY_ON_HOVER = `0s, 0s, 0s, calc(1ms * ${reducedMotionTransform.factor})`;
 
 const styles = stylex.create({
   base: {
