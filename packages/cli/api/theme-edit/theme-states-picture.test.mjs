@@ -137,9 +137,13 @@ describe('a state the picture draws', () => {
 });
 
 describe('an overlay shown in place', () => {
-  it('is no wider than its cell', () => {
+  it('is held whole by its cell', () => {
+    // The overlay keeps its own width; its cell is never narrower.
+    expect(SHEET_CSS).not.toMatch(
+      /\.cs-cell \[popover\]\[data-astryx-layer-root\]\{[^}]*max-width:100%/,
+    );
     expect(SHEET_CSS).toMatch(
-      /\.cs-cell \[popover\]\[data-astryx-layer-root\]\{[^}]*max-width:100%!important/,
+      /\.cs-sheet>\.cs-cell\{[^}]*min-width:min-content/,
     );
   });
 });

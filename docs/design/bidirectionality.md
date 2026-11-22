@@ -63,6 +63,9 @@ writing direction.
   has an ambient direction, while text, code, URLs, identifiers, and user content
   may carry their own direction. Mixed-direction content MUST retain readable
   character order and punctuation without moving to a different semantic slot.
+  A value a component formats for a locale (a time or a date) takes that
+  locale's direction (as the internationalization runtime derives it), while
+  its alignment and layout follow the page.
 - **DR3 — Reading-order relationships follow inline start and end.** Navigation,
   ordered progression, primary/supporting lanes, leading/trailing content, and
   start/end alignment MUST follow the containing region's direction.

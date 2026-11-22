@@ -644,7 +644,9 @@ const EXPRESSION_START = new Set([
  * @param {boolean} jsx whether the file may hold JSX (any file but .ts)
  * @returns {Set<number> | null}
  */
-function styleContextLines(source, jsx) {
+// `meter` (optional, `{steps: 0}`) adds every loop step the pass takes, so a
+// test can check that the work grows with the file and no faster.
+function styleContextLines(source, jsx, meter = {steps: 0}) {
   const covered = new Set();
   const length = source.length;
   let line = 1;
@@ -690,8 +692,12 @@ function styleContextLines(source, jsx) {
   const nextOpen = new Map();
   const firstOpen = at => {
     let end = at;
-    while (nextOpen.has(end)) end = nextOpen.get(end);
+    while (nextOpen.has(end)) {
+      meter.steps += 1;
+      end = nextOpen.get(end);
+    }
     while (nextOpen.has(at) && nextOpen.get(at) !== end) {
+      meter.steps += 1;
       const after = nextOpen.get(at);
       nextOpen.set(at, end);
       at = after;
@@ -700,6 +706,7 @@ function styleContextLines(source, jsx) {
   };
   const markLines = (from, to, onLine) => {
     for (let at = firstOpen(from); at <= to; at = firstOpen(at)) {
+      meter.steps += 1;
       covered.add(at);
       nextOpen.set(at, at + 1);
       if (onLine) onLine(at);
@@ -707,6 +714,7 @@ function styleContextLines(source, jsx) {
   };
   const top = () => stack[stack.length - 1];
   const countLines = (from, to) => {
+    meter.steps += Math.max(0, to - from);
     for (let at = from; at < to; at += 1) {
       if (source[at] === '\n') line += 1;
     }
@@ -716,6 +724,7 @@ function styleContextLines(source, jsx) {
   // A template literal stops at `${`, with a frame for its expression.
   const skipString = (index, quote) => {
     for (let at = index + 1; at < length; at += 1) {
+      meter.steps += 1;
       const character = source[at];
       if (character === '\\') {
         at += 1;
@@ -738,6 +747,7 @@ function styleContextLines(source, jsx) {
   const skipRegex = index => {
     let inClass = false;
     for (let at = index + 1; at < length; at += 1) {
+      meter.steps += 1;
       const character = source[at];
       if (character === '\n') return -1;
       if (character === '\\') {
@@ -748,7 +758,10 @@ function styleContextLines(source, jsx) {
       else if (character === ']') inClass = false;
       else if (character === '/' && !inClass) {
         at += 1;
-        while (at < length && /[a-z]/i.test(source[at])) at += 1;
+        while (at < length && /[a-z]/i.test(source[at])) {
+          meter.steps += 1;
+          at += 1;
+        }
         return at;
       }
     }
@@ -759,6 +772,7 @@ function styleContextLines(source, jsx) {
   const skipAngles = index => {
     let depth = 0;
     for (let at = index; at < length; at += 1) {
+      meter.steps += 1;
       const character = source[at];
       if (character === '\n') line += 1;
       if (character === '<') depth += 1;
@@ -798,8 +812,13 @@ function styleContextLines(source, jsx) {
     return null;
   };
 
+  // Steps a search from `from` to `end` (-1: the end of the file) takes.
+  const searched = (from, end) => {
+    meter.steps += (end === -1 ? length : end) - from;
+  };
   let index = 0;
   while (index < length) {
+    meter.steps += 1;
     const character = source[index];
     const next = source[index + 1];
     if (character === '\n') {
@@ -817,6 +836,7 @@ function styleContextLines(source, jsx) {
       } else if (character === '<' && next === '/') {
         // A closing tag ends these children.
         const end = source.indexOf('>', index);
+        searched(index, end);
         if (end === -1) return null;
         countLines(index, end);
         stack.pop();
@@ -840,11 +860,13 @@ function styleContextLines(source, jsx) {
     }
     if (character === '/' && next === '/') {
       const end = source.indexOf('\n', index);
+      searched(index, end);
       index = end === -1 ? length : end;
       continue;
     }
     if (character === '/' && next === '*') {
       const end = source.indexOf('*/', index + 2);
+      searched(index, end);
       if (end === -1) return null;
       countLines(index, end);
       index = end + 2;
@@ -885,6 +907,7 @@ function styleContextLines(source, jsx) {
         while (end < length && /[\w$.:-]/.test(source[end])) end += 1;
         let at = end;
         while (at < length && /[ \t]/.test(source[at])) at += 1;
+        meter.steps += at - index;
         pendingAttribute =
           STYLE_NAME.test(source.slice(index, end)) && source[at] === '=';
         index = end;
@@ -948,6 +971,7 @@ function styleContextLines(source, jsx) {
       const word = source.slice(index, end);
       let after = end;
       while (after < length && /[ \t]/.test(source[after])) after += 1;
+      meter.steps += after - index;
       if (last !== '.') references.push({name: word, line});
       // A style-named property: `style: {...}` or `labelStyle: base`.
       if (STYLE_NAME.test(word) && source[after] === ':' && last !== '.') {
@@ -1001,6 +1025,7 @@ function styleContextLines(source, jsx) {
     if (/[0-9]/.test(character)) {
       let end = index + 1;
       while (end < length && /[\w.]/.test(source[end])) end += 1;
+      meter.steps += end - index;
       index = end;
       last = 'value';
       pushWord('value');
@@ -1132,6 +1157,7 @@ function styleContextLines(source, jsx) {
     return state;
   };
   for (const {name, line: at} of references) {
+    meter.steps += 1;
     if (!namesAt.has(at)) namesAt.set(at, new Set());
     namesAt.get(at).add(name);
     if (covered.has(at) || styleValueLines.has(at)) {
@@ -1142,6 +1168,7 @@ function styleContextLines(source, jsx) {
   }
   const bindingsOf = new Map();
   for (const binding of bindings) {
+    meter.steps += 1;
     if (!bindingsOf.has(binding.name)) bindingsOf.set(binding.name, []);
     bindingsOf.get(binding.name).push(binding);
     stateOf(binding.name).waiting.push(binding);
@@ -1149,6 +1176,7 @@ function styleContextLines(source, jsx) {
   // A call result waits like a binding of its name over its own line; when
   // it is used as style, the function it calls is marked.
   for (const result of callResults) {
+    meter.steps += 1;
     stateOf(result.name).waiting.push({
       from: result.line,
       to: result.line,
@@ -1156,6 +1184,7 @@ function styleContextLines(source, jsx) {
     });
   }
   for (const state of byName.values()) {
+    meter.steps += 1 + 2 * state.waiting.length;
     // Popped from the end: the largest `from` first, the smallest `to` first.
     state.byFrom = [...state.waiting].sort((x, y) => x.from - y.from);
     state.byTo = [...state.waiting].sort((x, y) => y.to - x.to);
@@ -1164,6 +1193,7 @@ function styleContextLines(source, jsx) {
   const pending = [];
   const readsAt = at => {
     for (const name of namesAt.get(at) ?? []) {
+      meter.steps += 1;
       const state = stateOf(name);
       if (at < state.min || at > state.max) {
         state.min = Math.min(state.min, at);
@@ -1181,6 +1211,7 @@ function styleContextLines(source, jsx) {
       if (expanded.has(entry.calls)) return;
       expanded.add(entry.calls);
       for (const binding of bindingsOf.get(entry.calls) ?? []) {
+        meter.steps += 1;
         if (done.has(binding)) continue;
         done.add(binding);
         markLines(binding.from, binding.to, readsAt);
@@ -1189,15 +1220,19 @@ function styleContextLines(source, jsx) {
     }
     markLines(entry.from, entry.to, readsAt);
   };
+  meter.steps += bindings.length + byName.size;
   for (const binding of bindings) if (binding.typed) settle(binding);
   for (const name of byName.keys()) pending.push(name);
   while (pending.length > 0) {
+    meter.steps += 1;
     const state = byName.get(pending.pop());
     const {byFrom, byTo} = state;
     while (byFrom.length > 0 && byFrom[byFrom.length - 1].from > state.min) {
+      meter.steps += 1;
       settle(byFrom.pop());
     }
     while (byTo.length > 0 && byTo[byTo.length - 1].to < state.max) {
+      meter.steps += 1;
       settle(byTo.pop());
     }
   }

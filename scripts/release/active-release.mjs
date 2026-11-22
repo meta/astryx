@@ -1937,7 +1937,16 @@ function validateOwnerRecutReceipt(root, reference, version) {
 
 function versionTagCommit(root, version) {
   try {
-    return git(root, ['rev-parse', `refs/tags/v${version}^{commit}`]);
+    return execFileSync(
+      'git',
+      ['rev-parse', '--verify', '--quiet', `refs/tags/v${version}^{commit}`],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        maxBuffer: GIT_MAX_BUFFER,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    ).trim();
   } catch {
     return null;
   }

@@ -8,7 +8,23 @@ export type ThemeDataAttributes = Record<`data-${string}`, string | undefined>;
 export type ThemeProps = {className: string} & ThemeDataAttributes;
 
 export function themeDataAttributeName(prop: string): `data-${string}` {
+  if (isLowercaseAscii(prop)) {
+    return `data-${prop}`;
+  }
   return `data-${prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
+}
+
+// Most prop names are lowercase ASCII and need no change, so they skip the
+// conversion. A non-ASCII letter can have a lowercase form, so a name with one
+// goes through the conversion.
+function isLowercaseAscii(text: string): boolean {
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if ((code >= 65 && code <= 90) || code > 127) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -56,11 +72,14 @@ export function themeDataAttributes(props?: ClassProps): ThemeDataAttributes {
   const attrs: ThemeDataAttributes = {};
 
   if (props) {
-    for (const [prop, value] of Object.entries(props)) {
-      if (value == null) {
+    for (const prop in props) {
+      if (!Object.hasOwn(props, prop)) {
         continue;
       }
-      attrs[themeDataAttributeName(prop)] = String(value);
+      const value = props[prop];
+      if (value != null) {
+        attrs[themeDataAttributeName(prop)] = String(value);
+      }
     }
   }
 

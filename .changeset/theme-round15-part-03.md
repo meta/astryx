@@ -8,7 +8,7 @@
 
 - `astryx experimental theme set`: a dial's value that names a part or group, plural included (`spacing 'buttons: roomy'`, `corners 'cards: pill'`, `corners 'pill on card'`, `spacing 'button compact'`), offers the line that keeps the change on that part (`set my spacing roomy --on button`), never a whole-theme line, even when the label also spells another setting.
 
-- `astryx experimental theme editor how` now writes to the whole theme only when a clause names nothing, or says the whole theme. A clause whose subject matches no part ("command palette 8px corners", "FAB 16px corners") writes nothing, names the words, and lists any parts that contain them. Font names, brand labels and look words still read as before.
+- `astryx experimental theme editor how` writes nothing for a clause led by a plural, or by words of a part's name, that match no part ("command palette 8px corners", "widgets 8px corners"): it names the words and lists any parts that contain them. A single word it does not know ("FAB 16px corners") still changes the whole theme, as released versions do. Font names, brand labels and look words still read as before.
 
 A part's list keeps its items on that part:
 
@@ -41,7 +41,7 @@ Other readings fixed:
 - "status colors green #x, amber #y, red #z" sets the success, warning and danger colors. "amber #y for warnings" keeps the typed value.
 - A color name before a typed value ("light gray fill #F1F2F4") uses the typed value. "blue-gray" for the theme's gray reaches the neutral color again.
 - "clear error messages" no longer resets the danger color.
-- "less contrast" softens the main text. "a gentle dark mode" softens the dark text and lightens the dark page. "big type" and "big readable text" mean larger text. "thin borders" means thinner borders, and "lots of white space" means more spacing.
+- "less contrast" softens the main text. "big type" and "big readable text" mean larger text. "thin borders" means thinner borders, and "lots of white space" means more spacing.
 - "deep teal" is a deep teal.
 
 - `astryx experimental theme editor how`:

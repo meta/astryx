@@ -348,9 +348,12 @@ describe('VideoPlayer', () => {
     act(() => screen.getByRole('button', {name: 'Play'}).focus());
     await user.keyboard('{Enter}');
     expect(onPlay).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    // The same toggle keeps focus, so the keyboard drives each change. A
+    // pointer click could land after the 2 s idle hide on a slow run, when
+    // the hidden bar refuses pointer input.
+    await user.keyboard('{Enter}');
     expect(onPause).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', {name: 'Play'}));
+    await user.keyboard('{Enter}');
     playback.end();
     expect(onEnded).toHaveBeenCalledTimes(1);
     expect(onPause).toHaveBeenCalledTimes(1);
@@ -363,13 +366,17 @@ describe('VideoPlayer', () => {
 
   it('keeps the bar behind the large play control until playback starts, in reach of the keyboard', async () => {
     const user = userEvent.setup();
-    const {video} = renderVideoPlayer();
+    const {video, player} = renderVideoPlayer();
     fakePlayback(video);
     const barPlay = screen.getByRole('button', {name: 'Play'});
     await expect(user.click(barPlay)).rejects.toThrow(/pointer-events/);
     act(() => barPlay.focus());
     await user.keyboard('{Enter}');
-    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    const pause = screen.getByRole('button', {name: 'Pause'});
+    // A person moves the pointer to the bar before clicking, which shows it
+    // again if a slow run has passed the 2 s idle hide.
+    fireEvent.pointerMove(player, {pointerType: 'mouse'});
+    await user.click(pause);
     expect(screen.getByRole('button', {name: 'Play'})).toBeInTheDocument();
   });
 
@@ -440,7 +447,11 @@ describe('VideoPlayer', () => {
       void video.play();
     });
     const bar = () => container.querySelector('[data-visible]');
-    await user.click(screen.getByRole('slider', {name: 'Seek'}));
+    const seek = screen.getByRole('slider', {name: 'Seek'});
+    // The pointer reaches the timeline before the click, which shows the bar
+    // again if a slow run has passed the 2 s idle hide.
+    fireEvent.pointerMove(player, {pointerType: 'mouse'});
+    await user.click(seek);
     expect(screen.getByRole('slider', {name: 'Seek'})).toHaveFocus();
     fireEvent.pointerLeave(player, {pointerType: 'mouse'});
     expect(bar()).toHaveAttribute('data-visible', 'false');

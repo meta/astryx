@@ -39,6 +39,7 @@ import {
   sameKindValues,
   unitsJoined,
   sidesOf,
+  BOX_SIDES,
 } from './_css.mjs';
 import {
   calcVars,
@@ -124,12 +125,19 @@ import {
   radiusTokenOf,
   borderParts,
   cornerParts,
+  boxFrameOf,
+  givesEdge,
+  isRowFrame,
+  rowFrameOf,
   focusStateOf,
   valueProblem,
   partComponentDocs,
   colorPropTokens,
   innerPropTokens,
   columnLineTokens,
+  mainTextSizeToken,
+  namesToken,
+  heldSizeTokenFor,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -154,6 +162,10 @@ import {
   dialValueFits,
   groupsOf,
   onlyFits,
+  growsWithContent,
+  notGrowingWhens,
+  sharedControlHeight,
+  controlHeightValue,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -887,6 +899,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
   const WHOLE_ONLY = [
     'surfaces',
     'buttons',
+    'badges',
     'base',
     'mode',
     'vibrancy',
@@ -1009,6 +1022,8 @@ export function storedProblems(ctx, slug, data, skip = '') {
           mode: s.mode,
           only: s.only,
         },
+        false,
+        {saved: true},
       );
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -2393,6 +2408,53 @@ function isShadow(value) {
 }
 
 /**
+ * The tokens a control height written as a size token reads on its way
+ * back to that token, ending with it; null when it never reads it. A
+ * custom property's var() resolves on the element that sets it, so only
+ * the tokens set where this one is written are followed: on the controls
+ * group, and on the one control for its own height (where its own tokens
+ * win).
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{token: string, own: boolean, setting: import('./_settings.mjs').Setting}} asToken
+ * @param {string} value
+ * @returns {string[] | null}
+ */
+function heightTokenLoop(data, asToken, value) {
+  const scopes = asToken.own ? ['controls', asToken.setting.on] : ['controls'];
+  /** @type {Map<string, string>} */
+  const held = new Map();
+  for (const on of scopes)
+    for (const x of data.settings)
+      if (
+        x.source === 'token' &&
+        x.on === on &&
+        !x.when &&
+        !x.state &&
+        (x.mode ?? null) === (asToken.setting.mode ?? null)
+      )
+        held.set(x.thing, String(x.value));
+  held.set(asToken.token, value);
+  /** @param {string} v */
+  const refs = v =>
+    [
+      ...v.matchAll(new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})`, 'gi')),
+    ].map(m => m[1]);
+  const seen = new Set();
+  /** @param {string} v @param {string[]} path @returns {string[] | null} */
+  const walk = (v, path) => {
+    for (const t of refs(v)) {
+      if (t === asToken.token) return [...path, t];
+      if (seen.has(t) || !held.has(t)) continue;
+      seen.add(t);
+      const found = walk(/** @type {string} */ (held.get(t)), [...path, t]);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk(value, []);
+}
+
+/**
  * Refuse a value that would read the token itself, through other tokens.
  * A token set on a part (`--on`) overrides only inside that part: there
  * it reads the part's own settings first and the whole theme's after, and
@@ -2732,6 +2794,15 @@ const DIAL_WORDS = wordTable(
       outline: 'outlined',
       plain: 'flat',
       minimal: 'flat',
+    },
+    badges: {
+      tint: 'soft',
+      tinted: 'soft',
+      subtle: 'soft',
+      outlined: 'outline',
+      bordered: 'outline',
+      filled: 'solid',
+      fill: 'solid',
     },
     buttons: {
       uppercase: 'caps',
@@ -3507,14 +3578,22 @@ function bordersBeyondCore(ctx, data, s, part) {
     );
   for (const [k, b] of Object.entries(blocks))
     if (k === 'base' || !wp || k === s.when) if (drawsIn(b)) return true;
-  // The theme's own settings for it.
+  // The theme's own settings for it. (A width alone draws no line: Core's
+  // style stays none; a style draws, and a shorthand only with a style word
+  // in it, as borderSidesOff reads it: `border-top 1px` draws nothing.)
+  const STYLE_WORD =
+    /(?:^|\s)(?:solid|dashed|dotted|double|groove|ridge|inset|outset)(?:\s|$)/i;
   return (data?.settings ?? []).some(
     (/** @type {any} */ x) =>
       x.source === 'property' &&
       edgeProp.test(String(x.thing)) &&
+      !/-width$/.test(String(x.thing)) &&
+      (/-style$/.test(String(x.thing)) || STYLE_WORD.test(String(x.value))) &&
       !blank(x.value) &&
       (!x.when || !s.when || x.when === s.when) &&
       (!x.state || x.state === s.state) &&
+      // (A border written for one mode draws only in that mode.)
+      (!x.mode || x.mode === /** @type {any} */ (s).mode) &&
       partsOf(ctx, x).includes(part),
   );
 }
@@ -3597,64 +3676,118 @@ export const BORDER_COLOR_PROP =
 export const BORDER_TO_COLOR = 'var(--border-width) solid transparent';
 
 /**
- * The theme's own setting that says a part draws no border (`border none`,
- * `border-width 0`, `border-style none`) where a border color is asked,
- * or undefined.
+ * The theme's own setting that turns off every side a border color is on
+ * (`border none`, `border-width 0`, `border-bottom none` for a bottom
+ * color), read in order, or undefined.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {any} data
  * @param {{on?: string, when?: string, state?: string}} s
  * @param {string} part
  */
 function borderSetToNone(ctx, data, s, part) {
-  const turned = borderTurnedOff(ctx, data, s, part);
-  return turned?.whole ? turned.setting : undefined;
+  const hidden = borderSidesOff(ctx, data, s, part);
+  const asked = borderSides(String(/** @type {any} */ (s).thing ?? ''));
+  return asked.every(side => hidden.has(side))
+    ? hidden.get(asked[0])
+    : undefined;
 }
 
 /**
- * The latest none or zero the theme sets on a part's border where a color
- * is asked, and whether it turns the whole border off: `border none` (or
- * `0`), a single-value `border-width 0` or `border-style none`, with no
- * later setting on the part that draws a side again. A per-side, logical
- * or multi-value none (`border-bottom none`, `border-width '0 0 1px'`)
- * leaves a side that may draw: it is not whole.
+ * The sides a border property names: one side, a logical pair, or all four.
+ * @param {string} thing
+ * @returns {string[]}
+ */
+function borderSides(thing) {
+  const m =
+    /^border-(top|right|bottom|left|block|inline)(?:-(start|end))?/.exec(thing);
+  if (!m) return [...BOX_SIDES];
+  if (m[1] === 'block')
+    return m[2] ? [m[2] === 'start' ? 'top' : 'bottom'] : ['top', 'bottom'];
+  if (m[1] === 'inline')
+    return m[2] ? [m[2] === 'start' ? 'left' : 'right'] : ['left', 'right'];
+  return [m[1]];
+}
+
+/**
+ * The sides of a part's border the theme turns off where a color is asked,
+ * each with the setting that does it, read in the order the settings are
+ * written: a none or zero hides a side, and a later width, style or
+ * shorthand on it draws it again (`border none` then `border-top 1px
+ * solid` leaves the top). A width or style of several values names each
+ * side as CSS reads it, a logical pair (`border-block-width '0 1px'`) its
+ * start and end.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {any} data
  * @param {{on?: string, when?: string, state?: string}} s
  * @param {string} part
- * @returns {{setting: any, whole: boolean} | null}
+ * @returns {Map<string, any>}
  */
-function borderTurnedOff(ctx, data, s, part) {
-  const settings = /** @type {any[]} */ (data?.settings ?? []);
+function borderSidesOff(ctx, data, s, part) {
   const edge =
-    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/;
-  const here = (/** @type {any} */ x) =>
-    x.source === 'property' &&
-    edge.test(String(x.thing)) &&
-    // (A none set for one look hides only that look.)
-    (!x.when || x.when === s.when) &&
-    (!x.state || x.state === s.state) &&
-    partsOf(ctx, x).includes(part);
-  const blank = (/** @type {string} */ t) =>
-    /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t);
-  for (let i = settings.length - 1; i >= 0; i--) {
-    const x = settings[i];
-    if (!here(x)) continue;
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(width|style))?$/;
+  const blank = (/** @type {string | undefined} */ t) =>
+    /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t ?? '');
+  /** @type {Map<string, any>} */
+  const widthOff = new Map();
+  /** @type {Map<string, any>} */
+  const styleOff = new Map();
+  for (const x of /** @type {any[]} */ (data?.settings ?? [])) {
+    const m = edge.exec(String(x.thing));
+    if (
+      !m ||
+      x.source !== 'property' ||
+      // (A none set for one look hides only that look.)
+      (x.when && x.when !== s.when) ||
+      (x.state && x.state !== s.state) ||
+      !partsOf(ctx, x).includes(part)
+    )
+      continue;
+    const sides = borderSides(String(x.thing));
     const tokens = String(x.value).trim().split(/\s+/).filter(Boolean);
-    if (!tokens.some(blank)) continue;
-    const whole =
-      (x.thing === 'border' ||
-        ((x.thing === 'border-width' || x.thing === 'border-style') &&
-          tokens.length === 1)) &&
-      // (A later setting on the part that draws a side again.)
-      !settings
-        .slice(i + 1)
-        .some(
-          (/** @type {any} */ y) =>
-            here(y) && !String(y.value).trim().split(/\s+/).some(blank),
-        );
-    return {setting: x, whole};
+    // (A width or style names each side's value as CSS reads the list,
+    // `calc()` kept whole; a logical pair is its start and its end.)
+    const perSide = m[1] ? sidesOf(String(x.thing), String(x.value)) : null;
+    /** @param {string} side @returns {string | undefined} */
+    const tokenAt = side => {
+      if (!perSide) return tokens[0];
+      const prop = Object.keys(perSide).find(p => borderSides(p)[0] === side);
+      return prop ? perSide[prop] : undefined;
+    };
+    sides.forEach(side => {
+      if (m[1]) {
+        const off = m[1] === 'width' ? widthOff : styleOff;
+        if (blank(tokenAt(side))) off.set(side, x);
+        else off.delete(side);
+      } else {
+        // (A shorthand writes the side's width and style together; with no
+        // style in it, the style is none: `border-top 1px` draws no line.)
+        const none =
+          tokens.some(t => /^(?:none|hidden)$/i.test(t)) ||
+          !tokens.some(t =>
+            /^(?:solid|dashed|dotted|double|groove|ridge|inset|outset)$/i.test(
+              t,
+            ),
+          );
+        const zero = tokens.some(t => /^0(?:px|rem|em)?$/i.test(t));
+        if (none || zero) {
+          if (none) styleOff.set(side, x);
+          else styleOff.delete(side);
+          if (zero) widthOff.set(side, x);
+          else widthOff.delete(side);
+        } else {
+          widthOff.delete(side);
+          styleOff.delete(side);
+        }
+      }
+    });
   }
-  return null;
+  /** @type {Map<string, any>} */
+  const off = new Map();
+  for (const side of BOX_SIDES) {
+    const by = styleOff.get(side) ?? widthOff.get(side);
+    if (by) off.set(side, by);
+  }
+  return off;
 }
 
 /**
@@ -3695,10 +3828,6 @@ export function borderFor(ctx, slug, data, s) {
    */
   const draws = t =>
     drawsLineAround(ctx, t, s.state, s.when) ||
-    // (A color for one mode on a look that draws a group seam brings no
-    // border: one written for every mode would hide the other mode's seam.)
-    (!!s.mode &&
-      drawsLine(ctx.C, [t], 'border', null, s.when ?? defaultLook(ctx, t))) ||
     bordersBeyondCore(
       ctx,
       data,
@@ -3710,13 +3839,12 @@ export function borderFor(ctx, slug, data, s) {
     parts.some(
       t =>
         draws(t) ||
-        // (Any none the theme sets there, a whole one or one side's: the
-        // color is saved as written, and no border is brought.)
-        borderTurnedOff(ctx, data, s, t) != null,
+        // (Every side the color is on turned off: set refuses it.)
+        borderSetToNone(ctx, data, s, t) != null,
     )
   )
     return null;
-  return checkSetting(
+  const edge = checkSetting(
     ctx,
     slug,
     structuredClone(data),
@@ -3725,12 +3853,66 @@ export function borderFor(ctx, slug, data, s) {
     {on: s.on, when: s.when, only: s.only},
     false,
   );
+  // (In the color's own mode only where the look draws a line in the other
+  // mode, a button group's seam, which a border for every mode would hide;
+  // elsewhere for every mode, so the part keeps one size when the mode
+  // changes.)
+  const seam = parts.some(t =>
+    drawsLine(ctx.C, [t], 'border', null, s.when ?? defaultLook(ctx, t)),
+  );
+  return s.mode && seam ? {...edge, mode: s.mode} : edge;
 }
 
 /**
- * Refuses a border color on a part whose whole border the theme itself turns
- * off (`border none --on tab`): the two say opposite things, so neither is
- * changed for the other. The refusal names the none and offers its undo.
+ * Whether a setting turns a border side off: a border width, style or side
+ * shorthand (never a radius, spacing or image) whose value holds a none,
+ * hidden or zero.
+ * @param {{thing?: unknown, value?: unknown}} x
+ */
+export function turnsBorderOff(x) {
+  return (
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
+      String(x.thing),
+    ) &&
+    String(x.value ?? '')
+      .trim()
+      .split(/\s+/)
+      .some(t => /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t))
+  );
+}
+
+/**
+ * Where a border a color brings goes in the theme's settings: before the
+ * part's own border widths, styles, shorthands and colors, so a side the
+ * theme turns off or sizes itself keeps its own value and a color saved
+ * earlier still draws.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any[]} settings
+ * @param {import('./_settings.mjs').Setting} edge
+ * @returns {number}
+ */
+export function broughtBorderAt(ctx, settings, edge) {
+  const parts = partsOf(ctx, edge);
+  const i = settings.findIndex(
+    x =>
+      x.source === 'property' &&
+      // (A saved border color too: written before the brought border, the
+      // border's shorthand would reset it to see-through.)
+      (/^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
+        String(x.thing),
+      ) ||
+        BORDER_COLOR_PROP.test(String(x.thing))) &&
+      (!x.when || !edge.when || x.when === edge.when) &&
+      partsOf(ctx, x).some(t => parts.includes(t)),
+  );
+  return i < 0 ? settings.length : i;
+}
+
+/**
+ * Refuses a border color on a part where the theme itself turns off every
+ * side the color is on (`border none --on tab`): the two say opposite
+ * things, so neither is changed for the other. The refusal names the none
+ * and offers its undo.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {any} data
@@ -4146,11 +4328,13 @@ export function coveredPaints(ctx, part, prop) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
- * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope] `reads`: the custom
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>, saved?: boolean}} [scope] `reads`: the custom
  *   properties the theme itself sets where the value is read, which a var()
  *   in it reads as it reads a design token; `element`: the custom properties
  *   set on the element the value is set on, when that is not the theme's
- *   root (a surface's own tokens), the only ones that can loop back to it
+ *   root (a surface's own tokens), the only ones that can loop back to it;
+ *   `saved`: the setting is read from the settings file, not typed in, so a
+ *   rule about what a new `set` writes does not refuse it
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -4163,10 +4347,16 @@ export function checkSetting(
   unset = false,
   scope = {},
 ) {
+  // (The settings a part's reach reads are this theme's, for this check
+  // only.)
+  const before = ctx.themeSettings;
+  ctx.themeSettings = data.settings;
   try {
     return checkTyped(ctx, slug, data, thing, value, flags, unset, scope);
   } catch (e) {
     throw keepTypedScope(e, ctx, slug, data, flags);
+  } finally {
+    ctx.themeSettings = before;
   }
 }
 
@@ -4267,7 +4457,7 @@ function keepTypedScope(e, ctx, slug, data, flags) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset]
- * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope]
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>, saved?: boolean}} [scope]
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkTyped(
@@ -4278,7 +4468,7 @@ function checkTyped(
   value,
   flags,
   unset = false,
-  {reads, element} = {},
+  {reads, element, saved = false} = {},
 ) {
   // Any other dial's value pasted with its property name (`font-size:
   // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
@@ -4927,6 +5117,7 @@ function checkTyped(
     unset,
     reads,
     element,
+    saved,
   );
   // A var() with a fallback always gives a value; a name one slip from a
   // design token is noted as a likely typo, and the setting stands.
@@ -5045,6 +5236,7 @@ function fallbackVarTypo(v, TOKENS) {
  * @param {Record<string, unknown>} [element] the custom properties set on
  *   the element the value is set on, when that is not the theme's root (a
  *   surface's own tokens): only these can loop back to it
+ * @param {boolean} [saved] read from the settings file, not typed in
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkSettingAsTyped(
@@ -5057,6 +5249,7 @@ function checkSettingAsTyped(
   unset = false,
   reads = undefined,
   element = undefined,
+  saved = false,
 ) {
   const s = checkOne(
     ctx,
@@ -5068,6 +5261,7 @@ function checkSettingAsTyped(
     unset,
     reads,
     element,
+    saved,
   );
   const why = unset ? null : valueProblem(s);
   if (why)
@@ -5098,6 +5292,7 @@ function checkSettingAsTyped(
  * @param {boolean} unset
  * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
  * @param {Record<string, unknown>} [element] the custom properties set on the element the value is set on, when that is not the theme's root
+ * @param {boolean} [saved] read from the settings file, not typed in
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkOne(
@@ -5110,6 +5305,7 @@ function checkOne(
   unset,
   reads,
   element = undefined,
+  saved = false,
 ) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
@@ -5350,12 +5546,59 @@ function checkOne(
       );
     // (One predicate with the settings reader: a member of a group that
     // spreads.)
-    if (!onlyFits(s)) {
+    if (!onlyFits(s, ctx)) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
     }
   }
+  // A control that grows with its content takes its top and bottom padding
+  // from its size's height, so controls keep one height at each size: a
+  // padding of those sides alone changes nothing on it.
+  if (
+    s.on &&
+    /^padding-(top|bottom|block(-start|-end)?)$/.test(kebab(String(thing)))
+  ) {
+    const reached = partsOf(ctx, /** @type {any} */ (s));
+    if (
+      reached.length &&
+      reached.every(
+        t =>
+          growsWithContent(ctx, t, s.when) &&
+          !notGrowingWhens(ctx, t, s.when).length,
+      )
+    )
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `${s.on} keeps Core's top and bottom padding, so a theme's padding never makes it taller than the other controls at its size; ${thing} changes nothing on it. Set its height instead: ${P} set ${slug} height <length> --on ${s.on} (every control's height at that size; add --only for ${s.on} alone).`,
+        {run: [`${HOW} height`]},
+      );
+  }
+  // A control's height is a size every control shares, which Core reads
+  // inside its own sums: a word (auto) cannot be one. Only a height set
+  // writes as a size token is refused (one predicate with set): a variant
+  // that is not a size keeps a plain height. (A saved word height was built
+  // as a plain height, and still is.)
+  const asToken =
+    !unset && !saved
+      ? sharedControlHeight(ctx, {...s, source: 'property'})
+      : null;
+  if (asToken && !controlHeightValue(String(value)))
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${value} is not a size, and a height on ${s.on} ${asToken.own ? `is written as its own size token (${asToken.token})` : 'is the size every control takes (buttons, inputs, selectors, input groups)'}: give a length, as in ${P} set ${slug} height <length> --on ${s.on}${asToken.own ? ' --only' : ''}.`,
+      {run: [`${HOW} height`]},
+    );
+  // (The height is written as that size's token: a value that reads the
+  // token, itself or through the tokens set on the controls, would read
+  // itself.)
+  const loop = asToken ? heightTokenLoop(data, asToken, String(value)) : null;
+  if (asToken && loop)
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${value} reads ${loop.length > 1 ? `${loop.slice(0, -1).join(', which reads ')}, which reads ` : ''}${asToken.token}, which is the token this height is written as, so it would read itself: give a length, as in ${P} set ${slug} height <length> --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${asToken.own ? ' --only' : ''}.`,
+      {run: [`${HOW} height`]},
+    );
   // A font role in other letters (Body, CODE) is that role.
   if (
     thing === 'font' &&
@@ -5373,7 +5616,7 @@ function checkOne(
     );
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
   if (s.on && !isRole && !groupsOf(ctx)[s.on]) {
-    const t = TARGET.get(s.on);
+    let t = TARGET.get(s.on);
     if (!t) {
       // Another case of a part or group, its class name copied from the
       // page (`.astryx-card`), or its component (`<Card>`, `Card`): that
@@ -5560,18 +5803,39 @@ function checkOne(
           : Object.keys(record?.innerSets ?? {}).length > 0)
       ) {
         const toks = innerPropTokens(ctx.C, holder, kebab(thing));
-        refuse(
-          E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
-          {
-            didYouMean: [holder],
-            run: toks.length
-              ? toks.map(tok =>
-                  setLine(slug, tok, v, {...s, on: holder}, unset),
-                )
-              : [setLine(slug, thing, v, {...s, on: holder}, unset)],
-          },
-        );
+        // (A text size said of the main piece's name, "top-nav-heading-title"
+        // or "-heading", where the holder's main text can be told: set on, or
+        // undone from, the holder, as said of it. Another piece's name,
+        // "-subtitle", is refused: which line it is cannot be told apart.)
+        const main =
+          !s.state &&
+          kebab(thing) === 'font-size' &&
+          /^(?:title|heading)$/.test(rest)
+            ? mainTextSizeToken(ctx.C, holder, TOKENS)
+            : null;
+        if (main && (unset || !namesToken(v, main))) {
+          const said = `"${s.on}" is drawn inside ${holder}: ${unset ? 'undone from' : 'set on'} ${holder}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+          s.on = holder;
+          // (As --only reads on the holder named directly.)
+          if (s.only && !onlyFits(s)) {
+            s.only = undefined;
+            if (!unset)
+              s.note = `${s.note}; ${holder} is styled on its own already, so --only changes nothing: it is saved without it`;
+          }
+        } else
+          refuse(
+            E.ERR_THEME_UNKNOWN_PART,
+            `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
+            {
+              didYouMean: [holder],
+              run: toks.length
+                ? toks.map(tok =>
+                    setLine(slug, tok, v, {...s, on: holder}, unset),
+                  )
+                : [setLine(slug, thing, v, {...s, on: holder}, unset)],
+            },
+          );
       }
       // A plural or another case names the part it means; a typo of one
       // part leads with the same command on that part.
@@ -5580,20 +5844,24 @@ function checkOne(
         ...Object.keys(groupsOf(ctx)),
       ]);
       const typo = near.filter(n => typoOf(lower, n));
-      refuse(
-        E.ERR_THEME_UNKNOWN_PART,
-        `"${s.on}" is not a part you can style.`,
-        {
-          didYouMean: near,
-          run: [
-            ...(typo.length === 1
-              ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
-              : []),
-            `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
-            `${HOW} ${quoteCommandArgument(s.on)}`,
-          ],
-        },
-      );
+      // (A title piece moved onto its holder above is a part now.)
+      const moved = TARGET.get(s.on);
+      if (moved) t = moved;
+      else
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part you can style.`,
+          {
+            didYouMean: near,
+            run: [
+              ...(typo.length === 1
+                ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
+                : []),
+              `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
+              `${HOW} ${quoteCommandArgument(s.on)}`,
+            ],
+          },
+        );
     }
     if (s.when) {
       const variants = C.variantValues(s.on);
@@ -6149,7 +6417,7 @@ function checkOne(
     );
   if (DIALS[thing]) {
     s.source = 'dial';
-    if (['surfaces', 'buttons', 'type'].includes(thing)) {
+    if (['surfaces', 'buttons', 'badges', 'type'].includes(thing)) {
       if (s.on)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -6212,7 +6480,11 @@ function checkOne(
                             CORNERS.find(
                               ([n]) => lower.replace(/s$/, '') === n,
                             )?.[0] ?? lower,
-                            thing === 'buttons' ? {on: 'button'} : {},
+                            thing === 'buttons'
+                              ? {on: 'button'}
+                              : thing === 'badges'
+                                ? {on: 'badge'}
+                                : {},
                           ),
                         ]
                       : [
@@ -7681,6 +7953,15 @@ function checkOne(
       multipliedTokens(ctx.project).has(thing),
       data.settings.some(x => x.thing === thing),
     );
+    // A control's size token takes what a control's height takes (one
+    // predicate with `set height --on <control>`): no percentage. Only a
+    // typed value is refused; a saved one still opens.
+    if (!saved && /^--size-element-/.test(thing) && !controlHeightValue(v))
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${v} is not a size a control can take: ${thing} is a control's height, which Core reads inside its own sums, so it takes a length and no percentage, as in ${setLine(slug, thing, '40px', s)}.`,
+        {run: [`${HOW} ${thing}`]},
+      );
     checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s, element);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
@@ -7705,6 +7986,24 @@ function checkOne(
                 ),
           ]),
       );
+      // (A text size token said for one part that reads no size token,
+      // whose held parts read one, a tab list's tabs: the value goes into
+      // that token on the part; the build reads it the same way.)
+      if (results.length === 1 && results[0][1] && !results[0][1].soft) {
+        const held = heldSizeTokenFor(
+          C,
+          s,
+          results[0][0],
+          thing,
+          v,
+          results[0][1],
+        );
+        if (held) {
+          results[0][1] = null;
+          const said = `${results[0][0]} never reads ${thing}: its text reads ${held}, so the value goes into ${held} on ${results[0][0]}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+        }
+      }
       const recorded = results.filter(([, r]) => !r?.soft);
       const hard = recorded.filter(([, r]) => r);
       const spread = Boolean(
@@ -8172,15 +8471,27 @@ function checkOne(
       const column = (/** @type {string} */ t, /** @type {string[]} */ toks) =>
         toks.length > 1 &&
         columnLineTokens(ctx.C, t, prop).join() === toks.join();
+      // (A text size whose pieces each read a text size token, said of one
+      // part, a top nav heading's title and supporting line: the main
+      // text's, the largest.)
+      const main = (/** @type {string} */ t) => {
+        if (prop !== 'font-size' || partsOf(ctx, s).length !== 1) return null;
+        const m = mainTextSizeToken(ctx.C, t, TOKENS);
+        return m && !namesToken(v, m) ? m : null;
+      };
       const oneEach =
         prop !== 'color' &&
-        inner.every(([t, toks]) => toks.length === 1 || column(t, toks));
+        inner.every(
+          ([t, toks]) => toks.length === 1 || column(t, toks) || main(t),
+        );
       if (inner.length && inner.length === partsOf(ctx, s).length && oneEach) {
         const said = inner
           .map(([part, toks]) =>
             toks.length === 1
               ? `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks[0]}, so the value goes into ${toks[0]} on ${part}`
-              : `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`,
+              : column(part, toks)
+                ? `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`
+                : `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into ${main(part)} on ${part}, the size of its main text`,
           )
           .join('; ');
         s.note = s.note ? `${s.note}; ${said}` : said;
@@ -8391,6 +8702,9 @@ function checkOne(
       s.mode &&
       !COLOR_PROPS.test(prop) &&
       !(prop === 'background' && isColorValue(v)) &&
+      // (The see-through border a border color brings, in that color's
+      // mode: it shows nothing, and the other mode keeps its own line.)
+      !(prop === 'border' && v.trim() === BORDER_TO_COLOR) &&
       // A gradient background (no image file) goes per mode: its colors
       // are each painted in that mode only (compileTheme).
       !(
@@ -8749,17 +9063,54 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     parts.some(t => cornerParts(ctx, t).some(x => x !== t))
   )
     return;
-  // An edge the theme gives the part itself shows its corners too.
+  // An edge the theme gives the part itself shows its corners too. (On a
+  // pager's row, only an edge that paints: "border none" there is none.)
+  const onRow = isRowFrame(ctx, parts[0]);
   const edged = data.settings.some(
     x =>
       x.source === 'property' &&
       /^(background|border|box-shadow|outline)/.test(x.thing) &&
+      (!onRow || givesEdge(x, true)) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
   if (edged) return;
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
     .filter(k => ctx.C.showsCorners(k) && ctx.C.MAP[k])
     .slice(0, 3);
+  // (A border radius set on a pager goes on the row that frames its pages;
+  // asked of that row, the same. With no edge there yet it shows nothing:
+  // refused, with the row's lookup and the line that rounds each page.)
+  const frame = boxFrameOf(ctx, s) ?? (onRow ? parts[0] : null);
+  if (frame) {
+    const pager =
+      frame === s.on
+        ? [...ctx.project.target.keys()].find(
+            k => k !== frame && rowFrameOf(ctx, k) === frame,
+          )
+        : s.on;
+    // (A corner named alone rounds that corner of each control; a whole
+    // radius, the corners dial on the pager.)
+    const whole = s.thing === 'border-radius' || s.thing === 'corners';
+    const cells = pager
+      ? cornerParts(ctx, pager).filter(k => k !== pager && k !== frame)
+      : [];
+    const perPage = !pager
+      ? null
+      : whole
+        ? setLine(slug, 'corners', String(s.value), {...s, on: pager})
+        : cells.length
+          ? cells
+              .map(k => setLine(slug, s.thing, String(s.value), {...s, on: k}))
+              .join(' && ')
+          : null;
+    refuse(
+      E.ERR_THEME_NO_EFFECT,
+      `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s border radius goes on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners.${perPage ? ` To round each page on its own instead: ${perPage}.` : ''}`,
+      {
+        run: [`${HOW} ${frame}`, ...(perPage ? [perPage] : [])],
+      },
+    );
+  }
   refuse(
     E.ERR_THEME_NO_EFFECT,
     `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. To round ${s.on} itself, give it a background or a border first, then set its corners.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,

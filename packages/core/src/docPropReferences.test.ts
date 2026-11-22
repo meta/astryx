@@ -153,6 +153,42 @@ function findViolations(): Violation[] {
   return violations;
 }
 
+/**
+ * Every prop table in every doc export (`docs`, `docsZh`, and their
+ * `components[]` entries) that names one prop more than once. A reader sees
+ * two entries and cannot tell which one is true.
+ */
+function findRepeatedProps(): string[] {
+  const repeated: string[] = [];
+  for (const file of docFiles) {
+    const mod = require(file) as Record<string, DocModule['docs']>;
+    for (const [exportName, docs] of Object.entries(mod)) {
+      if (!docs || typeof docs !== 'object') {
+        continue;
+      }
+      const tables = [
+        {name: docs.name, props: docs.props},
+        ...(Array.isArray(docs.components) ? docs.components : []),
+      ];
+      for (const {name, props} of tables) {
+        if (!Array.isArray(props)) {
+          continue;
+        }
+        const seen = new Set<string>();
+        for (const prop of props) {
+          if (seen.has(prop.name)) {
+            repeated.push(
+              `${relative(SRC_DIR, file)} ${exportName} ${name ?? ''} ${prop.name}`,
+            );
+          }
+          seen.add(prop.name);
+        }
+      }
+    }
+  }
+  return repeated;
+}
+
 describe('doc prose prop references', () => {
   it('sanity: discovers doc files and documented components', () => {
     expect(docFiles.length).toBeGreaterThan(0);
@@ -174,5 +210,9 @@ describe('doc prose prop references', () => {
         )
         .join('\n'),
     ).toEqual([]);
+  });
+
+  it('every prop table lists each prop once', () => {
+    expect(findRepeatedProps()).toEqual([]);
   });
 });

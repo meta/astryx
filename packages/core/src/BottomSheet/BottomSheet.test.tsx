@@ -39,6 +39,14 @@ import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height
 // stop, and a 92% stop the Tall budget already covers — are the geometry the
@@ -575,8 +583,44 @@ describe('BottomSheet', () => {
         Content
       </BottomSheet>,
     );
+    fireEvent.pointerDown(screen.getByRole('dialog'));
+    fireEvent.pointerUp(screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('dialog'));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('stays open on a press that starts inside and ends on the scrim (family:overlay-dismissal FR10)', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" defaultValue="Note text" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByLabelText('Search');
+
+    fireEvent.pointerDown(input);
+    fireEvent.pointerUp(dialog);
+    fireEvent.click(dialog);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('stays open on a press that starts on the scrim and ends inside the sheet (family:overlay-dismissal FR10)', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" defaultValue="Note text" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByLabelText('Search');
+
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(input);
+    fireEvent.click(dialog);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('purpose=form blocks scrim and swipe dismissal but allows Escape', () => {
@@ -592,6 +636,8 @@ describe('BottomSheet', () => {
     );
     const dialog = screen.getByRole('dialog');
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
 
@@ -619,6 +665,8 @@ describe('BottomSheet', () => {
     );
     const dialog = screen.getByRole('alertdialog');
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
@@ -643,6 +691,8 @@ describe('BottomSheet', () => {
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
     expect(onOpenChange).not.toHaveBeenCalled();
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
@@ -1102,7 +1152,7 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      fireEvent.click(screen.getByRole('dialog'));
+      pressScrim(screen.getByRole('dialog'));
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 

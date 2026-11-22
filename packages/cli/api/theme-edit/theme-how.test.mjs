@@ -373,8 +373,9 @@ const QUESTIONS = [
   [
     'glossy gradient header',
     {
-      top: /^set q background 'linear-gradient\(.*\)' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.background=linear-gradient/,
+      // (A gloss is the part's own color in each mode: the sample is help,
+      // never written.)
+      top: null,
     },
   ],
   // borders
@@ -528,7 +529,7 @@ const QUESTIONS = [
     'square corners everywhere',
     {
       // (The dial squares the pills that are a styling choice itself.)
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -565,6 +566,13 @@ const QUESTIONS = [
       adds: /avatar\.base\.borderRadius=/,
     },
   ],
+  // (A role or a part named before the corner size keeps it: never the
+  // whole theme's corners.)
+  ['controls with 12px corners', {top: /^set q --radius-element 12px$/}],
+  ['give overlays 12px corners', {top: /^set q --radius-container 12px$/}],
+  ['surfaces with 12px corners', {top: /^set q --radius-container 12px$/}],
+  // (The glass look's own reading is never a role's corners.)
+  ['glass with 8px corners', {top: /set q corners 8px/}],
   ['corners: 12', {top: /^set q corners 12px$/, adds: /--radius-element=12px/}],
   [
     'rounder corners but not on inputs',
@@ -888,6 +896,145 @@ describe('stripe answers keep to the stripe', () => {
   it('never darkens the even stripe for "odd rows darker"', async () => {
     expect(await commandsFor('odd rows darker background')).not.toMatch(
       /parity:even|--color-background-muted/,
+    );
+  });
+});
+
+describe('zebra rows beside a row metric', () => {
+  /** @param {string} question */
+  const commandsFor = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    return (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+  };
+  // "zebra" that only names the rows, beside a row metric, is that
+  // metric's ask.
+  it.each([
+    ['zebra rows taller', /spacing more --on table-row/],
+    [
+      'add more padding to buttons and make the zebra rows taller',
+      /spacing more --on table-row/,
+    ],
+    ['zebra rows bold', /font-weight 700 --on table-row/],
+    ['compact zebra rows', /spacing less --on table-row/],
+  ])('answers %s with that metric alone', async (question, own) => {
+    const commands = await commandsFor(question);
+    expect(commands).toMatch(own);
+    expect(commands).not.toMatch(/parity:|background[^\n]*--on table-row/);
+  });
+  // A color, fill, shading or lightness word anywhere in the ask, the
+  // stripes named as what changes, or tables that are striped keep the
+  // stripe ask.
+  it.each([
+    ['zebra rows taller and #f9f9f9', /--color-background-muted '#f9f9f9'/],
+    ['zebra rows #f9f9f9 taller', /--color-background-muted '#f9f9f9'/],
+    ['zebra rows #F9F9F9 taller', /--color-background-muted '#f9f9f9'/i],
+    ['zebra rows taller and #F9F9F9', /--color-background-muted '#f9f9f9'/i],
+    [
+      'zebra rows taller and light gray',
+      /--on table-row --when parity:even|--color-background-muted/,
+    ],
+    ['darker bold zebra rows', /--color-background-muted/],
+    [
+      'zebra rows taller and tinted',
+      /--on table-row --when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller, with shading',
+      /--on table-row --when parity:even|--color-background-muted/,
+    ],
+    [
+      'make the zebra row backgrounds bolder',
+      /--when parity:even|--color-background-muted/,
+    ],
+    ['zebra row fills bolder', /--when parity:even|--color-background-muted/],
+    [
+      'zebra rows taller and colored',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller with more color',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows bold, darken them slightly',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller, more subtle',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller and warmer',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller and more vibrant',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows bold and more saturated',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller; more vibrant',
+      /--when parity:even|--color-background-muted/,
+    ],
+    ['add taller zebra rows', /--when parity:even|--color-background-muted/],
+    [
+      'a table with taller zebra rows',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'i want zebra rows that are taller',
+      /--when parity:even|--color-background-muted/,
+    ],
+    ['make the zebra row colors bolder', /--when parity:even/],
+    ['bolder zebra stripes', /--when parity:even/],
+    ['compact striped tables', /--when parity:even/],
+  ])('keeps the stripe in %s', async (question, stripe) => {
+    expect(await commandsFor(question)).toMatch(stripe);
+  });
+});
+
+describe("the stripes' names in any form", () => {
+  /** @param {string} question */
+  const topSet = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const top = (data.results ?? []).find(
+      (/** @type {{commands: string[]}} */ r) =>
+        r.commands.some(c => / editor set /.test(c)),
+    );
+    return bare(top?.commands[0] ?? '');
+  };
+  // Another form of a name ("alternating"), or the component named before
+  // its last word ("every other table row"), still names the stripes.
+  it.each([
+    'shade every other table row',
+    'alternating row colors',
+    'alternating rows',
+    'alternately shaded rows',
+  ])('stripes the even rows for %s', async question => {
+    expect(await topSet(question)).toMatch(
+      /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    );
+  });
+  // A word that only starts like a name is not one: "strip" is a removal,
+  // "alternatively" a way of saying.
+  it('reads "strip the background from table rows" as a removal', async () => {
+    expect(await topSet('strip the background from table rows')).toBe(
+      await topSet('remove the background from table rows'),
+    );
+  });
+  it('writes no stripe for "alternatively make the table rows light gray"', async () => {
+    expect(
+      await topSet('alternatively make the table rows light gray'),
+    ).not.toMatch(/parity:|--color-background-muted/);
+  });
+  it('colors the stripe, not every row, for every other table row light gray', async () => {
+    expect(await topSet('every other table row light gray')).toMatch(
+      /^set q --color-background-muted '#e5e7eb' --on table-row --mode light$/,
     );
   });
 });
@@ -3331,7 +3478,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],
