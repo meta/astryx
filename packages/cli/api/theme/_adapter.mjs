@@ -23,6 +23,7 @@ import {
 import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
 import {newerRecipe} from './palette/generate/newer-recipe.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
+export {tokenContrastWarnings} from '../theme-edit/_theme-contrast.mjs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

@@ -624,6 +624,18 @@ export async function baseResolved(project, like) {
         v => v && typeof v === 'object' && typeof v.name === 'string',
       );
   }
+  return themeBase(project, theme);
+}
+
+/**
+ * A theme as a base: its resolved tokens in both modes, its own part
+ * styles and the tokens its dark media rule replaces (see baseResolved).
+ * @param {ThemeProject} project
+ * @param {any} theme a defined or built theme
+ * @returns {{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>, onDark: Record<string, string>}}
+ */
+export function themeBase(project, theme) {
+  const {core} = project;
   const out = {
     light: core.resolveThemeTokens(theme, {mode: 'light'}),
     dark: core.resolveThemeTokens(theme, {mode: 'dark'}),

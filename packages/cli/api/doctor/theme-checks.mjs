@@ -51,6 +51,7 @@ import {
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
+  tokenContrastWarnings,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
 import {
@@ -1990,6 +1991,70 @@ export async function checkAppThemes(cwd) {
                   : 'No added local themes to check.',
             },
   );
+
+  // The text contrast each local theme's color tokens give, measured as the
+  // theme editor's check measures a setting: a warning, never a failure.
+  if (localThemes.length > 0 && !incompleteResolution) {
+    /** @type {string[]} */
+    const lines = [];
+    /** @type {Set<string>} */
+    const fixes = new Set();
+    /** The local themes the measurement did not read. @type {string[]} */
+    const unmeasured = [];
+    for (const theme of localThemes) {
+      const loaded = await resolveRecordedTheme(
+        state.projectDir,
+        theme.slug,
+      ).catch(() => null);
+      const built = Object.values(loaded?.module ?? {}).find(
+        v =>
+          v &&
+          typeof v === 'object' &&
+          typeof (/** @type {{name?: unknown}} */ (v).name) === 'string',
+      );
+      const found = built
+        ? await tokenContrastWarnings(
+            state.projectDir,
+            /** @type {any} */ (built),
+          )
+        : null;
+      if (!found) {
+        unmeasured.push(theme.slug);
+        continue;
+      }
+      for (const p of found) {
+        lines.push(`${theme.slug}: ${p.text}`);
+        if (p.fix) fixes.add(`${theme.slug}: ${p.fix}`);
+      }
+    }
+    const notMeasured = unmeasured.length
+      ? `Not checked, because the theme editor's measurement could not read ${unmeasured.length === 1 ? 'it' : 'them'} here: ${unmeasured.join(', ')}.`
+      : '';
+    checks.push(
+      lines.length > 0
+        ? {
+            id: 'theme-contrast',
+            label: 'Theme text contrast',
+            status: 'warn',
+            message: `${lines.length} ${lines.length === 1 ? 'text reads' : 'texts read'} below 4.5:1 with the theme's color tokens: ${lines.join('; ')}.${notMeasured ? ` ${notMeasured}` : ''}`,
+            ...(fixes.size ? {fix: `${[...fixes].join('; ')}.`} : {}),
+          }
+        : unmeasured.length
+          ? {
+              id: 'theme-contrast',
+              label: 'Theme text contrast',
+              status: 'info',
+              message: notMeasured,
+            }
+          : {
+              id: 'theme-contrast',
+              label: 'Theme text contrast',
+              status: 'pass',
+              message:
+                'The color tokens of the added local themes keep their text at 4.5:1 or more.',
+            },
+    );
+  }
 
   // The inputs load with Core, and doctor reads only the Core the project
   // installed, never the one the answering copy carries.

@@ -39,7 +39,10 @@
  * does not show as written (also among `warnings`, except one a generated
  * file writes: that file gets one entry in `notices`), with the rule that
  * wins and the fix; onDark, onLight and adaptation rules are not read.
- * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], settingIssues: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, base?: {theme: string, package: string | null, export: string | null}}} data
+ * `contrast`, present when there are any, lists the text the theme's color
+ * tokens give below 4.5:1, each with its plain fix: warnings that never
+ * change the build's exit status.
+ * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], settingIssues: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, contrast?: string[], base?: {theme: string, package: string | null, export: string | null}}} data
  */
 
 /**
@@ -49,7 +52,7 @@
  * `settingIssues`, present when there are any, is the build receipt's
  * list of settings the browser does not show as written; `notices`, one per
  * generated file whose settings do not show.
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[]}} data
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[], contrast?: string[]}} data
  *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
