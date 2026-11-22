@@ -219,7 +219,7 @@ export function registerExperimentalIcon(group, program) {
             ]
           : []),
         text(
-          `Built-in meanings are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
+          `Built-in meanings are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <meaning> <icon id> --set <set>`,
         ),
       );
       return answered;
@@ -237,7 +237,7 @@ export function registerExperimentalIcon(group, program) {
           ),
         ),
         text(
-          `Map one: ${run} experimental icon map <definition> <id> --set ${set}`,
+          `Map one: ${run} experimental icon map <meaning> <id> --set ${set}`,
         ),
       );
       return answered;

@@ -199,14 +199,14 @@ const CASES = {
       'options.pairs': 'close=close',
     },
     refused: [
-      ['definition', '--pairs'],
+      ['meaning', '--pairs'],
       ['icon', '--remove'],
       ['icon', '--pairs'],
       ['--remove', '--pairs'],
     ],
     composes: [
-      ['definition', 'icon'],
-      ['definition', '--remove'],
+      ['meaning', 'icon'],
+      ['meaning', '--remove'],
       ['--set', '--pairs'],
     ],
   },

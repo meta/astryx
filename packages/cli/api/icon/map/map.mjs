@@ -43,13 +43,13 @@ export async function iconMap(definition, icon, options = {}) {
   // (spec:AST-042 FR5).
   refuseIgnoredPairs(
     {
-      'a definition': passed(definition),
+      'a meaning': passed(definition),
       'an icon': passed(icon),
       '--remove': passed(remove),
       '--pairs': passed(pairs),
     },
     [
-      ['--pairs', 'a definition'],
+      ['--pairs', 'a meaning'],
       ['--pairs', 'an icon'],
       ['--pairs', '--remove'],
       ['--remove', 'an icon'],
@@ -183,7 +183,7 @@ async function mapMany({cwd, selector, pairs}) {
     .filter(Boolean);
   if (items.length === 0) {
     throw new AstryxError(
-      'Pass --pairs with <definition>=<icon> entries, such as close=x-mark,search=magnifying-glass.',
+      'Pass --pairs with <meaning>=<icon> entries, such as close=x-mark,search=magnifying-glass.',
       undefined,
       ERROR_CODES.ERR_MISSING_ARGUMENT,
     );
@@ -201,7 +201,7 @@ async function mapMany({cwd, selector, pairs}) {
     const match = /^([^=]+)=([^=]+)$/u.exec(item);
     if (!match) {
       throw new AstryxError(
-        `"${item}" is not a <definition>=<icon> pair.`,
+        `"${item}" is not a <meaning>=<icon> pair.`,
         undefined,
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );

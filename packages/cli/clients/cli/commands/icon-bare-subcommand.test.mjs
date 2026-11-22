@@ -72,7 +72,7 @@ describe('a bare icon subcommand', () => {
     expect(res.stdout).toContain('Icons for "map" (1)');
     expect(res.stdout).toMatch(/id: +home/);
     expect(res.stdout).toMatch(
-      /`map` is also a subcommand: .*experimental icon map \[options\] \[definition\] \[icon\]/,
+      /`map` is also a subcommand: .*experimental icon map \[options\] \[meaning\] \[icon\]/,
     );
   });
 

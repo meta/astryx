@@ -442,7 +442,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   `definition`, or `variant` for an icon moved to the project's look within
   its set; the sizing props `dropped`; and `variant: {asked, used}` when the
   chosen set's icon lacks the look asked for), a `placeholder` (source, the placeholder's local name,
-  its `definitions`, and `fixes`: `astryx experimental icon map <definition>
+  its `definitions`, and `fixes`: `astryx experimental icon map <meaning>
 <icon> --set <main>` and `astryx experimental icon use <main> --backup
 <set>`), or `kept` (with why, and a `likely` suggestion when one exists),
   and `sets`, each set the mapped icons come from with its license. With a
@@ -508,7 +508,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   `add --all` with an export name, `--definition`, `--new-definition`,
   `--description`, `--words`, `--default`, or `--id`; `add --definition`
   with `--new-definition`; `add --description` or `--words` without
-  `--new-definition`; `map --pairs` with a definition, an icon, or
+  `--new-definition`; `map --pairs` with a meaning, an icon, or
   `--remove`, and `map --remove` with an icon; and `new-set --exclude`
   without `--from` or `--default-variant` without `--variants`. Every
   command reads modules statically, and its writes are all or nothing: when
@@ -667,7 +667,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     own export is that look, is listed as missing. For a `./`
     file outside package.json `files`, it names the `files` array that
     publishes it.
-  - `experimental icon map <definition> <icon>` writes one `map` entry,
+  - `experimental icon map <meaning> <icon>` writes one `map` entry,
     `--remove` removes one, and `--pairs` writes many in one checked write;
     here and in `add --definition` a definition may be named by its kebab
     id. `map` names an icon only by its `id`, its export name in any case,
