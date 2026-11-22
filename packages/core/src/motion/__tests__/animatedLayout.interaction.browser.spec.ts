@@ -1161,15 +1161,16 @@ test.describe('spec:AST-105 Coverage', () => {
         isVisiblePart: true,
       });
       target.classList.add('open');
-      // Late in the frame: the change's start is the moment it is made.
+      // Late in the frame. A change made from rest starts with the first
+      // frame drawn after its task, however late in its frame it is made.
       const end = performance.now() + 50;
       while (performance.now() < end) {
         // the page's main thread is busy
       }
       report.animate();
-      // As a shell does, it reads the change's start for its own clock. Then
+      // As a shell does, it keeps the change's start for its own clock. Then
       // it plays a swap whose parts ride the row's glide, which flushes first.
-      const startedAt = window.AnimatedLayout.layoutStartFor(document);
+      const startedAt = window.AnimatedLayout.layoutStartReaderFor(document);
       if (swap != null) {
         window.AnimatedLayout.playLayoutSwap(swap, {
           host: container,
@@ -1178,15 +1179,14 @@ test.describe('spec:AST-105 Coverage', () => {
           incoming: [],
         });
       }
-      await new Promise<void>(resolve => {
-        setTimeout(resolve, 0);
-      });
+      // The first frame after the task starts the change.
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
       const glide = row
         .getAnimations()
         .find(animation => animation.playState !== 'finished');
       const copy = swap?.copy.getAnimations()[0];
       return {
-        startedAt,
+        startedAt: startedAt(),
         glide: glide == null ? null : Number(glide.startTime),
         copy: copy == null ? null : Number(copy.startTime),
       };
@@ -1368,21 +1368,22 @@ test.describe('spec:AST-105 Coverage', () => {
       grow.classList.add('open');
       report.animate();
       window.AnimatedLayout.playLayoutChange(layout, grow);
-      await new Promise<void>(resolve => {
-        queueMicrotask(resolve);
-      });
+      // The frame time on the frame's timeline as the change is made.
+      const changeFrame = Number(doc.timeline.currentTime);
+      // The frame's first frame after the change starts the change.
+      await frame(view);
       const [animation] = (
         doc.getElementById('after') as HTMLElement
       ).getAnimations();
-      // These reads happen as the change commits, before any frame. They take
-      // the glide's start, the last frame time on its timeline, and the
-      // frame's clock. The engines keep these times to the microsecond.
+      // These reads happen at a frame after the one that starts the change.
+      // They take the glide's start and the frame's clock. The engines keep
+      // these times to the microsecond.
       const us = (ms: number) => Math.round(ms * 1000) / 1000;
       return {
         gap: performance.now() - view.performance.now(),
         playState: animation.playState,
         startTime: us(Number(animation.startTime)),
-        frameTime: us(Number(doc.timeline.currentTime)),
+        changeFrame: us(changeFrame),
         now: us(view.performance.now()),
       };
     }, BASE_STYLE);
@@ -1392,11 +1393,14 @@ test.describe('spec:AST-105 Coverage', () => {
     });
     // The frame's clock started well after the page's...
     expect(run.gap).toBeGreaterThan(100);
-    // ...and the row after the change glides from the frame's next frame. Its
-    // start is on the frame's own clock, from that clock's last frame to now.
-    // On the page's clock it would sit `gap` later and hold its old place.
+    // ...and the row after the change glides from the first frame drawn
+    // after it. Its start is on the frame's own clock, from the frame the
+    // change was made in to now. Made in a frame callback, the change can draw
+    // in that same frame, and the browser then dates the start itself, in its
+    // own units. On the page's clock it would sit `gap` later and hold its
+    // old place.
     expect(run.playState).toBe('running');
-    expect(run.startTime).toBeGreaterThanOrEqual(run.frameTime);
+    expect(run.startTime).toBeGreaterThanOrEqual(run.changeFrame - 0.1);
     expect(run.startTime).toBeLessThanOrEqual(run.now);
   });
 

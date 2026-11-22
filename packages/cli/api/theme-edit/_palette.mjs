@@ -34,6 +34,7 @@ import {
   PALETTE_GENERATOR_VERSION,
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPES,
   PALETTE_WHITE,
   generateTonalPalette,
   modesForStrategy,
@@ -61,12 +62,18 @@ import {
   fillAt,
   grownGrays,
   isGray,
+  isLookToken,
   mapPalette,
   nearestShade,
   paletteToken,
   sameColor,
   shade,
 } from '../theme/palette/generate/mapping.mjs';
+import * as editorLook from '../theme/palette/generate/editor-look.mjs';
+import {
+  cvdClashes,
+  isLookFamily,
+} from '../theme/palette/generate/derive-look.mjs';
 /**
  * How the page-wide tokens a theme's own source sets are read: given by
  * _settings (which imports this module) when it loads.
@@ -82,10 +89,21 @@ export function setOwnTokenReader(read) {
   ownSourceTokenValues = read;
 }
 import {alphaOf, hex, isClipped, parseColor} from './_color.mjs';
+import {
+  contrastRatio,
+  hexToOklch,
+  oklchClampedHex,
+} from '../theme/palette/generate/color.mjs';
 import {splitTop} from './_css.mjs';
+import {isColorToken} from './_compiler.mjs';
 import {P} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {
+  newerRecipe,
+  newerRecipeRefusal,
+} from '../theme/palette/generate/newer-recipe.mjs';
 
 export {readRegularFile};
 
@@ -277,6 +295,7 @@ export function tempFor(file) {
  * @property {string} [alpha] - Two hex digits of opacity.
  * @property {string} [family] - The family the stop is from when it is not the token's own: `neutral` for text on a fill, or `black` / `white`, the palette's own ends.
  * @property {boolean} [exact] - The stop holds the seed's exact color (an exact anchor).
+ * @property {boolean} [base] - The half is the base theme's own value in that mode (family `literal`): the generated module reads it from the base, so the mode follows the base theme.
  */
 
 /**
@@ -298,7 +317,8 @@ export function tempFor(file) {
 /**
  * A color dial's family: its seed, and the source token that gives it when
  * the theme's own source sets the family's fill (null when the setting does).
- * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null}} DialFamily
+ * An accent set as a token carries the one mode it is for.
+ * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null, only?: 'light' | 'dark'}} DialFamily
  */
 
 /**
@@ -308,10 +328,16 @@ export function tempFor(file) {
  * @property {DialFamily[]} families
  * @property {Record<string, {family: string, light: StopRef, dark: StopRef}>} tokens
  * @property {ContrastCheck[]} contrast
+ * @property {boolean} [stored] - Whether the palette is kept as saved (made with a recipe this CLI does not know): its colors cannot change here.
  * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
+ * @property {{badges: 'derived' | 'none', chart: 'derived' | 'none', limits: string[], moved: string[], alike: boolean, unread: boolean}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and what they gave up to stay written.
+ * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string], page?: string, pages?: string[]}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
+ * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
+ * @property {Array<{token: string, mode: Mode, pair: import('../theme/palette/generate/mapping.mjs').BasePair, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
+ * @property {{roles: Record<string, 'derived'>, why: string[], short: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look, and what they gave up to stay written.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
 
@@ -464,6 +490,38 @@ function dialFamilies(data, own = {}) {
         source: inEffect ? paletteToken(dial) : null,
       });
   }
+  // A whole-theme --color-accent set as a token is the accent too: the
+  // accent's shades (links, selected rows, tints) grow from it as from the
+  // dial, and the token itself keeps the exact value it was given.
+  if (!out.some(f => f.id === 'accent')) {
+    const raws = data.settings.filter(
+      x =>
+        x?.source === 'token' &&
+        x.thing === '--color-accent' &&
+        !x.on &&
+        !x.when &&
+        !x.state,
+    );
+    const last = (/** @type {(m: unknown) => boolean} */ ok) =>
+      [...raws].reverse().find(x => ok(x.mode));
+    const light = last(m => !m || m === 'light') ?? last(m => m === 'dark');
+    const seed = light && seedOf(light.value);
+    // Set for one mode only, it moves that mode only.
+    const modes = new Set(raws.map(x => x.mode ?? 'both'));
+    const only =
+      modes.size === 1 && (modes.has('light') || modes.has('dark'))
+        ? /** @type {'light' | 'dark'} */ ([...modes][0])
+        : null;
+    if (light && seed)
+      out.unshift({
+        id: 'accent',
+        dial: 'accent',
+        seed,
+        value: light.value,
+        source: null,
+        ...(only ? {only} : {}),
+      });
+  }
   return out;
 }
 
@@ -475,7 +533,121 @@ function dialFamilies(data, own = {}) {
  * @param {{settings: Setting[]}} data
  */
 export function seedsInEffect(cwd, slug, data) {
-  return dialFamilies(data, ownSourceTokenValues(cwd, slug));
+  return seedsOfSettings(data, ownSourceTokenValues(cwd, slug));
+}
+
+/**
+ * The seeds of a theme's color settings, its own source's values read:
+ * what seedsInEffect returns, for a caller that holds those values.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} own the theme source's own token values
+ */
+export function seedsOfSettings(data, own) {
+  // (A color setting's families only: an accent set as a token keeps its
+  // exact value, so it is not a seed a dial such as vibrancy moves.)
+  return dialFamilies(data, own).filter(f =>
+    data.settings.some(x => x?.source === 'dial' && x.thing === f.dial),
+  );
+}
+
+/**
+ * Whether `set <theme> vibrancy` changes anything: a color setting's seed
+ * that vibrancy moves, the check set runs.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} own the theme source's own token values
+ */
+export function vibrancyTakes(data, own) {
+  return vibrancyMovesAny(seedsOfSettings(data, own));
+}
+
+/**
+ * Whether vibrancy changes any of these seeds: the one test `set <theme>
+ * vibrancy`, `how` and the color notes share.
+ * @param {DialFamily[]} seeds
+ */
+export function vibrancyMovesAny(seeds) {
+  return seeds.some(f => vibrancyMoves(f.dial, f.seed, 0, 100));
+}
+
+/**
+ * The token words of the status roles a theme's look derives: every role
+ * it leaves unset, once it sets a color.
+ * @param {{settings: Setting[]}} data
+ * @returns {string[]}
+ */
+export function derivedStatusWords(data) {
+  const fams = dialFamilies(data);
+  if (!fams.length) return [];
+  return Object.keys(STATUS_TOKEN)
+    .filter(d => !fams.some(f => f.id === d))
+    .map(d => STATUS_TOKEN[d]);
+}
+
+/**
+ * The tokens a theme sets to a value of its own for the whole theme: the
+ * change names each, apart from the colors that move with the look.
+ * @param {{settings: Setting[]}} data
+ * @returns {string[]}
+ */
+export function exactTokens(data) {
+  return data.settings
+    .filter(x => x?.source === 'token' && !x.on && !x.when && !x.state)
+    .map(x => x.thing);
+}
+
+export {isLookToken, STATUS_TOKEN};
+
+/** A code color or the overlay scrim. @param {string} token */
+const isCodeToken = token => /^--color-(?:syntax-[a-z]+|overlay)$/.test(token);
+
+/**
+ * A change's token lines with the look's own (category and chart colors)
+ * said in one line each, as counts: they move together with every look
+ * change, and one line per value would bury the rest.
+ * @param {unknown[]} lines - `token (mode): before -> after` lines.
+ * @param {string[]} [statusWords] - The status words whose colors the look derives (derivedStatusWords): theirs are counted too.
+ * @param {string[]} [exact] - Tokens the theme sets to a value of its own (exactTokens): each is named, never counted, as it did not move with the look.
+ */
+export function lookCollapsed(lines, statusWords = [], exact = []) {
+  const tokenOf = (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0];
+  const status = new RegExp(
+    `^--color-(?:(?:on|text|icon|border)-)?(?:${statusWords.join('|') || '(?!)'})(?:-muted)?$`,
+  );
+  const folded = (/** @type {unknown} */ c) =>
+    status.test(tokenOf(c)) && !exact.includes(tokenOf(c));
+  const statusLines = lines.filter(folded);
+  const rest = lines.filter(c => !folded(c));
+  lines = rest;
+  // (A look token the theme sets to a value of its own is named, never
+  // counted: it did not move with the look.)
+  const counted = (/** @type {unknown} */ c) =>
+    isLookToken(tokenOf(c)) && !exact.includes(tokenOf(c));
+  const look = lines.filter(counted).map(String);
+  const code = look.filter(c => isCodeToken(tokenOf(c))).length;
+  const badges = look.filter(
+    c => !tokenOf(c).startsWith('--color-data-') && !isCodeToken(tokenOf(c)),
+  );
+  const chart = look.length - badges.length - code;
+  return {
+    lines: [
+      ...lines.filter(c => !counted(c)).map(String),
+      ...(badges.length
+        ? [
+            `category colors (badges, tokens and card tints): ${badges.length} values moved with the look`,
+          ]
+        : []),
+      ...(chart ? [`chart colors: ${chart} values moved with the look`] : []),
+      ...(code
+        ? [`code colors and the overlay: ${code} values moved with the look`]
+        : []),
+      ...(statusLines.length
+        ? [
+            `status colors (${statusWords.join(', ')}): ${statusLines.length} values moved with the look`,
+          ]
+        : []),
+    ],
+    look: [...look, ...statusLines.map(String)],
+  };
 }
 
 /** Notes for damaged color configs kept aside during one sync. @type {string[]} */
@@ -524,6 +696,25 @@ function keepDamaged(file) {
 }
 
 /**
+ * A theme's settings file as it is on disk, or null when it does not read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {any}
+ */
+function savedTheme(cwd, slug) {
+  try {
+    return JSON.parse(
+      fs.readFileSync(
+        path.join(cwd, 'themes', slug, `${slug}.settings.json`),
+        'utf8',
+      ),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The settings saved on disk, before the change being built: what the
  * editor wrote into the config last time, so a value it did not write is
  * known to be a hand edit.
@@ -532,20 +723,11 @@ function keepDamaged(file) {
  * @returns {{settings: Setting[], mode: string | null}}
  */
 function savedSettings(cwd, slug) {
-  try {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(cwd, 'themes', slug, `${slug}.settings.json`),
-        'utf8',
-      ),
-    );
-    return {
-      settings: Array.isArray(data?.settings) ? data.settings : [],
-      mode: typeof data?.mode === 'string' ? data.mode : null,
-    };
-  } catch {
-    return {settings: [], mode: null};
-  }
+  const data = savedTheme(cwd, slug);
+  return {
+    settings: Array.isArray(data?.settings) ? data.settings : [],
+    mode: typeof data?.mode === 'string' ? data.mode : null,
+  };
 }
 
 /** The generator's mode strategy for a list of modes. @param {Mode[]} modes */
@@ -630,10 +812,10 @@ function usableStops(stops, slug) {
  * What the palette mapping reads of a theme: its base colors, the tokens it
  * has, its exact token settings (a page-wide token its own source sets wins,
  * as the build shows it), the fixed color a value gives in a mode, and the
- * command that sets a value.
+ * command that sets a value, and the modes the theme shows.
  * @param {string} cwd
  * @param {string} slug
- * @param {{settings: Setting[]}} data
+ * @param {{mode?: string, settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} base
  * @param {Record<string, unknown>} [tokenDefaults]
  * @returns {import('../theme/palette/generate/mapping.mjs').PaletteMappingContext}
@@ -694,6 +876,11 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
   return {
     base,
     has: token => token in tokenDefaults,
+    // The editor's own rules (Core's context.editor), which only the
+    // editor loads.
+    editor: editorLook,
+    shown: modesOf(data),
+    defaults: tokenDefaults,
     reader: {
       rgb: value =>
         /** @type {[number, number, number] | null} */ (parseColor(value)),
@@ -723,7 +910,214 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
  * @property {any} config
  * @property {string[]} notes
  * @property {Record<string, {stop: number, dark: boolean, why: string, ratio: number}>} fills
+ * @property {boolean} [stored] the saved palette, kept as it is (a recipe this CLI does not know)
  */
+
+/**
+ * Whether a theme's palette names a recipe this CLI does not know (its
+ * colors are kept as saved, made by a newer CLI).
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function paletteRecipeUnknown(cwd, slug) {
+  const config = readConfig(path.join(cwd, paletteFiles(slug).config));
+  return newerRecipe(config?.recipe) != null;
+}
+
+/**
+ * What a palette kept as saved is, in words: whose colors use which recipe,
+ * that this CLI does not make it, and what still works. No update step: a
+ * CLI that makes the recipe may not be released yet.
+ * @param {string} slug
+ * @param {unknown} recipe
+ */
+const keptPaletteWords = (slug, recipe) =>
+  `${slug}'s colors use the ${String(recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. Changes to what the palette is made from (the accent, neutral and status colors, the vibrancy) need a CLI that makes that recipe; other changes, including exact color tokens, a part's colors, the mode and the base, save as usual.`;
+
+/**
+ * The refusal of a color change to a palette kept as saved (a recipe a
+ * newer CLI names): what it is, and nothing to run.
+ * @param {string} slug
+ * @param {unknown} recipe
+ */
+function unknownRecipe(slug, recipe) {
+  return new AstryxError(
+    `${keptPaletteWords(slug, recipe)} Nothing was changed.`,
+    [],
+    ERROR_CODES.ERR_PALETTE_GENERATION,
+  );
+}
+
+/**
+ * Each theme's colors as saved (its {@link paletteMadeFromKey}), as the
+ * settings reader read the file: a change is compared with this.
+ * @type {Map<string, string | null>}
+ */
+const SAVED_COLORS = new Map();
+
+/**
+ * Each theme's settings as the settings reader read the file, before any
+ * change: what a hand edit is checked against.
+ * @type {Map<string, any>}
+ */
+const LOADED_SETTINGS = new Map();
+
+/**
+ * Note what a theme's colors come from as saved, read as the settings
+ * reader reads the file (its base word, its field and entry names).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {any} data the settings as read, before any change
+ */
+export function noteSavedColors(cwd, slug, data) {
+  SAVED_COLORS.set(path.join(cwd, 'themes', slug), paletteMadeFromKey(data));
+  LOADED_SETTINGS.set(path.join(cwd, 'themes', slug), data);
+}
+
+/**
+ * A theme's settings as read before any change (the ones its settings
+ * module was built from), else as the file holds them now.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {any}
+ */
+export function settingsBeforeChange(cwd, slug) {
+  const dir = path.join(cwd, 'themes', slug);
+  return LOADED_SETTINGS.has(dir)
+    ? LOADED_SETTINGS.get(dir)
+    : savedTheme(cwd, slug);
+}
+
+/**
+ * What a palette is made from, as one key to compare: the color dials and
+ * vibrancy, and a whole-theme accent token, as {@link dialFamilies} reads
+ * them. A change to these makes the palette again; the mode, the base and
+ * any other color token only map it.
+ * @param {{settings?: Setting[]} | null} d
+ */
+export function paletteMadeFromKey(d) {
+  // (Beside an accent dial, a whole-theme accent token is an exact value
+  // the palette never reads, as dialFamilies reads it.)
+  const accentDial = (d?.settings ?? []).some(
+    x => x?.source === 'dial' && x.thing === 'accent' && !x.on && !x.mode,
+  );
+  return d
+    ? JSON.stringify(
+        (d.settings ?? [])
+          .filter(
+            x =>
+              (x?.source === 'dial' &&
+                !x.on &&
+                (PALETTE_DIALS.includes(x.thing) || x.thing === 'vibrancy')) ||
+              (!accentDial &&
+                x?.source === 'token' &&
+                x.thing === '--color-accent' &&
+                !x.on &&
+                !x.when &&
+                !x.state),
+          )
+          .map(x =>
+            [x.source, x.thing, x.value, x.mode]
+              .map(v => String(v ?? '').toLowerCase())
+              .join('|'),
+          ),
+      )
+    : null;
+}
+
+/**
+ * What a theme's colors come from, as one key to compare: its mode, its
+ * base, its color dials (and vibrancy) and its color tokens. A change that
+ * leaves this as it was leaves the palette's colors alone.
+ * @param {{mode?: string | null, like?: string | null, settings?: Setting[]} | null} d
+ */
+export function paletteColorKey(d) {
+  return d
+    ? JSON.stringify({
+        mode: d.mode ?? 'both',
+        like: d.like ?? null,
+        // (Each by what it says.)
+        colors: (d.settings ?? [])
+          .filter(
+            x =>
+              (x?.source === 'dial' &&
+                (PALETTE_DIALS.includes(x.thing) || x.thing === 'vibrancy')) ||
+              (x?.source === 'token' && isColorToken(x.thing)),
+          )
+          .map(x =>
+            [x.source, x.thing, x.value, x.on, x.when, x.state, x.mode]
+              .map(v => String(v ?? '').toLowerCase())
+              .join('|'),
+          ),
+      })
+    : null;
+}
+
+/**
+ * The palette as its files hold it, read as the generator's candidate
+ * (its stops, families and ends), for a palette this CLI cannot make
+ * again; null when the palette file is missing or does not read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {any} config
+ */
+function storedCandidate(cwd, slug, config) {
+  const f = paletteFiles(slug);
+  let data;
+  try {
+    data = paletteData(fs.readFileSync(path.join(cwd, f.palette), 'utf8'));
+  } catch {
+    return null;
+  }
+  if (!data) return null;
+  const first = /** @type {any} */ (Object.values(data.palette)[0]);
+  const stops = (
+    Array.isArray(config?.stops)
+      ? config.stops
+      : Object.keys(first?.light ?? first?.dark ?? {})
+  )
+    .map(Number)
+    .sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
+  return {
+    schemaVersion: 1,
+    status: 'candidate',
+    recipe: config?.recipe,
+    black: data.black ?? PALETTE_BLACK,
+    white: data.white ?? PALETTE_WHITE,
+    stops,
+    palette: data.palette,
+  };
+}
+
+/**
+ * Whether a theme's palette is kept exactly as saved, as one made with a
+ * recipe this CLI does not know is ({@link planPalette}): its build keeps
+ * what that palette made.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} [base]
+ */
+export function paletteKeptAsSaved(cwd, slug, data, base) {
+  try {
+    return Boolean(planPalette(cwd, slug, data, base)?.stored);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The candidate a plan's palette is: the saved one for a palette this CLI
+ * cannot make again, else the generator's.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {PalettePlan} plan
+ */
+function candidateOf(cwd, slug, plan) {
+  return plan.stored
+    ? /** @type {Candidate} */ (storedCandidate(cwd, slug, plan.config))
+    : generate(plan.config, paletteFiles(slug).config, cwd);
+}
 
 /**
  * The palette config a theme's settings ask for. The existing config is
@@ -735,7 +1129,7 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
  * the author's own stay. Null when the config would hold no family.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: Setting[], palette?: string}} data
+ * @param {{mode?: string, like?: string, settings: Setting[], palette?: string}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base] the base theme's resolved colors, which the dark check reads
  * @returns {PalettePlan | null}
  */
@@ -748,6 +1142,169 @@ function planPalette(cwd, slug, data, base) {
   const notes = [];
   const own =
     existing && typeof existing === 'object' && !Array.isArray(existing);
+  // A palette made with a recipe this CLI does not know (a newer CLI's):
+  // its saved colors stay exactly as stored, so opening the theme never
+  // recolors it; only a change to its colors needs a CLI that knows it.
+  if (own && newerRecipe(existing.recipe)) {
+    const stored = storedCandidate(cwd, slug, existing);
+    const dir = path.join(cwd, 'themes', slug);
+    const savedKey = SAVED_COLORS.has(dir)
+      ? SAVED_COLORS.get(dir)
+      : paletteMadeFromKey(savedTheme(cwd, slug));
+    /** The seed the saved palette made a family from. @param {string} id */
+    const seedOfSaved = id =>
+      /** @type {any[]} */ (
+        Array.isArray(existing.families) ? existing.families : []
+      ).find(x => x?.id === id)?.seed;
+    // (A color changed in the settings file by hand is a change too: each
+    // color the settings name is checked against the seed the saved
+    // palette was made from, where it names that family. A color the
+    // saved palette has no shades for is a change too.)
+    /** @param {DialFamily[]} list */
+    const differing = list =>
+      list.find(f => {
+        if (!(/** @type {any} */ (stored?.palette)?.[f.id])) return true;
+        const was = seedOfSaved(f.id);
+        return Boolean(was) && !sameColor(String(was), f.seed);
+      }) ?? null;
+    const madeFrom = !differing(fams);
+    // Settings that already disagree with the saved palette as read (a
+    // color changed or added in the file by hand).
+    const loaded = LOADED_SETTINGS.has(dir)
+      ? LOADED_SETTINGS.get(dir)
+      : savedTheme(cwd, slug);
+    const hand =
+      stored && Array.isArray(loaded?.settings)
+        ? differing(dialFamilies(loaded, ownSourceTokenValues(cwd, slug)))
+        : null;
+    // (From such a file, any change that brings every color back to the
+    // seeds the saved palette was made from is the way back, an undo or a
+    // `set` of the saved seed alike, as long as the vibrancy is the saved
+    // one.)
+    const back =
+      hand != null &&
+      // (Every color the file names still named, so none falls back to the
+      // base theme's.)
+      // (A color the saved palette has no shades for may go.)
+      dialFamilies(loaded, ownSourceTokenValues(cwd, slug)).every(
+        l =>
+          !(/** @type {any} */ (stored?.palette)?.[l.id]) ||
+          fams.some(f => f.id === l.id),
+      ) &&
+      (dialVibrancy(data.settings) ?? VIBRANCY_DEFAULT) ===
+        (existing.vibrancy ?? VIBRANCY_DEFAULT);
+    if (stored && madeFrom && (paletteMadeFromKey(data) === savedKey || back))
+      return {
+        config: existing,
+        // Each accent or status color at the stop its saved palette holds
+        // it, light (its exact anchor, else the nearest shade), and dark
+        // when an exact dark anchor holds it there too.
+        fills: Object.fromEntries(
+          fams
+            .filter(f => f.id !== 'neutral')
+            .map(f => {
+              const anchors = /** @type {any[]} */ (
+                existing.families?.find(
+                  (/** @type {any} */ x) => x?.id === f.id,
+                )?.anchors ?? []
+              );
+              const exact = (/** @type {Mode} */ m) =>
+                anchors.find(
+                  a =>
+                    a?.mode === m &&
+                    a.policy === 'exact' &&
+                    sameColor(a.color, f.seed),
+                );
+              const ramp = /** @type {any} */ (stored.palette)[f.id]?.light;
+              const stop =
+                exact('light')?.stop ??
+                (ramp ? nearestShade(ramp, f.seed) : null) ??
+                50;
+              return [
+                f.id,
+                {
+                  stop: Number(stop),
+                  dark: Boolean(exact('dark')),
+                  why: '',
+                  ratio: 0,
+                },
+              ];
+            }),
+        ),
+        notes: [`${file}: ${keptPaletteWords(slug, existing.recipe)}`],
+        stored: true,
+      };
+    // (A palette file gone or unreadable leaves nothing to keep: every
+    // command needs it back, or a CLI that can make the colors again.)
+    if (!stored)
+      throw new AstryxError(
+        `${file}: ${slug}'s colors use the ${String(existing.recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make, and its palette file (${paletteFiles(slug).palette}) is missing or does not read, so the theme cannot be built until that file is back. Nothing was changed.`,
+        [],
+        ERROR_CODES.ERR_PALETTE_GENERATION,
+      );
+    // Settings that already disagree with the saved palette as read refuse
+    // every other command, so the refusal names that setting and the way
+    // back.
+    if (hand) {
+      const name =
+        hand.source ??
+        (loaded.settings.some(
+          (/** @type {any} */ x) =>
+            x?.source === 'dial' && x.thing === hand.dial,
+        )
+          ? hand.dial
+          : '--color-accent');
+      const seed = /** @type {any} */ (stored?.palette)?.[hand.id]
+        ? String(seedOfSaved(hand.id))
+        : null;
+      const was = seed
+        ? `the saved palette was made from ${seed}`
+        : `the saved palette has no shades for ${hand.dial}`;
+      // (The way back named is the one that opens the theme: `set` of the
+      // saved seed when that setting is the only difference, else each
+      // difference to put back by hand.)
+      const own = ownSourceTokenValues(cwd, slug);
+      const diffs = dialFamilies(loaded, own).filter(f => differing([f]));
+      const vibrancyOff =
+        (dialVibrancy(loaded.settings) ?? VIBRANCY_DEFAULT) !==
+        (existing.vibrancy ?? VIBRANCY_DEFAULT);
+      const nameOf = (/** @type {DialFamily} */ f) =>
+        f.source ??
+        (loaded.settings.some(
+          (/** @type {any} */ x) => x?.source === 'dial' && x.thing === f.dial,
+        )
+          ? f.dial
+          : '--color-accent');
+      // (A color the theme's own source sets wins over the settings: it is
+      // put back in that file, never with set.)
+      const sourceFile = `themes/${slug}/${slug}.theme.ts`;
+      const backOf = (/** @type {DialFamily} */ f) =>
+        /** @type {any} */ (stored?.palette)?.[f.id]
+          ? `${nameOf(f)} back to ${String(seedOfSaved(f.id))}${f.source ? ` in ${sourceFile}` : ''}`
+          : `${nameOf(f)} out${f.source ? ` of ${sourceFile}` : ''}`;
+      const way =
+        diffs.length === 1 && !vibrancyOff
+          ? hand.source
+            ? `Change it back in ${sourceFile} to open the theme.`
+            : seed
+              ? `Put it back by hand, or with set ${slug} ${name} ${seed}, to open the theme.`
+              : `Take it out of the file by hand to open the theme.`
+          : `Put every one back by hand to open the theme: ${[
+              ...diffs.map(backOf),
+              ...(vibrancyOff
+                ? [
+                    `vibrancy back to ${String(existing.vibrancy ?? VIBRANCY_DEFAULT)}`,
+                  ]
+                : []),
+            ].join(', ')}.`;
+      throw new AstryxError(
+        `${slug}'s colors use the ${String(existing.recipe)} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. ${hand.source ? sourceFile : `themes/${slug}/${slug}.settings.json`} sets ${name} to ${hand.source ? hand.seed : hand.value}, but ${was}. ${way} Nothing was changed.`,
+        [],
+        ERROR_CODES.ERR_PALETTE_GENERATION,
+      );
+    }
+    throw unknownRecipe(slug, existing.recipe);
+  }
   // A new palette is made with the newest recipe; a palette the theme
   // already has keeps the one it was made with (none named is the first),
   // so its colors never move with a CLI upgrade. Moving it is a choice
@@ -914,6 +1471,12 @@ function planPalette(cwd, slug, data, base) {
       if (f.id !== 'neutral') fills[f.id] = fillAt(stop);
       families.push(family);
     }
+  // The hues the editor grew for the look (lookSeeds) go, and are grown
+  // again below while the theme has a color; any other hue the config
+  // holds is the author's, and stays as written.
+  const grown = isLookFamily;
+  for (let i = families.length - 1; i >= 0; i--)
+    if (grown(families[i])) families.splice(i, 1);
   if (!families.length) return null;
   // The editor's colors stand in the order of their settings, wherever they
   // sit among a config's own families, so a step back writes the same file.
@@ -926,6 +1489,16 @@ function planPalette(cwd, slug, data, base) {
   if (inOrder.length === slots.length)
     slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
+  // The category and chart hues grow with the look, after the theme's own
+  // colors, and so do the status roles the theme leaves unset (the
+  // editor's own grownFamilies); a family the author's config already holds stays
+  // theirs. A status family that is not a setting is the editor's, grown
+  // again at every plan.
+  for (const family of editorLook.grownFamilies(fams, {
+    base,
+    reader: {rgb: parseColor, alpha: alphaOf},
+  }))
+    if (!families.some(f => f?.id === family.id)) families.push(family);
   // A color change on a palette made with the first recipe says what the
   // newer one does, and how to choose it.
   /** @param {any} c */
@@ -1095,6 +1668,12 @@ function syncPaletteFiles(cwd, slug, data, base) {
     if (fs.existsSync(tokensDir) && !fs.readdirSync(tokensDir).length)
       fs.rmdirSync(tokensDir);
     return notes;
+  }
+  // A palette this CLI cannot make again keeps its files as they are.
+  // (Its note rides on the mapping, paletteMapping, once.)
+  if (plan.stored) {
+    data.palette = sha256(fs.readFileSync(abs(f.config)));
+    return [];
   }
   const text = `${JSON.stringify(plan.config, null, 2)}\n`;
   /** @type {any} */
@@ -1532,11 +2111,38 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
 }
 
 /**
+ * A palette made with a recipe this CLI does not know, with the file left as
+ * it is. A newer CLI's recipe is no fault to fix by hand: it gets the
+ * refusal `theme palette generate` gives, with the update step that fits
+ * where the CLI runs. Any other recipe is named as no recipe Astryx makes,
+ * and the file is the fix: its `recipe` set to one this CLI knows.
+ * @param {any} config
+ * @param {string} file the config's path, for the refusal
+ * @param {string} [cwd] the project, for the step that updates the CLI
+ */
+function refuseUnknownRecipe(config, file, cwd) {
+  const recipe = config?.recipe;
+  if (recipe == null || PALETTE_RECIPES.includes(recipe)) return;
+  if (newerRecipe(recipe))
+    throw newerRecipeRefusal({recipe, file, cwd: cwd ?? process.cwd()});
+  // Every command that reads the theme builds this plan and meets this
+  // refusal again, so the way out is the file itself, and no command is
+  // offered.
+  throw new AstryxError(
+    `${file}: this theme's colors name the palette recipe ${String(recipe)}, which no Astryx CLI makes. Fix that part of the file by hand: set "recipe" to one of the recipes this CLI (${cliVersion()}) knows, ${PALETTE_RECIPES.join(', ')}. Nothing was changed.`,
+    [],
+    ERROR_CODES.ERR_PALETTE_GENERATION,
+  );
+}
+
+/**
  * @param {any} config
  * @param {string} [file] the config's path, for the refusal
+ * @param {string} [cwd] the project, for the command that updates the CLI
  * @returns {Candidate}
  */
-function generate(config, file = 'palette.config.json') {
+function generate(config, file = 'palette.config.json', cwd = undefined) {
+  refuseUnknownRecipe(config, file, cwd);
   try {
     return generateTonalPalette(config);
   } catch (e) {
@@ -1565,9 +2171,9 @@ export function familyRamp(cwd, slug, data, base, family) {
     const plan = /** @type {PalettePlan} */ (
       planPalette(cwd, slug, data, base)
     );
-    const ramp = /** @type {any} */ (
-      generate(plan.config, paletteFiles(slug).config).palette
-    )[family];
+    const ramp = /** @type {any} */ (candidateOf(cwd, slug, plan).palette)[
+      family
+    ];
     if (ramp?.light && ramp?.dark) return ramp;
   }
   if (family !== 'neutral') return null;
@@ -1599,27 +2205,163 @@ export function familyRamp(cwd, slug, data, base, family) {
  * in memory, so it matches the palette file `syncPalette` writes.
  * @param {string} cwd
  * @param {string} slug
- * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{mode?: string, settings: Setting[]}} data - The theme's settings (a whole ThemeData, or the settings with one left out).
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @param {Record<string, unknown>} tokenDefaults
  * @returns {PaletteMapping | null}
  */
 export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
+  if (!dialFamilies(data).length) return null;
+  // One change asks for the mapping several times (to build, to check, to
+  // say what changed), each with the same inputs: what it reads (the
+  // settings, the base, the color config, saved settings and generated
+  // palette on disk, the theme's own token values) names it, and an answer is made once. A
+  // config that does not parse is read again each time, so it is named.
+  const config = readText(path.join(cwd, paletteFiles(slug).config));
+  if (config != null && !parsesAsJson(config))
+    return paletteMappingOf(cwd, slug, data, base, tokenDefaults);
+  const key = sha256(
+    JSON.stringify([
+      cwd,
+      slug,
+      data,
+      base,
+      tokenDefaults,
+      config,
+      readText(path.join(cwd, 'themes', slug, `${slug}.settings.json`)),
+      ownSourceTokenValues(cwd, slug),
+      // (The generated palette and its receipt: a hand edit there is the
+      // mapping's "was edited by hand" note.)
+      readText(path.join(cwd, paletteFiles(slug).palette)),
+      readText(path.join(cwd, paletteFiles(slug).receipt)),
+    ]),
+  );
+  const kept = MAPPINGS.get(key);
+  if (kept) {
+    MAPPINGS.delete(key);
+    MAPPINGS.set(key, kept);
+    return structuredClone(kept);
+  }
+  const made = paletteMappingOf(cwd, slug, data, base, tokenDefaults);
+  if (made) {
+    MAPPINGS.set(key, structuredClone(made));
+    if (MAPPINGS.size > MAPPINGS_KEPT)
+      MAPPINGS.delete(/** @type {string} */ (MAPPINGS.keys().next().value));
+  }
+  return made;
+}
+
+/** The mappings made last, by what they were made from (paletteMapping). @type {Map<string, PaletteMapping>} */
+const MAPPINGS = new Map();
+/** How many mappings are kept. */
+const MAPPINGS_KEPT = 8;
+
+/** A file's text, or null when it cannot be read. @param {string} file */
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} text */
+function parsesAsJson(text) {
+  try {
+    JSON.parse(text.replace(/^\uFEFF/, ''));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The mapping, made: see {@link paletteMapping}.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {Record<string, unknown>} tokenDefaults
+ * @returns {PaletteMapping | null}
+ */
+function paletteMappingOf(cwd, slug, data, base, tokenDefaults) {
   const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
-  const candidate = generate(config, paletteFiles(slug).config);
+  const candidate = candidateOf(cwd, slug, plan);
   const mapping = mapPalette(
     candidate,
     fams,
     plan.fills,
     paletteContext(cwd, slug, data, base, tokenDefaults),
   );
+  const {tokens} = mapping;
+  // An accent set as a token for one mode moves that mode only: the other
+  // mode keeps what the theme's palette gives it without that accent (its
+  // other colors, a warm gray, still drawn), else follows the base theme.
+  // (A palette kept as saved has no palette without that accent to make:
+  // its saved shades stand for both modes.)
+  const only = plan.stored ? null : fams.find(f => f.id === 'accent')?.only;
+  if (only) {
+    const other = only === 'light' ? 'dark' : 'light';
+    // The palette's checks for that mode are those of the palette without
+    // the accent, which this change does not move.
+    mapping.contrast = mapping.contrast.filter(c => c.mode !== other);
+    const rest = paletteMapping(
+      cwd,
+      slug,
+      {
+        ...data,
+        settings: data.settings.filter(
+          x =>
+            !(
+              x.source === 'token' &&
+              x.thing === '--color-accent' &&
+              !x.on &&
+              !x.when &&
+              !x.state &&
+              x.mode === only
+            ),
+        ),
+      },
+      base,
+      tokenDefaults,
+    );
+    for (const [k, v] of Object.entries(tokens)) {
+      const before = rest?.tokens?.[k]?.[other];
+      if (before) {
+        // (The same shade where the palette's color there is the same; its
+        // color written out where it differs, as the accent moves the
+        // shades it coordinates.)
+        tokens[k] = {
+          ...v,
+          [other]:
+            String(v[other]?.color).toLowerCase() ===
+            String(before.color).toLowerCase()
+              ? v[other]
+              : {stop: 0, color: String(before.color), family: 'literal'},
+        };
+        continue;
+      }
+      const kept = base?.[other]?.[k];
+      if (kept == null) {
+        delete tokens[k];
+        continue;
+      }
+      // (The base theme's own value: the module reads it from the base,
+      // so the mode keeps following it.)
+      tokens[k] = {
+        ...v,
+        [other]: {stop: 0, color: String(kept), family: 'literal', base: true},
+      };
+    }
+  }
   return {
     candidate,
     families: fams,
     ...mapping,
+    stored: Boolean(plan.stored),
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     notes: [
       ...plan.notes,
@@ -1801,6 +2543,167 @@ export function paletteFailedKeys(pal) {
 }
 
 /**
+ * A text/fill pair the base theme draws, as a person reads it: "the blue
+ * card's primary text", "text on the error tint".
+ * @param {import('../theme/palette/generate/mapping.mjs').BasePair} pair
+ */
+function pairWords(pair) {
+  if (pair.kind === 'category') return `${pair.hue} category text`;
+  if (pair.kind === 'status')
+    return pair.tint ? `text on the ${pair.role} tint` : `text on ${pair.role}`;
+  const which =
+    /^(?:variant|color):(.+)$/.exec(pair.block)?.[1] ??
+    pair.block.replace(':', ' ');
+  const role =
+    pair.prop === 'color'
+      ? 'text'
+      : `${pair.prop.replace(/^--color-text-/, '')} text`;
+  return `the ${which === 'base' ? '' : `${which} `}${pair.part.replace(/-/g, ' ')}'s ${role}`;
+}
+
+/**
+ * What the look did to the category colors (Badge, Token, Card tints), the
+ * chart colors and the status roles: one line with the accent's notes, and
+ * what a set gave up to stay written with every dial's.
+ * @param {PaletteMapping} pal
+ * @param {string} dial
+ * @param {string} [slug]
+ * @param {boolean} [vibrancyRuns] whether `set <theme> vibrancy` changes
+ *   anything (vibrancyTakes): only then is a higher vibrancy advised
+ */
+export function categoryNotes(
+  pal,
+  dial,
+  slug = '<theme>',
+  vibrancyRuns = false,
+) {
+  const c = pal.categories;
+  if (!c) return [];
+  /** @type {string[]} */
+  const out = [];
+  const derived = [
+    c.badges === 'derived'
+      ? 'category colors (badges, tokens and card tints)'
+      : '',
+    c.chart === 'derived' ? 'chart colors' : '',
+    Object.keys(pal.tokens).some(k => k.startsWith('--color-syntax-'))
+      ? 'code colors'
+      : '',
+  ].filter(Boolean);
+  if (dial === 'accent' && derived.length)
+    out.push(
+      `${derived.join(', ').replace(/, ([^,]*)$/, ' and $1')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on where a shade allows, code reads at 4.5:1 on its background, and an exact --color-<role>-<hue>, --color-data-* or --color-syntax-* setting wins`,
+    );
+  // (Every limit no shade meets is said; the colors moved apart are
+  // counted after the first.)
+  if (c.limits.length || c.moved.length) {
+    // (Hues drawn alike come from a low vibrancy: a higher one is advised,
+    // with its command, only where set takes it.)
+    // (A theme at 100 already has no higher vibrancy.)
+    const apart =
+      c.alike && vibrancyRuns && pal.vibrancy < 100
+        ? `; a higher vibrancy draws the hues apart: ${P} set ${slug} vibrancy more`
+        : '';
+    const moves = c.moved.length
+      ? `${c.moved[0]}${c.moved.length > 1 ? `, and ${c.moved.length - 1} more moved apart` : ''}`
+      : '';
+    out.push(
+      `category and chart colors follow your look: ${[...c.limits, ...(moves ? [moves] : [])].join('; ')}${apart}${c.unread ? '; an exact setting of a color that does not read chooses it' : ''}`,
+    );
+  }
+  // Status fills someone red-weak or green-weak may not tell apart: one
+  // note per pair, with a line that sets one of them apart in lightness.
+  /** @type {Set<string>} */
+  const saidPairs = new Set();
+  for (const c of pal.cvd ?? []) {
+    const id = `${c.a}|${c.b}`;
+    if (saidPairs.has(id)) continue;
+    saidPairs.add(id);
+    const visions = [
+      ...new Set(
+        (pal.cvd ?? [])
+          .filter(x => x.a === c.a && x.b === c.b)
+          .map(x => `${x.vision} (${x.mode})`),
+      ),
+    ];
+    // The one to move and its way: the second of the pair first, away
+    // from the first in lightness, then the other way, then the first of
+    // the pair; the first move that keeps the moved fill standing out from
+    // the page (3:1, in every mode the theme shows) is the line. None
+    // that does: the note names no line.
+    const pages = [
+      ...new Set(
+        (pal.cvd ?? [])
+          .filter(z => z.a === c.a && z.b === c.b)
+          .flatMap(z => z.pages ?? (z.page ? [z.page] : [])),
+      ),
+    ];
+    const tries = /** @type {Array<[number, number]>} */ ([
+      [1, 1],
+      [1, -1],
+      [0, 1],
+      [0, -1],
+    ]);
+    const [p0, p1] = c.colors.map(v => hexToOklch(v));
+    // (The smallest move, in steps of lightness, that sets the pair apart
+    // for color-blind readers and still stands out from every page.)
+    const steps = [0.06, 0.09, 0.12, 0.15, 0.18, 0.21, 0.24, 0.27, 0.3];
+    const move = steps
+      .flatMap(d =>
+        tries.map(([who, way]) => {
+          const [me, other] = who === 1 ? [p1, p0] : [p0, p1];
+          const sign = (me.L >= other.L ? 1 : -1) * way;
+          const L = me.L + sign * d;
+          if (L < 0.15 || L > 0.95) return null;
+          const to = oklchClampedHex(L, me.C, me.H);
+          if (!pages.every(pg => contrastRatio(to, pg) >= NON_TEXT))
+            return null;
+          const role = who === 1 ? c.b : c.a;
+          const pair = {
+            [c.a]: role === c.a ? to : c.colors[0],
+            [c.b]: role === c.b ? to : c.colors[1],
+          };
+          if (cvdClashes(pair).some(x => x.a === c.a && x.b === c.b))
+            return null;
+          return {role, to, lighter: sign > 0};
+        }),
+      )
+      .find(Boolean);
+    const dial = move ? (move.role === 'error' ? 'danger' : move.role) : '';
+    out.push(
+      `for color-blind readers, the ${c.a} and ${c.b} fills may look alike (${visions.join(', ')}: ${c.colors.join(' and ')}); ${move ? `a ${move.lighter ? 'lighter' : 'darker'} ${dial} keeps the colors apart: ${P} set ${slug} ${dial} ${quoteCommandArgument(move.to)}` : 'no lighter or darker shade of either keeps both standing out from the page; pick a status color of another hue'}`,
+    );
+  }
+  if (pal.code?.length)
+    out.push(
+      `${pal.code.join(', ')} ${pal.code.length > 1 ? 'keep' : 'keeps'} the base theme's: no shade of ${pal.code.length > 1 ? 'their' : 'its'} color reads at 4.5:1 on the code background and the page`,
+    );
+  const held = pal.kept ?? [];
+  if (held.length) {
+    const tokensHeld = [...new Set(held.map(h => h.token))];
+    const pairs = [
+      ...new Set(held.map(h => `${pairWords(h.pair)} (${h.mode})`)),
+    ];
+    out.push(
+      `${tokensHeld.length} of the colors the look grows keep the base theme's where the base theme draws its own text with them, so it stays readable: ${pairs.slice(0, 3).join(', ')}${pairs.length > 3 ? `, and ${pairs.length - 3} more` : ''}`,
+    );
+  }
+  const st = pal.statuses;
+  const grown = ['info', 'success', 'warning', 'danger'].filter(
+    role => st?.roles[role] === 'derived',
+  );
+  if (dial === 'accent' && grown.length)
+    out.push(
+      `${grown.join(', ')} ${grown.length > 1 ? 'grow' : 'grows'} from the base theme's ${grown.length > 1 ? 'hues' : 'hue'} at your accent's strength and the palette's vibrancy, kept apart from your accent where a shade allows (badges, banners, status dots, field status); an exact setting of ${grown.length > 1 ? 'one' : 'it'} chooses it`,
+    );
+  if (st?.why.length)
+    out.push(
+      `status colors follow your look: ${st.why.join('; ')}; to choose one: ${st.short.map(role => `${P} set ${slug} ${role} <color>`).join(', ')}`,
+    );
+  return out;
+}
+
+/**
  * What one color dial did, for the result notes: what its main token uses
  * in each mode, every token contrast moved, and last the generated files.
  * What the config writer kept or replaced of a hand edit comes from the
@@ -1809,9 +2712,17 @@ export function paletteFailedKeys(pal) {
  * @param {string} dial
  * @param {string} slug
  * @param {Mode[]} [modes] the modes the theme has
+ * @param {boolean} [vibrancyRuns] whether `set <theme> vibrancy` changes
+ *   anything (vibrancyTakes)
  * @returns {string[]}
  */
-export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
+export function paletteNotes(
+  pal,
+  dial,
+  slug,
+  modes = ['light', 'dark'],
+  vibrancyRuns = false,
+) {
   if (!pal) return [];
   const f = paletteFiles(slug);
   const token = paletteToken(dial);
@@ -1857,6 +2768,7 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
         `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,
       );
   }
+  notes.push(...categoryNotes(pal, dial, slug, vibrancyRuns));
   notes.push(
     `the generated colors are in ${f.palette}, made from ${f.config} (receipt: ${f.receipt}); the theme imports only the shades it uses, from ${f.refs}`,
   );

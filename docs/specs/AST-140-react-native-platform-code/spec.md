@@ -32,8 +32,7 @@ parts are engine-specific and which are engine-neutral, how engines bind native
 code through its seam, and how Astryx's native code sits beside the native code
 of other libraries in the same app.
 
-A contributor who writes a native piece for any group of the platform
-(`spec:AST-112/FR7`) follows these rules, and a reviewer checks a native change
+A contributor who writes a native piece follows these rules, and a reviewer checks a native change
 against them. An app reaches the platform through its JavaScript API
 (`spec:AST-112/FR5`).
 
@@ -47,39 +46,17 @@ for these interfaces is set when the package leaves the canary channel
 `spec:AST-112` describes the React Native foundation in terms that hold for any
 JavaScript engine React Native hosts. The platform's native code follows more
 specific rules: the binding to React Native, the shape of every message across
-it, threads, tests, and the native seam. Every platform group record follows
-the same rules, so they live once, here.
+it, threads, tests, and the native seam. Every native piece of the platform
+follows the same rules, so they live once, here.
 
 ## Related records
 
-- Each native piece's methods, props, events, and reasons: its group record
-  (below).
 - The JavaScript API an app calls, its entries, and its capability shape:
   `spec:AST-112/FR5` and `spec:AST-112/FR7`.
 - Which capabilities link by default and which an app opts in, and how
   linking relates to the app's build settings: `spec:AST-112/FR3`.
 - Packages outside the core that carry native code, their roles, the host
   interface, and the version pin: `spec:AST-112/FR4`.
-
-## Platform group records
-
-Each group record specifies its own native pieces and follows this record for
-the rules above. `spec:AST-112/FR3` says which pieces link in every app and
-which an app opts in, and `spec:AST-112/FR7` lists the groups.
-
-| Record         | Group                                             |
-| -------------- | ------------------------------------------------- |
-| `spec:AST-123` | Surfaces and glass                                |
-| `spec:AST-124` | Gestures and drag                                 |
-| `spec:AST-125` | Navigation hosts                                  |
-| `spec:AST-126` | Native controls                                   |
-| `spec:AST-127` | Icons and drawing                                 |
-| `spec:AST-128` | Menus and presentation                            |
-| `spec:AST-129` | Layout, text, and keyboard                        |
-| `spec:AST-130` | System modules, the platform info module included |
-| `spec:AST-131` | Web                                               |
-| `spec:AST-132` | Media and camera                                  |
-| `spec:AST-135` | Photos                                            |
 
 ## Non-goals
 
@@ -173,8 +150,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     the method's own argument after its request object (FR3), such as bytes
     an app hands over for analysis.
   - Bytes that native code produces cross as a `file:` URI to a file in the
-    core's cache, which stays there until the system reclaims the cache
-    (`spec:AST-130/FR14`). A short, fixed-size value, such as a block of
+    core's cache, which stays there until the system reclaims the cache. A
+    short, fixed-size value, such as a block of
     random bytes, crosses as a base64 string.
   - Bytes of any size cross in both directions: native code reads an
     `ArrayBuffer` in place and writes what it produces to the file.
@@ -195,11 +172,12 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     `<Contract>.<feature>`. Each contract's named features live in one list,
     the contract's own; the binary's report, the typed names below, and the
     documentation all come from it.
-  - The binary reports the features it has through the platform info module
-    (`spec:AST-130`), on both platforms with the same name, with
+  - The binary reports the features it has through the platform info module,
+    on both platforms with the same name, with
     `isSupported` false and a note on a platform that lacks one.
   - The package's public API reads the features a binary implements:
-    `contractFeatures(contract)` answers the sorted list of the contract's
+    `contractFeatures(contract)`, exported from the package's main entry `.`,
+    answers the sorted list of the contract's
     named features that the binary implements, or `null` when the binary does
     not carry the contract. Feature names are of a generated, typed
     `ContractFeature` union, so type checking catches an unknown or misspelt
@@ -238,7 +216,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     itself, such as a spring, a drag with snap points, or a navigation
     transition. Each transition and gesture runs frame by frame on the UI
     thread, so it keeps the display's rate while the JavaScript thread is
-    busy.
+    busy. Its feel follows `spec:AST-107` and `spec:AST-108`.
   - Work that can take long, such as file, storage, and network work,
     decoding, rendering a page, and cryptography, runs on background threads.
     A method that runs on the main thread hands that work to them and returns
@@ -299,7 +277,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     registration through autolinking and React Native's code generation, the
     module lookup of FR2, the Fabric components, view managers, and Turbo
     Native Modules that forward to the native seam (FR11), and the binding's
-    own delivery of calls, events, and threads (`spec:AST-112/FR22`).
+    own delivery of calls, events, and threads.
   - Engine-neutral: each contract's name, kind, platforms, members, value
     types, results and reasons, and named features; the result vocabulary
     (FR3); the values that cross (FR4); the growth by named features (FR5);
@@ -316,8 +294,12 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 - **FR9 — Astryx's native code sits beside the native code an app adds.**
   - The platform carries all the native code it needs (`spec:AST-112/FR2`),
     and an app adds react-native-gesture-handler, Reanimated,
-    react-native-screens, react-native-safe-area-context, or another library
-    with native code beside it without conflict.
+    react-native-screens, react-native-safe-area-context, a haptics library,
+    or another library with native code beside it without conflict. A compatibility test runs
+    Astryx components beside each of them on iOS and Android, and a release
+    waits for it to pass. Astryx measures its own safe-area insets from the
+    platform; they agree with any other inset provider the app uses, and the
+    compatibility test checks that they agree.
   - Every class, type, C symbol, and category or extension method that
     Astryx's native code adds to the Objective-C runtime carries the `Astryx`
     prefix. Android code lives in the package's own namespace, and its
@@ -327,16 +309,37 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     React Native's classes, and other libraries' classes stay as they are, and
     the application's delegate, each window's root, other objects' delegates
     and data sources, and app-wide appearance proxies stay the app's.
+  - The core fixes what it owns inside its own hosts (DEC-6):
+    - The stack host resets React Native's right-to-left mirror on the scroll
+      view it owns, so the large title draws correctly.
+    - On iOS, the library's modal surfaces present only through the
+      presentation host; the library has no React Native `Modal` path on iOS.
+    - The generated app shell and the Expo package's configuration plugin
+      write the explicit call that hands an opened URL to the sign-in claim;
+      an app with its own native projects makes that call itself. No
+      interceptor stands in for it.
+    - The HTTP cache guarantees of clear on sign-out, under which nothing in
+      flight lands after a clear, cover React Native's networking session,
+      through React Native's public session-configuration hook, and Astryx's
+      own sessions. The app's shared URL cache stays the app's own. An app
+      that sets its own session-configuration provider opts in to these
+      guarantees explicitly.
   - An app-wide setting that a piece changes, such as the audio session's
-    category, holds while that piece is active, and the piece's group record
-    names it.
+    category, holds while that piece is active.
   - It observes system notifications and passes them on, and its gesture
-    recognizers join each platform's arbitration (`spec:AST-112/FR18`) within
+    recognizers join each platform's arbitration within
     Astryx's views.
-  - Native code calls public platform API (`spec:AST-112/DEC-15`). Where a
-    group record names an exception, the binary reports a self-check for it
+  - Native code calls public platform API (DEC-9). Where a
+    record names an exception, the binary reports a self-check for it
     through the platform info module, and the piece takes its public path
     when the check fails.
+  - On iOS the core adds no MetricKit subscriber unless the app opts in to it
+    through its capability list (`spec:AST-112/FR3`), as it opts in a
+    capability: an app that did not opt in has no Astryx subscriber, and an
+    app that did has exactly one (DEC-10).
+
+  FR9 gap: on iOS, VideoView's full-screen presentation uses React Native's
+  `Modal` instead of the presentation host.
 
 - **FR11 — Native seam.** Astryx's native views and modules are exposed
   through a seam generated from the contracts; React Native's glue and other
@@ -373,7 +376,8 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     method. An asynchronous method takes a typed resolve and a reject (a
     stable code and a message), and settles exactly once. A reject's code is
     one of the method's reasons (FR3), and the binding turns the reject into
-    FR3's result object with that code as its reason, so JavaScript always
+    FR3's result object, with status `cancelled` when the code is `cancelled`
+    and `error` otherwise, and that code as its reason, so JavaScript always
     receives a result value (DEC-2). An optional
     spec method is an optional member on iOS and, on Android, resolves `error`
     with reason `unsupported` by default. A module that emits events has `eventSink` and
@@ -394,7 +398,6 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     | array                     | typed `NSArray`, scalars boxed                                       | `List<T>`                                                      |
     | untyped object            | `NSDictionary<NSString*, id>`                                        | `Map<String, Any?>`                                            |
     | `Promise<T>`              | `resolve(T)` and `reject(code, message)` blocks                      | a promise object with `resolve(T)` and `reject(code, message)` |
-    | callback                  | block                                                                | function type                                                  |
 
   - On a view, an optional scalar, enum, or array without a default reads as
     React Native's code generation reads it (false, 0, the first case, empty),
@@ -417,9 +420,9 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     (`<Name>HostSet<Prop>(host, value)`, `<Name>Host<Command>(host, …)`) let a
     C caller reach a host directly.
   - On Android the seam is public Kotlin interfaces in one package, as on iOS,
-    where the seam headers are public headers; an engine outside the platform
-    module binds them. A class adopts its seam directly or through a host
-    object it owns.
+    where the seam headers are public headers. A class adopts its seam directly
+    or through a host object it owns, and an engine binding calls those
+    members.
   - A class adopts its seam and keeps its behavior. For React Native, the
     Fabric component or view manager compares old and new props, writes the
     changed ones through the host, calls `didUpdateProps`, and sets
@@ -453,8 +456,6 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
   features, the registration of the core and each capability, how native
   modules and views reach JavaScript, the native-layer conformance tests, and
   the split between engine-specific and engine-neutral code.
-- Every platform group record listed above follows this record and adds its
-  own pieces.
 - The package's contributor documentation for native code states these rules.
 
 ## Verification
@@ -469,8 +470,11 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 | FR6      | Gesture and transition runs on the Simulator, the emulator, and devices with a busy JavaScript thread; main-thread checker runs                                                                                                                                                                                                          | a drag; a sheet; a navigation transition; a file read from the main thread                                                                                                                                                                                 | A dropped frame while JavaScript is busy, JavaScript per frame, a view change off the main thread, or main-thread file or network work                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR7      | The conformance suites on iOS, Android, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                                                                                                                                                                 | each contract; a binary with and without each feature; a push; a large title's collapse; an off-screen `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording                                          | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, an off-screen `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order                                                                                                                  |
 | FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types                                                                                                                                                                                                                              | each contract                                                                                                                                                                                                                                              | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                                                                                                                                        |
-| FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                                                                                                                                                         | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                                                                      | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public path                                                                                                                                                                                                                                                                                                                                                                                |
-| FR11     | The package's check of generated files; native builds on iOS and Android of every class against its seam; source check of each binding; unit tests of the generated type mapping; conformance suites run through the seam                                                                                                                | each native view and module; a spec change; a prop batch; an event with and without a payload; an optional value without a default; a member whose name a platform class already has; a C caller on iOS; a seam reject; a record with every declared field | A stale seam, a class that does not adopt its seam, a binding that reaches a class other than through its seam, an engine type, value box, or name lookup across it, a prop set out of spec order or unchanged, a missing `didUpdateProps` call, an event without its typed arguments, an optional view scalar that reads null, a generated name without the `Seam` infix, a colliding member name without `Prop` or `Field`, a seam reject that reaches JavaScript as a rejection, a record field its spec does not declare, or a behavior change on adoption |
+| FR9      | Symbol and runtime checks of the built binaries; a source check of the platform's native calls; the compatibility test on iOS and Android                                                                                                                                                                                                | a binary with each listed library beside Astryx; an app with and without another inset provider; a call outside public platform API; an exception's self-check that fails                                                                                  | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a call outside public platform API with no exception named in its record, a conflict with a listed library, a release that ships with a failing compatibility test, Astryx insets that disagree with another inset provider the app uses, or a failed self-check without the public path                                                                                                                                                                        |
+| FR9      | A source check of the core's iOS code                                                                                                                                                                                                                                                                                                    | each file in the core                                                                                                                                                                                                                                      | A method exchange, set-implementation, or replace-method call on a UIKit or React Native class                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| FR9      | A launch test on iOS of the shared URL cache; a clear on sign-out with requests in flight over React Native's networking and Astryx's own sessions                                                                                                                                                                                       | the default session-configuration provider; an app's own provider with and without the opt-in                                                                                                                                                              | The app's shared URL cache replaced, a response that lands after a clear, or an app's own provider overridden without its opt-in                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| FR11     | The package's check of generated files; native builds on iOS and Android of every class against its seam; source check of each binding; unit tests of the generated type mapping; conformance suites run through the seam                                                                                                                | each native view and module; a spec change; a prop batch; an event with and without a payload; an optional value without a default; a member whose name a platform class already has; a C caller on iOS; a seam reject; a record with every declared field | A stale seam, a class that does not adopt its seam, a binding that reaches a class other than through its seam, an engine type or any name lookup crossing the seam, a prop set out of spec order or unchanged, a missing `didUpdateProps` call, an event without its typed arguments, an optional view scalar that reads null, a generated name without the `Seam` infix, a colliding member name without `Prop` or `Field`, a seam reject that reaches JavaScript as a rejection, a record field its spec does not declare, or a behavior change on adoption |
+| DEC-10   | A launch test on iOS of the subscribers MetricKit holds, in an app built with and without the opt-in                                                                                                                                                                                                                                     | an app that did not opt in; an app that opted in; a second launch step in the same process                                                                                                                                                                 | An Astryx subscriber in an app that did not opt in, none or more than one in an app that did, or an app subscriber removed or replaced                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## Decision log
 
@@ -481,8 +485,7 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
 
 The foundation record describes what an app gets in terms that hold for any
 JavaScript engine React Native hosts. The rules for the native code itself
-follow the binding and apply to every platform group, so one record owns them
-and every group record follows it.
+follow the binding and apply to every native piece, so one record owns them.
 
 ### DEC-2 — Results are values at the binding too
 
@@ -558,6 +561,26 @@ written once and reached by more than one engine, and a binding by class name
 or selector ties a class's internals to one engine and breaks when the class
 changes. The seam's typed, generated members let each engine bind the same
 class, so the class keeps one implementation across engines.
+
+### DEC-9 — Native code uses public platform API only
+
+**Reference:** `spec:AST-140/DEC-9`
+**Decider:** imdreamrunner, 2026-11-17
+
+An app built with these packages passes store review and keeps working across
+OS updates only when its native code uses public API. A record that needs an
+exception names it and the reason, so each one is visible and reviewed.
+
+### DEC-10 — App diagnostics are the app's choice
+
+**Reference:** `spec:AST-140/DEC-10`
+**Decider:** imdreamrunner, 2026-11-19
+
+A library collects no app-level diagnostics the app did not ask for. The core
+adds a MetricKit subscriber only when the app opts in through its capability
+list (`spec:AST-112/FR3`), so an app's diagnostics stay the app's choice, and
+an app that opts in has the core's subscriber beside any subscriber it adds
+itself.
 
 ## Open questions
 

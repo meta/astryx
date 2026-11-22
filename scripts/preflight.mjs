@@ -6,7 +6,8 @@
  *   locally before the change is marked ready.
  * @input The committed change (`HEAD` against its merge base with `--base
  *   <ref>`, default `origin/main`), `--browser`, `--quick` (the
- *   changed packages, files and tests alone; not CI's scope), and `--wrap
+ *   changed packages, files and tests alone; not CI's scope; a typecheck
+ *   that fails only on missing workspace builds reports SKIP), and `--wrap
  *   <command>` (or `PREFLIGHT_WRAP`): a command that runs each heavy step as
  *   `<command> <build|test|knowledge> <step command...>`, such as a machine's
  *   job limiter. A working tree with uncommitted changes stops the run.
@@ -26,6 +27,8 @@ import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+
+import {expandWorkspaceDirs} from './lib/workspace-globs.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,7 +50,9 @@ const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
  * commands. A command's `kind` is `light`, or `build`, `test` or `knowledge`
  * for a heavy one. `stdout` writes the command's output to a file. `argsFrom`
  * adds arguments read from a file a command before it wrote; with no such
- * arguments the command does not run (`emptyMeans` says why).
+ * arguments the command does not run (`emptyMeans` says why). `argsAfter`
+ * goes after them: an option such as Playwright's `--project`, which takes
+ * every value that follows it, must come last.
  * @param {{scope: ReturnType<typeof classify>, mergeBase: string, changed: string[], browser: boolean, tmp: string, chromiumScope?: string}} input
  */
 export function planChecks({
@@ -59,7 +64,7 @@ export function planChecks({
   chromiumScope,
   quick = false,
 }) {
-  if (quick) return quickChecks({scope, mergeBase, changed});
+  if (quick) return quickChecks({scope, mergeBase, changed, tmp});
   const at = name => path.join(tmp, name);
   const checks = [];
   const specOnly = scope.specOnly || scope.timesOnly;
@@ -362,8 +367,9 @@ export function planChecks({
             },
             {
               kind: 'test',
-              argv: ['pnpm', 'test:interaction', '--project', 'chromium'],
+              argv: ['pnpm', 'test:interaction'],
               argsFrom: selection,
+              argsAfter: ['--project', 'chromium'],
               parse: chromiumSpecs,
               emptyMeans: 'the change selects no Chromium proof',
             },
@@ -387,7 +393,7 @@ function present(files) {
  * not CI's scope: no build, no dependent package, no test the change reaches
  * through an import, and no guard.
  */
-function quickChecks({scope, mergeBase, changed}) {
+function quickChecks({scope, mergeBase, changed, tmp}) {
   const specOnly = scope.specOnly || scope.timesOnly;
   const typechecks = !specOnly && !scope.docsiteOnly && !scope.toolingOnly;
   const linted = present(changed.filter(file => LINTED.test(file)));
@@ -414,6 +420,12 @@ function quickChecks({scope, mergeBase, changed}) {
                 'run',
                 'typecheck',
               ],
+              // Without a build, a package that reads a workspace package's
+              // build output fails to typecheck: that is not this change's
+              // error, so the check reports it as skipped.
+              stdout: path.join(tmp, 'typecheck.log'),
+              tee: true,
+              skipWhen: missingBuilds,
             },
           ],
         }
@@ -465,6 +477,124 @@ function quickChecks({scope, mergeBase, changed}) {
   ];
 }
 
+const MISSING_BUILDS =
+  'skipped, workspace builds missing; run `pnpm build` first';
+
+/** An unresolved module and its specifier. */
+const UNRESOLVED = /error TS2307: Cannot find module '([^']+)'/;
+
+/** A relative path into a `dist` folder: a workspace package's build output. */
+const DIST_PATH = /^\.\.?\/(?:[^']*\/)?dist(?:\/[^']*)?$/;
+
+/** An implicit-any error, which an unresolved import causes in its own file. */
+const IMPLICIT_ANY = /error TS(?:7006|7031):/;
+
+/** The file a TypeScript error line names: the text before `(line,col)`. */
+const errorFile = line =>
+  line.match(/^(.*?)\(\d+,\d+\): error TS/)?.[1] ?? null;
+
+/**
+ * The file an `exports` entry names for type checking: its `types` target,
+ * else its `default`, `import` or `require` target (conditions may nest).
+ * @param {unknown} target
+ * @returns {string | null}
+ */
+function typesTarget(target) {
+  if (typeof target === 'string') return target;
+  if (!target || typeof target !== 'object') return null;
+  for (const condition of ['types', 'default', 'import', 'require']) {
+    const file = typesTarget(target[condition]);
+    if (file) return file;
+  }
+  return null;
+}
+
+/**
+ * Whether an unresolved workspace import is a build that `pnpm build` writes:
+ * its package (a folder `pnpm-workspace.yaml` lists) declares the entry in
+ * `exports`, and the file that entry names for types is absent. An unknown
+ * package, an undeclared subpath, or an entry whose file exists (an import
+ * from a package the importer does not depend on) is a real error.
+ * @param {string} root the repository root
+ * @returns {(specifier: string) => boolean}
+ */
+export function workspaceExports(root = ROOT) {
+  /** @type {Map<string, {dir: string, exports: unknown}>} */
+  const packages = new Map();
+  for (const dir of expandWorkspaceDirs(root)) {
+    const file = path.join(dir, 'package.json');
+    if (!fs.existsSync(file)) continue;
+    const {name, exports} = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (name?.startsWith('@astryxdesign/')) packages.set(name, {dir, exports});
+  }
+  return specifier => {
+    const [, name, subpath] =
+      specifier.match(/^(@astryxdesign\/[^/]+)(?:\/(.+))?$/) ?? [];
+    const found = name ? packages.get(name) : undefined;
+    if (!found?.exports) return false;
+    const wanted = subpath ? `./${subpath}` : '.';
+    const entries =
+      typeof found.exports === 'object' &&
+      Object.keys(found.exports).some(key => key.startsWith('.'))
+        ? Object.entries(found.exports)
+        : [['.', found.exports]];
+    for (const [key, target] of entries) {
+      const [head, tail] = key.split('*');
+      const matched =
+        tail === undefined
+          ? key === wanted && ''
+          : wanted.length > head.length + tail.length &&
+              wanted.startsWith(head) &&
+              wanted.endsWith(tail)
+            ? wanted.slice(head.length, wanted.length - tail.length)
+            : false;
+      if (matched === false) continue;
+      const file = typesTarget(target);
+      if (!file) return false;
+      return !fs.existsSync(
+        path.join(found.dir, file.split('*').join(matched)),
+      );
+    }
+    return false;
+  };
+}
+
+let defaultExports;
+
+/**
+ * Why a failed typecheck is skipped, or null: every TypeScript error is a
+ * missing build output, or an implicit-any error (TS7006, TS7031) in a file
+ * that also has a missing build output. A missing build output is an
+ * unresolved import that a workspace package's `exports` declares and whose
+ * types file is absent (workspaceExports), or a relative path into a `dist`
+ * folder. An undeclared subpath, an unknown package, an entry whose file
+ * exists, a third-party module, an implicit-any error in any other file, and
+ * any other error are real.
+ * @param {string} text the typecheck's output
+ * @param {{declares?: (specifier: string) => boolean}} [options]
+ * @returns {string | null}
+ */
+export function missingBuilds(text, {declares} = {}) {
+  const errors = text.split('\n').filter(line => /error TS\d+/.test(line));
+  if (errors.length === 0) return null;
+  const isDeclared = declares ?? (defaultExports ??= workspaceExports());
+  const missing = line => {
+    const specifier = line.match(UNRESOLVED)?.[1];
+    return (
+      specifier != null &&
+      (DIST_PATH.test(specifier) ||
+        (specifier.startsWith('@astryxdesign/') && isDeclared(specifier)))
+    );
+  };
+  const unresolved = new Set(errors.filter(missing).map(errorFile));
+  const followOn = line =>
+    IMPLICIT_ANY.test(line) &&
+    errorFile(line) != null &&
+    unresolved.has(errorFile(line));
+  if (!errors.every(line => missing(line) || followOn(line))) return null;
+  return MISSING_BUILDS;
+}
+
 function skip(id, why) {
   return {id, commands: [], skip: why};
 }
@@ -514,9 +644,30 @@ export function runChecks(checks, {exec, wrap = [], now = Date.now} = {}) {
         }
         argv = [...argv, ...(extra ?? [])];
       }
+      if (command.argsAfter) argv = [...argv, ...command.argsAfter];
       if (command.kind !== 'light' && wrap.length)
         argv = [...wrap, command.kind, ...argv];
-      const code = exec(argv, {env: command.env, stdout: command.stdout});
+      const code = exec(argv, {
+        env: command.env,
+        stdout: command.stdout,
+        tee: command.tee,
+      });
+      const skipped =
+        code !== 0 && command.skipWhen && command.stdout
+          ? command.skipWhen(
+              fs.existsSync(command.stdout)
+                ? fs.readFileSync(command.stdout, 'utf8')
+                : '',
+            )
+          : null;
+      if (skipped)
+        return {
+          id: check.id,
+          result: 'SKIP',
+          note: skipped,
+          failed: null,
+          seconds: Math.round((now() - started) / 1000),
+        };
       if (code !== 0)
         return {
           id: check.id,
@@ -553,13 +704,20 @@ export function formatTable(rows, {quick = false} = {}) {
     lines.push('', 'Failing commands:');
     for (const row of failed) lines.push(`  ${row.id}: ${row.failed}`);
   }
+  // A typecheck skipped for missing builds checked nothing, so the verdict
+  // says so instead of reading as a pass.
+  const unbuilt = rows.filter(
+    row => row.result === 'SKIP' && row.note === MISSING_BUILDS,
+  );
   lines.push(
     '',
     failed.length
       ? `not ready: ${failed.length}`
-      : quick
-        ? 'quick checks pass; run `pnpm preflight` before you flip'
-        : 'ready to flip',
+      : unbuilt.length
+        ? `not checked: ${unbuilt.map(row => row.id).join(', ')} (workspace builds missing); run \`pnpm build\`, then run again before you flip`
+        : quick
+          ? 'quick checks pass; run `pnpm preflight` before you flip'
+          : 'ready to flip',
     quick
       ? 'Quick mode is not CI-equivalent: it skips the build, dependent packages, the tests the change reaches and the guards.'
       : NOT_RUN,
@@ -675,8 +833,21 @@ async function main(argv) {
   });
   const rows = runChecks(checks, {
     wrap,
-    exec(command, {env, stdout}) {
+    exec(command, {env, stdout, tee}) {
       console.log(`\n== ${command.join(' ')}`);
+      if (stdout && tee) {
+        // Shows the output and keeps it for the check to read.
+        const result = spawnSync(command[0], command.slice(1), {
+          cwd: ROOT,
+          env: {...process.env, ...env},
+          stdio: ['ignore', 'pipe', 'pipe'],
+          maxBuffer: 256 * 1024 * 1024,
+        });
+        const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+        process.stdout.write(text);
+        fs.writeFileSync(stdout, text);
+        return result.status ?? 1;
+      }
       const out = stdout ? fs.openSync(stdout, 'w') : 'inherit';
       const result = spawnSync(command[0], command.slice(1), {
         cwd: ROOT,

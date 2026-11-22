@@ -95,6 +95,7 @@ import {
   typedWordTest,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {isOutsideAnyPackage} from '../../foundation/env/project-scope.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
@@ -2457,11 +2458,63 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
 }
 
 /**
+ * The one page below `route`, at any depth, whose last route segment or
+ * title has the words of `rest` (nameWords): `authoring/define-the-theme`
+ * finds `authoring/building-blocks/themes/define-the-theme`. None when no page or more than one has them.
+ * An experimental page is never found.
+ * @param {DocsTree} tree
+ * @param {string} route
+ * @param {string} rest the typed segments after `route`
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function pageBelow(tree, route, rest) {
+  const words = nameWords(rest).join(' ');
+  if (words === '') return [];
+  const found = [...tree.nodes.values()].filter(
+    node =>
+      node.route.startsWith(`${route}/`) &&
+      [node.route.slice(node.route.lastIndexOf('/') + 1), node.title].some(
+        name => name != null && nameWords(name).join(' ') === words,
+      ) &&
+      !isExperimentalTreeNode(tree, node),
+  );
+  return found.length === 1
+    ? [{name: found[0].route, reason: found[0].summary}]
+    : [];
+}
+
+/**
+ * A namespace's ordered children with the page further down placed as
+ * spec:AST-046 FR6 says: right after the child that route words alone put
+ * first, when the typed text names that child, and first otherwise. A page
+ * that is that child is listed once, first.
+ * @template {{name: string}} T
+ * @param {string} topic
+ * @param {T[]} byRoute the children as route words order them
+ * @param {T[]} ordered the children as {@link namedFirst} orders them
+ * @param {T[]} deeper the page further down ({@link pageBelow}), or none
+ * @returns {T[]}
+ */
+export function withPageBelow(topic, byRoute, ordered, deeper) {
+  const kept = namesRoute(topic, byRoute[0]?.name ?? '') ? 1 : 0;
+  const lead = ordered.slice(0, kept);
+  const below = deeper.filter(
+    page => !lead.some(entry => entry.name === page.name),
+  );
+  const rest = ordered
+    .slice(kept)
+    .filter(entry => !below.some(page => page.name === entry.name));
+  return [...lead, ...below, ...rest];
+}
+
+/**
  * The error for a docs argument that names nothing. For a route, it suggests
  * every child of the deepest namespace the route reaches, closest first by
  * each child's route, title and keywords, with a child the route names kept
- * first. Otherwise it suggests the docs whose own name it is, or whose route
- * it spells with hyphens; failing that, the topics and top-level namespaces,
+ * first; the one page further down that the rest of the route names
+ * ({@link pageBelow}) comes right after that child, or first. Otherwise it
+ * suggests the docs whose own name it is, or whose route it spells with
+ * hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
  * none shares a word with the argument, with the names a slip or two from it
  * first). When the argument matches a component, hook or template
@@ -2484,6 +2537,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   let suggestions = [];
   // Route children stay whole (spec:AST-046); only the other lists are cut.
   let routeChildren = false;
+  /** @type {Array<{name: string, reason: string}>} */
+  let deeper = [];
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -2494,6 +2549,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
         routeChildren = true;
+        deeper = pageBelow(tree, near.route, parts.slice(depth).join('/'));
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -2528,10 +2584,16 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     ];
   }
   if (typeof topic === 'string' && routeChildren) {
-    suggestions = namedFirst(
+    const byRoute = orderRouteSuggestions(topic, suggestions, {closest: false});
+    suggestions = withPageBelow(
       topic,
-      orderRouteSuggestions(topic, suggestions, {closest: false}),
-      orderDocPages(tree, topic, suggestions, false),
+      byRoute,
+      namedFirst(
+        topic,
+        byRoute,
+        orderDocPages(tree, topic, suggestions, false),
+      ),
+      deeper,
     );
   } else if (typeof topic === 'string') {
     // Every topic and namespace is listed, so a near name (`tokns` for
@@ -2676,6 +2738,7 @@ export async function integrationDocTypes(integration, cwd) {
   const checked = await checkDocTypes(files, {
     packageDir: packageDir ?? cwd,
     resolveFrom: [cwd, packageDir],
+    outsideAnyPackage: isOutsideAnyPackage(cwd),
   });
   // Test fixtures no reader serves don't ship as docs: only counted.
   const report =

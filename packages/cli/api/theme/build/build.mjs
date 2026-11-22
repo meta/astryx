@@ -67,6 +67,7 @@ import {createRequire, isBuiltin} from 'node:module';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 import {projectMapsImport} from '../../../foundation/render/ts-paths.mjs';
 import {STYLESHEET_FILE} from '../../../foundation/fs/stylesheet-file.mjs';
+import {packageNameAt} from '../../../foundation/fs/package-name.mjs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
@@ -137,7 +138,11 @@ import {
   sourceInputField,
   sourceTypography,
 } from './input-fields.mjs';
-import {styleKeyProblems} from './style-keys.mjs';
+import {
+  holdsOnlyVariantMaps,
+  styleKeyProblems,
+  withoutVariantMaps,
+} from './style-keys.mjs';
 import {
   bigIntAsText,
   writtenPrimitives,
@@ -892,14 +897,13 @@ export const BUILT_BY_LINE =
 export const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 
 /**
- * `lines` with the command in a built module's built-by line as
- * `<command>`, when exactly one line is a built-by line; otherwise unchanged,
- * so a second or a malformed line stays significant.
+ * `lines` with the command in each of a built module's built-by lines as
+ * `<command>`. A theme module has one built-by line and a family module one
+ * per member.
  * @param {string[]} lines
  * @returns {string[]}
  */
 export function withBuiltByCommandPlaceholder(lines) {
-  if (lines.filter(line => BUILT_BY_LINE.test(line)).length !== 1) return lines;
   return lines.map(line => line.replace(BUILT_BY_LINE, '$1<command>$3$4'));
 }
 
@@ -938,8 +942,8 @@ export function withCliReleasePlaceholder(lines) {
  * Normalize generated file content for staleness comparison: without the
  * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
  * that the header's one `CLI:` line names as `<version>`
- * ({@link withCliReleasePlaceholder}), and with the command in a built
- * module's one {@link BUILT_BY_LINE} as `<command>`. Which release
+ * ({@link withCliReleasePlaceholder}), and with the command in each of a
+ * built module's {@link BUILT_BY_LINE}s (one per theme) as `<command>`. Which release
  * answers, and the command that starts it, depend on how the CLI was started
  * (a global install, a tool that runs it, or the project's own copy) and
  * change with each update, so the same outputs built another way are not
@@ -1483,7 +1487,10 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `ownsOutputs` says the caller made the folder the outputs go into and owns
  * every file there named like one (the theme editor's theme folder), so a
  * damaged or half-written output is replaced, never refused.
- * @typedef {{ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
+ * `warnings` takes each warning message of the build, in check mode too,
+ * where the receipt carries none (the theme editor, recording a source as
+ * built without building it, keeps the warnings that build gives).
+ * @typedef {{warnings?: string[], ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
  */
 
 /**
@@ -1678,15 +1685,20 @@ function assertOutputsReplaceable(
     // that source.
     const owner = /** @type {{source?: string}} */ (write).source ?? filePath;
     if (key === sourceKey) {
+      // The module is named after the theme, so a .js source of that name
+      // (brand.js for theme brand) has its built module at its own path:
+      // only another folder takes every output.
+      const free = freeOutPath(writes);
       throw new AstryxError(
-        `The output ${rel(write.dest)} is the theme source itself. Pick another --out.`,
-        [
-          {
-            // The same build without --out (its --icons-specifier kept).
-            name: beside.name,
-            reason: 'write the outputs beside the source',
-          },
-        ],
+        `The output ${rel(write.dest)} is the theme source itself, so the build does not write it. Build the outputs into another folder with --out${free ? `, such as --out ${rel(free)}` : ''}.`,
+        free && rerun
+          ? [
+              {
+                name: rerun(rel(free)),
+                reason: 'a folder where no output of this build exists yet',
+              },
+            ]
+          : [],
         ERROR_CODES.ERR_THEME_INVALID,
       );
     }
@@ -1996,14 +2008,8 @@ function resolveCoreRoot() {
 function corePackageRoot(file) {
   let dir = path.dirname(file);
   for (;;) {
-    try {
-      const pkg = JSON.parse(
-        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
-      );
-      if (pkg?.name === '@astryxdesign/core') return dir;
-    } catch {
-      // No readable package.json here; keep walking up.
-    }
+    if (packageNameAt(path.join(dir, 'package.json')) === '@astryxdesign/core')
+      return dir;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -3135,7 +3141,7 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
         ? jitiError
         : new Error(`it threw ${thrownText(jitiError)}`);
     throw new Error(
-      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
+      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}${await baseImportHint(filePath, je)}`,
       {cause: jitiError},
     );
   }
@@ -3313,6 +3319,53 @@ function thrownText(value) {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * The import that fixes a base Core refuses as no theme, when the theme
+ * extends a package's default export or the package as one object: a theme
+ * package exports its themes by name, and the hint names them.
+ * @param {string} filePath
+ * @param {Error} error
+ * @returns {Promise<string>} '' when the base is no such import
+ */
+async function baseImportHint(filePath, error) {
+  if (!/`extends` must be a theme from defineTheme\(\)/.test(error.message))
+    return '';
+  const binding = themeBaseBinding(filePath, 'default');
+  const specifier = binding?.importPath;
+  if (
+    !specifier ||
+    specifier.startsWith('.') ||
+    path.isAbsolute(specifier) ||
+    (binding.exportName !== 'default' && binding.exportName !== '*')
+  )
+    return '';
+  /** @type {string[]} */
+  let themes = [];
+  try {
+    const resolved = createRequire(filePath).resolve(specifier);
+    const mod = await import(pathToFileURL(resolved).href);
+    themes = Object.entries(mod)
+      .filter(
+        ([name, value]) =>
+          name !== 'default' &&
+          value &&
+          typeof value === 'object' &&
+          typeof value.name === 'string' &&
+          value.tokens &&
+          typeof value.tokens === 'object',
+      )
+      .map(([name]) => name);
+  } catch {
+    // The package's exports are not read: the hint names the form only.
+  }
+  const how =
+    binding.exportName === '*'
+      ? `all of ${specifier} as one object`
+      : `the default export of ${specifier}`;
+  const example = themes[0] ?? '<theme>';
+  return `\nThe theme extends ${how}, which is not a theme: a theme package exports its theme by name${themes.length ? ` (${themes.join(', ')})` : ''}. Import it so: import {${example}} from '${specifier}', and extend ${example}.`;
 }
 
 /**
@@ -4451,6 +4504,9 @@ export function validateComponentOverridesAgainstRegistry(
       const knownProps = knownComponents.propsByKey[component];
       for (const key of Object.keys(rules)) {
         if (key === 'base') continue;
+        // A wrapper of variant maps (`variants: {variant: {…}}`): the
+        // warning on each map names the keys that write it.
+        if (holdsOnlyVariantMaps(rules[key])) continue;
 
         const pairs = key.split('+');
         for (const pair of pairs) {
@@ -5589,6 +5645,9 @@ async function themeBuildInternal(
     // too. A boxed primitive in a part would be written as JSON text (with
     // its quotes), where a token writes its text: it gets its primitive.
     resolvedTheme = writtenPrimitives(resolvedTheme);
+    // A map of values to blocks in a style block is warned at its line with
+    // the keys that write it; Core would only drop it again.
+    resolvedTheme = withoutVariantMaps(resolvedTheme);
 
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;
@@ -5648,8 +5707,7 @@ async function themeBuildInternal(
         at => {
           for (const [layer, {lineOf}] of writtenIn.entries())
             for (const keys of declarationPaths(at, blocks))
-              if (lineOf(keys) != null)
-                return {path: keys, layer};
+              if (lineOf(keys) != null) return {path: keys, layer};
           return null;
         },
         {
@@ -5662,9 +5720,7 @@ async function themeBuildInternal(
     )) {
       // At its line in the theme's file, or in the local theme it extends
       // that writes it (a family member's included).
-      const writer = writtenIn.find(
-        w => w.lineOf(entry.path) != null,
-      );
+      const writer = writtenIn.find(w => w.lineOf(entry.path) != null);
       const line = writer?.lineOf(entry.path) ?? null;
       const file =
         writer && writer.file !== filePath
@@ -6223,6 +6279,7 @@ async function themeBuildInternal(
         );
     }
     warnMissingDeclarations(writes, cwd);
+    handOff.warnings?.push(...warningMessages);
     return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {

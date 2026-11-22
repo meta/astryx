@@ -16,6 +16,7 @@ export {
   holdLayoutExit,
   holdLayoutSwap,
   layoutStartFor,
+  layoutStartReaderFor,
   playLayoutChange,
   playLayoutEdge,
   playLayoutSwap,

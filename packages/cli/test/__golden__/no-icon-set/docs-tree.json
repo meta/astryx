@@ -1259,6 +1259,7 @@
       "look-after-each-change",
       "denser-or-roomier",
       "one-kind-of-part",
+      "values-a-part-shows",
       "no-app-yet",
       "share-with-other-teams",
       "quick-start",
@@ -1463,6 +1464,24 @@
       "install-an-integration",
       "use-what-it-adds",
       "check-for-problems"
+    ],
+    "mentions": []
+  },
+  "visualization": {
+    "type": "docs.node",
+    "children": [
+      "visualization/data-colors-in-renderers"
+    ],
+    "mentions": []
+  },
+  "visualization/data-colors-in-renderers": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-path",
+      "use-datavars",
+      "use-raw-css-variables",
+      "draw-canvas-with-resolved-colors",
+      "configure-vega-lite"
     ],
     "mentions": []
   },

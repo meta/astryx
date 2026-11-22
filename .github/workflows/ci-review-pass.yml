@@ -2,12 +2,12 @@
 
 # Starts the heavy suites of a pull request whose review passes at its head
 # (spec:AST-030/DEC-32, FR20, heavy-turn.mjs). A push runs only the fast
-# checks in its CI run's first attempt. Once the review app (for a
-# write-access author) or an engineering owner approves that exact head and
-# the review-required status shows success (its spec half included), this
-# workflow runs the deferred run again in full, and a later attempt runs every
-# suite. A success at an engineering owner's own push, with no review, does
-# not count (architecture:knowledge-contracts DEC-11). It
+# checks in its CI run's first attempt. Once the spec half of the review gate
+# passes and an engineering owner, or the review app (for a write-access author
+# or a fork a maintainer admitted with `ci:run`), approves that exact head,
+# this workflow runs the deferred run again in full, and a later attempt runs
+# every suite. This clears no gate: merging still needs review-required. An
+# author's own review never counts (architecture:knowledge-contracts DEC-11). It
 # looks when a review is submitted or an /approve-spec comment lands (the
 # gate settles a moment later, so it waits for it), when a CI run ends (a
 # deferred run that finished after its review passed), when Review signal
@@ -52,6 +52,8 @@ jobs:
     timeout-minutes: 8
     permissions:
       actions: write
+      # checks: read lets the review read when the head was pushed.
+      checks: read
       contents: read
       pull-requests: read
       statuses: read

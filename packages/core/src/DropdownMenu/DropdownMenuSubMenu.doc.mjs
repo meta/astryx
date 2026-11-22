@@ -23,7 +23,7 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display before the label; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'description',
@@ -124,7 +124,7 @@ export const docsDense = {
     'menu row that reveals a nested flyout of its own children/items (single component, not Sub/SubTrigger/SubContent); drills in on a phone',
   propDescriptions: {
     label: 'primary label text for the trigger row',
-    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    icon: 'icon before label; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     description: 'secondary text below label',
     children: 'flyout menu items (same components as top level)',
     isDisabled: 'renders trigger but never opens',

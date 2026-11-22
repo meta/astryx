@@ -143,6 +143,7 @@ describe('dials and tokens', () => {
       'set ne corners 8px',
       'set ne --radius-container 8px',
       'set ne --radius-page 8px',
+      "set ne --radius-chat 'min(calc(var(--radius-container) * 28 / 12), 8px)'",
     ]);
     expect(rs[0].text).toContain('held at 8px');
   }, 120_000);

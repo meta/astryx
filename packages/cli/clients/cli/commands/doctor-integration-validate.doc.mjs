@@ -24,7 +24,9 @@ export const doc = {
     '`__tests__` in the components or docs root are counted, not checked. Without ' +
     'TypeScript it prints one line saying the docs were not type-checked. ' +
     'Outside a package, with no package name it writes nothing and reports one no_package issue (exit 1); ' +
-    'a package name is looked up as it is in a project.',
+    "a package name is looked up in the project's packages, or, outside a project, " +
+    'as the folder loads it: its own source or a package it declares, else the copy installed for the computer, ' +
+    'else the `node_modules` at or above the folder.',
   fn: 'validateIntegration',
   args: [
     {
@@ -57,7 +59,7 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: "In global mode: outside a package, with no package named, it writes nothing, reports one `no_package` issue, and exits 1; a package name is looked up as it is in a project. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+      text: "In global mode: outside a package, with no package named, it writes nothing, reports one `no_package` issue, and exits 1; a package name is looked up in the project's packages, or, outside a project, as the folder loads it: its own source or a package it declares, else the copy installed for the computer, which `doctor` names this command for, else the `node_modules` at or above the folder. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
     },
   ],
 };

@@ -45,7 +45,7 @@ system_specs: [spec:AST-005/DEC-1, spec:AST-020, spec:AST-085]
 | Behavior                | A `role="menu"` list of `menuitem` rows inside a heading popover, with arrow, Home, End, typeahead, Enter, Space, and Escape support. Selecting an enabled item runs it and, where the host heading supplies a close action, closes the heading menu.                 |
 | End-user impact         | Users switch products or accounts from the heading menu by pointer or keyboard; keyboard and typeahead reach disabled rows, which are announced as disabled and do nothing (FR6).                                                                                     |
 | Builder impact          | None.                                                                                                                                                                                                                                                                 |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled item gains `tabindex="-1"` (FR6). Four implementation gaps (see Current-state impact).                                                                                                                            |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled item gains `tabindex="-1"` (FR6). Two implementation gaps (see Current-state impact).                                                                                                                             |
 | Review checks           | Reject losing `menu`/`menuitem` roles to caller props, keyboard movement or typeahead that skips a disabled item, a disabled item that acts or closes the menu, or a caller `onKeyDown` that silently disables the keyboard model.                                    |
 | Governing rules         | `family:navigation-destinations` FR7; `architecture:interaction-modality`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                                                    |
 
@@ -64,8 +64,9 @@ covers both.
 - Released default preserved: `no` for disabled items: the keyboard reaches a
   disabled item and the item carries `tabindex="-1"` (FR5, FR6), a defect fix
   under `component:DropdownMenu` DEC-11 (owner decision, 2026-11-04)
-- Compatibility class: records shipped behavior; no public API, styling, or
-  target change; a disabled item gains `tabindex="-1"` (FR6)
+- Compatibility class: records shipped behavior; no public API or target
+  change; a disabled item gains `tabindex="-1"` (FR6), and a keyboard-focused
+  item draws the shared focus ring (AR4)
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -79,18 +80,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   `onClick`. `family:navigation-destinations` FR7 has members keep their own
   disabled semantics, and `spec:AST-085` FR2 has a disabled control block
   navigation.
-- **The documented composition nests two menus.** Passed as the `menu` of
-  SideNavHeading or TopNavHeading, as its consumer doc directs, NavHeadingMenu's
-  `role="menu"` sits directly inside the heading's own `role="menu"` wrapper.
-  WAI-ARIA 1.2 allows a `menu` to own only `menuitem`-family items and groups,
-  so assistive technology meets a menu nested in a menu.
-- **The menu has no name of its own.** NavHeadingMenu's `menu` carries no
-  accessible name unless the caller passes `aria-label`; inside a heading only
-  the heading's wrapper `menu` is named. The APG menu pattern, which
-  `spec:AST-020` FR15 adopts, names each menu.
-- **Focus is shown only by fill.** An item removes the outline and marks focus
-  with the hover fill; it does not use the shared focus outline that
-  `architecture:interaction-modality` provides.
+- **A standalone menu has no name of its own.** Outside a heading,
+  NavHeadingMenu's `menu` carries no accessible name unless the caller passes
+  `aria-label`. The APG menu pattern, which `spec:AST-020` FR15 adopts, names
+  each menu.
 
 ## Ownership boundary
 
@@ -126,7 +119,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 | ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Basis                           |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| FR1 | NavHeadingMenu renders one Menu `div` carrying `role="menu"`, the current `nav-heading-menu` target with `size`, the forwarded `ref`, `data-testid`, and other DOM props; caller props cannot replace the role. `minWidth` overrides the size's minimum width.                                                                                                                                                                                                                                                                                                                                                                                                              | Current source, docs, and tests |
+| FR1 | NavHeadingMenu renders one Menu `div` carrying `role="menu"`, the current `nav-heading-menu` target with `size`, the forwarded `ref`, `data-testid`, and other DOM props; caller props cannot replace the role. Inside the named `menu` region of a SideNavHeading or TopNavHeading popover, the `div` carries `role="none"` instead, so the heading's one `menu` holds the items. `minWidth` overrides the size's minimum width.                                                                                                                                                                                                                                           | Current source, docs, and tests |
 | FR2 | NavHeadingMenuItem renders one Item carrying `role="menuitem"` and the current `nav-heading-menu-item` target with the menu's size, as the `LinkProvider` link (else `<a>`) when `href` is supplied and a `div` otherwise. Caller props cannot replace its role, tab index, or disabled state.                                                                                                                                                                                                                                                                                                                                                                              | Current source, docs, and tests |
 | FR3 | An optional Icon-rendered icon delegates to Icon's `icon` target. String labels and all descriptions render through Text's `text` target on one line; non-string labels render directly as caller-owned content.                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Current source and target docs  |
 | FR4 | The host heading owns the popup runtime. Where it supplies a close callback (TopNavHeading and the collapsed SideNavHeading), NavHeadingMenu calls it on Escape and on successful Item selection; an expanded SideNavHeading supplies none, so the menu stays open after a choice (`component:SideNavHeading` FR7).                                                                                                                                                                                                                                                                                                                                                         | Current source and tests        |
@@ -167,12 +160,17 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Accessibility contract
 
-- **AR1 — Menu semantics.** One `menu` holds `menuitem` rows (FR1, FR2). It is
-  named only by a caller `aria-label`; inside a heading, the heading names its
-  own wrapper `menu`, not this one (Current-state impact).
+- **AR1 — Menu semantics.** One `menu` holds `menuitem` rows (FR1, FR2).
+  Standalone, it is named by a caller `aria-label`; inside a heading, the
+  heading's named `menu` holds the rows and this element is not a menu (FR1).
 - **AR2 — Keyboard.** FR5 and FR6.
 - **AR3 — Disabled.** Disabled items are exposed as disabled, reached by
   keyboard movement and typeahead, and inert (FR6).
+- **AR4 — Focus perception.** After keyboard input the focused item draws the
+  shared focus ring inside its edge, as `component:DropdownMenuItem` AR4
+  states; the ring's color meets 3:1 against the menu in light and dark
+  (`spec:AST-020` FR1, WCAG 2.2 1.4.11). After pointer input the focused item
+  keeps the hover fill alone.
 
 ## Design relationships
 
@@ -230,15 +228,17 @@ owns the layer lifecycle and supplies the close callback through context.
 
 ## Verification map
 
-| Contract            | Verification                                                                                    | Representative states                                                        | Mutation or failure expectation                                                                                                                                                                        | Audit section                   |
-| ------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| FR1, FR2            | `NavHeadingMenu.test.tsx` role, render, link, and disabled suites                               | Menu with link, action, and disabled Items                                   | Removing menu/item semantics, content, or current rendering branches fails existing role, tag, attribute, and text checks.                                                                             | `audit:NavHeadingMenu/anatomy`  |
-| FR3                 | NavHeadingMenuItem source inspection plus Icon and Text target metadata                         | Icon, string label, caller-rendered label, and description paths             | Source proves Icon-slot delegation, conditional label rendering, and Text-wrapped description; focused tests assert string and description content but not target placement or custom-label ownership. | `audit:NavHeadingMenu/theming`  |
-| FR4–FR7             | `NavHeadingMenu.test.tsx` context, keyboard, disabled, and pass-through suites                  | Selection, Escape, arrows, Home/End, typeahead, disabled, caller handlers    | Breaking close callback consumption, keyboard behavior, or role precedence fails focused interaction assertions.                                                                                       | `audit:NavHeadingMenu/behavior` |
-| Target inventory    | Source inspection and `themingTargets.test.ts`                                                  | Menu, Item, and delegated Icon targets                                       | Runtime and documented target metadata drift fails target validation.                                                                                                                                  | `audit:NavHeadingMenu/theming`  |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                   | Canonical anatomy and both current local targets                             | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                                                                                | `audit:NavHeadingMenu/theming`  |
-| FR8                 | `NavHeadingMenu.test.tsx` action-group suite (touch and mouse slides)                           | Touch and mouse slides across items; a disabled item; undraggable link items | Removing the adoption fails the slide tests.                                                                                                                                                           | —                               |
-| RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `NavMenu / With icons` | A menu item icon and its label; LTR and RTL                                  | An icon that is not at the inline start of its label fails D2.                                                                                                                                         | `audit:NavHeadingMenu/i18n-rtl` |
+| Contract            | Verification                                                                                                                                                                                                         | Representative states                                                        | Mutation or failure expectation                                                                                                                                                                        | Audit section                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| FR1, FR2            | `NavHeadingMenu.test.tsx` role, render, link, and disabled suites                                                                                                                                                    | Menu with link, action, and disabled Items                                   | Removing menu/item semantics, content, or current rendering branches fails existing role, tag, attribute, and text checks.                                                                             | `audit:NavHeadingMenu/anatomy`  |
+| AR1                 | `NavHeadingMenu.test.tsx` "is a menu named by the caller's aria-label when it stands alone"; `SideNav.test.tsx` and `TopNav.test.tsx` "holds a NavHeadingMenu's items in its own named menu, with no menu inside it" | Standalone with `aria-label`; inside SideNavHeading and TopNavHeading        | A second `menu` inside a heading, or items outside the heading's named `menu`, fails.                                                                                                                  |
+| FR3                 | NavHeadingMenuItem source inspection plus Icon and Text target metadata                                                                                                                                              | Icon, string label, caller-rendered label, and description paths             | Source proves Icon-slot delegation, conditional label rendering, and Text-wrapped description; focused tests assert string and description content but not target placement or custom-label ownership. | `audit:NavHeadingMenu/theming`  |
+| FR4–FR7             | `NavHeadingMenu.test.tsx` context, keyboard, disabled, and pass-through suites                                                                                                                                       | Selection, Escape, arrows, Home/End, typeahead, disabled, caller handlers    | Breaking close callback consumption, keyboard behavior, or role precedence fails focused interaction assertions.                                                                                       | `audit:NavHeadingMenu/behavior` |
+| Target inventory    | Source inspection and `themingTargets.test.ts`                                                                                                                                                                       | Menu, Item, and delegated Icon targets                                       | Runtime and documented target metadata drift fails target validation.                                                                                                                                  | `audit:NavHeadingMenu/theming`  |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                        | Canonical anatomy and both current local targets                             | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                                                                                | `audit:NavHeadingMenu/theming`  |
+| FR8                 | `NavHeadingMenu.test.tsx` action-group suite (touch and mouse slides)                                                                                                                                                | Touch and mouse slides across items; a disabled item; undraggable link items | Removing the adoption fails the slide tests.                                                                                                                                                           | —                               |
+| AR4                 | `NavHeadingMenu.test.tsx` focus-ring case: each item's `:focus-visible` ring, inset by its own width, and its color against the menu in light and dark                                                               | A link item and an action item; light and dark                               | Removing the ring, drawing it outside the item, or a ring color under 3:1 against the menu fails.                                                                                                      | —                               |
+| RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `NavMenu / With icons`                                                                                                                      | A menu item icon and its label; LTR and RTL                                  | An icon that is not at the inline start of its label fails D2.                                                                                                                                         | `audit:NavHeadingMenu/i18n-rtl` |
 
 Read from source, with no focused test yet:
 
@@ -247,7 +247,7 @@ Read from source, with no focused test yet:
 - FR3.
 - FR5: that enabled items are focusable but not tab stops.
 - FR6: that a disabled item does not close the menu.
-- FR4, FR5, and AR1 inside SideNavHeading or TopNavHeading.
+- FR4 and FR5 inside SideNavHeading or TopNavHeading.
 - The Menu and Item target placements in the theming map.
 
 ## Decision log

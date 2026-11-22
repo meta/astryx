@@ -275,6 +275,22 @@ describe('peerProblem', () => {
       peerProblem({peerDependencies: {react: '>=99'}}, '0.8.2'),
     ).toBeNull();
   });
+
+  it('names every release peer range that excludes the release', () => {
+    expect(
+      peerProblem(
+        {
+          peerDependencies: {
+            '@astryxdesign/core': '>=0.9.0',
+            '@astryxdesign/cli': '>=0.9.0',
+          },
+        },
+        '0.8.2',
+      ),
+    ).toBe(
+      "it needs @astryxdesign/core >=0.9.0 and @astryxdesign/cli >=0.9.0, and this computer's CLI is 0.8.2",
+    );
+  });
 });
 
 describe('loadComputerIntegrations', () => {

@@ -116,8 +116,9 @@ const UNSAFE_HOSTS = new Set([
  *   and custom properties; `document.body` may sit outside a nested scope.
  * - **Tab order.** Sequential focus follows DOM order, so a host near the
  *   trigger keeps the layer's focusables next to it. (`show()` also passes
- *   the trigger as the popover's invoker `source`, which pins focus order to
- *   the invoker in browsers that support it.)
+ *   an invoker `source`, the trigger unless the layer names another element
+ *   or none, which pins focus order to the invoker in browsers that support
+ *   it.)
  *
  * The outermost unsafe ancestor matters up to the nearest native dialog. A safe
  * div may itself sit inside an anchor; stopping at that div would still put the
