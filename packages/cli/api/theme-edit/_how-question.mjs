@@ -30034,12 +30034,9 @@ export function draftAnswer(ctx, env, question) {
       (looksSaid.length > 0 &&
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
+    // (An undo of a saved setting keeps its own answer.)
+    if (unsure && unmet.takesBack) continue;
     if (unsure) {
-      // (Nor a saved setting: the undo is not read for sure.)
-      if (unmet.takesBack) {
-        takeFromWholes(unmet.options[0] ?? []);
-        unmet.options = [];
-      }
       unmet.text = several
         ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
         : loose

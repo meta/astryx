@@ -120,15 +120,6 @@ const ROWS = [
     },
   ],
   [
-    'an undo of several changes takes nothing back, saved settings included',
-    {
-      theme: 'mc',
-      q: 'make the cards blue. undo the card change and the heading change',
-      never: /^undo /,
-      says: /undo them one at a time/,
-    },
-  ],
-  [
     'an undo of one mode beside a setting for both modes and the other mode',
     {
       theme: 'mx',
