@@ -4983,6 +4983,62 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:in the day|during the day|day ?(?:mode|theme)|day ?time)\b/gi,
       'in light mode',
     );
+  // (A look said, then taken away by a pronoun: "the copy button border is
+  // ugly, hide it", "the shadow on the cards is too strong, remove it". The
+  // pronoun is that look on one part, never the part. Only a plain ask is
+  // read this way: an ask said on its own, with one part, the look, and
+  // words that only judge it; a side, a state, a variant, a mode, a list
+  // of parts or an ask joined to another keeps the reading it has without
+  // the pronoun.)
+  question = String(question).replace(
+    /(^|[,;.!?\n]\s*)([^,;.!?\n]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)[^,;.!?\n]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b(?=\s*(?:[.!?\n]|$))/gi,
+    (m, lead, said) => {
+      // ("it" is the nearest look said before it.)
+      const looks = [
+        ...said.matchAll(
+          // (A look word that names another aspect, "border radius", is
+          // never the look taken away.)
+          /\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)/gi,
+        ),
+      ];
+      const last = looks[looks.length - 1];
+      const look = last[1];
+      const word = look.toLowerCase().replace(/s$/, '');
+      // (Only an ask said on its own: one joined to another by "and",
+      // "but" or "then" keeps the reading it has without the pronoun.)
+      if (/\b(?:and|but|then)\b/i.test(said)) return m;
+      const own = String(said);
+      // (The one part the look's own words name, by its longest match.)
+      const found = partLexicon(ctx)
+        .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
+        .filter(x => x != null);
+      const longest = /** @type {RegExpExecArray[]} */ (found).sort(
+        (x, y) => y[0].length - x[0].length,
+      )[0];
+      if (!longest) return m;
+      const part = longest[0].trim();
+      // (Every other word only judges the look: "the copy button border is
+      // ugly", "the shadow on the cards is too strong". Any other word, a
+      // side, a state, a variant, a mode or a second part, keeps the
+      // earlier reading.)
+      const others = own
+        .toLowerCase()
+        .replace(longest[0].trim(), ' ')
+        .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
+        .split(/[^a-z]+/)
+        .filter(Boolean);
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      if (!others.every(w => JUDGING.test(w))) return m;
+      // ("them" names more than one thing: read it only over one part said
+      // in the plural.)
+      if (/\bthem\b\s*[.!]?$/i.test(m) && !/s\b/.test(longest[0].trim()))
+        return m;
+      // (A "!" or "?" before it ends the ask before, as a full stop does.)
+      const stop = String(lead).replace(/[!?]/, '.');
+      return `${stop}no ${word} on ${part}`;
+    },
+  );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
   // color the answer writes is held to (after the answers are made), never
   // the color asked for nor a clause of its own, so it is read out of the
