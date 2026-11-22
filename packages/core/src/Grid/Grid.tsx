@@ -61,8 +61,10 @@ export interface GridProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLDivElement>;
   /**
-   * Column configuration. A number creates exactly N `1fr` tracks and never
-   * reflows; a child's minimum content may widen its track. For columns that
+   * Column configuration: `{minWidth}` alone keeps empty tracks, so a few
+   * tiles fill only part of a wide row; for a known number of tiles add `max`
+   * with that count or `repeat: 'fit'` so they stretch. A number creates
+   * exactly N `1fr` tracks and never reflows; a child's minimum content may widen its track. For columns that
    * reflow on small screens, use `{minWidth, max}`.
    * - `number` — exactly N `1fr` tracks at every width
    * - `{minWidth, max?, repeat?}` — responsive columns with a px floor and an

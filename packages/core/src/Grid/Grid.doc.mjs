@@ -61,7 +61,7 @@ export const docs = {
     {
       name: 'columns',
       type: "number | {minWidth: number, max?: number, repeat?: 'fill' | 'fit'}",
-      description: 'Column configuration. A number creates exactly N `1fr` tracks at every width and never reflows (e.g. `columns={3}`); a child\'s minimum content may widen its track. For columns that reflow on small screens, use `{minWidth, max}`. Use an object for responsive columns: `minWidth` sets the minimum column width in px, `repeat` controls track behavior (`"fill"` preserves empty tracks for consistent widths, `"fit"` collapses empty tracks so items stretch; defaults to `"fill"`), and `max` caps the maximum number of columns.',
+      description: 'Column configuration: `{minWidth}` alone keeps empty tracks, so a few tiles fill only part of a wide row; for a known number of tiles add `max` with that count (`{minWidth: 160, max: 4}` for four) or `repeat: "fit"` so the tiles stretch across it. A number creates exactly N `1fr` tracks at every width and never reflows (e.g. `columns={3}`); a child\'s minimum content may widen its track. For columns that reflow on small screens, use `{minWidth, max}`. Use an object for responsive columns: `minWidth` sets the minimum column width in px, `repeat` controls track behavior (`"fill"` preserves empty tracks for consistent widths, `"fit"` collapses empty tracks so items stretch; defaults to `"fill"`), and `max` caps the maximum number of columns.',
     },
     {
       name: 'width',
