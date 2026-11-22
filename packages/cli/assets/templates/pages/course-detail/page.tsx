@@ -701,7 +701,10 @@ function SyllabusSection() {
                           </StackItem>
                         )}
                       </HStack>
-                      <Text type="supporting" color="secondary">
+                      <Text
+                        type="supporting"
+                        color="secondary"
+                        textWrap="nowrap">
                         {lesson.duration}
                       </Text>
                     </HStack>
@@ -1163,10 +1166,14 @@ function RelatedRail() {
         />
         <Carousel hasSnap hasEdgeFade gap={3} aria-label="More courses">
           {RELATED.map(course => (
-            <Card key={course.title} padding={4}>
+            // A slide sizes to its content, so a long title would make the
+            // card wider than a phone's rail. A set width keeps the card and
+            // its price inside the rail; a longer title ends in an ellipsis
+            // after two lines.
+            <Card key={course.title} padding={4} width="min(18rem, 80vw)">
               <VStack gap={2}>
                 <Badge label={course.topic} />
-                <Text type="large" weight="bold">
+                <Text type="large" weight="bold" maxLines={2}>
                   {course.title}
                 </Text>
                 <Text type="supporting" color="secondary">
