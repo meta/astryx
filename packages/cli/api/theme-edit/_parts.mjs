@@ -1399,7 +1399,8 @@ function expand(v, env, tokens, refsOf = refs, seen = new Set(), depth = 0) {
     if (tokens.has(r)) out.add(r);
     else if (env[r] && !seen.has(r) && depth < 8) {
       seen.add(r);
-      for (const t of expand(env[r], env, tokens, refsOf, seen, depth + 1)) out.add(t);
+      for (const t of expand(env[r], env, tokens, refsOf, seen, depth + 1))
+        out.add(t);
     }
   }
   return out;
