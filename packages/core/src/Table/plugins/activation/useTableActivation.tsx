@@ -20,6 +20,7 @@ import {colorVars} from '../../../theme/tokens.stylex';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {mergeRefs} from '../../../utils/mergeRefs';
 import {warnOnce} from '../../../utils/devWarning';
+import {useCommittedRef} from '../../../hooks/useCommittedRef';
 import {isRtlElement} from '../../../hooks/isRtlElement';
 import {shouldSuppressRowPress} from '../../rowPressGuard';
 import type {
@@ -87,11 +88,13 @@ interface ActivationStore<T extends Record<string, unknown>> {
   getConfig: () => UseTableActivationConfig<T>;
 }
 
-function createActivationStore<T extends Record<string, unknown>>(
-  configRef: React.RefObject<UseTableActivationConfig<T>>,
-): ActivationStore<T> {
+function createActivationStore<T extends Record<string, unknown>>(configRef: {
+  readonly current: UseTableActivationConfig<T>;
+}): ActivationStore<T> {
   const buckets = new Map<string | number, Set<() => void>>();
-  let previous = configRef.current;
+  // Seeded on the first notify: rows apply their own mount state in ref
+  // callbacks, so the baseline starts with the first committed config.
+  let previous: UseTableActivationConfig<T> | null = null;
 
   const notifyBuckets = (keys: ReadonlyArray<string | number | null>) => {
     for (const key of keys) {
@@ -123,6 +126,10 @@ function createActivationStore<T extends Record<string, unknown>>(
     },
     notify() {
       const current = configRef.current;
+      if (previous === null) {
+        previous = current;
+        return;
+      }
       if (current.getIsItemActivatable !== previous.getIsItemActivatable) {
         for (const bucket of buckets.values()) {
           for (const listener of bucket) {
@@ -426,8 +433,9 @@ export function getForcedColorsBarClassNames(): ReadonlyArray<string> {
 export function useTableActivation<T extends Record<string, unknown>>(
   config: UseTableActivationConfig<T>,
 ): TablePlugin<T> {
-  const configRef = useRef(config);
-  configRef.current = config;
+  // The committed config: ref callbacks and press handlers read the live
+  // values, never the render's, so no ref is written during render.
+  const configRef = useCommittedRef(config);
 
   const storeRef = useRef<ActivationStore<T> | null>(null);
   if (storeRef.current == null) {
@@ -459,10 +467,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
         _index: number,
         context?: TableRowContext,
       ): BodyRowRenderProps {
-        const {getIsItemActivatable} = store.getConfig();
-        // The first apply reuses this result. Later applies and every press
-        // call the predicate again.
-        const eligible = getIsItemActivatable?.(item) ?? true;
         // Identity and admission come from the row context: no usable key
         // without an explicit idKey, and only flat product rows admit
         // activation. Grouped, tree, detail, and undeclared custom models
@@ -529,22 +533,22 @@ export function useTableActivation<T extends Record<string, unknown>>(
         // controlled-key change reaches mounted rows without re-rendering
         // the table, touching at most the rows whose state flips. Eligibility
         // re-resolves live on every apply and every press, so flipping the
-        // caller predicate takes effect without waiting for a row update;
-        // the render-time value below only decides the static affordances.
+        // caller predicate takes effect without waiting for a row update.
+        // Nothing eligibility-dependent is declared at render time: the row's
+        // ref callback applies the affordances and paint on mount and keeps
+        // them live, following the selection plugin's shape.
         const isEligibleNow = () =>
           store.getConfig().getIsItemActivatable?.(item) ?? true;
-        // Declarative snapshot for this render; the subscriber below keeps
-        // it fresh between renders.
-        const activeNow = eligible && key === store.getConfig().activeKey;
         const activationRef: React.RefCallback<HTMLTableRowElement> = row => {
           if (!row) {
             return;
           }
-          // The render above already declared this row's affordances for its
-          // render-time eligibility. The subscriber changes them only when
-          // liveness flips between renders: the caller predicate changed, or
-          // a later plugin marked the row current.
-          let lastInteractive: boolean = eligible;
+          // The subscriber changes affordances only when liveness flips
+          // between renders: the caller predicate changed, or a later plugin
+          // marked the row current.
+          // Nothing is declared at render time, so the first apply writes
+          // the affordances; later applies write only on liveness flips.
+          let lastInteractive: boolean | null = null;
           let lastActive: boolean | null = null;
           const applyStyle = (eligibleNow: boolean) => {
             const interactive = eligibleNow && !hasCompetingCurrentOwner(row);
@@ -586,10 +590,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
               row.setAttribute('aria-keyshortcuts', earlierShortcuts);
             }
           };
-          // The first apply reuses the render-time eligibility above, so the
-          // caller predicate runs once per row on mount; later notifies
-          // re-resolve it live.
-          applyStyle(eligible);
+          // The mount apply resolves eligibility live, so the caller
+          // predicate runs once per row on mount; later notifies re-resolve
+          // it the same way.
+          applyStyle(isEligibleNow());
           const unsubscribe = store.subscribe(key, () => {
             if (!row.isConnected) {
               clearRowActivationStyle(row);
@@ -622,21 +626,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
             ]
               .filter(Boolean)
               .join(' '),
-            ...(activeNow ? {'data-active': 'true' as const} : null),
-            // Seeded from the render-time eligibility; the subscriber
-            // corrects it against competing owners and later flips. Merged
-            // over earlier plugins' row style, which the spread preserves.
-            ...(eligible
-              ? {
-                  style: {
-                    ...props.htmlProps.style,
-                    [ELIGIBLE_CURSOR_VAR]: 'pointer',
-                  } as React.CSSProperties,
-                }
-              : null),
-            ...(eligible
-              ? {tabIndex: ownTabIndex, 'aria-keyshortcuts': ownShortcuts}
-              : null),
+            // No eligibility-dependent props are declared here: the row's ref
+            // callback applies the tab stop, key announcements, cursor gate
+            // and active paint on mount and keeps them live, so a render
+            // never reads the config.
             onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
               const row = event.currentTarget;
               // Earlier accumulated handlers run first and may cancel the
