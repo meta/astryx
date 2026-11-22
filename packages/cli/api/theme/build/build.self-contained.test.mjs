@@ -418,6 +418,48 @@ describe('a theme family whose registry reaches a TSX entry of a linked workspac
   });
 });
 
+describe('a theme family whose member’s slot function is in a TSX module, built by the CLI in its own process', () => {
+  it('compiles the slot module beside the family outputs, and the family module loads in plain Node', () => {
+    write(
+      'fam/slots.tsx',
+      `export const calmSlots = {\n  'code-block-copy': ({copied}: {copied: boolean}) => ({icon: copied ? 'checkDouble' : 'copy'}),\n};\n`,
+    );
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmSlots} from './slots.tsx';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', componentIcons: calmSlots});\n`,
+    );
+    const run = cli([
+      'theme',
+      'build',
+      '--family',
+      'fam/ocean.ts',
+      'fam/ocean-calm.ts',
+      '--family-key',
+      'ocean-family',
+    ]);
+    expect(run.stderr).not.toContain('Cannot import family registry');
+    expect(run.status).toBe(0);
+    expect(read('fam/ocean-family.js')).toContain(
+      "from './ocean-family.modules/slots.tsx.js'",
+    );
+    const loaded = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const m = await import(${JSON.stringify(path.join(dir, 'fam/ocean-family.js'))}); console.log(typeof m.oceanCalmTheme);`,
+      ],
+      {cwd: dir, encoding: 'utf8', timeout: 60_000},
+    );
+    expect(loaded.stderr).toBe('');
+    expect(loaded.stdout.trim()).toBe('object');
+  });
+});
+
 describe('a theme family with a compiled registry, where the build writes nothing', () => {
   const family = () => {
     write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);

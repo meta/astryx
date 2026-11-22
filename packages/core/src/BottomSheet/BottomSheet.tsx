@@ -137,6 +137,7 @@ export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 
 const styles = stylex.create({
   dialog: {
@@ -872,13 +873,14 @@ function StandaloneBottomSheet({
     },
     [dismissOnEscape, shouldDismissOnCloseRequest],
   );
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLDialogElement>) => {
-      if (hasScrim && event.target === event.currentTarget) {
-        dismissOnLightInteraction();
-      }
-    },
-    [dismissOnLightInteraction, hasScrim],
+  // A press on the ::backdrop targets the <dialog> itself. The press must
+  // start and end there.
+  const handleBackdropPress = useCallback(() => {
+    dismissOnLightInteraction();
+  }, [dismissOnLightInteraction]);
+  const backdropPress = useBackdropPress(
+    handleBackdropPress,
+    hasScrim && isOpen && purpose === 'info',
   );
 
   const isExiting = !isOpen && isPresented;
@@ -943,7 +945,10 @@ function StandaloneBottomSheet({
       onCancel={handleCancel}
       // Presses inside the sheet do not reach handlers around where it is
       // written. The dialog, not the panel, is the root, as in a switcher.
-      {...layerClickBoundary({onClick: handleClick})}>
+      {...layerClickBoundary({onClick: backdropPress.onClick})}
+      onPointerDownCapture={backdropPress.onPointerDownCapture}
+      onPointerUpCapture={backdropPress.onPointerUpCapture}
+      onPointerCancelCapture={backdropPress.onPointerCancelCapture}>
       <BottomSheetPanel
         {...props}
         ref={ref}
@@ -1027,6 +1032,9 @@ function SwitcherBottomSheetItem({
     onDialogCancel,
     onDialogClick,
     onDialogKeyDown,
+    onDialogPointerDownCapture,
+    onDialogPointerUpCapture,
+    onDialogPointerCancelCapture,
     settledSheet,
     releaseSettledSheet,
   } = switcher;
@@ -1299,7 +1307,10 @@ function SwitcherBottomSheetItem({
       {...layerClickBoundary({
         ...switcherDialogProps,
         onClick: onDialogClick,
-      })}>
+      })}
+      onPointerDownCapture={onDialogPointerDownCapture}
+      onPointerUpCapture={onDialogPointerUpCapture}
+      onPointerCancelCapture={onDialogPointerCancelCapture}>
       <div
         {...stylex.props(
           styles.positioner,

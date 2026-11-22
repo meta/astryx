@@ -344,6 +344,35 @@ function grayStop(family, stop) {
 }
 
 /**
+ * A part said to work in both modes, "headings that work in light and dark
+ * mode".
+ */
+const PLURAL_BOTH_MODES =
+  /\b(?:that\s+|which\s+)?(?:work(?:\s+well)?|look\s+good|hold\s+up|are\s+usable)\s+in\s+(?:both\s+)?(?:light\s+(?:and|&)\s+dark|dark\s+(?:and|&)\s+light)\s+modes?\b/gi;
+/**
+ * A plural part said to work in both modes, read as "in both modes".
+ * After a modal ("must", "could", "needs to") the verb says nothing of
+ * number, so only a plural part before it ("headings that could work") is
+ * read so; "text that must work …" is left as said ("modes" as "mode").
+ * @param {string} m @param {number} at @param {string} whole
+ */
+const pluralBothModesAt = (m, at, whole) => {
+  const before = whole.slice(0, at);
+  if (
+    !/\b(?:must|should|shall|will|would|could|can|may|to|needs?\s+to|has\s+to|have\s+to)\s+$/i.test(
+      before,
+    )
+  )
+    return ' in both modes ';
+  const part = /\b([a-z]+)\s+(?:that|which)\s+(?:[a-z]+\s+){1,2}$/i.exec(
+    before,
+  )?.[1];
+  // (A singular part keeps the base reading: "modes" reads as "mode".)
+  return part && /[^s]s$/i.test(part)
+    ? ' in both modes '
+    : m.replace(/\bmodes\b/i, 'mode');
+};
+/**
  * The palette names among the hues (terracotta, sage, slate…): read when
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
@@ -5007,6 +5036,10 @@ export function draftAnswer(ctx, env, question) {
           ? m
           : ', light and dark modes',
     )
+    // ("headings that work in light and dark mode should be navy": a plural
+    // part said to work in both modes is that part in both modes, as "in
+    // both modes" says it; the clause is never cut at its "and".)
+    .replace(PLURAL_BOTH_MODES, pluralBothModesAt)
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark.)
     .replace(
@@ -29563,8 +29596,8 @@ export function draftAnswer(ctx, env, question) {
     });
     // An undo that names more than one change ("Undo the card change and
     // the heading change"), or a look that more than one earlier change
-    // could be ("the heading size change" after a size and a bold), is not
-    // read for sure: nothing is taken back, and the answer says so.
+    // could be, is not read for sure: nothing is taken back, and the
+    // answer says so. A bare "size" or "weights" said alone is read below.
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
     const alsoNamed =
@@ -29590,8 +29623,42 @@ export function draftAnswer(ctx, env, question) {
         ? ['said']
         : []),
     ];
-    const looks = new Set(undone.flatMap(lookOf));
     const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    // ("Make the headings bigger. Make the headings bold. Undo the heading
+    // size change.": a look the undo names, read by `aspectsOf`, takes back
+    // only the earlier change of that look. A bare "size" is the part's
+    // text size or its room.)
+    const said = String(uc?.text ?? '').toLowerCase();
+    const lookNamed = [
+      ...new Set([
+        ...aspectsOf(said.replace(/\bweights\b/g, 'weight'))
+          .filter(a => a !== 'text' && a !== 'background')
+          .flatMap(a => (a === 'size' ? ['fontsize', 'size', 'spacing'] : [a])),
+        ...(/\bsizes?\b/.test(said) && !/\bfont[- ]?sizes?\b/.test(said)
+          ? ['fontsize', 'size', 'spacing']
+          : []),
+      ]),
+    ];
+    // (Only an undo said alone: one followed by another "… change" phrase
+    // reads as before.)
+    const followed =
+      next &&
+      !GOING_BACK.test(String(next.text ?? '')) &&
+      /\bchanges?\W*$/i.test(String(next.text ?? ''));
+    if (lookNamed.length && !several && !colorSaid && !followed) {
+      const ofLook = undone.filter(d =>
+        lookNamed.some(a => lookOf(d).includes(a)),
+      );
+      if (!ofLook.length && undone.length) {
+        // ("Make the headings bold. Undo the heading size change.": no
+        // change of that look was said, so nothing is taken back.)
+        unmet.text = `no ${part ? `${part} ` : ''}change of that look was said earlier in this ask, so nothing is taken back`;
+        if (uc) answeredByUndo.add(uc);
+        continue;
+      }
+      undone.splice(0, undone.length, ...ofLook);
+    }
+    const looks = new Set(undone.flatMap(lookOf));
     // ("Make the cards rounder. Undo the corner change.": an earlier change
     // the undo could mean, though it does not name it for sure.)
     const loose =
@@ -32784,8 +32851,17 @@ export function draftAnswer(ctx, env, question) {
     ) ||
     q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
-    const answeredText = result
-      .map(d => `${d.text} ${JSON.stringify(d.options)}`)
+    // (The words an undo reads, "undo", "change" and the look it names,
+    // were read with it; any other word of its clause is still named.)
+    const answeredText = [
+      ...result.map(d => `${d.text} ${JSON.stringify(d.options)}`),
+      ...[...answeredByUndo].flatMap(
+        c =>
+          String(/** @type {any} */ (c).text ?? '')
+            .toLowerCase()
+            .match(/\b(?:undo|changes?|sizes?|weights?)\b/g) ?? [],
+      ),
+    ]
       .join(' ')
       .toLowerCase();
     const STOP =
@@ -33195,6 +33271,62 @@ export function draftAnswer(ctx, env, question) {
     const writes = !unsure && result.some(r => r.options.some(o => o.length));
     if (writes) result.push(note);
     else result.splice(0, result.length, note);
+  }
+  // (A part said to work in both modes asks that it reads in both: a text
+  // color written for both that one mode's page makes hard to read says
+  // so, with that mode, the ratio and the way to keep it readable there.
+  // Only text on the page: a part that draws its own fill, a button,
+  // puts its text on that fill, never on the page. The page is the one the
+  // answer leaves: a page color any of its lines writes counts over the
+  // saved one.)
+  if (
+    modal &&
+    asked0.replace(PLURAL_BOTH_MODES, pluralBothModesAt) !== asked0
+  ) {
+    const answered = result.flatMap(r => r.options.flat());
+    /** @param {'light' | 'dark'} m */
+    const pageIn = m => {
+      const said = (/** @type {string | null} */ mode) =>
+        answered.find(
+          st =>
+            st.verb === 'set' &&
+            st.thing === '--color-background-body' &&
+            (st.mode ?? null) === mode,
+        )?.value;
+      return String(
+        said(m) ?? said(null) ?? current('--color-background-body', m),
+      );
+    };
+    for (const r of result) {
+      /** @type {string[]} */
+      const notes = [];
+      for (const step of r.options.flat()) {
+        if (
+          step.verb !== 'set' ||
+          step.mode ||
+          !(
+            step.thing === 'color' || /^--color-text-/.test(String(step.thing))
+          ) ||
+          (step.on && !textOnlyPart(String(step.on)))
+        )
+          continue;
+        const rgb = parseColor(String(step.value));
+        if (!rgb) continue;
+        for (const m of /** @type {const} */ (['light', 'dark'])) {
+          const page = parseColor(pageIn(m));
+          const read = page ? ratio(rgb, page) : Infinity;
+          // (Which way to move follows the measured page: lighter where
+          // white reads better on it than black.)
+          const lighter =
+            page != null &&
+            ratio(/** @type {any} */ (parseColor('#ffffff')), page) >
+              ratio(/** @type {any} */ (parseColor('#000000')), page);
+          const note = `${step.value} reads ${read.toFixed(2)}:1 on the ${m} page (under 4.5:1); for ${m} mode, set a ${lighter ? 'lighter' : 'darker'} color with --mode ${m}`;
+          if (read < 4.5 && !notes.includes(note)) notes.push(note);
+        }
+      }
+      if (notes.length) r.text = `${r.text}; ${notes.join('; ')}`;
+    }
   }
   // Each file set aside is written back as typed, where an answer names or
   // writes it.
