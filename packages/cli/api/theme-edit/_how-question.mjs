@@ -137,7 +137,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, clash?: boolean, batch?: {leftOut: string}, offer?: boolean, already?: boolean, joined?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, takesBack?: string, clash?: boolean, batch?: {leftOut: string}, offer?: boolean, already?: boolean, joined?: boolean}} Draft
  */
 
 /** The words a badge style ask is made of when the style is all it asks. */
@@ -14399,6 +14399,7 @@ export function draftAnswer(ctx, env, question) {
           : {}
       ),
       ...(input.unmet ? {unmet: input.unmet} : {}),
+      ...(input.takesBack ? {takesBack: input.takesBack} : {}),
       ...(d.offer || input.offer ? {offer: true} : {}),
       ...(d.already || input.already ? {already: true} : {}),
     };
@@ -19950,6 +19951,26 @@ export function draftAnswer(ctx, env, question) {
         (st.on ?? '') === (on ?? ''),
     );
     const what = role ? role[1] : (c.aspects[0] ?? 'everything');
+    const named = `${what}${on ? ` on ${on}` : ''}`;
+    // ("Undo the light mode accent change" on a theme with both modes: a
+    // setting saved for that mode only. A setting saved the same for both
+    // modes is named, with how to take it back in both.)
+    if (c.mode && env.data.mode === 'both' && matches.length) {
+      const ofMode = matches.filter(st => st.mode === c.mode);
+      if (!ofMode.length)
+        return matches.some(st => !st.mode)
+          ? {
+              text: `${env.slug} sets ${named} the same in both modes, so an undo of ${c.mode} mode alone takes nothing back; an undo that names no mode takes it back in both`,
+              options: [],
+              takesBack: named,
+            }
+          : {
+              text: `${env.slug} sets nothing for ${named} in ${c.mode} mode, so it already uses the base value there`,
+              options: [],
+              unmet: named,
+            };
+      matches.splice(0, matches.length, ...ofMode);
+    }
     if (!matches.length)
       return {
         text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}, so it already uses the base value`,
@@ -19974,6 +19995,9 @@ export function draftAnswer(ctx, env, question) {
         ),
       ],
       sequence: matches.length > 1,
+      // (A change said earlier in the same ask is what the undo takes
+      // back, before a saved setting.)
+      takesBack: named,
     };
   }
 
@@ -29763,9 +29787,11 @@ export function draftAnswer(ctx, env, question) {
   // rest of the ask stands. Only a change of what the undo names: "Reset
   // the card shadows" takes back a card shadow, never "cards rounder", and
   // never a change said after it. Each undo is read in turn.)
-  for (const unmet of result.filter(d => d.unmet)) {
+  for (const unmet of result.filter(d => d.unmet || d.takesBack)) {
     const [, what, part] =
-      /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
+      /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(
+        String(unmet.unmet ?? unmet.takesBack ?? ''),
+      ) ?? [];
     const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
     // ("Undo the button color change": a part's color is its fill and its
     // text, and the readable text a fill brings.)
@@ -29778,7 +29804,8 @@ export function draftAnswer(ctx, env, question) {
     )?.[2];
     const matched = result.filter(d => {
       const c = /** @type {any} */ (draftClause.get(d));
-      if (d === unmet || d.unmet || !d.options.length || !c) return false;
+      if (d === unmet || d.unmet || d.takesBack || !d.options.length || !c)
+        return false;
       if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
       // (Of the part the undo names; with no part, of the whole theme.)
       const onPart = part
@@ -29852,6 +29879,9 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // (An undo of a saved setting with no earlier change of it in the ask
+    // stays as it is.)
+    if (unmet.takesBack && !undone.length) continue;
     if (!undone.length && matched.length) {
       const modes = new Set(
         matched.map(d => /** @type {any} */ (draftClause.get(d))?.mode),
@@ -29949,6 +29979,7 @@ export function draftAnswer(ctx, env, question) {
       (looksSaid.length > 0 &&
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
+    if (unsure && unmet.takesBack) continue;
     if (unsure) {
       unmet.text = several
         ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
@@ -29962,7 +29993,9 @@ export function draftAnswer(ctx, env, question) {
     // (A whole answer that holds every line, "all of it, in order", loses
     // each line taken back once; a later clause that says the change again
     // keeps it.)
-    const gone = undone.flatMap(d => d.options[0] ?? []);
+    // (The undo's own saved-setting lines go too: the undo meant the change
+    // said in the ask.)
+    const gone = [unmet, ...undone].flatMap(d => d.options[0] ?? []);
     /** Whole answers the take-back leaves with no line. @type {Set<Draft>} */
     const emptied = new Set();
     for (const d of result)
@@ -33444,7 +33477,14 @@ export function draftAnswer(ctx, env, question) {
       // ("in dark mode, cards …": a mode the other lines carry is used.)
       const modeOnly =
         /^(?:(?:in|for|on)\s+)?(?:the\s+)?(dark|light)(?:[- ]mode)?$/.exec(t);
-      if (modeOnly && steps.some(st => st.mode === modeOnly[1])) return false;
+      // (Also when an undo it gave its mode to read it: "in dark mode,
+      // reset the card background" on a theme that saves nothing there.)
+      if (
+        modeOnly &&
+        (steps.some(st => st.mode === modeOnly[1]) ||
+          clauses.some(o => o !== c && taken.has(o) && o.mode === modeOnly[1]))
+      )
+        return false;
       if (
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),
