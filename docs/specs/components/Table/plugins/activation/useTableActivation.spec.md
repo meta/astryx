@@ -243,6 +243,25 @@ owner. Non-flat, unknown custom-body, and competing-owner combinations neutralis
 activation deterministically while preserving legacy plugin behavior.
 Rejected: inferring row kind/ownership from plugin names, insertion order, key prefixes, or DOM markers.
 
+### DEC-6 — No shared behavior engine for the activation module
+
+**Reference:** `module:Table/useTableActivation/DEC-6`
+**Decider:** `nbozidarevic`, `2026-11-22`
+
+The activation behavior module names no shared engine because none listed
+fits its three parts. Press suppression is already shared (`rowPressGuard.ts`,
+ORD4, one guard for activation, expansion and tree). The focus engines
+(`useListFocus`, `useTreeFocus`, `useGridFocus`) own focus movement — arrow-key
+navigation the contract excludes, since rows keep native focus behavior with
+entry tab stops and action keys only. Motion, gesture, layer, hover, windowing
+and overflow engines cover behavior this module has none of, by contract. The
+remaining part — store-subscribed imperative reflection of tab stop, key
+announcements, active paint and current-state exposure per row — follows the
+selection store shape with activation-local state; no listed engine provides
+it. Rejected: adopting a focus engine for its entry-stop half while carrying
+unwanted focus movement, and unifying the selection and activation state
+machines across their separate release owners.
+
 ## Open questions
 
 None. The normative contract is complete. Implementation and release verification
