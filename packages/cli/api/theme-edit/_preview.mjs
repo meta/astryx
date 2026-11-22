@@ -1471,6 +1471,11 @@ const SAMPLE_SOURCE_LINES = [
   '};',
 ];
 
+/** The preset ranges the page hands a date range input: two fixed ones. */
+const SAMPLE_PRESETS_LINES = [
+  "const SAMPLE_PRESETS = [{label: 'This week', getRange: () => ({start: '2026-01-12', end: '2026-01-16'})}, {label: 'Next week', getRange: () => ({start: '2026-01-19', end: '2026-01-23'})}];",
+];
+
 /**
  * A copy of an element tree in which every part that requires a search
  * source and has none gets the page's sample source. A typeahead without a
@@ -1560,11 +1565,19 @@ export function withHandlers(v, project) {
  * @param {unknown} v
  * @returns {boolean}
  */
-const usesSource = v =>
+const usesSource = v => usesCode(v, SAMPLE_SOURCE.__code);
+
+/**
+ * Whether an element tree uses one of the page's samples, by its name.
+ * @param {unknown} v
+ * @param {string} code
+ * @returns {boolean}
+ */
+const usesCode = (v, code) =>
   isCode(v)
-    ? v.__code === SAMPLE_SOURCE.__code
+    ? v.__code === code
     : Boolean(v && typeof v === 'object') &&
-      Object.values(/** @type {object} */ (v)).some(usesSource);
+      Object.values(/** @type {object} */ (v)).some(x => usesCode(x, code));
 
 /** The heading of each group on the components page. */
 const GROUP_TITLES = wordTable(
@@ -1737,6 +1750,7 @@ function componentsPage(project, {theme = null, C}) {
     ...CELL,
     '',
     ...(usesSource(items) ? [...SAMPLE_SOURCE_LINES, ''] : []),
+    ...(usesCode(items, 'SAMPLE_PRESETS') ? [...SAMPLE_PRESETS_LINES, ''] : []),
     'export default function ComponentsPage() {',
     '  return (',
     '    <div>',
