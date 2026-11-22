@@ -793,19 +793,41 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     settleDetach();
   });
 
-  // Effect: keeps the window's input stream hearing mouse moves
-  // (isMouseMove) while a hover can open this tooltip: enabled, and not
-  // controlled by `isOpen`.
-  const opensOnHover = isEnabled && isOpen === undefined;
-  useEffect(() => {
-    if (!opensOnHover) {
+  // Keeps the trigger's window's input stream hearing mouse moves
+  // (isMouseMove) while a hover can open this tooltip: a trigger is
+  // attached, and the tooltip is enabled and not controlled by `isOpen`.
+  const mouseMoveHoldRef = useRef<{
+    view: Window;
+    release: () => void;
+  } | null>(null);
+  const syncMouseMoveHold = useCallback(() => {
+    const latest = handlersRef.current;
+    const view =
+      latest.isEnabled && latest.isOpen === undefined
+        ? (triggerRef.current?.ownerDocument.defaultView ?? null)
+        : null;
+    const held = mouseMoveHoldRef.current;
+    if ((held?.view ?? null) === view) {
       return;
     }
-    return holdMouseMoves(
-      triggerRef.current?.ownerDocument.defaultView ??
-        (typeof window === 'undefined' ? null : window),
-    );
-  }, [opensOnHover]);
+    held?.release();
+    mouseMoveHoldRef.current =
+      view == null ? null : {view, release: holdMouseMoves(view)};
+  }, [handlersRef]);
+  const opensOnHover = isEnabled && isOpen === undefined;
+  // Effect: follows a change to `isEnabled` or `isOpen` after the trigger
+  // attached.
+  useEffect(() => {
+    syncMouseMoveHold();
+  }, [opensOnHover, syncMouseMoveHold]);
+  // Effect: releases the hold when the hook unmounts.
+  useEffect(
+    () => () => {
+      mouseMoveHoldRef.current?.release();
+      mouseMoveHoldRef.current = null;
+    },
+    [],
+  );
 
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
@@ -855,6 +877,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       el.addEventListener('focusout', onFocusOut);
       el.addEventListener('focusout', onHeldFocusOut);
       triggerRef.current = el;
+      syncMouseMoveHold();
 
       // A trigger that attaches again after its wiring was removed
       // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -920,6 +943,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         stopPressTrackingRef.current?.();
         if (triggerRef.current === el) {
           triggerRef.current = null;
+          syncMouseMoveHold();
         }
         // This cleanup runs before the commit's insertion Effects write the
         // flags, so the detach settles once they are written.
@@ -929,7 +953,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       detachTriggerRef.current = detach;
       return detach;
     },
-    [handlersRef, settleDetach],
+    [handlersRef, settleDetach, syncMouseMoveHold],
   );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef

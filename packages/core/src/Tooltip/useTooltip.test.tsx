@@ -28,6 +28,7 @@ import {useLayer} from '../Layer/useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Suspense, startTransition, use, useState} from 'react';
 import type {Ref, RefCallback} from 'react';
+import {createPortal} from 'react-dom';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -261,6 +262,64 @@ describe('useTooltip — a pointer that does not move', () => {
     expect(live()).toBe(0);
     add.mockRestore();
     remove.mockRestore();
+  });
+
+  it("holds the trigger's own window, for a trigger that attaches after mount or moves to another document", () => {
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const frameWindow = frame.contentWindow as Window;
+    const frameDocument = frame.contentDocument as Document;
+    const liveIn = (target: Window) => {
+      const count = (calls: unknown[][]) =>
+        calls.filter(
+          ([type, , options]) =>
+            type === 'pointermove' &&
+            (options as EventListenerOptions | undefined)?.capture === true,
+        ).length;
+      const {add, remove} = spies.get(target)!;
+      return count(add.mock.calls) - count(remove.mock.calls);
+    };
+    const spies = new Map(
+      [window, frameWindow].map(target => [
+        target,
+        {
+          add: vi.spyOn(target, 'addEventListener'),
+          remove: vi.spyOn(target, 'removeEventListener'),
+        },
+      ]),
+    );
+    function Placed({place}: {place: 'none' | 'main' | 'frame'}) {
+      const tooltip = useTooltip({});
+      const button = (
+        <button type="button" ref={tooltip.ref}>
+          Trigger
+        </button>
+      );
+      return (
+        <>
+          {place === 'main' && button}
+          {place === 'frame' && createPortal(button, frameDocument.body)}
+          {tooltip.renderTooltip('Helpful text')}
+        </>
+      );
+    }
+    // No trigger yet: nothing to hold.
+    const view = render(<Placed place="none" />);
+    expect(liveIn(window)).toBe(0);
+    // The trigger attaches after mount, in the main document.
+    view.rerender(<Placed place="main" />);
+    expect(liveIn(window)).toBe(1);
+    // The trigger moves into the frame: the hold moves with it.
+    view.rerender(<Placed place="frame" />);
+    expect(liveIn(window)).toBe(0);
+    expect(liveIn(frameWindow)).toBe(1);
+    view.unmount();
+    expect(liveIn(frameWindow)).toBe(0);
+    for (const {add, remove} of spies.values()) {
+      add.mockRestore();
+      remove.mockRestore();
+    }
+    frame.remove();
   });
 
   it('a press on a trigger that appeared under a still mouse keeps it closed on the next move', () => {
