@@ -34,12 +34,15 @@ export const WEBKIT_A11Y_SPEC_GLOBS = Object.freeze([
  * Chromium and WebKit: it can fire `pointermove` before `mouseenter`. Each spec
  * here is in the Tooltip, InfoTip, HoverCard, DropdownMenu or NavMenu folder
  * and opens or moves a hover surface by moving the pointer; specs of other
- * components that open one are not listed. The list names files, not globs: a
+ * components that open one are not listed. MenuPress is left out: its cases
+ * drive touches and clicks through Chromium's DevTools protocol, which Firefox
+ * does not have. The list names files, not globs: a
  * file named `.a11y.chromium.spec.ts` runs here too, and a case in it that
  * needs a Chromium-only API skips in other browsers and says why.
  */
 export const FIREFOX_HOVER_SPECS = Object.freeze([
   'packages/core/src/DropdownMenu/__tests__/DropdownMenuAudit.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/DropdownMenuDisabledRow.a11y.browser.spec.ts',
   'packages/core/src/DropdownMenu/__tests__/DropdownMenuItemAudit.a11y.chromium.spec.ts',
   'packages/core/src/DropdownMenu/__tests__/DropdownMenuRadioItemAudit.a11y.chromium.spec.ts',
   'packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts',
