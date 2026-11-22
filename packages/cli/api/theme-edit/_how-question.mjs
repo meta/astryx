@@ -33221,19 +33221,42 @@ export function draftAnswer(ctx, env, question) {
     };
     /** @type {Map<string, {step: Step, ratio: number, under: string, washed: boolean}>} */
     const out = new Map();
-    /** A part, or a part holding it, the theme or the ask itself colors. @param {string} part */
-    const colored = part =>
-      [...env.data.settings, ...steps].some(
+    /** The parts that hold a part: by name, and those that list it. @param {string} part */
+    const holders = part =>
+      Object.keys(C.MAP).filter(
+        h =>
+          h !== part &&
+          (part.startsWith(`${h}-`) ||
+            /** @type {string[]} */ (C.MAP[h]?.contains ?? []).includes(part)),
+      );
+    /**
+     * A part the theme or any line of the ask colors: itself, a part holding
+     * it, or a part drawn with it that reads the same text color (a menu
+     * row is both the menu item and the item it renders). A group setting
+     * reaches each of its parts.
+     * @param {string} part @param {string} token
+     */
+    const colored = (part, token) => {
+      const up = holders(part);
+      const beside = up.flatMap(h =>
+        /** @type {string[]} */ (C.MAP[h]?.contains ?? []).filter(
+          (/** @type {string} */ s) =>
+            s !== part &&
+            (C.partReads(s, 'text') ?? []).some(r => r.token === token),
+        ),
+      );
+      const near = new Set([part, ...up, ...beside]);
+      return [...env.data.settings, ...steps].some(
         x =>
           x.on &&
-          (part === x.on || part.startsWith(`${x.on}-`)) &&
           (/^(?:background|background-color|color)$/.test(x.thing) ||
-            /^--color-/.test(x.thing)),
+            /^--color-/.test(x.thing)) &&
+          partsOf(ctx, /** @type {any} */ (x)).some(t => near.has(t)),
       );
+    };
     /** The fill of a part holding this one, when it does not follow the page. @param {string} part */
     const heldOff = part =>
-      Object.keys(C.MAP).some(holder => {
-        if (holder === part || !part.startsWith(`${holder}-`)) return false;
+      holders(part).some(holder => {
         const fill = (C.partReads(holder, 'background') ?? []).find(b =>
           (b.when ?? []).includes(''),
         );
@@ -33245,13 +33268,14 @@ export function draftAnswer(ctx, env, question) {
       // (A part whose own colors the theme or the ask sets, or that sits in
       // a holder of another color, is measured by the theme's own check,
       // never on the page.)
-      if (colored(part) || heldOff(part)) continue;
+      if (heldOff(part)) continue;
       const bg = (C.partReads(part, 'background') ?? []).filter(
         r => !/overlay|tint/.test(r.token),
       );
       for (const r of C.partReads(part, 'text') ?? []) {
         if (!/^--color-text-/.test(r.token) || /disabled/.test(r.token))
           continue;
+        if (colored(part, r.token)) continue;
         // (A text color the ask writes is the asker's.)
         if (
           result.some(o =>
@@ -33456,7 +33480,9 @@ export function draftAnswer(ctx, env, question) {
               m,
               modes.length > 1 || !!st.mode,
               fixes,
-              d.options[0],
+              // (Every line the ask writes, in any of its answers: a menu
+              // another clause colors is a holder colored apart.)
+              [...new Set(result.flatMap(o => o.options.flatMap(opt => opt)))],
             ).map(f => ({...f, page: String(st.value)})),
           );
     }
