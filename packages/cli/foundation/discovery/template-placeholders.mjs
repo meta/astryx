@@ -442,7 +442,7 @@ export function templatePlaceholderProblems(templates, definitions) {
             : null;
         if (!meaning || !definitions.has(meaning)) {
           problems.push(
-            `${id}: ${name} names no icon meaning. Fix: import <Meaning>Icon for an icon definition (astryx experimental icon <words> finds it), or add the definition in the same change.`,
+            `${id}: ${name} names no icon meaning. Fix: import <Meaning>Icon for an icon meaning (astryx experimental icon <words> finds it), or add the meaning in the same change.`,
           );
           continue;
         }

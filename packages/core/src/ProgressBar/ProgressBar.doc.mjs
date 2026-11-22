@@ -98,7 +98,8 @@ export const docs = {
     {
       name: 'variant',
       type: "'accent' | 'success' | 'warning' | 'error' | 'neutral'",
-      description: 'Semantic color variant.',
+      description:
+        'Semantic color variant. A variant a theme adds paints the accent fill until the theme styles it.',
       default: "'accent'",
     },
     {
@@ -182,6 +183,11 @@ export const docs = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -243,13 +249,15 @@ export const docsZh = {
     {
       name: 'variant',
       type: "'accent' | 'success' | 'warning' | 'error' | 'neutral'",
-      description: '语义颜色变体。',
+      description:
+        '语义颜色变体。主题新增的变体在主题为其设置样式之前使用强调色填充。',
       default: "'accent'",
     },
     {
       name: 'isIndeterminate',
       type: 'boolean',
-      description: '用于未知进度的动画加载指示器。',
+      description:
+        '用于未知进度的动画加载指示器。在减少动态效果的设置下，它在原处脉动而不是滑动。',
       default: 'false',
     },
     {
@@ -326,6 +334,11 @@ export const docsZh = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -369,6 +382,11 @@ export const docsDense = {
           "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
       },
       {
+        guidance: true,
+        description:
+          'Screen readers announce the track as a progressbar: the label is its name and the value text is what they read. Pass formatValueLabel when a percentage would mislead, such as "3 of 5 files".',
+      },
+      {
         guidance: false,
         description:
           'Place icons or labels inside the bar; compose them alongside it using layout components.',
@@ -393,11 +411,12 @@ export const docsDense = {
     hasValueLabel: 'Show formatted value text (ignored when indeterminate).',
     formatValueLabel:
       'Custom value label formatter; defaults to percentage string.',
-    variant: 'Semantic color variant.',
+    variant:
+      'Semantic color variant; a theme-added variant paints the accent fill until styled.',
     isIndeterminate:
       'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
     marks:
-      'Fixed target marks ({value, label?}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
+      'Fixed target marks ({value, label}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
     isDisabled: 'Visually disabled: grays out fill and text.',
     xstyle:
       'StyleX styles for layout customization. Must be stylex.create() value.',

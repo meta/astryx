@@ -6,8 +6,9 @@
  * @file TruncationTooltip.tsx
  * @input A truncated element's ref, its full text and the tooltip placement
  * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
- *   module once text is truncated and tracks the first hover, tap or focus on
- *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
+ *   module once text is truncated, or after the page's first paint for text
+ *   that measures on interest, and tracks the first hover, tap or focus on it,
+ *   and `TruncationTooltip`, the Tooltip that mounts on that interaction
  * @position Shared by Text, Heading and Lab's LineClamp (through Core's internal
  *   line-clamp entry). Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
@@ -42,6 +43,19 @@ const tooltipModule = createModuleLoader(
   async () => import('../Tooltip/Tooltip'),
 );
 
+// The page's texts share one preload. It waits a frame and a task for the
+// paint, then loads the module once. The shared loader keeps no failed load,
+// so the next text tries again.
+const afterPaintModule = createModuleLoader(async () => {
+  await new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
+  return tooltipModule.load();
+});
+const loadAfterNextPaint = afterPaintModule.load;
+
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
@@ -58,54 +72,74 @@ export interface TruncationTooltipInterest {
 
 /**
  * Tracks the interaction that mounts a truncated element's tooltip, while
- * `isEnabled`, until the mounted tooltip reads it. A finger's arrival does not
+ * `isEnabled` or, with `measure`, while the interaction measures the text
+ * truncated, until the mounted tooltip reads it. A finger's arrival does not
  * count: only a press that the touch trigger's recognizer takes for a tap
  * does. Once the tooltip has read the interaction, its own listeners take
  * over.
  */
 export function useTruncationTooltipInterest(
   isEnabled: boolean,
+  // For text that measures on interest: measures now and returns whether the
+  // text is truncated, so the interaction that measures it can mount the
+  // tooltip.
+  measure?: () => boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
     () => tooltipModule.loaded()?.Tooltip ?? null,
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
-  // the first interaction mounts the tooltip at once.
+  // the first interaction mounts the tooltip at once. Text that measures on
+  // interest has no answer yet. It joins the page's one after-paint preload,
+  // so the page shows first, and a hover never hurries the load.
   useEffect(() => {
-    if (!isEnabled || tooltip != null) {
+    if ((!isEnabled && measure == null) || tooltip != null) {
       return;
     }
     let isCurrent = true;
-    tooltipModule.load().then(
-      loaded => {
-        if (isCurrent) {
-          setTooltip(() => loaded.Tooltip);
-        }
-      },
+    const show = (loaded: {Tooltip: TooltipComponent}) => {
+      if (isCurrent) {
+        setTooltip(() => loaded.Tooltip);
+      }
+    };
+    (measure == null ? tooltipModule.load() : loadAfterNextPaint()).then(
+      show,
       () => {},
     );
     return () => {
       isCurrent = false;
     };
-  }, [isEnabled, tooltip]);
+  }, [isEnabled, measure, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,
     isRead: false,
   });
   const tapRecognizer = useTapRecognizer();
+  // A tooltip that read an interaction unmounts while the text fits. When the
+  // text is cut off again, the next tooltip reads the next interaction.
+  const measureInterest = useCallback((): boolean => {
+    if (measure == null) {
+      return isEnabled;
+    }
+    const isTruncated = measure();
+    if (isTruncated && !isEnabled) {
+      interestRef.current.isRead = false;
+    }
+    return isTruncated;
+  }, [isEnabled, measure]);
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
-      if (!isEnabled || state.isRead) {
+      if (!measureInterest() || state.isRead) {
         return;
       }
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
     },
-    [isEnabled],
+    [measureInterest],
   );
   const forget = useCallback((interest: 'hover' | 'focus') => {
     const state = interestRef.current;
@@ -137,7 +171,7 @@ export function useTruncationTooltipInterest(
   }, [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (!isEnabled || interestRef.current.isRead) {
+      if (!measureInterest() || interestRef.current.isRead) {
         tapRecognizer.forget();
         return;
       }
@@ -153,7 +187,7 @@ export function useTruncationTooltipInterest(
         forget('hover');
       }
     },
-    [isEnabled, tapRecognizer, want, forget],
+    [measureInterest, tapRecognizer, want, forget],
   );
   const onFocus = useCallback(
     (event: FocusEvent<HTMLElement>) => {

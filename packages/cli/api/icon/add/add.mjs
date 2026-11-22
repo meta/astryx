@@ -357,7 +357,7 @@ export async function iconAdd(exportName, options) {
         sameIconModule(own.module, source.module)
       ) {
         throw new AstryxError(
-          `"${sourceExport}" is icon "${id}"'s own export, which draws its default look, so it can't be its ${variant} variant too.`,
+          `"${sourceExport}" is icon "${id}"'s own export, which draws its default variant, so it can't be its ${variant} variant too.`,
           undefined,
           ERROR_CODES.ERR_INVALID_ARGUMENT,
         );
@@ -759,11 +759,11 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       ...(set.data.variants ?? []).filter(each => each !== variant),
     ];
     throw new AstryxError(
-      `"${source.module}" is the module the ${own.length} icons of "${set.name}" come from: its exports are those icons in the look they draw now, so "${variant}" is that look and can't be a variant of them. "${set.name}" declares no default variant; declare "${variant}" as the default first.`,
+      `"${source.module}" is the module the ${own.length} icons of "${set.name}" come from: its exports already draw those icons as "${variant}", so "${variant}" can't be another variant of them. "${set.name}" declares no default variant; declare "${variant}" as the default first.`,
       [
         {
           name: `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')} --default-variant ${variant}`,
-          reason: `declare ${variant}, the look each icon draws, as the default`,
+          reason: `declare ${variant}, the variant each icon draws, as the default`,
         },
       ],
       ERROR_CODES.ERR_INVALID_ARGUMENT,

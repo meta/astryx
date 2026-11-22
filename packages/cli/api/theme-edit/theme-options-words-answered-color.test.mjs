@@ -98,7 +98,7 @@ describe('an option or words a command does not take', () => {
     async () => {
       const r = await cli([...ED, 'show', 't', '--zz']);
       expect(r.error).toContain(
-        "unknown option '--zz': show takes --section, --png and --json.",
+        "unknown option '--zz': show takes --on, --section, --png and --json.",
       );
       expect(names(r)[0]).toMatch(/ editor show t$/);
       expect((await follow(names(r)[0])).error).toBeUndefined();

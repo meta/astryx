@@ -68,6 +68,9 @@ export async function searchIconSection(
   if (!iconFeatureGate(project).on) return null;
   const loaded = /** @type {Project} */ (project);
   const {iconSection} = await import('./_icons.mjs');
+  const {coreComponentNames} = await import('../icon/_adapter.mjs');
+  /** @type {string[] | undefined} */
+  let names;
   return iconSection(
     query,
     {
@@ -87,6 +90,7 @@ export async function searchIconSection(
           };
         }
       },
+      componentNames: () => (names ??= coreComponentNames(cwd)),
     },
     {declaredNames, resultDomains, limit},
   );

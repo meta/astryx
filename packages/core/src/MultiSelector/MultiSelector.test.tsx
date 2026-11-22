@@ -155,6 +155,12 @@ beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
 });
 
+// The labels trigger isolates each item in its own element, so its text
+// spans several text nodes. The match reads the whole text content.
+const textContentIs = (text: string) => (_: string, element: Element | null) =>
+  element?.textContent === text &&
+  [...(element?.children ?? [])].every(child => child.textContent !== text);
+
 describe('MultiSelector', () => {
   const defaultOptions = ['Apple', 'Banana', 'Orange'];
 
@@ -510,7 +516,9 @@ describe('MultiSelector', () => {
         />
       </InternationalizationProvider>,
     );
-    expect(screen.getByText('Apple, Banana und Orange')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana und Orange')),
+    ).toBeInTheDocument();
   });
 
   it('writes the labels overflow through one catalog message', () => {
@@ -532,7 +540,7 @@ describe('MultiSelector', () => {
       </InternationalizationProvider>,
     );
     expect(
-      screen.getByText('Apple, Banana, Orange und 2 weitere'),
+      screen.getByText(textContentIs('Apple, Banana, Orange und 2 weitere')),
     ).toBeInTheDocument();
   });
 
@@ -613,7 +621,85 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Apple, Banana')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana')),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a right-to-left label that starts with a Latin word in the page direction', () => {
+    render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Team"
+          options={['iPhone חדש', 'Design']}
+          value={['iPhone חדש', 'Design']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </div>,
+    );
+    const label = [
+      ...screen.getByRole('combobox').querySelectorAll('span'),
+    ].find(span => span.textContent === 'iPhone חדש');
+    // No `dir="auto"`: the first strong letter is Latin, which would lay the
+    // Hebrew label out left to right.
+    expect(label).not.toHaveAttribute('dir');
+  });
+
+  it('gives the overflow count the locale direction, so a right-to-left locale keeps its form', () => {
+    render(
+      <InternationalizationProvider locale="he-IL">
+        <MultiSelector
+          label="Team"
+          options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          value={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    const spans = [
+      ...screen.getByRole('combobox').querySelectorAll('span'),
+    ].filter(span =>
+      ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
+    );
+    expect(spans.map(span => span.getAttribute('dir'))).toEqual([
+      'ltr',
+      null,
+      null,
+      'rtl',
+    ]);
+  });
+
+  it('isolates each label and the overflow count, keeping the trigger text', () => {
+    render(
+      <MultiSelector
+        label="Team"
+        options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        value={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        onChange={() => {}}
+        triggerDisplay="labels"
+      />,
+    );
+    expect(
+      screen.getByText(textContentIs('Design, עיצוב, שיווק, +2')),
+    ).toBeInTheDocument();
+    const isolated = [...screen.getByRole('combobox').querySelectorAll('span')]
+      .filter(span =>
+        ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
+      )
+      .map(span => [span.textContent, span.getAttribute('dir')]);
+    expect(isolated).toEqual([
+      ['Design', 'ltr'],
+      ['עיצוב', null],
+      ['שיווק', null],
+      ['+2', 'ltr'],
+    ]);
+    // A screen reader reads the same name and text: no bidi control characters.
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveAccessibleName('Team');
+    expect(trigger).toHaveTextContent('Design, עיצוב, שיווק, +2');
+    expect(trigger.textContent).not.toMatch(/[\u2066-\u2069\u200e\u200f]/);
   });
 
   it('shows labels display with overflow', () => {
@@ -626,7 +712,9 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Apple, Banana, Orange, +2')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana, Orange, +2')),
+    ).toBeInTheDocument();
   });
 
   it('opens dropdown on click', async () => {
