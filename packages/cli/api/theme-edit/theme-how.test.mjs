@@ -3406,7 +3406,7 @@ const QUESTIONS_J = [
   ],
   [
     'font size 16px line height 150%',
-    {top: /^set q --text-body-leading 2\.14$/},
+    {top: /^set q --text-body-leading 1\.5$/},
   ],
   [
     'font size 16px line height normal',
