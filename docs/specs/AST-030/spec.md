@@ -574,7 +574,7 @@ they are separately named.
 
 - **FR23 — A release-check finishes in minutes, and the release owner can
   re-check `main`'s tip at once.** A release-check runs its browser owners in
-  legs that all start together: six accessibility-audit legs, six contract
+  legs that all start together: six accessibility-audit legs, seven contract
   legs, eight visual-scout legs and six Core RTL legs, beside the other RTL
   packages. A contract spec file longer than one leg's share is cut into
   consecutive runs of its tests in different legs, and every listed test runs
