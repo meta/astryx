@@ -775,11 +775,11 @@ describe("a set that wraps the template's library", () => {
     expect(icons?.kept.map(each => [each.export, each.reason])).toEqual([
       [
         'FrameGlyph',
-        'no set in your list maps its icon definition, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+        'no set in your list maps its icon meaning, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
       ],
       [
         'ScissorsGlyph',
-        'no set in your list maps its icon definition, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+        'no set in your list maps its icon meaning, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
       ],
     ]);
   });
@@ -832,7 +832,7 @@ describe("a set that wraps the template's library", () => {
     };
     const asBackup = map(subpath, DECLARED, backup, [SET, WRAPPER]);
     expect(asBackup.icons?.kept.map(each => each.reason)).toContain(
-      'no set in your list maps its icon definition, and it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
+      'no set in your list maps its icon meaning, and it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
     );
   });
 

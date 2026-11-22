@@ -373,8 +373,9 @@ const QUESTIONS = [
   [
     'glossy gradient header',
     {
-      top: /^set q background 'linear-gradient\(.*\)' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.background=linear-gradient/,
+      // (A gloss is the part's own color in each mode: the sample is help,
+      // never written.)
+      top: null,
     },
   ],
   // borders
@@ -528,7 +529,7 @@ const QUESTIONS = [
     'square corners everywhere',
     {
       // (The dial squares the pills that are a styling choice itself.)
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -888,6 +889,47 @@ describe('stripe answers keep to the stripe', () => {
   it('never darkens the even stripe for "odd rows darker"', async () => {
     expect(await commandsFor('odd rows darker background')).not.toMatch(
       /parity:even|--color-background-muted/,
+    );
+  });
+});
+
+describe("the stripes' names in any form", () => {
+  /** @param {string} question */
+  const topSet = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const top = (data.results ?? []).find(
+      (/** @type {{commands: string[]}} */ r) =>
+        r.commands.some(c => / editor set /.test(c)),
+    );
+    return bare(top?.commands[0] ?? '');
+  };
+  // Another form of a name ("alternating"), or the component named before
+  // its last word ("every other table row"), still names the stripes.
+  it.each([
+    'shade every other table row',
+    'alternating row colors',
+    'alternating rows',
+    'alternately shaded rows',
+  ])('stripes the even rows for %s', async question => {
+    expect(await topSet(question)).toMatch(
+      /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    );
+  });
+  // A word that only starts like a name is not one: "strip" is a removal,
+  // "alternatively" a way of saying.
+  it('reads "strip the background from table rows" as a removal', async () => {
+    expect(await topSet('strip the background from table rows')).toBe(
+      await topSet('remove the background from table rows'),
+    );
+  });
+  it('writes no stripe for "alternatively make the table rows light gray"', async () => {
+    expect(
+      await topSet('alternatively make the table rows light gray'),
+    ).not.toMatch(/parity:|--color-background-muted/);
+  });
+  it('colors the stripe, not every row, for every other table row light gray', async () => {
+    expect(await topSet('every other table row light gray')).toMatch(
+      /^set q --color-background-muted '#e5e7eb' --on table-row --mode light$/,
     );
   });
 });
@@ -3331,7 +3373,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square$/,
+      top: /^set q corners square && set q --radius-full '?0px'?$/,
       adds: /--radius-element=0px/,
     },
   ],

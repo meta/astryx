@@ -79,6 +79,26 @@ describe('useAnnounceRenderedText text priority', () => {
   });
 });
 
+function Notice({occasion, text}: {occasion: string; text: string}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useAnnounceRenderedText(ref, true, occasion, {isOncePerOccasion: true});
+  return <div ref={ref}>{text}</div>;
+}
+
+describe('useAnnounceRenderedText once per occasion', () => {
+  it('stays silent when the text changes under the same occasion, and speaks for a new one', () => {
+    const {rerender} = render(<Notice occasion="a" text="Payment received" />);
+    rerender(<Notice occasion="a" text="Payment received: $120.00" />);
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Payment received',
+      'polite',
+    );
+    rerender(<Notice occasion="b" text="Refund sent" />);
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenLastCalledWith('Refund sent', 'polite');
+  });
+});
+
 describe('renderedText reads block boxes apart (AST-086 FR7)', () => {
   it('separates the inline children of a flex or grid stack, as the layout blockifies them', () => {
     const {container} = render(

@@ -75,6 +75,7 @@ import {
   readReleaseFacts,
 } from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
+import {readOfficialList} from '../discovery/official-list.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 import {binStartedRun} from './run-context.mjs';
 import {installGuidanceFor} from '../env/cli-command.mjs';
@@ -527,14 +528,7 @@ function officialPackages() {
   /** @type {any} */
   let list;
   try {
-    // Built here, not at load: paths.mjs and this module load each other.
-    const file = path.join(
-      CLI_ROOT,
-      'assets',
-      'discover',
-      'official-packages.json',
-    );
-    list = JSON.parse(fs.readFileSync(file, 'utf8'));
+    list = readOfficialList();
   } catch {
     return [];
   }
