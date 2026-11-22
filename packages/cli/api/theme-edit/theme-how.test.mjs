@@ -3387,25 +3387,14 @@ const QUESTIONS_J = [
     'one and a half line height for body',
     {top: /^set q --text-body-leading 1\.5$/},
   ],
-  // a leading in pixels is a ratio of the text size the question says, else
-  // of the body text size now
+  // a leading in pixels, said on its own, is a ratio of the text size
+  // another clause says, else of the body text size now
   [
     '13px text, 18px leading',
     {top: /^set q text-size 13 && set q --text-body-leading 1\.385$/},
   ],
   ['18px leading', {top: /^set q --text-body-leading 1\.286$/}],
   ['body text 18px leading', {top: /^set q --text-body-leading 1\.286$/}],
-  ['font size 13px line height 18px', {top: /--text-body-leading 1\.385$/}],
-  ['line height 18px font size 13px', {top: /--text-body-leading 1\.385$/}],
-  ['18px leading 13px text', {top: /--text-body-leading 1\.385$/}],
-  [
-    '13px line height 18px',
-    {top: /^set q text-size 13 && set q --text-body-leading 1\.385$/},
-  ],
-  ['16px body text, 24px line height', {top: /--text-body-leading 1\.714$/}],
-  ['13px text 18px leading', {top: /--text-body-leading 1\.385$/}],
-  ['13px font 18px line height', {top: /--text-body-leading 1\.385$/}],
-  ['18px line height 13px font', {top: /--text-body-leading 1\.385$/}],
   [
     'heading font size 24px, body 14px text, 20px leading',
     {top: /--text-body-leading 1\.429$/},
