@@ -74,7 +74,7 @@ describe('icon-set guide', () => {
       '--new-definition',
       formatCliCommand('docs cli/experimental/icon-definitions'),
       'icon_builtin_definition_missing',
-      'Unmapped icon definitions (optional)',
+      'Unmapped icon meanings (optional)',
       'unmappedDefinitions',
       'icon_module_not_public',
       'icon_not_component',
