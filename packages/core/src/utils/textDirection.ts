@@ -10,7 +10,8 @@
  *   localeTextStyles and truncatedTextStyles (`pageAlign` for an element
  *   with its own `dir`)
  * @position Core-internal helper, not exported from the package: the one
- *   owner of direction decisions for caller text and locale-formatted text
+ *   owner of direction decisions for caller text (a locale's own direction
+ *   comes from getLocaleDirection)
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
@@ -32,16 +33,29 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
   return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
 }
 
-// An element's own `dir` moves its text to the other side. A field's text and
-// the `withTextDirection` span (a block inside a flex parent such as Field's
-// label) need the parent's alignment instead. `match-parent` resolves `start`
-// and `end` in the parent's direction, so a centred label stays centred.
-// Chromium supports only the prefixed keyword.
-export const localeTextStyles = stylex.create({
+/**
+ * For an element that cuts its own text with an ellipsis. The element's own
+ * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
+ * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
+ * a right-to-left letter keeps the page's direction and is cut at its own
+ * end. Put `pageAlign` beside the `dir` so the element keeps the page's
+ * alignment.
+ */
+export const truncatedTextStyles = stylex.create({
   pageAlign: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
   },
 });
+
+/**
+ * The same `pageAlign` for a field that shows text a locale formats, with
+ * the locale's direction as its `dir`. A field's own `dir` would otherwise
+ * move its text to the other side. `match-parent` resolves `start` and `end`
+ * in the parent's direction, so the text stays at the page's start edge, and
+ * a centred `withTextDirection` label stays centred. Chromium supports only
+ * the prefixed keyword.
+ */
+export const localeTextStyles = truncatedTextStyles;
 
 const styles = stylex.create({
   isolate: {
@@ -62,7 +76,7 @@ export function withTextDirection(content: ReactNode): ReactNode {
     ? content
     : createElement(
         'span',
-        {dir, ...stylex.props(localeTextStyles.pageAlign)},
+        {dir, ...stylex.props(truncatedTextStyles.pageAlign)},
         content,
       );
 }
@@ -93,17 +107,3 @@ export function isolatedText(
     text,
   );
 }
-
-/**
- * For an element that cuts its own text with an ellipsis. The element's own
- * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
- * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
- * a right-to-left letter keeps the page's direction and is cut at its own
- * end. Put `pageAlign` beside the `dir` so the element keeps the page's
- * alignment.
- */
-export const truncatedTextStyles = stylex.create({
-  pageAlign: {
-    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
-  },
-});
