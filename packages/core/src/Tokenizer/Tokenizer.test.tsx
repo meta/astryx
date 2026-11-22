@@ -4524,7 +4524,7 @@ describe('Tokenizer pending search debounce Enter handling (Issue #13523)', () =
   });
 
   for (const delayMs of [0, 30, 100]) {
-    it(`creates typed value Zig when Enter is pressed at ${delayMs}ms during debounce with hasCreate and hasEntriesOnFocus`, async () => {
+    it(`does not commit stale result when Enter is pressed at ${delayMs}ms during debounce with hasCreate and hasEntriesOnFocus, and creates token after search settles`, async () => {
       const onChange = vi.fn();
       render(
         <Tokenizer
@@ -4556,17 +4556,33 @@ describe('Tokenizer pending search debounce Enter handling (Issue #13523)', () =
 
       fireEvent.keyDown(input, {key: 'Enter'});
 
-      // Verify that Zig is created instead of selecting the first stale suggestion (Alice)
+      // Enter during debounce selects nothing and creates nothing (stale Alice is never selected)
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({label: 'Alice'})]),
+        expect.anything(),
+      );
+
+      // Wait for debounce and search to settle
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Create "Zig"', hidden: true}),
+        ).toBeInTheDocument();
+      });
+
+      fireEvent.keyDown(input, {key: 'Enter'});
+
+      // Once settled, Enter creates "Zig"
       expect(onChange).toHaveBeenCalledWith(
         [expect.objectContaining({label: 'Zig', id: 'Zig'})],
         expect.objectContaining({
           type: 'create',
           item: expect.objectContaining({label: 'Zig'}),
         }),
-      );
-      expect(onChange).not.toHaveBeenCalledWith(
-        expect.arrayContaining([expect.objectContaining({label: 'Alice'})]),
-        expect.anything(),
       );
     });
   }
@@ -4594,6 +4610,10 @@ describe('Tokenizer pending search debounce Enter handling (Issue #13523)', () =
 
     fireEvent.change(input, {target: {value: 'Bob'}});
 
+    // Press Enter immediately during debounce
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).not.toHaveBeenCalled();
+
     // Wait for debounce and search to settle
     await act(async () => {
       vi.advanceTimersByTime(200);
@@ -4616,7 +4636,7 @@ describe('Tokenizer pending search debounce Enter handling (Issue #13523)', () =
     );
   });
 
-  it('creates token on paste/fill followed immediately by Enter', async () => {
+  it('does not commit stale result on paste/fill followed immediately by Enter, and creates token once settled', async () => {
     const onChange = vi.fn();
     render(
       <Tokenizer
@@ -4639,6 +4659,20 @@ describe('Tokenizer pending search debounce Enter handling (Issue #13523)', () =
 
     // Paste/fill: directly set target value to "Zig" and press Enter at 0ms
     fireEvent.change(input, {target: {value: 'Zig'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Create "Zig"', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
     fireEvent.keyDown(input, {key: 'Enter'});
 
     expect(onChange).toHaveBeenCalledWith(

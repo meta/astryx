@@ -1454,6 +1454,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const performBootstrap = useCallback(async () => {
     const gen = ++searchGenRef.current;
     setLastSearchedQuery('');
+    setHasSearched(false);
     dismissedRef.current = false;
     let bootstrapResult: T[] | Promise<T[]>;
     try {
@@ -2011,14 +2012,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           dismiss();
           return;
         }
-        if (e.key === 'Enter') {
-          const createEntry = __queryEntries?.(query, [])?.[0];
-          if (createEntry) {
-            e.preventDefault();
-            handleSelect(createEntry);
-            return;
-          }
-        }
         if (e.key === 'ArrowDown' && (hasEntriesOnFocus || query.length > 0)) {
           e.preventDefault();
           // Results held from a replaced search source are not current
@@ -2073,11 +2066,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           break;
         case 'Enter':
           e.preventDefault();
-          if (isSearchPending) {
-            const createEntry = __queryEntries?.(query, [])?.[0];
-            if (createEntry) {
-              handleSelect(createEntry);
-            } else if (query === '') {
+          if (query !== lastSearchedQuery) {
+            if (query === '') {
               popover.hide();
             }
             break;
@@ -2126,14 +2116,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       handleSelect,
       hasEntriesOnFocus,
       query,
+      lastSearchedQuery,
       minQueryLength,
       performBootstrap,
       performSearch,
       openWithKeptAnswer,
       dismiss,
       externalOnKeyDown,
-      isSearchPending,
-      __queryEntries,
     ],
   );
 
