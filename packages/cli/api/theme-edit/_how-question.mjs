@@ -2691,6 +2691,7 @@ const ROLE_WORDS =
  * @property {'light' | 'dark' | null} mode
  * @property {boolean} except - "but not on X": X keeps what the clause before does
  * @property {Clause} [exceptOf] - the one list item an except keeps a state of ("gray text on the rest" keeps the selected tab's text): it belongs to that item only
+ * @property {Clause[]} [reads] - the clauses this one read and answers for: a mode said alone before it, the asks an except takes up
  * @property {Record<string, string>} decl - CSS written as `prop: value`
  * @property {string[]} [quoted] - family names the clause writes in quotes
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
@@ -12408,8 +12409,13 @@ export function draftAnswer(ctx, env, question) {
           ].includes(a),
         )
       )
-    )
+    ) {
       c.mode = prev.mode;
+      // (A clause that says nothing but the mode is read by the ones it
+      // gives the mode to.)
+      if (!prev.parts.length && !prev.aspects.length)
+        c.reads = [...(c.reads ?? []), prev];
+    }
     // "on focus, inputs get a 2px outline": a clause that only names a state
     // gives it to the clause after it.
     // (Never an except's state: "except when focused, and rounder".)
@@ -16038,6 +16044,8 @@ export function draftAnswer(ctx, env, question) {
           }
         : undefined;
       if (!prior) continue;
+      // (The except answers for the asks it takes up.)
+      c.reads = [...(c.reads ?? []), ...span.map(x => x.clause)];
       // The part being changed that the except names a variant of, else the
       // part of the latest ask.
       const ons = [
@@ -29287,6 +29295,8 @@ export function draftAnswer(ctx, env, question) {
   }
   /** @type {Draft[]} */
   const result = [];
+  /** The words a note already names as not taken (or not known as a look). */
+  const wordsNamed = new Set();
   // Several changes in one question: one answer that runs them all first,
   // with repeats dropped and a step dropped when a later one replaces it.
   // Two clauses that set one thing two ways contradict each other: they are
@@ -33166,6 +33176,7 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} "accent #2563eb, page #f8fafc, font Inter, corners round, spacing compact"`,
       });
     const rest = notTaken.filter(w => !namedFor.includes(w));
+    for (const w of notTaken) wordsNamed.add(w.replace(/-like$/, ''));
     if (rest.length)
       result.push({
         text: `not taken: ${rest.map(w => `"${w}"`).join(', ')}: no setting reads ${rest.length > 1 ? 'these words' : 'this word'}; the looks how sets are colors (accent, neutral, the page, the text), mode, spacing, corners, fonts and contrast (how --list dials lists each)`,
@@ -33295,11 +33306,28 @@ export function draftAnswer(ctx, env, question) {
       ...answeredByUndo,
       ...clashClauses,
     ]);
+    // (A clause an answered one read, a mode said alone before it or the
+    // asks an except takes up, is used too.)
+    // (Through every clause that one read in turn: a mode said before an
+    // ask an except took up.)
+    for (const c of taken)
+      for (const r of /** @type {Clause} */ (c).reads ?? []) taken.add(r);
     const silent = clauses.filter(c => {
       const t = c.text.trim();
       if (!t || c.except || taken.has(c)) return false;
+      // (A clause whose words a note names already, "not taken: \"cozy\"",
+      // is said once.)
+      {
+        const own = (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter(
+          w => !['and', 'the', 'for', 'with', 'all'].includes(w),
+        );
+        if (
+          wordsNamed.has(t.toLowerCase()) ||
+          (own.length && own.every(w => wordsNamed.has(w)))
+        )
+          return false;
+      }
       if (!/[a-z]{3,}|#[0-9a-f]{3}|\d/i.test(t)) return false;
-      if (texts.includes(t.toLowerCase())) return false;
       const vals = steps.map(st => String(st.value ?? '').toLowerCase());
       // ("in dark mode, cards …": a mode the other lines carry is used.)
       const modeOnly =
