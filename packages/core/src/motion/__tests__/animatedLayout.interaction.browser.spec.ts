@@ -3492,6 +3492,9 @@ for (const rate of [1, 0.25]) {
       });
       const row = document.getElementById('a') as HTMLElement;
       const [glide] = row.getAnimations();
+      // A glide from rest holds until the first frame after its task, and
+      // that frame dates its start.
+      await new Promise(resolve => requestAnimationFrame(resolve));
       const start = Number(glide.startTime);
       const duration = Number(glide.effect?.getTiming().duration);
       const reference = new DocumentTimeline();
