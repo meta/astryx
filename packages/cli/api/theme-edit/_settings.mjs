@@ -5378,7 +5378,7 @@ export function holdCopies(ctx, data, s) {
                 (y.state ?? '') === st &&
                 (!y.when || y.when === variant) &&
                 (!y.mode || !m || y.mode === m) &&
-                partsOf(ctx, y).includes(String(s.on)),
+                writtenPartsOf(ctx, data, y).includes(String(s.on)),
             );
           const value = String(own ? own.value : s.value);
           // (Only where that color reads 4.5:1 on the state's fill as built:
@@ -16493,17 +16493,17 @@ function scopedTextProblems(ctx, data, res) {
         // (A state within a placement, a selected link in the phone menu,
         // draws the fill set for the state alone.)
         (st && when
-          ? [...data.settings]
-              .reverse()
-              .find(
-                y =>
-                  test(y) &&
-                  Boolean(y.on) &&
-                  (!y.mode || y.mode === m) &&
-                  (y.state ?? null) === st &&
-                  !y.when &&
-                  partsOf(ctx, y).includes(t),
-              )
+          ? [...data.settings].reverse().find(
+              y =>
+                test(y) &&
+                Boolean(y.on) &&
+                (!y.mode || y.mode === m) &&
+                (y.state ?? null) === st &&
+                !y.when &&
+                // (Only what the build writes on the part: its own
+                // `--only` state look keeps it under a later group one.)
+                writtenPartsOf(ctx, data, y).includes(t),
+            )
           : null) ??
         [...data.settings].reverse().find(y => test(y) && here(y, m, false)) ??
         null;
