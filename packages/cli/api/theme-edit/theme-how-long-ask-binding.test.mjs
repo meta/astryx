@@ -546,19 +546,19 @@ const ROWS = [
     },
   ],
   [
-    'an undo that names two changes takes nothing back and says so',
+    'an undo that names two changed parts takes both back and says so',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the card change and the heading change.',
-      has: ['corners more --on card', 'headings bold'],
-      says: /names more than one change, so none is taken back and each stays written/,
+      never: /corners more --on card|^headings bold$/,
+      says: /the card and heading changes said earlier in this ask are taken back/,
     },
   ],
   [
-    'an undo that names two changes, only one said earlier, takes nothing back and says so',
+    'an undo that names two parts, only one changed earlier, takes that one back and says so',
     {
       q: 'Make the headings bold. Undo the card change and the heading change.',
-      has: ['headings bold'],
-      says: /names more than one change, so none is taken back and each stays written/,
+      never: /^headings bold$/,
+      says: /no card change was said earlier in this ask, so nothing is taken back for it[\s\S]*the heading change said earlier in this ask is taken back|the heading change said earlier in this ask is taken back[\s\S]*no card change was said earlier in this ask, so nothing is taken back for it/,
     },
   ],
   [

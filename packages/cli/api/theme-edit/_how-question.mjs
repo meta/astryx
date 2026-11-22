@@ -29585,6 +29585,7 @@ export function draftAnswer(ctx, env, question) {
       nextOn[0].on !== uc.parts[0].on;
     const several =
       (uc?.parts?.length ?? 0) > 1 || (alsoNamed && !nextNew && !both);
+    const ownChanged = both && changedEarlier(String(uc.parts[0].on));
     // ("Make the headings bigger. Make the headings bold. Undo the heading
     // size change.": a look the undo names, read by `aspectsOf`, takes back
     // only the earlier change of that look. A bare "size" is the part's
@@ -29639,6 +29640,13 @@ export function draftAnswer(ctx, env, question) {
         }),
       );
       strikeNext();
+      // ("Make the headings bold. Undo the card change and the heading
+      // change.": the card had no change, so nothing is taken back for it.)
+      if (!ownChanged)
+        result.push({
+          text: `no ${part} change was said earlier in this ask, so nothing is taken back for it`,
+          options: [],
+        });
     }
     const looks = new Set(undone.flatMap(lookOf));
     // ("Make the cards rounder. Undo the corner change.": an earlier change
@@ -29766,9 +29774,10 @@ export function draftAnswer(ctx, env, question) {
       if (c) answeredByUndo.add(c);
     }
     result.push({
-      text: both
-        ? `the ${part ? `${part} ` : ''}and ${nextOn[0].on} changes said earlier in this ask are taken back by their undo, so they are not written`
-        : `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
+      text:
+        both && ownChanged
+          ? `the ${part} and ${nextOn[0].on} changes said earlier in this ask are taken back by their undo, so they are not written`
+          : `the ${both ? `${nextOn[0].on} ` : part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
       options: [],
     });
   }
