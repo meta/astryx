@@ -305,7 +305,7 @@ describe('a tint word', () => {
   );
 
   it(
-    'picks, in each mode, the tint stop the text on the part reads on: the text the ask says, else the theme’s',
+    'picks, in each mode, the tint stop the text on the part reads on: the text the ask says, else the part’s own',
     async test => {
       needsBases(test);
       /** @param {string} q */
@@ -337,6 +337,14 @@ describe('a tint word', () => {
       expect(cards).toContain(
         "background-color '#bfd5ff' --on card --when variant:default --mode light",
       );
+      // (Two parts that take different stops each get their own note.)
+      const {data} = await themeEditHow('cards and buttons tinted blue', {
+        cwd,
+        theme: 'n',
+      });
+      const said = String(data.results?.[0]?.text ?? '');
+      expect(said).toMatch(/a tint of \S+ on card[^)]*#bfd5ff in light mode/);
+      expect(said).toMatch(/a tint of \S+ on button[^)]*#366ee6 in light mode/);
     },
     T,
   );

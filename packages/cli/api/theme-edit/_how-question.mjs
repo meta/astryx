@@ -32260,8 +32260,9 @@ export function draftAnswer(ctx, env, question) {
     }
   // ("cards tinted blue", "selected nav items tinted forest green"): a
   // color a tint word names is a light tint of it, drawn from the palette
-  // generator's default ramp for it, at the stops Core's card tints use (pale in light mode, deep in
-  // dark), on the parts named before the tint word ("cards tinted blue
+  // generator's default ramp for it, near the stops Core's card tints use
+  // (pale in light mode, deep in dark) where the text on the part reads, on
+  // the parts named before the tint word ("cards tinted blue
   // with a navy header": the cards, never the header). A color said with
   // its own shade word ("a light blue tint") names its shade already and
   // is written as said.
@@ -32319,6 +32320,8 @@ export function draftAnswer(ctx, env, question) {
   const tintFillsAnyLook = new Map();
   /** The fill steps a tint wrote, one a mode. @type {WeakSet<Step>} */
   const tintSteps = new WeakSet();
+  /** Each answer's tints, by color and shades, with the parts they fill. @type {Map<any, Map<string, Set<string>>>} */
+  const tintNotes = new Map();
   const tintKey = (/** @type {Step} */ st) =>
     [st.on, st.state ?? '', st.when ?? ''].join('\0');
   /** The modes the theme draws. @type {Array<'light' | 'dark'>} */
@@ -32398,10 +32401,24 @@ export function draftAnswer(ctx, env, question) {
         );
         tintFills.set(tintKey(st), shades);
         tintFillsAnyLook.set(tintKey({...st, when: undefined}), shades);
-        const said = `a tint of ${st.value}`;
-        if (!d.text.includes(said))
-          d.text += ` (${said}: ${modes.map(m => `${shades[m]} in ${m} mode`).join(', ')}, from its palette ramp)`;
+        // (One note for each tint the answer writes, naming the parts that
+        // take it: each part's text can pick its own stop.)
+        const noted = tintNotes.get(d) ?? new Map();
+        tintNotes.set(d, noted);
+        const said = `${st.value}: ${modes.map(m => `${shades[m]} in ${m} mode`).join(', ')}`;
+        const parts = noted.get(said) ?? new Set();
+        parts.add(st.on ? String(st.on) : 'the page');
+        noted.set(said, parts);
       }
+  for (const [d, noted] of tintNotes)
+    for (const [said, parts] of noted) {
+      const [color, shades] = [
+        said.slice(0, said.indexOf(':')),
+        said.slice(said.indexOf(':') + 2),
+      ];
+      const note = `a tint of ${color} on ${[...parts].join(', ')}: ${shades}, from its palette ramp`;
+      if (!d.text.includes(note)) d.text += ` (${note})`;
+    }
   // (Text asked with a tint is measured on each mode's own tint fill: it
   // is written in the modes it reads in at 4.5:1, and where it does not
   // read, it is left out and said, with an ink that reads there.)
