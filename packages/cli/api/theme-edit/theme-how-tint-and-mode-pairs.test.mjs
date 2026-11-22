@@ -325,4 +325,24 @@ describe('a tint word', () => {
     },
     T,
   );
+
+  it(
+    'reads a tint said with a color as that color, never the hover wash',
+    async test => {
+      needsBases(test);
+      /** @param {string} q */
+      const lines = async q =>
+        ((await themeEditHow(q, {cwd, theme: 'n'})).data.results ?? [])
+          .flatMap(r => r.commands ?? [])
+          .map(c => c.replace(/^.* editor set \S+ /, ''));
+      const said = await lines('a light blue tint background');
+      expect(said.join('\n')).not.toMatch(/--color-overlay-hover/);
+      expect(said.some(c => /^--color-background-body '#/.test(c))).toBe(true);
+      // (A tint with no color is still the wash.)
+      expect((await lines('the tint stronger')).join('\n')).toMatch(
+        /--color-overlay-hover/,
+      );
+    },
+    T,
+  );
 });
