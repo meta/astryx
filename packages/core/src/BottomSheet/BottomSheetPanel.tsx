@@ -387,7 +387,10 @@ const styles = stylex.create({
     },
     transitionProperty: 'transform, opacity',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
+      // Under a theme that reduces motion for everyone the sheet lands on the
+      // next frame: its own wait (waitForTransition) resolves a zero duration,
+      // so it needs no settle time.
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': {
         default: '0.01s',
         '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,
