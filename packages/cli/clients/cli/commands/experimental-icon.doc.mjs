@@ -37,7 +37,7 @@ export const doc = {
       flag: '--set <name>',
       param: 'options.set',
       description:
-        'Search one set, by name or <package>/<set>; with --definitions, the set to check the meanings against',
+        'Search one set, by name or <package>/<set>; with --meanings, the set to check the meanings against',
     },
     {
       flag: '--limit <n>',
@@ -45,7 +45,7 @@ export const doc = {
       description: 'Max number of matches, a positive integer (default 10)',
     },
     {
-      flag: '--definitions',
+      flag: '--meanings',
       param: 'options.definitions',
       description:
         "Every Astryx icon meaning, one line each: name, built in or not, how many bundled templates use it, whether the set maps it (--set, else the project's main set, else the package's only set), description, words",

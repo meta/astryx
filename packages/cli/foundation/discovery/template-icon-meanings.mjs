@@ -18,7 +18,7 @@
  *   first; and the ones a set's `map` leaves out. The one-line summary is in
  *   foundation/text/template-meanings-line.mjs
  * @position packages/cli/foundation/discovery — read by the icon authoring
- *   receipts, `experimental icon --definitions`, and `integration check`
+ *   receipts, `experimental icon --meanings`, and `integration check`
  */
 
 import {discoverCoreTemplates} from './template-adapter.mjs';

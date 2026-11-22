@@ -244,7 +244,7 @@ export const doc = {
       value: 'icon.definitions',
       stability: 'experimental',
       description:
-        'Every Astryx icon meaning (--definitions): each {name, builtIn, description, words}.',
+        'Every Astryx icon meaning (--meanings): each {name, builtIn, description, words}.',
     },
     {
       value: 'icon.setIcons',

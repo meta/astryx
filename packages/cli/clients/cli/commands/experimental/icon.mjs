@@ -444,7 +444,7 @@ export function registerExperimentalIcon(group, program) {
     fn: iconFn,
     action: async (
       /** @type {string[] | string | undefined} */ words,
-      /** @type {{list?: boolean, set?: string, limit?: string, allIcons?: boolean, definitions?: boolean}} */ options,
+      /** @type {{list?: boolean, set?: string, limit?: string, allIcons?: boolean, meanings?: boolean}} */ options,
     ) => {
       const query = Array.isArray(words) ? words.join(' ') : words;
       // Number(), not parseInt(): the API refuses `1.5` and `5abc`.
@@ -459,7 +459,7 @@ export function registerExperimentalIcon(group, program) {
           set: options.set,
           limit,
           allIcons: options.allIcons ?? false,
-          definitions: options.definitions ?? false,
+          definitions: options.meanings ?? false,
         });
       } catch (e) {
         const err =

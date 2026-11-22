@@ -321,7 +321,7 @@
  */
 
 /**
- * `astryx --json experimental icon --definitions`.
+ * `astryx --json experimental icon --meanings`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconDefinitionsResponse
  * @property {'icon.definitions'} type

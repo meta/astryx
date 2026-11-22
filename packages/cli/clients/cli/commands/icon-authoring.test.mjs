@@ -1802,8 +1802,8 @@ describe('blind run 4 fixes', () => {
     });
   });
 
-  it('--definitions lists every definition, marking built-ins', async () => {
-    const {code, body} = await json(['experimental', 'icon', '--definitions']);
+  it('--meanings lists every definition, marking built-ins', async () => {
+    const {code, body} = await json(['experimental', 'icon', '--meanings']);
     expect(code).toBe(0);
     expect(body.type).toBe('icon.definitions');
     const close = body.data.definitions.find(
@@ -1811,7 +1811,7 @@ describe('blind run 4 fixes', () => {
     );
     expect(close).toMatchObject({builtIn: true});
     expect(close.words).toContain('x');
-    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    const text = await runCli(['experimental', 'icon', '--meanings'], pkg);
     expect(text.stdout).toMatch(
       /^- close \[built-in(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
     );
@@ -1955,7 +1955,7 @@ describe('blind run 5 fixes', () => {
     expect(added.body.data.note).toContain(
       './art/check-double.js is not in package.json "files", so it would not be published; set "files" to `["index.js","icon-sets","astryx.integration.mjs","art"]`.',
     );
-    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    const text = await runCli(['experimental', 'icon', '--meanings'], pkg);
     expect(text.stdout).toMatch(
       /^- activity \[optional(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
     );
