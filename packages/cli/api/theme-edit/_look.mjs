@@ -682,7 +682,13 @@ function barTextProblems(look) {
               ? (partValue(components, part, [p.bg.tokens[0]], m) ??
                 `var(${p.bg.tokens[0]})`)
               : p.bg.raw);
-          const fill = shown(colorIn(fillValue, res[m], m), bar);
+          // A see-through fill (a segmented control's track) shows the bar
+          // through it: its text reads on the bar, which the bar-ground
+          // measure checks; only a part that paints its own fill draws
+          // the bar's text on something else.
+          const own = colorIn(fillValue, res[m], m);
+          if (own == null || alphaOf(own) < 1) continue;
+          const fill = shown(own, bar);
           if (!fill) continue;
           const r = ratio(fg, fill);
           if (r >= TEXT) continue;

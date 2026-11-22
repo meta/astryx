@@ -1438,6 +1438,28 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
             /in app-shell-header's own style/.test(p.message),
         ),
       ).toBe(true);
+      // A navy bar with white text: the segmented control's see-through
+      // track shows the bar, so --fix spreads no theme text onto it.
+      const navy = themeFile('navybar', READABLE, {
+        'app-shell-header': {
+          base: {
+            backgroundColor: '#002244',
+            '--color-text-primary': '#ffffff',
+            '--color-text-secondary': '#ffffff',
+          },
+        },
+      });
+      const navyFixed = await check(navy, {fix: true});
+      expect(
+        navyFixed.fixed.some(f =>
+          (f.parts ?? []).includes('segmented-control'),
+        ),
+      ).toBe(false);
+      expect(
+        navyFixed.problems.some(p =>
+          (p.parts ?? []).some(q => /^segmented-control/.test(q)),
+        ),
+      ).toBe(false);
       // A fill placed under a structural selector is the part's fill.
       const placed = await check(
         themeFile('placedfill', READABLE, {
