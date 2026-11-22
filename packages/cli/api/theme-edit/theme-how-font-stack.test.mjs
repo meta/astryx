@@ -75,6 +75,16 @@ describe('a family said as like another', () => {
     expect(bulma).toContain('font system');
     expect(bulma).toContain('text-size 16');
     expect(await commandsFor('serif 16px')).toContain('text-size 16');
+    expect(bulma).toMatch(/--text-body-leading 1\.5/);
+    // (Before any other word, "sans" is still "without".)
+    for (const ask of [
+      'buttons sans 2px borders',
+      'buttons sans 3D effects',
+      'cards sans 2 shadows',
+    ])
+      expect(await commandsFor(ask), ask).toBe(
+        await commandsFor(ask.replace('sans', 'without')),
+      );
     // ("sans-serif" and "sans serif" name no serif.)
     expect(
       await commandsFor('Type: MS Sans Serif-like pixel sans-serif 11px'),

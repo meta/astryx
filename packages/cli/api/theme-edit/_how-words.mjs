@@ -48,12 +48,13 @@ export const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
     ['цвет\\p{L}*|colore|farbe', '颜色|色', 'color'],
     ['акцент\\p{L}*', '强调', 'accent'],
     ['más|mais|mehr|più|более', '更', 'more'],
-    // "sans" is a typeface word before serif, font, a size or the end of
-    // its clause ("system sans 16px", "system sans."), or after a kind of
-    // typeface ("humanist sans"); before any other word it is "without"
-    // ("a design system sans shadows").
+    // "sans" is a typeface word before serif, font, the end of its clause
+    // or a text size that ends it or comes before a text word ("system sans
+    // 16px", "system sans."), or after a kind of typeface ("humanist
+    // sans"); before any other word it is "without" ("a design system sans
+    // shadows", "buttons sans 2px borders").
     [
-      'sin|(?<!(?<!\\p{L})(?:humanist|geometric|grotesque|grotesk)[\\s-]+)sans(?![\\s-]*(serif|fonts?|typefaces?|\\d|[,.;]|$))|ohne|без|sem|senza',
+      'sin|(?<!(?<!\\p{L})(?:humanist|geometric|grotesque|grotesk)[\\s-]+)sans(?![\\s-]*(serif|fonts?|typefaces?|\\d*\\.?\\d+\\s?(?:px|pt|rem|em)\\s*(?:[,.;!?)]|$|(?:text|type|body|copy)\\b)|[,.;!?)]|$))|ohne|без|sem|senza',
       '没有|无',
       'without',
     ],
