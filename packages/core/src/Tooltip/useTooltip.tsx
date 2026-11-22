@@ -572,10 +572,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handleMouseLeave = useCallback(
     (event: Event) => {
+      isArrivalUnmovedRef.current = false;
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
-      isArrivalUnmovedRef.current = false;
       if (isTouchPointerRef.current) {
         return;
       }
