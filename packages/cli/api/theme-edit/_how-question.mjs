@@ -27649,13 +27649,19 @@ export function draftAnswer(ctx, env, question) {
               };
         }
         // "the hover tint stronger", "the selected background lighter": a
-        // state's own wash, never the page. A tint said with a color ("a
-        // light blue tint background") is that color's, never the wash.
+        // state's own wash, never the page. "Tint" as the word for a color's
+        // background ("a light blue tint background": the color, then
+        // "tint", then the background) is that color's, never the wash.
+        const colorTint =
+          /(\S+(?:\s+\S+)?)\s+tint\s+(?:background|fill)\b/.exec(
+            c.text.toLowerCase(),
+          );
         const stateSaid =
           /\b(hover(?:ed|ing)?|press(?:ed)?|active|selected|checked)\b/.exec(
             c.text,
           )?.[1] ??
-          (/\btint\b/.test(c.text) && !colorsFound(c.text.toLowerCase()).length
+          (/\btint\b/.test(c.text) &&
+          !(colorTint && colorsFound(colorTint[1]).length)
             ? 'hover'
             : null);
         if (!on && stateSaid) {

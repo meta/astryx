@@ -338,10 +338,15 @@ describe('a tint word', () => {
       const said = await lines('a light blue tint background');
       expect(said.join('\n')).not.toMatch(/--color-overlay-hover/);
       expect(said.some(c => /^--color-background-body '#/.test(c))).toBe(true);
-      // (A tint with no color is still the wash.)
-      expect((await lines('the tint stronger')).join('\n')).toMatch(
-        /--color-overlay-hover/,
-      );
+      // (A tint with no color, or one asked less or more of a color, is
+      // still the wash.)
+      for (const q of [
+        'the tint stronger',
+        'the tint less blue',
+        'the tint a little less red',
+        'the tint is too blue',
+      ])
+        expect((await lines(q)).join('\n'), q).toMatch(/--color-overlay-hover/);
     },
     T,
   );
