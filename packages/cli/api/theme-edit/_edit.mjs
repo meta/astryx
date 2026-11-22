@@ -190,6 +190,7 @@ import {
   ownSettingOf,
   spreads,
   reachOffers,
+  savedOneLineReachNotes,
   familyRoleOf,
 } from './_settings.mjs';
 import {
@@ -9660,6 +9661,7 @@ export async function themeEditShow(theme, options = {}) {
           o =>
             `${o.setting} would also reach ${o.parts.join(', ')}, drawn alike; to let it: ${o.run}`,
         ),
+        ...savedOneLineReachNotes(ctx, theme, data),
         ...(png ? [] : leftWords),
         ...sheet.notes,
         // Text the sample page's pictures draw cut short.

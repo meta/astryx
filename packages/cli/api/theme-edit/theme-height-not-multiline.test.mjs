@@ -9,6 +9,8 @@
  * bundled base theme.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
@@ -96,4 +98,35 @@ describe('a height on a text input', () => {
         new RegExp(`${thing} does not reach text-area`),
       );
     }, 240_000);
+
+  it('a min-height saved by an earlier editor keeps the text area it reached, unchanged at every build, and is named', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('old', {cwd, like: 'neutral'});
+    const file = path.join(cwd, 'themes', 'old', 'old.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: 'min-height',
+      value: '40px',
+      source: 'property',
+      on: 'text-input',
+    });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    /** The built rules that set the saved min-height. */
+    const rules = () =>
+      [
+        ...fs
+          .readFileSync(path.join(cwd, 'themes', 'old', 'old.css'), 'utf8')
+          .matchAll(/[^{}]*\{[^}]*min-height: 40px[^}]*\}/g),
+      ].map(m => m[0].trim());
+    const first = /** @type {any} */ (
+      await themeEditSet('old', 'corners', '4px', {cwd})
+    );
+    expect(rules().join('\n')).toContain('astryx-text-area');
+    expect(first.data.notes.join('\n')).toMatch(
+      /min-height = 40px on text-input still reaches text-area, as it was saved; .*set old min-height 40px --on text-input --only/,
+    );
+    const before = rules();
+    await themeEditSet('old', 'corners', '6px', {cwd});
+    expect(rules()).toEqual(before);
+  }, 240_000);
 });

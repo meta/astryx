@@ -6188,7 +6188,7 @@ export function partsOf(ctx, s) {
   const pin =
     /** @type {any} */ (s).reached ??
     (UNRECORDED.has(s) ? savedReach(ctx, /** @type {any} */ (s)) : null);
-  const all = reachedPartsOf(ctx, s).filter(
+  const all = reachedPartsOf(ctx, s, Array.isArray(pin)).filter(
     t => !Array.isArray(pin) || ownsPlace(ctx, s, t) || pin.includes(t),
   );
   // (Members the setting keeps out, where it would make text unreadable.)
@@ -6218,9 +6218,10 @@ export function ownsPlace(ctx, s, part) {
  * The parts a setting reaches before any it keeps out (partsOf).
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null, state?: string | null}} s
+ * @param {boolean} [saved] a saved setting: reached as the editor that saved it reached it
  * @returns {string[]}
  */
-function reachedPartsOf(ctx, s) {
+function reachedPartsOf(ctx, s, saved = false) {
   if (!s.on) return [];
   if (s.thing === 'font') return [];
   const has = (/** @type {string} */ t) => ctx.project.target.has(t);
@@ -6277,7 +6278,7 @@ function reachedPartsOf(ctx, s) {
     return spread(
       members
         .filter(has)
-        .filter(m => drawnAlike(ctx, s, m))
+        .filter(m => drawnAlike(ctx, s, m, false, saved))
         .filter(m => !sharedState(m))
         .filter(takesWhen)
         .filter(keepsOwnHeight),
@@ -6461,7 +6462,7 @@ function drawnKind(prop, value) {
  * @param {boolean} [exact] compare the values themselves, not their kind
  * @returns {boolean}
  */
-function drawnAlike(ctx, s, member, exact = false) {
+function drawnAlike(ctx, s, member, exact = false, saved = false) {
   if (member === s.on || !s.on) return true;
   const thing = String(s.thing ?? '');
   if (thing.startsWith('--')) return true;
@@ -6533,7 +6534,8 @@ function drawnAlike(ctx, s, member, exact = false) {
   // (A one-line height reaches only members drawn one line tall: a
   // multi-line field grows with its rows, so a text input's height would
   // shut a text area to one line.)
-  if (oneLineSizeMisses(ctx, s, member)) return false;
+  // (A saved setting keeps the reach the editor that saved it gave it.)
+  if (!saved && oneLineSizeMisses(ctx, s, member)) return false;
   const a = rest(s.on);
   const b = rest(member);
   return a == null || b == null || a === b;
@@ -17406,7 +17408,9 @@ export function earlierReach(ctx, s) {
   if (s.only || groupsOf(ctx)[String(s.on)]) return reachedPartsOf(ctx, s);
   const fam = familyOf(String(s.on));
   if (fam && ['inputs', 'checks'].includes(fam))
-    return reachedPartsOf(ctx, s).filter(t => drawnAlike(ctx, s, t, true));
+    return reachedPartsOf(ctx, s, true).filter(t =>
+      drawnAlike(ctx, s, t, true, true),
+    );
   return [String(s.on)];
 }
 
@@ -19756,6 +19760,30 @@ export function reachOffers(ctx, slug, data) {
 }
 
 /**
+ * The saved height settings that still reach a multi-line field a one-line
+ * height now leaves alone (a text area beside a text input): the build keeps
+ * them as saved, and the result names each with the line that keeps it on
+ * its own part.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @returns {string[]}
+ */
+export function savedOneLineReachNotes(ctx, slug, data) {
+  /** @type {string[]} */
+  const out = [];
+  for (const s of data.settings) {
+    if (!s.on) continue;
+    const parts = partsOf(ctx, s).filter(m => oneLineSizeMisses(ctx, s, m));
+    if (!parts.length) continue;
+    out.push(
+      `${describe(s)} still reaches ${parts.join(', ')}, as it was saved; a ${s.thing} set now on ${s.on} leaves a multi-line field its own; to keep it on ${s.on} only: \`${P} set ${slug} ${setArgs({...s, only: true, reached: undefined, keep: undefined, hold: undefined}, String(s.value))}\``,
+    );
+  }
+  return out;
+}
+
+/**
  * Pins each setting's reach: a setting that reaches beyond its own part
  * keeps the parts it reached when it was made (`reached`, saved on the
  * setting), and parts its family gains later are offered (reachOffers),
@@ -20081,6 +20109,14 @@ export async function commitTheme(
         ERROR_CODES.ERR_THEME_BAD_VALUE,
       );
     data.lifted = built.lifted;
+    // (A saved height that still reaches a text area is named once, when
+    // its reach is first recorded.)
+    notes.push(
+      ...savedOneLineReachNotes(ctx, slug, {
+        ...data,
+        settings: data.settings.filter(x => !Array.isArray(x.reached)),
+      }),
+    );
     offered = recordReach(ctx, slug, data, before);
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
