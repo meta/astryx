@@ -5,9 +5,10 @@
 /**
  * @file page.tsx
  * @input `?start=next-frame|presented|browser` (how a motion from rest takes
- *   its start; next-frame by default), `?work=<ms>` (work the tap's task
- *   runs after the call, 0 by default) and `?hold=<ms>` (how long the curve
- *   holds its first value, 0 by default)
+ *   its start; next-frame by default), `?work=<ms>` (work the tap's task runs
+ *   after the call, 0 by default), `?hold=<ms>` (how long the curve holds its
+ *   first value, 0 by default) and `?compare=<ms>` (two cards side by side:
+ *   no hold, and a hold of that length)
  * @output A card that a row's tap slides in from the trailing edge and Back
  *   slides out, on the push spring, as one Web Animation per change. A ruler
  *   of travel marks sits over it. The readout gives each change's start on
@@ -61,6 +62,20 @@ const START_MODES: ReadonlyArray<StartMode> = [
 ];
 
 const styles = stylex.create({
+  columns: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+  },
+  column: {
+    position: 'relative',
+    flexGrow: 1,
+    flexBasis: 0,
+    overflow: 'hidden',
+    borderInlineEndWidth: 1,
+    borderInlineEndStyle: 'solid',
+    borderInlineEndColor: 'rgba(0, 0, 0, 0.2)',
+  },
   root: {
     position: 'absolute',
     inset: 0,
@@ -95,8 +110,8 @@ function springTravel(t: number): number {
 
 /**
  * The change's keyframes, from `from` to `to` px, sampled at 120 Hz, after
- * `hold` ms at `from`. A hold covers the frames a compositor runs before
- * the screen first shows a new animation.
+ * `hold` ms at `from`. A hold covers the frames a compositor runs before the
+ * screen first shows a new animation.
  */
 function springKeyframes(from: number, to: number, hold: number): Keyframe[] {
   const total = hold + DURATION_MS;
@@ -118,13 +133,22 @@ function parseStart(value: string | null): StartMode {
 
 const round = (ms: number) => Math.round(ms * 10) / 10;
 
-function MotionStartClockCell() {
-  const [params] = useSearchParams();
-  const start = parseStart(params.get('start'));
-  const work = queryNumber(params, 'work', 0);
-  const hold = queryNumber(params, 'hold', 0);
-  const [lines, addLine] = useReadoutLines();
-  const stageRef = useRef<HTMLDivElement | null>(null);
+/** The width a card travels: its column's, or the page's. */
+function widthOf(card: HTMLElement): number {
+  return card.parentElement?.clientWidth ?? card.clientWidth;
+}
+
+interface SlidingCardProps {
+  start: StartMode;
+  work: number;
+  hold: number;
+  /** Names the card in its readout lines and its rows, when there are two. */
+  label?: string;
+  addLine: (line: string) => void;
+}
+
+/** A list, and a card over it that a row's tap slides in and Back out. */
+function SlidingCard({start, work, hold, label, addLine}: SlidingCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const shownRef = useRef<'root' | 'card'>('root');
   // The card starts at the trailing edge in px, which the page's watch reads
@@ -132,7 +156,7 @@ function MotionStartClockCell() {
   const attachCard = useCallback((card: HTMLDivElement | null) => {
     cardRef.current = card;
     if (card != null) {
-      card.style.translate = `${stageRef.current?.clientWidth ?? card.clientWidth}px 0`;
+      card.style.translate = `${widthOf(card)}px 0`;
     }
   }, []);
 
@@ -144,7 +168,7 @@ function MotionStartClockCell() {
       }
       shownRef.current = kind === 'push' ? 'card' : 'root';
       const tapped = performance.now();
-      const width = stageRef.current?.clientWidth ?? card.clientWidth;
+      const width = widthOf(card);
       const from = kind === 'push' ? width : 0;
       const to = kind === 'push' ? 0 : width;
       let startedMs: number | null = null;
@@ -198,45 +222,88 @@ function MotionStartClockCell() {
         () => to,
         move => {
           addLine(
-            `${kind}: started ${startedMs ?? '?'} ms after the tap (document timeline); first moved frame ${move.ms} ms after the tap, at ${Math.round(move.travel * 100)}% of its travel (page clock)`,
+            `${label == null ? '' : `${label}, `}${kind}: started ${startedMs ?? '?'} ms after the tap (document timeline); first moved frame ${move.ms} ms after the tap, at ${Math.round(move.travel * 100)}% of its travel (page clock)`,
           );
         },
       );
     },
-    [start, work, addLine],
+    [start, work, hold, label, addLine],
   );
 
   return (
     <>
-      <Ruler />
-      <Stage>
-        <div ref={stageRef} {...stylex.props(styles.root)}>
-          <List>
-            {ITEMS.map(item => (
-              <ListItem
-                key={item}
-                label={item}
-                description={`Slides a card in, start: ${start}, ${work} ms of work in the tap's task`}
-                onClick={() => change('push')}
-              />
-            ))}
-          </List>
-        </div>
-        <div ref={attachCard} {...stylex.props(styles.card)}>
-          <div {...stylex.props(styles.bar)}>
-            <Button
-              label="Back"
-              variant="secondary"
-              size="sm"
-              onClick={() => change('pop')}
+      <div {...stylex.props(styles.root)}>
+        <List>
+          {ITEMS.map(item => (
+            <ListItem
+              key={item}
+              label={label == null ? item : `${label}: ${item}`}
+              description={`Slides a card in, start: ${start}, ${work} ms of work in the tap's task, hold ${hold} ms`}
+              onClick={() => change('push')}
             />
-          </div>
-          <List>
-            {ITEMS.map(item => (
-              <ListItem key={item} label={`Card, ${item}`} />
-            ))}
-          </List>
+          ))}
+        </List>
+      </div>
+      <div ref={attachCard} {...stylex.props(styles.card)}>
+        <div {...stylex.props(styles.bar)}>
+          <Button
+            label="Back"
+            variant="secondary"
+            size="sm"
+            onClick={() => change('pop')}
+          />
         </div>
+        <List>
+          {ITEMS.map(item => (
+            <ListItem key={item} label={`Card, ${item}`} />
+          ))}
+        </List>
+      </div>
+    </>
+  );
+}
+
+function MotionStartClockCell() {
+  const [params] = useSearchParams();
+  const start = parseStart(params.get('start'));
+  const work = queryNumber(params, 'work', 0);
+  const hold = queryNumber(params, 'hold', 0);
+  const compare = queryNumber(params, 'compare', 0);
+  const [lines, addLine] = useReadoutLines();
+
+  return (
+    <>
+      {compare > 0 ? null : <Ruler />}
+      <Stage>
+        {compare > 0 ? (
+          <div {...stylex.props(styles.columns)}>
+            <div {...stylex.props(styles.column)}>
+              <SlidingCard
+                start={start}
+                work={work}
+                hold={0}
+                label="Current"
+                addLine={addLine}
+              />
+            </div>
+            <div {...stylex.props(styles.column)}>
+              <SlidingCard
+                start={start}
+                work={work}
+                hold={compare}
+                label={`Hold ${compare} ms`}
+                addLine={addLine}
+              />
+            </div>
+          </div>
+        ) : (
+          <SlidingCard
+            start={start}
+            work={work}
+            hold={hold}
+            addLine={addLine}
+          />
+        )}
       </Stage>
       <Readout
         links={[
@@ -251,9 +318,15 @@ function MotionStartClockCell() {
             label: `next-frame, hold ${ms} ms`,
             href: `${PAGE}?start=next-frame&hold=${ms}`,
           })),
+          ...HOLDS.map(ms => ({
+            label: `current vs hold ${ms} ms`,
+            href: `${PAGE}?compare=${ms}`,
+          })),
         ]}
         lines={[
-          `start: ${start} · ${work} ms of work in the tap's task · hold ${hold} ms · the first frame must show 0% of the travel`,
+          compare > 0
+            ? `current vs hold ${compare} ms · start: ${start} · ${work} ms of work in the tap's task · tap a row on either side`
+            : `start: ${start} · ${work} ms of work in the tap's task · hold ${hold} ms · the first frame must show 0% of the travel`,
           ...lines,
         ]}
       />
