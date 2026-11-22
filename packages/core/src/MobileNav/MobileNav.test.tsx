@@ -11,6 +11,7 @@
 
 import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {render, screen, within, fireEvent} from '@testing-library/react';
+import {Button} from '../Button';
 import {MobileNav} from './MobileNav';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 
@@ -43,6 +44,32 @@ describe('MobileNav', () => {
     // (The overlay keeps its own target; the panel's is not on it.)
     expect(dialog).toHaveClass('astryx-mobile-nav');
     expect(dialog).not.toHaveClass('astryx-mobile-nav-drawer');
+  });
+
+  it('carries mobile-nav-close on the Close button, beside the Button target', () => {
+    render(
+      <MobileNav isOpen={true} onOpenChange={() => {}}>
+        <span>Nav content</span>
+      </MobileNav>,
+    );
+    const close = screen.getByRole('button', {name: /close navigation/i});
+    expect(close).toHaveClass('astryx-mobile-nav-close');
+    expect(close).toHaveClass('astryx-button');
+  });
+
+  it('keeps mobile-nav-close and mobile-nav-toggle off every other Button', () => {
+    render(
+      <MobileNav isOpen={true} onOpenChange={() => {}}>
+        <Button label="Other action" />
+      </MobileNav>,
+    );
+    const other = screen.getByRole('button', {name: 'Other action'});
+    expect(other).toHaveClass('astryx-button');
+    expect(other).not.toHaveClass('astryx-mobile-nav-close');
+    expect(other).not.toHaveClass('astryx-mobile-nav-toggle');
+    expect(document.querySelectorAll('.astryx-mobile-nav-close')).toHaveLength(
+      1,
+    );
   });
 
   it('renders when isOpen is true', () => {
