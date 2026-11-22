@@ -55,7 +55,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: "the check after writing finds problems, measured no text (`unmeasured`) or had a repair kept back by a protected app file (`protectedFiles`): the theme is written and the result says so. Or, with nothing written: no --traits (ERR_MISSING_ARGUMENT); traits it does not take, a component's private `--_` variable, a token or part this Core does not have, or a name that is no theme name or a bundled theme's (ERR_INVALID_ARGUMENT); a theme file, or an editor theme, by that name already, or a file of the app's where the theme's stylesheet would go (ERR_FILE_EXISTS); a theme folder that leads out of the app (ERR_PATH_TRAVERSAL); or no app project with Core installed (ERR_PROJECT_REQUIRED)",
+      when: "the check after writing finds problems, measured no text (`unmeasured`) or had a repair kept back by a protected app file (`protectedFiles`): the theme is written and the result says so. Or, with nothing written: no --traits (ERR_MISSING_ARGUMENT); traits it does not take, a component's private `--_` variable, a token or part this Core does not have, or a name that is no theme name or a bundled theme's (ERR_INVALID_ARGUMENT); a theme file, or an editor theme, by that name already, or a file of the app's where the theme's stylesheet would go (ERR_FILE_EXISTS); a theme the build refuses, such as a part style it cannot write (ERR_THEME_INVALID; what create wrote is removed); a theme folder that leads out of the app (ERR_PATH_TRAVERSAL); or no app project with Core installed (ERR_PROJECT_REQUIRED)",
     },
   ],
   related: [

@@ -578,6 +578,19 @@ describe('a surface with no page', () => {
   }, 120_000);
 });
 
+describe('a part style the build refuses', () => {
+  it('stops with ERR_THEME_INVALID and leaves nothing behind', async () => {
+    await expect(
+      themeEditCreate(
+        'badtype',
+        {components: {heading: {'type:hero': {}}}},
+        {cwd},
+      ),
+    ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(fs.existsSync(path.join(cwd, 'src/themes/badtype'))).toBe(false);
+  }, 120_000);
+});
+
 describe("a component's private variable", () => {
   it('is refused before anything is written', async () => {
     await expect(

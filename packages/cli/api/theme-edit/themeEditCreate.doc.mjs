@@ -56,6 +56,10 @@ export const doc = {
       when: "a theme file is at the path already, the theme editor has a theme with that name, or a file of the app's is where the theme's stylesheet would go (the build's refusal; what create wrote is removed)",
     },
     {
+      code: 'ERR_THEME_INVALID',
+      when: "the theme build refuses the theme the traits describe, such as a part style it cannot write (what create wrote is removed); or check --fix's repair does not build (the theme stays written and added)",
+    },
+    {
       code: 'ERR_PATH_TRAVERSAL',
       when: "the theme's folder leads out of the app (a link)",
     },
