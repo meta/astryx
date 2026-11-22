@@ -17,13 +17,12 @@
 
 // Chromium keeps one invalidation set for each pseudo-class and attribute,
 // for the whole document. `stylex.when.ancestor(':hover')` prints
-// `.c.c:where(.m:hover *)`. Its relation ends in a bare `*`, so the `:hover`
-// set restyles the whole subtree of an element whose hover changes, for every
-// rule in the document that tests an ancestor's hover. With the `*` keyed to
-// the rule's class, `:where(.m:hover :where(.c))`, the set restyles only the
-// elements with that class. The rule matches the same elements, because its
-// own compound already requires the class. `:where()` adds no specificity,
-// also inside `:is()`.
+// `.c.c:where(.m:hover *)`. Its relation ends in a bare `*`. So the `:hover`
+// set restyles the whole subtree of each element whose hover changes. With the
+// `*` keyed to the rule's class, `:where(.m:hover :where(.c))`, the set
+// restyles only the elements with that class. The rule matches the same
+// elements, because its own compound already requires the class. `:where()`
+// adds no specificity, also inside `:is()`.
 
 /** The characters that separate two compounds at the top level. */
 const COMBINATORS = new Set([' ', '\t', '\n', '\r', '\f', '>', '+', '~']);
@@ -150,9 +149,9 @@ function hasClass(text, from, to, className) {
 }
 
 /**
- * The edits that key one complex selector, `text[from, to)`: each `*` that
- * ends a relation in a `:where()` or `:is()` of its subject compound, when
- * that compound has the class `className`.
+ * The edits that key one complex selector, `text[from, to)`. Each is a `*`
+ * that ends a relation in a `:where()` or `:is()` of the subject compound.
+ * There are none unless that compound has the class `className`.
  */
 function selectorEdits(text, from, to, className) {
   const subject = lastCompound(text, from, to);

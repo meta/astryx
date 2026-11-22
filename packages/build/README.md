@@ -272,9 +272,9 @@ A production build also checks the StyleX stylesheet for generated custom proper
 
 ### Relations keyed to their class
 
-Each StyleX relation that ends in a bare `*` names its rule's own class instead. `stylex.when.ancestor(':hover')` prints `.c.c:where(.marker:hover *)`; the build prints `.c.c:where(.marker:hover :where(.c))`. The rule matches the same elements, because its own compound already requires the class, and `:where()` adds no specificity. Chromium keeps one invalidation set for each pseudo-class for the whole document. A relation that ends in a bare `*` makes that set restyle the whole subtree of every element whose hover, focus or press changes, for every rule that reads that state. With the class named, it restyles only the elements with the class.
+Each StyleX relation that ends in a bare `*` names its rule's own class instead. `stylex.when.ancestor(':hover')` prints `.c.c:where(.marker:hover *)`; the build prints `.c.c:where(.marker:hover :where(.c))`. The rule matches the same elements, because its own compound already requires the class, and `:where()` adds no specificity. Chromium keeps one invalidation set for each pseudo-class for the whole document. A relation that ends in a bare `*` makes that set restyle the whole subtree of every element whose hover, focus or press changes. That holds for every rule that reads that state. With the class named, it restyles only the elements with the class.
 
-The prebuilt stylesheets and every source build through `@astryxdesign/build` print the keyed form, and the PostCSS and Vite integrations key the app's own rules too. One relation that ends in a bare `*` in any stylesheet on the page still restyles whole subtrees, so name the subject in CSS that these integrations do not compile.
+The prebuilt stylesheets and every source build through `@astryxdesign/build` print the keyed form, and the PostCSS and Vite integrations key the app's own rules too. One relation that ends in a bare `*` in any stylesheet on the page still restyles whole subtrees. So name the subject in CSS that these integrations do not compile.
 
 ---
 
