@@ -78,6 +78,62 @@ describe("a theme's own color tokens", () => {
     expect(await themeTokenContrast(cwd, handTheme('same', {}))).toEqual([]);
   }, 300_000);
 
+  it('set in a component block reach the menus a bar opens', async () => {
+    // (The header block of a first-try theme written by hand.)
+    const header = {
+      '--color-text-primary': '#ffffff',
+      '--color-text-secondary': '#ffffff',
+    };
+    const theme = {
+      ...handTheme('docs', {}),
+      components: {
+        ...neutral.components,
+        'app-shell-header': {
+          ...neutral.components?.['app-shell-header'],
+          base: {
+            ...neutral.components?.['app-shell-header']?.base,
+            backgroundColor: '#1e87f0',
+            ...header,
+          },
+        },
+      },
+    };
+    const found = await themeTokenContrast(cwd, theme);
+    const menu = (found ?? []).find(p =>
+      /^a menu or popover opened from app-shell-header draws its --color-text-primary \(#ffffff\) on the popover fill \(#ffffff\): 1\.00:1 in light/.test(
+        p.text,
+      ),
+    );
+    expect(menu?.fix).toBe(
+      "set --color-text-primary to #000000 in components['popover'] for light mode",
+    );
+  }, 300_000);
+
+  it('set in a block of one input stay on that input', async () => {
+    const theme = {
+      ...handTheme('ti', {}),
+      components: {
+        ...neutral.components,
+        'text-input': {
+          ...neutral.components?.['text-input'],
+          base: {
+            ...neutral.components?.['text-input']?.base,
+            backgroundColor: '#222222',
+            '--color-text-primary': '#ffffff',
+          },
+        },
+      },
+    };
+    const found = (await themeTokenContrast(cwd, theme)) ?? [];
+    expect(
+      found.filter(p =>
+        /\b(?:date-input|date-range-input|selector|multi-selector)\b/.test(
+          p.text,
+        ),
+      ),
+    ).toEqual([]);
+  }, 300_000);
+
   it('turn an editor fix line into plain words', () => {
     expect(
       plainFix(
@@ -101,6 +157,13 @@ describe("a theme's own color tokens", () => {
         "astryx experimental theme editor set t color '#1b1b1b' --on tab --only",
       ),
     ).toBe("set color to #1b1b1b in components['tab']");
+    expect(
+      plainFix(
+        "astryx experimental theme editor set t --color-text-primary '#000000' --on overlays --mode light",
+      ),
+    ).toBe(
+      "set --color-text-primary to #000000 in components['popover'] for light mode",
+    );
     expect(plainFix(null)).toBeNull();
   });
 
