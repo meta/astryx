@@ -124,6 +124,42 @@ export const categories: SandboxCategory[] = [
           'A pushed NavigationStack screen with a Done row or a strip at its edge, and a RefreshControl list, on a page that scrolls with the document, to check taps and pulls on a phone',
       },
       {
+        name: 'NavigationStack: Current and Proposed',
+        href: '/pages/navstack-current-proposed/',
+        description:
+          "One chat app on a full-page NavigationStack with today's stack and with its opt-in options, switched at the top, to try on a phone",
+      },
+      {
+        name: 'NavigationStack Press',
+        href: '/pages/navstack-press/',
+        description:
+          'A long windowed list whose row pushes a heavy screen, with and without the row preparing it at the press, for filming the press and the push on a phone',
+      },
+      {
+        name: 'NavigationStack Inert Cost',
+        href: '/pages/navstack-inert-cost/',
+        description:
+          'Times setting inert, pointer-events: none and aria-hidden on a covered long list and on a transcript, on a phone',
+      },
+      {
+        name: 'NavigationStack Kept Layout',
+        href: '/pages/navstack-kept-layout/',
+        description:
+          "Chats with long transcripts: a fresh push, a retained screen's re-push and a prepared push, for filming each push on a phone",
+      },
+      {
+        name: 'NavigationStack Heavy Commit',
+        href: '/pages/navstack-heavy-commit/',
+        description:
+          'A push and a pop with extra work in the commit or from the first frame, under a ruler of travel marks, for filming the first frame on a phone',
+      },
+      {
+        name: 'Motion Start Clock',
+        href: '/pages/motion-start-clock/',
+        description:
+          'A card a tap slides in and Back slides out on the push spring, with each way a motion from rest takes its start, for filming the first frame on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:

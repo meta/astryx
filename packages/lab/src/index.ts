@@ -414,10 +414,18 @@ export {
 export {
   NavigationScreen,
   NavigationStack,
+  useNavigationLink,
+  useNavigationScreen,
+  useNavigationScroller,
   useNavigationStack,
+  type NavigationChangeOptions,
+  type NavigationLinkProps,
   type NavigationScreenProps,
+  type NavigationScreenState,
+  type NavigationScroller,
   type NavigationStackApi,
   type NavigationStackProps,
+  type NavigationTransition,
 } from './NavigationStack';
 
 // PageControl: UIPageControl's row of page indicators.

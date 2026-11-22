@@ -6,8 +6,9 @@
  * @output Whether React can safely hydrate instead of client-rendering.
  * @position Prevents mismatches for iframe themes and for pages whose first
  *   render reads URL controls. Those pages are Shell Lab, Perf Scenes, Chat
- *   Layout, AlertDialog Cases, List Reorder Cases, Scroll Edge Taps and Swipe
- *   Actions Cases.
+ *   Layout, AlertDialog Cases, List Reorder Cases, Scroll Edge Taps, Swipe
+ *   Actions Cases, the NavigationStack (navstack-*) pages and Motion Start
+ *   Clock.
  */
 
 /** Pages whose first render reads the query string. */
@@ -19,6 +20,12 @@ const QUERY_RENDERED_PAGES = new Set([
   '/pages/list-reorder-cases/',
   '/pages/scroll-edge-taps/',
   '/pages/swipe-actions-cases/',
+  '/pages/navstack-current-proposed/',
+  '/pages/navstack-press/',
+  '/pages/navstack-inert-cost/',
+  '/pages/navstack-kept-layout/',
+  '/pages/navstack-heavy-commit/',
+  '/pages/motion-start-clock/',
 ]);
 
 export function canHydrate(route: string | undefined, search: string): boolean {

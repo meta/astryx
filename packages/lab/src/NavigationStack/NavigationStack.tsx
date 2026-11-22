@@ -30,6 +30,7 @@ import {
   useMemo,
   useRef,
   useState,
+  startTransition,
   type ReactElement,
   type ReactNode,
   type SyntheticEvent,
@@ -48,6 +49,7 @@ import {
   type MotionEngine,
   type SpringDescription,
 } from '@astryxdesign/core/internal/touch';
+import {useCommittedRef} from '@astryxdesign/core/internal/committed-ref';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {useScrollableArea} from '@astryxdesign/core/hooks';
 import {focusOutlineStyles} from '@astryxdesign/core/utils';
@@ -86,15 +88,60 @@ export interface NavigationScreenProps {
   /** Content at the end of the bar while this screen is on top. */
   endContent?: ReactNode;
   /**
+   * Rich content for the bar's title area. `title` still names the screen
+   * and Back's label.
+   */
+  titleContent?: ReactNode;
+  /**
    * How the title shows: in the bar (`inline`), or `large` above the
    * content. A large title scrolls with the content, as iOS's large titles
    * do. It hands over to the bar's title once it has scrolled under the bar.
    * @default 'inline'
    */
   titleDisplayMode?: 'large' | 'inline';
+  /**
+   * Which scroller scrolls the screen: the stack's (`screen`), or one the
+   * content brings (`content`). With `content`, the content fills the
+   * card's box under the bar and names its scroller with
+   * useNavigationScroller. Its title shows inline.
+   * @default 'screen'
+   */
+  scroll?: 'screen' | 'content';
+  /**
+   * Whether the screen draws no bar and keeps its own header, as UIKit's
+   * `navigationBarHidden`. A push from it brings the next screen's bar in
+   * with the push; a pop back takes it out.
+   * @default false
+   */
+  isBarHidden?: boolean;
   /** The screen's content; it scrolls on its own. */
   children?: ReactNode;
 }
+
+/** How one change moves: UIKit's motion, or a cut with none. */
+export type NavigationTransition = 'default' | 'cut';
+
+/** Options of one push, pop or popToRoot. */
+export interface NavigationChangeOptions {
+  /**
+   * `'cut'` lands the change in the commit that makes it, with no travel,
+   * dimming or fade.
+   * @default 'default'
+   */
+  transition?: NavigationTransition;
+  /**
+   * Where focus goes once the change lands: the new top screen's title, or
+   * nowhere new (`keep`), so a control the caller focused keeps it.
+   * @default 'title'
+   */
+  focus?: 'title' | 'keep';
+}
+
+/**
+ * Where a mounted screen is: on view (`top`), painted under it (`covered`),
+ * deeper or retained (`hidden`), or rendered before its push (`prepared`).
+ */
+export type NavigationScreenState = 'top' | 'covered' | 'hidden' | 'prepared';
 
 export interface NavigationStackProps<T> {
   /** The root screen: a NavigationScreen. */
@@ -115,6 +162,18 @@ export interface NavigationStackProps<T> {
   getKey?: (entry: T, index: number) => string | number;
   /** Whether the back swipe pops. @default true */
   isInteractivePopEnabled?: boolean;
+  /**
+   * How many popped screens stay mounted, hidden, with their state and
+   * scroll: 0 to 4. The least recently popped leaves first. Needs `getKey`.
+   * @default 0
+   */
+  retainPopped?: number;
+  /**
+   * How a path change the app makes directly moves. `'cut'` lands it in the
+   * render that changes `path`, as a change's `transition: 'cut'` does.
+   * @default 'default'
+   */
+  pathTransition?: 'default' | 'cut';
   /** Accessible name of the navigator region. */
   label?: string;
   'data-testid'?: string;
@@ -125,13 +184,22 @@ export interface NavigationStackApi<T = unknown> {
    * Pushes an entry. The control that started it (the click or key press
    * being handled, or `options.source`) gets focus back when its screen pops.
    */
-  push: (entry: T, options?: {source?: Element | null}) => void;
+  push: (
+    entry: T,
+    options?: {source?: Element | null} & NavigationChangeOptions,
+  ) => void;
   /** Pops the top screen; nothing at the root. */
-  pop: () => void;
+  pop: (options?: NavigationChangeOptions) => void;
   /** Pops back to the root. */
-  popToRoot: () => void;
+  popToRoot: (options?: NavigationChangeOptions) => void;
   /** How many screens are pushed on the root. */
   depth: number;
+  /** Unmounts an entry's retained or prepared screen. */
+  evict: (entry: T) => void;
+  /** Renders an entry's screen before its push, hidden. One at a time. */
+  prepare: (entry: T) => void;
+  /** Unmounts the prepared screen. */
+  drop: () => void;
 }
 
 // =============================================================================
@@ -139,6 +207,43 @@ export interface NavigationStackApi<T = unknown> {
 // =============================================================================
 
 const NavigationStackContext = createContext<NavigationStackApi | null>(null);
+
+const NavigationScreenContext = createContext<NavigationScreenState>('top');
+
+/** What a screen whose content owns its scroller reads. */
+export interface NavigationScroller {
+  /** Attach to the content's scroller: the bar's edge effect reads it. */
+  ref: (element: HTMLElement | null) => void;
+  /** How far the bar overlays the top of the content's box, in px. */
+  barInset: number;
+  /**
+   * Spread on an empty element at the top of the scroller's content: it
+   * switches the bar's edge effect.
+   */
+  sentinelProps?: Record<string, unknown>;
+}
+
+const NavigationScrollerContext = createContext<NavigationScroller | null>(
+  null,
+);
+
+/**
+ * The scroller hook of a screen with `scroll: 'content'`: the ref its
+ * scroller takes and the bar's inset. Elsewhere it names nothing.
+ */
+export function useNavigationScroller(): NavigationScroller {
+  return useContext(NavigationScrollerContext) ?? NO_SCROLLER;
+}
+
+const NO_SCROLLER: NavigationScroller = {ref: () => {}, barInset: 0};
+
+/**
+ * The state of the screen that renders this: `top`, `covered`, `hidden` or
+ * `prepared`. Only the top screen runs document-level work.
+ */
+export function useNavigationScreen(): {state: NavigationScreenState} {
+  return {state: useContext(NavigationScreenContext)};
+}
 
 /** The enclosing NavigationStack's push / pop / popToRoot. */
 export function useNavigationStack<T = unknown>(): NavigationStackApi<T> {
@@ -165,6 +270,9 @@ const styles = stylex.create({
   },
   // The bar overlays the screens, which scroll under it, as UIKit's content
   // extends under its bar.
+  // The strip itself takes no hit tests: a top screen that hides the bar
+  // keeps the taps on its own header. The bar's background, its layers and
+  // the back button take them.
   bar: {
     position: 'absolute',
     top: 0,
@@ -172,6 +280,7 @@ const styles = stylex.create({
     isolation: 'isolate',
     height: BAR_HEIGHT,
     zIndex: 1,
+    pointerEvents: 'none',
   },
   // The bar's own background and hairline, under every screen's bar layer,
   // which paints its own background over it. iOS 26.2's bar paints neither:
@@ -182,6 +291,7 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
     zIndex: -2,
+    pointerEvents: 'auto',
     backgroundColor: {
       default: colorVars['--color-background-surface'],
       '@media (pointer: coarse)': 'transparent',
@@ -204,6 +314,7 @@ const styles = stylex.create({
     // Below the back button: WebKit does not promote the static siblings a
     // moving layer crosses, so the moving one goes underneath.
     zIndex: -1,
+    pointerEvents: 'auto',
   },
   // The box that cuts the bar, moved by the stack. The row inside it moves
   // back by as much, so only the cut moves.
@@ -238,6 +349,7 @@ const styles = stylex.create({
     position: 'absolute',
     insetInlineStart: spacingVars['--spacing-4'],
     top: 0,
+    pointerEvents: 'auto',
     bottom: 0,
     display: 'flex',
     alignItems: 'center',
@@ -304,9 +416,13 @@ const styles = stylex.create({
       ':is([dir="rtl"] *)': 'scaleX(-1)',
     },
   },
+  // The cards' own stacking context, under the bar: no screen's content, and
+  // no card's layer, paints over the bar.
   cards: {
     position: 'absolute',
     inset: 0,
+    isolation: 'isolate',
+    zIndex: 0,
   },
   // Each card is a stacking context at rest, as a transform makes it during a
   // transition. So screen content with any z-index stays under the bar.
@@ -333,8 +449,38 @@ const styles = stylex.create({
       ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
+  // A covered screen deeper than the one under the top skips its layout.
   cardHidden: {
     contentVisibility: 'hidden',
+  },
+  // A screen with no bar: its content starts at the card's top.
+  scrollerNoBar: {
+    paddingTop: 0,
+    scrollPaddingTop: 0,
+  },
+  // The title of a screen with no bar, for assistive technology only.
+  hiddenTitle: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    margin: -1,
+    overflow: 'hidden',
+    clipPath: 'inset(50%)',
+    whiteSpace: 'nowrap',
+  },
+  // A screen whose content owns its scroller: a definite box under the bar.
+  contentBox: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  // A retained or prepared screen: no paint and no hit testing, whatever its
+  // place in the DOM. It stays laid out, so it shows again with no style or
+  // layout work.
+  cardAway: {
+    visibility: 'hidden',
+    pointerEvents: 'none',
   },
   // The scroll edge sentinel stays at its static position, just above the
   // content. The scroller is its containing block, so it scrolls with the
@@ -369,6 +515,7 @@ const styles = stylex.create({
 // The dimming's black is the UIKit table's alpha, a runtime value StyleX
 // cannot read at compile time.
 const dynamicStyles = stylex.create({
+  layer: (zIndex: number) => ({zIndex}),
   dimColor: (alpha: number) => ({
     // eslint-disable-next-line @astryx/no-raw-color -- UIKit's parallax dimming is black at the table's measured alpha in every appearance; it is not a theme colour
     backgroundColor: `rgba(0, 0, 0, ${alpha})`,
@@ -416,6 +563,9 @@ interface ScreenModel {
 function CardLayer({
   model,
   registry,
+  state,
+  layer,
+  onPath,
   isTop,
   isCovered,
   isHidden,
@@ -423,13 +573,39 @@ function CardLayer({
 }: {
   model: ScreenModel;
   registry: Registry;
+  state: NavigationScreenState;
+  layer: number;
+  /** Whether the screen is on the path (else retained or prepared). */
+  onPath: boolean;
   isTop: boolean;
   isCovered: boolean;
   isHidden: boolean;
   onLargeTitleCollapse: (key: string, isCollapsed: boolean) => void;
 }) {
   const props = model.element.props;
-  const isLarge = props.titleDisplayMode === 'large';
+  const isContentScroll = props.scroll === 'content';
+  const isBarHidden = props.isBarHidden === true;
+  // With no bar, a visually hidden heading is the title the stack focuses.
+  const hiddenTitleRef = useCallback(
+    (title: HTMLHeadingElement | null) => {
+      if (!isBarHidden) {
+        return;
+      }
+      const entry = registry.get(model.key) ?? {};
+      entry.titleElement = title;
+      registry.set(model.key, entry);
+    },
+    [isBarHidden, registry, model.key],
+  );
+  const isLarge = props.titleDisplayMode === 'large' && !isContentScroll;
+  // The content's own scroller, once it attaches (scroll: 'content').
+  const [contentScroller, setContentScroller] = useState<HTMLElement | null>(
+    null,
+  );
+  const contentScrollerRef = useMemo(
+    () => ({current: contentScroller}),
+    [contentScroller],
+  );
   // The large title has collapsed once it has scrolled entirely under the
   // bar: the bar's own title takes over. The title reads the card's scroll
   // position from the moment it attaches. A card hidden two levels down
@@ -479,8 +655,11 @@ function CardLayer({
   // more levels down, has no layout to measure, so it runs no effect. Once
   // revealed it measures and switches at once.
   const edge = useScrollEdgeEffect({
-    enabled: !isHidden,
-    root: scrollerRef,
+    enabled:
+      !isHidden &&
+      !isBarHidden &&
+      (!isContentScroll || contentScroller != null),
+    root: isContentScroll ? contentScrollerRef : scrollerRef,
     rootInset: BAR_HEIGHT,
     edge: `${BAR_HEIGHT}px`,
     sentinelXstyle: isLarge
@@ -508,42 +687,80 @@ function CardLayer({
     },
     [card, registry, model.key, dim.animator],
   );
+  const scroller = useMemo<NavigationScroller>(
+    () => ({
+      ref: setContentScroller,
+      barInset: BAR_HEIGHT,
+      sentinelProps: edge.sentinelProps as unknown as Record<string, unknown>,
+    }),
+    [edge.sentinelProps],
+  );
   return (
     <div
       ref={cardRef}
       data-navigation-screen={model.key}
       data-navigation-top={isTop || undefined}
       inert={isCovered || undefined}
-      {...stylex.props(styles.card, isHidden && styles.cardHidden)}>
-      <div
-        {...getViewportProps<HTMLDivElement>({
-          ref: scrollerRef,
-          xstyle: [focusOutlineStyles.focusVisible, styles.scroller],
-        })}>
-        {isLarge ? null : (
-          <div {...edge.sentinelProps} data-navigation-scroll-edge-sentinel />
-        )}
-        <div {...getContentProps<HTMLDivElement>({})}>
-          {isLarge ? (
-            <>
-              <h1
-                ref={largeTitleCallback}
-                tabIndex={-1}
-                {...stylex.props(
-                  focusOutlineStyles.focusVisible,
-                  styles.largeTitle,
-                )}>
-                {props.title}
-              </h1>
-              <div
-                {...edge.sentinelProps}
-                data-navigation-scroll-edge-sentinel
-              />
-            </>
-          ) : null}
-          {props.children}
+      data-navigation-screen-state={state}
+      {...stylex.props(
+        styles.card,
+        dynamicStyles.layer(layer),
+        isHidden && onPath && styles.cardHidden,
+        !onPath && styles.cardAway,
+      )}>
+      {isContentScroll ? (
+        <div data-navigation-content-box {...stylex.props(styles.contentBox)}>
+          <NavigationScrollerContext.Provider value={scroller}>
+            <NavigationScreenContext.Provider value={state}>
+              {props.children}
+            </NavigationScreenContext.Provider>
+          </NavigationScrollerContext.Provider>
         </div>
-      </div>
+      ) : (
+        <div
+          {...getViewportProps<HTMLDivElement>({
+            ref: scrollerRef,
+            xstyle: [
+              focusOutlineStyles.focusVisible,
+              styles.scroller,
+              isBarHidden && styles.scrollerNoBar,
+            ],
+          })}>
+          {isBarHidden ? (
+            <h2
+              ref={hiddenTitleRef}
+              tabIndex={-1}
+              {...stylex.props(styles.hiddenTitle)}>
+              {props.title}
+            </h2>
+          ) : null}
+          {isLarge ? null : (
+            <div {...edge.sentinelProps} data-navigation-scroll-edge-sentinel />
+          )}
+          <div {...getContentProps<HTMLDivElement>({})}>
+            {isLarge ? (
+              <>
+                <h1
+                  ref={largeTitleCallback}
+                  tabIndex={-1}
+                  {...stylex.props(
+                    focusOutlineStyles.focusVisible,
+                    styles.largeTitle,
+                  )}>
+                  {props.title}
+                </h1>
+                <div
+                  {...edge.sentinelProps}
+                  data-navigation-scroll-edge-sentinel
+                />
+              </>
+            ) : null}
+            <NavigationScreenContext.Provider value={state}>
+              {props.children}
+            </NavigationScreenContext.Provider>
+          </div>
+        </div>
+      )}
       <div {...edge.layerProps} data-navigation-scroll-edge />
       <div
         ref={dim.ref}
@@ -644,8 +861,9 @@ function BarLayer({
             ref={titleRefs}
             tabIndex={-1}
             aria-hidden={isLargeTitleShown || undefined}
+            aria-label={props.titleContent != null ? props.title : undefined}
             {...stylex.props(styles.barTitle, focusOutlineStyles.focusVisible)}>
-            {props.title}
+            {props.titleContent ?? props.title}
           </h2>
           <div {...stylex.props(styles.barEnd)}>{props.endContent}</div>
           <div
@@ -736,6 +954,66 @@ interface Transition {
   top: string;
   /** The screen under it. */
   under: string | null;
+  /** A cut: the change lands at rest, with no motion. */
+  cut?: boolean;
+  /** The change keeps focus where it is. */
+  keepFocus?: boolean;
+}
+
+/**
+ * The retained screens after `popped` leave the path, most recent last,
+ * trimmed to `limit`. An evicted screen is not retained.
+ */
+function keepRetained(
+  list: ScreenModel[],
+  popped: ScreenModel[],
+  limit: number,
+  evicted: readonly string[],
+): ScreenModel[] {
+  if (limit <= 0) {
+    return [];
+  }
+  const keys = new Set(popped.map(model => model.key));
+  return [
+    ...list.filter(model => !keys.has(model.key)),
+    ...popped.filter(model => !evicted.includes(model.key)),
+  ].slice(-limit);
+}
+
+interface ViewState {
+  keys: string;
+  models: ScreenModel[];
+  leaving: ScreenModel | null;
+  transition: Transition;
+  retained: ScreenModel[];
+  prepared: ScreenModel | null;
+  /**
+   * Screens the app evicted while they were on the path or leaving: their
+   * pop does not retain them.
+   */
+  evicted: string[];
+  /** Every mounted screen, in the order it first mounted. */
+  order: string[];
+}
+
+/**
+ * The view with its card order kept: a mounted screen keeps its place, and a
+ * new one goes last. A card that keeps its place in the DOM keeps its scroll.
+ */
+function withOrder(next: ViewState): ViewState {
+  const mounted = [
+    ...next.models,
+    ...(next.leaving == null ? [] : [next.leaving]),
+    ...next.retained,
+    ...(next.prepared == null ? [] : [next.prepared]),
+  ].map(model => model.key);
+  const order = next.order.filter(key => mounted.includes(key));
+  for (const key of mounted) {
+    if (!order.includes(key)) {
+      order.push(key);
+    }
+  }
+  return {...next, order};
 }
 
 /**
@@ -937,6 +1215,8 @@ export function NavigationStack<T>({
   renderScreen,
   getKey,
   isInteractivePopEnabled = true,
+  retainPopped = 0,
+  pathTransition = 'default',
   label,
   'data-testid': testId,
 }: NavigationStackProps<T>) {
@@ -1012,15 +1292,23 @@ export function NavigationStack<T>({
 
   // Derived during render, so a popped screen is still rendered (leaving) in
   // the very commit that drops it from the path.
-  const [view, setView] = useState<{
-    keys: string;
-    models: ScreenModel[];
-    leaving: ScreenModel | null;
-    transition: Transition;
-  }>(() => ({
+  // Retention keys screens by `getKey`: a position names no entry.
+  const retainLimit =
+    getKey == null
+      ? 0
+      : Math.max(0, Math.min(4, Math.floor(retainPopped) || 0));
+  const retainLimitRef = useCommittedRef(retainLimit);
+  // Paths a cut change made: the derivation below reads them.
+  const [cutPaths] = useState(() => new WeakSet<object>());
+  const [keepFocusPaths] = useState(() => new WeakSet<object>());
+  const [view, setView] = useState<ViewState>(() => ({
     keys,
     models,
     leaving: null,
+    retained: [],
+    prepared: null,
+    evicted: [],
+    order: models.map(model => model.key),
     transition: {
       id: 0,
       kind: 'none',
@@ -1033,22 +1321,69 @@ export function NavigationStack<T>({
     const before = view.models;
     const isPrefix = (shorter: ScreenModel[], longer: ScreenModel[]) =>
       shorter.every((model, i) => longer[i]?.key === model.key);
+    const cut = cutPaths.has(path) || pathTransition === 'cut';
+    const keepFocus = keepFocusPaths.has(path);
     let transition: Transition;
     let leaving: ScreenModel | null = null;
+    // A pop still leaving is popped all the same.
+    let retained =
+      view.leaving == null
+        ? view.retained
+        : keepRetained(
+            view.retained,
+            [view.leaving],
+            retainLimit,
+            view.evicted,
+          );
+    let prepared = view.prepared;
     if (models.length === before.length + 1 && isPrefix(before, models)) {
       transition = {
         id: view.transition.id + 1,
         kind: 'push',
         top: models[models.length - 1].key,
         under: before[before.length - 1]?.key ?? null,
+        cut,
+        keepFocus,
       };
     } else if (models.length < before.length && isPrefix(models, before)) {
-      leaving = before[before.length - 1];
+      const popped = before.slice(models.length);
+      const top = popped[popped.length - 1];
+      leaving = cut ? null : top;
       transition = {
         id: view.transition.id + 1,
         kind: 'pop',
-        top: leaving.key,
+        top: top.key,
         under: models[models.length - 1].key,
+        cut,
+        keepFocus,
+      };
+      retained = keepRetained(
+        retained,
+        cut ? popped : popped.slice(0, -1),
+        retainLimit,
+        view.evicted,
+      );
+    } else if (
+      cut &&
+      models.length === before.length &&
+      models.length > 1 &&
+      isPrefix(models.slice(0, -1), before)
+    ) {
+      // A cut that changes the top entry pops the old screen, which retention
+      // may keep, and lands the new one at rest.
+      retained = keepRetained(
+        retained,
+        [before[before.length - 1]],
+        retainLimit,
+        view.evicted,
+      );
+      transition = {
+        id: view.transition.id + 1,
+        kind: 'push',
+        top: models[models.length - 1].key,
+        under: models[models.length - 2].key,
+        cut,
+        keepFocus,
       };
     } else {
       transition = {
@@ -1058,7 +1393,28 @@ export function NavigationStack<T>({
         under: null,
       };
     }
-    setView({keys, models, leaving, transition});
+    // A screen back on the path keeps its instance: it is no longer hidden.
+    const onPath = new Set(models.map(model => model.key));
+    retained = retained.filter(model => !onPath.has(model.key));
+    if (prepared != null && onPath.has(prepared.key)) {
+      prepared = null;
+    }
+    // An eviction holds until its screen has left the path and the pop.
+    const evicted = view.evicted.filter(
+      key => onPath.has(key) || leaving?.key === key,
+    );
+    setView(
+      withOrder({
+        keys,
+        models,
+        leaving,
+        transition,
+        retained,
+        prepared,
+        evicted,
+        order: view.order,
+      }),
+    );
   } else if (view.models !== models) {
     // Same screens, new elements (the app re-rendered): keep them current.
     setView({...view, models});
@@ -1456,6 +1812,19 @@ export function NavigationStack<T>({
     [layersOf, readClearBars, setClip, clipXFor],
   );
 
+  /** Whether focus is inside the screen keyed `key`. */
+  const focusIsIn = useCallback((key: string | null) => {
+    const cards = cardsRef.current;
+    const active = cards?.ownerDocument.activeElement;
+    if (cards == null || active == null || key == null) {
+      return false;
+    }
+    const card = [...cards.children].find(
+      child => child.getAttribute('data-navigation-screen') === key,
+    );
+    return card != null && card.contains(active);
+  }, []);
+
   const focusAfter = useCallback(
     (kind: 'push' | 'pop', key: string, revealed?: string) => {
       const container = containerRef.current;
@@ -1526,6 +1895,32 @@ export function NavigationStack<T>({
       });
       backControl.animator.set({opacity: 1});
       backChevron.animator.set({opacity: 1});
+      return;
+    }
+    if (transition.cut === true) {
+      // A cut lands at rest in this commit: nothing travels, dims or fades.
+      runningRef.current = {id: transition.id, done: true};
+      releaseRef.current = null;
+      view.models.forEach((model, index) => {
+        settle(model.key, index === view.models.length - 1 ? 'top' : 'covered');
+      });
+      backControl.animator.set({opacity: 1});
+      backChevron.animator.set({opacity: 1});
+      const keepsCallerFocus =
+        transition.keepFocus === true &&
+        focusIsIn(
+          transition.kind === 'push' ? transition.top : transition.under,
+        );
+      if (!keepsCallerFocus) {
+        if (transition.kind === 'push') {
+          focusAfter('push', transition.top);
+        } else if (transition.under != null) {
+          pendingFocusRef.current = {
+            popped: transition.top,
+            revealed: transition.under,
+          };
+        }
+      }
       return;
     }
     const {top, under} = transition;
@@ -1622,18 +2017,39 @@ export function NavigationStack<T>({
       }
       if (transition.kind === 'pop') {
         setView(current =>
-          current.transition.id === id ? {...current, leaving: null} : current,
+          current.transition.id === id
+            ? withOrder({
+                ...current,
+                leaving: null,
+                retained:
+                  current.leaving == null
+                    ? current.retained
+                    : keepRetained(
+                        current.retained,
+                        [current.leaving],
+                        retainLimitRef.current,
+                        current.evicted,
+                      ),
+                evicted: current.evicted.filter(key =>
+                  current.models.some(model => model.key === key),
+                ),
+              })
+            : current,
         );
         if (under != null) {
           settle(under, 'top');
-          pendingFocusRef.current = {popped: top, revealed: under};
+          if (transition.keepFocus !== true || !focusIsIn(under)) {
+            pendingFocusRef.current = {popped: top, revealed: under};
+          }
         }
       } else {
         if (under != null) {
           // The covered screen keeps its place under the top one.
           layersOf(under)?.card?.set({opacity: 1});
         }
-        focusAfter('push', top);
+        if (transition.keepFocus !== true || !focusIsIn(top)) {
+          focusAfter('push', top);
+        }
       }
     });
     // Only a new transition restarts this; the stack drives the layers
@@ -1642,6 +2058,7 @@ export function NavigationStack<T>({
     view.transition.id,
     animateProgress,
     focusAfter,
+    focusIsIn,
     platformTraversal,
     layersOf,
     readClearBars,
@@ -1674,6 +2091,33 @@ export function NavigationStack<T>({
     pathRef.current = path;
     onPathChangeRef.current = onPathChange;
   });
+  const getKeyRef = useCommittedRef(getKey);
+  const renderScreenRef = useCommittedRef(renderScreen);
+
+  // A change through the API: a cut marks its path for the derivation.
+  const change = useCallback(
+    (next: T[], options?: NavigationChangeOptions) => {
+      if (options?.transition === 'cut') {
+        cutPaths.add(next);
+      }
+      if (options?.focus === 'keep') {
+        keepFocusPaths.add(next);
+      }
+      onPathChangeRef.current(next);
+    },
+    [cutPaths, keepFocusPaths],
+  );
+  // An entry's screen key, for retention and preparation (null without
+  // `getKey`).
+  const keyOf = useCallback(
+    (entry: T): string | null => {
+      const read = getKeyRef.current;
+      return read == null
+        ? null
+        : `screen-${read(entry, pathRef.current.length)}`;
+    },
+    [getKeyRef],
+  );
 
   const api = useMemo<NavigationStackApi<T>>(
     () => ({
@@ -1686,21 +2130,70 @@ export function NavigationStack<T>({
               ? last.target
               : null;
         pendingSourceRef.current = source;
-        onPathChangeRef.current([...pathRef.current, entry]);
+        change([...pathRef.current, entry], options);
       },
-      pop: () => {
+      pop: options => {
         if (pathRef.current.length > 0) {
-          onPathChangeRef.current(pathRef.current.slice(0, -1));
+          change(pathRef.current.slice(0, -1), options);
         }
       },
-      popToRoot: () => {
+      popToRoot: options => {
         if (pathRef.current.length > 0) {
-          onPathChangeRef.current([]);
+          change([], options);
         }
       },
       depth,
+      evict: entry => {
+        const key = keyOf(entry);
+        if (key == null) {
+          return;
+        }
+        setView(current => {
+          // A screen still on the path or leaving is not retained when its
+          // pop lands.
+          const isLeaving =
+            current.models.some(model => model.key === key) ||
+            current.leaving?.key === key;
+          return withOrder({
+            ...current,
+            retained: current.retained.filter(model => model.key !== key),
+            prepared: current.prepared?.key === key ? null : current.prepared,
+            evicted:
+              isLeaving && !current.evicted.includes(key)
+                ? [...current.evicted, key]
+                : current.evicted,
+          });
+        });
+      },
+      prepare: entry => {
+        const key = keyOf(entry);
+        if (key == null) {
+          return;
+        }
+        const element = renderScreenRef.current(entry, pathRef.current.length);
+        // Low priority: the render never holds back input or a scroll.
+        startTransition(() => {
+          setView(current =>
+            current.models.some(model => model.key === key) ||
+            current.retained.some(model => model.key === key) ||
+            current.prepared?.key === key
+              ? current
+              : withOrder({
+                  ...current,
+                  prepared: {key, element, source: null},
+                }),
+          );
+        });
+      },
+      drop: () => {
+        setView(current =>
+          current.prepared == null
+            ? current
+            : withOrder({...current, prepared: null}),
+        );
+      },
     }),
-    [depth],
+    [depth, change, keyOf, renderScreenRef],
   );
 
   // Record the source of a push on the screen it pushed.
@@ -1842,6 +2335,10 @@ export function NavigationStack<T>({
   // Render
   // ---------------------------------------------------------------------------
 
+  // A retained screen pushed again keeps its place in the DOM, and so its
+  // scroll; the stack layers the cards itself.
+  const cardOrder = view.order;
+
   const backLabelFor = (index: number) => {
     if (index === 0) {
       return null;
@@ -1871,9 +2368,13 @@ export function NavigationStack<T>({
         onKeyDownCapture={rememberActivation}
         {...stylex.props(styles.stack)}>
         <div {...stylex.props(styles.bar)}>
-          <div aria-hidden {...stylex.props(styles.barBackground)} />
+          {rendered.find(model => model.key === topKey)?.element.props
+            .isBarHidden === true ? null : (
+            <div aria-hidden {...stylex.props(styles.barBackground)} />
+          )}
           {rendered.map(model =>
-            model.key === topKey || model.key === underKey ? (
+            (model.key === topKey || model.key === underKey) &&
+            model.element.props.isBarHidden !== true ? (
               <BarLayer
                 key={model.key}
                 model={model}
@@ -1897,17 +2398,51 @@ export function NavigationStack<T>({
           ) : null}
         </div>
         <div ref={cardsRef} {...stylex.props(styles.cards)}>
-          {rendered.map(model => (
-            <CardLayer
-              key={model.key}
-              model={model}
-              registry={registry}
-              isTop={model.key === topKey && view.leaving == null}
-              isCovered={model.key !== topKey || view.leaving != null}
-              isHidden={model.key !== topKey && model.key !== underKey}
-              onLargeTitleCollapse={onLargeTitleCollapse}
-            />
-          ))}
+          {cardOrder.map(key => {
+            const index = rendered.findIndex(model => model.key === key);
+            if (index >= 0) {
+              const model = rendered[index];
+              const isTop = model.key === topKey && view.leaving == null;
+              return (
+                <CardLayer
+                  key={key}
+                  model={model}
+                  registry={registry}
+                  state={
+                    isTop
+                      ? 'top'
+                      : model.key === underKey || model.key === topKey
+                        ? 'covered'
+                        : 'hidden'
+                  }
+                  layer={index + 1}
+                  onPath
+                  isTop={isTop}
+                  isCovered={model.key !== topKey || view.leaving != null}
+                  isHidden={model.key !== topKey && model.key !== underKey}
+                  onLargeTitleCollapse={onLargeTitleCollapse}
+                />
+              );
+            }
+            const model =
+              view.prepared?.key === key
+                ? view.prepared
+                : view.retained.find(retained => retained.key === key);
+            return model == null ? null : (
+              <CardLayer
+                key={key}
+                model={model}
+                registry={registry}
+                state={model === view.prepared ? 'prepared' : 'hidden'}
+                layer={0}
+                onPath={false}
+                isTop={false}
+                isCovered
+                isHidden
+                onLargeTitleCollapse={onLargeTitleCollapse}
+              />
+            );
+          })}
         </div>
       </div>
     </NavigationStackContext.Provider>
