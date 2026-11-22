@@ -27,7 +27,7 @@ import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
   ExternalLinkIcon,
-  ExpandIcon,
+  FullScreenIcon,
   AddIcon,
 } from '@astryxdesign/template-icons';
 
@@ -693,7 +693,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                             label="Fullscreen"
                             variant="ghost"
                             size="sm"
-                            icon={<Icon icon={ExpandIcon} />}
+                            icon={<Icon icon={FullScreenIcon} />}
                             onClick={() =>
                               showToast({
                                 body: 'Demo: this example would open full screen here',
