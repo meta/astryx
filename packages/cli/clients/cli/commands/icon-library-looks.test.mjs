@@ -2118,8 +2118,6 @@ describe('a refresh of a set the library ships itself, whose root re-exports the
     ];
     const created = await json(SELF);
     expect(created.code, JSON.stringify(created.body)).toBe(0);
-    const added = await json(ADD);
-    expect(added.code, JSON.stringify(added.body)).toBe(0);
     const before = generatedOf('own');
     expect(before).toContain(
       "export {XOutline24WGHT400Icon as XIcon} from '@acme/icons';",
@@ -2128,9 +2126,19 @@ describe('a refresh of a set the library ships itself, whose root re-exports the
     writeRoot(["export * from './icon-sets/own/own.generated.js';"]);
     const refreshed = await json(SELF);
     expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(generatedOf('own')).toEqual(before);
+
+    // The first filled look, added after the root re-exports the set, wraps
+    // the library's filled export, not the set's outline name.
+    const added = await json(ADD);
+    expect(added.code, JSON.stringify(added.body)).toBe(0);
+    const withFilled = generatedOf('own');
+    expect(withFilled).toContain(
+      "export {XFilled24WGHT400Icon as XFilledIcon} from '@acme/icons';",
+    );
     const addedAgain = await json(ADD);
     expect(addedAgain.code, JSON.stringify(addedAgain.body)).toBe(0);
-    expect(generatedOf('own')).toEqual(before);
+    expect(generatedOf('own')).toEqual(withFilled);
     expect(
       dataOf('own').icons.map((/** @type {{id: string}} */ icon) => icon.id),
     ).toEqual(['arrow-down', 'search', 'star', 'trash', 'x']);
