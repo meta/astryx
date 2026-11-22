@@ -775,6 +775,35 @@ const ROWS = [
     },
   ],
   [
+    '"too" after "and also the … change" adds nothing',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Undo the heading change and also the card change too.',
+      never: /corners|font-weight/,
+      says: /^(?![\s\S]*no part is called)/,
+    },
+  ],
+  [
+    '"too" after a "The … change" sentence adds nothing',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Undo the heading change. The card change too.',
+      never: /corners|font-weight/,
+    },
+  ],
+  [
+    'a phrase with no part of its own is no undo of its own; it reads as before',
+    {
+      q: 'Make the corners rounder. Make the headings bold. Undo the heading change and the corner change.',
+      has: ['corners round'],
+    },
+  ],
+  [
+    'so is a phrase beside a mode',
+    {
+      q: 'Make the accent red in light mode. Make the cards blue in dark mode. Undo the light mode accent change and the dark mode card change.',
+      says: /names more than one change/,
+    },
+  ],
+  [
     '"too" after the change it names adds nothing',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the heading change and the card change too.',

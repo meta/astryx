@@ -5291,9 +5291,12 @@ export function draftAnswer(ctx, env, question) {
         return `${r} color ${typed ?? color}`;
       },
     )
-    // ("… and the card change too": "too" adds nothing to a "the …
-    // change" an undo names.)
-    .replace(/(\band the (?:[\w-]+\s+)+?changes?)\s+too\b/gi, '$1')
+    // ("… and the card change too", "… The card change too.": "too" adds
+    // nothing to a "the … change" an undo names.)
+    .replace(
+      /((?:^|[.;!?]\s*|\band\s+(?:also\s+)?)the (?:[\w-]+\s+)+?changes?)\s+too\b/gi,
+      '$1',
+    )
     // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with
     // status said, each hue is its status's color, green success, amber
     // or yellow or orange warning, red danger, blue info.
@@ -12104,12 +12107,17 @@ export function draftAnswer(ctx, env, question) {
       c.state = prev.state;
   }
   // ("Undo the heading change and the card corners change": each "the …
-  // change" said after an undo is an undo of its own. It takes back that
-  // change, or names that there is none; it never asks for a change.)
+  // change" said after an undo, naming a part of its own and no mode, is an
+  // undo of its own. It takes back that change, or names that there is
+  // none; it never asks for a change. Any other phrase is read with the
+  // undo before it, which then names more than one change.)
   for (let i = 1; i < clauses.length; i++) {
     const c = clauses[i];
     if (
       UNDO_VERB.test(clauses[i - 1].text) &&
+      !clauses[i - 1].mode &&
+      !c.mode &&
+      c.parts.length > 0 &&
       !c.colors.length &&
       !c.lengths.length &&
       /^\s*(?:and\s+)?(?:also\s+)?the\s+(?:[\w-]+\s+)+?changes?\s*$/i.test(
@@ -29961,14 +29969,21 @@ export function draftAnswer(ctx, env, question) {
       if (uc0) answeredByUndo.add(uc0);
       continue;
     }
-    // An undo whose one phrase names more than one part ("the card and
-    // button corners change"), or a look that more than one earlier change
-    // could be, is not read for sure: nothing is taken back, and the answer
-    // says so. A bare "size" or "weights" said alone is read below. ("Undo
-    // the card change and the heading change" is two undos, each read in
-    // turn.)
+    // An undo that names more than one change ("Undo the heading change
+    // and the corner change", a phrase that is no undo of its own), or a
+    // look that more than one earlier change could be, is not read for
+    // sure: nothing is taken back, and the answer says so. A bare "size" or
+    // "weights" said alone is read below. ("Undo the card change and the
+    // heading change" is two undos, each read in turn.)
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
+    const alsoNamed =
+      next &&
+      !next.aspects?.length &&
+      !next.colors?.length &&
+      /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
+        String(next.text ?? ''),
+      );
     const lookOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
         /** @type {any} */ (draftClause.get(d))?.aspects ?? []
@@ -29985,7 +30000,7 @@ export function draftAnswer(ctx, env, question) {
         ? ['said']
         : []),
     ];
-    const several = (uc?.parts?.length ?? 0) > 1;
+    const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
     // ("Make the headings bigger. Make the headings bold. Undo the heading
     // size change.": a look the undo names, read by `aspectsOf`, takes back
     // only the earlier change of that look. A bare "size" is the part's
@@ -30056,6 +30071,7 @@ export function draftAnswer(ctx, env, question) {
           ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
           : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
       if (uc) answeredByUndo.add(uc);
+      if (alsoNamed) answeredByUndo.add(next);
       continue;
     }
     // (A whole answer that holds every line, "all of it, in order", loses
