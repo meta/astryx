@@ -617,6 +617,32 @@ const ROWS = [
     },
   ],
   [
+    'an undo that names nothing takes back the changes said before it',
+    {
+      q: 'make cards glossy and buttons bold, then take them away',
+      never: /font-weight 700 --on button/,
+      says: /the button change said earlier in this ask is taken back/,
+      saysNot: /not taken/,
+    },
+  ],
+  [
+    'an undo of "that" takes back the change said before it',
+    {
+      q: 'make the buttons bold. undo that',
+      never: /font-weight 700 --on button/,
+      says: /taken back by its undo/,
+    },
+  ],
+  [
+    'an undo of "them" takes back every change said before it, and a later ask stands',
+    {
+      q: 'make the buttons bold. Make the cards blue. Undo all of it. Make the headings red.',
+      has: ["color '#dc2626' --on heading"],
+      never: /font-weight 700 --on button|#2563eb/,
+      says: /the changes said earlier in this ask are taken back by their undo/,
+    },
+  ],
+  [
     'an undo of an italic keeps the bold said earlier',
     {
       q: 'Make the headings italic. Make the headings bold. Undo the heading italic change.',

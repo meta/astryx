@@ -2338,7 +2338,7 @@ const PLACE_ONLY =
   /^\s*(?:[,.;:!?]|$|(?:on|in|inside|of|from|for|at|across|throughout|within|everywhere|anywhere|entirely|completely|too|as well|also|only|so|but|because|since|while|and nothing|please|thanks|thank you|(?:background|backdrop|fill|bg)s?)\b)/;
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
-  /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
+  /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|take (?:it|them|that|those|these|both) (?:away|back)|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
 /** The things a removal can take away. */
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
@@ -23019,13 +23019,9 @@ export function draftAnswer(ctx, env, question) {
           /\b(?:increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
             c.text,
           );
-        const factorSaid =
-          pxRatio != null ? null : exactFactor(c.text);
+        const factorSaid = pxRatio != null ? null : exactFactor(c.text);
         const pctAbsolute =
-          pxRatio == null &&
-          factorSaid == null &&
-          pct != null &&
-          !asChange
+          pxRatio == null && factorSaid == null && pct != null && !asChange
             ? String(Number(pct.toFixed(3)))
             : null;
         // (A change "by N%" with no way said writes nothing and asks which
@@ -28669,19 +28665,27 @@ export function draftAnswer(ctx, env, question) {
           };
     }
     if (
-      (/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) ||
+      (/\b(undo|revert|go back|take back)\b|\btake (?:it|them|that|those|these|both) (?:away|back)\b/.test(
+        t,
+      ) &&
+        !c.colors.length) ||
       (back && earlier.test(t))
     )
+      // (An undo that names no part, "undo that", "then take them away",
+      // takes back the changes said before it in the same ask, when there
+      // are any; `unmet` lets that pass find them.)
       return env.undoSteps
         ? {
             text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,
             options: [],
             lookup: `${P} undo ${env.slug}`,
+            unmet: 'everything',
           }
         : {
             text: `${env.slug} has no change to undo yet; show ${env.slug} lists its settings`,
             options: [],
             ...(env.exists ? {lookup: `${P} show ${env.slug}`} : {}),
+            unmet: 'everything',
           };
     if (/\breset\b|\bstart over\b|\bback to (the )?defaults?\b/.test(t))
       return {
@@ -30338,13 +30342,14 @@ export function draftAnswer(ctx, env, question) {
       const c = /** @type {any} */ (draftClause.get(d));
       if (d === unmet || d.unmet || !d.options.length || !c) return false;
       if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
-      // (Of the part the undo names; with no part, of the whole theme.)
+      // (Of the part the undo names; with no part, of the whole theme, or
+      // every change said before it when it names nothing at all.)
       const onPart = part
         ? c.parts?.some(
             (/** @type {{on: string}} */ p) =>
               p.on === part || (FAMILIES[part] ?? []).includes(p.on),
           )
-        : !c.parts?.length;
+        : what === 'everything' || !c.parts?.length;
       return (
         onPart &&
         (what === 'everything' ||
@@ -30475,10 +30480,18 @@ export function draftAnswer(ctx, env, question) {
             return left;
           })
           .filter(o => o.length);
+    // (A whole answer left with no line, every change taken back, goes.)
     result.splice(
       0,
       result.length,
-      ...result.filter(d => d !== unmet && !undone.includes(d)),
+      ...result.filter(
+        d =>
+          d !== unmet &&
+          !undone.includes(d) &&
+          (draftClause.get(d) ||
+            d.options.length ||
+            !d.text.startsWith('all of it, in order')),
+      ),
     );
     // (A color taken back leaves no line of it anywhere: the fill, its text
     // and the readable text the fill brought.)
@@ -30511,7 +30524,10 @@ export function draftAnswer(ctx, env, question) {
       if (c) answeredByUndo.add(c);
     }
     result.push({
-      text: `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
+      text:
+        !part && undone.length > 1
+          ? `the changes said earlier in this ask are taken back by their undo, so they are not written`
+          : `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
       options: [],
     });
   }
@@ -34082,7 +34098,8 @@ export function draftAnswer(ctx, env, question) {
         c =>
           String(/** @type {any} */ (c).text ?? '')
             .toLowerCase()
-            .match(/\b(?:undo|changes?|sizes?|weights?)\b/g) ?? [],
+            .match(/\b(?:undo|changes?|sizes?|weights?|take|away|back)\b/g) ??
+          [],
       ),
     ]
       .join(' ')
