@@ -226,11 +226,10 @@ const expansionStyles = stylex.create({
   // The button takes its baseline from this fixed box. A theme's glyph size
   // or a hidden glyph then keeps the row height. The box is the toggle's
   // first child, which the glide gives its spring, so it carries the turn.
-  // The glyph is centred in that box without positioning: WebKit pays for
-  // every positioned or transformed box in a table on each frame of a row
-  // glide, so a long table must not carry one per row at rest. A float keeps
-  // the glyph out of the line, so the box's baseline stays its bottom edge
-  // whatever size the glyph is.
+  // WebKit processes every positioned or transformed box in a table on each
+  // frame of a row glide. So the glyph box has no position at rest. The float
+  // centres the glyph and keeps it out of the line. The box's baseline stays
+  // its bottom edge for every glyph size.
   glyphBox: {
     display: 'inline-block',
     flexShrink: 0,
@@ -257,8 +256,8 @@ const expansionStyles = stylex.create({
       ':is([dir="rtl"] *)': 'scaleX(-1) rotate(90deg)',
     },
   },
-  // No transform at rest, for the same reason. RTL keeps its mirror: the
-  // icon slot has no mirrored artwork, and only CSS knows the direction.
+  // No transform at rest, for the same reason. RTL keeps its mirror. The icon
+  // slot has no mirrored artwork, and the rendered direction comes from the DOM.
   chevronCollapsed: {
     transform: {
       default: 'none',

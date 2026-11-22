@@ -3,8 +3,8 @@
 
 /**
  * @file TableRowExpandSlot.a11y.browser.spec.ts
- * @input The built TableRowExpansion IconSlotRowHeight story in real Chromium
- *   and WebKit
+ * @input The built TableRowExpansion IconSlotRowHeight and DetailPanel stories
+ *   in real Chromium and WebKit
  * @output Browser evidence that a theme's `table-row-expand` size request or
  *   `null` changes only the glyph (component:Table FR7): every expandable row
  *   keeps the height it has with the default glyph; and that a collapsed
@@ -93,12 +93,14 @@ for (const dir of ['ltr', 'rtl'] as const) {
     );
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    // Rounded, so an engine that keeps cos 90° as a tiny number still
+    // matches; `+ 0` turns -0 into 0.
+    const turn = (t?: string) =>
+      (t?.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/g) ?? [])
+        .slice(0, 4)
+        .map(n => Math.round(Number(n)) + 0);
     await expect
-      .poll(async () => (await boxes())[0]?.transform)
-      .toBe(
-        dir === 'rtl'
-          ? 'matrix(0, 1, 1, 0, 0, 0)'
-          : 'matrix(0, 1, -1, 0, 0, 0)',
-      );
+      .poll(async () => turn((await boxes())[0]?.transform))
+      .toEqual(dir === 'rtl' ? [0, 1, 1, 0] : [0, 1, -1, 0]);
   });
 }
