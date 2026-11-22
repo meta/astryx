@@ -939,8 +939,9 @@ a feel said with its moment ("darker on press", "darker on click", "8% tint
 on hover") as the dial; a border, text or shadow said with its moment stays
 that look's, and "hover #0065ff" said of a part stays that part's hover. A
 wash said as a tint or a moment's background ("hover tint 8%", "stronger
-hover tint", "make the pressed background darker") keeps the exact per-mode
-wash tokens it wrote before the dials.
+hover tint", "make the pressed background darker") writes the exact per-mode
+wash tokens (`--color-overlay-hover`, `--color-overlay-pressed`), never the
+dial. An exact wash the theme saves wins over the dial, and `how` says so.
 
 Rejected: a pressed fill written on each part and variant, which drifts from the parts' own fills when they change.
 Rejected: `none`, which leaves a pointer user no feedback on parts that paint only the wash, and a keyboard user no visible option in a list whose highlight is that wash.

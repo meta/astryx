@@ -248,6 +248,21 @@ describe('the press and hover dials', () => {
   );
 
   it(
+    'say in how that a saved exact wash wins, never that the look is already there',
+    async () => {
+      await themeEditNew('fe', {cwd, like: 'neutral'});
+      await themeEditSet('fe', '--color-overlay-pressed', '#22222233', {cwd});
+      const r = /** @type {any} */ (
+        (await themeEditHow('lighter on press', {cwd, theme: 'fe'})).data
+      );
+      const text = JSON.stringify(r.results);
+      expect(text).toContain('fe saves an exact --color-overlay-pressed');
+      expect(text).not.toContain('already lighter');
+    },
+    T,
+  );
+
+  it(
     'refuse a scope and a value they do not take',
     async () => {
       await themeEditNew('fr', {cwd, like: 'neutral'});
