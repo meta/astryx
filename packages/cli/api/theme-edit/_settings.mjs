@@ -62,6 +62,7 @@ import {
   fontShorthandStyle,
   fontShorthandWeight,
   namedFontFamilies,
+  systemFontSuccessor,
 } from '../theme/build/font-warning.mjs';
 import {
   customPropertyValues,
@@ -5496,15 +5497,33 @@ export function fontOf(value) {
 /**
  * The fallbacks a family typed alone gets, by the kind its name says, as
  * the open fonts get theirs: a monospace name (Mono, Code) monospace ones,
- * a serif name (but no sans) serif ones, any other sans-serif ones.
+ * a serif name (but no sans) serif ones, any other sans-serif ones; after
+ * the family that replaced it, for an older name of a system family.
  * @param {string} family
  * @returns {string[]}
  */
 function aloneFallbacks(family) {
-  if (/\b(mono|code)\b/i.test(family)) return ['ui-monospace', 'monospace'];
-  if (/serif/i.test(family) && !/sans/i.test(family))
-    return ['Georgia', 'serif'];
-  return ['system-ui', 'sans-serif'];
+  // (An older name of a system family, "MS Sans Serif", reaches the family
+  // that replaced it first.)
+  const successor = systemFontSuccessor(family);
+  const first = successor ? [`"${successor}"`] : [];
+  const kind = familyKind(family);
+  if (kind === 'mono') return [...first, 'ui-monospace', 'monospace'];
+  if (kind === 'serif') return [...first, 'Georgia', 'serif'];
+  return [...first, 'system-ui', 'sans-serif'];
+}
+
+/**
+ * The kind of font a family's name says: monospace for a Mono or Code
+ * name, serif for a serif name with no sans, sans-serif for any other.
+ * The fallbacks a family typed alone gets follow it.
+ * @param {string} family
+ * @returns {'mono' | 'serif' | 'sans'}
+ */
+export function familyKind(family) {
+  if (/\b(mono|code)\b/i.test(family)) return 'mono';
+  if (/serif/i.test(family) && !/sans/i.test(family)) return 'serif';
+  return 'sans';
 }
 
 /** A family name without its quotes. @param {string} family */

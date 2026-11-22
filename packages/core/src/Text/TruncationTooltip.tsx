@@ -27,7 +27,7 @@ import {
 } from 'react';
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
+import type {UndescribedTooltip as UndescribedTooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -35,7 +35,7 @@ import {
   type TooltipPresentInterestState,
 } from '../Tooltip/tooltipPresentInterest';
 
-type TooltipComponent = typeof TooltipType;
+type UndescribedTooltipComponent = typeof UndescribedTooltipType;
 
 // The Tooltip module. Once loaded, a tooltip renders from it at once: no
 // boundary suspends, so the first hover's delay starts on the hover.
@@ -59,8 +59,8 @@ const loadAfterNextPaint = afterPaintModule.load;
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
-  /** The Tooltip component, once its module has loaded. */
-  readonly tooltip: TooltipComponent | null;
+  /** The tooltip component, once its module has loaded. */
+  readonly tooltip: UndescribedTooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
   readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
@@ -86,8 +86,8 @@ export function useTruncationTooltipInterest(
   measure?: () => boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
-  const [tooltip, setTooltip] = useState<TooltipComponent | null>(
-    () => tooltipModule.loaded()?.Tooltip ?? null,
+  const [tooltip, setTooltip] = useState<UndescribedTooltipComponent | null>(
+    () => tooltipModule.loaded()?.UndescribedTooltip ?? null,
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once. Text that measures on
@@ -98,9 +98,11 @@ export function useTruncationTooltipInterest(
       return;
     }
     let isCurrent = true;
-    const show = (loaded: {Tooltip: TooltipComponent}) => {
+    const show = (loaded: {
+      UndescribedTooltip: UndescribedTooltipComponent;
+    }) => {
       if (isCurrent) {
-        setTooltip(() => loaded.Tooltip);
+        setTooltip(() => loaded.UndescribedTooltip);
       }
     };
     (measure == null ? tooltipModule.load() : loadAfterNextPaint()).then(
@@ -203,7 +205,10 @@ export function useTruncationTooltipInterest(
   };
 }
 
-/** The truncated element's Tooltip, given the interaction that mounted it. */
+/**
+ * The truncated element's tooltip, given the interaction that mounted it. Its
+ * text is the element's own, so it adds no description.
+ */
 export function TruncationTooltip({
   anchorRef,
   content,

@@ -77,6 +77,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[], fileWash?: true}} check the steps' check; fileWash marks a feel dial whose wash the theme's own file sets, a step left out of a sequence with its reason
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
+ * @property {(steps: Step[], token: string) => {light: string, dark: string} | null} tokenAfter what a whole-theme token shows after the steps, in each mode, or null when the steps do not build
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -277,6 +278,34 @@ export async function howTheme(ctx, cwd, name) {
             ? 'dark'
             : null;
       return measureFit(ctx, base, was, now, intent, steps, visible);
+    },
+    /**
+     * What a whole-theme token shows after the steps (built in memory,
+     * nothing written), every var() written out, in each mode.
+     * @param {Step[]} steps
+     * @param {string} token
+     */
+    tokenAfter(steps, token) {
+      const d = JSON.parse(JSON.stringify(theme));
+      const checkCtx = /** @type {any} */ ({...ctx, base});
+      try {
+        for (const st of steps) apply(checkCtx, slug, d, st);
+      } catch {
+        return null;
+      }
+      const toks = ownTokens(
+        compileTheme(ctx, d, base),
+        base,
+        ctx.project?.core,
+      );
+      /** @param {'light' | 'dark'} m */
+      const shown = m => {
+        let v = `var(${token})`;
+        for (let i = 0; i < 4 && /var\(/.test(v); i++)
+          v = resolveIn(v, toks[m], m);
+        return v.trim();
+      };
+      return {light: shown('light'), dark: shown('dark')};
     },
     /**
      * What a part shows for a property at rest after the steps (built in
