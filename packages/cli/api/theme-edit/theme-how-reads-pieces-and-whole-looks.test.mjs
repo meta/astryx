@@ -433,6 +433,21 @@ describe('a look said, then taken away by a pronoun', () => {
     },
     T,
   );
+
+  it(
+    'reads the ask the same way when another sentence follows it',
+    async () => {
+      for (const q of [
+        'The card border is ugly, hide it. Thanks!',
+        'The card border is ugly, hide it. Make the buttons blue.',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).toMatch(/border none --on card/);
+        expect(lines, q).not.toMatch(/border '1px/);
+      }
+    },
+    T,
+  );
 });
 
 describe('a nav said as a bar', () => {
