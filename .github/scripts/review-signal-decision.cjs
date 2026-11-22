@@ -168,6 +168,111 @@ function resolveReviewApprovals({
   };
 }
 
+// A stack is pull requests into main that each contain the one below. Each
+// description carries the same whole line, bottom first: `Stack: #a → #b`.
+const STACK_LINE = /^Stack: #\d+(?:[ \t]*(?:→|->)[ \t]*#\d+)+[ \t]*$/;
+
+/** Every whole `Stack:` line in a description, each as its numbers. */
+function stackLinesOf(body) {
+  return String(body ?? '')
+    .split(/\r?\n/)
+    .filter(line => STACK_LINE.test(line))
+    .map(line => (line.match(/#\d+/g) ?? []).map(ref => Number(ref.slice(1))));
+}
+
+/**
+ * The stacks whose `Stack:` line in a member's description lists the member
+ * below the top: each top's number and the line.
+ * @param {{number: number, body?: string | null}} member
+ */
+function stackTopsOf({number, body}) {
+  return stackLinesOf(body)
+    .filter(line => {
+      const at = line.indexOf(number);
+      return (
+        at >= 0 && at < line.length - 1 && new Set(line).size === line.length
+      );
+    })
+    .map(line => ({top: line[line.length - 1], line}));
+}
+
+/** Whether a review body has the bullet `**#<member>**: approved`. */
+function namesMemberApproved(body, member) {
+  const lead = `**#${member}**: approved`;
+  return String(body ?? '')
+    .split(/\r?\n/)
+    .some(
+      line =>
+        line.startsWith(lead) &&
+        !/^[A-Za-z]/.test(line.slice(lead.length)) &&
+        !/\bnot\b|changes/i.test(line),
+    );
+}
+
+/**
+ * Whether the stack top's review approves a stack member for the heavy turn
+ * only (spec:AST-030 FR20). The review app reviews a stack at its top. Its
+ * latest verdict at the top's exact current head, submitted after that head
+ * was pushed, must approve, after the member's latest push too, with the
+ * bullet `**#<member>**: approved`. The member's head must be in the top's
+ * head, and both descriptions must carry the same `Stack:` line. So the
+ * review read the member's current head. A missing push time counts nothing.
+ * @param {{
+ *   member: number,
+ *   memberHeadPushedAt: string | null,
+ *   line: number[],
+ *   top: {body?: string | null, head: {sha: string}},
+ *   topHeadPushedAt: string | null,
+ *   topReviews: any[],
+ *   reviewApp: string,
+ *   memberInTopHead: boolean,
+ * }} input
+ */
+function stackTopApproves({
+  member,
+  memberHeadPushedAt,
+  line,
+  top,
+  topHeadPushedAt,
+  topReviews,
+  reviewApp,
+  memberInTopHead,
+}) {
+  const app = normalizeReviewApp(reviewApp);
+  const memberPushed = Date.parse(memberHeadPushedAt ?? '');
+  const topPushed = Date.parse(topHeadPushedAt ?? '');
+  if (
+    !app ||
+    memberInTopHead !== true ||
+    !Number.isFinite(memberPushed) ||
+    !Number.isFinite(topPushed)
+  )
+    return false;
+  const key = line.join(' ');
+  if (!stackLinesOf(top.body).some(each => each.join(' ') === key))
+    return false;
+  let latest = null;
+  for (const review of topReviews) {
+    const at = Date.parse(review.submitted_at ?? '');
+    if (
+      review.user?.login?.toLowerCase() !== app ||
+      review.user?.type !== 'Bot' ||
+      review.commit_id !== top.head.sha ||
+      !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state) ||
+      // A review submitted before the top's head was pushed is re-bound.
+      !(at >= topPushed)
+    )
+      continue;
+    if (latest == null || at >= Date.parse(latest.submitted_at))
+      latest = review;
+  }
+  return (
+    latest?.state === 'APPROVED' &&
+    Date.parse(latest.submitted_at) >= memberPushed &&
+    namesMemberApproved(latest.body, member)
+  );
+}
+
 // A pull request the review app opens is the app's own work, which it cannot
 // approve: its code review is a trainer pass, an engineering owner's approval
 // of its exact head. Other bots stay exempt.
@@ -419,5 +524,8 @@ module.exports = {
   normalizeReviewApp,
   readHeadPushedAt,
   resolveReviewApprovals,
+  stackLinesOf,
+  stackTopApproves,
+  stackTopsOf,
   trainerPassed,
 };
