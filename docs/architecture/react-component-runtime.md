@@ -360,8 +360,8 @@ those contracts, and one user-facing rule that no component owns: how a
   `utils/touchRuntimeModules.tsx`, the shared core (the animator), and the
   touch part of a component that hands the loader its part (SegmentedControl,
   Switch, and the text fields' keyboard part through
-  `keyboard/useDeferredMobileKeyboard.tsx`), so a page loads only the parts its
-  components use, and every touch
+  `keyboard/useDeferredMobileKeyboard.tsx`), so a page loads only the parts of the
+  components it imports, and every touch
   load goes through the one loader. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD`
   apart from the animator, so a component that reads the threshold statically
   does not pull in the deferred runtime, and `motion/motionQueries.ts` holds
