@@ -5,8 +5,9 @@
 /**
  * @file page.tsx
  * @input `?start=next-frame|presented|browser` (how a motion from rest takes
- *   its start; next-frame by default) and `?work=<ms>` (work the tap's task
- *   runs after the call, 0 by default)
+ *   its start; next-frame by default), `?work=<ms>` (work the tap's task
+ *   runs after the call, 0 by default) and `?hold=<ms>` (how long the curve
+ *   holds its first value, 0 by default)
  * @output A card that a row's tap slides in from the trailing edge and Back
  *   slides out, on the push spring, as one Web Animation per change. A ruler
  *   of travel marks sits over it. The readout gives each change's start on
@@ -41,6 +42,7 @@ const OMEGA = (2 * Math.PI) / 0.3;
 const START_VELOCITY = 8.773;
 const DURATION_MS = 700;
 const STEP_MS = 1000 / 120;
+const HOLDS = [17, 33, 50];
 
 /**
  * How a change takes its start. `next-frame`: the animation is made in the
@@ -91,12 +93,18 @@ function springTravel(t: number): number {
   return 1 - (1 + (OMEGA - START_VELOCITY) * t) * Math.exp(-OMEGA * t);
 }
 
-/** The change's keyframes, from `from` to `to` px, sampled at 120 Hz. */
-function springKeyframes(from: number, to: number): Keyframe[] {
-  const frames: Keyframe[] = [];
+/**
+ * The change's keyframes, from `from` to `to` px, sampled at 120 Hz, after
+ * `hold` ms at `from`. A hold covers the frames a compositor runs before
+ * the screen first shows a new animation.
+ */
+function springKeyframes(from: number, to: number, hold: number): Keyframe[] {
+  const total = hold + DURATION_MS;
+  const frames: Keyframe[] =
+    hold > 0 ? [{offset: 0, translate: `${from}px 0`}] : [];
   for (let ms = 0; ms < DURATION_MS; ms += STEP_MS) {
     frames.push({
-      offset: ms / DURATION_MS,
+      offset: (hold + ms) / total,
       translate: `${from + (to - from) * springTravel(ms / 1000)}px 0`,
     });
   }
@@ -114,6 +122,7 @@ function MotionStartClockCell() {
   const [params] = useSearchParams();
   const start = parseStart(params.get('start'));
   const work = queryNumber(params, 'work', 0);
+  const hold = queryNumber(params, 'hold', 0);
   const [lines, addLine] = useReadoutLines();
   const stageRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -140,8 +149,8 @@ function MotionStartClockCell() {
       const to = kind === 'push' ? 0 : width;
       let startedMs: number | null = null;
       const run = () => {
-        const animation = card.animate(springKeyframes(from, to), {
-          duration: DURATION_MS,
+        const animation = card.animate(springKeyframes(from, to, hold), {
+          duration: hold + DURATION_MS,
           fill: 'forwards',
         });
         animation.finished.then(
@@ -230,15 +239,21 @@ function MotionStartClockCell() {
         </div>
       </Stage>
       <Readout
-        links={START_MODES.flatMap(mode => [
-          {label: mode, href: `${PAGE}?start=${mode}`},
-          {
-            label: `${mode} + 300 ms`,
-            href: `${PAGE}?start=${mode}&work=300`,
-          },
-        ])}
+        links={[
+          ...START_MODES.flatMap(mode => [
+            {label: mode, href: `${PAGE}?start=${mode}`},
+            {
+              label: `${mode} + 300 ms`,
+              href: `${PAGE}?start=${mode}&work=300`,
+            },
+          ]),
+          ...HOLDS.map(ms => ({
+            label: `next-frame, hold ${ms} ms`,
+            href: `${PAGE}?start=next-frame&hold=${ms}`,
+          })),
+        ]}
         lines={[
-          `start: ${start} · ${work} ms of work in the tap's task · the first frame must show 0% of the travel`,
+          `start: ${start} · ${work} ms of work in the tap's task · hold ${hold} ms · the first frame must show 0% of the travel`,
           ...lines,
         ]}
       />
