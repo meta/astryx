@@ -4784,6 +4784,16 @@ function clauseBefore(text, at) {
 }
 
 /**
+ * The slash before a gradient's length size, right after the `background`
+ * word and the gradient's position ("background linear-gradient(…) 0 0 /
+ * 24px 24px"): part of the value, never a break between asks.
+ */
+const PATTERN_SIZE_SLASH = new RegExp(
+  String.raw`(?<=\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:(?:px|r?em|vh|vw|ch)\b|%)))\s\/\s(?![^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\()`,
+  'i',
+);
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -6907,7 +6917,7 @@ export function draftAnswer(ctx, env, question) {
   // else is a way of the color before it, one segment.)
   const segments = question
     .split(
-      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|(?:(?<!\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:(?:px|r?em|vh|vw|ch)\b|%)))|(?=\s[/+]\s[^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\())\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     // (A list's marker, "1." or "2)", never a decimal's whole part: "1.5
     // leading" is one value.)
@@ -6921,6 +6931,14 @@ export function draftAnswer(ctx, env, question) {
     !/;/.test(question)
   )
     segments.splice(0, segments.length, question);
+  // (A pattern said with its size keeps the slash before its size in its
+  // value; any other slash between asks becomes a comma, so each ask is a
+  // clause of its own and every value stays as typed.)
+  if (segments.length > 1 && PATTERN_SIZE_SLASH.test(question))
+    question = question
+      .replace(new RegExp(PATTERN_SIZE_SLASH.source, 'gi'), ' \u2e35 ')
+      .replace(/\s\/\s(?![^(]*\))/g, ', ')
+      .replace(/ \u2e35 /g, ' / ');
   // A clause writes only when it reads as a direct ask: an imperative, a
   // request, or a thing with a value or a direction; a condition, an
   // indirect question, a double negative or a statement of fact gets the
