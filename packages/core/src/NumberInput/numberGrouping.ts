@@ -68,8 +68,12 @@ function insertGroupSeparators(
   group: string,
   primaryGroupSize: number,
   secondaryGroupSize: number,
+  minimumGroupingDigits: number,
 ): string {
-  if (group === '' || digits.length <= primaryGroupSize) {
+  if (
+    group === '' ||
+    digits.length < primaryGroupSize + minimumGroupingDigits
+  ) {
     return digits;
   }
   const chunks = [digits.slice(-primaryGroupSize)];
@@ -228,6 +232,7 @@ function hasOnlyFieldGrouping(
   group: string,
   primaryGroupSize: number,
   secondaryGroupSize: number,
+  minimumGroupingDigits: number,
 ): boolean {
   const {runStart, runEnd} = findIntegerRun(text, group);
   const run = text.slice(runStart, runEnd);
@@ -241,6 +246,7 @@ function hasOnlyFieldGrouping(
       group,
       primaryGroupSize,
       secondaryGroupSize,
+      minimumGroupingDigits,
     )
   );
 }
@@ -314,8 +320,13 @@ export function groupEditableDraft(
   previousTypedGroups: ReadonlyArray<number> = [],
 ): GroupedEditableDraft {
   const clampedCaret = Math.max(0, Math.min(caret, text.length));
-  const {group, primaryGroupSize, secondaryGroupSize, hasGrouping} =
-    getLocaleNumberSymbols(locale);
+  const {
+    group,
+    primaryGroupSize,
+    secondaryGroupSize,
+    minimumGroupingDigits,
+    hasGrouping,
+  } = getLocaleNumberSymbols(locale);
   if (!hasGrouping || group === '') {
     return {text, caret: clampedCaret};
   }
@@ -356,6 +367,7 @@ export function groupEditableDraft(
       group,
       primaryGroupSize,
       secondaryGroupSize,
+      minimumGroupingDigits,
     );
 
   // A digit or deletion edit to a draft that holds a group character the
@@ -390,6 +402,7 @@ export function groupEditableDraft(
     group,
     primaryGroupSize,
     secondaryGroupSize,
+    minimumGroupingDigits,
   );
   const nextText = text.slice(0, runStart) + groupedRun + text.slice(runEnd);
   if (clampedCaret <= runStart) {
@@ -485,13 +498,24 @@ export function deleteDigitAcrossGroupSeparator(
   key: 'Backspace' | 'Delete',
   locale?: Locale,
 ): GroupedEditableDraft | null {
-  const {group, hasGrouping, primaryGroupSize, secondaryGroupSize} =
-    getLocaleNumberSymbols(locale);
+  const {
+    group,
+    hasGrouping,
+    primaryGroupSize,
+    secondaryGroupSize,
+    minimumGroupingDigits,
+  } = getLocaleNumberSymbols(locale);
   if (!hasGrouping || group === '' || caret < 0 || caret > text.length) {
     return null;
   }
   if (
-    !hasOnlyFieldGrouping(text, group, primaryGroupSize, secondaryGroupSize)
+    !hasOnlyFieldGrouping(
+      text,
+      group,
+      primaryGroupSize,
+      secondaryGroupSize,
+      minimumGroupingDigits,
+    )
   ) {
     return null;
   }

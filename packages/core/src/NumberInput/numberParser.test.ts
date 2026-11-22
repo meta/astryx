@@ -250,6 +250,10 @@ describe('formatGroupedEditableNumber', () => {
     [-1500000, 'en-US', '-1,500,000'],
     [1500.5, 'en-US', '1,500.5'],
     [1500.5, 'de-DE', '1.500,5'],
+    [1500, 'es-ES', '1500'],
+    [15000, 'es-ES', '15.000'],
+    [1500, 'pl-PL', '1500'],
+    [15000, 'pt-PT', '15 000'],
   ])('shows %j in %s as %j', (value, locale, expected) => {
     expect(formatGroupedEditableNumber(value, locale)).toBe(expected);
   });
@@ -271,6 +275,17 @@ describe('formatGroupedEditableNumber', () => {
 });
 
 describe('groupEditableDraft', () => {
+  it('leaves four-digit integers ungrouped where the locale does', () => {
+    expect(groupEditableDraft('15000', 5, 'es-ES', '1500')).toEqual({
+      text: '15.000',
+      caret: 6,
+    });
+    expect(groupEditableDraft('15.00', 5, 'es-ES', '15.000')).toEqual({
+      text: '1500',
+      caret: 4,
+    });
+  });
+
   it('regroups digits and keeps the caret before the same digits', () => {
     expect(groupEditableDraft('15600000', 3, 'en-US')).toEqual({
       text: '15,600,000',

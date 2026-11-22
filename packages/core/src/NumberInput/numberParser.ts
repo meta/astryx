@@ -53,6 +53,11 @@ interface LocaleNumberSymbols {
   primaryGroupSize: number;
   /** Digits in every group left of it — 2 in en-IN's lakh grouping. */
   secondaryGroupSize: number;
+  /**
+   * Digits the integer needs past the primary group before it is grouped at
+   * all: 1 nearly everywhere, 2 in es-ES, pl-PL and pt-PT (`1500`, `15.000`).
+   */
+  minimumGroupingDigits: number;
   hasGrouping: boolean;
 }
 
@@ -75,6 +80,9 @@ export function getLocaleNumberSymbols(locale: Locale | undefined) {
       .filter(part => part.type === 'integer')
       .map(part => part.value.length);
     const hasGrouping = groupSizes.length > 1;
+    const groupsFourDigits =
+      format.formatToParts(1000).filter(part => part.type === 'integer')
+        .length > 1;
     symbols = {
       // Normalized so the space-family separators compare equal to the plain
       // space that input text is normalized to.
@@ -84,6 +92,7 @@ export function getLocaleNumberSymbols(locale: Locale | undefined) {
       decimal: parts.find(p => p.type === 'decimal')?.value ?? '.',
       primaryGroupSize: hasGrouping ? groupSizes[groupSizes.length - 1] : 3,
       secondaryGroupSize: hasGrouping ? groupSizes[groupSizes.length - 2] : 3,
+      minimumGroupingDigits: hasGrouping && !groupsFourDigits ? 2 : 1,
       hasGrouping,
     };
     symbolsByLocale.set(key, symbols);
