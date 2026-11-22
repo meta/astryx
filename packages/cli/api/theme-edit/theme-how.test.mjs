@@ -3548,6 +3548,14 @@ const QUESTIONS_J = [
   ['tighten line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
   ['change the line height by 10%', {top: null}],
   ['line height 150% by default', {top: /^set q --text-body-leading 1\.5$/}],
+  // a line height with no part is the body's; "all text" takes every
+  // text leading
+  ['1.5 line height', {top: /^set q --text-body-leading 1\.5$/}],
+  ['16px text, 1.5 leading.', {top: /--text-body-leading 1\.5$/}],
+  [
+    '1.5 line height for all text',
+    {top: /--text-supporting-leading 1\.5 && .*--text-heading-1-leading 1\.5/},
+  ],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],

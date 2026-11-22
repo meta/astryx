@@ -23019,13 +23019,9 @@ export function draftAnswer(ctx, env, question) {
           /\b(?:increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
             c.text,
           );
-        const factorSaid =
-          pxRatio != null ? null : exactFactor(c.text);
+        const factorSaid = pxRatio != null ? null : exactFactor(c.text);
         const pctAbsolute =
-          pxRatio == null &&
-          factorSaid == null &&
-          pct != null &&
-          !asChange
+          pxRatio == null && factorSaid == null && pct != null && !asChange
             ? String(Number(pct.toFixed(3)))
             : null;
         // (A change "by N%" with no way said writes nothing and asks which
@@ -23081,12 +23077,62 @@ export function draftAnswer(ctx, env, question) {
             : c.dir === 'less'
               ? '1.3'
               : '1.6');
+        // A line height said with no part is the body's: the other text
+        // leadings (the supporting and large text, the headings, labels and
+        // code) are read by sized parts too, so they keep theirs, said in a
+        // note with the line that changes them. "All text" or "everything"
+        // takes every leading by the same change.
+        const everyText =
+          !on &&
+          /\b(?:all|every|each)\s+(?:the\s+)?text\b|\beverything\b/i.test(
+            c.text,
+          );
+        const RUNNING = ['--text-large-leading', '--text-supporting-leading'];
+        const HEADINGS = [
+          '--text-display-1-leading',
+          '--text-display-2-leading',
+          '--text-display-3-leading',
+          '--text-heading-1-leading',
+          '--text-heading-2-leading',
+          '--text-heading-3-leading',
+          '--text-heading-4-leading',
+          '--text-heading-5-leading',
+          '--text-heading-6-leading',
+          '--text-label-leading',
+          '--text-code-leading',
+        ];
+        /** The same change on another leading token, from its own value. @param {string} t */
+        const alike = t => {
+          if (!(t in TOKENS)) return null;
+          if (n != null) return set(t, value);
+          const own = String(current(t) ?? '').trim();
+          if (!/^\d*\.?\d+$/.test(own)) return null;
+          return set(
+            t,
+            String(
+              Number(
+                (
+                  Number(own) * (leadFactor ?? (c.dir === 'less' ? 0.9 : 1.1))
+                ).toFixed(2),
+              ),
+            ),
+          );
+        };
+        const others =
+          tok && !on && numeric && everyText
+            ? [...RUNNING, ...HEADINGS].map(alike).filter(st => st != null)
+            : [];
+        const keepNote =
+          tok && !on && !everyText
+            ? `; the supporting and large text (--text-supporting-leading, --text-large-leading), the headings, the labels and code keep their own leading; say "headings line height ${value}" for the headings, or "all text line height ${value}" for every one`
+            : '';
         if (tok)
           return {
             // (A leading typed in pixels names its reading, so the answer
             // says what it read.)
-            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}`,
-            options: [[set(tok, value)]],
+            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}${others.length ? ', and every other text leading with it (supporting, large, headings, labels, code)' : keepNote}`,
+            options: [[set(tok, value), ...others]],
+            ...(others.length ? {sequence: true} : {}),
           };
         return {
           text: `line height${where}${numeric && !n ? ` (now ${now})` : ''}`,
