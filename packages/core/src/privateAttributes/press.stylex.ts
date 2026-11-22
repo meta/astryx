@@ -527,9 +527,9 @@ export const containerPressOverlayStyles = stylex.create({
     // does not: a layered build emits the property's default outside the
     // priority layers its attribute arms land in, and the default wins.
     // A press that starts on a control inside the card sets
-    // `--_nested-press-paint` on the container (useClickableContainer), so the
-    // container paints its rest overlay, not a mouse press. A container inside
-    // resets it.
+    // `--_nested-press-paint` on the container (useClickableContainer). The
+    // container then paints its rest overlay, not a mouse press. A container
+    // inside resets it.
     '--_nested-press-paint': 'initial',
     '--_nested-press-rest': {
       default: 'transparent',
