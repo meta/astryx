@@ -27,6 +27,8 @@ export function initialize(data) {
 }
 
 /**
+ * The answer depends only on the name and the importing file's folder, never
+ * on the file itself: package-resolve-hooks.mjs keeps it for the folder.
  * @param {string} specifier
  * @param {{parentURL?: string}} context
  * @param {(specifier: string, context?: object) => Promise<unknown>} nextResolve

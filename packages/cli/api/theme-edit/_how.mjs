@@ -47,6 +47,9 @@ import {
   selfSizedBoxLines,
   selfSizedWhy,
   sizesItsOwnBox,
+  givesEdge,
+  isRowFrame,
+  roundsCorners,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -749,7 +752,7 @@ async function answer(subject, options, cwd, blindSaid = false) {
         subject: t,
         understood: {parts: q.parts, aspects: q.aspects},
         ...themeFields,
-        results: finish(env, /** @type {any} */ (drafts)),
+        results: finish(env, /** @type {any} */ (drafts), ctx),
         ...unknown,
       };
     }
@@ -828,7 +831,7 @@ async function answer(subject, options, cwd, blindSaid = false) {
     h.drafts.unshift(...entries.filter((_, k) => !written.has(mine[k].part)));
     h.drafts.push(...entries.filter((_, k) => written.has(mine[k].part)));
   }
-  const results = finish(env, h.drafts);
+  const results = finish(env, h.drafts, ctx);
   const empty = !results.some(r => r.commands.length);
   const already = results.length > 0 && results.every(r => ALREADY.has(r));
   return {
@@ -976,8 +979,9 @@ const ALREADY = new WeakSet();
  * are all refused says why, and points to the lookup that helps.
  * @param {import('./_how-commands.mjs').HowTheme} env
  * @param {import('./_how-question.mjs').Draft[]} drafts
+ * @param {import('./_settings.mjs').Ctx} ctx
  */
-function finish(env, drafts) {
+function finish(env, drafts, ctx) {
   /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>, offer?: boolean}>} */
   const out = [];
   // The measured check runs first on the drafts that carry what their
@@ -1108,7 +1112,18 @@ function finish(env, drafts) {
       )
         continue;
     }
+    afterAskedEdge(ctx, env, d, drafts);
     const {commands, refused} = checked(env, d.options);
+    // (A choice whose options hold more than one step, a fill with the text
+    // that reads on it: each option is one line, so a line is one whole
+    // choice.)
+    if (d.joined) {
+      const whole = d.options
+        .map(o => checked(env, [o]))
+        .filter(r => r.commands.length && !r.refused.length)
+        .map(r => r.commands.join(' && '));
+      commands.splice(0, commands.length, ...whole);
+    }
     const lookups = d.lookup ? [d.lookup] : [];
     // (The draft found it in place already: said, with no command.)
     if (d.already) {
@@ -2303,7 +2318,12 @@ async function pictureLook(cwd, name, read) {
   const familyHolds = (family, on) => {
     const families =
       family === 'controls' ? ['button-like', 'inputs'] : [family];
-    return families.some(f => on === f || (groups[f] ?? []).includes(on));
+    // (The family itself holds what is set on it: a height set on a
+    // control is saved on the controls.)
+    return (
+      on === family ||
+      families.some(f => on === f || (groups[f] ?? []).includes(on))
+    );
   };
   const env = await howTheme(ctx, cwd, name);
   const own = env.data.settings;
@@ -2370,4 +2390,45 @@ async function pictureLook(cwd, name, read) {
     results,
     unsure,
   };
+}
+
+/**
+ * Corners asked of a pager's row with the edge the same ask gives it
+ * ("pagination: 6px radius, 1px border"). Alone they show nothing, as the
+ * row has no edge yet; the whole ask runs them after its edge. So the
+ * corners' own answer takes that edge first, as the whole ask does, and
+ * says so.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} env
+ * @param {any} d
+ * @param {any[]} drafts
+ */
+function afterAskedEdge(ctx, env, d, drafts) {
+  const isCorner = (/** @type {any} */ st) =>
+    st.verb === 'set' && roundsCorners(st.thing);
+  if (
+    d.sequence ||
+    !d.options.length ||
+    !d.options.every(
+      (/** @type {any[]} */ o) => o.length === 1 && isCorner(o[0]),
+    )
+  )
+    return;
+  const on = d.options[0][0].on;
+  if (!on || !isRowFrame(ctx, on)) return;
+  const edge = drafts
+    .filter(x => x !== d && x.sequence)
+    .flatMap(x => x.options[0] ?? [])
+    .find(
+      (/** @type {any} */ x) =>
+        x.verb === 'set' && x.on === on && givesEdge(x, d.options[0][0].state),
+    );
+  if (!edge || d.options.some((/** @type {any[]} */ o) => env.check(o).ok))
+    return;
+  const withEdge = d.options
+    .map((/** @type {any[]} */ o) => [edge, ...o])
+    .find((/** @type {any[]} */ o) => env.check(o).ok);
+  if (!withEdge) return;
+  d.options = [withEdge];
+  d.text = `${d.text}, after the ${edge.thing} this ask gives it (alone, its corners would show nothing)`;
 }

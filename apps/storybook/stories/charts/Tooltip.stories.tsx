@@ -50,6 +50,7 @@ const modalLayeringTheme = defineTheme({
 const meta: Meta<typeof Chart> = {
   title: 'Charts/Chrome/Tooltip',
   component: Chart,
+  tags: ['autodocs'],
 };
 export default meta;
 
@@ -327,6 +328,9 @@ function ModalLayeringFixture() {
  * portal hidden behind the dialog.
  */
 export const ModalLayering: StoryObj = {
+  // The fixture opens a native modal on mount. On the Docs page that modal
+  // would cover the page and make the other stories inert.
+  tags: ['!autodocs'],
   render: () => <ModalLayeringFixture />,
   play: async ({canvasElement}) => {
     const dialog = canvasElement.querySelector('dialog');

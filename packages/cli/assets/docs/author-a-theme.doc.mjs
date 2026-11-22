@@ -155,7 +155,7 @@ export const docs = {
     {
       title: 'Building a Theme Family',
       content: [
-        {type: 'prose', text: 'Use family mode when an app switches among one base theme and its selected descendants. The build writes one keyed CSS file containing every member, plus one keyed JavaScript module and one declaration file, beside the root source. A member\'s plain JavaScript registry is imported by its path from the family module, so ship it at that path.'},
+        {type: 'prose', text: 'Use family mode when an app switches among one base theme and its selected descendants. The build writes one keyed CSS file containing every member, plus one keyed JavaScript module and one declaration file, beside the root source. When a member\'s registry or slot module is TypeScript or JSX, it also writes a `<family-key>.modules/` folder beside them, which ships with the module, as for a single build. A member\'s plain JavaScript registry is imported by its path from the family module, so ship it at that path.'},
         {type: 'code', lang: 'bash', label: 'Build one family', code: "{@command theme build} --family \\\n  ./src/themes/ocean.mjs \\\n  ./src/themes/ocean-calm.mjs \\\n  ./src/themes/ocean-calm-deep.mjs \\\n  --family-key ocean-family"},
         {type: 'prose', text: 'The family stylesheet eagerly downloads every selected member so first paint is complete. Switching members changes only the theme identity; it does not add, remove, or reorder stylesheets.'},
       ],
