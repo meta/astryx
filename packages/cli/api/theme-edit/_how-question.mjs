@@ -5550,7 +5550,9 @@ export function draftAnswer(ctx, env, question) {
       // word anywhere ("don't", "never", "shouldn't", in any case or place)
       // keeps the base answer: the clause reader takes it as an exception to
       // what is asked, so the grays are not read beside it.)
-      text => {
+      raw => {
+        // (A typographic apostrophe, "don’t", is the plain one.)
+        const text = raw.replace(/[\u2018\u2019]/g, "'");
         const clause =
           text
             .split(/[,;.!?\n]/)
