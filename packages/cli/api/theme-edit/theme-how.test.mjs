@@ -3554,7 +3554,10 @@ const QUESTIONS_J = [
   ['16px text, 1.5 leading.', {top: /--text-body-leading 1\.5$/}],
   [
     '1.5 line height for all text',
-    {top: /--text-supporting-leading 1\.5 && .*--text-heading-1-leading 1\.5/},
+    {
+      top: /^set q --text-body-leading 1\.5 && set q --text-large-leading 1\.5 && .*--text-heading-1-leading 1\.5.*--text-code-leading 1\.5$/,
+      text: /labels and supporting text .* keep their own/,
+    },
   ],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],

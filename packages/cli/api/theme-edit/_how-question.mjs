@@ -23078,16 +23078,17 @@ export function draftAnswer(ctx, env, question) {
               ? '1.3'
               : '1.6');
         // A line height said with no part is the body's: the other text
-        // leadings (the supporting and large text, the headings, labels and
-        // code) are read by sized parts too, so they keep theirs, said in a
-        // note with the line that changes them. "All text" or "everything"
-        // takes every leading by the same change.
+        // leadings keep theirs, said in a note with the line that changes
+        // them. "All text" or "everything" takes the large text, heading
+        // and code leadings by the same change too. The label and
+        // supporting leadings set the height of controls and rows (a
+        // checkbox label, a menu item), so they keep theirs even then.
         const everyText =
           !on &&
           /\b(?:all|every|each)\s+(?:the\s+)?text\b|\beverything\b/i.test(
             c.text,
           );
-        const RUNNING = ['--text-large-leading', '--text-supporting-leading'];
+        const RUNNING = ['--text-large-leading'];
         const HEADINGS = [
           '--text-display-1-leading',
           '--text-display-2-leading',
@@ -23098,7 +23099,6 @@ export function draftAnswer(ctx, env, question) {
           '--text-heading-4-leading',
           '--text-heading-5-leading',
           '--text-heading-6-leading',
-          '--text-label-leading',
           '--text-code-leading',
         ];
         /** The same change on another leading token, from its own value. @param {string} t */
@@ -23124,13 +23124,13 @@ export function draftAnswer(ctx, env, question) {
             : [];
         const keepNote =
           tok && !on && !everyText
-            ? `; the supporting and large text (--text-supporting-leading, --text-large-leading), the headings, the labels and code keep their own leading; say "headings line height ${value}" for the headings, or "all text line height ${value}" for every one`
+            ? `; the supporting and large text (--text-supporting-leading, --text-large-leading), the headings, the labels and code keep their own leading; say "headings line height ${value}" for the headings, or "all text line height ${value}" for the large text, headings and code too`
             : '';
         if (tok)
           return {
             // (A leading typed in pixels names its reading, so the answer
             // says what it read.)
-            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}${others.length ? ', and every other text leading with it (supporting, large, headings, labels, code)' : keepNote}`,
+            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}${others.length ? '; and the large text, heading and code leadings with it; the labels and supporting text (--text-label-leading, --text-supporting-leading) keep their own, as they set the height of controls and rows' : keepNote}${env.base?.typeScaleAdapted ? `; on touch phones this base's type scale resets line heights; a Core fix is pending` : ''}`,
             options: [[set(tok, value), ...others]],
             ...(others.length ? {sequence: true} : {}),
           };

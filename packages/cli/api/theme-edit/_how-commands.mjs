@@ -71,7 +71,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {number} undoSteps - How many changes `undo` can step back.
  * @property {boolean} bodyFontReachesHeadings - Whether `font X --on body` also changes the heading font in this release.
  * @property {import('./_settings.mjs').ThemeData} data
- * @property {{light: Record<string, string>, dark: Record<string, string>, onDark?: Record<string, string>}} base - `onDark`: the tokens the base's dark media rule replaces
+ * @property {{light: Record<string, string>, dark: Record<string, string>, onDark?: Record<string, string>, typeScaleAdapted?: boolean}} base - `onDark`: the tokens the base's dark media rule replaces; `typeScaleAdapted`: an adaptation rule of the base sets its own type scale
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none

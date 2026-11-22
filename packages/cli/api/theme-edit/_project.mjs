@@ -638,6 +638,12 @@ export async function baseResolved(project, like) {
         ([k, v]) => k.startsWith('--') && typeof v === 'string',
       ),
     ),
+    // Whether an adaptation rule of the base sets its own type scale (on
+    // touch phones): the scale it builds there sets every line height
+    // again, over the theme's.
+    typeScaleAdapted: (theme.__adaptations?.rules ?? []).some(
+      (/** @type {any} */ r) => r?.value?.typography?.scale != null,
+    ),
   };
   return out;
 }
