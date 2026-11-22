@@ -821,6 +821,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       const link = screen.getByRole('link', {name: LABEL});
       const text = link.parentElement as HTMLElement;
       fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.pointerMove(text, {pointerType: 'mouse'});
       await waitFor(
         () => {
           expect(showPopover).toHaveBeenCalled();
