@@ -119,11 +119,13 @@ const styles = stylex.create({
 export function DocPageLayout({
   title,
   description,
+  titleDescriptionGap = 4,
   children,
   outline,
 }: {
   title: string;
   description?: string;
+  titleDescriptionGap?: 1 | 4;
   children: ReactNode;
   /**
    * Optional on-this-page navigation items. When non-empty, an Outline aside
@@ -182,14 +184,16 @@ export function DocPageLayout({
       xstyle={hasOutline ? styles.sectionInRow : styles.sectionCentered}>
       <VStack gap={10}>
         <VStack gap={4}>
-          <Heading level={1} type="display-1">
-            {title}
-          </Heading>
-          {description ? (
-            <Text type="large" weight="normal" color="secondary">
-              {description}
-            </Text>
-          ) : null}
+          <VStack gap={titleDescriptionGap}>
+            <Heading level={1} type="display-1">
+              {title}
+            </Heading>
+            {description ? (
+              <Text type="large" weight="normal" color="secondary">
+                {description}
+              </Text>
+            ) : null}
+          </VStack>
           <Divider xstyle={hasOutline && styles.titleDivider} />
         </VStack>
         {showSelector ? (

@@ -43,7 +43,9 @@ export const GUIDE_NAMESPACE_PAGES = new Map();
  * slug so the sidebar shows it under that page.
  * @type {Map<string, string[]>}
  */
-export const NESTED_NAMESPACE_PAGES = new Map();
+export const NESTED_NAMESPACE_PAGES = new Map([
+  ['visualization', ['visualization/color-sets']],
+]);
 
 /**
  * Pages the sidebar shows under another page, child slug to parent slug. The

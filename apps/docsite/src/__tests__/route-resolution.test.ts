@@ -127,6 +127,7 @@ describe('route resolution', () => {
         'theme',
         'use-integrations',
         'visualization',
+        'visualization-color-sets',
         'working-with-ai',
       ].sort(),
     );
@@ -144,6 +145,21 @@ describe('route resolution', () => {
     expect(docRedirects['visualization-data-colors-in-renderers']).toMatch(
       /^\/docs\/visualization#/,
     );
+  });
+
+  it('shows Color sets as a separate child page of Data visualization', () => {
+    const page = pageBySlug.get('visualization-color-sets');
+    expect(page?.parent).toBe('visualization');
+    expect(page?.title).toBe('Colors');
+    expect(page?.sections.map(section => section.title)).toContain(
+      'Categorical',
+    );
+    expect(
+      pageBySlug.get('visualization')?.sections.map(section => section.title),
+    ).not.toContain('Categorical');
+    expect(
+      page?.sections.filter(section => section.previewType === 'swatch'),
+    ).toHaveLength(7);
   });
 
   it('shows Calendars as its own guide page, under Internationalization in the sidebar', () => {
