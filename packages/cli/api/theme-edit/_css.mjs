@@ -446,6 +446,10 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
     }).flatMap(([type, units]) => units.map(u => [u, type])),
   )
 );
+/** Every CSS length unit, longest first (`vmin` before `vm…`). */
+export const LENGTH_UNITS = Object.keys(UNIT_TYPES)
+  .filter(u => UNIT_TYPES[u] === 'length')
+  .sort((a, b) => b.length - a.length);
 /**
  * A value with each unit split off its number by a space joined to it
  * (`50 %`, `200 ms`, `8 PX`), for every unit CSS reads (the table above, and

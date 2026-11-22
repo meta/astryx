@@ -136,7 +136,13 @@ import {
   pluralOf,
 } from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
+import {
+  cssProperties,
+  keywordsOf,
+  LENGTH_UNITS,
+  matchValue,
+  splitTop,
+} from './_css.mjs';
 
 import {render as renderStep} from './_how-commands.mjs';
 import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
@@ -4800,8 +4806,9 @@ function clauseBefore(text, at) {
  * word and the gradient's position ("background linear-gradient(…) 0 0 /
  * 24px 24px"): part of the value, never a break between asks.
  */
+const LENGTH = `(?:${LENGTH_UNITS.join('|')})`;
 const PATTERN_SIZE_SLASH = new RegExp(
-  String.raw`(?<=\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:(?:px|r?em|vh|vw|ch)\b|%)))\s\/\s(?![^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\()`,
+  String.raw`(?<=\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:${LENGTH}\b|%)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:${LENGTH}\b|%)))\s\/\s(?![^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\()`,
   'i',
 );
 
@@ -6995,13 +7002,20 @@ export function draftAnswer(ctx, env, question) {
   question = joinSideLists(question);
   // ("the accent color, but lighter": a way after the comma with nothing
   // else is a way of the color before it, one segment.)
+  // (A pattern's size slash, "… 0 0 / 24px 24px", is set aside before the
+  // split: it is part of the value.)
   const segments = question
+    .replace(new RegExp(PATTERN_SIZE_SLASH.source, 'gi'), ' \u2e35 ')
     .split(
-      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|(?:(?<!\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:(?:px|r?em|vh|vw|ch)\b|%)))|(?=\s[/+]\s[^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\())\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     // (A list's marker, "1." or "2)", never a decimal's whole part: "1.5
     // leading" is one value.)
-    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)](?!\d))\s*/, ''))
+    .map(x =>
+      x
+        .replace(/ \u2e35 /g, ' / ')
+        .replace(/^\s*(?:[-*•]|\d+[.)](?!\d))\s*/, ''),
+    )
     .filter(x => x.trim());
   // "drop shadow: x 0, y 4, …", "card shadow: 0 1px …, 0 2px …": a label
   // with its value is one clause, commas and all.

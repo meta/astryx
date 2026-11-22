@@ -207,3 +207,21 @@ it('two sized layers with the mode said at the end answer as main does', async (
     ),
   ).toBe(true);
 }, 240_000);
+
+it('a size in any CSS length unit after the slash reads as that mode too', async () => {
+  expect(
+    await commands(
+      'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 10vmin 10vmin in dark mode',
+    ),
+  ).toContain(
+    "set pg background 'linear-gradient(#0001 1px, transparent 1px) 0 0 / 10vmin 10vmin' --on app-shell-header --mode dark",
+  );
+  // (Points are written as the pixels they are.)
+  expect(
+    (
+      await commands(
+        'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24pt 24pt in dark mode',
+      )
+    ).join('\n'),
+  ).toMatch(/ 0 0 \/ 32px 32px' --on app-shell-header --mode dark$/m);
+}, 240_000);
