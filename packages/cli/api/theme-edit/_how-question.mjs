@@ -19986,7 +19986,7 @@ export function draftAnswer(ctx, env, question) {
         unmet: `${what}${on ? ` on ${on}` : ''}`,
       };
     return {
-      text: `take back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}${fallsBack ? ` in ${c.mode} mode${fallsBack}` : ': undo restores the base value'}`,
+      text: `take back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}${c.mode && env.data.mode === 'both' ? ` in ${c.mode} mode` : ''}${fallsBack || ': undo restores the base value'}`,
       options: [
         matches.map(
           st =>
@@ -29916,6 +29916,8 @@ export function draftAnswer(ctx, env, question) {
             clashOfMode(d),
         );
     if (clashGone.length) {
+      // (The undo's own saved-setting lines go too.)
+      if (unmet.takesBack) takeFromWholes(unmet.options[0] ?? []);
       result.splice(
         0,
         result.length,
@@ -29997,6 +29999,9 @@ export function draftAnswer(ctx, env, question) {
         lookNamed.some(a => lookOf(d).includes(a)),
       );
       if (!ofLook.length && undone.length) {
+        // (An undo of a saved setting with no earlier change of that look
+        // stays as it is.)
+        if (unmet.takesBack) continue;
         // ("Make the headings bold. Undo the heading size change.": no
         // change of that look was said, so nothing is taken back.)
         unmet.text = `no ${part ? `${part} ` : ''}change of that look was said earlier in this ask, so nothing is taken back`;

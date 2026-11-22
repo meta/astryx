@@ -33,12 +33,13 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-undo-mode-', FIXTURE_PACKAGES);
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) return;
-  for (const t of ['ml', 'md', 'mb', 'mc', 'mx'])
+  for (const t of ['ml', 'md', 'mb', 'mc', 'mx', 'mh'])
     await themeEditNew(t, {cwd, like: 'neutral'});
   await themeEditSet('ml', '--color-accent', '#0f766e', {cwd, mode: 'light'});
   await themeEditSet('md', '--color-accent', '#0f766e', {cwd, mode: 'dark'});
   await themeEditSet('mb', '--color-accent', '#0f766e', {cwd});
   await themeEditSet('mx', '--color-accent', '#0f766e', {cwd});
+  await themeEditSet('mh', 'font-weight', '700', {cwd, on: 'heading'});
   await themeEditSet('mx', '--color-accent', '#7c3aed', {cwd, mode: 'dark'});
   await themeEditSet('mc', 'background-color', '#eeeeee', {
     cwd,
@@ -143,6 +144,31 @@ const ROWS = [
       q: 'in dark mode, reset the accent',
       lines: ['undo --color-accent --mode dark'],
       says: /dark mode then uses what mx sets for both modes/,
+    },
+  ],
+  [
+    'a clash said after the undo keeps its choice and the saved undo',
+    {
+      theme: 'mc',
+      q: 'reset the card background. make the cards red. make the cards blue',
+      says: /contradict each other/,
+    },
+  ],
+  [
+    "a clash taken back takes the undo's saved lines with it",
+    {
+      theme: 'mc',
+      q: 'make the headings bold. make the cards red. make the cards blue. reset the card background',
+      never: /^undo /,
+      says: /which clash, are taken back/,
+    },
+  ],
+  [
+    'an undo of a look with no change of it said keeps the saved undo',
+    {
+      theme: 'mh',
+      q: 'make the headings bold. undo the heading size change',
+      says: /take back what mh sets/,
     },
   ],
   [
