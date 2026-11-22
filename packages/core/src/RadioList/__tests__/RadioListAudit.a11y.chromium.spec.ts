@@ -207,7 +207,7 @@ async function readGroup(page: Page) {
           ?.querySelector('.astryx-radio-indicator')
           ?.getBoundingClientRect();
         return {
-          label: row?.querySelector('label')?.textContent?.trim() ?? '',
+          label: row?.textContent?.trim() ?? '',
           value: radio.value,
           name: radio.name,
           checked: radio.checked,
@@ -258,11 +258,31 @@ function checkGroup(
       radio.itemSize === expected.size,
       `${radio.label}: item data-size ${radio.itemSize}`,
     );
-    check(
-      radio.bottom - radio.top >= MIN_TARGET_PX,
-      `${radio.label}: row height ${radio.bottom - radio.top}`,
-    );
   }
+  // WCAG 2.5.8: a row under 24 px passes when a 24 px circle on its center
+  // clears its neighbours, so the centers of adjacent rows must be 24 px apart.
+  group.radios.forEach((radio, i) => {
+    const height = radio.bottom - radio.top;
+    const width = radio.right - radio.left;
+    if (height >= MIN_TARGET_PX && width >= MIN_TARGET_PX) {
+      return;
+    }
+    const center = (r: typeof radio) => [
+      (r.left + r.right) / 2,
+      (r.top + r.bottom) / 2,
+    ];
+    const [x, y] = center(radio);
+    for (const other of [group.radios[i - 1], group.radios[i + 1]]) {
+      if (other == null) {
+        continue;
+      }
+      const [ox, oy] = center(other);
+      check(
+        Math.hypot(ox - x, oy - y) >= MIN_TARGET_PX,
+        `${radio.label}: ${width}x${height} row, ${Math.round(Math.hypot(ox - x, oy - y))} px from ${other.label}`,
+      );
+    }
+  });
   // A disabled group's dimmed label belongs to an inactive control, which
   // WCAG 1.4.3 exempts. The receipt still records the ratio.
   if (group.disabled !== 'true') {
