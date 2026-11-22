@@ -263,8 +263,6 @@ export function systemFontSuccessor(family) {
  */
 export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
   'sf pro': 'system-ui',
-  // (Apple's name for the same face.)
-  'san francisco': 'system-ui',
   'sf pro text': 'system-ui',
   'sf pro display': 'system-ui',
   'sf pro rounded': 'ui-rounded',

@@ -34404,7 +34404,13 @@ function fontIn(cl, question) {
         .replace(/ (Font|Typeface)$/, '')
         .replace(/-(?:like|style|esque)$/i, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
-      if (/-(?:like|style|esque)\b|\slike\s/i.test(m[0])) {
+      // (A likeness: "<Name>-like", or a font said like it anywhere in the
+      // question, whichever pattern took the name.)
+      const likeBefore = new RegExp(
+        `\\b(?:font|typeface)s?\\s+like\\s+["']?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+        'i',
+      ).test(question);
+      if (/-(?:like|style|esque)\b/i.test(m[0]) || likeBefore) {
         // (A kind the rest of the clause names as a whole word, "NYT-style
         // serif headings", wins over the family's own kind: the kind said
         // is written, as before.)
