@@ -9673,6 +9673,134 @@ export function compileTheme(ctx, data, base) {
       ],
     };
   barReach(ctx, theme);
+  // A focus ring is drawn on what lies under the part it rings. Inside a
+  // part the theme fills (a colored top bar), the theme's ring color can be
+  // that fill itself, and keyboard focus would show nothing there. Such a
+  // part points the focus ring color of what it holds at a color that reads
+  // on its fill at 3:1: its own text color first, else white or black. A
+  // part that draws a focus ring itself lies on what is around it, so its
+  // own ring keeps the theme's color: a part that rings when it has focus
+  // (a button, a popover) gets the theme's color back on that focus, and a
+  // part that rings in another shape (a switch's track) is not given one.
+  // The picked color is never on what a part draws itself. A part inside
+  // that paints its own box (a card in a filled content area, a banner, a
+  // white top bar in a filled shell) gets a ring color that reads on its
+  // own fill again, the theme's first, unless it draws a ring itself. Each
+  // is decided from the fill and text color in effect for that part in each
+  // mode. A focus ring color the theme sets on a part stays.
+  {
+    /** @param {string} x */
+    const rgbOf = x => /** @type {[number, number, number]} */ (parseColor(x));
+    /** The last unscoped resting setting of a thing on a part in a mode. @param {string} target @param {RegExp} thing @param {'light' | 'dark'} m */
+    const inEffect = (target, thing, m) =>
+      [...data.settings]
+        .reverse()
+        .find(
+          y =>
+            y.on != null &&
+            thing.test(kebab(String(y.thing))) &&
+            !y.state &&
+            !y.when &&
+            (!y.mode || y.mode === m) &&
+            partsOf(ctx, y).includes(target),
+        );
+    /** A fill value as one opaque color in a mode, or null. @param {unknown} v @param {'light' | 'dark'} m */
+    const opaque = (v, m) => {
+      const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(String(v ?? '').trim())?.[1];
+      const x = ref ? shown(ref, m) : String(v ?? '').trim();
+      const c = x ? parseColor(x) : null;
+      return c && alphaOf(String(x)) >= 1 ? hex(c) : null;
+    };
+    /** The fill a part draws at rest in a mode: the theme's, else Core's. @param {string} target @param {'light' | 'dark'} m */
+    const fillOf = (target, m) => {
+      const set = inEffect(target, /^background(-color)?$/, m);
+      if (set) return opaque(set.value, m);
+      const at = ctx.C.MAP[target]?.at?.['background-color'] ?? {};
+      const rest = Object.keys(at).find(k => !k.includes(' '));
+      return rest == null ? null : opaque(at[rest], m);
+    };
+    /** Whether a part draws a focus ring itself, by its own rules, in whatever shape (a button's outline, a switch's track), but not a frame's ring for the control inside it (a card's), which is read for what it holds. @param {string} target */
+    const drawsRing = target =>
+      // (An indicator drawn under a native input, a checkbox's box, rings
+      // where that input has focus: on an element of its own, around it.)
+      ctx.C.MAP[target]?.underInput != null ||
+      Object.values(ctx.C.MAP[target]?.own ?? {}).some((/** @type {any} */ v) =>
+        /** @type {string[]} */ (
+          v?.tokens?.['--focus-outline-color'] ?? []
+        ).some(w => !/:has\(>\s*\[data-astryx-focus-owner\]/.test(w)),
+      );
+    /** Whether a part draws its focus ring only when it has focus itself (a button, a popover), so its own rule can give the ring back. @param {string} target */
+    const ringsOnFocus = target => {
+      const rings = Object.values(ctx.C.MAP[target]?.own ?? {}).flatMap(
+        (/** @type {any} */ v) =>
+          /** @type {string[]} */ (v?.tokens?.['--focus-outline-color'] ?? []),
+      );
+      return (
+        ctx.C.MAP[target]?.underInput == null &&
+        rings.length > 0 &&
+        rings.every(w => /(?:^|\s):focus-visible$/.test(w.trim()))
+      );
+    };
+    /** Whether the theme sets a focus ring color on a part. @param {string} target */
+    const ringSet = target =>
+      data.settings.some(
+        y =>
+          y.thing === '--focus-outline-color' &&
+          y.on &&
+          partsOf(ctx, y).includes(target),
+      );
+    const filled = new Set(
+      data.settings
+        .filter(
+          s =>
+            s.source === 'property' &&
+            /^background(-color)?$/.test(kebab(s.thing)) &&
+            !s.state &&
+            !s.when,
+        )
+        .flatMap(s => partsOf(ctx, s))
+        .filter(
+          t =>
+            (ctx.C.MAP[t]?.contains ?? []).length &&
+            !ringSet(t) &&
+            (!drawsRing(t) || ringsOnFocus(t)),
+        ),
+    );
+    for (const target of filled)
+      for (const m of /** @type {const} */ (['light', 'dark'])) {
+        const set = inEffect(target, /^background(-color)?$/, m);
+        const fill = set ? opaque(set.value, m) : null;
+        const ring = shown('--focus-outline-color', m);
+        if (!set || !fill || !ring) continue;
+        if (ratio(rgbOf(ring), rgbOf(fill)) >= 3) continue;
+        const text = inEffect(target, /^(color|--color-text-primary)$/, m);
+        const ownText = text ? opaque(text.value, m) : null;
+        const picked =
+          [ownText, '#ffffff', '#000000'].find(
+            c => c && ratio(rgbOf(c), rgbOf(fill)) >= 3,
+          ) ?? null;
+        if (!picked) continue;
+        const at = {...set, state: undefined, when: undefined};
+        modeBlock(at, target, m)['--focus-outline-color'] = picked;
+        if (ringsOnFocus(target))
+          modeBlock({...at, state: 'focus-visible'}, target, m)[
+            '--focus-outline-color'
+          ] = ring;
+        (ctx.compileNotes ??= []).push(
+          `${target} in ${m}: the focus ring of what it holds is ${picked}, so keyboard focus reads on its ${fill} fill (the theme's ring color, ${ring}, does not)`,
+        );
+        for (const inner of ctx.C.MAP[target]?.contains ?? []) {
+          if (ringSet(inner) || drawsRing(inner)) continue;
+          const own = fillOf(inner, m);
+          if (!own || own === fill) continue;
+          const back =
+            [ring, '#000000', '#ffffff'].find(
+              c => ratio(rgbOf(c), rgbOf(own)) >= 3,
+            ) ?? null;
+          if (back) modeBlock(at, inner, m)['--focus-outline-color'] = back;
+        }
+      }
+  }
   // A longhand set after a shorthand that covers it is the one in effect,
   // as the result says. The build merges these blocks over the base
   // theme's, and a key the base holds keeps the base's (earlier) place, so
