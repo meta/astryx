@@ -5831,14 +5831,17 @@ const KEPT_PAIRS_LINE =
  * theme this editor has not built yet (added from a shared theme with its
  * working files, whose built settings module is code and stays behind):
  * each color token, light and dark, as the palette stop that holds its
- * color, else as the color. The copy's stylesheet is read as text, and the
+ * color in that mode (a see-through one as that stop with its alpha), as
+ * the base theme's value where it shows that, else as the color it shows;
+ * a token no stop draws in either mode is left out. The copy's stylesheet is read as text, and the
  * first declaration of each token counts. Null when the theme has no app
  * copy, or no palette kept as saved.
  * @param {string} cwd
  * @param {string} slug
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base the base theme's resolved values
  * @returns {Record<string, Record<'light' | 'dark', KeptHalf>> | null}
  */
-function stopsShownInCopy(cwd, slug) {
+function stopsShownInCopy(cwd, slug, base) {
   const kept = keptPaletteColors(cwd, slug);
   /** @type {string} */
   let css;
@@ -5851,21 +5854,22 @@ function stopsShownInCopy(cwd, slug) {
     return null;
   }
   if (!kept) return null;
-  /** @param {string} color @param {'light' | 'dark'} m @returns {KeptHalf} */
-  const half = (color, m) => {
-    const c = color.toLowerCase();
-    if (c === String(kept.white).toLowerCase())
+  /** @param {string} token @param {string} color @param {'light' | 'dark'} m @returns {KeptHalf} */
+  const half = (token, color, m) => {
+    const c = color.toLowerCase().slice(0, 7);
+    const alpha = color.length === 9 ? color.slice(7).toLowerCase() : null;
+    if (!alpha && c === String(kept.white).toLowerCase())
       return {family: 'white', stop: 100};
-    if (c === String(kept.black).toLowerCase())
+    if (!alpha && c === String(kept.black).toLowerCase())
       return {family: 'black', stop: 0};
-    // (The mode's own ramp first: a color in both ramps is the mode's.)
-    for (const side of [m, m === 'light' ? 'dark' : 'light'])
-      for (const [family, f] of Object.entries(kept.palette ?? {}))
-        for (const [stop, value] of Object.entries(
-          /** @type {any} */ (f)?.[side] ?? {},
-        ))
-          if (side === m && String(value).toLowerCase() === c)
-            return {family, stop: Number(stop)};
+    for (const [family, f] of Object.entries(kept.palette ?? {}))
+      for (const [stop, value] of Object.entries(
+        /** @type {any} */ (f)?.[m] ?? {},
+      ))
+        if (String(value).toLowerCase() === c)
+          return {family, stop: Number(stop), ...(alpha ? {alpha} : {})};
+    if (String(base[m]?.[token] ?? '').toLowerCase() === color.toLowerCase())
+      return {family: 'literal', stop: 0, base: true};
     return {family: 'literal', stop: 0, color};
   };
   /** @type {Record<string, Record<'light' | 'dark', KeptHalf>>} */
@@ -5877,9 +5881,14 @@ function stopsShownInCopy(cwd, slug) {
   );
   for (const m of css.matchAll(decl)) {
     if (out[m[1]]) continue;
-    const light = m[2] ?? m[4];
-    const dark = m[3] ?? m[4];
-    out[m[1]] = {light: half(light, 'light'), dark: half(dark, 'dark')};
+    const pair = {
+      light: half(m[1], m[2] ?? m[4], 'light'),
+      dark: half(m[1], m[3] ?? m[4], 'dark'),
+    };
+    // (A token the base theme draws in both modes is not the palette's to
+    // keep.)
+    if (pair.light.base && pair.dark.base) continue;
+    out[m[1]] = pair;
   }
   return Object.keys(out).length ? out : null;
 }
@@ -18113,8 +18122,15 @@ export async function commitTheme(
   const stopsNow =
     keptPalette && moduleNow && moduleUnedited(moduleNow) !== false
       ? paletteStopsOnly(stopsIn(moduleNow, true), before, moduleNow)
-      : keptPalette && !moduleNow
-        ? paletteStopsOnly(stopsShownInCopy(cwd, slug), before)
+      : keptPalette && !fs.existsSync(f.settingsTs)
+        ? paletteStopsOnly(
+            stopsShownInCopy(
+              cwd,
+              slug,
+              await baseResolved(ctx.project, data.like),
+            ),
+            before,
+          )
         : null;
   // (A kept palette always keeps what its module showed, less what a token
   // setting wrote: `stopsNow`.)

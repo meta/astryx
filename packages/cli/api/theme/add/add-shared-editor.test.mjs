@@ -326,6 +326,11 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
         saved,
       )?.[1];
     expect(stop90).toBeTruthy();
+    expect(
+      /--color-accent-muted\s*:\s*light-dark\(\s*(#[0-9a-fA-F]+)/.exec(
+        fs.readFileSync(path.join(shared, 'app-copy/harbor.css'), 'utf-8'),
+      )?.[1],
+    ).not.toBe(stop90);
     const sharedCss = path.join(shared, 'app-copy/harbor.css');
     fs.writeFileSync(
       sharedCss,
@@ -371,9 +376,7 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
     );
     await themeEditSet('harbor', 'corners', 'square', {cwd: app});
     const after = shades(fs.readFileSync(copyCss, 'utf-8'));
-    expect(
-      Object.keys(shown).filter(k => k in after && after[k] !== shown[k]),
-    ).toEqual([]);
+    expect(Object.keys(shown).filter(k => after[k] !== shown[k])).toEqual([]);
     await expect(
       themeEditSet('harbor', 'accent', '#ff0000', {cwd: app}),
     ).rejects.toThrow(/astryx-oklch-v99 recipe, which this Astryx CLI/);
