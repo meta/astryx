@@ -19,6 +19,7 @@ import {REPO_ROOT} from './repo-root.mjs';
 import {packPublishedCli} from './pack-published-cli.mjs';
 import {runFolder} from './global-local-fixtures.mjs';
 import {readKept} from './kept-entry.mjs';
+import {removeCoreStep} from './core-step.mjs';
 
 export {readKept, writeKept} from './kept-entry.mjs';
 export const BUILD_ID = 'clients/cli/build-id.generated.json';
@@ -556,6 +557,11 @@ export function usePackedCli() {
       path.join(runFolder() ?? os.tmpdir(), 'packed-gather-cache-'),
     );
     packed = packPublishedCli(work);
+    // No run starts the global copy's background Core step, as placeCli
+    // leaves it out: once this version is published, the step installs its
+    // Core into a kept temp folder's release cache, and later runs there then
+    // name a Core that a fresh run does not.
+    removeCoreStep(packed);
     // What `prepack` writes for a published package.
     fs.writeFileSync(
       path.join(packed, BUILD_ID),

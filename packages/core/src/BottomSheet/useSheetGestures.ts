@@ -71,6 +71,7 @@ import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
 import {sheet} from '../motion/uikit/sheet';
+import {touchActionAllowsPan} from '../utils/scrollView';
 import {
   computeDetentOffsets,
   peekOffsetFor,
@@ -265,6 +266,26 @@ export function isInsideNestedLayer(
     }
   }
   return false;
+}
+
+/**
+ * Whether the content between `target` and the body leaves no one-finger pan
+ * to the browser, as a menu whose rows fit does with `pinch-zoom`. A pan
+ * recognizer leaves such a touch to that content. Content that allows a pan
+ * on either axis (`pan-x` on the date pickers' month scroller) does not
+ * count, nor do the body and the sheet's own surfaces above it.
+ */
+export function leavesNoPan(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  if (!(target instanceof Element) || target === body) {
+    return false;
+  }
+  return (
+    !touchActionAllowsPan(target, 'x', body) &&
+    !touchActionAllowsPan(target, 'y', body)
+  );
 }
 
 /**
@@ -1681,7 +1702,11 @@ export function useSheetGestures({
       // content while the finger is still down (see onTouchMove). A touch
       // inside a layer this sheet hosts is that layer's, never tracked here.
       releaseContentHold(touchDragRef.current);
-      if (!touch || isInsideNestedLayer(event.target, body)) {
+      if (
+        !touch ||
+        isInsideNestedLayer(event.target, body) ||
+        leavesNoPan(event.target, body)
+      ) {
         touchDragRef.current = null;
         return;
       }

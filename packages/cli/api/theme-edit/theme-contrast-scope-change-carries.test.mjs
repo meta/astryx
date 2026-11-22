@@ -25,6 +25,8 @@ import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 
 // The assertions are about settings, builds, notes and lines, not rendered
 // pages: a render costs seconds, so the pages are written by the stand-in.
+import {butterTheme} from '../../../themes/butter/src/butterTheme';
+
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
     /** @type {any} */ (await importOriginal()),
@@ -187,8 +189,13 @@ describe('text on a ground part whose variants differ', () => {
         /top-nav-item \(on app-shell-header/.test(p.problem),
       );
       expect(item.length).toBeGreaterThan(0);
+      // Butter's own nav item text color in light, as its theme writes it.
+      const own = String(
+        /** @type {any} */ (butterTheme).components['top-nav-item'].base.color,
+      );
+      const light = /^light-dark\((#[0-9a-f]{6})/i.exec(own)?.[1] ?? own;
       for (const p of item) {
-        expect(p.problem).toMatch(/#225bff/i);
+        expect(p.problem.toLowerCase()).toContain(light.toLowerCase());
         expect(p.fix ?? '').not.toMatch(/--on app-shell-header/);
       }
     },

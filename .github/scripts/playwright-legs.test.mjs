@@ -16,12 +16,14 @@ import {
   costsFor,
   countTests,
   estimateSeconds,
+  floorSpecs,
   folderSpecs,
   isInteractionSpec,
   legCount,
   legsFitMessage,
   nearCeilingMessage,
   planLegs,
+  RECORDED_SPECS,
   recordLog,
   selectProofs,
   testsReader,
@@ -573,8 +575,41 @@ describe('the recorded Chromium interaction times', () => {
     // A spec with no recorded time is costed at the mean time a test, which
     // undercounts a slow spec; the legs then run past the time they planned.
     expect(specs.length).toBeGreaterThan(100);
-    const timed = specs.filter(file => recorded[file] != null);
-    expect(timed.length / specs.length).toBeGreaterThanOrEqual(0.9);
+    const counted = floorSpecs(specs, durations);
+    expect(counted.length).toBeGreaterThan(100);
+    const timed = counted.filter(file => recorded[file] != null);
+    expect(timed.length / counted.length).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('count toward that share only the specs the record knew, so a new spec needs no entry', () => {
+    const record = {
+      [RECORDED_SPECS]: [
+        'a.interaction.browser.spec.ts',
+        'b.interaction.browser.spec.ts',
+      ],
+    };
+    // A spec added after the record (c) is not counted; a spec the record knew
+    // and git no longer tracks (b) is not either.
+    expect(
+      floorSpecs(
+        ['a.interaction.browser.spec.ts', 'c.interaction.browser.spec.ts'],
+        record,
+      ),
+    ).toEqual(['a.interaction.browser.spec.ts']);
+    // A record without the list counts every spec, as before.
+    expect(floorSpecs(['a', 'c'], {})).toEqual(['a', 'c']);
+  });
+
+  it('still fails when entries for specs the record knew go missing', () => {
+    const known = specs.filter(file =>
+      durations[RECORDED_SPECS].includes(file),
+    );
+    const thinned = Object.fromEntries(
+      Object.entries(recorded).slice(0, Math.floor(known.length * 0.8)),
+    );
+    const counted = floorSpecs(specs, durations);
+    const timed = counted.filter(file => thinned[file] != null);
+    expect(timed.length / counted.length).toBeLessThan(0.9);
   });
 
   it('plan the whole suite into legs that each end within 12 minutes', () => {

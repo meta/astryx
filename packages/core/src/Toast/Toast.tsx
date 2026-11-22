@@ -430,6 +430,7 @@ export function ToastSurface({
     {
       politeness: isError ? 'assertive' : 'polite',
       announce,
+      isOncePerOccasion: true,
       exclude:
         renderContent != null
           ? TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR
