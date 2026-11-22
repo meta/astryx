@@ -6739,6 +6739,10 @@ export function draftAnswer(ctx, env, question) {
     /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they|we|i|you)|had (?:the|it|they|we|i|you)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event|(?:would|could|should) have (?:been|gone|used|had|looked|made|picked|chosen|kept))\b|^\s*(?:after|until|till|before)\s+(?!(?:hover|hovering|focus|focusing|click|clicking|press|pressing|visiting|being)\b)(?!(?:this|that)\b\s*(?:,|$|(?:make|set|change|use|give|turn|add|remove|put)\b))(?:the|a|an|my|our|their|your|this|that|[a-z]+\s+(?:approves?|reviews?|signs?\s+off|ships?|launch(?:es)?|is\s+done|finish(?:es)?))\b/i;
   // A feel said as what is not wanted ("never darker on press").
   const FEEL_NOT = /\b(?:never|avoid|without|not|no|don'?t|doesn'?t|won'?t)\b/i;
+  // A feel said while thinking aloud ("what if it were darker on press",
+  // "I wonder if it should be darker on press").
+  const FEEL_MUSE =
+    /\?|\bwhat if\b|\bi wonder\b|\bwondering\b|\b(isn'?t|aren'?t|doesn'?t|did|does|was|were|could|might|should|would)\b/i;
   // A dial whose wash the theme saves as an exact token is not read; the
   // ask reads as it did before the dials.
   /** @param {string} dial */
@@ -6900,9 +6904,7 @@ export function draftAnswer(ctx, env, question) {
       (feel.dial === 'press' || feel.dial === 'hover') &&
       !FEEL_NOT.test(raw) &&
       !feelHeld(feel.dial) &&
-      !/\?|\bwhat if\b|\b(isn'?t|aren'?t|doesn'?t|did|does|was|were|could|might|should|would)\b/.test(
-        raw,
-      )
+      !FEEL_MUSE.test(raw)
     )
       return true;
     // Questions in a script how cannot read word by word keep their ask.
@@ -17254,6 +17256,7 @@ export function draftAnswer(ctx, env, question) {
         (rung?.dial === 'press' || rung?.dial === 'hover') &&
         (c.neg ||
           FEEL_NOT.test(c.text) ||
+          FEEL_MUSE.test(question) ||
           feelHeld(rung.dial) ||
           c.aspects.some(a => !/^(?:background|fill)$/.test(a)));
       const r =

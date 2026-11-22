@@ -359,6 +359,7 @@ describe('how', () => {
         'never lighter on hover',
         'what if it were darker on press',
         'the old theme was darker on hover',
+        'I wonder if it should be darker on press',
       ])
         expect(await writes('fh', q), q).toEqual([]);
     },
