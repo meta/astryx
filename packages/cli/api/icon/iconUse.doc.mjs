@@ -58,7 +58,7 @@ export const doc = {
     {
       type: 'icon.use',
       description:
-        "The main set and the backups written, the sets they name, the variant written (`variant`, or null), the config file, whether it was created, the values it replaced (`previous`, `previousVariant`), the installed sets the list leaves out (`unlisted`, with a `next` command), with `variant`, the look each listed set draws (`looks`) and the main set's theme map for that look (`themeMap`), and a `warning` when the project's @astryxdesign/cli range admits a release that refuses the config: before 0.7.4 for a string, before 0.7.12 for a list, before 0.7.16 for a variant.",
+        "The main set and the backups written, the sets they name, the variant written (`variant`, or null), the config file, whether it was created, the values it replaced (`previous`, `previousVariant`), the installed sets the list leaves out (`unlisted`, with a `next` command), with a variant the look each listed set draws (`looks`) and the main set's theme map for that look (`themeMap`), and a `warning` when the project's @astryxdesign/cli range admits a release that refuses the config: before 0.7.4 for a string, before 0.7.12 for a list, before 0.7.16 for a variant.",
     },
   ],
   throws: [
