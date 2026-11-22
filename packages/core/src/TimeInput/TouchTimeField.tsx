@@ -50,6 +50,8 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {formatLocaleTime} from '../utils/timeFormat';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -209,6 +211,7 @@ export function TouchTimeField({
   } = rest;
   const t = useComponentTranslator();
   const locale = useLocale();
+  const textDirection = getLocaleDirection(locale);
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
@@ -442,7 +445,8 @@ export function TouchTimeField({
             ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
             : ariaLabelledBy
         }
-        {...stylex.props(styles.input)}
+        dir={controlProps.dir ?? textDirection}
+        {...stylex.props(styles.input, localeTextStyles.pageAlign)}
       />
       {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && optimisticValue && !isEffectivelyDisabled && (
