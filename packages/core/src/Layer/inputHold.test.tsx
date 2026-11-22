@@ -18,6 +18,8 @@ import {
   holdsTouch,
   isInHeldLayer,
   isInputShield,
+  LATE_PRESS_MS,
+  LATE_RELEASE_FRAMES,
   type InputHoldScope,
 } from './inputHold';
 import {subscribeModalOutlets, type ModalOutletChange} from './modalOutlet';
@@ -408,6 +410,7 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     pointerType: string,
     pointerId = 1,
     buttons = 0,
+    time?: number,
   ): Event {
     const event = new PointerEvent(type, {
       ...INIT,
@@ -415,9 +418,60 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
       pointerType,
       buttons,
     });
+    stamp(event, time);
     element.dispatchEvent(event);
     return event;
   }
+
+  /**
+   * Gives `event` the time an engine stamps on input, on the page's clock.
+   * Without one, jsdom's wall-clock stamp marks input after every hold.
+   */
+  function stamp(event: Event, time: number | undefined) {
+    if (time != null) {
+      Object.defineProperty(event, 'timeStamp', {value: time});
+    }
+  }
+
+  /** The page's clock, at `time` until the case moves it. */
+  function clockAt(time: number) {
+    const clock = {time};
+    vi.spyOn(window.performance, 'now').mockImplementation(() => clock.time);
+    return clock;
+  }
+
+  /** The page's frames: each `draw` runs the waiting callbacks at its time. */
+  function framesOn(clock: {time: number}) {
+    const waiting = new Map<number, FrameRequestCallback>();
+    let next = 1;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      waiting.set(next, callback);
+      return next++;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
+      waiting.delete(id);
+    });
+    return {
+      get waiting() {
+        return waiting.size;
+      },
+      /** Draws a frame at each time, in order. */
+      draw(...times: number[]) {
+        for (const time of times) {
+          clock.time = time;
+          const callbacks = [...waiting.values()];
+          waiting.clear();
+          for (const callback of callbacks) {
+            callback(time);
+          }
+        }
+      },
+    };
+  }
+
+  /** Frames at 60 Hz from `from`, `count` of them. */
+  const at60Hz = (from: number, count: number) =>
+    Array.from({length: count}, (_, index) => from + (index * 1000) / 60);
 
   /** A click as a browser sends it: a pointer event naming its pointer. */
   function click(element: Element, pointerType: string, detail = 1): Event {
@@ -438,8 +492,10 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     type: string,
     identifiers: number[],
     down: number = identifiers.length,
+    time?: number,
   ): Event {
     const event = new Event(type, INIT);
+    stamp(event, time);
     const list = identifiers.map(identifier => ({identifier, target: element}));
     Object.defineProperty(event, 'changedTouches', {value: list});
     Object.defineProperty(event, 'touches', {
@@ -972,6 +1028,331 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     // The next tap is the page's again.
     tap(button, 'touch', 2);
     expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+  });
+
+  it("holds a finger's press that went down during the hold and arrives after its end, when a long task ran the release: its release, end and click never reach the page (spec:AST-094 FR35)", () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    frames.draw(...at60Hz(1000, 4));
+    // A long task: no frame for 100 ms, then the release.
+    clock.time = 1150;
+    release();
+    // The engine dispatches the press after the task.
+    clock.time = 1160;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1080);
+    touch(button, 'touchstart', [0], 1, 1080);
+    pointer(button, 'pointerup', 'touch', 1, 0, 1160);
+    const end = touch(button, 'touchend', [0], 0, 1160);
+    mouse(button, 'mousedown');
+    mouse(button, 'mouseup');
+    click(button, 'touch');
+    expect(end.defaultPrevented).toBe(true);
+    expect(reached).toEqual([]);
+  });
+
+  it("judges a finger's press once, by its time: when a long task ends the hold between its pointerdown and its touchstart, both are held (spec:AST-094 FR35)", () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1060;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1060);
+    clock.time = 1150;
+    release();
+    touch(button, 'touchstart', [0], 1, 1060);
+    pointer(button, 'pointerup', 'touch', 1, 0, 1160);
+    const end = touch(button, 'touchend', [0], 0, 1160);
+    click(button, 'touch');
+    expect(end.defaultPrevented).toBe(true);
+    expect(reached).toEqual([]);
+  });
+
+  it("waits for no late press after a release in time, within the hold's frames: no listener, no timer and no frame request stay, and a press stamped during the hold is the page's (spec:AST-094 FR24)", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const listening = () => added.mock.calls.length - removed.mock.calls.length;
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    expect(frames.waiting).toBe(1);
+    frames.draw(...at60Hz(1000, 4));
+    // The release comes 10 ms after the last frame.
+    clock.time = 1060;
+    release();
+    expect(listening()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(frames.waiting).toBe(0);
+    clock.time = 1070;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1055);
+    pointer(button, 'pointerup', 'touch', 1, 0, 1070);
+    expect(reached).toEqual(['pointerdown', 'pointerup']);
+  });
+
+  it(`reads a long task by the hold's own frames: at 30 Hz, a release 50 ms after a frame waits for no late press, and one 80 ms after it, more than ${LATE_RELEASE_FRAMES} frames, does (spec:AST-094 FR35)`, () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const at30Hz = Array.from(
+      {length: 4},
+      (_, index) => 1000 + (index * 1000) / 30,
+    );
+    // 50 ms after the last frame: within two 30 Hz frames.
+    const release = hold(layer);
+    frames.draw(...at30Hz);
+    clock.time = 1150;
+    release();
+    clock.time = 1160;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1110);
+    pointer(button, 'pointerup', 'touch', 1, 0, 1160);
+    expect(reached).toEqual(['pointerdown', 'pointerup']);
+    // 80 ms after the last frame: a long task.
+    const again = hold(layer);
+    frames.draw(...at30Hz.map(time => time + 200));
+    clock.time = 1380;
+    again();
+    clock.time = 1390;
+    pointer(button, 'pointerdown', 'touch', 2, 0, 1310);
+    pointer(button, 'pointerup', 'touch', 2, 0, 1390);
+    expect(reached).toEqual(['pointerdown', 'pointerup']);
+  });
+
+  it('waits for a late press when the release runs in the frame that ends a long task: input from that task can come after the frame (spec:AST-094 FR35)', () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    frames.draw(...at60Hz(1000, 4));
+    // A long task to 1150, then the frame that ends it, and the release in it.
+    frames.draw(1150);
+    clock.time = 1152;
+    release();
+    clock.time = 1160;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1080);
+    pointer(button, 'pointerup', 'touch', 1, 0, 1160);
+    expect(reached).toEqual([]);
+  });
+
+  it(`holds a late press to its end, though it stays down past the ${LATE_PRESS_MS} ms that the wait takes new late presses: a long press's release, pointerup and click never reach the page (spec:AST-094 FR35)`, () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const listening = () => added.mock.calls.length - removed.mock.calls.length;
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    const once = listening();
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1150;
+    release();
+    // The engine dispatches the press after the long task.
+    clock.time = 1160;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1080);
+    touch(button, 'touchstart', [0], 1, 1080);
+    // The finger stays down past the wait.
+    clock.time += LATE_PRESS_MS + 200;
+    vi.advanceTimersByTime(LATE_PRESS_MS + 200);
+    expect(listening()).toBe(once);
+    const up = pointer(button, 'pointerup', 'touch', 1, 0, clock.time);
+    const end = touch(button, 'touchend', [0], 0, clock.time);
+    mouse(button, 'mousedown');
+    mouse(button, 'mouseup');
+    click(button, 'touch');
+    expect(up.defaultPrevented).toBe(true);
+    expect(end.defaultPrevented).toBe(true);
+    expect(reached).toEqual([]);
+    // Its click window ends, and so do the subscriptions.
+    clock.time += 800;
+    vi.advanceTimersByTime(800);
+    expect(listening()).toBe(0);
+  });
+
+  it("judges a wall-clock stamp, as jsdom gives, by its age on the page's clock: a late press stamped 80 ms before now is held (spec:AST-094 FR35)", () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1150;
+    release();
+    clock.time = 1160;
+    // 80 ms ago on the wall clock is 1080 on the page's clock.
+    pointer(button, 'pointerdown', 'touch', 1, 0, Date.now() - 80);
+    pointer(button, 'pointerup', 'touch', 1, 0, Date.now());
+    expect(reached).toEqual([]);
+  });
+
+  it("lets a press through that went down at or after the hold's end, or before it began: a tap after the release acts", () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1150;
+    release();
+    clock.time = 1170;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1150);
+    touch(button, 'touchstart', [0], 1, 1150);
+    pointer(button, 'pointerup', 'touch', 1, 0, 1160);
+    const end = touch(button, 'touchend', [0], 0, 1160);
+    click(button, 'touch');
+    expect(end.defaultPrevented).toBe(false);
+    expect(reached).toEqual([
+      'pointerdown',
+      'touchstart',
+      'pointerup',
+      'touchend',
+      'click',
+    ]);
+    // A finger that went down before the hold began is not the hold's.
+    const again = hold(layer);
+    frames.draw(...at60Hz(1180, 4));
+    clock.time = 1330;
+    again();
+    clock.time = 1340;
+    pointer(button, 'pointerdown', 'touch', 2, 0, 1165);
+    pointer(button, 'pointerup', 'touch', 2, 0, 1340);
+    expect(reached.slice(5)).toEqual(['pointerdown', 'pointerup']);
+  });
+
+  it("keeps a late press to its ended hold's scope: after a 'surface' hold that a long task ended, one that went down during it on the page is the page's, and one on the layer is held (spec:AST-094 FR35)", () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const page = recorder();
+    const onLayer = recorder(layer);
+    const release = hold(layer, 'surface');
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1150;
+    release();
+    clock.time = 1160;
+    pointer(page.button, 'pointerdown', 'touch', 1, 0, 1080);
+    pointer(onLayer.button, 'pointerdown', 'touch', 2, 0, 1080);
+    pointer(page.button, 'pointerup', 'touch', 1, 0, 1160);
+    pointer(onLayer.button, 'pointerup', 'touch', 2, 0, 1160);
+    expect(page.reached).toEqual(['pointerdown', 'pointerup']);
+    expect(onLayer.reached).toEqual([]);
+  });
+
+  it(`waits for a late press ${LATE_PRESS_MS} ms after the hold's end at most: then its subscriptions end, and a press that went down during the hold is the page's (spec:AST-094 FR35)`, () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const listening = () => added.mock.calls.length - removed.mock.calls.length;
+    const {layer} = mountLayer();
+    const {button, reached} = recorder();
+    const release = hold(layer);
+    const once = listening();
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1150;
+    release();
+    // It still listens, for a press that went down before the end.
+    clock.time += LATE_PRESS_MS - 1;
+    vi.advanceTimersByTime(LATE_PRESS_MS - 1);
+    expect(listening()).toBe(once);
+    clock.time += 1;
+    vi.advanceTimersByTime(1);
+    expect(listening()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    clock.time += 1;
+    pointer(button, 'pointerdown', 'touch', 1, 0, 1080);
+    pointer(button, 'pointerup', 'touch', 1, 0, clock.time);
+    expect(reached).toEqual(['pointerdown', 'pointerup']);
+  });
+
+  it("ends the wait for a late press as the ended hold's layer leaves the page: no listener and no timer stay after the last instance unmounts (spec:AST-094 FR24)", async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const listening = () => added.mock.calls.length - removed.mock.calls.length;
+    const {layer} = mountLayer();
+    const release = hold(layer);
+    frames.draw(...at60Hz(1000, 4));
+    clock.time = 1150;
+    release();
+    expect(listening()).toBeGreaterThan(0);
+    layer.remove();
+    await flush();
+    expect(listening()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(frames.waiting).toBe(0);
+  });
+
+  it('asks for one frame at a time while a layer is held, and none once the hold ends or its layer leaves the page (spec:AST-094 FR24)', () => {
+    const clock = clockAt(1000);
+    const frames = framesOn(clock);
+    const {layer} = mountLayer();
+    const release = hold(layer);
+    expect(frames.waiting).toBe(1);
+    frames.draw(1016);
+    expect(frames.waiting).toBe(1);
+    release();
+    expect(frames.waiting).toBe(0);
+    // A layer that leaves the page while held asks for no frame after it.
+    const other = mountLayer().layer;
+    hold(other);
+    expect(frames.waiting).toBe(1);
+    other.remove();
+    frames.draw(1033);
+    expect(frames.waiting).toBe(0);
+  });
+
+  it('waits for a late press after a hold that saw no frame, as in a hidden tab, and ends that wait at its cap or as the layer leaves the page (spec:AST-094 FR35)', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const clock = clockAt(1000);
+    framesOn(clock);
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const listening = () => added.mock.calls.length - removed.mock.calls.length;
+    const first = mountLayer().layer;
+    const release = hold(first);
+    clock.time = 1200;
+    release();
+    expect(listening()).toBeGreaterThan(0);
+    clock.time += LATE_PRESS_MS;
+    vi.advanceTimersByTime(LATE_PRESS_MS);
+    expect(listening()).toBe(0);
+    const second = mountLayer().layer;
+    const releaseSecond = hold(second);
+    clock.time += 200;
+    releaseSecond();
+    expect(listening()).toBeGreaterThan(0);
+    second.remove();
+    await flush();
+    expect(listening()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('lets a touch after the release through when a held touch ended where the window could not hear it, its identifier reused', () => {

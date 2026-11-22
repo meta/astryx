@@ -16,7 +16,10 @@ import {useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, typeScaleVars} from '../../../theme/tokens.stylex';
 
-import {registerFixedHeightColumn} from '../../tableColumnAdmission';
+import {
+  registerFixedHeightColumn,
+  registerWindowFallbackReason,
+} from '../../tableColumnAdmission';
 import type {TableColumn, TablePlugin} from '../../types';
 
 /**
@@ -112,6 +115,12 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
     registerFixedHeightColumn(indexColumn, startFrom === 1, logicalIndex => (
       <span {...stylex.props(styles.index)}>{logicalIndex + 1}</span>
     ));
+    if (startFrom !== 1) {
+      registerWindowFallbackReason(
+        indexColumn,
+        `the useTableRowIndex column counts from ${startFrom}, and only a row-number column that counts from 1 stays windowed`,
+      );
+    }
     return {
       rowModel: 'flat',
       transformBodyCell(props, column, item, _columnIndex, _columns, context) {

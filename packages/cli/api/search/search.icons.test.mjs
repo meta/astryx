@@ -263,6 +263,52 @@ describe('search icon section', () => {
   );
 
   it(
+    'the words after the icon word that name a Core component only break a tie, as in the finder',
+    async () => {
+      // `card` names a Core component, so the four `shape` icons lead.
+      const {data} = await search('shape icon card', {cwd: packed});
+      expect(data.icons?.results[0]?.id).toBe('circle');
+      const found = await icon('shape icon card', {cwd: packed});
+      expect(found.type === 'icon.search' && found.data.matches[0]?.id).toBe(
+        'circle',
+      );
+    },
+    SLOW,
+  );
+
+  it(
+    "reads the same component names as the finder: Core's, not an integration's",
+    async () => {
+      const dir = path.join(root, 'tiles');
+      writeProject(dir, true);
+      writeIconPackage(path.join(dir, 'node_modules', '@acme', 'glyphs'), {
+        data: {
+          ...glyphsData(),
+          module: '@acme/glyphs',
+          icons: [
+            {id: 'star', export: 'StarIcon', words: ['favorite', 'rating']},
+            {id: 'tile', export: 'TileIcon', words: ['kind']},
+          ],
+          map: {},
+        },
+      });
+      // `kind tile` names the integration's KindTile, which is no Core
+      // component, so its words still count in both answers.
+      const query = 'favorite rating icon kind tile';
+      const {data} = await search(query, {cwd: dir});
+      const found = await icon(query, {cwd: dir});
+      expect(data.icons?.results.map(each => each.id)).toEqual([
+        'tile',
+        'star',
+      ]);
+      expect(
+        found.type === 'icon.search' && found.data.matches.map(m => m.id),
+      ).toEqual(['tile', 'star']);
+    },
+    SLOW,
+  );
+
+  it(
     'an entry that declares the keyword `icon` keeps its place: the icons only follow',
     async () => {
       for (const query of ['icon', 'icons']) {
