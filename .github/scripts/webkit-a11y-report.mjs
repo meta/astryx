@@ -21,7 +21,7 @@ const CONFIG = 'playwright.config.ts';
 /**
  * Every test in a Playwright JSON report, with its outcome.
  * @param {any} report Playwright's JSON report
- * @returns {{file: string, line: number, title: string, status: string, ran: boolean, error: string}[]}
+ * @returns {{file: string, line: number, title: string, status: string, ran: boolean, skippedOnPurpose: boolean, error: string}[]}
  */
 export function testsOf(report) {
   const tests = [];
@@ -56,6 +56,7 @@ export function testsOf(report) {
           title: [...here, spec.title].join(' › '),
           status: test.status,
           ran,
+          skippedOnPurpose,
           error:
             message
               .replace(/\x1b\[[0-9;]*m/g, '')
@@ -71,6 +72,37 @@ export function testsOf(report) {
 }
 
 /**
+ * The errors that stopped a run, one line each.
+ * @param {any} report Playwright's JSON report, or null
+ * @returns {string[]}
+ */
+export function runErrorsOf(report) {
+  return (report?.errors ?? []).map(
+    (/** @type {any} */ error) =>
+      String(error?.message ?? error)
+        .replace(/\x1b\[[0-9;]*m/g, '')
+        .split('\n')
+        .find(Boolean) ?? '',
+  );
+}
+
+/**
+ * Why a run left no results, or '' when it has some. A run that left no
+ * report, stopped on an error, or ran no test is never a pass: no spec
+ * matched, or a spec failed to load before its tests. A run that stopped on
+ * an error after some tests ran keeps their results.
+ * @param {any} report Playwright's JSON report, or null
+ * @param {string[]} errors runErrorsOf(report)
+ */
+export function noResultsReason(report, errors) {
+  if (report && testsOf(report).length > 0) return '';
+  if (!report) return 'the specs did not run to the end';
+  if (errors.length > 0)
+    return `the run stopped on ${errors.length === 1 ? 'an error' : `${errors.length} errors`}: ${errors.join('; ')}`;
+  return 'no test ran (no spec file matched)';
+}
+
+/**
  * The report for one run: the failed (`unexpected`) and flaky tests, each with
  * a command that runs it again in WebKit, and any error that stopped the run.
  * @param {any} report Playwright's JSON report, or null when the run left none
@@ -78,22 +110,9 @@ export function testsOf(report) {
  */
 export function buildReport(report, {sha = ''} = {}) {
   const tests = report ? testsOf(report) : [];
-  // A run that left no report, stopped on an error, or ran no test is never a
-  // pass: no spec matched, or a spec failed to load before its tests. A run
-  // that stopped on an error after some tests ran keeps their results.
-  const errors = (report?.errors ?? []).map(
-    (/** @type {any} */ error) =>
-      String(error?.message ?? error)
-        .replace(/\x1b\[[0-9;]*m/g, '')
-        .split('\n')
-        .find(Boolean) ?? '',
-  );
-  if (!report || tests.length === 0) {
-    const why = !report
-      ? 'the specs did not run to the end'
-      : errors.length > 0
-        ? `the run stopped on ${errors.length === 1 ? 'an error' : `${errors.length} errors`}: ${errors.join('; ')}`
-        : 'no test ran (no spec file matched)';
+  const errors = runErrorsOf(report);
+  const why = noResultsReason(report, errors);
+  if (why) {
     return {
       ok: false,
       counts: null,

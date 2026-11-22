@@ -115,8 +115,10 @@ describe('how amounts', () => {
     expect(await how('less line height on cards')).toMatch(
       /line-height 1\.08 --on card/,
     );
+    // (A percent said as the line height is a share of the text size, as
+    // CSS reads it.)
     expect(await how('make line height on cards 150%')).toMatch(
-      /line-height 1\.8 --on card/,
+      /line-height 1\.5 --on card/,
     );
     expect(await how('make line height on cards 1.5x')).toMatch(
       /line-height 1\.8 --on card/,
