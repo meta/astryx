@@ -5227,31 +5227,22 @@ export function disabledCopies(ctx, data, s) {
       state: 'disabled',
       only: true,
     };
-    /** The theme's own disabled settings of a property on this part. @param {RegExp} things */
-    const ownDisabled = things =>
-      data.settings.some(
-        x =>
-          x.state === 'disabled' &&
-          things.test(kebab(String(x.thing))) &&
-          // (One set for one variant keeps that variant only.)
-          (!x.when || x.when === copy.when) &&
-          partsOf(ctx, x).includes(t),
-      );
-    // (A disabled image or background of the theme's own wins; a disabled
-    // fill of its own shows with only the image taken off, whatever the
-    // order they were set in.)
-    if (ownDisabled(/^background(-image)?$/)) continue;
-    // (Only the image comes off in a mode the theme's own disabled fill
-    // covers; another mode keeps the whole copy, so its fill shows.)
-    const fills = data.settings.filter(
+    /** The theme's own disabled backgrounds on this part, in this variant. */
+    const own = data.settings.filter(
       x =>
         x.state === 'disabled' &&
-        kebab(String(x.thing)) === 'background-color' &&
+        /^background(-image|-color)?$/.test(kebab(String(x.thing))) &&
+        // (One set for one variant keeps that variant only.)
         (!x.when || x.when === copy.when) &&
         partsOf(ctx, x).includes(t),
     );
-    /** @param {string | undefined} m */
-    const covers = m => fills.some(x => !x.mode || !m || x.mode === m);
+    /** @param {Setting} x */
+    const drawsImage = x =>
+      kebab(String(x.thing)) === 'background-image' ||
+      (kebab(String(x.thing)) === 'background' &&
+        /\b(url|image-set|[a-z-]*gradient)\(/i.test(String(x.value)));
+    /** @param {Setting} x @param {'light' | 'dark' | undefined} m */
+    const inMode = (x, m) => !x.mode || !m || x.mode === m;
     const imageOnly = {...copy, thing: 'background-image'};
     // (A copy for one mode is written as longhands: a shorthand set for one
     // mode is written as its color alone.)
@@ -5263,12 +5254,23 @@ export function disabledCopies(ctx, data, s) {
             {...imageOnly, mode: m},
           ]
         : [copy];
-    if (!fills.length) out.push(...whole(copy.mode));
-    else if (copy.mode || fills.some(x => !x.mode))
-      out.push(...(covers(copy.mode) ? [imageOnly] : whole(copy.mode)));
-    else
-      for (const m of /** @type {Array<'light' | 'dark'>} */ (modesOf(data)))
-        out.push(...(covers(m) ? [{...imageOnly, mode: m}] : whole(m)));
+    // (In each mode a disabled image or background of the theme's own wins;
+    // a disabled fill of its own, or a background with no image, shows with
+    // only the image taken off, whatever the order they were set in; a mode
+    // none of them covers keeps the whole copy.)
+    const modes = /** @type {Array<'light' | 'dark' | undefined>} */ (
+      copy.mode
+        ? [copy.mode]
+        : own.every(x => !x.mode)
+          ? [undefined]
+          : modesOf(data)
+    );
+    for (const m of modes) {
+      const here = own.filter(x => inMode(x, m));
+      if (here.some(drawsImage)) continue;
+      if (here.length) out.push(m ? {...imageOnly, mode: m} : imageOnly);
+      else out.push(...whole(m));
+    }
   }
   return out;
 }

@@ -530,6 +530,44 @@ describe('family reach by default', () => {
       expect(disabledRules(`${slug}m`)).toMatch(
         /background-image: revert-layer/,
       );
+      // (A disabled image of the theme's own set for one mode wins in that
+      // mode only; the other mode keeps the whole copy.)
+      await themeEditNew(`${slug}i`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}i`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+      });
+      await themeEditSet(
+        `${slug}i`,
+        'background-image',
+        'linear-gradient(#333333, #222222)',
+        {cwd, on: 'button', state: 'disabled', mode: 'dark'},
+      );
+      expect(disabledRules(`${slug}i`)).toMatch(
+        /data-theme="light"[^{]*\{\s*background-color: revert-layer/,
+      );
+      expect(disabledRules(`${slug}i`)).toMatch(
+        /data-theme="light"[^{]*\{\s*background-image: revert-layer/,
+      );
+      expect(disabledRules(`${slug}i`)).not.toMatch(
+        /:where\(:scope\[data-theme="dark"\] \*\)[^{]*\{\s*background(?:-color|-image)?: revert-layer/,
+      );
+      // (A disabled background of its own with no image shows like a fill:
+      // only the image comes off.)
+      await themeEditNew(`${slug}b`, {cwd, like: 'neutral'});
+      await themeEditSet(`${slug}b`, 'background', GRADIENT, {
+        cwd,
+        on: 'button',
+      });
+      await themeEditSet(`${slug}b`, 'background', '#eeeeee', {
+        cwd,
+        on: 'button',
+        state: 'disabled',
+      });
+      expect(disabledRules(`${slug}b`)).toMatch(
+        /background-image: revert-layer/,
+      );
+      expect(disabledRules(`${slug}b`)).not.toMatch(/background: revert-layer/);
       // (A gradient set for one mode takes the whole disabled look off in
       // that mode, its image included.)
       await themeEditNew(`${slug}g`, {cwd, like: 'neutral'});
