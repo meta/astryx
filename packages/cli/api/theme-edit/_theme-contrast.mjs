@@ -6,8 +6,9 @@
  * written (a hand-written theme.ts included).
  * @input A project folder and a defined or built theme object.
  * @output Problems, each with a plain fix: the token, where, the mode and a
- * value that reads. Component rules the theme writes are what the tokens
- * are measured over, not measured themselves.
+ * value that reads. The color tokens a theme sets, for the whole theme or at
+ * rest in a component block, are measured; its other component rules are
+ * what they are measured over.
  * @position api/theme-edit — read by `theme build` and `doctor`.
  */
 
@@ -60,8 +61,9 @@ export function plainFix(fix) {
 
 /**
  * The text contrast problems a theme's color tokens give with its part rules:
- * each token the theme sets is measured as an editor setting, over Core's
- * own tokens and the theme's components. A problem the components give with
+ * each color token the theme sets, for the whole theme or at rest in a
+ * component block, is measured as an editor setting, over Core's own tokens
+ * and the theme's components (the text pairs, and the menus a bar opens). A problem the components give with
  * Core's own tokens is not the theme's tokens' to report. A project whose
  * part census cannot be read gives none.
  * @param {string} cwd
@@ -71,6 +73,7 @@ export function plainFix(fix) {
 export async function themeTokenContrast(cwd, theme) {
   const {context} = await import('./_context.mjs');
   const {contrastProblems, themeResolved} = await import('./_settings.mjs');
+  const {onlyMeans} = await import('./_tables.mjs');
   const ctx = await context(cwd);
   if (ctx.unchecked) return null;
   const {themeBase} = await import('./_project.mjs');
@@ -85,13 +88,31 @@ export async function themeTokenContrast(cwd, theme) {
     components: own.components,
     onDark: own.onDark,
   };
-  const settings = Object.entries(theme.tokens ?? {})
-    .filter(([thing, v]) => /^--color-/.test(thing) && v != null)
-    .map(([thing, v]) => ({
-      thing,
-      value: Array.isArray(v) ? `light-dark(${v[0]}, ${v[1]})` : String(v),
-      source: 'token',
-    }));
+  /** @param {unknown} v */
+  const asValue = v =>
+    Array.isArray(v) ? `light-dark(${v[0]}, ${v[1]})` : String(v);
+  /** @param {[string, unknown]} entry */
+  const isColor = ([thing, v]) => /^--color-/.test(thing) && v != null;
+  // (A color token a component block sets at rest is a setting on that
+  // part: a header block's white text reaches the menus its items open.)
+  const settings = [
+    ...Object.entries(theme.tokens ?? {})
+      .filter(isColor)
+      .map(([thing, v]) => ({thing, value: asValue(v), source: 'token'})),
+    ...Object.entries(theme.components ?? {}).flatMap(([on, blocks]) =>
+      Object.entries(blocks?.base ?? {})
+        .filter(isColor)
+        .map(([thing, v]) => ({
+          thing,
+          value: asValue(v),
+          source: 'token',
+          on,
+          // (A block on one member of a group, a text input of the inputs,
+          // is that member's alone, as an editor setting there is.)
+          ...(onlyMeans(on) === 'member' ? {only: true} : {}),
+        })),
+    ),
+  ];
   const res = themeResolved(ctx, theme.name, theme);
   const found = await contrastProblems(
     ctx,
@@ -104,7 +125,11 @@ export async function themeTokenContrast(cwd, theme) {
   /** @type {Map<string, {text: string, fix: string | null, more: number}>} */
   const byFix = new Map();
   for (const p of found) {
-    if (typeof p === 'string' || !/^text in /.test(p.text)) continue;
+    if (
+      typeof p === 'string' ||
+      !/^(?:text in |a menu or popover opened from )/.test(p.text)
+    )
+      continue;
     const fix = plainFix(p.fix);
     const seen = byFix.get(fix ?? p.text);
     if (seen) seen.more++;
