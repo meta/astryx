@@ -2306,35 +2306,37 @@ function askFrom(asked, at, isVerb, partWords) {
  * word of the ask must be one the clause reader placed in its clause (a
  * part, its mode or variant, a removable look) or one that only joins them.
  * When unsure, the clause keeps the reset reading.
- * @param {Clause} c the clause the ask starts
+ * @param {Clause[]} group the clause the ask starts, and the clauses the
+ *   clause reader made of the same ask for its other parts
  * @param {string} ask the ask as said, from its clear (see askFrom)
  * @param {Array<[RegExp, PartRef]>} partWords
  * @returns {boolean}
  */
-function clearTakesAway(c, ask, partWords) {
+function clearTakesAway(group, ask, partWords) {
+  const [first] = group;
+  const parts = group.flatMap(x => x.parts);
+  const aspects = [...new Set(group.flatMap(x => x.aspects))];
   if (
+    !first ||
     !new RegExp(`^${CLEAR_LEAD}`).test(ask) ||
-    !/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text) ||
-    !c.parts.length ||
-    !c.aspects.length ||
-    c.colors.length ||
-    c.lengths.length ||
-    c.named ||
-    c.state ||
-    c.dir
+    !/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(first.text) ||
+    group.some(x => !x.parts.length || !x.aspects.length) ||
+    group.some(
+      x => x.colors.length || x.lengths.length || x.named || x.state || x.dir,
+    )
   )
     return false;
   const removable = new RegExp(`^${REMOVABLE}$`);
-  if (!c.aspects.every(a => removable.test(a))) return false;
-  const ons = new Set(c.parts.map(p => p.on));
+  if (!aspects.every(a => removable.test(a))) return false;
+  const ons = new Set(parts.map(p => p.on));
   let rest = ` ${ask} `;
   for (const [re, ref] of partWords)
     if (ons.has(ref.on)) rest = rest.replace(globalOf(re), ' ');
-  for (const p of c.parts) {
+  for (const p of parts) {
     const value = /:([a-z-]+)$/.exec(p.when ?? '')?.[1];
     if (value) rest = rest.replace(new RegExp(`\\b${value}\\b`, 'g'), ' ');
   }
-  if (c.mode)
+  if (group.some(x => x.mode))
     rest = rest.replace(
       /\b(?:in\s+)?(?:dark|light)(?:\s+(?:mode|theme))?\b/g,
       ' ',
@@ -2343,9 +2345,14 @@ function clearTakesAway(c, ask, partWords) {
   // put in another clause, "and shadow", is a word this clause does not
   // explain.)
   rest = rest.replace(new RegExp(`\\b${REMOVABLE}\\b`, 'g'), w => {
-    const said = aspectsOf(w);
-    return said.length && said.every(a => c.aspects.includes(a)) ? ' ' : w;
+    // (A plural, "the card and button backgrounds", names the look too.)
+    const said = aspectsOf(w).length
+      ? aspectsOf(w)
+      : aspectsOf(w.replace(/s$/, ''));
+    return said.length && said.every(a => aspects.includes(a)) ? ' ' : w;
   });
+  // (An "and" between the parts the ask names joins them.)
+  if (ons.size > 1) rest = rest.replace(/\band\b/g, ' ');
   rest = rest
     .replace(/'s\b/g, ' ')
     .replace(
@@ -8081,20 +8088,83 @@ export function draftAnswer(ctx, env, question) {
   // and says only the parts, their mode and variant, and removable looks
   // this reader found asks to take those looks away, as remove does. Any
   // other word in it, a way back included, leaves the reset reading.)
+  // ("clear the card and button borders": the clause reader says the ask
+  // once for each part, so each such clause whose parts the same ask names
+  // is read with it.)
   {
     const leads = [...asked0.matchAll(new RegExp(CLEAR_LEAD, 'g'))];
-    let k = 0;
+    const asks = leads.map(l =>
+      askFrom(asked0, l.index ?? 0, verbWord, lex.parts),
+    );
+    /** @type {Clause[][]} */
+    const groups = [];
+    let k = -1;
+    /** @type {Clause | null} */
+    let last = null;
+    const ons = (/** @type {Clause} */ c) => new Set(c.parts.map(p => p.on));
+    /** Whether an ask says every look of the clause, in the plural too ("backgrounds"). @param {Clause} c @param {string} ask */
+    const looksOf = (c, ask) => {
+      const said = [
+        ...aspectsOf(ask),
+        ...ask.split(/\s+/).flatMap(w => aspectsOf(w.replace(/s$/, ''))),
+      ];
+      return c.aspects.every(a => said.includes(a));
+    };
+    /** The parts an ask names, in the order it says them. @param {string} ask */
+    const partsSaid = ask =>
+      lex.parts
+        .flatMap(([re, ref]) => {
+          const m = globalOf(re).exec(` ${ask} `);
+          globalOf(re).lastIndex = 0;
+          return m ? [{on: ref.on, at: m.index}] : [];
+        })
+        .sort((a, b) => a.at - b.at)
+        .map(x => x.on);
     for (const c of clauses) {
-      if (!new RegExp(CLEAR_LEAD, 'i').test(c.text)) continue;
-      const at = leads[k++]?.index;
-      if (at == null) break;
-      if (
-        !clearTakesAway(c, askFrom(asked0, at, verbWord, lex.parts), lex.parts)
-      )
+      if (!/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text)) {
+        // (A clause that holds a clear it does not lead, "can you clear the
+        // card border", uses up that ask: it takes nothing away.)
+        for (const _ of c.text.matchAll(new RegExp(CLEAR_LEAD, 'gi')))
+          groups[++k] = [];
+        last = null;
         continue;
-      c.text = c.text.replace(/\bclear\b/i, 'remove');
-      c.neg = true;
+      }
+      const own = ons(c);
+      const group = groups[k] ?? [];
+      const taken = new Set(group.flatMap(x => x.parts.map(p => p.on)));
+      // (The clause reader's copy of the ask for another part: the ask
+      // names that part, and no clause of the group has it yet.)
+      const sameAsk =
+        last != null &&
+        own.size > 0 &&
+        looksOf(c, asks[k] ?? '') &&
+        [...own].every(
+          on => !taken.has(on) && partsSaid(asks[k] ?? '').includes(on),
+        );
+      if (!sameAsk) {
+        // (A clause opens the next ask when it says that ask's lead, or is
+        // the reader's copy of it for the first part the ask names.)
+        const next = asks[k + 1];
+        const opens =
+          next != null &&
+          (new RegExp(CLEAR_LEAD, 'i').test(c.text) ||
+            (own.has(partsSaid(next)[0] ?? '') && looksOf(c, next)));
+        if (!opens) {
+          last = null;
+          continue;
+        }
+        groups[++k] = [];
+      }
+      groups[k].push(c);
+      last = c;
     }
+    groups.forEach((group, i) => {
+      if (!clearTakesAway(group, asks[i], lex.parts)) return;
+      for (const c of group) {
+        c.text = c.text.replace(/\bclear\b/i, 'remove');
+        c.neg = true;
+      }
+    });
   }
   // ("display headings": a numbered look of a part said in the plural is
   // every look of that numbered family the part draws, display-1 to
