@@ -1049,21 +1049,31 @@ export function NumberInput({
         return;
       }
       const input = e.currentTarget;
-      const text = input.value;
       if (
         isGroupedWhileEditing &&
         (isComposingRef.current ||
           (e.nativeEvent instanceof InputEvent && e.nativeEvent.isComposing))
       ) {
-        commitDraftText(text);
+        commitDraftText(input.value);
         return;
       }
+      const caret = input.selectionStart ?? input.value.length;
+      // A keystroke can insert full-width or other script digits with no IME
+      // composition. Regrouping reads ASCII digits, so fold them first, as
+      // composition end does and as the parser does at commit.
+      const text = isGroupedWhileEditing
+        ? (toAsciiDigits(input.value) ?? input.value)
+        : input.value;
+      const foldedCaret =
+        text === input.value
+          ? caret
+          : (toAsciiDigits(input.value.slice(0, caret))?.length ?? caret);
       // The previous draft shows which separators the field wrote. An edit
       // can move them off their grouping boundaries.
       applyGroupedDraft(
         input,
         text,
-        input.selectionStart ?? text.length,
+        foldedCaret,
         displayValue,
         getTypedGroups(displayValue),
       );

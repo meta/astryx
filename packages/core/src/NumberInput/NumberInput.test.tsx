@@ -683,6 +683,30 @@ describe('NumberInput', () => {
       expect(onChange).toHaveBeenCalledWith(15000);
     });
 
+    it('regroups an Arabic-Indic digit typed onto a grouped ar-EG value', () => {
+      const onChange = vi.fn();
+      render(
+        <GroupedField locale="ar-EG" value={1500000} onChange={onChange} />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      // ar-EG groups with U+066C. The typed five is Arabic-Indic U+0665, not
+      // an IME composition.
+      expect(input).toHaveValue('1\u066C500\u066C000');
+      fireEvent.input(input, {
+        target: {
+          value: '1\u066C500\u066C000\u0665',
+          selectionStart: 10,
+          selectionEnd: 10,
+        },
+      });
+      expect(input).toHaveValue('15\u066C000\u066C005');
+      expect(input.selectionStart).toBe(10);
+      expect(input.selectionEnd).toBe(10);
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(15000005);
+    });
+
     it('regroups after Backspace in the last digit group', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole<HTMLInputElement>('spinbutton');
