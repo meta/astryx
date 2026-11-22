@@ -224,6 +224,35 @@ describe('a color said for one mode is its page', () => {
         isShade,
       ),
     ).toBe('dark mode: page navy. light mode: page cream');
+    // (A name the reader reads in two words is a color by itself.)
+    for (const [ask, read] of [
+      ['dark mode is almost black', 'dark mode: page almost black'],
+      ['dark mode is near-black', 'dark mode: page near-black'],
+      ['dark mode is midnight blue', 'dark mode: page midnightblue'],
+    ])
+      expect(colorsSaidForPages(ask, isHue, isShade), ask).toBe(read);
+    // (Hue words the reader takes stay as said: "sky blue" is toned, never
+    // the CSS skyblue.)
+    expect(
+      colorsSaidForPages(
+        'light mode is sky blue',
+        w => isHue(w) || w === 'sky',
+        isShade,
+      ),
+    ).toBe('light mode: page sky blue');
+    // (A gray in two words stays with the gray reading: as said on a theme
+    // of one mode, the page's gray on a theme of both.)
+    expect(
+      colorsSaidForPages('dark mode is dark gray', isHue, isShade, false),
+    ).toBe('dark mode is dark gray');
+    expect(
+      colorsSaidForPages(
+        'light mode should be light gray',
+        isHue,
+        isShade,
+        true,
+      ),
+    ).toBe('light mode: page light gray');
     // (A line of the ask, or a list item, is a clause start.)
     expect(
       colorsSaidForPages(
@@ -357,6 +386,33 @@ describe('a color said for one mode is its page', () => {
       const accent = plum.filter(l => /^accent '#/.test(l));
       expect(accent.length).toBeGreaterThan(0);
       for (const l of accent) expect(l).not.toMatch(/--mode/);
+    },
+    T,
+  );
+
+  it(
+    'almost black and midnight blue said for dark mode are its page; midnight navy stays as said',
+    async test => {
+      needsBases(test);
+      /** @param {string} ask */
+      const lines = async ask =>
+        /** @type {string[]} */ (
+          (await themeEditHow(ask, {cwd, theme: 'c'})).data.results ?? []
+        )
+          .flatMap(r => r.commands ?? [])
+          .map(x =>
+            String(x)
+              .replace(/^.* editor /, '')
+              .replace(/^set c /, ''),
+          );
+      expect(
+        pageIn(await lines('dark mode is almost black'), 'dark'),
+      ).not.toBeNull();
+      expect(
+        pageIn(await lines('dark mode is midnight blue'), 'dark'),
+      ).not.toBeNull();
+      const navy = await lines('dark mode is midnight navy');
+      expect(pageIn(navy, 'dark')).toBeNull();
     },
     T,
   );

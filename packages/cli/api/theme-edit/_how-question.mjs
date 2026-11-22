@@ -129,6 +129,7 @@ import {
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
 import {
+  NEAR_BLACK,
   NUMBER_WORDS,
   colorsSaidForPages,
   commaNumbers,
@@ -5853,7 +5854,7 @@ export function draftAnswer(ctx, env, question) {
     )
     // ("sky blue", "near-black"): names in two words.
     .replace(/\bsky[- ]blue\b/gi, 'sky')
-    .replace(/\b(?:near|almost|nearly|soft)[- ]black\b/gi, '#111111')
+    .replace(NEAR_BLACK, '#111111')
     // ("navy tinted grays", "warm gray neutrals"): the grays a color
     // tints are the neutral color.
     .replace(/\b([a-z]+)[- ]tinted\s+(?:gr[ae]ys|neutrals?)\b/gi, (m, color) =>

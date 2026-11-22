@@ -17,7 +17,13 @@ import {
   fontStack,
   wordTable,
 } from './_tables.mjs';
-import {colorOpacitiesAsCss, colorProblem, hex, parseColor} from './_color.mjs';
+import {
+  colorOpacitiesAsCss,
+  colorProblem,
+  hex,
+  namedColorHex,
+  parseColor,
+} from './_color.mjs';
 import {sameKindValues, takesWholeNumbersOnly, unitsJoined} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
@@ -2003,6 +2009,12 @@ const TONE_WORDS = new Set([
 ]);
 
 /**
+ * The near-black the reader reads in two words: "almost black", "nearly
+ * black", "near-black", "soft black".
+ */
+export const NEAR_BLACK = /\b(?:near|almost|nearly|soft)[- ]black\b/gi;
+
+/**
  * A hue said for one mode's page, or for everything, as the page it
  * means: "dark mode should be a deep dark plum" and "light mode is pale
  * blush" are that mode's page ("dark mode: page …"), whose answer takes
@@ -2047,6 +2059,22 @@ export function colorsSaidForPages(
   const colorAlone = (words, grayOk = false) =>
     wordsOf(words).some(w => hue(w) || (grayOk && /^gr[ae]y$/.test(w))) &&
     wordsOf(words).every(w => hue(w) || isShade(w) || TONE_WORDS.has(w));
+  /**
+   * A color the reader reads as one name in two words: its near-black
+   * ("almost black") or two words that join into a CSS name ("midnight
+   * blue"). "midnight navy" is neither; a gray ("dark gray") stays with the
+   * gray reading above.
+   * @param {string} words
+   */
+  const twoWordName = words => {
+    const w = wordsOf(words);
+    return (
+      w.length === 2 &&
+      !w.some(x => /^gr[ae]y$/.test(x)) &&
+      (new RegExp(`^${NEAR_BLACK.source}$`, 'i').test(w.join(' ')) ||
+        namedColorHex(w.join('')) != null)
+    );
+  };
   return question
     .replace(
       /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+(?:a\s+|an\s+)?((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?=\s*[,.;!\n]|\s*$)/gi,
@@ -2057,10 +2085,19 @@ export function colorsSaidForPages(
             wordsOf(String(phrase)).every(
               w => hue(w) || isShade(w) || TONE_WORDS.has(w),
             )
-          : colorAlone(String(phrase), grayPages);
-        return said
-          ? `${lead}${mode} mode: page ${String(tint ?? phrase).trim()}`
-          : m;
+          : colorAlone(String(phrase), grayPages) ||
+            twoWordName(String(phrase));
+        // (A CSS name said in two words is written as the one name the
+        // reader reads after "page": "midnightblue".)
+        const joined = wordsOf(String(phrase)).join('');
+        const color =
+          !tint &&
+          !colorAlone(String(phrase)) &&
+          twoWordName(String(phrase)) &&
+          namedColorHex(joined) != null
+            ? joined
+            : String(tint ?? phrase).trim();
+        return said ? `${lead}${mode} mode: page ${color}` : m;
       },
     )
     .replace(
