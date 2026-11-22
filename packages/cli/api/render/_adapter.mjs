@@ -18,7 +18,9 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   MODULE_EXTENSIONS,
   PAGE_EXTENSIONS,
+  REACT_UNKNOWN_PROP,
   RenderError,
+  pageOutputWarnings,
   renderPage,
 } from '../../foundation/render/render-page.mjs';
 import {
@@ -35,6 +37,7 @@ import {clip, locate, textEdits, textRuns} from '../../foundation/render/markup-
 import {isPackageName} from '../../foundation/identity/provider-identity.mjs';
 import {cliCommand} from '../../foundation/render/file-header.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
@@ -46,14 +49,17 @@ import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
-import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {assertWithin, PathSafetyError, tempFolders} from '../../foundation/fs/path-safety.mjs';
+import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {judgeCoreProps, projectTypeScript, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
+import {COMPONENT_BATCH_SELECTOR_LIMIT, component} from '../component/component.mjs';
+import {projectAugmentations, propValueKinds, propWideningInterfaces, unacceptedKind} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -430,10 +436,10 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      // At installCommandFor's versions: a package Astryx releases with Core
-      // at the project's Core release, in the guidance too; any other at the
-      // CLI's range in the command, bare in the guidance; no command when the
-      // project's lockfiles disagree.
+      // At installCommandFor's versions: Core, the CLI and a package Astryx
+      // releases with Core at the project's Core release, in the guidance
+      // too; any other at the CLI's range in the command, bare in the
+      // guidance; no command when the project's lockfiles disagree.
       const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
       const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
@@ -492,13 +498,255 @@ function servedSet(input) {
   }
 }
 
+/** A prop type that is a closed union of string literals, as a doc writes it: `'sm' | 'md'`. */
+const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
+
+/** A documented type that is only string literals, or `string` itself. */
+const STRING_TYPE = /^\s*(?:string|'[^']*'(?:\s*\|\s*'[^']*')*)\s*$/;
+
+/**
+ * Whether a prop's documented type (as `astryx component` shows it) plainly
+ * takes every written kind: strings for a string union or `string`, numbers
+ * for `number`, true or false for `boolean`. Only a yes skips the read of
+ * Core's source; any other type is read there.
+ * @param {unknown} docType
+ * @param {string[]} kinds
+ * @returns {boolean}
+ */
+function docTypeTakes(docType, kinds) {
+  if (typeof docType !== 'string') return false;
+  const type = docType.trim();
+  return kinds.every(kind =>
+    kind === 'string' ? STRING_TYPE.test(type) : kind === 'number' ? type === 'number' : kind === 'boolean' && type === 'boolean',
+  );
+}
+
+/** How a warning names each kind of value. */
+const KIND_WORDS = /** @type {Record<import('../../foundation/discovery/core-augmentation-points.mjs').ValueKind, string>} */ ({
+  string: 'a string',
+  number: 'a number',
+  boolean: 'true or false',
+  object: 'an object',
+  array: 'an array',
+  Date: 'a Date',
+  function: 'a function',
+});
+
+/**
+ * A warning for each value a page certainly gives a Core component's prop
+ * that the prop does not take.
+ * - A value of the wrong kind for the prop's declared type in the page's
+ *   Core (`<TextInput status="error">`, where status takes an object): both
+ *   the written value and the declared type must be certain, else the prop
+ *   is not checked.
+ * - A string the prop's closed union does not hold (`<Button
+ *   variant="danger">`), each branch of a literal-only conditional included:
+ *   the component draws no look for it, and nothing else says so. The union
+ *   comes from Core's own docs for the component in the page's Core, the
+ *   props `astryx component <Name> --package @astryxdesign/core` reads, so an
+ *   integration that replaces the component does not change it. Where the
+ *   prop's type takes the keys of an interface a theme can widen by
+ *   declaration merging (`interface ButtonVariantMap`, `interface
+ *   TextColorMap` for Link's `color`), the keys the page's project adds to it
+ *   are values the prop has too; when the project cannot be read in full, or
+ *   the prop's type cannot be followed, such a prop is not checked. A
+ *   component or prop with no doc entry, and a prop whose type is not a
+ *   closed union, are not checked.
+ * @param {NonNullable<import('../../foundation/render/render-page.mjs').RenderedPage['propValues']>} values
+ * @param {string} page the page file; its folder's Core gives the docs
+ * @param {(name: string) => Promise<any[] | null>} docsOf the documented
+ *   props of a Core component, read once for both prop checks
+ * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
+ */
+async function propValueWarnings(values, page, docsOf) {
+  const dir = path.dirname(page);
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  const seen = new Set();
+  /** @param {string} key @param {string} message */
+  const warn = (key, message) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    warnings.push({code: 'unknown-prop-value', message});
+  };
+  const coreDir = values.length ? findCoreDir(dir) : null;
+  /** @type {ReturnType<typeof projectAugmentations> | undefined} */
+  let added;
+  /** @type {Map<string, ReturnType<typeof propValueKinds>>} */
+  const declaredKinds = new Map();
+  // The same wrong kind for one prop on several lines of a file is one
+  // warning that names every line.
+  /** @type {Map<string, {file: string, said: string, lines: number[], at: number}>} */
+  const kindGroups = new Map();
+  for (const v of values) {
+    const docType = (await docsOf(v.component))?.find(p => p?.name === v.prop)?.type;
+    const kindKey = `${v.component}.${v.prop}`;
+    // A documented string union, `string`, `number` or `boolean` that takes
+    // every written kind decides the prop without Core's source, which costs
+    // a parse per component.
+    if (!declaredKinds.has(kindKey) && !docTypeTakes(docType, v.kinds)) {
+      declaredKinds.set(kindKey, propValueKinds(coreDir, v.component, v.prop));
+    }
+    const declared = declaredKinds.get(kindKey) ?? null;
+    const wrong = declared ? unacceptedKind(v.kinds, declared) : null;
+    if (declared && wrong) {
+      const fields = declared.fields ? ` {${declared.fields.join(', ')}}` : '';
+      const numbers =
+        !declared.anyNumber && declared.numbers.size > 0 ? `one of ${[...declared.numbers].join(', ')}` : null;
+      const expected = [...declared.kinds].map(kind =>
+        kind === 'object' ? KIND_WORDS.object + fields : kind === 'number' && numbers ? numbers : KIND_WORDS[kind],
+      );
+      const said = `${v.component} ${v.prop} expects ${expected.join(' or ')}; got ${KIND_WORDS[wrong]}`;
+      const group = kindGroups.get(`${v.file}\0${said}`) ?? {file: v.file, said, lines: [], at: warnings.length};
+      if (group.lines.length === 0) {
+        kindGroups.set(`${v.file}\0${said}`, group);
+        warnings.push({code: 'unknown-prop-value', message: ''});
+      }
+      if (!group.lines.includes(v.line)) group.lines.push(v.line);
+      continue;
+    }
+    if (!v.strings || v.strings.length === 0) continue;
+    const prop = (await docsOf(v.component))?.find(p => p?.name === v.prop);
+    if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
+    const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
+    const unknown = v.strings.filter(value => !allowed.includes(value));
+    if (unknown.length === 0) continue;
+    // The project read can walk a large tree; only a value the docs lack needs it.
+    const widening = await propWideningInterfaces(coreDir, v.component, v.prop);
+    if (widening === null) continue;
+    if (widening.size > 0) {
+      added ??= projectAugmentations(findPackageRoot(dir) ?? dir, page);
+      if (!added.complete) continue;
+      for (const name of widening) {
+        for (const key of added.keys.get(name) ?? []) if (!allowed.includes(key)) allowed.push(key);
+      }
+    }
+    const kinds = v.prop.endsWith('s') ? `${v.prop} values` : `${v.prop}s`;
+    for (const value of unknown) {
+      if (allowed.includes(value)) continue;
+      warn(
+        `${v.file}:${v.line}:${v.component}:${v.prop}:${value}`,
+        `${v.file}:${v.line}: ${v.component} has no ${v.prop} "${value}"; its ${kinds} are ${allowed.join(', ')}.`,
+      );
+    }
+  }
+  for (const {file, said, lines, at} of kindGroups.values()) {
+    warnings[at].message =
+      lines.length === 1 ? `${file}:${lines[0]}: ${said}.` : `${file}: ${said} on ${lines.length} lines (${lines.join(', ')}).`;
+  }
+  return warnings;
+}
+
+/**
+ * The documented props of each Core component, read from the Core of the
+ * folder `dir` with doctor's reader (`readCoreDocs`); null for a component
+ * the docs do not describe. `load` reads the components it is given in
+ * batches; `of` reads one component that was not loaded. Each component is
+ * read once.
+ * @param {string} dir
+ */
+function coreDocsReader(dir) {
+  /** @type {Map<string, any[] | null>} */
+  const docs = new Map();
+  /** @param {string[]} names */
+  const load = async names => {
+    const missing = [...new Set(names)].filter(name => !docs.has(name));
+    for (const name of missing) docs.set(name, null);
+    try {
+      for (const [name, props] of await readCoreDocs(component, missing, dir, COMPONENT_BATCH_SELECTOR_LIMIT)) docs.set(name, props);
+    } catch {
+      // A component the docs do not describe is not checked.
+    }
+  };
+  /** @param {string} name */
+  const of = async name => {
+    await load([name]);
+    return docs.get(name) ?? null;
+  };
+  return {load, of};
+}
+
+/** How many of a component's props a warning names before it counts the rest. */
+const PROPS_LISTED = 12;
+
+/**
+ * A warning for each Core component element a page's file gives props it
+ * does not take (`<AlertDialog onConfirm={…}>`), judged as `astryx doctor`
+ * judges them (`judgeCoreProps`): the prop does nothing, and a callback the
+ * page passes is never called. Each prop gets the documented prop with the
+ * same words, when there is one; when a prop has none, the warning lists the
+ * props the component takes. Core's types are read with the project's
+ * TypeScript and React's types, as the page finds them; without them, the
+ * props are not judged. Only the docs are read while every prop is
+ * documented.
+ * @param {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string, element: {line: number, column: number}}>} names
+ *   each with the file's absolute path and where its element opens
+ * @param {string} page the page file
+ * @param {(name: string) => Promise<any[] | null>} docsOf
+ * @returns {Promise<{warnings: import('../../foundation/render/render-page.mjs').RenderWarning[], props: Set<string>}>}
+ *   the warnings, and the props they name
+ */
+async function propNameWarnings(names, page, docsOf) {
+  if (names.length === 0) return {warnings: [], props: new Set()};
+  const dir = path.dirname(page);
+  const projectDir = runChoice(dir).inProject ? (findPackageRoot(dir) ?? dir) : dir;
+  const shown = (/** @type {string} */ file) => path.relative(dir, file).split(path.sep).join('/');
+  const {found, skipped, reason} = await judgeCoreProps({
+    projectDir,
+    uses: names.map(use => ({...use, file: shown(use.file), path: use.file})),
+    pages: [...new Set(names.map(use => use.file))],
+    readDocs: async components => {
+      /** @type {Map<string, any[]>} */
+      const documented = new Map();
+      for (const name of components) {
+        const props = await docsOf(name);
+        if (props) documented.set(name, props);
+      }
+      return documented;
+    },
+    typescript: () => projectTypeScript([projectDir]),
+  });
+  /** @type {Map<string, {line: number, column: number}>} */
+  const elementOf = new Map(names.map(use => [`${shown(use.file)}\0${use.line}\0${use.column}`, use.element]));
+  /** @type {Map<string, typeof found>} */
+  const byElement = new Map();
+  for (const use of found) {
+    const element = elementOf.get(`${use.file}\0${use.line}\0${use.column}`);
+    const key = `${use.file}\0${element?.line}\0${element?.column}`;
+    (byElement.get(key) ?? byElement.set(key, []).get(key))?.push(use);
+  }
+  /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
+  const warnings = [];
+  for (const uses of byElement.values()) {
+    const {file, line, component: name} = uses[0];
+    /** @type {Map<string, string | null>} */
+    const props = new Map(uses.map(use => [use.prop, use.suggestion]));
+    const named = [...props].map(([prop, suggestion]) => (suggestion ? `${prop} (did you mean ${suggestion}?)` : prop));
+    let message = `${file}:${line}: ${name} has no ${named.join(', ')}`;
+    if ([...props.values()].some(suggestion => suggestion === null)) {
+      const takes = propNamesOf((await docsOf(name)) ?? []);
+      const rest = takes.length - PROPS_LISTED;
+      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more (\`${getCliInvocation(dir)} component ${name} --package @astryxdesign/core\` lists them)` : ''}`;
+    }
+    warnings.push({code: 'unknown-prop', message: `${message}.`});
+  }
+  // A check that could not run says so once, with doctor's reason and what
+  // to install: silence would read as every prop being right.
+  // Outside a project a step that installs into a project does not apply.
+  const why = runChoice(dir).inProject ? skipped : (reason ?? skipped);
+  if (why) warnings.push({code: 'props-not-checked', message: `Core prop names: ${why}`});
+  return {warnings, props: new Set(found.map(use => use.prop))};
+}
+
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
- *   `absolute`: the caller named the output by an absolute path
+ * @param {{cwd: string, input: string, output: string, title?: string, keepClassNames?: boolean, absolute?: boolean, pictures?: boolean}} args absolute paths;
+ *   `absolute`: the caller named the output by an absolute path;
+ *   `keepClassNames`: keep every class of the first paint as written;
+ *   `pictures`: also take pictures of the written file ({@link pagePictures})
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title, absolute = false}) {
+export async function renderToFile({cwd, input, output, title, keepClassNames = false, absolute = false, pictures = false}) {
   readInput(input, cwd);
   // An absolute --out is the caller's choice of place, also outside the
   // current folder (cli-surface DEC-16). The file there is still never one a
@@ -510,7 +758,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, cutFontFaces: true, keepClassNames});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
@@ -525,6 +773,27 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   } catch (e) {
     throw asAstryxError(e, path.dirname(input), cwd);
   }
+  const docs = coreDocsReader(path.dirname(input));
+  await docs.load([...(page.propValues ?? []), ...(page.propNames ?? [])].map(use => use.component));
+  const docsOf = docs.of;
+  /** @type {Awaited<ReturnType<typeof propNameWarnings>>} */
+  let named = {warnings: [], props: new Set()};
+  try {
+    named = await propNameWarnings(page.propNames ?? [], input, docsOf);
+  } catch {
+    // The check only warns: a project whose types cannot be read still exports.
+  }
+  // React's own console line for a prop the warning names says less, cut
+  // short, so it goes, before the page output is capped: it never hides a
+  // line the page printed itself.
+  const kept = (page.logs ?? []).filter(log => {
+    const prop = REACT_UNKNOWN_PROP.exec(log.text);
+    return !prop || !named.props.has(prop[1] ?? prop[2]);
+  });
+  const at = page.warnings.findIndex(warning => warning.code === 'page-output');
+  page.warnings = page.warnings.filter(warning => warning.code !== 'page-output');
+  page.warnings.splice(at === -1 ? page.warnings.length : at, 0, ...pageOutputWarnings(kept));
+  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input, docsOf)), ...named.warnings);
   for (const {name, dir} of page.fromSet) {
     let version = null;
     try {
@@ -591,7 +860,60 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     scriptModules: page.scriptModules ?? 0,
     checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
     ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
+    ...(pictures ? {pictures: await pagePictures(output, cwd, input)} : {}),
   };
+}
+
+/** The phone the pictures are taken on: its window in CSS pixels. */
+const PHONE = Object.freeze({width: 375, height: 812, mobile: true});
+
+/**
+ * Pictures of the written file, to check how it looks, not to send: a
+ * phone in light and dark, and a desktop window, taken after the page's
+ * script ran, with a browser already on the machine (the project's
+ * Playwright, else a Chrome or Chromium). They go into a new folder in the
+ * system temp folder, never beside the file. No browser, or one that
+ * fails: no pictures, the reason, and the file stands as written. The
+ * picture runner loads only here, so an export without pictures loads
+ * none of it.
+ * @param {string} output the written file, absolute
+ * @param {string} cwd
+ * @param {string} input the page module, absolute: its folder finds the
+ *   project's Playwright
+ * @returns {Promise<import('./render.type.mjs').RenderPictures>}
+ */
+async function pagePictures(output, cwd, input) {
+  const {takePictures} = await import('../../foundation/pictures/pictures.mjs');
+  const stem = path.basename(output).replace(/\.html?$/i, '');
+  // The system temp folder, as for a template's scratch copy: never a disk's
+  // root or a folder that holds the home folder.
+  const [temp] = tempFolders();
+  if (!temp) return {skipped: 'there is no system temp folder to write them to (a disk root or a folder holding the home folder is not one)'};
+  /** @type {string} */
+  let dir;
+  try {
+    dir = fs.mkdtempSync(path.join(temp, `astryx-pictures-${stem}-`));
+  } catch (e) {
+    return {skipped: `the system temp folder cannot be written (${/** @type {any} */ (e)?.code ?? e})`};
+  }
+  const jobs = [
+    {html: output, png: path.join(dir, `${stem}-phone.png`), mode: /** @type {const} */ ('light'), window: PHONE},
+    {html: output, png: path.join(dir, `${stem}-phone-dark.png`), mode: /** @type {const} */ ('dark'), window: PHONE},
+    {html: output, png: path.join(dir, `${stem}-desktop.png`), mode: /** @type {const} */ ('light')},
+  ];
+  const taken = await takePictures({cwd, from: input}, jobs);
+  const missed = taken.find(r => !r.ok);
+  if (missed || taken.length < jobs.length) {
+    fs.rmSync(dir, {recursive: true, force: true});
+    if (missed && 'reason' in missed) return {skipped: missed.reason};
+    const failed = missed && 'failed' in missed ? missed.failed : [];
+    return {
+      skipped: failed.length
+        ? `${failed.join('; ')}; install Playwright with its browser, or Google Chrome or Chromium`
+        : 'no browser was found; install Playwright with its browser, or Google Chrome or Chromium',
+    };
+  }
+  return {phone: jobs[0].png, phoneDark: jobs[1].png, desktop: jobs[2].png};
 }
 
 /**

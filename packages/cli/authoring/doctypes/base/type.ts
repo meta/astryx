@@ -501,6 +501,12 @@ export interface ComponentThemingDerivedVar {
    *  (e.g. TextArea's flush wrapper drives the inner textarea's inline
    *  padding). Without this, the property is emitted alongside the var. */
   replaces?: boolean;
+  /** On a `borderRadius` entry whose component reads each corner on its
+   *  own: the theme pipeline also writes every corner of the radius to
+   *  `<var>-top-left`, … (from the shorthand or a physical longhand) and
+   *  `<var>-start-start`, … (from a logical longhand), so a radius of
+   *  different corners reaches what the component hands each corner to. */
+  corners?: boolean;
 }
 
 /**

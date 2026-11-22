@@ -248,9 +248,9 @@ describe('new-set --from a library of looks', () => {
     expect(data.map).toMatchObject({arrowDown: 'arrow-down', star: 'star'});
     const notes = body.data.notes.join('\n');
     expect(notes).toContain(
-      'Found 6 icons in @acme/vector-icons, each drawn in several looks (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
+      'Found 6 icons in @acme/vector-icons, each drawn in several styles, sizes and weights (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
     );
-    expect(notes).toContain('in the outline 24 wght400 look');
+    expect(notes).toContain('as its outline 24 wght400 export');
     expect(body.data.suggestions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({definition: 'close', icon: 'x'}),
@@ -731,7 +731,7 @@ describe('reading a large library', () => {
       'Reading 1021 exports of @acme/vector-icons...',
     );
     expect(text.stderr).toContain(
-      'Found 170 icons in @acme/vector-icons, drawn by 1020 exports in their looks.',
+      'Found 170 icons in @acme/vector-icons, drawn by 1020 exports across its look words.',
     );
     const asJson = await runCli([...NEW_SET, '--dry-run', '--json'], pkg);
     expect(asJson.stderr).not.toContain('Reading');
@@ -1494,7 +1494,7 @@ describe('the default variant on every path', () => {
         ? looks.drawn
         : looks.other;
     const withLook = command
-      .replaceAll('<look>', another)
+      .replaceAll('<variant>', another)
       .replaceAll('<name>', another)
       .replaceAll('<default>', looks.drawn);
     const variant = /--variant (\S+)/u.exec(withLook)?.[1] ?? looks.other;
@@ -1836,12 +1836,12 @@ describe('the default variant on every path', () => {
   const NEW_SET_REFUSALS = /** @type {const} */ ({
     looks: [
       'ERR_INVALID_ARGUMENT',
-      'no look word of a library whose export names encode looks',
+      'no look word of a library whose export names carry look words',
     ],
     refresh: ['ERR_INVALID_ARGUMENT', 'without `from`'],
     keep: [
       'ERR_INVALID_ARGUMENT',
-      'when the export names of its icons name no looks',
+      'when the export names of its icons carry no look words',
     ],
     drop: ['ERR_INVALID_OPTION', '`variants` leave out the default variant'],
     name: ['ERR_INVALID_OPTION', 'declares no default'],
@@ -1908,7 +1908,7 @@ describe('the default variant on every path', () => {
         // Every icon's own export comes from this module: the variant is
         // the look they draw now, the default the set must declare.
         expect(res.body.error).toBe(
-          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the look they draw now, so "${looks.drawn}" is that look and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports already draw those icons as "${looks.drawn}", so "${looks.drawn}" can't be another variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
         );
         expect(suggestions).toEqual([
           `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,
@@ -1930,7 +1930,7 @@ describe('the default variant on every path', () => {
       case 'keep': {
         // No run moves the default; each printed command runs, the
         // module placeholder filled with the module that draws the look.
-        expect(res.body.error).toContain('export names name no looks');
+        expect(res.body.error).toContain('export names carry no look words');
         expect(suggestions.length).toBeGreaterThan(0);
         for (const command of suggestions) {
           expect(command).not.toMatch(/new-set brand --from /u);

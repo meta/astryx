@@ -60,12 +60,12 @@ import {Selector} from '../Selector';
 import {Tokenizer} from '../Tokenizer/Tokenizer';
 import {Typeahead} from '../Typeahead';
 import {useLocale} from '../i18n';
-import type {TranslatorFn} from '../i18n';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearchValueEditor.generated';
+import {buildRelativeDateOptions} from './relativeDateOptions';
 
 registerEnglishFallback(english);
 
@@ -652,64 +652,6 @@ function DateAbsoluteEditor({
   );
 }
 
-const RELATIVE_DATE_UNITS = [
-  {
-    unit: 'day',
-    plural: 'days',
-    amounts: [1, 3, 7, 14, 30],
-    ago: '@astryx.powersearch.sheet.relativeDaysAgo',
-    fromNow: '@astryx.powersearch.sheet.relativeDaysFromNow',
-  },
-  {
-    unit: 'week',
-    plural: 'weeks',
-    amounts: [1, 2, 4],
-    ago: '@astryx.powersearch.sheet.relativeWeeksAgo',
-    fromNow: '@astryx.powersearch.sheet.relativeWeeksFromNow',
-  },
-  {
-    unit: 'month',
-    plural: 'months',
-    amounts: [1, 3, 6, 12],
-    ago: '@astryx.powersearch.sheet.relativeMonthsAgo',
-    fromNow: '@astryx.powersearch.sheet.relativeMonthsFromNow',
-  },
-] as const;
-
-/**
- * The relative-date choices an operator offers, in display order. Shared by
- * the popover's Selector and the sheet presentation's rows so both list the
- * same values. With `t` the labels resolve through the catalog's ICU plural
- * messages (the sheet presentation's rows); without it they are the popover
- * editor's own literals. In English the two read identically.
- */
-export function buildRelativeDateOptions(
-  operatorValue: OperatorValue & {type: 'date_relative'},
-  t?: TranslatorFn,
-): {value: string; label: string}[] {
-  const result: {value: string; label: string}[] = [];
-  for (const {unit, plural, amounts, ago, fromNow} of RELATIVE_DATE_UNITS) {
-    for (const amount of amounts) {
-      const unitWord = amount === 1 ? unit : plural;
-      if (operatorValue.isPastAllowed !== false) {
-        result.push({
-          value: `${amount}${unit[0]}_ago`,
-          label: t ? t(ago, {count: amount}) : `${amount} ${unitWord} ago`,
-        });
-      }
-      if (operatorValue.isFutureAllowed !== false) {
-        result.push({
-          value: `${amount}${unit[0]}_from_now`,
-          label: t
-            ? t(fromNow, {count: amount})
-            : `${amount} ${unitWord} from now`,
-        });
-      }
-    }
-  }
-  return result;
-}
-
 function DateRelativeEditor({
   operatorValue,
   filterValue,
@@ -730,12 +672,15 @@ function DateRelativeEditor({
   const {isPastAllowed, isFutureAllowed} = operatorValue;
   const options = useMemo(
     () =>
-      buildRelativeDateOptions({
-        type: 'date_relative',
-        isPastAllowed,
-        isFutureAllowed,
-      }),
-    [isPastAllowed, isFutureAllowed],
+      buildRelativeDateOptions(
+        {
+          type: 'date_relative',
+          isPastAllowed,
+          isFutureAllowed,
+        },
+        t,
+      ),
+    [isPastAllowed, isFutureAllowed, t],
   );
 
   return (

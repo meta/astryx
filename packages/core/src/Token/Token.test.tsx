@@ -853,4 +853,10 @@ describe('popup state on a clickable token (FR10)', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false');
     expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
   });
+
+  it('passes aria-pressed to the inner button, so the token is a toggle', () => {
+    render(<Token label="Open" onClick={() => {}} aria-pressed={true} />);
+    const button = screen.getByRole('button', {name: 'Open', pressed: true});
+    expect(button.parentElement).not.toHaveAttribute('aria-pressed');
+  });
 });

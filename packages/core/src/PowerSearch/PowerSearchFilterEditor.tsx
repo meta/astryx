@@ -14,6 +14,11 @@ import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchEditorProps} from './types';
 import {pickDataAttributes} from '../utils/themeProps';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * Default filter editor for PowerSearch.
@@ -34,6 +39,13 @@ export function PowerSearchFilterEditor({
   timezoneID,
   ...rest
 }: PowerSearchEditorProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearchFilterEditor',
+      'config',
+      'is required: the same config as the PowerSearch it edits.',
+    );
+  }
   const config = useInternalConfig(configProp);
 
   return (

@@ -10,7 +10,14 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting, indicatorLines, pillDrawnRadios} from './_check.mjs';
+import {
+  BORDER_COLOR_PROP,
+  borderFor,
+  broughtBorderAt,
+  checkSetting,
+  indicatorLines,
+  pillDrawnRadios,
+} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -20,8 +27,9 @@ import {
   loadTheme,
   readHistory,
   themeFiles,
+  groupsOf,
 } from './_settings.mjs';
-import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
+import {GROUPS, LIKE, P} from './_tables.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
   COLOR_IN_VALUE,
@@ -63,7 +71,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {number} undoSteps - How many changes `undo` can step back.
  * @property {boolean} bodyFontReachesHeadings - Whether `font X --on body` also changes the heading font in this release.
  * @property {import('./_settings.mjs').ThemeData} data
- * @property {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @property {{light: Record<string, string>, dark: Record<string, string>, onDark?: Record<string, string>}} base - `onDark`: the tokens the base's dark media rule replaces
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
@@ -74,12 +82,37 @@ export const EXAMPLE_THEME = 'my-theme';
  * The theme's own token values in each mode: the base theme's, with the
  * theme's settings applied (a whole-theme corners setting, an exact
  * token), as `compile` builds them.
+ * A type scale the theme writes (the text-size and type dials write one)
+ * is expanded the way Core expands it, so a heading size reads as the
+ * scale draws it, not as the base theme's.
  * @param {any} compiled
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {any} [core] the project's Core module, which expands the scale
  * @returns {{light: Record<string, string>, dark: Record<string, string>}}
  */
-function ownTokens(compiled, base) {
+export function ownTokens(compiled, base, core) {
   const out = {light: {...base.light}, dark: {...base.dark}};
+  const scale = compiled?.typography?.scale;
+  if (
+    scale &&
+    typeof scale.base === 'number' &&
+    typeof scale.ratio === 'number' &&
+    typeof core?.expandTypeScale === 'function'
+  ) {
+    try {
+      const expanded = core.expandTypeScale({
+        base: scale.base,
+        ratio: scale.ratio,
+      });
+      for (const [k, v] of Object.entries(expanded ?? {}))
+        if (typeof v === 'string' && /^--font-size-|^--text-.*-size$/.test(k)) {
+          out.light[k] = v;
+          out.dark[k] = v;
+        }
+    } catch {
+      // (A Core that cannot expand the scale leaves the base sizes.)
+    }
+  }
   for (const [k, v] of Object.entries(compiled?.tokens ?? {})) {
     const pair = Array.isArray(v)
       ? v
@@ -209,7 +242,7 @@ export async function howTheme(ctx, cwd, name) {
           : 'last-changed',
     data: theme,
     base,
-    own: ownTokens(compileTheme(ctx, theme, base), base),
+    own: ownTokens(compileTheme(ctx, theme, base), base, ctx.project?.core),
     undoSteps: exists
       ? readHistory(themeFiles(cwd, slug).history).steps.length
       : 0,
@@ -260,7 +293,7 @@ export async function howTheme(ctx, cwd, name) {
         return null;
       }
       const now = compileTheme(ctx, d, base);
-      const toks = ownTokens(now, base);
+      const toks = ownTokens(now, base, ctx.project?.core);
       const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
       /** @type {Record<string, any>} */
       const rules = {
@@ -365,7 +398,7 @@ const kebab = k => k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
  * @param {any} comp the part's compiled styles
  * @returns {Map<string, string>}
  */
-function partValues(comp) {
+export function partValues(comp) {
   /** @type {Map<string, string>} */
   const out = new Map();
   for (const [when, rules] of Object.entries(comp ?? {}))
@@ -390,7 +423,7 @@ function partValues(comp) {
  * @param {Record<string, string>} map
  * @param {'light' | 'dark'} mode
  */
-function resolveIn(v, map, mode) {
+export function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out
@@ -565,9 +598,10 @@ function ruleValue(compiled, part, render, prop) {
  * @param {Step[]} steps
  * @param {MeasureIntent} intent
  * @param {'light' | 'dark' | null} visible
+ * @param {Record<string, string[]>} groups the family groups `--on` takes, read from the census
  * @returns {string | null}
  */
-function lineWay(C, was, now, tw, tn, steps, intent, visible) {
+function lineWay(C, was, now, tw, tn, steps, intent, visible, groups) {
   const fainter = Boolean(intent.fainter) || intent.zero;
   // (A dial set to a named look, "the buttons dial, outline", draws that
   // look's lines: a line it adds is the look asked.)
@@ -587,7 +621,7 @@ function lineWay(C, was, now, tw, tn, steps, intent, visible) {
     steps
       .map(st => st.on)
       .filter(Boolean)
-      .flatMap(x => FAMILIES[String(x)] ?? [String(x)]),
+      .flatMap(x => groups[String(x)] ?? [String(x)]),
   );
   if (changedTokens.size)
     for (const [part, info] of Object.entries(C.MAP ?? {}))
@@ -778,6 +812,133 @@ const CHROMA_STEP = 0.005;
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
 /**
+ * One part's rules: each source's declarations on top of the one before,
+ * condition by condition (a rule that sets one property keeps the earlier
+ * rule's others).
+ * @param {...Record<string, any>} sources the part's rules, earliest first
+ * @returns {Record<string, Record<string, any>>}
+ */
+export function mergeRules(...sources) {
+  /** @type {Record<string, Record<string, any>>} */
+  const rules = {};
+  for (const src of sources)
+    for (const [when, rule] of Object.entries(src ?? {}))
+      rules[when] =
+        rule && typeof rule === 'object' && !Array.isArray(rule)
+          ? {...(rules[when] ?? {}), ...rule}
+          : rule;
+  return rules;
+}
+
+/**
+ * The tokens inside a part in one mode: the theme's, with each token the
+ * part's own rule sets (a part-scoped dial's `--spacing-4`) over them, and a
+ * variant's rule over the part's in that variant.
+ * @param {Record<string, Record<string, any>>} rules the part's rules
+ * @param {Record<string, string>} tokens the theme's tokens in that mode
+ * @param {string} when the rule's condition (`base` at rest)
+ * @returns {Record<string, string>}
+ */
+export function scopedTokens(rules, tokens, when) {
+  /** @type {Record<string, string>} */
+  const t = {...tokens};
+  for (const w of when === 'base' ? ['base'] : ['base', when])
+    for (const [k, v] of Object.entries(rules[w] ?? {}))
+      if (k.startsWith('--') && typeof v === 'string') t[k] = v;
+  return t;
+}
+
+/**
+ * The values a part shows, by `when|state|prop` and mode: its own
+ * compiled rules (the base theme's, with the theme's on top), then each
+ * token it reads for a property, with every var() written out from the
+ * part's tokens in that mode. `raw` is the declaration as written.
+ * @param {any} C the part data (what each part reads, from Core)
+ * @param {Record<string, any>} baseComponents the base theme's own part styles
+ * @param {any} compiled the theme's own compiled styles
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} toks
+ * @param {string} part
+ * @returns {Map<string, {light: string, dark: string, raw: string}>}
+ */
+export function partShows(C, baseComponents, compiled, toks, part) {
+  const rules = mergeRules(
+    baseComponents?.[part] ?? {},
+    compiled.components?.[part] ?? {},
+  );
+  const own = partValues(rules);
+  const scoped = (
+    /** @type {'light' | 'dark'} */ m,
+    /** @type {string} */ when,
+  ) => scopedTokens(rules, toks[m], when);
+  /** @type {Map<string, string>} */
+  const raw = new Map(own);
+  // The part at rest in its main variant is its `base` too (a set with no
+  // --when writes base).
+  const mainWhen = (/** @type {string[]} */ ws) =>
+    ws.some(
+      w =>
+        w === '' ||
+        /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
+    );
+  // What Core writes for a property in a rule (a card's padding is its
+  // container padding less the border width): the whole declaration, so
+  // a value is never read from one token of several.
+  const declOf = (
+    /** @type {string} */ prop,
+    /** @type {string} */ w,
+    /** @type {string} */ token,
+  ) => {
+    const at = C.MAP[part]?.at?.[prop] ?? {};
+    const attrs = w ? w.split(' ') : [];
+    const key = Object.keys(at).find(k =>
+      attrs.every(x => k.split(',').includes(x)),
+    );
+    // (Only a declaration of several theme tokens: one token alone is
+    // read as that token.)
+    const decl = key ? String(at[key]) : '';
+    const tokens = new Set(
+      [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
+        .map(m => m[1])
+        .filter(t => !/^--(_|astryx-)/.test(t)),
+    );
+    return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
+  };
+  for (const g of Object.keys(GROUPS))
+    for (const r of C.partReads(part, g) ?? [])
+      if (mainWhen(r.when?.length ? r.when : ['']))
+        for (const prop of r.props ?? []) {
+          const key = `base||${prop}`;
+          const w = (r.when?.length ? r.when : ['']).find(
+            (/** @type {string} */ x) => mainWhen([x]),
+          );
+          if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
+        }
+  for (const g of Object.keys(GROUPS))
+    for (const r of C.partReads(part, g) ?? [])
+      for (const prop of r.props ?? [])
+        for (const w of r.when?.length ? r.when : [''])
+          if (!/::|:active|:hover|:focus|:checked|:disabled/.test(w)) {
+            const key = `${w ? w.replace('=', ':') : 'base'}||${prop}`;
+            // A variant with no rule of its own takes the part's own base
+            // rule over the token it reads.
+            if (!raw.has(key))
+              raw.set(
+                key,
+                own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
+              );
+          }
+  /** @type {Map<string, {light: string, dark: string, raw: string}>} */
+  const out = new Map();
+  for (const [k, v] of raw)
+    out.set(k, {
+      light: resolveIn(v, scoped('light', k.split('|')[0]), 'light'),
+      dark: resolveIn(v, scoped('dark', k.split('|')[0]), 'dark'),
+      raw: v,
+    });
+  return out;
+}
+
+/**
  * Hold the after build to the intent; why it does not fit, or null.
  * @param {any} ctx
  * @param {any} base
@@ -788,11 +949,11 @@ const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
  * @param {'light' | 'dark' | null} [visible] the one mode a one-mode theme shows
  */
 function measureFit(ctx, base, was, now, intent, steps, visible = null) {
-  const tw = ownTokens(was, base);
-  const tn = ownTokens(now, base);
+  const tw = ownTokens(was, base, ctx.project?.core);
+  const tn = ownTokens(now, base, ctx.project?.core);
   const C = ctx.C;
   /** @param {string} part */
-  const members = part => FAMILIES[part] ?? [part];
+  const members = part => groupsOf(ctx)[part] ?? [part];
   // A kept part, or one state or variant of it (`part@when|state|`).
   /** @type {Array<{part: string, prefix: string}>} */
   const keeps = intent.keep.flatMap(k => {
@@ -801,109 +962,12 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   });
   const subjects = new Set(intent.subjects.flatMap(members));
   /**
-   * The values a part shows, by `when|state|prop` and mode: its own
-   * compiled rules, then each token it reads for a property.
    * @param {any} compiled
    * @param {{light: Record<string, string>, dark: Record<string, string>}} toks
    * @param {string} part
    */
-  const shown = (compiled, toks, part) => {
-    // Each rule of the part: the base theme's own declarations with the
-    // theme's on top, condition by condition (a theme rule that sets one
-    // property keeps the base rule's others).
-    /** @type {Record<string, Record<string, any>>} */
-    const rules = {};
-    for (const src of [
-      base.components?.[part] ?? {},
-      compiled.components?.[part] ?? {},
-    ])
-      for (const [when, rule] of Object.entries(src))
-        rules[when] =
-          rule && typeof rule === 'object' && !Array.isArray(rule)
-            ? {...(rules[when] ?? {}), ...rule}
-            : rule;
-    const own = partValues(rules);
-    // A token the part's own rule sets (a part-scoped dial's --spacing-4)
-    // is the value inside the part.
-    // A token a variant's rule sets holds in that variant, over the part's.
-    const scoped = (
-      /** @type {'light' | 'dark'} */ m,
-      /** @type {string} */ when,
-    ) => {
-      /** @type {Record<string, string>} */
-      const t = {...toks[m]};
-      for (const w of when === 'base' ? ['base'] : ['base', when])
-        for (const [k, v] of Object.entries(rules[w] ?? {}))
-          if (k.startsWith('--') && typeof v === 'string') t[k] = v;
-      return t;
-    };
-    /** @type {Map<string, string>} */
-    const raw = new Map(own);
-    // The part at rest in its main variant is its `base` too (a set with no
-    // --when writes base).
-    const mainWhen = (/** @type {string[]} */ ws) =>
-      ws.some(
-        w =>
-          w === '' ||
-          /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
-      );
-    // What Core writes for a property in a rule (a card's padding is its
-    // container padding less the border width): the whole declaration, so
-    // a value is never read from one token of several.
-    const declOf = (
-      /** @type {string} */ prop,
-      /** @type {string} */ w,
-      /** @type {string} */ token,
-    ) => {
-      const at = C.MAP[part]?.at?.[prop] ?? {};
-      const attrs = w ? w.split(' ') : [];
-      const key = Object.keys(at).find(k =>
-        attrs.every(x => k.split(',').includes(x)),
-      );
-      // (Only a declaration of several theme tokens: one token alone is
-      // read as that token.)
-      const decl = key ? String(at[key]) : '';
-      const tokens = new Set(
-        [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
-          .map(m => m[1])
-          .filter(t => !/^--(_|astryx-)/.test(t)),
-      );
-      return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
-    };
-    for (const g of Object.keys(GROUPS))
-      for (const r of C.partReads(part, g) ?? [])
-        if (mainWhen(r.when?.length ? r.when : ['']))
-          for (const prop of r.props ?? []) {
-            const key = `base||${prop}`;
-            const w = (r.when?.length ? r.when : ['']).find(
-              (/** @type {string} */ x) => mainWhen([x]),
-            );
-            if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
-          }
-    for (const g of Object.keys(GROUPS))
-      for (const r of C.partReads(part, g) ?? [])
-        for (const prop of r.props ?? [])
-          for (const w of r.when?.length ? r.when : [''])
-            if (!/::|:active|:hover|:focus|:checked|:disabled/.test(w)) {
-              const key = `${w ? w.replace('=', ':') : 'base'}||${prop}`;
-              // A variant with no rule of its own takes the part's own base
-              // rule over the token it reads.
-              if (!raw.has(key))
-                raw.set(
-                  key,
-                  own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
-                );
-            }
-    /** @type {Map<string, {light: string, dark: string, raw: string}>} */
-    const out = new Map();
-    for (const [k, v] of raw)
-      out.set(k, {
-        light: resolveIn(v, scoped('light', k.split('|')[0]), 'light'),
-        dark: resolveIn(v, scoped('dark', k.split('|')[0]), 'dark'),
-        raw: v,
-      });
-    return out;
-  };
+  const shown = (compiled, toks, part) =>
+    partShows(C, base.components, compiled, toks, part);
   // Parts the question keeps: every value they show is the same after.
   for (const {part, prefix} of keeps) {
     const a = shown(was, tw, part);
@@ -1090,7 +1154,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
     (Boolean(intent.dir) &&
       intent.families.some(f => f === 'border' || f === 'shadow'));
   if (lineAsk) {
-    const why = lineWay(C, was, now, tw, tn, steps, intent, visible);
+    const why = lineWay(
+      C,
+      was,
+      now,
+      tw,
+      tn,
+      steps,
+      intent,
+      visible,
+      groupsOf(ctx),
+    );
     if (why) return why;
   }
   const typed = new Set(intent.typed.map(x => x.toLowerCase()));
@@ -1148,6 +1222,15 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             ? a.get('base||border-width')
             : a.get(`base||${prop}`));
       if (o && o.light === v.light && o.dark === v.dark) continue;
+      // The see-through border a border color brings to a part that draws
+      // none (set writes it with the color) is that color's line: asked
+      // with it, never a change of its own.
+      if (
+        prop === 'border' &&
+        /\btransparent\b/.test(`${v.light} ${v.dark}`) &&
+        steps.some(st => BORDER_COLOR_PROP.test(String(st.thing)))
+      )
+        continue;
       const fam = familyOf(prop);
       if (!fam) continue;
       // A property a typed value writes is asked: the question wrote it.
@@ -1447,7 +1530,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
  * @param {import('./_settings.mjs').ThemeData} d
  * @param {Step} st
  */
-function apply(ctx, slug, d, st) {
+export function apply(ctx, slug, d, st) {
   const unset = st.verb === 'undo';
   const s = checkSetting(
     ctx,
@@ -1455,9 +1538,28 @@ function apply(ctx, slug, d, st) {
     d,
     st.thing,
     st.value,
-    {on: st.on, when: st.when, state: st.state, mode: st.mode, only: st.only},
+    {
+      on: st.on,
+      when: st.when,
+      state: st.state,
+      mode: st.mode,
+      only: st.only,
+      // A box shorthand `set` writes as its sides is checked the same way.
+      ...(unset ? {} : {sides: true}),
+    },
     unset,
   );
+  // The sides replace the typed shorthand and each its own earlier entry,
+  // as set writes them.
+  if (!unset && s.sides?.length) {
+    const typed = keyOf(s);
+    d.settings = d.settings.filter(x => keyOf(x) !== typed);
+    for (const side of s.sides) {
+      d.settings = d.settings.filter(x => keyOf(x) !== keyOf(side));
+      d.settings.push(side);
+    }
+    return;
+  }
   if (!unset && s.thing === 'mode') {
     d.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     return;
@@ -1468,7 +1570,17 @@ function apply(ctx, slug, d, st) {
       [],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
+  // A border color on a part that draws no border brings the border it
+  // needs, as set writes it.
+  const edge = unset ? null : borderFor(ctx, slug, d, s);
   const k = keyOf(s);
+  // (With a border brought, the color goes after it, as set writes them:
+  // a color the theme saves already moves last, never stays before the
+  // border, whose shorthand would reset it.)
+  if (edge) {
+    d.settings = d.settings.filter(x => keyOf(x) !== k);
+    d.settings.splice(broughtBorderAt(ctx, d.settings, edge), 0, edge);
+  }
   const i = d.settings.findIndex(x => keyOf(x) === k);
   if (unset) {
     if (i < 0)

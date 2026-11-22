@@ -122,6 +122,19 @@ function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
 // =============================================================================
 
 describe('TableHeaderCell', () => {
+  it('gives a truncating plain-text heading its own direction, so a Latin heading keeps its start', () => {
+    renderChildrenMode('truncate');
+    const heading = screen.getByText('Jobs');
+    expect(heading.tagName).toBe('SPAN');
+    expect(heading).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByRole('columnheader', {name: 'Jobs'})).toBeTruthy();
+  });
+
+  it('keeps a wrapping heading as plain text in the cell', () => {
+    renderChildrenMode('wrap');
+    expect(screen.getByText('Jobs').tagName).toBe('TH');
+  });
+
   it('renders a th element around its children', () => {
     const {container} = renderStandalone(
       <TableHeaderCell>Name</TableHeaderCell>,
@@ -197,6 +210,65 @@ describe('TableHeaderCell', () => {
     expect(declarations).toContain(
       '--_table-header-end-room: var(--_table-edge-inline-end,var(--_table-header-inline))',
     );
+  });
+
+  it('wraps its heading under the default textOverflow, like the body cells', () => {
+    const {container} = render(<Table data={users} columns={columns} />);
+    const declarations = headerCellDeclarations(container);
+    expect(declarations).not.toContain('white-space: nowrap');
+    expect(declarations).toContain(
+      'white-space: var(--_table-header-white-space,normal)',
+    );
+    expect(declarations).toContain('overflow-wrap: break-word');
+    expect(
+      cssDeclarationsOf(container.querySelector('table') as Element),
+    ).toContain('--_table-header-white-space: normal');
+  });
+
+  it('keeps a children-mode heading on one line under wrap and truncates it under truncate', () => {
+    const composed = (textOverflow?: 'wrap' | 'truncate') => (
+      <Table textOverflow={textOverflow}>
+        <TableHeader>
+          <TableRow>
+            <TableHeaderCell>Name</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>Alice</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+    // Under wrap, a children-mode table keeps each heading on one line and
+    // grows the column to fit it; a data-driven table lets the heading wrap.
+    const wrapped = render(composed());
+    const childrenTable = cssDeclarationsOf(
+      wrapped.container.querySelector('table') as Element,
+    );
+    expect(childrenTable).toContain('--_table-header-white-space: nowrap');
+    expect(headerCellDeclarations(wrapped.container)).toContain(
+      'white-space: var(--_table-header-white-space,normal)',
+    );
+    wrapped.unmount();
+    const data = render(<Table data={users} columns={columns} />);
+    expect(
+      cssDeclarationsOf(data.container.querySelector('table') as Element),
+    ).toContain('--_table-header-white-space: normal');
+    data.unmount();
+    const truncated = render(composed('truncate'));
+    expect(headerCellDeclarations(truncated.container)).toContain(
+      'white-space: nowrap',
+    );
+  });
+
+  it('truncates its heading when the table truncates', () => {
+    const {container} = render(
+      <Table data={users} columns={columns} textOverflow="truncate" />,
+    );
+    const declarations = headerCellDeclarations(container);
+    expect(declarations).toContain('white-space: nowrap');
+    expect(declarations).toContain('text-overflow: ellipsis');
   });
 
   it('applies the header font weight and color inside a table', () => {

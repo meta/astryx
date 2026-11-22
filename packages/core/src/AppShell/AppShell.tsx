@@ -62,6 +62,7 @@ import {
   landLayoutGlide,
   layoutMotionFor,
   layoutStartFor,
+  layoutStartReaderFor,
   playLayoutFrames,
   playLayoutSwap,
   reportLayoutChange,
@@ -1016,8 +1017,10 @@ export function AppShell({
   } | null>(null);
   // The running swap: when it started and its wraps' starting opacities, so a
   // change made during it starts its cross-fade from what the content shows.
+  // Its start can still move after the swap is made (layoutStartReaderFor),
+  // so it is read when needed.
   const lastSwapRef = useRef<{
-    startedAt: number;
+    startedAt: () => number;
     held: number;
     entering: number;
   } | null>(null);
@@ -1059,7 +1062,7 @@ export function AppShell({
           // timeline still reads.
           const elapsed = Math.max(
             0,
-            layoutStartFor(main.ownerDocument) - last.startedAt,
+            layoutStartFor(main.ownerDocument) - last.startedAt(),
           );
           if (elapsed < motion.progress.durationMs) {
             const p = 1 - motion.progress.remaining(elapsed);
@@ -1120,7 +1123,7 @@ export function AppShell({
         }
         const {held, entering} = pending;
         lastSwapRef.current = {
-          startedAt: layoutStartFor(main.ownerDocument),
+          startedAt: layoutStartReaderFor(main.ownerDocument),
           held,
           entering,
         };

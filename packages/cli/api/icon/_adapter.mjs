@@ -7,12 +7,14 @@
  * @position api/icon — adapter for api/icon/{search,detail,list,definitions,
  *   use,map,add,new-set,new-definition}; it also carries the icon ranking, the icon-set
  *   writer, the set and definition authoring writes, the default-look
- *   rule, and the config writer the leaves use
+ *   rule, and the config writer the leaves use; search's adapter reads the
+ *   Core component names from it
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
+import {discoverComponents} from '../../foundation/discovery/component-discovery.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -93,6 +95,7 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+export {meaningWithFallbacks} from '../../foundation/discovery/template-placeholders.mjs';
 export {
   ICON_SET_GUIDE_COMMAND,
   ICON_USE_COMMAND,
@@ -175,6 +178,24 @@ export async function discoverListsIconSet(cwd) {
   const project = Project.lastLoaded(cwd) ?? (await Project.load(cwd));
   const {listsToAdd} = await import('../discover/discover.mjs');
   return listsToAdd(project, ICON_PACK_QUERY, 'icon-set');
+}
+
+/**
+ * The names of the components of the Core the project in `cwd` reads: an
+ * icon query's words that name one say where the icon goes (spec:AST-084
+ * FR6). Empty when there is no Core, or when its components cannot be read.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function coreComponentNames(cwd) {
+  const project = Project.lastLoaded(cwd);
+  try {
+    return Object.values(discoverComponents(project?.coreDir() ?? null)).flat();
+  } catch {
+    // The names only break ties, so a Core that cannot be read leaves every
+    // word its full weight and the icon answer still comes.
+    return [];
+  }
 }
 
 /**
