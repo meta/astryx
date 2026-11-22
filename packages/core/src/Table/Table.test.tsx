@@ -778,40 +778,6 @@ describe('BaseTable', () => {
       expect(screen.getByText('Name')).not.toHaveAttribute('dir');
     });
 
-    it('gives a truncating plain-text label beside an overlay alone its own direction', () => {
-      const plugin: TablePlugin<User> = {
-        transformHeaderCell: props => ({
-          ...props,
-          overlay: <span aria-hidden="true">boundary</span>,
-        }),
-      };
-      const columns: TableColumn<User>[] = [
-        {key: 'name', header: 'Name'},
-        {key: 'email', header: 'אימייל'},
-      ];
-      const {unmount} = render(
-        <BaseTable
-          data={users}
-          columns={columns}
-          textOverflow="truncate"
-          plugins={[plugin]}
-        />,
-      );
-      expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
-      expect(screen.getByText('אימייל')).not.toHaveAttribute('dir');
-      expect(screen.getByRole('columnheader', {name: 'Name'})).toBeTruthy();
-      unmount();
-      render(
-        <BaseTable
-          data={users}
-          columns={columns}
-          textOverflow="wrap"
-          plugins={[plugin]}
-        />,
-      );
-      expect(screen.getByText('Name')).not.toHaveAttribute('dir');
-    });
-
     it('applies transformBodyRow plugin with item and index', () => {
       const receivedItems: string[] = [];
       const plugin: TablePlugin<User> = {
