@@ -57,7 +57,6 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
-import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -67,9 +66,11 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedPress,
   hasInteractiveAncestor,
+  hasTextSelection,
   PRESSABLE_CONTAINER_ATTRIBUTE,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
+import {isSafeUrl} from '../utils/safeUrl';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -80,7 +81,6 @@ import {
 } from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
-import {isCoarsePointer} from '../utils/coarsePointer';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
@@ -242,7 +242,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   /**
    * Link URL. Makes the item a link via an invisible anchor element. A row
    * whose root is already a link component (see `as`) carries the address on
-   * that root instead, and no invisible anchor is rendered.
+   * that root instead, and no invisible anchor is rendered. In a row with no
+   * `onClick`, a press anywhere on the row that is not on a nested control or
+   * a text selection follows the link, as a press on the label does.
    */
   href?: string;
 
@@ -660,7 +662,6 @@ export function Item({
 }: ItemProps) {
   const pressable = usePressFeedback();
   const columnMarker = use(ItemMarkerColumnsContext);
-  const isListRow = use(ItemListRowContext);
   const LinkComponent = useLinkComponent();
   // A disabled row's anchor has no destination, so no activation path (a
   // screen reader's click, Enter, a link context menu) can navigate
@@ -679,15 +680,25 @@ export function Item({
   // control is the row's only tab stop; the row proxies surface clicks to it.
   const isDelegate = interactiveRef != null;
   const containerRef = useRef<HTMLElement | null>(null);
-  // Only onClick is needed: onMouseUp handles middle-click href navigation,
-  // which delegation mode never has (href is ignored here). A List link row's
-  // surface click goes to its anchor through the same hook and its guards.
+  // A delegate row's and a link row's surface clicks go to their own action
+  // through this one call and its guards. A link row handles its middle press
+  // itself, below.
   const {onClick: containerOnClick, onPointerDown: delegatedOnPointerDown} =
     useClickableContainerProxy({
       containerRef,
       interactiveRef: interactiveRef ?? actionLinkRef,
       disabled: isDisabled,
     });
+  // A link row is the enlarged target of its own anchor. A press on the row
+  // outside a nested control goes to the anchor with its modifier keys, so the
+  // anchor decides where it goes. A middle press fires no click event, so the
+  // row opens the link on mouse up.
+  const isLinkRow =
+    !isDelegate &&
+    role == null &&
+    onClick == null &&
+    href != null &&
+    typeof Component === 'string';
 
   useDevWarning(
     'Item',
@@ -714,12 +725,52 @@ export function Item({
   // card still treats it as part of its own surface.
   const hasOwnAction =
     (onClick != null || href != null) && !hasParentRole && !isLinkRoot;
-  const pressOnRow = (event: React.PointerEvent<HTMLElement>) =>
+  // Whether the link row's current press started or ended on a nested
+  // control. The click that ends such a press can land outside the control.
+  const linkPressOnControlRef = useRef(false);
+  const pressOnRow = (event: React.PointerEvent<HTMLElement>) => {
+    if (isLinkRow) {
+      linkPressOnControlRef.current = isOnNestedControl(
+        event,
+        actionLinkRef.current,
+      );
+    }
     cancelNestedPress(
       event,
       event.currentTarget,
       href != null ? actionLinkRef.current : actionButtonRef.current,
     );
+  };
+  const handleLinkRowPointerUp = (event: React.PointerEvent<HTMLElement>) => {
+    if (isOnNestedControl(event, actionLinkRef.current)) {
+      linkPressOnControlRef.current = true;
+    }
+  };
+  const handleLinkRowClick = (event: React.MouseEvent<HTMLElement>) => {
+    const pressedOnControl = linkPressOnControlRef.current;
+    linkPressOnControlRef.current = false;
+    if (!pressedOnControl && isEventInsideRow(event)) {
+      containerOnClick(event);
+    }
+  };
+  const handleLinkRowMouseUp = (event: React.MouseEvent<HTMLElement>) => {
+    const anchorHref = actionLinkRef.current?.getAttribute('href');
+    if (
+      event.button !== 1 ||
+      isDisabled ||
+      anchorHref == null ||
+      linkPressOnControlRef.current ||
+      !isEventInsideRow(event) ||
+      isOnNestedControl(event, null) ||
+      hasTextSelection(event.currentTarget) ||
+      !isSafeUrl(anchorHref)
+    ) {
+      return;
+    }
+    // The anchor's own address, so a link component that rewrites `href`
+    // opens the same page as a middle press on the label.
+    window.open(anchorHref, '_blank', 'noopener');
+  };
 
   // The bridge the swipe layer fills, on a row given `swipe` and on the
   // deprecated path. It is empty until the layer has mounted, when the
@@ -889,8 +940,6 @@ export function Item({
     </>
   );
 
-  const isLinkRow = isListRow && onClick == null && href != null && !isLinkRoot;
-
   const handleContainerClick = (e: React.MouseEvent) => {
     if (isDisabled) {
       return;
@@ -905,25 +954,6 @@ export function Item({
       target.closest('button, a, input, select, textarea') ||
       hasInteractiveAncestor(target, e.currentTarget)
     ) {
-      return;
-    }
-    if (isLinkRow) {
-      // Under a coarse primary pointer, a tap in the row's padding or band
-      // follows its link, with the click's modifier keys. The primary pointer
-      // decides, as it decides the band, not the pointer that made the click.
-      const row = e.currentTarget as HTMLElement;
-      const box = row.getBoundingClientRect();
-      const isInBand =
-        e.clientX < box.left ||
-        e.clientX > box.right ||
-        e.clientY < box.top ||
-        e.clientY > box.bottom;
-      if (
-        e.detail > 0 &&
-        (isInBand || isCoarsePointer(row.ownerDocument.defaultView))
-      ) {
-        containerOnClick(e as React.MouseEvent<HTMLElement>);
-      }
       return;
     }
     onClick?.(e);
@@ -1022,11 +1052,13 @@ export function Item({
   // never reaches it: the gesture system swallows it.
   const primaryOnClick = isDelegate
     ? containerOnClick
-    : hasParentRole
-      ? onClick
-      : isInteractive
-        ? handleContainerClick
-        : undefined;
+    : isLinkRow
+      ? handleLinkRowClick
+      : hasParentRole
+        ? onClick
+        : isInteractive
+          ? handleContainerClick
+          : undefined;
   // The root forwards its key events into the bridge the swipe layer fills, on
   // both paths, as released. Until the layer has mounted the forwarder does
   // nothing.
@@ -1057,11 +1089,21 @@ export function Item({
                 restProps.onPointerDown,
                 pressOnRow,
               ),
+              ...(isLinkRow
+                ? {
+                    onPointerUp: chainEventHandlers(
+                      restProps.onPointerUp,
+                      handleLinkRowPointerUp,
+                    ),
+                  }
+                : null),
             }
           : null)}
-      // Only a delegate row is a pressable container. So a mouse click in a
-      // link row's padding still reaches a clickable container around it.
-      {...(isDelegate ? {[PRESSABLE_CONTAINER_ATTRIBUTE]: 'true'} : undefined)}
+      // A delegate row and a link row are pressable containers: a press in one
+      // runs its own action, not that of a clickable container around it.
+      {...(isDelegate || isLinkRow
+        ? {[PRESSABLE_CONTAINER_ATTRIBUTE]: 'true'}
+        : undefined)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
@@ -1117,29 +1159,32 @@ export function Item({
         style,
       )}
       role={role}
-      onClick={primaryOnClick}>
+      onClick={primaryOnClick}
+      onMouseUp={
+        isLinkRow
+          ? chainEventHandlers(restProps.onMouseUp, handleLinkRowMouseUp)
+          : restProps.onMouseUp
+      }>
       <ItemTrailingContext value={null}>
         <ItemDescriptionContext
           value={hasRenderableDescription ? descriptionID : null}>
           <ItemLabelContext value={publishedLabelID}>
             <ItemLabelNeededContext value={false}>
-              <ItemListRowContext value={false}>
-                {isRenderable(marker) && marker}
-                {isRenderable(marker) && columnMarker === marker ? (
-                  <span
-                    // The row's own button or link sits in this cell, so the
-                    // row's ring reaches it here.
-                    {...focusOwnerGroupProps}
-                    {...stylex.props(
-                      styles.markerContent,
-                      align === 'first-line' && styles.markerContentFirstLine,
-                    )}>
-                    {content}
-                  </span>
-                ) : (
-                  content
-                )}
-              </ItemListRowContext>
+              {isRenderable(marker) && marker}
+              {isRenderable(marker) && columnMarker === marker ? (
+                <span
+                  // The row's own button or link sits in this cell, so the
+                  // row's ring reaches it here.
+                  {...focusOwnerGroupProps}
+                  {...stylex.props(
+                    styles.markerContent,
+                    align === 'first-line' && styles.markerContentFirstLine,
+                  )}>
+                  {content}
+                </span>
+              ) : (
+                content
+              )}
             </ItemLabelNeededContext>
           </ItemLabelContext>
         </ItemDescriptionContext>
@@ -1163,3 +1208,24 @@ export function Item({
 }
 
 Item.displayName = 'Item';
+
+// React bubbles an event through a portal the caller renders from the row,
+// but its target is not in the row, so it is not a press on the row.
+function isEventInsideRow(event: React.MouseEvent<HTMLElement>): boolean {
+  return event.currentTarget.contains(event.target as Node);
+}
+
+// Whether a pointer event is on a nested interactive element other than the
+// row's own action.
+function isOnNestedControl(
+  event: React.MouseEvent<HTMLElement>,
+  ownAction: Element | null,
+): boolean {
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    target !== event.currentTarget &&
+    hasInteractiveAncestor(target, event.currentTarget) &&
+    ownAction?.contains(target) !== true
+  );
+}

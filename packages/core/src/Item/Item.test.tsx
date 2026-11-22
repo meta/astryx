@@ -410,10 +410,10 @@ describe('Item', () => {
     expect(followed.mock.calls[2][0].ctrlKey).toBe(true);
   });
 
-  it('does nothing for a mouse click inside a List link row’s box but outside its anchor', () => {
+  it('follows the link on a mouse click inside a List link row’s box but outside its anchor', () => {
     const {followed, row} = linkRow();
     fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
-    expect(followed).not.toHaveBeenCalled();
+    expect(followed).toHaveBeenCalledTimes(1);
   });
 
   /** Runs `body` with the primary pointer coarse or fine. */
@@ -432,26 +432,22 @@ describe('Item', () => {
     }
   }
 
-  it('decides a tap in a List link row’s own padding by the primary pointer, not the pointer that made it', () => {
+  it('follows the link on a tap in a List link row’s own padding, whatever the primary pointer', () => {
     const {followed, row} = linkRow();
-    // A fine primary pointer keeps the anchor as the target: a finger's tap in
-    // the padding (a touch screen beside a mouse) does nothing.
     withPrimaryPointer(false, () => {
       fireEvent.pointerDown(row, {pointerType: 'touch'});
       fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
     });
-    expect(followed).not.toHaveBeenCalled();
-    // Under a coarse primary pointer the padding is part of the row's
-    // target, whatever pointer made the click (WebKit reports a finger's
-    // click as `mouse`).
+    expect(followed).toHaveBeenCalledTimes(1);
+    // WebKit reports a finger's click as `mouse`.
     withPrimaryPointer(true, () => {
       fireEvent.pointerDown(row, {pointerType: 'mouse'});
       fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
     });
-    expect(followed).toHaveBeenCalledTimes(1);
+    expect(followed).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps a standalone link Item to its anchor under a finger: a tap in its padding or past its box does nothing', () => {
+  it('follows a standalone link Item’s link from its padding under a finger', () => {
     const {container} = render(<Item label="Link" href="/docs" />);
     const anchor = container.querySelector('a') as HTMLAnchorElement;
     const followed = vi.fn((event: MouseEvent) => event.preventDefault());
@@ -462,15 +458,14 @@ describe('Item', () => {
     );
     withPrimaryPointer(true, () => {
       fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
-      fireEvent.click(row, {clientX: 50, clientY: 5, detail: 1});
     });
-    expect(followed).not.toHaveBeenCalled();
-    // Present first: its anchor itself still follows.
-    fireEvent.click(anchor);
     expect(followed).toHaveBeenCalledTimes(1);
+    // A click on the anchor itself follows it once, not twice.
+    fireEvent.click(anchor);
+    expect(followed).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps a link Item inside a List row’s content to its anchor under a finger', () => {
+  it('follows a link Item inside a List row’s content from that Item’s whole row', () => {
     const {container} = render(
       <List>
         <ListItem label="Row" endContent={<Item label="Nested" href="/n" />} />
@@ -485,7 +480,7 @@ describe('Item', () => {
     withPrimaryPointer(true, () => {
       fireEvent.click(nested as HTMLElement, {detail: 1});
     });
-    expect(followed).not.toHaveBeenCalled();
+    expect(followed).toHaveBeenCalledTimes(1);
   });
 
   it('under a finger, leaves a tap on a control in a List link row’s end content to that control', () => {
@@ -529,7 +524,7 @@ describe('Item', () => {
     }
   });
 
-  it('with a mouse, leaves a click in a List link row’s padding to a clickable container around it', () => {
+  it('with a mouse, follows a List link row’s link on a click in its padding, not a clickable container around it', () => {
     const cardClick = vi.fn();
     function Card({children}: {children: ReactNode}) {
       const cardRef = useRef<HTMLDivElement | null>(null);
@@ -560,12 +555,11 @@ describe('Item', () => {
     withPrimaryPointer(false, () => {
       fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
     });
-    expect(followed).not.toHaveBeenCalled();
-    expect(cardClick).toHaveBeenCalledTimes(1);
-    expect(row).not.toHaveAttribute('data-pressable-container');
+    expect(followed).toHaveBeenCalledTimes(1);
+    expect(cardClick).not.toHaveBeenCalled();
   });
 
-  it('keeps a List link row unmarked after its Activity hides and shows, so a mouse click in its padding still reaches the card around it', () => {
+  it('keeps a List link row the target of a mouse click in its padding after its Activity hides and shows', () => {
     const cardClick = vi.fn();
     function Card({hidden}: {hidden: boolean}) {
       const cardRef = useRef<HTMLDivElement | null>(null);
@@ -598,18 +592,17 @@ describe('Item', () => {
     expect(followed).toHaveBeenCalledTimes(1);
     rerender(<Card hidden />);
     rerender(<Card hidden={false} />);
-    expect(row).not.toHaveAttribute('data-pressable-container');
     withPrimaryPointer(false, () => {
       fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
     });
-    expect(cardClick).toHaveBeenCalledTimes(1);
-    expect(followed).toHaveBeenCalledTimes(1);
+    expect(cardClick).not.toHaveBeenCalled();
+    expect(followed).toHaveBeenCalledTimes(2);
   });
 
-  it('does nothing for a click with no pointer behind it', () => {
+  it('follows the link for a click with no pointer behind it, as its anchor does', () => {
     const {followed, row} = linkRow();
     fireEvent.click(row, {clientX: 50, clientY: 5, detail: 0});
-    expect(followed).not.toHaveBeenCalled();
+    expect(followed).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a row with both onClick and href on onClick for a click in its own box', () => {
@@ -725,6 +718,254 @@ describe('Item', () => {
       </>,
     );
     expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+
+  describe('a link row follows its link from the whole row', () => {
+    function renderLinkRow() {
+      const view = render(
+        <Item
+          label="Ada Lovelace"
+          description="Not applied"
+          href="/candidates/1"
+          startContent={<span>AL</span>}
+          endContent={
+            <>
+              <span>Yesterday</span>
+              <button type="button">Star</button>
+            </>
+          }
+        />,
+      );
+      const anchor = screen.getByRole('link', {name: /Ada Lovelace/});
+      const clicks: MouseEvent[] = [];
+      anchor.addEventListener('click', event => {
+        event.preventDefault();
+        clicks.push(event);
+      });
+      const root = view.container.firstElementChild as HTMLElement;
+      return {anchor, clicks, root};
+    }
+
+    it('a press on the start content, the end content or the row itself follows the link', () => {
+      const {clicks, root} = renderLinkRow();
+      fireEvent.click(screen.getByText('AL'));
+      fireEvent.click(screen.getByText('Yesterday'));
+      fireEvent.click(root);
+      expect(clicks).toHaveLength(3);
+    });
+
+    it('a press on the description follows the link once', () => {
+      const {clicks} = renderLinkRow();
+      fireEvent.click(screen.getByText('Not applied'));
+      expect(clicks).toHaveLength(1);
+    });
+
+    it('a press on a nested control does not follow the link', () => {
+      const {clicks} = renderLinkRow();
+      fireEvent.click(screen.getByRole('button', {name: 'Star'}));
+      expect(clicks).toHaveLength(0);
+    });
+
+    it('a press that starts or ends on a nested control does not follow the link', () => {
+      const {clicks} = renderLinkRow();
+      // Present first: a press that starts and ends on the row follows it.
+      fireEvent.pointerDown(screen.getByText('Yesterday'), {
+        pointerType: 'mouse',
+      });
+      fireEvent.click(screen.getByText('Yesterday'));
+      expect(clicks).toHaveLength(1);
+      fireEvent.pointerDown(screen.getByRole('button', {name: 'Star'}), {
+        pointerType: 'mouse',
+      });
+      fireEvent.click(screen.getByText('Yesterday'));
+      expect(clicks).toHaveLength(1);
+      // A press that starts on the row and ends on the control: the browser
+      // sends the click to the element that holds both points.
+      fireEvent.pointerDown(screen.getByText('Yesterday'), {
+        pointerType: 'mouse',
+      });
+      fireEvent.pointerUp(screen.getByRole('button', {name: 'Star'}), {
+        pointerType: 'mouse',
+      });
+      fireEvent.click(
+        screen.getByText('Yesterday').parentElement as HTMLElement,
+      );
+      expect(clicks).toHaveLength(1);
+    });
+
+    it('a middle press that starts on a nested control does not open the link', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      try {
+        renderLinkRow();
+        fireEvent.pointerDown(screen.getByRole('button', {name: 'Star'}), {
+          pointerType: 'mouse',
+          button: 1,
+        });
+        fireEvent.mouseUp(screen.getByText('Yesterday'), {button: 1});
+        expect(open).not.toHaveBeenCalled();
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it('marks a link row as a pressable container from its first render', () => {
+      const {root} = renderLinkRow();
+      expect(root).toHaveAttribute('data-pressable-container', 'true');
+    });
+
+    it('marks a row that becomes a link row after it mounts', () => {
+      const {container, rerender} = render(<Item label="Ada Lovelace" />);
+      const row = container.firstElementChild as HTMLElement;
+      expect(row).not.toHaveAttribute('data-pressable-container');
+      rerender(<Item label="Ada Lovelace" href="/candidates/1" />);
+      expect(container.firstElementChild).toHaveAttribute(
+        'data-pressable-container',
+        'true',
+      );
+    });
+
+    it('a press that ends a text selection does not follow the link', () => {
+      const {clicks} = renderLinkRow();
+      const start = screen.getByText('AL');
+      document.getSelection()?.selectAllChildren(start);
+      try {
+        fireEvent.click(start);
+      } finally {
+        document.getSelection()?.removeAllRanges();
+      }
+      expect(clicks).toHaveLength(0);
+    });
+
+    it('a press with a modifier key reaches the anchor with that key', () => {
+      const {clicks} = renderLinkRow();
+      fireEvent.click(screen.getByText('AL'), {metaKey: true});
+      fireEvent.click(screen.getByText('AL'), {ctrlKey: true});
+      fireEvent.click(screen.getByText('AL'), {shiftKey: true});
+      expect(
+        clicks.map(event => [event.metaKey, event.ctrlKey, event.shiftKey]),
+      ).toEqual([
+        [true, false, false],
+        [false, true, false],
+        [false, false, true],
+      ]);
+    });
+
+    it('a middle press on the row opens the link in a new tab', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      try {
+        renderLinkRow();
+        fireEvent.mouseUp(screen.getByText('AL'), {button: 1});
+        expect(open).toHaveBeenCalledWith(
+          '/candidates/1',
+          '_blank',
+          'noopener',
+        );
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it('a middle press in content the row portals out does not open the link', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      try {
+        render(
+          <Item
+            label="Ada Lovelace"
+            href="/candidates/1"
+            startContent={<span>AL</span>}
+            endContent={createPortal(
+              <span data-testid="portaled">Portaled</span>,
+              document.body,
+            )}
+          />,
+        );
+        // Present first: a middle press on the row opens the link.
+        fireEvent.mouseUp(screen.getByText('AL'), {button: 1});
+        expect(open).toHaveBeenCalledTimes(1);
+        fireEvent.mouseUp(screen.getByTestId('portaled'), {button: 1});
+        expect(open).toHaveBeenCalledTimes(1);
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it("a press on the row reaches a router link component's own click handler", () => {
+      const navigate = vi.fn();
+      function RouterLink({
+        ref,
+        onClick,
+        ...props
+      }: React.ComponentPropsWithRef<'a'>) {
+        return (
+          <a
+            ref={ref}
+            {...props}
+            onClick={event => {
+              onClick?.(event);
+              event.preventDefault();
+              navigate(props.href);
+            }}
+          />
+        );
+      }
+      render(
+        <LinkProvider component={RouterLink}>
+          <Item
+            label="Ada Lovelace"
+            href="/candidates/1"
+            startContent={<span>AL</span>}
+          />
+        </LinkProvider>,
+      );
+      fireEvent.click(screen.getByText('AL'));
+      expect(navigate).toHaveBeenCalledWith('/candidates/1');
+    });
+
+    it('a middle press on the row opens the address the link component renders', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      function BasePathLink({
+        ref,
+        href,
+        ...props
+      }: React.ComponentPropsWithRef<'a'>) {
+        return <a ref={ref} href={`/base${href ?? ''}`} {...props} />;
+      }
+      try {
+        render(
+          <LinkProvider component={BasePathLink}>
+            <Item
+              label="Ada Lovelace"
+              href="/candidates/1"
+              startContent={<span>AL</span>}
+            />
+          </LinkProvider>,
+        );
+        fireEvent.mouseUp(screen.getByText('AL'), {button: 1});
+        expect(open).toHaveBeenCalledWith(
+          '/base/candidates/1',
+          '_blank',
+          'noopener',
+        );
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it('a disabled link row does not follow its link', () => {
+      render(
+        <Item
+          label="Ada Lovelace"
+          href="/candidates/1"
+          isDisabled
+          startContent={<span>AL</span>}
+        />,
+      );
+      const anchor = screen.getByRole('link', {name: /Ada Lovelace/});
+      const onClick = vi.fn();
+      anchor.addEventListener('click', onClick);
+      fireEvent.click(screen.getByText('AL'));
+      expect(onClick).not.toHaveBeenCalled();
+    });
   });
 
   it('keeps a disabled action focusable and inert (spec:AST-085 FR1, FR2)', async () => {

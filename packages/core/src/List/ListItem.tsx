@@ -51,7 +51,6 @@ import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {mergeProps} from '../utils/mergeProps';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {Item, servesSwipeActions} from '../Item/Item';
-import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
 import {ItemTrailingContext} from '../Item/ItemTrailingContext';
@@ -657,13 +656,12 @@ export function ListItem({
       swipe={keyedSwipe}
     />
   );
-  const row = <ItemListRowContext value>{item}</ItemListRowContext>;
   // Only numbered rows contribute two cells to List's shared counter grid.
   // Passing the marker identity keeps this request off unrelated Items in slots.
   const marked = usesNumberColumns ? (
-    <ItemMarkerColumnsContext value={marker}>{row}</ItemMarkerColumnsContext>
+    <ItemMarkerColumnsContext value={marker}>{item}</ItemMarkerColumnsContext>
   ) : (
-    row
+    item
   );
   return (
     <>
