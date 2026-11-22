@@ -793,6 +793,20 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     settleDetach();
   });
 
+  // Effect: keeps the window's input stream hearing mouse moves
+  // (isMouseMove) while a hover can open this tooltip: enabled, and not
+  // controlled by `isOpen`.
+  const opensOnHover = isEnabled && isOpen === undefined;
+  useEffect(() => {
+    if (!opensOnHover) {
+      return;
+    }
+    return holdMouseMoves(
+      triggerRef.current?.ownerDocument.defaultView ??
+        (typeof window === 'undefined' ? null : window),
+    );
+  }, [opensOnHover]);
+
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
   const interactionRef = useCallback(
@@ -808,7 +822,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       detachTriggerRef.current?.();
       const latest = () => handlersRef.current;
-      const releaseStillPointer = holdMouseMoves(el.ownerDocument.defaultView);
       // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
       // which is what lets the hover path know it is looking at a finger.
       const onPointerEnter = (e: PointerEvent) =>
@@ -895,7 +908,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         if (detachTriggerRef.current === detach) {
           detachTriggerRef.current = null;
         }
-        releaseStillPointer();
         el.removeEventListener('pointerenter', onPointerEnter);
         el.removeEventListener('mouseenter', onMouseEnter);
         el.removeEventListener('pointermove', onPointerMove);

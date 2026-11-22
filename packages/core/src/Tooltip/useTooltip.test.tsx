@@ -228,6 +228,41 @@ describe('useTooltip — a pointer that does not move', () => {
     remove.mockRestore();
   });
 
+  it('holds the window pointermove listener only while a hover can open the tooltip', () => {
+    const live = () => {
+      const added = add.mock.calls.filter(
+        ([type, , options]) =>
+          type === 'pointermove' &&
+          (options as AddEventListenerOptions | undefined)?.capture === true,
+      ).length;
+      const removed = remove.mock.calls.filter(
+        ([type, , options]) =>
+          type === 'pointermove' &&
+          (options as EventListenerOptions | undefined)?.capture === true,
+      ).length;
+      return added - removed;
+    };
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    // Disabled, then controlled: a hover opens neither, so nothing is held.
+    const view = render(<Harness isEnabled={false} />);
+    expect(live()).toBe(0);
+    view.rerender(<Harness isOpen={false} />);
+    expect(live()).toBe(0);
+    // Uncontrolled and enabled: a hover can open it.
+    view.rerender(<Harness />);
+    expect(live()).toBe(1);
+    // Back to disabled, then enabled again, then unmounted.
+    view.rerender(<Harness isEnabled={false} />);
+    expect(live()).toBe(0);
+    view.rerender(<Harness />);
+    expect(live()).toBe(1);
+    view.unmount();
+    expect(live()).toBe(0);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
   it('a press on a trigger that appeared under a still mouse keeps it closed on the next move', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
