@@ -63,7 +63,7 @@ import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {usePopover} from '../Popover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {
   isFocusInsideOwnedLayer,
   isPressInsideOwnedLayer,
@@ -785,14 +785,15 @@ function PointerDateField({
   );
 
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
-  // Set just before a close that focus already left the field for, so onHide
-  // does not pull focus back to the input.
+  // During focusout, focus is already on its way to the related target.
+  // Both close-time focus returns must leave it alone.
   const isFocusMovingAwayRef = useRef(false);
   const outsidePress = useOutsidePress();
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     // A text input cannot be an invoker. Light dismiss would count a press in
     // it as outside and close the calendar.
     hasLightDismiss: false,
+    isFocusMovingAway: () => isFocusMovingAwayRef.current,
     onShow: () => {
       const field = fieldElementRef.current;
       if (field == null) {
@@ -819,9 +820,7 @@ function PointerDateField({
     // already landed there; reclaiming it would fight their click.
     onHide: () => {
       outsidePress.stop();
-      const isFocusMovingAway = isFocusMovingAwayRef.current;
-      isFocusMovingAwayRef.current = false;
-      if (!isFocusMovingAway && isFocusDetached()) {
+      if (!isFocusMovingAwayRef.current && isFocusDetached()) {
         inputRef.current?.focus();
       }
     },
@@ -897,9 +896,13 @@ function PointerDateField({
       ) {
         return;
       }
-      isFocusMovingAwayRef.current = true;
       noteOutsideDismissal(e.currentTarget.ownerDocument);
-      popover.hide();
+      isFocusMovingAwayRef.current = true;
+      try {
+        popover.hide();
+      } finally {
+        isFocusMovingAwayRef.current = false;
+      }
     },
     [popover],
   );

@@ -553,10 +553,11 @@ export interface InternalFocusTrapReturn<
   T extends HTMLElement = HTMLElement,
 > extends UseFocusTrapReturn<T> {
   /**
-   * Runs the focus return now, as the overlay starts to close and while it
-   * still holds focus. Deactivation then has nothing left to do.
+   * Resolves focus return at close start. If provided, `wasStranded` replaces
+   * the stranded-focus check. A value of `false` ends the record without
+   * moving focus.
    */
-  returnFocus: () => void;
+  returnFocus: (wasStranded?: boolean) => void;
   /**
    * Moves focus out of the container while the layer stays open: to the first
    * of `first` that can take focus, then along the focus-return chain.
@@ -698,10 +699,10 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     };
   }, [isActive, getAnchorRef, getTriggerRef, layerIdRef]);
 
-  const returnFocus = useCallback(() => {
+  const returnFocus = useCallback((wasStranded?: boolean) => {
     const record = recordRef.current;
     if (record != null) {
-      restoreLayerFocus(record);
+      restoreLayerFocus(record, {wasStranded});
     }
   }, []);
 

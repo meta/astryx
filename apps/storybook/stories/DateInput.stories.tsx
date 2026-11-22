@@ -190,6 +190,37 @@ export const DayFirstLocale: Story = {
   },
 };
 
+export const CalendarFocusHandoff: Story = {
+  tags: ['!autodocs'],
+  render: () => {
+    const [first, setFirst] = useState<ISODateString | undefined>(
+      '2026-12-15' as ISODateString,
+    );
+    const [second, setSecond] = useState<ISODateString | undefined>();
+    return (
+      <InternationalizationProvider locale="en-GB">
+        <div
+          style={{display: 'flex', gap: 180, alignItems: 'start', margin: 80}}>
+          <DateInput
+            label="First date"
+            presentation="popover"
+            width={240}
+            value={first}
+            onChange={setFirst}
+          />
+          <DateInput
+            label="Second date"
+            presentation="popover"
+            width={240}
+            value={second}
+            onChange={setSecond}
+          />
+        </div>
+      </InternationalizationProvider>
+    );
+  },
+};
+
 export const MondayFirstWeek: Story = {
   name: 'Week starts on Monday',
   render: args => {

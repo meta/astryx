@@ -455,6 +455,8 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
    * A close that plays out after the popover is hidden starts here.
    */
   onCloseStart?: () => void;
+  /** Whether focus is in transit to a known destination outside the popover. */
+  isFocusMovingAway?: () => boolean;
   /**
    * Where focus returns on close when the element focused at open is gone.
    */
@@ -538,6 +540,7 @@ function usePopoverImplementation(
     onShow,
     onHide,
     onCloseStart,
+    isFocusMovingAway,
     writesEntranceSide,
     onPlacedAfresh,
     xstyle,
@@ -640,12 +643,15 @@ function usePopoverImplementation(
   // there, and then with a focus ring whatever the last input was. The trap
   // below supplies the return. It is read through a ref because the layer
   // exists first.
-  const returnFocusRef = useRef<() => void>(() => {});
+  const returnFocusRef = useRef<(wasStranded?: boolean) => void>(() => {});
   const onCloseStartRef = useCommittedRef(onCloseStart);
+  const isFocusMovingAwayRef = useCommittedRef(isFocusMovingAway);
   const handleCloseStart = useCallback(() => {
-    returnFocusRef.current();
+    returnFocusRef.current(
+      isFocusMovingAwayRef.current?.() ? false : undefined,
+    );
     onCloseStartRef.current?.();
-  }, [onCloseStartRef]);
+  }, [isFocusMovingAwayRef, onCloseStartRef]);
   // A `'pageOrder'` popover follows its trigger in the focus order. With no
   // trigger it follows an anchor that takes focus. Otherwise it keeps its DOM
   // place. A trigger that wraps its control passes the control: browsers

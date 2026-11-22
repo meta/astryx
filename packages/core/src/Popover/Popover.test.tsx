@@ -36,7 +36,7 @@ import {readFileSync} from 'node:fs';
 import React, {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
-import {usePopover} from './usePopover';
+import {usePopover, usePopoverInternal} from './usePopover';
 import type {UsePopoverReturn} from './usePopover';
 import {Dialog} from '../Dialog';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
@@ -2368,6 +2368,46 @@ describe('usePopover Tab behavior and modality (AST-116 FR12–FR15)', () => {
     await user.keyboard('{Escape}');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
+});
+
+it('skips focus return when focus is in transit to an outside control', async () => {
+  let isFocusMovingAway = false;
+
+  function Harness() {
+    const popover = usePopoverInternal({
+      isFocusMovingAway: () => isFocusMovingAway,
+    });
+    return (
+      <>
+        <button
+          type="button"
+          ref={popover.triggerRef}
+          onClick={() => popover.show()}>
+          Open
+        </button>
+        {popover.render(<button type="button">Inside</button>)}
+        <button type="button" onClick={popover.hide}>
+          Dismiss
+        </button>
+        <span>{popover.isOpen ? 'Open panel' : 'Closed panel'}</span>
+      </>
+    );
+  }
+
+  render(<Harness />);
+  const opener = screen.getByRole('button', {name: 'Open'});
+  opener.focus();
+  fireEvent.click(opener);
+  const inside = screen.getByRole('button', {name: 'Inside', hidden: true});
+  await waitFor(() => expect(inside).toHaveFocus());
+
+  // During focusout the browser briefly has no focused control.
+  inside.blur();
+  expect(document.body).toHaveFocus();
+  isFocusMovingAway = true;
+  fireEvent.click(screen.getByRole('button', {name: 'Dismiss'}));
+  expect(screen.getByText('Closed panel')).toBeInTheDocument();
+  expect(document.body).toHaveFocus();
 });
 
 describe('usePopover trigger ref', () => {
