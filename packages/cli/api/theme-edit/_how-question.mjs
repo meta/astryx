@@ -128,7 +128,13 @@ import {
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
-import {NUMBER_WORDS, commaNumbers, modeNear, pluralOf} from './_normal.mjs';
+import {
+  NUMBER_WORDS,
+  colorsSaidForPages,
+  commaNumbers,
+  modeNear,
+  pluralOf,
+} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -352,6 +358,8 @@ function grayStop(family, stop) {
   );
 }
 
+/** A mode's page said as a sentence head, "dark mode: page plum". */
+const MODE_PAGE_HEAD = /^\s*(light|dark)[- ]mode\s*:\s*page\b/i;
 /**
  * A part said to work in both modes, "headings that work in light and dark
  * mode".
@@ -410,6 +418,8 @@ const PALETTE_NAMES = new Set([
   'forest',
   'ruby',
   'plum',
+  'blush',
+  'raspberry',
   'lavender',
   'peach',
   'ivory',
@@ -5484,7 +5494,32 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\b(bigger|larger|smaller|bolder|lighter|darker|rounder|wider|taller|softer|brighter)\s*,\s*(?:and\s+)?(bigger|larger|smaller|bolder|lighter|darker|rounder|wider|taller|softer|brighter)\s+(?=[a-z])/gi,
       '$1 $2 ',
-    )
+    );
+  // (A color said for a mode or for everything is the page.)
+  // (The modes the person typed a page head for, "dark mode: page …",
+  // before the page reading writes any: a head for such a mode is the
+  // person's, whatever later rewrites make of its color.)
+  const typedHeadModes = new Set(
+    [...question.matchAll(/\b(light|dark)[- ]mode\s*:\s*page\b/gi)].map(m =>
+      m[1].toLowerCase(),
+    ),
+  );
+
+  /**
+   * Whether a clause's words are a mode page head the page reading wrote,
+   * never one the person typed.
+   * @param {string} text
+   */
+  const writtenHead = text => {
+    const mode = MODE_PAGE_HEAD.exec(text)?.[1]?.toLowerCase();
+    return mode != null && !typedHeadModes.has(mode);
+  };
+  question = colorsSaidForPages(
+    question,
+    w => Object.hasOwn(HUES, w),
+    w => new RegExp(`^(?:${SHADE_WORDS})$`).test(w),
+  );
+  question = question
     // ("dark purple theme", "moody dark purple": dark said of a whole look
     // with a hue is the dark mode and that hue as the accent; "dark purple
     // buttons" stays a shade.)
@@ -5822,7 +5857,8 @@ export function draftAnswer(ctx, env, question) {
     // tints are the neutral color.
     .replace(/\b([a-z]+)[- ]tinted\s+(?:gr[ae]ys|neutrals?)\b/gi, (m, color) =>
       colorsIn(String(color).toLowerCase()).length ? `neutral ${color}` : m,
-    )
+    );
+  question = question
     // ("mint green for positive numbers", "red for destructive actions"):
     // a color for a thing a status role names, in the words its own dial
     // gives for it (success: done, valid, positive; danger: errors,
@@ -12722,13 +12758,16 @@ export function draftAnswer(ctx, env, question) {
         c.aspects = ['fontsize'];
     }
     // "in dark mode, cards are #1c1c1e": a clause that only names the mode
-    // gives it to the clauses after it.
+    // gives it to the clauses after it. A mode's page said as its head,
+    // "dark mode: page plum. gold buttons", gives it the same way.
     // (Never to an ask that is the same in both modes, "and rounder": a
     // mode said of a color does not reach the corners.)
     if (
       !c.mode &&
       prev?.mode &&
-      (!c.parts.length || (!prev.parts.length && !prev.aspects.length)) &&
+      (!c.parts.length ||
+        (!prev.parts.length && !prev.aspects.length) ||
+        writtenHead(prev.text)) &&
       !(
         c.aspects.length &&
         c.aspects.every(a =>
@@ -12828,13 +12867,14 @@ export function draftAnswer(ctx, env, question) {
       c.parts = [];
       c.text = '';
     }
-  // "the same accent in light and dark": every mode, so no mode.
-  if (
-    /\b(light and dark|dark and light|both modes|every mode|all modes|same in (both|light and dark))\b/.test(
-      q,
-    )
-  )
-    for (const c of clauses) c.mode = null;
+  // "the same accent in light and dark": every mode, so no mode. (A page
+  // the page reading wrote for one mode, "dark mode is navy, same accent
+  // in both modes", keeps its mode; the clause that says both modes takes
+  // none.)
+  const bothModes =
+    /\b(light and dark|dark and light|both modes|every mode|all modes|same in (both|light and dark))\b/;
+  if (bothModes.test(q))
+    for (const c of clauses) if (!writtenHead(c.text)) c.mode = null;
   // "in dark mode: page #202020, cards #2b2b2b, card border #1d1d1d,
   // accent #4cc2ff": a mode said at the head of a sentence, before its
   // colon, is the mode of every clause in that sentence (an ask that is
@@ -12852,6 +12892,18 @@ export function draftAnswer(ctx, env, question) {
     for (let k = i + 1; k < clauses.length; k++) {
       const o = clauses[k];
       if (joinOf.get(o)?.sep === 'break') break;
+      // (The next mode's head starts its own run, and a page head's run
+      // ends at a clause that names the other mode: what follows takes
+      // the nearer mode, as said.)
+      if (writtenHead(o.text)) break;
+      // (Only a head the page reading wrote: one the person typed,
+      // "dark mode: page #111111, …", scopes its whole sentence, as
+      // before.)
+      if (writtenHead(c.text) && o.mode && o.mode !== c.mode && !o.except)
+        break;
+      // (An ask that says both modes anywhere ends a written page's run: what
+      // it names besides the page is for both modes, as main reads it.)
+      if (writtenHead(c.text) && bothModes.test(q)) break;
       if (
         o.mode ||
         o.except ||
@@ -13220,14 +13272,33 @@ export function draftAnswer(ctx, env, question) {
    * A page color said as a word ("make it gray") that is neither clearly
    * light nor clearly dark, on a theme that draws both modes: each mode's
    * page takes the word's color at that page's own lightness, so neither
-   * mode gets a mid-tone page under its text. Null when the color was
-   * typed, a mode or both modes were said, or the theme draws one mode.
+   * mode gets a mid-tone page under its text; said for one mode, that
+   * mode's page only. Null when the color was typed, both modes were
+   * said, or the theme draws one mode.
    * @param {Clause} c
    * @param {string} color
-   * @returns {{light: string, dark: string} | null}
+   * @returns {{light?: string, dark?: string} | null}
    */
   const pageTones = (c, color) => {
-    if (!modal || c.mode || pageModeOf(c, color)) return null;
+    if (!modal) return null;
+    // (A color word said for one mode that is not already of that mode's
+    // lightness, a mid tone: that mode's page, at its own lightness there.)
+    if (c.mode) {
+      const rgb = parseColor(String(color));
+      // (As readable as that mode's page already: kept as said.)
+      if (
+        !rgb ||
+        question.toLowerCase().includes(String(color).toLowerCase()) ||
+        ratio(rgb, c.mode === 'light' ? [0, 0, 0] : [255, 255, 255]) >= 12
+      )
+        return null;
+      const one = toneLike(
+        color,
+        String(current('--color-background-body', c.mode) ?? ''),
+      );
+      return one ? {[c.mode]: one} : null;
+    }
+    if (pageModeOf(c, color)) return null;
     if (
       /\b(?:(?:in\s+)?(?:both|all)\s+modes|every\s+mode|everywhere|light\s+and\s+dark|dark\s+and\s+light)\b/i.test(
         `${c.text} ${question}`,
@@ -13247,6 +13318,47 @@ export function draftAnswer(ctx, env, question) {
     const light = tone('light');
     const dark = tone('dark');
     return light && dark ? {light, dark} : null;
+  };
+  /**
+   * The page answer for a color word at its pages' own lightness
+   * (pageTones), or null.
+   * @param {Clause} c
+   * @param {string} color
+   * @param {string | null} [panel] the main panel's own fill, when it draws one
+   */
+  const pageTonesAnswer = (c, color, panel = null) => {
+    const tones = pageTones(c, color);
+    if (!tones) return null;
+    const modes = /** @type {const} */ (['light', 'dark']).filter(
+      m => tones[m],
+    );
+    // (Said for one mode, the second line paints the frame, and the main
+    // panel where it draws a fill of its own, in that toned color.)
+    const one = c.mode ? String(tones[c.mode]) : null;
+    return {
+      text: `the page background: --color-background-body, ${color}'s color at ${c.mode ? `the ${c.mode} page's own lightness (${tones[c.mode]})${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}` : `each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`}`,
+      options: [
+        modes.map(m =>
+          set('--color-background-body', String(tones[m]), {mode: m}),
+        ),
+        ...(one && c.mode
+          ? [
+              [
+                set('background', one, {on: 'app-shell', mode: c.mode}),
+                ...(panel
+                  ? [
+                      set('background-color', one, {
+                        on: 'layout-content',
+                        mode: c.mode,
+                      }),
+                    ]
+                  : []),
+              ],
+            ]
+          : []),
+      ],
+      sequence: modes.length > 1,
+    };
   };
   /** How a page color's mode reads. @param {Clause} c @param {'light' | 'dark' | null} m */
   const pageModeSaid = (c, m) => {
@@ -22205,18 +22317,6 @@ export function draftAnswer(ctx, env, question) {
         };
       // (A color word in neither mode's lightness, with no text said with
       // it: each mode's page takes it at its own.)
-      const tones = pageTones(c, String(color));
-      if (tones)
-        return {
-          text: `the page background: --color-background-body, ${color}'s color at each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`,
-          options: [
-            [
-              set('--color-background-body', tones.light, {mode: 'light'}),
-              set('--color-background-body', tones.dark, {mode: 'dark'}),
-            ],
-          ],
-          sequence: true,
-        };
       // (The main panel, drawn over the page with a fill of its own, shows
       // that fill: the second line paints it with the frame, so the page
       // looks the color asked.)
@@ -22225,6 +22325,8 @@ export function draftAnswer(ctx, env, question) {
         : null;
       const panel =
         panelRead && panelRead !== '--color-background-body' ? panelRead : null;
+      const tones = pageTonesAnswer(c, String(color), panel);
+      if (tones) return tones;
       return {
         text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
         options: [
@@ -28004,20 +28106,8 @@ export function draftAnswer(ctx, env, question) {
           const color = colorFor(c, 'fill');
           if (color) {
             const pageMode = pageModeOf(c, color);
-            const tones = pageTones(c, color);
-            if (tones)
-              return {
-                text: `the page background: --color-background-body, ${color}'s color at each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`,
-                options: [
-                  [
-                    set('--color-background-body', tones.light, {
-                      mode: 'light',
-                    }),
-                    set('--color-background-body', tones.dark, {mode: 'dark'}),
-                  ],
-                ],
-                sequence: true,
-              };
+            const tones = pageTonesAnswer(c, color);
+            if (tones) return tones;
             return {
               text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}`,
               options: [
