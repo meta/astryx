@@ -188,3 +188,22 @@ it.each([
   },
   240_000,
 );
+
+it('two sized layers with the mode said at the end answer as main does', async () => {
+  const {data} = /** @type {any} */ (
+    await themeEditHow(
+      'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, #0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+      {cwd, theme: 'pg'},
+    )
+  );
+  const texts = /** @type {Array<{text: string}>} */ (data.results ?? []).map(
+    r => r.text,
+  );
+  // (Nothing is dropped silently: the second layer and the mode are named
+  // as not used.)
+  expect(
+    texts.some(
+      t => /^not used/.test(t) && t.includes('24px 24px in dark mode'),
+    ),
+  ).toBe(true);
+}, 240_000);
