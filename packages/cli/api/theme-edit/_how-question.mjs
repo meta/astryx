@@ -28101,6 +28101,13 @@ export function draftAnswer(ctx, env, question) {
               text: `${bare.join(', ')} ${bare.length > 1 ? 'draw no fill of their own' : 'draws no fill of its own'}, and a gloss on every ${part.replace(/s$/, '')} would fill ${bare.length > 1 ? 'them' : 'it'}, so nothing is written; name the part to gloss${filledMember ? ` ("glossy ${filledMember.replace(/-/g, ' ')}s")` : ''}`,
               options: [],
             };
+          // (A tinted color, "tinted blue", is a lighter or deeper tint in
+          // each mode, which the gloss does not work out: nothing is written.)
+          if (said && /\btint(?:ed|s)?\b/.test(c.text))
+            return {
+              text: `a gloss of a tinted color on ${part} is not worked out here, so nothing is written; ask for "${part} tinted" with the color for the tint alone`,
+              options: [],
+            };
           /** @type {Record<string, string[]>} */
           const looks = C.variantValues(one(part));
           // (A condition on another axis, "glossy small buttons", scopes
@@ -28124,6 +28131,23 @@ export function draftAnswer(ctx, env, question) {
             )
           )
             whens = [f.when ?? null];
+          // (A color said for the whole of a part whose fills are its looks'
+          // only, a badge's: the editor does not split it into the looks
+          // here.)
+          const filledLook = (looks[axis] ?? []).find(
+            v => lookToken(`${axis}:${v}`) != null,
+          );
+          if (
+            said &&
+            filledLook &&
+            whens.length === 1 &&
+            whens[0] === (f.when ?? null) &&
+            modes.every(m => ownFill(f.when ?? null, m) == null)
+          )
+            return {
+              text: `${part} has a fill in each of its ${axis === 'variant' ? 'variants' : `${axis} looks`} but none of its own, and a color said for every ${part} is not split into them here, so nothing is written; name one ("glossy ${said.startsWith('#') ? 'blue' : said} ${filledLook} ${part}s")`,
+              options: [],
+            };
           /** @type {Step[]} */
           const steps = [];
           /** @type {string[]} */

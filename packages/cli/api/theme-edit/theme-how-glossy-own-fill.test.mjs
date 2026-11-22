@@ -401,6 +401,22 @@ describe("glossy is a gloss of the part's own fill", () => {
     ).toBe('var(--color-info)');
   }, 240_000);
 
+  it('a color said for a part whose fills are its looks writes nothing and says why', async () => {
+    const rs = await how('q0', 'glossy blue badges');
+    expect(writes(rs)).toEqual([]);
+    const text = rs.map(r => r.text).join('\n');
+    expect(text).not.toMatch(/draws no fill of its own/);
+    expect(text).toMatch(/is not split into them here/);
+  }, 240_000);
+
+  it('a tinted color writes no gloss and says why', async () => {
+    const rs = await how('q0', 'glossy tooltips tinted blue');
+    expect(writes(rs).filter(l => / --on tooltip\b/.test(l))).toEqual([]);
+    expect(rs.map(r => r.text).join('\n')).toMatch(
+      /a gloss of a tinted color on tooltip is not worked out here/,
+    );
+  }, 240_000);
+
   it('a fill the theme cleared keeps its look', async () => {
     await themeEditNew('q3', {cwd, like: 'neutral'});
     await themeEditSet('q3', 'background-color', 'transparent', {
