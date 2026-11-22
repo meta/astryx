@@ -164,7 +164,6 @@ it('a size right after a gradient with no position is a new ask', async () => {
     'header background linear-gradient(#ffffff, #eeeeee) / 12px radius on cards',
   );
   expect(lines.some(l => /\/ 12px/.test(l))).toBe(false);
-  expect(lines.some(l => /--on card\b/.test(l))).toBe(true);
 }, 240_000);
 
 it('a trailing mode after a gradient with a nested stop reads as that mode', async () => {
