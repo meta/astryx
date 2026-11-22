@@ -23,6 +23,8 @@ import {
   ratioWords,
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
+import {generateTonalPalette} from '../theme/palette/generate/generator.mjs';
+import {CATEGORY_STOPS} from '../theme/palette/generate/derive-look.mjs';
 import {OVERRIDES} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
@@ -627,6 +629,69 @@ function roleColorsFound(c) {
 /** The shade words the color reader takes before a color ("deep green"). */
 const SHADE_WORDS =
   'lighter|light|pale|pastel|darker|dark|deeper|deep|rich|subtle|soft';
+
+/** A tint word: "tinted", "tint", "tints", "washed", "wash". */
+const TINT_WORD = /\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/;
+
+/**
+ * The colors a tint word names in a clause: the color right after
+ * "tinted", "tint" or "washed" ("cards tinted blue"), or right before
+ * "tint" ("a green tint"), as RGB. A color said with its own shade word
+ * ("a light blue tint") names its shade already, so it is none of them.
+ * @param {string} c a clause, lower-case
+ * @returns {number[][]}
+ */
+function tintedColors(c) {
+  const found = colorsFound(c);
+  /** @type {number[][]} */
+  const out = [];
+  for (const m of c.matchAll(new RegExp(TINT_WORD.source, 'g'))) {
+    const at = m.index ?? 0;
+    const end = at + m[0].length;
+    const after = found.find(
+      ([i]) => i >= end && !/[,;.]|\bwith\b|\band\b/.test(c.slice(end, i)),
+    );
+    const before = [...found]
+      .reverse()
+      .find(([i]) => i < at && /^\S+?(?:\s+\S+?)?[\s-]+$/.test(c.slice(i, at)));
+    const pick =
+      /^tints?$/.test(m[0]) && before && !after ? before : (after ?? before);
+    if (!pick) continue;
+    // (The words just before the color: a shade word there names its shade.)
+    const lead = c.slice(Math.max(0, pick[0] - 12), pick[0]);
+    const shaded = new RegExp(`\\b(?:${SHADE_WORDS})\\s*$`).test(lead);
+    const said = c.slice(pick[0], pick[0] + 24);
+    if (shaded || new RegExp(`^(?:${SHADE_WORDS})\\b`).test(said)) continue;
+    const rgb = parseColor(pick[1]);
+    if (rgb) out.push(rgb);
+  }
+  return out;
+}
+
+/**
+ * A color's light tint in each mode, from the palette generator's default
+ * ramp for it (a gray grows as a neutral family, so it stays gray), at the
+ * stops Core's card tints use; null when no ramp can be drawn from it.
+ * @param {string} seed a hex color
+ * @returns {{light: string, dark: string} | null}
+ */
+function tintShades(seed) {
+  try {
+    const gray = isGraySeed(seed);
+    const p = generateTonalPalette({
+      families: [
+        {id: 'tint', name: 'Tint', seed, ...(gray ? {kind: 'neutral'} : {})},
+      ],
+      ...(gray ? {neutralProfile: 'custom'} : {}),
+    }).palette.tint;
+    const [lightStop, darkStop] = CATEGORY_STOPS.background;
+    const light = /** @type {any} */ (p).light?.[lightStop];
+    const dark = /** @type {any} */ (p).dark?.[darkStop];
+    return light && dark ? {light: String(light), dark: String(dark)} : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Each color a clause writes, with where it starts and whether it is
@@ -31938,6 +32003,170 @@ export function draftAnswer(ctx, env, question) {
           d.text += ` (${partial.join(', ')}: only in the mode it reads in)`;
       }
     }
+  // ("cards tinted blue", "selected nav items tinted forest green"): a
+  // color a tint word names is a light tint of it, drawn from the palette
+  // generator's default ramp for it, at the stops Core's card tints use (pale in light mode, deep in
+  // dark), on the parts named before the tint word ("cards tinted blue
+  // with a navy header": the cards, never the header). A color said with
+  // its own shade word ("a light blue tint") names its shade already and
+  // is written as said.
+  /** @type {Array<{parts: Set<string>, colors: number[][]}>} */
+  const tints = [];
+  for (const d of result) {
+    const c = draftClause.get(d);
+    if (!c || !TINT_WORD.test(c.text)) continue;
+    const text = c.text.toLowerCase();
+    const colors = tintedColors(text);
+    const at = text.search(TINT_WORD);
+    // (A part is named before the tint word when its own word is: the
+    // last word of its name, "card" for card, "item" for top-nav-item.)
+    const parts = new Set(
+      c.parts
+        .map(p => p.on)
+        .filter(on => {
+          const word = on.split('-').pop() ?? on;
+          return new RegExp(`\\b${word}`).test(text.slice(0, at));
+        }),
+    );
+    if (parts.size === 0)
+      for (const p of c.parts.length
+        ? c.parts.map(x => x.on)
+        : d.options.flat().map(st => st.on))
+        if (p) parts.add(p);
+    // (A part another clause of the ask also fills, "muted cards tinted
+    // blue, default cards navy", is written as said: a tint on one of its
+    // looks is not shown yet.)
+    const split = result.some(x => {
+      const xc = draftClause.get(x);
+      return (
+        xc &&
+        xc !== c &&
+        x.options
+          .flat()
+          .some(
+            st =>
+              st.on &&
+              parts.has(st.on) &&
+              /^background(?:-color)?$/.test(st.thing),
+          )
+      );
+    });
+    if (split) {
+      if (colors.length && !/is not shown yet/.test(d.text))
+        d.text += ` (a tint on ${[...parts].join(', ')}, which another part of the ask also fills, is not shown yet: the color is written as said)`;
+      continue;
+    }
+    if (colors.length && parts.size) tints.push({parts, colors});
+  }
+  /** The tint fills written, by part, state and variant: the text check below measures text on them. @type {Map<string, {light: string, dark: string}>} */
+  const tintFills = new Map();
+  /** The same, by part and state only: text that names no variant reads on these. @type {Map<string, {light: string, dark: string}>} */
+  const tintFillsAnyLook = new Map();
+  /** The fill steps a tint wrote, one a mode. @type {WeakSet<Step>} */
+  const tintSteps = new WeakSet();
+  const tintKey = (/** @type {Step} */ st) =>
+    [st.on, st.state ?? '', st.when ?? ''].join('\0');
+  /** The modes the theme draws. @type {Array<'light' | 'dark'>} */
+  const drawn =
+    env.data.mode === 'both'
+      ? ['light', 'dark']
+      : [env.data.mode === 'dark-only' ? 'dark' : 'light'];
+  for (const d of tints.length ? result : [])
+    for (const o of d.options)
+      for (let k = o.length - 1; k >= 0; k--) {
+        const st = o[k];
+        const v = parseColor(String(st.value ?? ''));
+        if (
+          !st.on ||
+          !/^background(?:-color)?$/.test(st.thing) ||
+          !v ||
+          alphaOf(String(st.value)) < 1 ||
+          !tints.some(
+            t =>
+              t.parts.has(String(st.on)) &&
+              t.colors.some(c => c.every((n, x) => Math.abs(n - v[x]) < 1)),
+          )
+        )
+          continue;
+        const shades = tintShades(hex(v.slice(0, 3)));
+        // (A color already as pale as its tint, "a cream tint", is written
+        // as said: its tint would be darker than it.)
+        if (!shades || luminance(hex(v.slice(0, 3))) >= luminance(shades.light))
+          continue;
+        const modes = /** @type {Array<'light' | 'dark'>} */ (
+          st.mode ? [st.mode] : drawn
+        );
+        o.splice(
+          k,
+          1,
+          ...modes.map(m => {
+            const line = {...st, value: shades[m], mode: m};
+            tintSteps.add(line);
+            return line;
+          }),
+        );
+        tintFills.set(tintKey(st), shades);
+        tintFillsAnyLook.set(tintKey({...st, when: undefined}), shades);
+        const said = `a tint of ${st.value}`;
+        if (!d.text.includes(said))
+          d.text += ` (${said}: ${modes.map(m => `${shades[m]} in ${m} mode`).join(', ')}, from its palette ramp)`;
+      }
+  // (Text asked with a tint is measured on each mode's own tint fill: it
+  // is written in the modes it reads in at 4.5:1, and where it does not
+  // read, it is left out and said, with an ink that reads there.)
+  for (const d of tintFills.size ? result : [])
+    for (const o of d.options)
+      for (let k = o.length - 1; k >= 0; k--) {
+        const st = o[k];
+        if (
+          !st.on ||
+          (st.thing !== 'color' && !/^--color-text-/.test(st.thing))
+        )
+          continue;
+        const shades =
+          tintFills.get(tintKey(st)) ??
+          (st.when ? undefined : tintFillsAnyLook.get(tintKey(st)));
+        const ink = parseColor(String(st.value ?? ''));
+        if (!shades || !ink || alphaOf(String(st.value)) < 1) continue;
+        const modes = /** @type {Array<'light' | 'dark'>} */ (
+          st.mode ? [st.mode] : drawn
+        );
+        /** @type {Array<{mode: 'light' | 'dark', under: number[], ratio: number}>} */
+        const measured = [];
+        for (const m of modes) {
+          const under = parseColor(shades[m]);
+          if (under) measured.push({mode: m, under, ratio: ratio(ink, under)});
+        }
+        const fails = measured.filter(x => x.ratio < 4.5);
+        if (!fails.length) continue;
+        const reads = modes.filter(m => !fails.some(x => x.mode === m));
+        o.splice(k, 1, ...reads.map(m => ({...st, mode: m})));
+        /** @type {Array<[string, number[]]>} */
+        const inks = [
+          ['#111827', [0x11, 0x18, 0x27]],
+          ['#ffffff', [0xff, 0xff, 0xff]],
+          ['#000000', [0, 0, 0]],
+        ];
+        for (const x of fails) {
+          const [better, betterRgb] =
+            [...inks]
+              .slice(0, 2)
+              .sort((a, b) => ratio(b[1], x.under) - ratio(a[1], x.under))
+              .concat([inks[2]])
+              .find(([, c]) => ratio(c, x.under) >= 4.5) ?? inks[1];
+          const said = `${st.value} text on the ${[st.state, st.on].filter(Boolean).join(' ')} would not read on the tint in ${x.mode} mode`;
+          if (!d.text.includes(said))
+            d.text += ` (${said}: ${ratioWords(x.ratio)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratioWords(ratio(betterRgb, x.under))}:1)`;
+        }
+      }
+  // (Text that reads in no mode leaves its line empty: the answer then
+  // writes nothing and says why, never an empty change.)
+  for (const d of tintFills.size ? result : []) {
+    const kept = d.options.filter(o => o.length);
+    if (kept.length === d.options.length) continue;
+    d.options = kept;
+    if (!kept.length) delete d.sequence;
+  }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides
@@ -32587,6 +32816,9 @@ export function draftAnswer(ctx, env, question) {
       /^background(?:-color)?$/.test(x.thing) &&
       (fillIn(x.value, 'light') != null || fillIn(x.value, 'dark') != null);
     const first = d.options[0]?.[0];
+    // (A tint is a pair of fills, one a mode: each mode is measured on its
+    // own line.)
+    const tintPair = !!first && tintSteps.has(first);
     const fillSteps =
       first && isFill(first)
         ? d.options
@@ -32596,9 +32828,10 @@ export function draftAnswer(ctx, env, question) {
                 isFill(x) &&
                 x.on === first.on &&
                 x.thing === first.thing &&
-                x.value === first.value &&
                 x.state === first.state &&
-                x.mode === first.mode,
+                (tintPair
+                  ? tintSteps.has(x)
+                  : x.value === first.value && x.mode === first.mode),
             )
         : [];
     // (A choice between fills said together, "a #0069d6 fill and a #eeeeee
@@ -32658,17 +32891,19 @@ export function draftAnswer(ctx, env, question) {
       const named = fillSteps.filter(x => x.when).map(x => String(x.when));
       const variants =
         named.length === fillSteps.length
-          ? named
+          ? [...new Set(named)]
           : (C.variantValues(one(st.on))?.variant ?? []).map(
               v => `variant:${v}`,
             );
       const looks = variants.length ? variants : [''];
       const modes = /** @type {Array<'light' | 'dark'>} */ (
-        st.mode
-          ? [st.mode]
-          : modal
-            ? ['light', 'dark']
-            : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+        tintPair
+          ? [...new Set(fillSteps.map(x => x.mode))]
+          : st.mode
+            ? [st.mode]
+            : modal
+              ? ['light', 'dark']
+              : [env.data.mode === 'dark-only' ? 'dark' : 'light']
       );
       /** @type {Step[]} */
       const fixes = [];
@@ -32678,7 +32913,12 @@ export function draftAnswer(ctx, env, question) {
         for (const m of modes) {
           const ink = parseColor(String(current(tok, m) ?? ''));
           if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
-          const fill = fillIn(st.value, m);
+          const under = tintPair
+            ? (fillSteps.find(
+                x => x.mode === m && (x.when ?? '') === (look || ''),
+              ) ?? fillSteps.find(x => x.mode === m))
+            : st;
+          const fill = under ? fillIn(under.value, m) : null;
           if (!fill || ratio(ink, fill) >= 4.5) continue;
           const white = ratio([255, 255, 255], fill);
           const black = ratio([0, 0, 0], fill);
@@ -32705,7 +32945,7 @@ export function draftAnswer(ctx, env, question) {
                 on: st.on,
                 ...(look ? {when: look} : {}),
                 ...(st.state ? {state: st.state} : {}),
-                ...(modes.length > 1 || st.mode ? {mode: m} : {}),
+                ...(modes.length > 1 || st.mode || tintPair ? {mode: m} : {}),
               },
             ),
           );
@@ -32749,7 +32989,7 @@ export function draftAnswer(ctx, env, question) {
       }
       d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
       result.splice(di + 1, 0, {
-        text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
+        text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
         options: [fixes],
         ...(fixes.length > 1 ? {sequence: true} : {}),
       });
