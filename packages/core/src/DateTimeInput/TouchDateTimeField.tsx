@@ -72,6 +72,8 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {formatLocaleTime} from '../utils/timeFormat';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {localeTextStyles} from '../utils/textDirection';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
   formatISOTime,
@@ -479,6 +481,7 @@ export function TouchDateTimeField({
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
+  const textDirection = getLocaleDirection(locale);
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateTimeInput.placeholder');
   const timePlaceholder =
@@ -1377,9 +1380,11 @@ export function TouchDateTimeField({
             aria-haspopup="dialog"
             aria-autocomplete="none"
             autoComplete="off"
+            dir={controlProps.dir ?? textDirection}
             {...stylex.props(
               styles.input,
               styles.touchInput,
+              localeTextStyles.pageAlign,
               isEffectivelyDisabled && styles.inputDisabled,
             )}
           />
@@ -1460,9 +1465,11 @@ export function TouchDateTimeField({
             aria-haspopup="dialog"
             aria-autocomplete="none"
             autoComplete="off"
+            dir={textDirection}
             {...stylex.props(
               styles.input,
               styles.touchInput,
+              localeTextStyles.pageAlign,
               isEffectivelyDisabled && styles.inputDisabled,
             )}
           />

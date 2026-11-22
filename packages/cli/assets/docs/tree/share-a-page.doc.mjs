@@ -94,7 +94,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Read what the command prints. A warning names something that can look different from what you meant, such as a component that ignores its children or a remote image the viewer cannot load, and says what to change; fix it and render again. When the command says a package is not installed, install that package in the page\u2019s folder and render again. Then read its Checks section: it names anything the file\u2019s markup and stylesheets load from outside it, and whether the file gives back its source exactly. When the file stands alone, it names the one file to share. Open the file in a browser too if you have one.',
+          text: 'Read what the command prints. A warning names something that can look different from what you meant, such as a component that ignores its children or a remote image the viewer cannot load, and says what to change; fix it and render again. When the command says a package is not installed, install that package in the page\u2019s folder and render again. Then read its Checks section: it names anything the file\u2019s markup and stylesheets load from outside it, and whether the file gives back its source exactly. When the file stands alone, it names the one file to share. To see how it looks, open the file in a browser, or add --pictures to the command: it takes a phone picture in light and dark and a desktop one with a browser on the machine, to check, not to send.',
         },
       ],
     },

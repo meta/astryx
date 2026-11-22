@@ -401,6 +401,182 @@ const ROWS = [
     {q: 'Ecken eckiger', has: ['corners less']},
   ],
   [
+    'every part said before a colon is a subject of the list',
+    {
+      q: 'popover, tooltip and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a head with its own colon keeps its items, never the app's part",
+    {
+      q: 'cards: white background, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    'every part before the colon of a two-part list is a subject',
+    {
+      q: 'popover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a list with its colon after several parts keeps its items, never the app's part",
+    {
+      q: 'cards, dialogs: white background, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    'an item after a rewritten colon stays an item, never a theme-wide dial',
+    {q: 'dialogs: no border, title: bold', never: /^headings /},
+  ],
+  [
+    "a decimal in the list's first item keeps its items, never the app's part",
+    {
+      q: 'cards: 0.5rem corners, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    "a part named before another sentence's colon stays an item of this list",
+    {
+      q: 'Header: navy with white text. Cards: white background, header: gray.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+    },
+  ],
+  [
+    'a subject stays a subject when a later sentence repeats its look',
+    {
+      q: 'The popover and hover card: dark. Make the text darker.',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'a subject after a prohibition read later stays a subject',
+    {
+      q: "Don't change the sidebar. Make the popover and hover card: dark.",
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "an example said inside a sentence never frees another sentence's item",
+    {
+      q: 'Header: navy, e.g. a dark blue. Cards: white background, gray header.',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+      ],
+    },
+  ],
+  [
+    "an example inside the list's own sentence keeps the list's items",
+    {
+      q: 'Header: navy. Cards: white background (e.g. snow), gray header.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /light-dark\(#9e9e9e, #525252\)' --on app-shell-header/,
+    },
+  ],
+  [
+    'a bracketed example with a comma after "e.g." is an aside',
+    {
+      q: 'Header (e.g., the top bar): navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /border-top/,
+    },
+  ],
+  [
+    'a bracketed example after a part is an aside',
+    {
+      q: 'Header (e.g. the top bar): navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /border-top/,
+    },
+  ],
+  [
+    'an example-led ask on its own line is an ask',
+    {
+      q: 'Header: navy\nFor example buttons red',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#dc2626' --on button",
+      ],
+    },
+  ],
+  [
+    'an example-led ask after a semicolon is an ask',
+    {
+      q: 'Header: navy; e.g. buttons red',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#dc2626' --on button",
+      ],
+    },
+  ],
+  [
+    'an example never reaches across a line break',
+    {
+      q: 'Cards: white background, e.g. snow\nHeader: navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#1e3a8a' --on card/,
+    },
+  ],
+  [
+    '"etc." before another ask still ends its sentence',
+    {
+      q: 'cards white, buttons blue etc. header navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#2563eb' --on app-shell-header/,
+    },
+  ],
+  [
+    'a subject on its own line stays a subject',
+    {
+      q: 'Sidebar: navy\nPopover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a word another sentence names before its colon never frees this list's item",
+    {
+      q: 'Header: navy. Cards: white background, gray header.',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+      ],
+    },
+  ],
+  [
+    'a part inside a longer name before the colon stays an item',
+    {
+      q: 'icon buttons: round, blue icon',
+      // (The icon color stays on the button, never theme-wide.)
+      never: /^--color-icon-[a-z-]+ '[^']*'$/,
+    },
+  ],
+  [
+    'the middle part of a three-part list is a subject',
+    {
+      q: 'sidebar, header and footer: navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+    },
+  ],
+  [
+    'a word before the first subject keeps the list',
+    {
+      q: 'the popover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'a head with its own colon keeps a button item, never every button',
+    {
+      q: 'toasts: dark, close button: white',
+      never: /--on button\b|--when variant:(?:secondary|ghost)/,
+    },
+  ],
+  [
     'a part that paints no shadow takes the large shared shadow',
     {
       q: 'ugh the cards look so flat, fix it',

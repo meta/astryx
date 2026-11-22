@@ -67,7 +67,7 @@ const answer = async q => {
 };
 
 /**
- * @typedef {{q: string, has?: string[], never?: RegExp, says?: RegExp, noWide?: boolean}} Row
+ * @typedef {{q: string, has?: string[], never?: RegExp, says?: RegExp, saysNot?: RegExp, noWide?: boolean}} Row
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
@@ -149,6 +149,49 @@ const ROWS = [
   [
     "a label under a part heading stays the part's",
     {q: 'Card\nPadding: roomy\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a heading with a colon keeps its labels',
+    {q: 'Cards:\nPadding: roomy\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a heading with a colon over one label keeps it',
+    {q: 'Card:\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    'a blank line under a heading keeps its labels',
+    {q: 'Card\n\nRadius: large', never: /^corners large$/},
+  ],
+  [
+    "numbered labels under a heading stay the part's",
+    {q: 'Card\n1. Padding: roomy\n2. Radius: large', never: /^corners large$/},
+  ],
+  [
+    "a decimal in a part's sentence keeps its label",
+    {q: 'cards: 1.5px border, radius: large', never: /^corners large$/},
+  ],
+  [
+    "a decimal in a part's sentence keeps a spacing label",
+    {q: 'cards: 0.5rem gap, padding: roomy', never: /^spacing roomy$/},
+  ],
+  [
+    'a two-word label line under a heading keeps the run on the part',
+    {
+      q: 'Card\nBackground color: white\nRadius: large',
+      never: /^corners large$/,
+    },
+  ],
+  [
+    'a hyphenated label line under a heading keeps the run on the part',
+    {q: 'Card\nBorder-radius: 8px\nPadding: roomy', never: /^spacing roomy$/},
+  ],
+  [
+    'a short sentence on its own line is not a heading',
+    {q: 'Soft cards.\nRadius: small.', has: ['corners small']},
+  ],
+  [
+    'a label after an earlier part sentence still sets its dial',
+    {q: 'soft shadows on cards. Radius: small.', has: ['corners small']},
   ],
   [
     "a label in a part's colon list stays the part's",
@@ -248,6 +291,13 @@ const ROWS = [
     },
   ],
   [
+    'a text line for a clashing fill goes with that fill in the choice',
+    {
+      q: 'pressed checkboxes: a #0069d6 fill and a #eeeeee fill',
+      says: /^(?![\s\S]*readable text on that fill)[\s\S]*choice also sets #ffffff text/,
+    },
+  ],
+  [
     'a clashing color is offered only in the choice',
     {q: 'make it blue, make it green', says: /^(?![\s\S]*--color-accent)/},
   ],
@@ -331,7 +381,7 @@ const ROWS = [
     "a part's own items said after its name are the part's",
     {
       q: 'pagination pages in one bordered strip',
-      has: ["border '1px solid var(--color-border)' --on pagination"],
+      has: ["border '1px solid var(--color-border)' --on pagination-list"],
       never: /--border-width/,
     },
   ],
@@ -520,11 +570,74 @@ const ROWS = [
     },
   ],
   [
-    'an undo whose look more than one earlier change could be takes nothing back',
+    'an undo that names a look takes back only that look',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change.',
       has: ['headings bold'],
-      says: /more than one earlier change[\s\S]*one at a time/,
+      never: /--text-heading-\d-size/,
+    },
+  ],
+  [
+    'an undo of a look no earlier change had takes nothing back and says so',
+    {
+      q: 'Make the headings bold. Undo the heading size change.',
+      has: ['headings bold'],
+      says: /no heading change of that look was said earlier/,
+    },
+  ],
+  [
+    'an undo followed by another change phrase reads as before',
+    {
+      q: 'Make the headings bigger. Make the headings bold. Undo the heading size change and the heading bold change.',
+      has: ['--text-heading-1-size 1.725rem'],
+    },
+  ],
+  [
+    'an undo in a joined ask still names a word it does not read',
+    {
+      q: 'Make the headings bigger, make the headings bold, and undo the heading scale change.',
+      says: /not taken: "scale"/,
+    },
+  ],
+  [
+    'an undo in a joined ask leaves no word of it not taken',
+    {
+      q: 'Make the headings bigger, make the headings bold, and undo the heading size change.',
+      has: ['headings bold'],
+      never: /--text-heading-\d-size/,
+      saysNot: /not taken/,
+    },
+  ],
+  [
+    'a named-look undo followed by a separate undo still takes back its look',
+    {
+      q: 'Make the cards rounder. Make the headings bigger. Make the headings bold. Undo the heading size change. Undo the card change.',
+      has: ['headings bold'],
+      never: /--text-heading-\d-size|--on card\b/,
+    },
+  ],
+  [
+    'an undo of an italic keeps the bold said earlier',
+    {
+      q: 'Make the headings italic. Make the headings bold. Undo the heading italic change.',
+      has: ['headings bold'],
+      never: /font-style italic/,
+    },
+  ],
+  [
+    'an undo of the weights keeps the sizes said earlier',
+    {
+      q: 'Make the headings bigger. Make the headings bold. Undo the heading weights change.',
+      has: ['--text-heading-1-size 1.725rem'],
+      never: /^headings bold$/,
+    },
+  ],
+  [
+    'an undo of a font size keeps the family said earlier',
+    {
+      q: 'Make the headings bigger. Make the headings serif. Undo the heading font size change.',
+      has: ['font serif --on heading'],
+      never: /--text-heading-\d-size/,
     },
   ],
   [
@@ -823,6 +936,7 @@ describe('long asks bind each clause to its own part', () => {
       if (row.never)
         for (const line of r.lines) expect(line, row.q).not.toMatch(row.never);
       if (row.says) expect(r.text, row.q).toMatch(row.says);
+      if (row.saysNot) expect(r.text, row.q).not.toMatch(row.saysNot);
       if (row.noWide)
         for (const line of r.lines) expect(line, row.q).toMatch(/ --on /);
     },

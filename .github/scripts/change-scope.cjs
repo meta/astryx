@@ -146,12 +146,13 @@ const SURFACES = Object.freeze({
   SHARED_OR_UNKNOWN: 'shared-or-unknown',
 });
 
-// The recorded Node test times. They decide only how the Node legs are
-// scheduled, never what a test checks, so a change to them alone runs the
-// Node leg plan's check and the tests that read the times (spec:AST-030
-// FR13). Beside any other change they count as test configuration and run the
-// full suite.
-const RECORDED_TIMES = /^scripts\/vitest-node-durations(?:\.[\w-]+)?\.json$/;
+// The recorded test times: the Node legs' and the interaction legs'. They
+// decide only how the legs are scheduled, never what a test checks, so a
+// change to them alone runs the Node leg plan's check and the tests that read
+// the times (spec:AST-030 FR13). Beside any other change they count as test
+// configuration and run the full suite.
+const RECORDED_TIMES =
+  /^(?:scripts\/vitest-node-durations(?:\.[\w-]+)?\.json|\.github\/playwright-leg-durations\.json)$/;
 
 const RUNTIME_PACKAGE_SURFACES = Object.freeze([
   ['packages/core/', 'runtime:core'],

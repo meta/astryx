@@ -50,11 +50,17 @@ const ranJobs = [
 /** A stub GitHub with pull requests, CI runs, their jobs and statuses. */
 const APP = 'astracat-bot[bot]';
 const REVIEW = {engOwners: ['owner1'], reviewApp: APP};
+// Each head was pushed at PUSHED (its first check suite); reviews default to
+// after it.
+const PUSHED = '2026-11-20T10:00:00Z';
+const AFTER = '2026-11-20T11:00:00Z';
+const BEFORE = '2026-11-19T09:00:00Z';
 /** The review app's approval of a head. */
-const appApproval = sha => ({
+const appApproval = (sha, submittedAt = AFTER) => ({
   user: {login: APP, type: 'Bot'},
   commit_id: sha,
   state: 'APPROVED',
+  submitted_at: submittedAt,
 });
 
 function stubGithub({
@@ -65,6 +71,7 @@ function stubGithub({
   reviews = null,
   permission = 'write',
   events = [],
+  pushReadFails = false,
 }) {
   const calls = {reRunWorkflow: [], listWorkflowRuns: []};
   const github = {
@@ -92,7 +99,16 @@ function stubGithub({
           };
         },
       },
+      checks: {
+        listSuitesForRef: async () => {
+          if (pushReadFails) throw new Error('rate limited');
+          return {data: {check_suites: [{created_at: PUSHED}]}};
+        },
+      },
       repos: {
+        getCommit: async () => ({
+          data: {commit: {committer: {date: '2026-11-19T08:00:00Z'}}},
+        }),
         // One permission for everyone, or one per login.
         getCollaboratorPermissionLevel: async ({username}) => ({
           data: {
@@ -256,7 +272,14 @@ describe('starting the heavy suites', () => {
       'an engineering owner approved the exact head',
       {
         reviews: {
-          1: [{user: {login: 'Owner1'}, commit_id: 'h1', state: 'APPROVED'}],
+          1: [
+            {
+              user: {login: 'Owner1'},
+              commit_id: 'h1',
+              state: 'APPROVED',
+              submitted_at: AFTER,
+            },
+          ],
         },
         permission: 'read',
       },
@@ -286,6 +309,7 @@ describe('starting the heavy suites', () => {
               user: {login: APP, type: 'User'},
               commit_id: 'h1',
               state: 'APPROVED',
+              submitted_at: AFTER,
             },
           ],
         },
@@ -351,6 +375,41 @@ describe('starting the heavy suites', () => {
       pull: pull(1, 'h1'),
     });
     expect(stub.calls.reRunWorkflow).toEqual([12]);
+  });
+});
+
+describe('reviews GitHub re-binds to a new head', () => {
+  // [heavy turn, merge gate] for a write-access author's pull request.
+  const both = async (reviews, extra = {}) => {
+    const pr = pull(1, 'h1');
+    const stub = stubGithub({
+      pulls: [pr],
+      statuses: {h1: passed},
+      reviews: {1: reviews},
+      ...extra,
+    });
+    const input = {...REVIEW, ...stub, owner: 'o', repo: 'r', pull: pr};
+    return [
+      await turn.heavyReviewPasses(input),
+      await turn.reviewPasses(input),
+    ];
+  };
+
+  it('does not start or pass a head whose only approval predates its push', async () => {
+    // GitHub reports the older approval's commit_id as the new head.
+    expect(await both([appApproval('h1', BEFORE)])).toEqual([false, false]);
+  });
+
+  it('starts and passes on an approval submitted after the push', async () => {
+    expect(
+      await both([appApproval('h1', BEFORE), appApproval('h1', AFTER)]),
+    ).toEqual([true, true]);
+  });
+
+  it('counts no review when the push time cannot be read', async () => {
+    expect(
+      await both([appApproval('h1', AFTER)], {pushReadFails: true}),
+    ).toEqual([false, false]);
   });
 });
 
@@ -422,7 +481,12 @@ describe("the heavy turn's review (DEC-32)", () => {
     expect(
       await both(forkPull('h1'), {
         reviews: [
-          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+          {
+            user: {login: 'owner1'},
+            commit_id: 'h1',
+            state: 'APPROVED',
+            submitted_at: AFTER,
+          },
         ],
       }),
     ).toEqual([true, true]);
@@ -442,7 +506,12 @@ describe("the heavy turn's review (DEC-32)", () => {
     expect(
       await both(own, {
         reviews: [
-          {user: {login: 'owner1'}, commit_id: 'h1', state: 'APPROVED'},
+          {
+            user: {login: 'owner1'},
+            commit_id: 'h1',
+            state: 'APPROVED',
+            submitted_at: AFTER,
+          },
         ],
       }),
     ).toEqual([false, true]);
@@ -506,8 +575,10 @@ describe('the workflow', () => {
     expect(workflow.permissions).toEqual({});
     const job = workflow.jobs.start;
     expect(job['runs-on']).toBe('ubuntu-slim');
+    // checks: read lets the review read when the head was pushed.
     expect(job.permissions).toEqual({
       actions: 'write',
+      checks: 'read',
       contents: 'read',
       'pull-requests': 'read',
       statuses: 'read',

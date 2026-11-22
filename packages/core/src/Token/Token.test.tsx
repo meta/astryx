@@ -13,6 +13,7 @@ import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Token} from './Token';
+import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import type {TokenColor} from './Token';
 
 describe('Token', () => {
@@ -110,6 +111,21 @@ describe('Token', () => {
     fireEvent.click(removeButton);
     expect(handleRemove).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: vi.fn()}],
+    ['link', {href: '/test'}],
+  ])(
+    'marks the remove button of a %s token as its own pressable surface',
+    (_, props) => {
+      render(<Token label="Removable" onRemove={vi.fn()} {...props} />);
+      const removeButton = screen.getByRole('button', {
+        name: 'Remove Removable',
+      });
+      expect(removeButton).toHaveAttribute(PRESSABLE_ATTRIBUTE);
+    },
+  );
 
   it.each([
     ['static', {}],
