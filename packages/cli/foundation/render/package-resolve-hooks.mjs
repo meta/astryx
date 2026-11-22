@@ -137,12 +137,24 @@ function noteLinkedPackage(specifier, url, lookups, skip) {
   const file = fileURLToPath(url);
   if (file.includes(NODE_MODULES)) return;
   const found = nearestManifest(path.dirname(file), lookups);
-  if (
-    found &&
-    found.name === packageOf(specifier) &&
-    !skip(found.dir + path.sep)
-  )
-    lookups.linked.add(found.dir);
+  if (found) noteLinkedFolder(packageOf(specifier), found.dir, lookups, skip);
+}
+
+/**
+ * Notes `folder` as the folder of the linked package `name`: a folder
+ * outside node_modules whose package.json names `name`, as the real folder
+ * of a link `node_modules/<name>` is, or the folder a bare import of `name`
+ * reached (see noteLinkedPackage). A folder `skip` refuses is not noted.
+ * @param {string} name
+ * @param {string} folder
+ * @param {PackageLookups} lookups
+ * @param {(folder: string) => boolean} skip - takes the folder with a
+ *   trailing separator
+ */
+export function noteLinkedFolder(name, folder, lookups, skip) {
+  if ((folder + path.sep).includes(NODE_MODULES)) return;
+  if (manifestAt(folder, lookups)?.name === name && !skip(folder + path.sep))
+    lookups.linked.add(folder);
 }
 
 /** Whether a specifier names a package (not a path, a URL or an import map entry). @param {string} specifier */

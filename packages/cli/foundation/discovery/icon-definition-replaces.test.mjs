@@ -138,15 +138,15 @@ describe('a definition that replaces another', () => {
       dismiss: definitionSource('dismiss', {replaces: 'close'}),
     });
     expect(builtIn.errors.map(each => each.message)).toEqual([
-      expect.stringContaining('replaces the built-in definition "close"'),
+      expect.stringContaining('replaces the built-in meaning "close"'),
     ]);
     const loop = folder({
       orbit: definitionSource('orbit', {replaces: 'comet'}),
       comet: definitionSource('comet', {replaces: 'orbit'}),
     });
     expect(loop.errors.map(each => each.message)).toEqual([
-      expect.stringContaining('never reaches a current definition'),
-      expect.stringContaining('never reaches a current definition'),
+      expect.stringContaining('never reaches a current meaning'),
+      expect.stringContaining('never reaches a current meaning'),
     ]);
   });
 
@@ -170,7 +170,7 @@ describe('a definition that replaces another', () => {
       }),
     ]);
     expect(issues[0].message).toContain(
-      'maps "planet", an icon definition that "meteor" replaced',
+      'maps "planet", an icon meaning that "meteor" replaced',
     );
     expect(issues[0].message).toContain(
       'astryx experimental icon map meteor home --set glyphs',
@@ -237,7 +237,7 @@ describe('a definition that replaces another', () => {
     );
     expect(read.sets).toEqual([]);
     expect(read.errors.map(each => each.message).join(' ')).toContain(
-      'replaces "close", an Astryx icon definition',
+      'replaces "close", an Astryx icon meaning',
     );
   });
 

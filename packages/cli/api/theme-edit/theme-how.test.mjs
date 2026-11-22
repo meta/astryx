@@ -893,6 +893,104 @@ describe('stripe answers keep to the stripe', () => {
   });
 });
 
+describe('zebra rows beside a row metric', () => {
+  /** @param {string} question */
+  const commandsFor = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    return (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+  };
+  // "zebra" that only names the rows, beside a row metric, is that
+  // metric's ask.
+  it.each([
+    ['zebra rows taller', /spacing more --on table-row/],
+    [
+      'add more padding to buttons and make the zebra rows taller',
+      /spacing more --on table-row/,
+    ],
+    ['zebra rows bold', /font-weight 700 --on table-row/],
+    ['compact zebra rows', /spacing less --on table-row/],
+  ])('answers %s with that metric alone', async (question, own) => {
+    const commands = await commandsFor(question);
+    expect(commands).toMatch(own);
+    expect(commands).not.toMatch(/parity:|background[^\n]*--on table-row/);
+  });
+  // A color, fill, shading or lightness word anywhere in the ask, the
+  // stripes named as what changes, or tables that are striped keep the
+  // stripe ask.
+  it.each([
+    ['zebra rows taller and #f9f9f9', /--color-background-muted '#f9f9f9'/],
+    ['zebra rows #f9f9f9 taller', /--color-background-muted '#f9f9f9'/],
+    ['zebra rows #F9F9F9 taller', /--color-background-muted '#f9f9f9'/i],
+    ['zebra rows taller and #F9F9F9', /--color-background-muted '#f9f9f9'/i],
+    [
+      'zebra rows taller and light gray',
+      /--on table-row --when parity:even|--color-background-muted/,
+    ],
+    ['darker bold zebra rows', /--color-background-muted/],
+    [
+      'zebra rows taller and tinted',
+      /--on table-row --when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller, with shading',
+      /--on table-row --when parity:even|--color-background-muted/,
+    ],
+    [
+      'make the zebra row backgrounds bolder',
+      /--when parity:even|--color-background-muted/,
+    ],
+    ['zebra row fills bolder', /--when parity:even|--color-background-muted/],
+    [
+      'zebra rows taller and colored',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller with more color',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows bold, darken them slightly',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller, more subtle',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller and warmer',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller and more vibrant',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows bold and more saturated',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'zebra rows taller; more vibrant',
+      /--when parity:even|--color-background-muted/,
+    ],
+    ['add taller zebra rows', /--when parity:even|--color-background-muted/],
+    [
+      'a table with taller zebra rows',
+      /--when parity:even|--color-background-muted/,
+    ],
+    [
+      'i want zebra rows that are taller',
+      /--when parity:even|--color-background-muted/,
+    ],
+    ['make the zebra row colors bolder', /--when parity:even/],
+    ['bolder zebra stripes', /--when parity:even/],
+    ['compact striped tables', /--when parity:even/],
+  ])('keeps the stripe in %s', async (question, stripe) => {
+    expect(await commandsFor(question)).toMatch(stripe);
+  });
+});
+
 describe("the stripes' names in any form", () => {
   /** @param {string} question */
   const topSet = async question => {

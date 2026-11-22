@@ -5,15 +5,15 @@
  * Chromium, driven over the DevTools protocol on a pipe, run as its own
  * process by the editor's browser runner.
  * @input argv: the browser, and the batch (JSON: each job's page .html,
- *   picture .png and color mode)
+ *   picture .png, color mode and, optionally, its window: a phone's)
  * @output each whole page, every pixel of its height, at its path, and on
  *   stdout, each line led by its job's place and a tab: the fonts it drew
  *   its text in (font-probe.mjs), the text it draws cut short
  *   (cut-short.mjs), and PICTURE_TAKEN once it is whole; on failure, the
  *   browser's reason on stderr and exit code 1
- * @position run by `screenshot` in api/theme-edit/_preview.mjs through
- *   `runBrowser`, which gives it a temp folder of its own (the browser's
- *   profile goes there), its time bound and its stop
+ * @position run by `takePictures` in foundation/pictures/pictures.mjs
+ *   through `runBrowser`, which gives it a temp folder of its own (the
+ *   browser's profile goes there), its time bound and its stop
  */
 
 import {spawn} from 'node:child_process';
@@ -31,6 +31,7 @@ import {
   PICTURE_PAGES_AT_ONCE,
   PICTURE_TAKEN,
   PICTURE_WINDOW,
+  windowCommands,
   SETTLE_ANIMATIONS,
   AWAIT_QUIET,
   eachAtOnce,
@@ -38,7 +39,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [chrome, batch] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string, boxes?: string[]}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -158,11 +159,11 @@ function event(method, sessionId) {
 
 /**
  * One page of the batch in a tab of its own: drawn, pictured whole, and
- * measured.
- * @param {{html: string, png: string, mode: string, boxes?: string[]}} job
+ * measured. A job's `window` (a phone's) replaces the editor's window.
+ * @param {{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}} job
  * @param {number} i
  */
-async function picture({html, png, mode, boxes}, i) {
+async function picture({html, png, mode, boxes, window: view}, i) {
   // Each page in a window of its own: a page in a background tab runs
   // no animation frames, so a chart drawn over frames never finishes.
   const {targetId} = await send('Target.createTarget', {url: 'about:blank', newWindow: true});
@@ -175,11 +176,7 @@ async function picture({html, png, mode, boxes}, i) {
   // fails at once instead of holding the load on a network.
   await send('Network.enable', {}, sessionId);
   await send('Network.setBlockedURLs', {urls: NETWORK_URL_PATTERNS}, sessionId);
-  await send(
-    'Emulation.setDeviceMetricsOverride',
-    {...PICTURE_WINDOW, deviceScaleFactor: 1, mobile: false},
-    sessionId,
-  );
+  for (const [method, params] of windowCommands(view)) await send(method, params, sessionId);
   await send(
     'Emulation.setEmulatedMedia',
     {
@@ -222,8 +219,9 @@ async function picture({html, png, mode, boxes}, i) {
         x: 0,
         y: 0,
         // The whole page: a part wider than the window (the page lays it out
-        // past the window's edge) is pictured whole, never cut at it.
-        width: Math.max(PICTURE_WINDOW.width, Math.ceil(size.width)),
+        // past the window's edge) is pictured whole, never cut at it; a job's
+        // own window (a phone's) is the narrowest it is.
+        width: Math.max((view ?? PICTURE_WINDOW).width, Math.ceil(size.width)),
         height: Math.max(1, Math.ceil(size.height)),
         scale: 1,
       },

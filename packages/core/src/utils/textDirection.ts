@@ -12,7 +12,9 @@
  *   Token put textDirectionProps on the element that holds caller text,
  *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
  *   description, FieldStatus and the status tooltip use withTextDirection.
- *   MultiSelector's labels trigger puts each label in isolatedText.
+ *   MultiSelector's labels trigger puts each label in isolatedText. Button,
+ *   SegmentedControl and TableHeaderCell put textDirectionProps and
+ *   truncatedTextStyles on the element that cuts its label.
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
@@ -88,3 +90,17 @@ export function isolatedText(
     text,
   );
 }
+
+/**
+ * For an element that cuts its own text with an ellipsis. The element's own
+ * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
+ * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
+ * a right-to-left letter keeps the page's direction and is cut at its own
+ * end. Put `pageAlign` beside the `dir` so the element keeps the page's
+ * alignment.
+ */
+export const truncatedTextStyles = stylex.create({
+  pageAlign: {
+    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
+  },
+});
