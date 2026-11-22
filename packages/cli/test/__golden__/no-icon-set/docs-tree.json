@@ -1467,6 +1467,24 @@
     ],
     "mentions": []
   },
+  "visualization": {
+    "type": "docs.node",
+    "children": [
+      "visualization/data-colors-in-renderers"
+    ],
+    "mentions": []
+  },
+  "visualization/data-colors-in-renderers": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-path",
+      "use-datavars",
+      "use-raw-css-variables",
+      "draw-canvas-with-resolved-colors",
+      "configure-vega-lite"
+    ],
+    "mentions": []
+  },
   "working-with-ai": {
     "type": "docs.detail",
     "sections": [

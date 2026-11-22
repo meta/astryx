@@ -7,6 +7,7 @@ import {pageWeightLoadTimeData, ticketResolutionData} from './_data';
 const meta: Meta<typeof Chart> = {
   title: 'Charts/Marks/Dot',
   component: Chart,
+  tags: ['autodocs'],
 };
 export default meta;
 
