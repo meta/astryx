@@ -1206,3 +1206,55 @@ export function gradientStops(v) {
   }
   return stops.length ? stops : null;
 }
+
+/**
+ * The color a one-layer linear or radial gradient has where centered
+ * text sits: the middle of a linear one, the center of a radial one,
+ * between the stops around that place; null for any other (several
+ * layers, a conic or repeating one, a stop with no fixed color).
+ * @param {string} v
+ * @param {{parseColor: (v: unknown) => [number, number, number] | null, alphaOf: (v: unknown) => number}} read
+ *   the color reader the caller measures with
+ * @returns {string | null}
+ */
+export function gradientColorBehindText(v, {parseColor, alphaOf}) {
+  const m = /^(linear|radial)-gradient\((.*)\)$/s.exec(v.trim());
+  if (!m || splitTop(v.trim(), ',').length !== 1) return null;
+  const args = splitTop(m[2], ',').map(x => x.trim());
+  if (
+    args[0] &&
+    /^(to\b|at\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+      args[0],
+    )
+  )
+    args.shift();
+  /** @type {Array<{c: [number, number, number], a: number, at: number | null}>} */
+  const stops = [];
+  for (const arg of args) {
+    const pos = /\s(-?[\d.]+)%$/.exec(arg);
+    const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+    const c = parseColor(color);
+    if (!c) return null;
+    stops.push({
+      c,
+      a: alphaOf(color),
+      at: pos ? Number(pos[1]) / 100 : null,
+    });
+  }
+  if (stops.length < 2) return null;
+  // Positions a stop leaves out are spread evenly, as CSS spreads them.
+  stops.forEach((x, i) => {
+    if (x.at == null) x.at = i / (stops.length - 1);
+  });
+  const at = m[1] === 'linear' ? 0.5 : 0;
+  const i = stops.findIndex(x => /** @type {number} */ (x.at) >= at);
+  if (i <= 0) {
+    const x = stops[Math.max(0, i)];
+    return `rgba(${x.c.join(', ')}, ${x.a})`;
+  }
+  const [lo, hi] = [stops[i - 1], stops[i]];
+  const span = /** @type {number} */ (hi.at) - /** @type {number} */ (lo.at);
+  const f = span > 0 ? (at - /** @type {number} */ (lo.at)) / span : 0;
+  const mix = lo.c.map((v0, k) => Math.round(v0 + (hi.c[k] - v0) * f));
+  return `rgba(${mix.join(', ')}, ${lo.a + (hi.a - lo.a) * f})`;
+}

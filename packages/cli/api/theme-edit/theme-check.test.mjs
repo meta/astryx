@@ -1201,7 +1201,8 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
         ),
       ).toBe(true);
       // A dark bar's own see-through track tint is the bar showing
-      // through: not a fill of the filter's own, so no bar-fill.
+      // through: the theme's dark text on it is said, and never repaired
+      // as a fill of the filter's own.
       const sheer = await check(
         themeFile('sheertrack', READABLE, {
           'app-shell-header': {
@@ -1213,7 +1214,11 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
           },
         }),
       );
-      expect(sheer.problems.some(p => p.kind === 'bar-fill')).toBe(false);
+      expect(
+        sheer.problems.some(
+          p => p.kind === 'bar-fill' && /see-through fill/.test(p.message),
+        ),
+      ).toBe(true);
       // An opaque light track the bar sets under its white text: the
       // repair gives the filter the theme's own track back.
       const track = themeFile('track', READABLE, {
@@ -1523,6 +1528,142 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
           p => p.kind === 'page-image' && p.part === 'layout',
         ),
       ).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'answers the review: see-through fills measured, dropped blocks, gradient middles, own press fills, per-mode images and next steps',
+    async () => {
+      // (1) A dark card's see-through neutral under its white text is
+      // measured laid over the card.
+      const card = await check(
+        themeFile('sheercard', READABLE, {
+          card: {
+            base: {
+              backgroundColor: '#1b1b1b',
+              '--color-text-primary': '#ffffff',
+              '--color-neutral': '#ffffffd9',
+            },
+          },
+        }),
+      );
+      expect(
+        card.problems.some(
+          p =>
+            (p.kind === 'bar-fill' || p.kind === 'bar-text') &&
+            p.part === 'card' &&
+            /see-through fill/.test(p.message),
+        ),
+      ).toBe(true);
+      // (2) A block under `[data-x]` is one the build drops: the header's
+      // text stays the theme's, which is said on the dark header.
+      const dropped = await check(
+        themeFile('droppedblock', READABLE, {
+          'app-shell-header': {
+            base: {
+              backgroundColor: '#101010',
+              '[data-x]': {'--color-text-primary': '#ffffff'},
+            },
+          },
+        }),
+      );
+      expect(
+        dropped.problems.some(
+          p => p.kind === 'bar-ground' && p.part === 'app-shell-header',
+        ),
+      ).toBe(true);
+      // (3) A gradient bar is read at its middle: white text on a header
+      // dark in the middle reads.
+      const mid = await check(
+        themeFile('midbar', READABLE, {
+          'app-shell-header': {
+            base: {
+              backgroundImage: 'linear-gradient(#ffffff, #142145, #ffffff)',
+              '--color-text-primary': '#ffffff',
+            },
+          },
+        }),
+      );
+      expect(
+        mid.problems.some(
+          p =>
+            p.kind === 'bar-ground' &&
+            p.part === 'app-shell-header' &&
+            p.token === '--color-text-primary',
+        ),
+      ).toBe(false);
+      // (4) A part's own press fill is the one the press check reads.
+      const press = await check(
+        themeFile('ownpress', READABLE, {
+          button: {
+            'variant:secondary': {
+              ':active': {backgroundColor: '#ffffff'},
+            },
+          },
+        }),
+      );
+      expect(
+        press.problems.some(
+          p =>
+            p.part === 'button' &&
+            /press fill/.test(p.message) &&
+            p.mode === 'dark',
+        ),
+      ).toBe(true);
+      // (6) A fill set only in light leaves a dark-only see-through gradient
+      // unread in dark: said for dark.
+      const glass = await check(
+        themeFile('glass', READABLE, {
+          card: {
+            base: {
+              '@light': {backgroundColor: '#ffffff'},
+              backgroundImage:
+                'linear-gradient(light-dark(#ffffff, #ffffff33), light-dark(#ffffff, #ffffff33))',
+            },
+          },
+        }),
+      );
+      expect(
+        glass.problems.some(
+          p =>
+            p.part === 'card' && p.kind === 'page-image' && p.mode === 'dark',
+        ),
+      ).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'names a next step that clears the problem for own-text bar ground and state fills',
+    async () => {
+      const r = await themeEditCheck(
+        themeFile('nextown', READABLE, {
+          'app-shell-header': {
+            base: {
+              backgroundColor: '#142145',
+              '--color-text-primary': '#ffffff',
+              '--color-text-secondary': '#dddddd',
+            },
+          },
+          'segmented-control-item': {
+            base: {'@light': {'--color-text-secondary': '#474747'}},
+          },
+        }),
+        {cwd},
+      ).catch(e => e);
+      const next = r.data?.next ?? r.details?.data?.next ?? '';
+      expect(next).not.toMatch(/in app-shell-header's own style to a color/);
+      const s = await themeEditCheck(
+        themeFile('nextstate', READABLE, {
+          button: {
+            'variant:secondary': {':active': {backgroundColor: '#ffffff'}},
+          },
+        }),
+        {cwd},
+      ).catch(e => e);
+      const sn = s.data?.next ?? s.details?.data?.next ?? '';
+      expect(sn).not.toMatch(/accepted\.json/);
     },
     T,
   );

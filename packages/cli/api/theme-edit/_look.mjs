@@ -29,7 +29,7 @@ import {
   splitTop,
   nearestLightness,
 } from './_color.mjs';
-import {gradientStops} from './_css.mjs';
+import {gradientColorBehindText, gradientStops} from './_css.mjs';
 import * as editorLook from '../theme/palette/generate/editor-look.mjs';
 import {acceptCovers} from './_accepted.mjs';
 import {familyOf} from './_tables.mjs';
@@ -185,11 +185,11 @@ export function partValue(components, part, keys, m, when = null) {
 
 /**
  * A selector key that places a style without a state: `:not(…)`,
- * `:where(…)`, `:is(…)`, or one naming a class or an attribute — never a
- * pointer, focus or check state.
+ * `:where(…)` or `:is(…)`, the ones the theme build nests; never a pointer,
+ * focus or check state.
  */
 const REST_SELECTOR =
-  /^(?!.*:(hover|active|focus|focus-visible|focus-within|disabled|checked|visited)\b)(:not\(|:where\(|:is\(|&|\.|\[)/;
+  /^(?!.*:(hover|active|focus|focus-visible|focus-within|disabled|checked|visited)\b)(:not\(|:where\(|:is\()/;
 
 /**
  * The fill a part's own style paints in a block: a background image that
@@ -636,6 +636,13 @@ function barTextProblems(look) {
   const {res, components, map, pairs} = look;
   /** @type {Map<string, LookProblem>} */
   const out = new Map();
+  /** The parts a menu holds: they sit on the menu, not on a bar. */
+  const inMenus = new Set(
+    menuParts(map).flatMap(({part: menu}) => [
+      menu,
+      ...(map[menu]?.contains ?? []),
+    ]),
+  );
   for (const [part, blocks] of Object.entries(components ?? {})) {
     if (!blocks || typeof blocks !== 'object') continue;
     const within = inside(map, part);
@@ -659,6 +666,8 @@ function barTextProblems(look) {
         ),
       );
       for (const token of tokens) {
+        // (Text drawn disabled has no reading floor.)
+        if (/disabled/.test(token)) continue;
         const set = partValue(components, part, [token], m);
         const fg = shown(colorIn(set, res[m], m), bar);
         if (!fg) continue;
@@ -683,11 +692,13 @@ function barTextProblems(look) {
                 `var(${p.bg.tokens[0]})`)
               : p.bg.raw);
           // A see-through fill (a segmented control's track) shows the bar
-          // through it: its text reads on the bar, which the bar-ground
-          // measure checks; only a part that paints its own fill draws
-          // the bar's text on something else.
+          // through it: its text is measured on the two laid together, and
+          // it is never repaired as a fill of the part's own.
           const own = colorIn(fillValue, res[m], m);
-          if (own == null || alphaOf(own) < 1) continue;
+          if (own == null) continue;
+          const sheer = alphaOf(own) < 1;
+          // (A part a menu holds sits on the menu's own fill, not the bar.)
+          if (sheer && inMenus.has(q)) continue;
           const fill = shown(own, bar);
           if (!fill) continue;
           const r = ratio(fg, fill);
@@ -698,7 +709,7 @@ function barTextProblems(look) {
           if (had) {
             if (!had.parts?.includes(q)) had.parts?.push(q);
             if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
-            BAR_BLOCKS.get(had)?.add(at);
+            if (!sheer) BAR_BLOCKS.get(had)?.add(at);
             continue;
           }
           const problem = /** @type {LookProblem} */ ({
@@ -712,7 +723,7 @@ function barTextProblems(look) {
             needs: TEXT,
           });
           out.set(key, problem);
-          BAR_BLOCKS.set(problem, new Set([at]));
+          BAR_BLOCKS.set(problem, new Set(sheer ? [] : [at]));
         }
       }
     }
@@ -758,12 +769,15 @@ function barTextProblems(look) {
           )
             continue;
           // A fill that is see-through over the bar (its track tint) is the
-          // bar showing through: never a fill of the part's own. Its text
-          // is measured on the bar by the bar-ground measure.
+          // bar showing through: its text is measured on the two laid
+          // together, and it is never repaired as a fill of the part's own.
           const tint = colorIn(value, res[m], m);
-          if (tint == null || alphaOf(tint) < 1) continue;
+          if (tint == null) continue;
+          const sheer = alphaOf(tint) < 1;
+          if (sheer && inMenus.has(q)) continue;
           const fill = shown(tint, bar);
           const tok = p.fg.tokens[0];
+          if (/disabled/.test(tok ?? '')) continue;
           const text =
             partValue(components, p.fg.target, ['color'], m, block) ??
             (tok
@@ -781,7 +795,7 @@ function barTextProblems(look) {
           if (had) {
             if (!had.parts?.includes(q)) had.parts?.push(q);
             if (r < /** @type {number} */ (had.ratio)) had.ratio = fixed(r);
-            BAR_BLOCKS.get(had)?.add(`${q}|${block ?? 'base'}`);
+            if (!sheer) BAR_BLOCKS.get(had)?.add(`${q}|${block ?? 'base'}`);
             continue;
           }
           const problem = /** @type {LookProblem} */ ({
@@ -795,7 +809,10 @@ function barTextProblems(look) {
             needs: TEXT,
           });
           out.set(key, problem);
-          BAR_BLOCKS.set(problem, new Set([`${q}|${block ?? 'base'}`]));
+          BAR_BLOCKS.set(
+            problem,
+            new Set(sheer ? [] : [`${q}|${block ?? 'base'}`]),
+          );
         }
       }
     }
@@ -803,13 +820,6 @@ function barTextProblems(look) {
   // Text a part inside a page bar draws on the bar's own fill (the part
   // paints none of its own): the text, its own or the bar's, must read on
   // the bar.
-  /** The parts a menu holds: they sit on the menu, not on a bar. */
-  const inMenus = new Set(
-    menuParts(map).flatMap(({part: menu}) => [
-      menu,
-      ...(map[menu]?.contains ?? []),
-    ]),
-  );
   for (const part of PAGE_BARS) {
     const blocks = components?.[part];
     if (!blocks || typeof blocks !== 'object') continue;
@@ -817,27 +827,19 @@ function barTextProblems(look) {
     for (const m of look.modes) {
       const page = shown(colorIn(`var(${PAGE})`, res[m], m), null);
       const barValue = ownFill(components, part, m, null, res[m]);
-      // A bar painted with one opaque gradient is measured at its middle
-      // color, as the contrast measure reads text on a gradient.
-      const stopsOf = (
+      // A bar painted with one opaque gradient is measured where centered
+      // text sits on it, as the contrast measure reads a gradient.
+      const barColor =
         barValue != null && /gradient\(/.test(barValue)
-          ? (fillStops(barValue) ?? [])
-          : barValue != null
-            ? [barValue]
-            : []
-      )
-        .map(v => shown(colorIn(v, res[m], m), page))
-        .filter(/** @returns {c is Rgb} */ c => c != null);
-      if (!stopsOf.length) continue;
+          ? fillStops(barValue)
+            ? gradientColorBehindText(barValue, {parseColor, alphaOf})
+            : null
+          : barValue;
+      const barRgb =
+        barColor != null ? shown(colorIn(barColor, res[m], m), page) : null;
+      if (!barRgb) continue;
       /** @type {Rgb[]} */
-      const bars = [
-        /** @type {Rgb} */ (
-          stopsOf[0].map(
-            (_, k) =>
-              stopsOf.reduce((sum, c) => sum + c[k], 0) / stopsOf.length,
-          )
-        ),
-      ];
+      const bars = [barRgb];
       for (const p of pairs) {
         const q = p.bg.target;
         // The text sits in the bar: its part is one the bar holds, or the
@@ -922,6 +924,12 @@ function barTextProblems(look) {
             ? `: set ${p.token} in ${p.part}'s own style to a color that reads there`
             : ''
       }`;
+      continue;
+    }
+    // Parts that show the bar through a see-through fill are not
+    // repaired: the edit is the text they draw there.
+    if (!BAR_BLOCKS.get(p)?.size) {
+      p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it show the bar through a see-through fill under their text: ${p.ratio}:1 in ${p.mode}. Give the text they draw there (in ${p.part}'s own style) a color that reads on the bar`;
       continue;
     }
     p.message =
@@ -1114,14 +1122,16 @@ function partImageProblems(look) {
   const out = [];
   for (const [part, blocks] of Object.entries(look.components ?? {})) {
     if (!blocks || typeof blocks !== 'object') continue;
-    const setsFill = Object.values(blocks).some(
-      (/** @type {any} */ b) =>
-        b &&
-        typeof b === 'object' &&
-        [b, b['@light'], b['@dark']].some(
-          x => x && typeof x === 'object' && x.backgroundColor != null,
-        ),
-    );
+    /** Whether the part sets a fill of its own in a mode. @param {Mode} m */
+    const setsFill = m =>
+      Object.values(blocks).some(
+        (/** @type {any} */ b) =>
+          b &&
+          typeof b === 'object' &&
+          [b, b[`@${m}`]].some(
+            x => x && typeof x === 'object' && x.backgroundColor != null,
+          ),
+      );
     // Each mode decides on its own: a gradient can be opaque in one mode
     // and see-through in the other.
     // Every block the part draws in (a `height:fill` layout, a selected
@@ -1149,7 +1159,7 @@ function partImageProblems(look) {
       if (opaqueGradient(read)) return false;
       // A see-through sheen over a fill the part sets is measured on that
       // fill; a variable the theme's tokens do not answer leaves it unread.
-      return /var\(/.test(read) || !setsFill;
+      return /var\(/.test(read) || !setsFill(m);
     }
     if (!unread.length) continue;
     out.push({
@@ -1198,10 +1208,11 @@ const HOVER_SAME = 0.01;
  * The hover fill a part's own style gives in a block, or null.
  * @param {Look['components']} components
  * @param {string} part @param {Mode} m @param {string | null} block
+ * @param {string} [state] the state's own key (`:hover`, `:active`)
  */
-function ownHover(components, part, m, block) {
+function ownHover(components, part, m, block, state = ':hover') {
   for (const b of [block, 'base']) {
-    const hover = b ? components?.[part]?.[b]?.[':hover'] : null;
+    const hover = b ? components?.[part]?.[b]?.[state] : null;
     if (!hover || typeof hover !== 'object') continue;
     for (const inner of [hover[`@${m}`], hover])
       if (inner && typeof inner === 'object')
@@ -1315,7 +1326,7 @@ function hoverProblems(look) {
             block,
           );
           const hoverValue =
-            ownHover(styles, part, m, block) ??
+            ownHover(styles, part, m, block, pressed ? ':active' : ':hover') ??
             (ownRest != null && !layer ? ownRest : value);
           const c = colorIn(hoverValue, tokens[m], m);
           const top = c ? /** @type {Rgb} */ (parseColor(c)) : null;
@@ -2176,6 +2187,7 @@ export function lookRepair(look, problems) {
     // the parts inside it that draw their text on it, the same way.)
     if ((p.kind !== 'bar-text' && p.kind !== 'bar-fill') || !p.token || !p.part)
       continue;
+    if (!BAR_BLOCKS.get(p)?.size) continue;
     const l = colorIn(`var(${p.token})`, res.light, 'light');
     const d = colorIn(`var(${p.token})`, res.dark, 'dark');
     const value = l && d && l !== d ? `light-dark(${l}, ${d})` : (l ?? d);
