@@ -29,7 +29,7 @@ import {doc as iconCommand} from '../../clients/cli/commands/experimental-icon.d
 import {doc as addCommand} from '../../clients/cli/commands/experimental-icon-add.doc.mjs';
 import {doc as mapCommand} from '../../clients/cli/commands/experimental-icon-map.doc.mjs';
 import {doc as newSetCommand} from '../../clients/cli/commands/experimental-icon-new-set.doc.mjs';
-import {doc as newDefinitionCommand} from '../../clients/cli/commands/experimental-icon-new-definition.doc.mjs';
+import {doc as newDefinitionCommand} from '../../clients/cli/commands/experimental-icon-new-meaning.doc.mjs';
 import {doc as useCommand} from '../../clients/cli/commands/experimental-icon-use.doc.mjs';
 import {doc as iconFn} from './icon.doc.mjs';
 import {doc as addFn} from './iconAdd.doc.mjs';
@@ -260,7 +260,7 @@ const CASES = {
       ['--adapter', '--description'],
     ],
   },
-  'experimental icon new-definition': {
+  'experimental icon new-meaning': {
     command: newDefinitionCommand,
     fn: newDefinitionFn,
     call: iconNewDefinition,

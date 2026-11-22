@@ -16,12 +16,12 @@ export const doc = {
   summary:
     'Find an icon by meaning, or build an icon set from a library (guide: astryx docs cli/experimental/icon-sets)',
   description:
-    "Terminal front-end to icon(): searches every installed icon set's data file by meaning and prints each match's import line, in the variant the project picks where the icon has it, and, when an icon meaning names the icon, the import that names it by that meaning (`meaningImport`). With no set installed, it names the icon meanings that match, built-in ones first, with the built-in that draws in place of a matching meaning Core does not draw (unless a match ranked above it has none), and how to get a set. `<set>/<id>` reads one icon with every variant's import line; --list lists the installed sets and how many icon meanings each one maps. The subcommands author a set: `new-set` starts one in an integration package, `new-definition` adds the set's own icon meaning, `add` adds an icon from a library, `map` maps an icon meaning to an icon, and `use` makes a set the project's. Start a set with `new-set <name> --from <library>`; the guide is `astryx docs cli/experimental/icon-sets`. Experimental: it may change or be removed in a patch release.",
+    "Terminal front-end to icon(): searches every installed icon set's data file by meaning and prints each match's import line, in the variant the project picks where the icon has it, and, when an icon meaning names the icon, the import that names it by that meaning (`meaningImport`). With no set installed, it names the icon meanings that match, built-in ones first, with the built-in that draws in place of a matching meaning Core does not draw (unless a match ranked above it has none), and how to get a set. `<set>/<id>` reads one icon with every variant's import line; --list lists the installed sets and how many icon meanings each one maps. The subcommands author a set: `new-set` starts one in an integration package, `new-meaning` adds the set's own icon meaning, `add` adds an icon from a library, `map` maps an icon meaning to an icon, and `use` makes a set the project's. Start a set with `new-set <name> --from <library>`; the guide is `astryx docs cli/experimental/icon-sets`. Experimental: it may change or be removed in a patch release.",
   fn: 'icon',
-  // `new-set` and `new-definition` start a set and its own meanings,
+  // `new-set` and `new-meaning` start a set and its own meanings,
   // `add` adds an icon, `map` edits a map entry, and `use` picks the
   // project's icon set.
-  subcommands: ['new-set', 'new-definition', 'add', 'map', 'use'],
+  subcommands: ['new-set', 'new-meaning', 'add', 'map', 'use'],
   // Every word after `icon` is the query: `astryx experimental icon arrow up`
   // searches for
   // "arrow up", with no quotes needed.

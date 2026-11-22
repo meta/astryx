@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file CommandDoc for `astryx experimental icon new-definition`. */
+/** @file CommandDoc for `astryx experimental icon new-meaning`. */
 
 /** @type {import('@astryxdesign/cli/authoring').CommandDoc} */
 export const doc = {
   type: 'command',
-  name: 'experimental icon new-definition',
-  displayName: 'astryx experimental icon new-definition',
+  name: 'experimental icon new-meaning',
+  displayName: 'astryx experimental icon new-meaning',
   namespace: 'cli/commands',
   stability: 'experimental',
   summary: "Add your icon set's own icon meaning",
@@ -52,7 +52,7 @@ export const doc = {
   examples: [
     {
       label: "Add a set's own icon meaning",
-      cli: "astryx experimental icon new-definition random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5",
+      cli: "astryx experimental icon new-meaning random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5",
     },
   ],
   outsideProject: 'refuse',
@@ -70,7 +70,7 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental icon new-definition writes nothing and stops with `ERR_PROJECT_REQUIRED`; run it in the icon-set package. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
+      text: "In global mode: outside a project, with no package.json in the folder or above it, experimental icon new-meaning writes nothing and stops with `ERR_PROJECT_REQUIRED`; run it in the icon-set package. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
     },
   ],
 };

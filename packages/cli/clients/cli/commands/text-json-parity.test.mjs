@@ -795,8 +795,8 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
-    name: 'experimental icon new-definition',
-    args: ['experimental', 'icon', 'new-definition', 'not-camel'],
+    name: 'experimental icon new-meaning',
+    args: ['experimental', 'icon', 'new-meaning', 'not-camel'],
     errorExpected: true,
     skipFieldChecks: true,
   },

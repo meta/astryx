@@ -674,7 +674,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     or another name its library exports it as (a word it carries that is
     not a part of its `id`); a part of an `id` alone (`glass` for
     `magnifying-glass`) is refused with the icons that carry it;
-    `new-definition` writes one of the set's own definitions; `use <set>`
+    `new-meaning` writes one of the set's own definitions; `use <set>`
     writes `experimental.iconSet`.
   - After it writes, `new-set` (with or without `--from`), `add` with an
     export name, and `map` (also with `--pairs`) answer `templateMeanings`
@@ -819,7 +819,7 @@ message}`) names each template or namespace doc that sets `stability`, and
   `experimental icon` with `--set` (with words or `--all-icons`) or
   `<set>/<id>`, `experimental icon use`, and `discover <package>/<set>` name a
   withdrawn set as withdrawn, with its reason, rather than as not installed,
-  each with `ERR_NOT_FOUND`; `add`, `map`, and `new-definition` name a
+  each with `ERR_NOT_FOUND`; `add`, `map`, and `new-meaning` name a
   withdrawn set in the package being authored the same way. `astryx discover` reads `icon-set` as
   a kind: `--type icon-set`, catalog entries with `iconCount`, `license` and
   `definitions`, and `discover <package>/<set>`; a withdrawn set is not

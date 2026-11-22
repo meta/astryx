@@ -2,7 +2,7 @@
 
 /**
  * @file Icon-set authoring commands end to end (AST-084): `experimental icon
- * new-set --from`, `experimental icon new-definition`, `experimental icon add`, `icon
+ * new-set --from`, `experimental icon new-meaning`, `experimental icon add`, `icon
  * map`, and `experimental icon use`, driving the real program over an icon-set package
  * that wraps a small component library and an app that installs it.
  */
@@ -698,7 +698,7 @@ describe('icon add', () => {
   });
 });
 
-describe('experimental icon map and new-definition', () => {
+describe('experimental icon map and new-meaning', () => {
   beforeEach(async () => {
     await runCli(
       [
@@ -746,7 +746,7 @@ describe('experimental icon map and new-definition', () => {
     expect(unknown.code).toBe(1);
     expect(unknown.body.suggestions).toContainEqual(
       expect.objectContaining({
-        name: 'astryx experimental icon new-definition orbit --set outline',
+        name: 'astryx experimental icon new-meaning orbit --set outline',
       }),
     );
     const noIcon = await json([
@@ -766,7 +766,7 @@ describe('experimental icon map and new-definition', () => {
     const {code, body} = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'crossOut',
       '--description',
       'Cross something out.',
@@ -784,7 +784,7 @@ describe('experimental icon map and new-definition', () => {
     const again = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'crossOut',
       '--description',
       'x',
@@ -2556,7 +2556,7 @@ describe('add --variant --all after the id rule changes', () => {
   });
 });
 
-describe('--set through the CLI selects the set add, map, and new-definition edit', () => {
+describe('--set through the CLI selects the set add, map, and new-meaning edit', () => {
   beforeEach(async () => {
     for (const set of ['one', 'two']) {
       await json([
@@ -2605,11 +2605,11 @@ describe('--set through the CLI selects the set add, map, and new-definition edi
       'rocket',
     ],
     [
-      'new-definition',
+      'new-meaning',
       set => [
         'experimental',
         'icon',
-        'new-definition',
+        'new-meaning',
         'binIt',
         '--description',
         'Put something in the bin.',

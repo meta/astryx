@@ -338,7 +338,7 @@ export function writeIconSetData(set, next, {extraDefinitions = []} = {}) {
             reason: 'a known icon meaning',
           })),
           {
-            name: `astryx experimental icon new-definition ${name} --set ${set.name}`,
+            name: `astryx experimental icon new-meaning ${name} --set ${set.name}`,
             reason: 'add it as your own meaning',
           },
         ],

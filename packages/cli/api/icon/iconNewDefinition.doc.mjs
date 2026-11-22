@@ -97,6 +97,6 @@ export const doc = {
       code: "await iconNewDefinition('random', {description: 'Pick something at random.', words: ['dice', 'shuffle', 'chance'], icon: 'dice-5'});",
     },
   ],
-  command: 'experimental icon new-definition',
+  command: 'experimental icon new-meaning',
   related: ['iconNewSet', 'iconMap', 'iconAdd'],
 };

@@ -782,7 +782,7 @@ describe('checkDocTypes', () => {
     );
   });
 
-  it("checks a set's own definition, as new-definition writes it, against IconDefinitionDoc", async () => {
+  it("checks a set's own definition, as new-meaning writes it, against IconDefinitionDoc", async () => {
     withTypeScript();
     write(
       'icon-sets/brand/definitions/aiHelper.doc.mjs',

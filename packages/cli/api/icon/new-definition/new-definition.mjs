@@ -6,7 +6,7 @@
  *
  * @output the `icon.newDefinition` envelope
  * @position api/icon/new-definition — dispatched by the `experimental icon
- *   new-definition` command
+ *   new-meaning` command
  */
 
 import {
@@ -18,7 +18,7 @@ import {refuseOtherOptions} from '../_options.mjs';
 
 /**
  * Add an icon set's own icon definition: `astryx experimental icon
- * new-definition` (AST-084). Experimental (spec:AST-017 FR27).
+ * new-meaning` (AST-084). Experimental (spec:AST-017 FR27).
  * @experimental
  * @param {string} name
  * @param {import('../icon.type.mjs').IconNewDefinitionOptions} [options]
@@ -28,7 +28,7 @@ export async function iconNewDefinition(name, options = {}) {
   refuseOtherOptions('icon-definition', options);
   refuseOutsideProject(
     options.cwd ?? process.cwd(),
-    'experimental icon new-definition',
+    'experimental icon new-meaning',
     'the icon-set package',
   );
   const {data} = await authoring(() => addIconDefinition(name, options));

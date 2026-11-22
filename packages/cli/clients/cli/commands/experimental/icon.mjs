@@ -49,7 +49,7 @@ import {doc as iconUseCommand} from '../experimental-icon-use.doc.mjs';
 import {doc as iconMapCommand} from '../experimental-icon-map.doc.mjs';
 import {doc as iconAddCommand} from '../experimental-icon-add.doc.mjs';
 import {doc as iconNewSetCommand} from '../experimental-icon-new-set.doc.mjs';
-import {doc as iconNewDefinitionCommand} from '../experimental-icon-new-definition.doc.mjs';
+import {doc as iconNewDefinitionCommand} from '../experimental-icon-new-meaning.doc.mjs';
 import {doc as iconFn} from '../../../../api/icon/icon.doc.mjs';
 import {doc as iconUseFn} from '../../../../api/icon/iconUse.doc.mjs';
 import {doc as iconMapFn} from '../../../../api/icon/iconMap.doc.mjs';
@@ -801,7 +801,7 @@ export function registerExperimentalIcon(group, program) {
   });
 
   /**
-   * Print a new-set or new-definition receipt: what it wrote and where.
+   * Print a new-set or new-meaning receipt: what it wrote and where.
    * @param {string} what `icon set` or `icon definition`
    */
   const printNew =

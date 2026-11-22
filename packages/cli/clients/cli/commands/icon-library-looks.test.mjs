@@ -416,7 +416,7 @@ describe('commands add prints run as printed', () => {
 });
 
 describe('a new definition named in kebab-case', () => {
-  it('is the camelCase definition, from add and from new-definition', async () => {
+  it('is the camelCase definition, from add and from new-meaning', async () => {
     writeVectorLibrary(GLYPHS);
     await json(['experimental', 'icon', 'new-set', 'brand']);
     const added = await json([
@@ -443,7 +443,7 @@ describe('a new definition named in kebab-case', () => {
     const made = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'company-logo',
       '--description',
       'The company logo.',

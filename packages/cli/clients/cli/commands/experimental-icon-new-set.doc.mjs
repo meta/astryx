@@ -100,7 +100,7 @@ export const doc = {
   ],
   related: [
     'experimental icon add',
-    'experimental icon new-definition',
+    'experimental icon new-meaning',
     'integration check',
   ],
   notes: [

@@ -149,7 +149,7 @@ const RUNNERS = {
       'import ../../../../api/icon/iconUse.doc.mjs',
       'import ../experimental-icon-add.doc.mjs',
       'import ../experimental-icon-map.doc.mjs',
-      'import ../experimental-icon-new-definition.doc.mjs',
+      'import ../experimental-icon-new-meaning.doc.mjs',
       'import ../experimental-icon-new-set.doc.mjs',
       'import ../experimental-icon-use.doc.mjs',
       'import ../experimental-icon.doc.mjs',

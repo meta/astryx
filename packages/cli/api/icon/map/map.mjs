@@ -100,7 +100,7 @@ export async function iconMap(definition, icon, options = {}) {
               name => ({name, reason: 'a known icon meaning'}),
             ),
             {
-              name: `astryx experimental icon new-definition ${definition} --set ${set.name}`,
+              name: `astryx experimental icon new-meaning ${definition} --set ${set.name}`,
               reason: 'add it as your own meaning',
             },
           ],

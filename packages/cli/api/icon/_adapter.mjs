@@ -5,7 +5,7 @@
  * Loads the project and reads its icon sets through the `Project` seam.
  *
  * @position api/icon — adapter for api/icon/{search,detail,list,definitions,
- *   use,map,add,new-set,new-definition}; it also carries the icon ranking, the icon-set
+ *   use,map,add,new-set} and api/icon/new-definition; it also carries the icon ranking, the icon-set
  *   writer, the set and definition authoring writes, the default-look
  *   rule, and the config writer the leaves use; search's adapter reads the
  *   Core component names from it

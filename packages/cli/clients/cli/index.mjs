@@ -120,7 +120,7 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon map',
   'experimental icon use',
   'experimental icon new-set',
-  'experimental icon new-definition',
+  'experimental icon new-meaning',
   'experimental export',
   'experimental import',
   // The groups answer --json with their own help, as the root does.

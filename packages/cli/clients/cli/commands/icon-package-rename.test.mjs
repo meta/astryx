@@ -337,13 +337,13 @@ describe('receipts after a package rename', () => {
 
   const DESCRIBED = ['--description', 'Throws an item away.', '--words', 'bin'];
 
-  it('new-definition --icon reports the module rewrite, and new-definition without --icon does not', async () => {
+  it('new-meaning --icon reports the module rewrite, and new-meaning without --icon does not', async () => {
     await wrapAndMap();
     writePackage('@acme/new-icons');
     const plain = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'trash-can',
       ...DESCRIBED,
     ]);
@@ -353,7 +353,7 @@ describe('receipts after a package rename', () => {
     const res = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'waste-bin',
       ...DESCRIBED,
       '--icon',
@@ -362,10 +362,10 @@ describe('receipts after a package rename', () => {
     expect(res.code, JSON.stringify(res.body)).toBe(0);
     expect(res.body.data.moduleUpdate).toEqual(MODULE_UPDATE);
     writePackage('@acme/old-icons');
-    await textOf(['new-definition', 'garbage', ...DESCRIBED, '--icon', 'bin']);
+    await textOf(['new-meaning', 'garbage', ...DESCRIBED, '--icon', 'bin']);
     writePackage('@acme/new-icons');
     const out = await textOf([
-      'new-definition',
+      'new-meaning',
       'rubbish',
       ...DESCRIBED,
       '--icon',

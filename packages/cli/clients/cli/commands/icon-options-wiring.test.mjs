@@ -17,7 +17,7 @@ import {doc as addCommand} from './experimental-icon-add.doc.mjs';
 import {doc as mapCommand} from './experimental-icon-map.doc.mjs';
 import {doc as useCommand} from './experimental-icon-use.doc.mjs';
 import {doc as newSetCommand} from './experimental-icon-new-set.doc.mjs';
-import {doc as newDefinitionCommand} from './experimental-icon-new-definition.doc.mjs';
+import {doc as newDefinitionCommand} from './experimental-icon-new-meaning.doc.mjs';
 
 const calls = vi.hoisted(
   () => /** @type {Array<{fn: string, args: unknown[]}>} */ ([]),
@@ -75,7 +75,7 @@ const COMMANDS = [
   ['experimental icon use', useCommand, 'iconUse'],
   ['experimental icon new-set', newSetCommand, 'iconNewSet'],
   [
-    'experimental icon new-definition',
+    'experimental icon new-meaning',
     newDefinitionCommand,
     'iconNewDefinition',
   ],
@@ -138,7 +138,7 @@ describe('--set on a subcommand, which experimental icon declares too', () => {
     ['experimental icon add', addCommand, 'iconAdd'],
     ['experimental icon map', mapCommand, 'iconMap'],
     [
-      'experimental icon new-definition',
+      'experimental icon new-meaning',
       newDefinitionCommand,
       'iconNewDefinition',
     ],
