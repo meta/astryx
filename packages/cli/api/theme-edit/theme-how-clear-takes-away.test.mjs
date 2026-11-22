@@ -100,6 +100,18 @@ describe('an ask that starts with "clear the ..."', () => {
       expect(fills, ask).toMatch(/background-color transparent --on card\b/);
       expect(fills, ask).toMatch(/background-color transparent --on button\b/);
     }
+    // (A clear an earlier clause holds but does not lead uses up its own
+    // ask: the next clear is read with its own words.)
+    const after = await commands(
+      'can you clear the card border and clear the button shadow',
+    );
+    expect(after).toContain('set ne box-shadow none --on button');
+    expect(after).not.toContain('set ne border none --on card');
+    expect(
+      await commands(
+        'can you clear the card border and clear my card border changes',
+      ),
+    ).not.toContain('set ne border none --on card');
     // (A later ask about the same part is an ask of its own.)
     for (const ask of [
       'clear the card shadow and clear my card border changes',

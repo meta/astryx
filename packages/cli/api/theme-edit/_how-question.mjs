@@ -8002,6 +8002,10 @@ export function draftAnswer(ctx, env, question) {
         .map(x => x.on);
     for (const c of clauses) {
       if (!/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text)) {
+        // (A clause that holds a clear it does not lead, "can you clear the
+        // card border", uses up that ask: it takes nothing away.)
+        for (const _ of c.text.matchAll(new RegExp(CLEAR_LEAD, 'gi')))
+          groups[++k] = [];
         last = null;
         continue;
       }
