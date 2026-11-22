@@ -434,6 +434,45 @@ describe('Dialog', () => {
     expect(order).toEqual(['showModal open=false', 'title focus open=true']);
   });
 
+  it('does not take focus from a field when a header mounts in an open dialog', () => {
+    function Wizard({step}: {step: number}) {
+      return (
+        <Dialog isOpen onOpenChange={() => {}} aria-label="Wizard">
+          {step === 1 ? (
+            <DialogHeader key="one" title="Step one" />
+          ) : (
+            <DialogHeader key="two" title="Step two" />
+          )}
+          <input aria-label="Name" />
+        </Dialog>
+      );
+    }
+    const {rerender} = render(<Wizard step={1} />);
+    const field = screen.getByRole('textbox', {name: 'Name'});
+    field.focus();
+
+    rerender(<Wizard step={2} />);
+
+    expect(field).toHaveFocus();
+  });
+
+  it('focuses the title of a header that mounts after the dialog opened with nothing focused inside', () => {
+    function Loading({isLoaded}: {isLoaded: boolean}) {
+      return (
+        <Dialog isOpen onOpenChange={() => {}} aria-label="Report">
+          {isLoaded ? <DialogHeader title="Report" /> : <p>Loading</p>}
+        </Dialog>
+      );
+    }
+    const {rerender} = render(<Loading isLoaded={false} />);
+    // With nothing to focus at open, focus rests on the dialog itself.
+    screen.getByRole('dialog').focus();
+
+    rerender(<Loading isLoaded />);
+
+    expect(screen.getByRole('heading', {name: 'Report'})).toHaveFocus();
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
