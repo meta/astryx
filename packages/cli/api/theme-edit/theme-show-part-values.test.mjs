@@ -587,6 +587,20 @@ describe('show --on: what one part of a theme shows', () => {
       (await refusal(() => themeEditShow('handy', {cwd, on: 'card'}))).code,
     ).toBe('ERR_THEME_INVALID');
     fs.writeFileSync(file, source);
+    // A token value a build refuses is refused here too, not read.
+    for (const bad of ["'banana'", '12']) {
+      fs.writeFileSync(
+        file,
+        source.replace(
+          "'--color-background-card': '#0a0b0c'",
+          `'--color-background-card': ${bad}`,
+        ),
+      );
+      expect(
+        (await refusal(() => themeEditShow('handy', {cwd, on: 'card'}))).code,
+      ).toBe('ERR_THEME_INVALID');
+    }
+    fs.writeFileSync(file, source);
     // A theme file that no longer loads is refused, as show refuses it.
     fs.writeFileSync(
       file,

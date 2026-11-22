@@ -30,6 +30,7 @@ import {
   loadTheme,
   ownThemeInput,
   readSavedStates,
+  refuseOwnTokens,
   refuseThemeSource,
   sourceChangedReason,
   staleBuild,
@@ -299,6 +300,8 @@ async function loadNamedTheme(ctx, cwd, name) {
       // parse or load, or no longer extends its settings, is refused, as
       // `set` refuses it.
       await refuseThemeSource(cwd, name);
+      // Its own token values, judged as a build judges them.
+      await refuseOwnTokens(ctx, name, data);
       // A theme file changed by hand since the build is what this reads;
       // any other stale build (a file missing or damaged, settings that no
       // longer match, a generated file edited by hand, a command stopped
