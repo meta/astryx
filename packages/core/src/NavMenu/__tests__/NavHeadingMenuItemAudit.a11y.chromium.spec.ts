@@ -179,6 +179,16 @@ async function readRows(page: Page) {
         bg,
       );
     };
+    // The ring's own alpha and the row's opacity both blend it into the
+    // backdrop it is drawn on.
+    const ringRatio = (color: number[], against: Element) => {
+      const bg = backdrop(against);
+      const alpha = color[3] * Number(getComputedStyle(against).opacity || 1);
+      return pair(
+        bg.map((c, i) => color[i] * alpha + c * (1 - alpha)),
+        bg,
+      );
+    };
     const menu = document.querySelector<HTMLElement>(
       '#storybook-root .astryx-nav-heading-menu',
     );
@@ -227,18 +237,13 @@ async function readRows(page: Page) {
           labelLeft: labelRect ? labelRect.left : null,
           focused: row === document.activeElement,
           fill: rgba(style.backgroundColor),
-          fillVsMenu: menu ? pair(backdrop(row), backdrop(menu)) : null,
           outlineStyle: style.outlineStyle,
           outlineWidth: parseFloat(style.outlineWidth),
           outlineOffset: parseFloat(style.outlineOffset),
           outlineVsMenu:
-            menu && outlineColor[3] > 0
-              ? pair(outlineColor.slice(0, 3), backdrop(menu))
-              : null,
+            menu && outlineColor[3] > 0 ? ringRatio(outlineColor, menu) : null,
           outlineVsRow:
-            outlineColor[3] > 0
-              ? pair(outlineColor.slice(0, 3), backdrop(row))
-              : null,
+            outlineColor[3] > 0 ? ringRatio(outlineColor, row) : null,
         };
       }),
     };
@@ -248,7 +253,12 @@ type Rows = Awaited<ReturnType<typeof readRows>>;
 type Row = Rows['rows'][number];
 
 /** The standing row contract: role, tab stop, target, size, box, and text. */
-function checkRows(check: Check, read: Rows, size: string) {
+function checkRows(
+  check: Check,
+  read: Rows,
+  size: string,
+  described: ReadonlySet<string> = new Set(),
+) {
   check(read.menuRole === 'menu', `menu role ${read.menuRole}`);
   check(read.rows.length > 0, 'no menuitem rows');
   for (const row of read.rows) {
@@ -260,15 +270,14 @@ function checkRows(check: Check, read: Rows, size: string) {
     if (row.disabled !== 'true') {
       check(row.opacity === 1, `${row.name}: opacity ${row.opacity}`);
       check(row.cursor === 'pointer', `${row.name}: cursor ${row.cursor}`);
-      if (row.labelContrast != null) {
+      check(
+        row.labelContrast != null && row.labelContrast >= MIN_TEXT_CONTRAST,
+        `${row.name}: label contrast ${row.labelContrast}`,
+      );
+      if (described.has(row.name)) {
         check(
-          row.labelContrast >= MIN_TEXT_CONTRAST,
-          `${row.name}: label contrast ${row.labelContrast}`,
-        );
-      }
-      if (row.descriptionContrast != null) {
-        check(
-          row.descriptionContrast >= MIN_TEXT_CONTRAST,
+          row.descriptionContrast != null &&
+            row.descriptionContrast >= MIN_TEXT_CONTRAST,
           `${row.name}: description contrast ${row.descriptionContrast}`,
         );
       }
@@ -310,6 +319,17 @@ async function rowShot(page: Page, index: number) {
     .screenshot({animations: 'disabled'});
 }
 
+/** Rows whose description a contrast read must find. */
+const WITH_DESCRIPTIONS: ReadonlySet<string> = new Set([
+  'Profile',
+  'Settings',
+  'Sign out',
+]);
+const LONG_STORY_DESCRIPTIONS: ReadonlySet<string> = new Set([
+  'Profile',
+  'Organization-wide notification preferences and delivery schedules',
+]);
+
 const cases: AuditCase[] = [];
 
 for (const mode of ['light', 'dark'] as const) {
@@ -324,7 +344,7 @@ for (const mode of ['light', 'dark'] as const) {
       viewport: DESKTOP,
       run: async (page, check, frame) => {
         const rest = await readRows(page);
-        checkRows(check, rest, 'lg');
+        checkRows(check, rest, 'lg', WITH_DESCRIPTIONS);
         const names = rest.rows.map(row => row.name);
         check(
           JSON.stringify(names) ===
@@ -435,7 +455,7 @@ for (const mode of ['light', 'dark'] as const) {
       await page.locator('#storybook-root [role="menuitem"]').first().waitFor();
       await settle(page);
       const large = await readRows(page);
-      checkRows(check, large, 'lg');
+      checkRows(check, large, 'lg', WITH_DESCRIPTIONS);
       const [sm, md, lg] = [small, medium, large].map(read => read.rows[0]);
       check(
         sm != null &&
@@ -554,7 +574,7 @@ cases.push({
   viewport: DESKTOP,
   run: async (page, check, frame) => {
     const rest = await readRows(page);
-    checkRows(check, rest, 'lg');
+    checkRows(check, rest, 'lg', WITH_DESCRIPTIONS);
     await page.locator('#storybook-root [role="menuitem"]').first().focus();
     await page.keyboard.press('ArrowDown');
     await settle(page);
@@ -582,7 +602,7 @@ cases.push({
       `horizontal scroll at 320px: ${JSON.stringify(scroll)}`,
     );
     const rest = await readRows(page);
-    checkRows(check, rest, 'lg');
+    checkRows(check, rest, 'lg', WITH_DESCRIPTIONS);
     await frame('rest', {scroll, rest});
   },
 });
@@ -599,7 +619,7 @@ for (const mode of ['light', 'dark'] as const) {
       viewport,
       run: async (page, check, frame) => {
         const rest = await readRows(page);
-        checkRows(check, rest, 'md');
+        checkRows(check, rest, 'md', LONG_STORY_DESCRIPTIONS);
         check(rest.menuName === 'Account', `menu name ${rest.menuName}`);
         const long = rest.rows[4];
         const profile = rest.rows[0];

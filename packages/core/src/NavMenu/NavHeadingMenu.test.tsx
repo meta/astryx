@@ -775,14 +775,14 @@ describe('NavHeadingMenu as an action group (family:action-groups)', () => {
   });
 });
 
-/**
- * The declarations the item's own classes apply, joined into one string: on
- * `:focus-visible` (the ring), or unconditionally.
- */
 const itemTestStyles = stylex.create({
   offset: {marginInlineStart: '4px'},
 });
 
+/**
+ * The declarations the item's own classes apply, joined into one string: on
+ * `:focus-visible` (the ring), or unconditionally.
+ */
 function itemDeclarations(
   item: HTMLElement,
   condition: ':focus-visible' | '' = ':focus-visible',
