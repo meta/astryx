@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `editor how` says, in a line height answer on a base whose touch
- * phone rule sets its own type scale, that the line heights reset there; a
- * base without that rule answers with no such note.
+ * @file `editor how` says, in a body line height answer on a base whose
+ * touch phone rule sets its own type scale, that the base's scale sets the
+ * line heights there; a base without that rule answers with no such note.
  *
  * @position api/theme-edit — tests
  */
@@ -52,7 +52,7 @@ describe('a line height on a base whose touch rule sets the type scale', () => {
   it('says the line heights reset on touch phones', async test => {
     if (unbuilt) return test.skip(unbuilt);
     expect(await text('1.5 line height', 'n')).toMatch(
-      /on touch phones this base's type scale resets line heights; a Core fix is pending/,
+      /on touch phones the base theme's own type scale sets the line heights, over these/,
     );
   }, 240_000);
 

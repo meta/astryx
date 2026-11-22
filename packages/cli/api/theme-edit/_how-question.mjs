@@ -23083,8 +23083,11 @@ export function draftAnswer(ctx, env, question) {
         // and code leadings by the same change too. The label and
         // supporting leadings set the height of controls and rows (a
         // checkbox label, a menu item), so they keep theirs even then.
+        // (An ask that keeps some text out, "everything except headings",
+        // is read as main reads it: the body only.)
         const everyText =
           !on &&
+          !/\b(?:except|but not|other than)\b/i.test(asked0) &&
           /\b(?:all|every|each)\s+(?:the\s+)?text\b|\beverything\b/i.test(
             c.text,
           );
@@ -23124,13 +23127,13 @@ export function draftAnswer(ctx, env, question) {
             : [];
         const keepNote =
           tok && !on && !everyText
-            ? `; the supporting and large text (--text-supporting-leading, --text-large-leading), the headings, the labels and code keep their own leading; say "headings line height ${value}" for the headings, or "all text line height ${value}" for the large text, headings and code too`
+            ? `; the supporting and large text (--text-supporting-leading, --text-large-leading), the headings, the labels and code keep their own leading; ${n != null ? `say "headings line height ${value}" for the headings, or "all text line height ${value}" for the large text, headings and code too` : 'add "for all text" to the ask for the large text, headings and code too'}`
             : '';
         if (tok)
           return {
             // (A leading typed in pixels names its reading, so the answer
             // says what it read.)
-            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}${others.length ? '; and the large text, heading and code leadings with it; the labels and supporting text (--text-label-leading, --text-supporting-leading) keep their own, as they set the height of controls and rows' : keepNote}${env.base?.typeScaleAdapted ? `; on touch phones this base's type scale resets line heights; a Core fix is pending` : ''}`,
+            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}${others.length ? '; and the large text, heading and code leadings with it; the labels and supporting text (--text-label-leading, --text-supporting-leading) keep their own, as they set the height of controls and rows' : keepNote}${env.base?.typeScaleAdapted ? `; on touch phones the base theme's own type scale sets the line heights, over these` : ''}`,
             options: [[set(tok, value), ...others]],
             ...(others.length ? {sequence: true} : {}),
           };

@@ -3550,8 +3550,28 @@ const QUESTIONS_J = [
   ['line height 150% by default', {top: /^set q --text-body-leading 1\.5$/}],
   // a line height with no part is the body's; "all text" takes every
   // text leading
-  ['1.5 line height', {top: /^set q --text-body-leading 1\.5$/}],
-  ['16px text, 1.5 leading.', {top: /--text-body-leading 1\.5$/}],
+  [
+    '1.5 line height',
+    {
+      top: /^set q --text-body-leading 1\.5$/,
+      text: /keep their own leading; say "headings line height 1\.5"/,
+    },
+  ],
+  [
+    '16px text, 1.5 leading.',
+    {top: /--text-body-leading 1\.5$/, text: /keep their own leading/},
+  ],
+  [
+    'looser line height',
+    {
+      top: /^set q --text-body-leading [\d.]+$/,
+      text: /add "for all text" to the ask/,
+    },
+  ],
+  [
+    'line height 1.5 for everything except headings',
+    {top: /^set q --text-body-leading 1\.5$/},
+  ],
   [
     '1.5 line height for all text',
     {
