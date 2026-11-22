@@ -27499,7 +27499,6 @@ export function draftAnswer(ctx, env, question) {
           // track, would lose them under a gloss image, and no state line
           // can bring them back: nothing is written.)
           if (
-            !said &&
             (C.partReads(one(part), 'background') ?? []).some(r =>
               /^--color-tint-/.test(r.token),
             )
@@ -27587,13 +27586,22 @@ export function draftAnswer(ctx, env, question) {
                 ),
               ),
             ];
-            if (!saidMode && gs.every(g => g === gs[0]))
+            // (A see-through fill is carried by its gloss alone: the look's
+            // own fill under it is cleared, so it is not painted twice.)
+            const clear = (/** @type {'light' | 'dark'} */ m) => {
+              const own = fillFor(when, m);
+              return own != null && alphaOf(own) < 1
+                ? [set('background-color', 'transparent', {...scoped, mode: m})]
+                : [];
+            };
+            if (!saidMode && gs.every(g => g === gs[0]) && opaque)
               steps.push(...glossSteps(String(gs[0]), scoped));
             else
               modes.forEach((m, i) => {
                 if (gs[i] != null)
                   steps.push(
                     ...glossSteps(String(gs[i]), {...scoped, mode: m}),
+                    ...clear(m),
                   );
               });
           }

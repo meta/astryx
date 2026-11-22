@@ -94,8 +94,8 @@ describe("glossy is a gloss of the part's own fill", () => {
       expect(mine.length, on).toBeGreaterThan(0);
       // (Each a gloss over the look's own token: lighter at the top, darker
       // at the bottom, in every mode at once.)
-      // (An opaque token fill is glossed live over its token in every mode
-      // at once; a see-through one, a secondary button's, per mode.)
+      // (An opaque token fill is glossed live over its token; a see-through
+      // one, a secondary button's, per mode.)
       expect(mine.some(live), on).toBe(true);
       for (const g of mine.filter(live)) {
         expect(g.stops[0], on).toMatch(
@@ -229,6 +229,12 @@ describe("glossy is a gloss of the part's own fill", () => {
     const g = glosses(writes(await how('q0', 'glossy secondary buttons')));
     // (Each mode's own tint, every stop at the fill's alpha.)
     expect(g.length).toBeGreaterThan(0);
+    const lines = writes(await how('q0', 'glossy secondary buttons'));
+    // (The look's own see-through fill under it is cleared in each mode.)
+    for (const m of ['light', 'dark'])
+      expect(lines).toContain(
+        `set q0 background-color transparent --on button --when variant:secondary --mode ${m}`,
+      );
     for (const x of g) {
       expect(x.rest).toMatch(/ --mode (?:light|dark)$/);
       const alphas = new Set(x.stops.map(s => s.slice(7)));
@@ -289,6 +295,11 @@ describe("glossy is a gloss of the part's own fill", () => {
     expect(rs.map(r => r.text).join('\n')).toMatch(
       /switch shows its hover and press by tinting its own fill/,
     );
+  }, 240_000);
+
+  it('a switch writes nothing with a color said too', async () => {
+    const rs = await how('q0', 'glossy blue toggles');
+    expect(writes(rs).filter(l => / --on switch\b/.test(l))).toEqual([]);
   }, 240_000);
 
   it('a named banner status says its color is not read here', async () => {
