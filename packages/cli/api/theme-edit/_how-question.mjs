@@ -4569,17 +4569,13 @@ export function draftAnswer(ctx, env, question) {
     urls.push(m);
     return `url(uu${urls.length - 1}uu)`;
   });
-  // An abbreviation's period never ends a sentence, before any reader
-  // reads the words. (An example of the part named before a colon,
-  // "Header, eg the top bar: navy" or "Header (eg the top bar): navy",
-  // restates that part: the list's subject stays the one part.)
   // (The words as asked, for the readers that hold the whole question and
   // the notes that quote it; their case too, which carries tone: an
   // emphatic "SO" in a lowercase line.)
   const raw0 = String(question);
-  question = dropAbbreviationDots(question)
-    .replace(/,\s*(?:eg|ie)\s+[^,:;.!?\n]*(?=:)/gi, '')
-    .replace(/\s*\(\s*(?:eg|ie)\s+[^()]*\)(?=\s*:)/gi, '');
+  // An abbreviation's period never ends a sentence, before any reader
+  // reads the words.
+  question = dropAbbreviationDots(question);
   const asked0 = raw0.toLowerCase();
   /** Text with each file set aside put back as typed. @param {string} s */
   const withUrls = s =>
