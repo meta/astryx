@@ -3799,6 +3799,7 @@ export function createMotionEngine(
       ? segment
       : {
           ...segment,
+          source: undefined,
           target: segment.target + offset,
           at: t => segment.at(t) + offset,
         };
