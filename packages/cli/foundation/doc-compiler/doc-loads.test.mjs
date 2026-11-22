@@ -72,10 +72,6 @@ const RUNNERS = {
     runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
     sites: ['require(<computed>)'],
   },
-  'api/theme-edit/_preview.mjs': {
-    runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
-    sites: ['child_process.spawn'],
-  },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
     sites: ['import(<computed>) ×2', 'require'],
@@ -405,6 +401,10 @@ const RUNNERS = {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
   },
+  'foundation/discovery/official-list.mjs': {
+    runs: "the CLI's own official-list generator, in a checkout with no packed list, to derive the list from the repository",
+    sites: ['child_process.execFileSync'],
+  },
   'foundation/discovery/copied-passages.mjs': {
     runs: "the CLI's own guides and the package's topics, to compare their prose for passages two topics repeat",
     sites: ['builtinGuideFiles', 'loadTopicModule'],
@@ -463,6 +463,10 @@ const RUNNERS = {
   'foundation/doc-compiler/read.mjs': {
     runs: 'authored doc files, each one handed to the compiler, with the loader its reader has always used',
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
+  },
+  'foundation/pictures/pictures.mjs': {
+    runs: "the picture process for a Playwright the project has installed, or a Chrome found on the machine, for the theme editor's pictures (--png) and an export's (--pictures), and a require at the project's folder to find that Playwright",
+    sites: ['child_process.spawn', 'createRequire'],
   },
   'foundation/render/page-worker.mjs': {
     runs: "the page `astryx experimental export` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from; an in-thread resolve hook that resolves imports between the files of an installed package by path; and the esbuild the CLI depends on, to bundle the page's script; and the Babel parser, to read which imports the page's own TypeScript modules use as values, and the modules the page's named imports come from, to check that each name the page uses exists",

@@ -16,6 +16,8 @@ verified_by:
     packages/core/src/Layer/toastHost.test.tsx,
     packages/core/src/Layer/toastHost.lateRegistration.test.tsx,
     apps/storybook/stories/Layer.stories.tsx,
+    apps/storybook/rtl-audit/verified-not-applicable.json,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -128,9 +130,10 @@ No component-local concept beyond the consumer props.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                                                                                                                                                          | Representative states                                         | Mutation or failure expectation                                                                                   | Audit section                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| FR1–FR3  | `LayerProvider.test.tsx`; for FR1 also `toastHost.test.tsx` and `toastHost.lateRegistration.test.tsx`; `LayerProvider.test.tsx` toast-configuration suite for `toast.maxVisible` and for a nested provider without `inset` (one viewport, outer configuration kept, no added element) | Default, declared inset, nested, toast inset, no Toast import | A default-provider difference, an inset that does not reach its layers, or a viewport with no Toast import fails. | `audit:LayerProvider/behavior` |
+| Contract     | Verification                                                                                                                                                                                                                                                                          | Representative states                                         | Mutation or failure expectation                                                                                                                                                                                   | Audit section                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR1–FR3      | `LayerProvider.test.tsx`; for FR1 also `toastHost.test.tsx` and `toastHost.lateRegistration.test.tsx`; `LayerProvider.test.tsx` toast-configuration suite for `toast.maxVisible` and for a nested provider without `inset` (one viewport, outer configuration kept, no added element) | Default, declared inset, nested, toast inset, no Toast import | A default-provider difference, an inset that does not reach its layers, or a viewport with no Toast import fails.                                                                                                 | `audit:LayerProvider/behavior` |
+| RTL relation | Verified-N/A declaration (`apps/storybook/rtl-audit/verified-not-applicable.json`) plus a route-only RTL audit target (`apps/storybook/rtl-audit/targets.json`) that scans the `Layer / Provider` story for LayerProvider                                                             | The `Layer / Provider` story, LTR and RTL                     | An unmirrored directional icon, a logical-anchor placement with a physical transform, or a contextual directional decoration that the audit detects on LayerProvider in that story reports the declaration stale. | `audit:LayerProvider/i18n-rtl` |
 
 Read from source, with no focused test yet:
 

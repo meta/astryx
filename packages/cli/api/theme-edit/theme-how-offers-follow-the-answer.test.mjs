@@ -161,3 +161,140 @@ describe('offers follow the answer', () => {
     );
   }, 300_000);
 });
+
+describe('light and dark said as what the theme must work in', () => {
+  it('asks for both modes at the end of the ask or its clause, never mid-clause', async () => {
+    const lines = async (/** @type {string} */ q) =>
+      (await results('lo', q)).flatMap(r =>
+        r.commands.map((/** @type {string} */ c) =>
+          c.replace(/^.*? editor /, ''),
+        ),
+      );
+    for (const q of [
+      'make sure it works in light and dark mode',
+      'the theme should work in light and dark mode',
+      'please make it work in light and dark mode',
+      'a navy theme that works in light and dark',
+      'a navy theme that should work in light and dark mode',
+      'works in light and dark',
+      'works in light and dark mode',
+      'looks good in dark and light modes',
+      'should work in light and dark mode',
+      'it needs to look good in dark and light',
+    ])
+      expect(await lines(q), q).toContain('set lo mode both');
+    // (Said before more of its clause, it only qualifies that clause.)
+    const text = await lines(
+      'text that must work in light and dark mode should be #111111',
+    );
+    expect(text).toContain(`set lo --color-text-primary '#111111'`);
+    expect(text).not.toContain('set lo mode both');
+    const headings = await lines(
+      'headings that work in light and dark mode should be navy',
+    );
+    expect(headings).not.toContain('set lo mode both');
+    expect(headings.join('\n')).not.toMatch(/headings light/);
+    // (The heading's text takes the color; nothing reads a weight in it.)
+    expect(headings.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
+    expect(headings.join('\n')).not.toMatch(/font-weight|headings bold/);
+    // (On a theme that draws both modes, the color is for both: a light
+    // one is not kept to light mode.)
+    const cards = (
+      await results(
+        'fresh',
+        'cards that hold up in light and dark mode should be white',
+      )
+    ).flatMap(r => r.commands);
+    expect(cards.join('\n')).toMatch(/'#ffffff' --on card/);
+    expect(cards.join('\n')).not.toMatch(/--mode light/);
+    // ("must work" is no plural part said to work: the text is kept to the
+    // mode it reads in, as before.)
+    const must = (
+      await results(
+        'fresh',
+        'text that must work in light and dark mode should be #111111',
+      )
+    ).flatMap(r => r.commands);
+    expect(must.join('\n')).toMatch(
+      /--color-text-primary '#111111' --mode light/,
+    );
+    // (Said to be usable in both modes, a color one page makes hard to
+    // read is written for both, with a note naming that mode and the
+    // ratio.)
+    const links = await results(
+      'fresh',
+      'links that are usable in light and dark mode should be navy',
+    );
+    const linkLines = links.flatMap(r => r.commands).join('\n');
+    expect(linkLines).toMatch(/'#1e3a8a'/);
+    expect(linkLines).not.toMatch(/'#1e3a8a'[^\n]*--mode/);
+    expect(links.map(r => r.text).join('\n')).toMatch(
+      /#1e3a8a reads \d+\.\d\d:1 on the dark page \(under 4\.5:1\); for dark mode, set a lighter color with --mode dark/,
+    );
+    // (A modal before the verb leaves the number to the part: a plural
+    // part, "headings that could work …", is still both modes.)
+    const could = (
+      await results(
+        'fresh',
+        'headings that could work in light and dark mode should be navy',
+      )
+    ).flatMap(r => r.commands);
+    expect(could.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
+    expect(could.join('\n')).not.toMatch(/headings bold/);
+    const modes = (
+      await results(
+        'fresh',
+        'headings that work in light and dark modes should be navy',
+      )
+    ).flatMap(r => r.commands);
+    expect(modes.join('\n')).toMatch(/color '#1e3a8a' --on heading/);
+    // (The page is the one the answer leaves: white headings on the black
+    // page it writes read in both modes.)
+    const black = await results(
+      'fresh',
+      'the page should be black, headings that work in light and dark mode should be white',
+    );
+    expect(black.map(r => r.text).join('\n')).not.toMatch(
+      /reads \d+\.\d\d:1 on the light page/,
+    );
+    // (Which way to move follows the page: on a white page in both modes,
+    // darker in both.)
+    const white = (
+      await results(
+        'fresh',
+        'the page should be white, headings that work in light and dark mode should be white',
+      )
+    )
+      .map(r => r.text)
+      .join('\n');
+    expect(white).not.toMatch(/lighter color with --mode dark/);
+    expect(white).toMatch(/darker color with --mode dark/);
+    // (A singular part after a modal keeps the base reading, "modes" too.)
+    const would = (
+      await results(
+        'fresh',
+        'text that would work in light and dark modes should be #111111',
+      )
+    ).flatMap(r => r.commands);
+    expect(would.join('\n')).toMatch(/#111111/);
+    // (Text on a part's own fill, a button's, is not measured against the
+    // page.)
+    const buttons = await results(
+      'fresh',
+      'buttons that work in light and dark mode should have white text',
+    );
+    expect(buttons.map(r => r.text).join('\n')).not.toMatch(
+      /reads \d+\.\d\d:1 on the light page/,
+    );
+  }, 300_000);
+  it('asks for nothing when "not" comes before it', async () => {
+    for (const q of [
+      "it doesn't need to work in light and dark mode",
+      "don't make it work in light and dark mode",
+      "make the buttons blue, it doesn't need to work in light and dark mode",
+    ])
+      expect(JSON.stringify(await results('lo', q)), q).not.toMatch(
+        /mode both/,
+      );
+  }, 240_000);
+});

@@ -18,6 +18,7 @@ import {
   keptModuleCount,
   measurePageRolldown,
   moduleGraphStats,
+  pageSource,
   comparePages,
   formatComparison,
   USAGE,
@@ -220,6 +221,10 @@ describe('measurePageRolldown', () => {
       const stats = await measurePageRolldown(dist, ['Widget']);
       expect(stats.chunks).toBe(1);
       expect(stats.keptModules).toBe(2);
+      // One named export from a folder: the label helper alone.
+      write('shared/index.js', "export {label} from './label.js';\n");
+      const helper = await measurePageRolldown(dist, ['shared:label']);
+      expect(helper.keptModules).toBe(1);
       // The lazy module's 2,000 characters stay out of the first load.
       expect(stats.min).toBeLessThan(2000);
     } finally {
@@ -461,6 +466,29 @@ describe('formatComparison', () => {
   });
 });
 
+describe('pageSource', () => {
+  it('imports a component from its folder, or one named export with Folder:name', () => {
+    const dist = fs.mkdtempSync(path.join(FIXTURES, 'page-source-'));
+    try {
+      for (const file of ['Text/index.js', 'Chat/index.js']) {
+        fs.mkdirSync(path.dirname(path.join(dist, file)), {recursive: true});
+        fs.writeFileSync(path.join(dist, file), '');
+      }
+      expect(pageSource(dist, ['Text', 'Chat:useChatComposerContext'])).toBe(
+        [
+          `export {Text} from ${JSON.stringify(path.join(dist, 'Text/index.js'))};`,
+          `export {useChatComposerContext} from ${JSON.stringify(path.join(dist, 'Chat/index.js'))};`,
+        ].join('\n'),
+      );
+      expect(() => pageSource(dist, ['Missing:useMissing'])).toThrow(
+        /No built module for Missing/,
+      );
+    } finally {
+      fs.rmSync(dist, {recursive: true, force: true});
+    }
+  });
+});
+
 describe('parseArgs', () => {
   it('needs a base and defaults the head to the working tree', () => {
     expect(() => parseArgs([])).toThrow(/Usage/);
@@ -515,6 +543,7 @@ describe('parseArgs', () => {
       '--help',
       `0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B)`,
       'pnpm size:pages --base origin/main --unused-on table,menu',
+      'Folder:name',
     ]) {
       expect(USAGE).toContain(text);
     }

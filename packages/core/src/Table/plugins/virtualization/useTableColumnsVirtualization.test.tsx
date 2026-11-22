@@ -1074,6 +1074,11 @@ describe('rows and columns windowing together', () => {
     expect(cell).not.toBeNull();
     act(() => cell?.focus());
     await viewport.scrollBoth(2000, 2400);
+    // CI once read the first window here with the focused row still mounted,
+    // and the failure did not reproduce locally. A second scroll report
+    // publishes the scroll position again, and two more frames let it land,
+    // before the rows are read.
+    await viewport.landWrites();
     const rows = mountedRows(container);
     // Row 1 stays as the island before the window from row 47.
     expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
@@ -1083,6 +1088,7 @@ describe('rows and columns windowing together', () => {
     expect(document.activeElement).toBe(cell);
     expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
     await viewport.scrollBoth(0, 0);
+    await viewport.landWrites();
     expect(document.activeElement).toBe(cell);
     expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
   });
