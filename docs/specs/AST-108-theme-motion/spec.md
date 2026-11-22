@@ -140,7 +140,10 @@ defineTheme({
   `prefers-reduced-motion` also keys it on that mark; the animator, every script reader of
   `prefers-reduced-motion` (a `matchMedia` or `useMediaQuery` check), and every
   adaptation rule keyed on `when: {motion}` (`spec:AST-012` FR2) treat the
-  preference as set. The mark only adds: an ancestor's `'always'` reaches
+  preference as set. A script reader decides Reduce Motion through the
+  reduced-motion mark's owner module, which counts the person's setting and a
+  theme's `'always'` and loads no animator, theme or StyleX module. The mark
+  only adds: an ancestor's `'always'` reaches
   inside every nested theme, and a nested theme can add `'always'` but never
   removes an ancestor's, since nothing loosens `design:reduced-motion` DR1–DR3
   (DR2a). The server and the client resolve the same
