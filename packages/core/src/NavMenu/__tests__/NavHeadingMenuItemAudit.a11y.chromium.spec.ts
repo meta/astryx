@@ -181,9 +181,9 @@ async function readRows(page: Page) {
     };
     // The ring's own alpha and the row's opacity both blend it into the
     // backdrop it is drawn on.
-    const ringRatio = (color: number[], against: Element) => {
+    const ringRatio = (color: number[], against: Element, row: Element) => {
       const bg = backdrop(against);
-      const alpha = color[3] * Number(getComputedStyle(against).opacity || 1);
+      const alpha = color[3] * Number(getComputedStyle(row).opacity || 1);
       return pair(
         bg.map((c, i) => color[i] * alpha + c * (1 - alpha)),
         bg,
@@ -241,9 +241,11 @@ async function readRows(page: Page) {
           outlineWidth: parseFloat(style.outlineWidth),
           outlineOffset: parseFloat(style.outlineOffset),
           outlineVsMenu:
-            menu && outlineColor[3] > 0 ? ringRatio(outlineColor, menu) : null,
+            menu && outlineColor[3] > 0
+              ? ringRatio(outlineColor, menu, row)
+              : null,
           outlineVsRow:
-            outlineColor[3] > 0 ? ringRatio(outlineColor, row) : null,
+            outlineColor[3] > 0 ? ringRatio(outlineColor, row, row) : null,
         };
       }),
     };
