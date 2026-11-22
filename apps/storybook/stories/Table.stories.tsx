@@ -1168,7 +1168,9 @@ function ResizableHeadingTable() {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const resizePlugin = useTableColumnResize<AppComparison>({
     columnWidths,
-    columns: resizableComparisonColumns as TableColumn<Record<string, unknown>>[],
+    columns: resizableComparisonColumns as TableColumn<
+      Record<string, unknown>
+    >[],
     onColumnResizeEnd: updates => {
       setColumnWidths(previous => ({...previous, ...updates}));
     },
