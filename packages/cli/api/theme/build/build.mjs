@@ -2703,8 +2703,9 @@ async function validateRegistryGraphs(/** @type {Array<{specifier: string, expor
  * the family module will import it. The folder is always removed.
  * @param {Array<{specifier: string, exportName: string, compiledCopy?: string}>} registries
  * @param {string} aggregatePath
- * With `--check` nothing is written, and each registry is checked from its
- * source, as before.
+ * With `--check` nothing is written: a compiled registry whose committed
+ * copy matches this build's is imported from that copy, and one whose copy is
+ * stale or missing is left to the comparison of the outputs, which reports it.
  * @param {{outDir: string, modulesDir: string, writes: Array<{dest: string, content: string}>, check?: boolean}} compiled
  */
 async function checkFamilyRegistries(registries, aggregatePath, {outDir, modulesDir, writes, check}) {
@@ -2713,7 +2714,12 @@ async function checkFamilyRegistries(registries, aggregatePath, {outDir, modules
   // from its source, as before.
   const written = new Set(writes.map(write => write.dest));
   registries = registries.map(({compiledCopy, ...registry}) => (compiledCopy && written.has(compiledCopy) ? {...registry, compiledCopy} : registry));
-  if (check) return validateRegistryGraphs(registries.map(({specifier, exportName}) => ({specifier, exportName})), aggregatePath);
+  if (check) {
+    // The committed copies are imported only when every module this build
+    // compiles matches its committed copy: a copy imports the others.
+    const current = writes.every(write => path.relative(modulesDir, write.dest).startsWith('..') || (fs.existsSync(write.dest) && normalizeThemeBuildForCompare(fs.readFileSync(write.dest, 'utf8')) === normalizeThemeBuildForCompare(write.content)));
+    return validateRegistryGraphs(current ? registries : registries.filter(registry => !registry.compiledCopy), aggregatePath);
+  }
   if (!registries.some(registry => registry.compiledCopy)) return validateRegistryGraphs(registries, aggregatePath);
   const checkDir = fs.mkdtempSync(path.join(outDir, `.${path.basename(modulesDir)}-check-`));
   /** @param {string} file */
