@@ -5,9 +5,9 @@
 /**
  * @file useNumberGrouping.ts
  * @input Uses React useState and useEffect, and numberGrouping.ts through a
- *   deferred import
+ *   deferred import with createModuleLoader
  * @output Exports useNumberGrouping, which returns the grouping helpers once
- *   they load, and loadNumberGrouping, which loads them without rendering
+ *   they load, and numberGroupingModule, which loads them without rendering
  * @position Internal to NumberInput: the deferred load of
  *   `isGroupedWhileEditing`'s code
  *
@@ -20,28 +20,15 @@
  */
 
 import {useEffect, useState} from 'react';
+import {createModuleLoader} from '../utils/moduleLoader';
 import type * as NumberGrouping from './numberGrouping';
 
 export type NumberGroupingModule = typeof NumberGrouping;
 
-let loadedModule: NumberGroupingModule | null = null;
-let pendingLoad: Promise<NumberGroupingModule> | null = null;
-
-/** Loads the grouping helpers once and returns them. */
-export async function loadNumberGrouping(): Promise<NumberGroupingModule> {
-  pendingLoad ??= import('./numberGrouping').then(
-    module => {
-      loadedModule = module;
-      return module;
-    },
-    (error: unknown) => {
-      // A failed chunk load is tried again by the next field that asks.
-      pendingLoad = null;
-      throw error;
-    },
-  );
-  return pendingLoad;
-}
+/** The grouping helpers, loaded once on demand. */
+export const numberGroupingModule = createModuleLoader<NumberGroupingModule>(
+  async () => import('./numberGrouping'),
+);
 
 /**
  * The grouping helpers while `isEnabled`, or null while they load or when it
@@ -50,13 +37,13 @@ export async function loadNumberGrouping(): Promise<NumberGroupingModule> {
 export function useNumberGrouping(
   isEnabled: boolean,
 ): NumberGroupingModule | null {
-  const [grouping, setGrouping] = useState(loadedModule);
+  const [grouping, setGrouping] = useState(numberGroupingModule.loaded);
   useEffect(() => {
     if (!isEnabled || grouping !== null) {
       return;
     }
     let isCurrent = true;
-    loadNumberGrouping().then(
+    numberGroupingModule.load().then(
       module => {
         if (isCurrent) {
           setGrouping(module);

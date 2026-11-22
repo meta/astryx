@@ -28,7 +28,7 @@ import {InternationalizationProvider} from '../i18n';
 import {registerIcons, resetIcons} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {NumberInput} from './NumberInput';
-import {loadNumberGrouping} from './useNumberGrouping';
+import {numberGroupingModule} from './useNumberGrouping';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -558,7 +558,7 @@ describe('NumberInput', () => {
     // The grouping code loads after the first render that sets the prop.
     // Load it first, so each test starts with it in place.
     beforeAll(async () => {
-      await loadNumberGrouping();
+      await numberGroupingModule.load();
     });
 
     function ignoreChange(_value: number) {}
