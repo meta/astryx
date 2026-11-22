@@ -81,6 +81,7 @@ import {applyWrites} from '../integration/add-helpers.mjs';
 import {
   FOLDER_JUNK,
   folderIsEmpty,
+  isFolderOrLinkToOne,
   removeEmptyFolder,
 } from '../../foundation/fs/empty-folder.mjs';
 import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
@@ -2122,21 +2123,11 @@ export async function addSharedThemeToApp(source, options) {
     // root, holds no folder to copy into: the theme is added without the
     // editor state.)
     // (A link counts as what it leads to; one that leads nowhere holds no
-    // folder either.)
-    const editorBlocked = [editorRoot, editorDir].find(at => {
-      let here;
-      try {
-        here = fs.lstatSync(at);
-      } catch {
-        return false;
-      }
-      if (!here.isSymbolicLink()) return !here.isDirectory();
-      try {
-        return !fs.statSync(at).isDirectory();
-      } catch {
-        return true;
-      }
-    });
+    // folder either: the editor's own rule for its folder.)
+    const editorBlocked = [editorRoot, editorDir].find(
+      at =>
+        fs.lstatSync(at, {throwIfNoEntry: false}) && !isFolderOrLinkToOne(at),
+    );
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
     else if (staged.editor && editorBlocked)
       editorNote = `${relFrom(cwd, editorBlocked)} is not a folder; it is left as it is`;

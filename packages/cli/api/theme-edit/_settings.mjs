@@ -155,6 +155,7 @@ import {
 import {
   FOLDER_JUNK,
   folderIsEmpty,
+  isFolderOrLinkToOne,
   removeEmptyFolder,
 } from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
@@ -564,12 +565,7 @@ export function refuseUnreadableFiles(cwd, slug) {
 export function refuseThemesNotFolder(cwd) {
   const root = path.join(cwd, 'themes');
   const st = fs.lstatSync(root, {throwIfNoEntry: false});
-  if (!st) return;
-  const isDir =
-    st.isDirectory() ||
-    (st.isSymbolicLink() &&
-      fs.statSync(root, {throwIfNoEntry: false})?.isDirectory());
-  if (isDir) return;
+  if (!st || isFolderOrLinkToOne(root)) return;
   refuse(
     ERROR_CODES.ERR_FILE_EXISTS,
     `themes in this app is ${st.isSymbolicLink() ? 'a link that does not lead to a folder' : 'a file, not a folder'}, so no editor theme can be read or made: every theme goes in themes/<name>/. Rename or move it, then run the command again.`,

@@ -715,15 +715,21 @@ describe('theme add with a shared theme', () => {
       'not a folder\n',
     );
     fs.rmSync(path.join(app, 'themes'));
-    // (A link that leads nowhere holds no folder either.)
-    fs.symlinkSync(path.join(app, 'nowhere'), path.join(app, 'themes'));
     await themeRemove('ocean', {cwd: app});
-    const linked = await themeAdd(path.join(shared, 'b'), {cwd: app});
-    expect(linked.data.copy?.workingFiles).toMatchObject({
-      files: [],
-      notCopied: expect.stringMatching(/themes is not a folder/),
-    });
-    fs.rmSync(path.join(app, 'themes'));
+    // (A link that leads nowhere holds no folder either, at the themes
+    // folder or at the theme's own folder, on a first add.)
+    for (const at of ['themes', 'themes/ocean']) {
+      if (at === 'themes/ocean') fs.mkdirSync(path.join(app, 'themes'));
+      fs.symlinkSync(path.join(app, 'nowhere'), path.join(app, at));
+      const linked = await themeAdd(path.join(shared, 'b'), {cwd: app});
+      expect(linked.data.copy?.workingFiles).toMatchObject({
+        files: [],
+        notCopied: expect.stringMatching(/ is not a folder/),
+      });
+      await themeRemove('ocean', {cwd: app});
+      fs.rmSync(path.join(app, at));
+    }
+    fs.rmSync(path.join(app, 'themes'), {recursive: true, force: true});
   });
 
   it('adds the theme but not editor state whose theme source has edits of its own, and says why', async () => {
