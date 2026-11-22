@@ -257,7 +257,7 @@ describe('a lone color after a link, a group or labels', () => {
   it('is the link text, the group fill, and the form label text', async () => {
     const link = writes(await how('q0', 'bold links, red')).join('\n');
     expect(link).not.toMatch(/background-color '#dc2626' --on link/);
-    expect(link).toMatch(/'#dc2626'/);
+    expect(link).toMatch(/--color-text-accent '(?:light-dark\()?#dc2626/);
     expect(writes(await how('q0', 'rounded inputs, white')).join('\n')).toMatch(
       /'#ffffff' --on inputs/,
     );

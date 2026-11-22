@@ -907,7 +907,10 @@ const ROWS = [
     'links said in tabs, which hold none, take the link color, as main reads them',
     {
       q: 'tabs: 14px text, blue links',
-      has: ['font-size 14px --on tab', "--color-text-accent '#2563eb'"],
+      has: [
+        'font-size 14px --on tab',
+        "--color-text-accent 'light-dark(#2563eb, #9db9f6)'",
+      ],
     },
   ],
   [

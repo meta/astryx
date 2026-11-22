@@ -72,7 +72,8 @@ describe('dark surfaces and light borders by mode', () => {
     expect(await first('body text should be #1a1f36; borders #e3e8ee')).toEqual(
       [
         "--color-text-primary '#1a1f36' --mode light",
-        "--color-border '#e3e8ee' --mode light",
+        // (A light gray said once for the whole theme covers both modes.)
+        "--color-border 'light-dark(#e3e8ee, #262626)'",
       ],
     );
     expect(await first('make the borders #333333')).toEqual([
