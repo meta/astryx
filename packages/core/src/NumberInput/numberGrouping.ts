@@ -262,7 +262,7 @@ function hasOnlyFieldGrouping(
  */
 export function typedGroupIndexes(
   text: string,
-  locale?: Locale,
+  locale: Locale,
   previousText?: string,
   previousTypedGroups: ReadonlyArray<number> = [],
 ): number[] {
@@ -315,7 +315,7 @@ export function typedGroupIndexes(
 export function groupEditableDraft(
   text: string,
   caret: number,
-  locale?: Locale,
+  locale: Locale,
   previousText?: string,
   previousTypedGroups: ReadonlyArray<number> = [],
 ): GroupedEditableDraft {
@@ -427,7 +427,7 @@ export function groupEditableDraft(
  */
 export function formatGroupedEditableNumber(
   value: number,
-  locale?: Locale,
+  locale: Locale,
 ): string {
   if (!Number.isFinite(value)) {
     return formatEditableNumber(value, locale);
@@ -495,7 +495,7 @@ export function deleteDigitAcrossGroupSeparator(
   text: string,
   caret: number,
   key: 'Backspace' | 'Delete',
-  locale?: Locale,
+  locale: Locale,
 ): GroupedEditableDraft | null {
   const {
     group,
