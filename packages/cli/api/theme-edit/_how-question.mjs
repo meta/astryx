@@ -28134,9 +28134,12 @@ export function draftAnswer(ctx, env, question) {
           // (A color said for the whole of a part whose fills are its looks'
           // only, a badge's: the editor does not split it into the looks
           // here.)
-          const filledLook = (looks[axis] ?? []).find(
+          // (A look to name in the answer, one that is no color word.)
+          const filled = (looks[axis] ?? []).filter(
             v => lookToken(`${axis}:${v}`) != null,
           );
+          const filledLook =
+            filled.find(v => !Object.hasOwn(COLOR_NAMES, v)) ?? filled[0];
           if (
             said &&
             filledLook &&
