@@ -1998,7 +1998,13 @@ export function bareNeutralGrays(
   // gives the words, from the readers that read a removal or a dislike.)
   if (turnsAway(question)) return false;
   const at = clauses.findIndex(c => BARE_GRAYS.test(bare(c)));
-  return at >= 0 && clauses.every((c, i) => i === at || namesThing(c));
+  // (The grays are the ask's last clause: said first or in the middle of a
+  // longer ask, the clause keeps its earlier reading.)
+  return (
+    at >= 0 &&
+    at === clauses.length - 1 &&
+    clauses.every((c, i) => i === at || namesThing(c))
+  );
 }
 
 /** Whether a clause is the bare neutral-grays ask, as `bareNeutralGrays` reads it. @param {string} text */

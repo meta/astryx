@@ -5714,7 +5714,8 @@ export function draftAnswer(ctx, env, question) {
       st =>
         (st.on &&
           (parseColor(String(st.value)) != null ||
-            /#[0-9a-f]{3,8}\b|var\(\s*--color-/i.test(String(st.value)))) ||
+            (String(st.value).match(COLOR_IN_VALUE) ?? []).length > 0 ||
+            /var\(\s*--color-/i.test(String(st.value)))) ||
         (!st.on && /^--color-background-(?:body|surface|card)$/.test(st.thing)),
     ) ||
     Object.values(

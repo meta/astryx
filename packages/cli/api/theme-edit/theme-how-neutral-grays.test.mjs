@@ -40,6 +40,11 @@ beforeAll(async () => {
     await themeEditNew('plain', {cwd, like: 'neutral'});
     await themeEditNew('warm', {cwd, like: 'neutral'});
     await themeEditSet('warm', 'neutral', '#78716c', {cwd});
+    await themeEditNew('rgbedge', {cwd, like: 'neutral'});
+    await themeEditSet('rgbedge', 'border', '1px solid rgb(120 113 108)', {
+      cwd,
+      on: 'card',
+    });
     await themeEditNew('cream', {cwd, like: 'neutral'});
     await themeEditSet('cream', '--color-background-body', '#faf3e8', {cwd});
     await themeEditNew('creamy', {cwd, like: 'neutral'});
@@ -130,6 +135,19 @@ describe('neutral grays', () => {
   );
 
   it(
+    'a theme that sets a part color inside a shorthand keeps the base answer',
+    async test => {
+      needsBases(test);
+      const results = await answer('neutral grays', 'rgbedge');
+      expect(results.flatMap(r => r.lines)).toEqual([]);
+      expect(
+        results.some(r => /already neutral|grays without a tint/.test(r.text)),
+      ).toBe(false);
+    },
+    T,
+  );
+
+  it(
     'a negated ask never makes the grays neutral',
     async test => {
       needsBases(test);
@@ -168,6 +186,9 @@ describe('neutral grays', () => {
         'ditch rounded corners and neutral grays',
         'skip rounded corners and neutral grays',
         'I dislike rounded corners and neutral grays',
+        // (Grays said before another clause keep the base answer.)
+        'neutral grays, drop shadows on cards',
+        'neutral grays, system font, 14px text, green #1f883d primary buttons, blue #0969da links',
         // (A prohibition anywhere keeps the base answer.)
         "buttons shouldn't be round, neutral grays",
         "don't make buttons rounder, neutral grays",
@@ -196,7 +217,6 @@ describe('neutral grays', () => {
       // (A removal word in another clause, or "drop shadows" as a thing,
       // turns nothing away: the grays are read.)
       for (const q of [
-        'neutral grays, drop shadows on cards',
         'zero radius corners, neutral grays',
         'remove the card borders, neutral grays',
         'cards with drop shadows and neutral grays',
