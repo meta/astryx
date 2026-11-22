@@ -122,7 +122,8 @@ jobs:
         run: npx playwright install chromium
 
       # The legs move between commits as recorded times change, so the leg is
-      # found by the spec file in this commit's own six-way split. A spec cut
+      # found by the spec file in this commit's own seven-way split, as many
+      # legs as the release-check's a11y-contracts-shard job in ci.yml. A spec cut
       # across legs runs with every leg that holds part of it.
       - name: Find the leg that holds the spec
         id: legs
@@ -132,8 +133,8 @@ jobs:
         run: |
           set -euo pipefail
           found=""
-          for leg in 1 2 3 4 5 6; do
-            node .github/scripts/a11y-contract-shard.mjs --shard "$leg/6" > "leg-$leg.txt"
+          for leg in 1 2 3 4 5 6 7; do
+            node .github/scripts/a11y-contract-shard.mjs --shard "$leg/7" > "leg-$leg.txt"
             if grep -qF "/$SPEC" "leg-$leg.txt"; then found="$found $leg"; fi
           done
           if [ -z "$found" ]; then
@@ -142,7 +143,7 @@ jobs:
           fi
           for leg in $found; do cat "leg-$leg.txt"; done | awk '!seen[$0]++' > contract-tests.txt
           echo "legs=${found# }" >> "$GITHUB_OUTPUT"
-          echo "$SPEC is in leg(s)${found} of 6 at $SHA."
+          echo "$SPEC is in leg(s)${found} of 7 at $SHA."
 
       # The same command and settings as the release-check's leg in ci.yml.
       - name: Run accessibility spec-test contracts
