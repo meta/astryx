@@ -338,6 +338,17 @@ describe('a tint word', () => {
       const said = await lines('a light blue tint background');
       expect(said.join('\n')).not.toMatch(/--color-overlay-hover/);
       expect(said.some(c => /^--color-background-body '#/.test(c))).toBe(true);
+      // (A color function typed before "tint background" is read whole.)
+      for (const q of [
+        'a rgb(37, 99, 235) tint background',
+        'an hsl(220, 80%, 55%) tint background',
+        'an oklch(0.6 0.15 250) tint background',
+        'a color-mix(in srgb, blue 20%, white) tint background',
+      ]) {
+        const out = (await lines(q)).join('\n');
+        expect(out, q).not.toMatch(/--color-overlay-hover/);
+        expect(out, q).toMatch(/^--color-background-body '/m);
+      }
       // (A tint with no color, or one asked less or more of a color, is
       // still the wash.)
       for (const q of [

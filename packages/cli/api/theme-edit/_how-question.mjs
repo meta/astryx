@@ -27651,9 +27651,11 @@ export function draftAnswer(ctx, env, question) {
         // "the hover tint stronger", "the selected background lighter": a
         // state's own wash, never the page. "Tint" as the word for a color's
         // background ("a light blue tint background": the color, then
-        // "tint", then the background) is that color's, never the wash.
+        // "tint", then the background) is that color's, never the wash. A
+        // color function typed there ("rgb(37, 99, 235) tint background")
+        // is read whole.
         const colorTint =
-          /(\S+(?:\s+\S+)?)\s+tint\s+(?:background|fill)\b/.exec(
+          /((?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\((?:[^()]|\([^()]*\))*\)|\S+(?:\s+\S+)?)\s+tint\s+(?:background|fill)\b/.exec(
             c.text.toLowerCase(),
           );
         const stateSaid =
