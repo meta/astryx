@@ -11795,6 +11795,27 @@ export function draftAnswer(ctx, env, question) {
       c.text = '';
     }
   }
+  // "silver page, surfaces and cards": the grounds listed after a page
+  // color take that color, as one ask with the page.
+  for (let i = 1; i < clauses.length; i++) {
+    const prev = clauses[i - 1];
+    const c = clauses[i];
+    if (
+      prev.parts.some(p => p.on === 'page') &&
+      prev.colors.length &&
+      !c.colors.length &&
+      /^(?:(?:and|the|all)\s+)*(?:surfaces?|cards?)(?:\s*(?:,|and)\s*(?:the\s+)?(?:surfaces?|cards?))*$/i.test(
+        c.text.trim(),
+      )
+    ) {
+      prev.text = `${prev.text}, ${c.text.trim()}`;
+      c.text = '';
+      c.parts = [];
+      c.aspects = [];
+      i--;
+      clauses.splice(i + 1, 1);
+    }
+  }
   // "every part bold except body text": the body is left as it is, so the
   // bold goes to the headings, not the body's weight.
   for (let i = 0; i < clauses.length - 1; i++) {
@@ -21501,6 +21522,14 @@ export function draftAnswer(ctx, env, question) {
     );
   }
   /**
+   * Whether a clause names the page and the surfaces together, "silver page,
+   * surfaces and cards": one color for every ground the theme draws on.
+   * @param {Clause} c
+   */
+  function groundsNamed(c) {
+    return c.parts.some(x => x.on === 'page') && /\bsurfaces?\b/i.test(c.text);
+  }
+  /**
    * The commands for one part (or the whole theme) and one aspect.
    * @param {Clause} c
    * @param {{on: string, when?: string, role?: string, level?: string} | null} p
@@ -21514,6 +21543,9 @@ export function draftAnswer(ctx, env, question) {
         options: [],
       };
     const on = p?.on;
+    // ("silver page, surfaces and cards": the cards named with the page and
+    // the surfaces are filled in the page's answer, never a second one.)
+    if (on === 'card' && a === 'background' && groundsNamed(c)) return null;
     const {noState, ...f} = p ? flagsFor(c, p) : {};
     if (noState && on) {
       // (The state is another part's, named by its own word in the ask,
@@ -22205,15 +22237,41 @@ export function draftAnswer(ctx, env, question) {
         };
       // (A color word in neither mode's lightness, with no text said with
       // it: each mode's page takes it at its own.)
+      // (One color named for the page and the surfaces, "silver page,
+      // surfaces and cards", fills the surfaces and the cards with the page
+      // color too, in each mode the page takes it.)
+      const grounds = groundsNamed(c)
+        ? [
+            '--color-background-surface',
+            ...(c.parts.some(x => x.on === 'card') || /\bcards?\b/i.test(c.text)
+              ? ['--color-background-card']
+              : []),
+          ]
+        : [];
+      const groundsSaid = grounds.length
+        ? `, and the ${grounds.length > 1 ? 'surfaces and cards' : 'surfaces'} take the same color (${grounds.join(', ')})`
+        : '';
+      /** @param {Step[]} steps */
+      const withGrounds = steps =>
+        steps.flatMap(st =>
+          st.thing === '--color-background-body'
+            ? [
+                st,
+                ...grounds.map(t =>
+                  set(t, String(st.value), st.mode ? {mode: st.mode} : {}),
+                ),
+              ]
+            : [st],
+        );
       const tones = pageTones(c, String(color));
       if (tones)
         return {
-          text: `the page background: --color-background-body, ${color}'s color at each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`,
+          text: `the page background: --color-background-body, ${color}'s color at each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable${groundsSaid}`,
           options: [
-            [
+            withGrounds([
               set('--color-background-body', tones.light, {mode: 'light'}),
               set('--color-background-body', tones.dark, {mode: 'dark'}),
-            ],
+            ]),
           ],
           sequence: true,
         };
@@ -22226,9 +22284,10 @@ export function draftAnswer(ctx, env, question) {
       const panel =
         panelRead && panelRead !== '--color-background-body' ? panelRead : null;
       return {
-        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
+        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${groundsSaid}${panel && !grounds.length ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
+        ...(grounds.length ? {sequence: true} : {}),
         options: [
-          [set('--color-background-body', color, pm)],
+          withGrounds([set('--color-background-body', color, pm)]),
           [
             set('background', color, {on: 'app-shell', ...pm}),
             ...(panel
