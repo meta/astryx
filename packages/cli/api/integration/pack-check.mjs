@@ -109,8 +109,8 @@ const CORE_VERSION_LINE = /^( \* Core: @astryxdesign\/core@)(\S+)(\s*)$/u;
  * CLI/Core version, or build command look like source drift. Normalization
  * applies only to a file whose first comment is the generated header with
  * exactly one well-formed Source, CLI, and Core line; it covers those lines
- * and, in a built module, the one `built by` line that names the command
- * (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
+ * and, in a built module, each `built by` line that names the command, one
+ * per theme (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
  * malformed, reordered, or any other bytes stay significant. `theme build
  * --check` stays strict about the Source and Core lines; the CLI line and the
  * command in the built-by line count for neither.

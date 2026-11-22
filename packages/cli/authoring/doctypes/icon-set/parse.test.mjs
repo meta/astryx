@@ -65,7 +65,7 @@ describe('parseIconSetData', () => {
     [
       'a map key that is not a definition name',
       d => (d.map['big-house'] = 'home'),
-      /"big-house" is not an icon definition name/,
+      /"big-house" is not an icon meaning name/,
     ],
     [
       'a map value that is not an icon id',
