@@ -80,6 +80,9 @@ lives in `NavigationStack.doc.mjs`.
   - FR21: a push moves focus out of the covered screen in its first commit,
     where the released stack moves it once the push settles. A pop rests focus on the
     stack's region until the revealed screen takes input.
+  - FR23: a pop from rest whose tap runs other work first starts at its first
+    presented frame, where on a phone the released stack shows only its end
+    state.
 
   Every other behavior needs an option.
 
@@ -424,7 +427,7 @@ in the frame that shows it. The cost moves to layout passes while it is
 hidden, bounded by the one prepared screen.
 
 Rejected: keeping retained screens laid out too, because on a phone a kept
-retained screen showed later after its commit than a fresh mount.
+retained screen shows no sooner after its commit than a fresh mount.
 
 ### DEC-15 — A change from rest starts at its first frame
 
