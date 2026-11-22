@@ -65,6 +65,8 @@ import {
   radiusAt,
   radioCircle,
   radiusTokenOf,
+  acceptedContrast,
+  contrastPlace,
   contrastProblems,
   describe,
   entryDamage,
@@ -2230,6 +2232,8 @@ async function labelRead(scope, cwd) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditSet(theme, thing, value, options = {}) {
+  if (thing === 'contrast-accepted')
+    return acceptContrast(theme, String(value ?? ''), options);
   try {
     return await change('set', theme, thing, value, options);
   } catch (e) {
@@ -2247,6 +2251,132 @@ export async function themeEditSet(theme, thing, value, options = {}) {
       options,
     );
   }
+}
+
+/** Words that say nothing of why a color is kept: a reason of only these is no reason. */
+const EMPTY_REASON =
+  /^(?:as|designed|design|by|intended|intentional|intentionally|on|purpose|accepted|accept|ok|okay|fine|keep|kept|it|is|this|that|the|a|yes|wanted|deliberate|deliberately|known|expected|same|original)$/;
+
+/**
+ * `set <theme> contrast-accepted '<reason>' --on <part> --ground <part>
+ * --mode <mode>`: a contrast problem kept on purpose, where its failing
+ * color is one the theme typed (a faithful copy of an original), recorded
+ * with the ratio drawn now and the reason. `none` takes the record away.
+ * A color the editor made is never accepted: it must pass.
+ * @param {string} slug
+ * @param {string} reason
+ * @param {ChangeOptions & {ground?: string}} options
+ */
+async function acceptContrast(slug, reason, options) {
+  const cwd = options.cwd ?? process.cwd();
+  const line = `${P} set ${slug} contrast-accepted '<why the original draws it so>' --on <text part> --ground <part under it> --mode <light|dark>`;
+  const part = options.on;
+  const ground = /** @type {any} */ (options).ground;
+  const mode = options.mode;
+  if (!part || !ground || (mode !== 'light' && mode !== 'dark'))
+    refuse(
+      E.ERR_MISSING_ARGUMENT,
+      `contrast-accepted keeps one contrast problem as designed: name the text part (--on), the part under it (--ground) and the mode (--mode), as the problem's own accept line does. Nothing was changed.`,
+      {run: [`${P} show ${slug}`, line]},
+    );
+  const ctx = await context(cwd);
+  const data = loadTheme(cwd, slug);
+  /** The settings' record of acceptances, written with the settings. */
+  const record =
+    /** @type {{accepted?: import('./_settings.mjs').AcceptedContrast[]}} */ (
+      /** @type {unknown} */ (data)
+    );
+  const kept = acceptedContrast(data);
+  const same = (
+    /** @type {{part: string, ground: string, mode: string}} */ a,
+  ) => a.part === part && a.ground === ground && a.mode === mode;
+  const res = await resolvedTokens(ctx, slug);
+  const found = await contrastProblems(ctx, data, res);
+  const here = found.find(p => {
+    const at = contrastPlace(p);
+    return at != null && same(at);
+  });
+  if (reason.trim().toLowerCase() === 'none') {
+    if (!kept.some(same))
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `${slug} accepts no contrast problem for ${part} on ${ground} in ${mode}. Nothing was changed.`,
+        {run: [`${P} show ${slug}`]},
+      );
+    const left = kept.filter(a => !same(a));
+    if (left.length) record.accepted = left;
+    else delete record.accepted;
+  } else {
+    const words = reason
+      .toLowerCase()
+      .split(/[^a-z0-9.#-]+/)
+      .filter(Boolean);
+    if (words.length < 3 || words.every(w => EMPTY_REASON.test(w)))
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `A contrast problem is kept only with the reason the original draws it so, said specifically (what it copies, and from where: "matches the original's .btn-info label"): "${reason.slice(0, 80)}" does not say. Nothing was changed.`,
+        {run: [line]},
+      );
+    if (!here)
+      refuse(
+        E.ERR_NOT_FOUND,
+        `${slug} has no contrast problem for ${part} on ${ground} in ${mode} to keep. Nothing was changed.`,
+        {run: [`${P} show ${slug}`]},
+      );
+    const at = /** @type {NonNullable<ReturnType<typeof contrastPlace>>} */ (
+      contrastPlace(/** @type {any} */ (here))
+    );
+    if (!here?.accept && !here?.accepted)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${part} on ${ground} in ${mode} fails in a color the editor made, not one the theme typed: a made color must pass, so it cannot be kept as designed; follow its fix line instead. Nothing was changed.`,
+        {run: here?.fix ? [here.fix] : [`${P} show ${slug}`]},
+      );
+    // The color kept: the text's as drawn (a token read in that mode), or
+    // a track's fill.
+    const drawnAs = /\(([^\s()]+) on /.exec(String(here?.text))?.[1] ?? '';
+    const read = drawnAs.startsWith('--')
+      ? String(res[mode][drawnAs] ?? '')
+      : drawnAs || (String(here?.text).match(/#[0-9a-f]{6}\b/i)?.[0] ?? '');
+    const rgb = parseColor(read);
+    const color = rgb ? hex(rgb) : read.toLowerCase();
+    record.accepted = [
+      ...kept.filter(a => !same(a)),
+      {part, ground, mode, ratio: at.ratio, color, reason: reason.trim()},
+    ];
+  }
+  await commitTheme(ctx, slug, data, {history: true});
+  const after = await contrastProblems(
+    ctx,
+    data,
+    await resolvedTokens(ctx, slug),
+  );
+  return /** @type {any} */ ({
+    type: 'themeEdit.set',
+    data: {
+      theme: slug,
+      action: 'set',
+      setting: {
+        thing: 'contrast-accepted',
+        value: reason.trim(),
+        on: part,
+        mode,
+      },
+      replaced: null,
+      was: null,
+      group: null,
+      changedTokens: [],
+      changedPartTokens: [],
+      problems: after.filter(p => !p.note).map(p => p.text),
+      newProblems: [],
+      acceptedContrast: acceptedContrast(data),
+      notes: [
+        reason.trim().toLowerCase() === 'none'
+          ? `${part} on ${ground} in ${mode} is a problem again: show lists it with its fix line`
+          : `${part} on ${ground} in ${mode} is kept as designed at ${contrastPlace(/** @type {any} */ (here))?.ratio}:1 (${reason.trim()}); a change that draws it lower makes it a problem again; to take this back: ${P} set ${slug} contrast-accepted none --on ${part} --ground ${ground} --mode ${mode}`,
+      ],
+    },
+  });
 }
 
 /**
@@ -8686,10 +8816,14 @@ function renderFix(ctx, cwd) {
 /**
  * Problems as a result names them: each with the command that fixes it.
  * @param {import('./_settings.mjs').ThemeProblem[] | undefined} list
- * @returns {Array<{problem: string, fix: string | null}>}
+ * @returns {Array<{problem: string, fix: string | null, accept?: string}>}
  */
 function problemLines(list) {
-  return (list ?? []).map(x => ({problem: x.text, fix: x.fix}));
+  return (list ?? []).map(x => ({
+    problem: x.text,
+    fix: x.fix,
+    ...(x.accept ? {accept: x.accept} : {}),
+  }));
 }
 
 /** Where a whole-theme size change applies: phones keep their own. */
@@ -9200,6 +9334,7 @@ export async function themeEditShow(theme, options = {}) {
           .filter(
             x =>
               isCheckNote(x) &&
+              !x.accepted &&
               !ownMasked.some(d => x.text.includes(` for ${d},`)),
           )
           .map(x => x.text),
@@ -9248,6 +9383,23 @@ export async function themeEditShow(theme, options = {}) {
       problems,
       // Every problem the theme has now, its text, border and color
       // contrast, each with the command that fixes it when one does.
+      // Contrast problems the theme keeps as designed, each with the ratio
+      // it accepts, its reason, the problem as drawn now and the line that
+      // takes it back: listed, never hidden.
+      acceptedContrast: acceptedContrast(data).map(a => ({
+        ...a,
+        problem:
+          checked.find(x => {
+            const at = x.accepted ? contrastPlace(x) : null;
+            return (
+              at != null &&
+              at.part === a.part &&
+              at.ground === a.ground &&
+              at.mode === a.mode
+            );
+          })?.text ?? null,
+        undo: `${P} set ${theme} contrast-accepted none --on ${a.part} --ground ${a.ground} --mode ${a.mode}`,
+      })),
       openProblems: [
         ...problemLines(shownChecks),
         ...colorProblems,
