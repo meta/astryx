@@ -6,20 +6,24 @@
  *
  * @input An operation run inside `recordReads(seen, fn)`.
  * @output `seen` gets every file whose content the operation read through fs
- *   or imported as a doc module (`recordContentRead`), and every folder it
+ *   (synchronously or with promises.readFile) or imported as a doc module
+ *   (`recordContentRead`), and every folder it
  *   listed or probed, each with its state when first read; an exact run
  *   records each probed path by what the call returned instead.
  *   `unchangedSince(seen)` says whether all are still in that state.
  * @position Used by search's adapter to reuse a gathered catalog only while
  *   it is exact, by the docs adapter to rebuild the CLI's own docs tree after
- *   an edit (`reusedWhileUnchanged`), and by the doc importers and reader
- *   (../doc-compiler) to read an edited doc file again. A run inside another
+ *   an edit (`reusedWhileUnchanged`), by the doc importers and reader
+ *   (../doc-compiler) to read an edited doc file again, and by swizzle's
+ *   copy to keep a package's public surface (`reusedWhileUnchangedSync`).
+ *   A run inside another
  *   records into both, so an outer reuse sees what an inner one read.
  *   Outside `recordReads` nothing is recorded and every fs call behaves as
  *   before.
  */
 
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {createHash} from 'node:crypto';
 import {createRequire, syncBuiltinESMExports} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -125,10 +129,11 @@ const RECORDED = [
   'realpathSync',
   'accessSync',
   'openSync',
+  'readFile',
 ];
 
 /** The reads that see a file's content, so the file itself is checked. */
-const CONTENT_READS = new Set(['readFileSync', 'openSync']);
+const CONTENT_READS = new Set(['readFileSync', 'openSync', 'readFile']);
 
 /**
  * What an existence check of a present path records: only that it is there,
@@ -185,6 +190,58 @@ const statSyncRaw = fs.statSync;
 /** fs.realpathSync as loaded, before installRecorder wraps it. */
 const realpathSyncRaw = fs.realpathSync;
 
+/** fs.readdirSync as loaded, before installRecorder wraps it. */
+const readdirSyncRaw = fs.readdirSync;
+
+/** fs.readlinkSync as loaded, before installRecorder wraps it. */
+const readlinkSyncRaw = fs.readlinkSync;
+
+/** How a folder's listing stamp ({@link listingStamp}) begins. */
+export const LISTED = 'list:';
+
+/**
+ * A folder's entries as a stamp: their names and types, and where each link
+ * points. A save that renames a new copy over an entry keeps it; an entry
+ * added, removed or renamed, a changed type, or a link re-pointed changes it.
+ * The folder's own times are left out, as a save by rename changes them on
+ * every save.
+ * @param {import('node:fs').Dirent[]} dirents the folder's entries
+ * @param {string} dir the folder
+ * @returns {string}
+ */
+export function listingOf(dirents, dir) {
+  const entries = dirents
+    .map(entry => {
+      if (entry.isSymbolicLink()) {
+        let target = '';
+        try {
+          target = String(readlinkSyncRaw(path.join(dir, entry.name)));
+        } catch {
+          // A link that cannot be read is listed by its name alone.
+        }
+        return `l${entry.name}\0${target}`;
+      }
+      const type = entry.isDirectory() ? 'd' : entry.isFile() ? 'f' : 'o';
+      return `${type}${entry.name}`;
+    })
+    .sort();
+  return `${LISTED}${createHash('sha256').update(entries.join('\0')).digest('hex')}`;
+}
+
+/**
+ * The listing stamp of the folder at `dir` now ({@link listingOf}), absent
+ * when nothing is there, or one fixed stamp while it cannot be read.
+ * @param {string} dir
+ * @returns {string}
+ */
+export function listingStamp(dir) {
+  try {
+    return listingOf(readdirSyncRaw(dir, {withFileTypes: true}), dir);
+  } catch {
+    return fileStamp(dir) === '-' ? '-' : `${LISTED}unreadable`;
+  }
+}
+
 /**
  * Wrap fs's read calls once so that, inside `reads.run`, each path they are
  * given is added to that run's set. Outside a run they behave exactly as
@@ -194,7 +251,9 @@ function installRecorder() {
   if (recording) return;
   recording = true;
   for (const name of RECORDED) {
-    const original = fs[name];
+    // Older Node releases read native ES modules through the promise API.
+    const api = name === 'readFile' ? fs.promises : fs;
+    const original = api[name];
     if (typeof original !== 'function') continue;
     const kind = readKind(name);
     /**
@@ -230,9 +289,9 @@ function installRecorder() {
       return answer;
     };
     Object.assign(wrapped, original);
-    fs[name] = wrapped;
+    api[name] = wrapped;
   }
-  // ESM imports of node:fs see the wrapped functions too.
+  // ESM imports of node:fs and node:fs/promises see the wrapped functions too.
   syncBuiltinESMExports();
 }
 
@@ -298,7 +357,7 @@ function presenceState(file) {
  * @param {string} file
  * @returns {string}
  */
-function resolvedNow(file) {
+export function resolvedNow(file) {
   try {
     return `${RESOLVED}${realpathSyncRaw(file)}`;
   } catch {
@@ -525,6 +584,38 @@ export function reusedWhileUnchanged(load, isUnchanged = unchangedSince) {
     value.catch(() => {
       if (last === entry) last = undefined;
     });
+    return value;
+  };
+}
+
+/**
+ * {@link reusedWhileUnchanged} for a loader that returns its value at once:
+ * kept while every file and folder it read is unchanged, loaded again after
+ * a change, and tried again after a load that throws. What a kept value read
+ * counts as read by the operation that asks for it.
+ * @template T
+ * @param {() => T} load
+ * @param {{exact?: boolean, isUnchanged?: (recorded: Map<string, string>) => boolean}} [options]
+ *   - `exact`: record reads as {@link recordReads} does with `exact`.
+ *   `isUnchanged`: as for {@link reusedWhileUnchanged}.
+ * @returns {(options?: {fresh?: boolean}) => T}
+ */
+export function reusedWhileUnchangedSync(
+  load,
+  {exact = false, isUnchanged = unchangedSince} = {},
+) {
+  /** @type {{reads: Map<string, string>, value: T} | undefined} */
+  let last;
+  return ({fresh = false} = {}) => {
+    if (!fresh && last && isUnchanged(last.reads)) {
+      recordStates(last.reads);
+      return last.value;
+    }
+    last = undefined;
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    const value = recordReads(seen, load, {exact});
+    last = {reads: seen, value};
     return value;
   };
 }

@@ -54,14 +54,13 @@ import {
   isJsonMode,
   jsonError as _jsonError,
   humanWarn,
-  outputCaptured,
-  writeAllSync,
 } from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
 import {
   formatCliCommand,
   getCliInvocation,
+  splitCommandInFolder,
 } from '../../../foundation/env/package-manager.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
@@ -136,18 +135,12 @@ export function cliError(message, options = {}) {
   if (suggestions?.length) {
     lines.push('');
     for (const s of suggestions) {
-      // A suggested command stays bare in JSON and is prefixed here.
-      const name = /^astryx(\s|$)/.test(s.name)
-        ? formatCliCommand(s.name)
-        : s.name;
+      const name = shownCommand(s.name);
       const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
       lines.push(tag);
     }
   }
-  // Written whole before a hard exit: output still queued for a slow pipe
-  // would be cut at 64 KiB. A soft exit lets the stream drain on its own.
-  if (hard && !outputCaptured(2)) writeAllSync(2, `${lines.join('\n')}\n`);
-  else for (const line of lines) console.error(line);
+  for (const line of lines) console.error(line);
 
   if (hard) {
     process.exit(exitCode);
@@ -155,6 +148,27 @@ export function cliError(message, options = {}) {
     process.exitCode = exitCode;
   }
   return /** @type {never} */ (undefined);
+}
+
+/**
+ * End a run with exit 1 after its output is printed, and record the stable
+ * code that output carries, as {@link cliError} records its own. Use it when
+ * a command has already answered or reported: a batch with a row that did not
+ * resolve, a check that found stale outputs, or an error the API printed. The
+ * run's debug event then names the failure instead of an exit that bypassed
+ * the error path. It prints nothing.
+ *
+ * @param {string | undefined} code - the code the output carries, from
+ *   error-codes.mjs
+ * @param {unknown} [error] - the error the output reports, when there is one
+ */
+export function failAfterOutput(code, error) {
+  setOutcome('error', {
+    exitCode: 1,
+    code,
+    ...(error === undefined ? {} : {error}),
+  });
+  process.exitCode = 1;
 }
 
 /**
@@ -310,4 +324,21 @@ export function themeGroupUnknownSubcommand(group, word, names, loaded) {
       moved,
     ),
   };
+}
+
+/**
+ * A suggested command as printed: it stays bare in JSON and the run that
+ * answers is prefixed here. A command run in another folder
+ * (commandInFolder) keeps its change of folder in front, and its invocation
+ * is chosen for that folder (`spec:AST-081` FR5).
+ * @param {string} name
+ * @returns {string}
+ */
+function shownCommand(name) {
+  const inFolder = splitCommandInFolder(name);
+  if (inFolder && /^astryx(\s|$)/.test(inFolder.command)) {
+    const lead = name.slice(0, name.length - inFolder.command.length);
+    return `${lead}${formatCliCommand(inFolder.command, inFolder.dir)}`;
+  }
+  return /^astryx(\s|$)/.test(name) ? formatCliCommand(name) : name;
 }

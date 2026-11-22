@@ -77,3 +77,34 @@ describe('the default app shell with the messaging shell ready', () => {
     );
   });
 });
+
+describe('a shell variant as the start of a part or an edit', () => {
+  /** The side-nav shell variant leads the ranking with enough evidence. */
+  const lead = {
+    name: 'shell-side-nav',
+    family: 'Shell',
+    score: 40,
+    hits: 3,
+    base: false,
+    familyNamed: true,
+    headNamed: false,
+    containerMatched: false,
+    typical: 0,
+  };
+
+  it('starts from the default shell when the idea names none of its keywords', async () => {
+    const catalog = (await loadTemplates(REPO)).pages;
+    const idea = 'a profile card for the account area';
+    expect(chooseStart([lead], 'part', [], false, catalog, idea)?.name).toBe(
+      'shell-top-nav',
+    );
+  });
+
+  it('starts from the variant when the idea names one of its keywords', async () => {
+    const catalog = (await loadTemplates(REPO)).pages;
+    const idea = 'a profile card in the sidebar';
+    expect(chooseStart([lead], 'part', [], false, catalog, idea)?.name).toBe(
+      'shell-side-nav',
+    );
+  });
+});

@@ -179,3 +179,79 @@ describe('butter color token mapping completeness', () => {
     });
   });
 });
+
+describe('butter progress fills', () => {
+  // In light mode the banner stops read at 1.2:1 to 2.6:1 on the progress
+  // track, so each status fill takes the theme's status role, which reaches
+  // 3:1 on it.
+  const {green, neutral, red, yellow} = butterModePalettes;
+  const track = {light: neutral.light[85], dark: neutral.dark[40]};
+
+  it('draws the progress track on those stops', () => {
+    expect(butterTheme.components?.['progress-bar-track']?.base).toMatchObject({
+      backgroundColor: `light-dark(${track.light}, ${track.dark})`,
+    });
+  });
+
+  const fills = {
+    success: {light: green.light[25], dark: green.dark[70]},
+    warning: {light: yellow.light[30], dark: yellow.dark[75]},
+    error: {light: red.light[30], dark: red.dark[85]},
+  };
+
+  it.each(Object.entries(fills))(
+    'keeps a %s fill at 3:1 on the track',
+    (variant, fill) => {
+      expect(
+        butterTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
+      ).toMatchObject({backgroundColor: `var(--color-${variant})`});
+      expect(butterTheme.tokens[`--color-${variant}`]).toBe(
+        `light-dark(${fill.light}, ${fill.dark})`,
+      );
+      expect(contrast(fill.light, track.light)).toBeGreaterThanOrEqual(3);
+      expect(contrast(fill.dark, track.dark)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  const marks = {
+    success: {light: green.light[85], dark: green.dark[15]},
+    warning: {light: yellow.light[95], dark: yellow.dark[15]},
+    error: {light: red.light[95], dark: red.dark[15]},
+  };
+
+  it.each(Object.entries(marks))(
+    'draws a mark on a %s fill in that status on-color, at 3:1 on the fill',
+    (variant, mark) => {
+      expect(
+        butterTheme.components?.['progress-bar-mark']?.[
+          `placement:fill+variant:${variant}`
+        ],
+      ).toMatchObject({backgroundColor: `var(--color-on-${variant})`});
+      expect(butterTheme.tokens[`--color-on-${variant}`]).toBe(
+        `light-dark(${mark.light}, ${mark.dark})`,
+      );
+      const fill = fills[variant as keyof typeof fills];
+      expect(contrast(mark.light, fill.light)).toBeGreaterThanOrEqual(3);
+      expect(contrast(mark.dark, fill.dark)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it.each(['neutral', 'disabled'])(
+    'keeps a %s fill at 3:1 on the track: secondary text in light, stop 80 in dark',
+    variant => {
+      expect(
+        butterTheme.components?.['progress-bar-fill']?.[`variant:${variant}`],
+      ).toMatchObject({
+        backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[80]})`,
+      });
+      // Secondary text in light mode is stop 45.
+      expect(butterTheme.tokens['--color-text-secondary']).toBe(
+        `light-dark(${neutral.light[45]}, ${neutral.dark[70]})`,
+      );
+      expect(contrast(neutral.light[45], track.light)).toBeGreaterThanOrEqual(
+        3,
+      );
+      expect(contrast(neutral.dark[80], track.dark)).toBeGreaterThanOrEqual(3);
+    },
+  );
+});

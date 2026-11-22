@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'eye',
+  group: 'visibility',
   description: 'Show or preview something.',
   words: ['view', 'visible', 'preview'],
 };

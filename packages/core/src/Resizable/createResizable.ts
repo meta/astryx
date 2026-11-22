@@ -506,6 +506,10 @@ export function createResizableAs(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
+  // Storage keeps only a size that a person chose. The default's first
+  // resolution, a restored size and a press that moves nothing do not count.
+  let hasBeenResized = false;
+  let stateAtGestureStart: {size: number; isCollapsed: boolean} | null = null;
   let snapshot: ResizableSnapshot | null = null;
   const snapshotListeners = new Set<() => void>();
 
@@ -840,10 +844,19 @@ export function createResizableAs(
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
   }
 
-  /** Nothing is written while the basis stands in, nor while a gesture runs. */
+  /**
+   * Nothing is written while the basis stands in, nor while a gesture runs.
+   * Before the first resize, only a restored size that the bounds or snaps
+   * changed is written. Storage then keeps the size the region shows.
+   */
   function persist(): void {
     const key = opts.autoSaveId;
     if (key == null || key === '' || !derived.isBasisMeasured) {
+      return;
+    }
+    const isRestoredSizeChanged =
+      persisted?.size != null && persisted.size !== derived.size;
+    if (!hasBeenResized && !isRestoredSizeChanged) {
       return;
     }
     if (isGestureActive) {
@@ -926,6 +939,7 @@ export function createResizableAs(
     if (isDestroyed || !collapsible() || derived.isCollapsed) {
       return;
     }
+    hasBeenResized = true;
     setCollapsed(true);
     commit();
     opts.onCollapseChange?.(true);
@@ -937,6 +951,9 @@ export function createResizableAs(
       return;
     }
     const wasCollapsed = derived.isCollapsed;
+    if (wasCollapsed) {
+      hasBeenResized = true;
+    }
     setCollapsed(false);
     commit();
     if (wasCollapsed) {
@@ -962,6 +979,9 @@ export function createResizableAs(
     }
     const clamped = clampSize(next, derived.min, derived.max, snaps());
     const wasCollapsed = derived.isCollapsed;
+    if (wasCollapsed || clamped !== derived.size) {
+      hasBeenResized = true;
+    }
     chosenSize = clamped;
     setCollapsed(false);
     commit();
@@ -989,6 +1009,10 @@ export function createResizableAs(
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
+      stateAtGestureStart = {
+        size: derived.size,
+        isCollapsed: derived.isCollapsed,
+      };
       isCarryingToSnap = false;
       // Only a pointer catches a slide or a spring-back; a key steps.
       const isPointer = regionSlot?.isPointerDragging() === true;
@@ -1125,6 +1149,12 @@ export function createResizableAs(
     const motions = pane == null ? [] : slideMotionsOf(pane);
     for (const motion of motions) {
       motion.pause();
+      // A slide that has not drawn its first frame holds a start time ahead
+      // of the timeline, so its time reads negative. Caught there, it starts
+      // from its first frame.
+      if (Number(motion.currentTime) < 0) {
+        motion.currentTime = 0;
+      }
     }
     const elapsed = Number(motions[0]?.currentTime ?? 0);
     const share = slide.remaining(Number.isFinite(elapsed) ? elapsed : 0);
@@ -1315,9 +1345,11 @@ export function createResizableAs(
       return 0;
     }
     // The slide's own motion on the pane tells how far it has run. A held
-    // slide keeps its time, and a landed one reads past its end. Without the
-    // animation API, the time since the lift tells it.
-    const elapsed =
+    // slide keeps its time, and a landed one reads past its end. One that has
+    // not drawn its first frame reads a negative time, and shows its start.
+    // Without the animation API, the time since the lift tells it.
+    const elapsed = Math.max(
+      0,
       typeof element.getAnimations === 'function'
         ? Number(
             element
@@ -1329,7 +1361,8 @@ export function createResizableAs(
                   isScriptMotion(motion),
               )?.currentTime ?? Infinity,
           )
-        : view.performance.now() - closingSlide.startedAt;
+        : view.performance.now() - closingSlide.startedAt,
+    );
     const share = closingSlide.remaining(elapsed);
     if (!(share > 0)) {
       return 0;
@@ -1424,6 +1457,14 @@ export function createResizableAs(
     if (!isGestureActive) {
       return;
     }
+    if (
+      stateAtGestureStart != null &&
+      (stateAtGestureStart.size !== derived.size ||
+        stateAtGestureStart.isCollapsed !== derived.isCollapsed)
+    ) {
+      hasBeenResized = true;
+    }
+    stateAtGestureStart = null;
     gestureBasis = null;
     isGestureActive = false;
     mustWrite = true;

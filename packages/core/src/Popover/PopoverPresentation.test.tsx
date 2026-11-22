@@ -105,8 +105,10 @@ function Filters({
   hasLightDismiss,
   hasEscapeDismiss,
   hasCloseButton,
+  isModal,
 }: {
   presentation?: PopoverPresentation;
+  isModal?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
   hasLightDismiss?: boolean;
   hasEscapeDismiss?: boolean;
@@ -120,6 +122,7 @@ function Filters({
       hasLightDismiss={hasLightDismiss}
       hasEscapeDismiss={hasEscapeDismiss}
       hasCloseButton={hasCloseButton}
+      isModal={isModal}
       content={<button type="button">Apply</button>}>
       <Button label="Filter">Filter</Button>
     </Popover>
@@ -208,6 +211,18 @@ describe('Popover presentation', () => {
       expect(observed.length).toBeGreaterThan(0);
     });
   });
+
+  it.each([[true], [false]])(
+    'presents the modal sheet when isModal is %s',
+    async isModal => {
+      render(<Filters presentation="bottom-sheet" isModal={isModal} />);
+      await tapTrigger();
+      await vi.waitFor(() => {
+        expect(sheetDialog()).toHaveAttribute('open');
+      });
+      expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalled();
+    },
+  );
 
   it('reads the compact-touch query only for an adaptive popover', async () => {
     const {unmount} = render(<Filters />);
@@ -457,6 +472,24 @@ describe('Popover presentation', () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(apply()));
   });
 
+  it('a sheet trigger names the sheet in aria-controls only while it is open (AR6)', async () => {
+    isCompactTouch = true;
+    render(<Filters presentation="bottom-sheet" />);
+    expect(trigger()).not.toHaveAttribute('aria-controls');
+    await tapTrigger();
+    await vi.waitFor(() => expect(sheetDialog()).toHaveAttribute('open'));
+    expect(
+      sheetDialog()!.contains(
+        document.getElementById(trigger().getAttribute('aria-controls') ?? ''),
+      ),
+    ).toBe(true);
+    await tapTrigger();
+    await vi.waitFor(() =>
+      expect(trigger()).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(trigger()).not.toHaveAttribute('aria-controls');
+  });
+
   it('adaptive: a desktop keeps the anchored popover', async () => {
     render(<Filters presentation="adaptive" />);
     await tapTrigger();
@@ -566,8 +599,10 @@ describe('Popover presentation', () => {
     });
     // Never an alertdialog: the sheet always has a way out.
     expect(dialog).not.toHaveAttribute('role', 'alertdialog');
-    // The scrim is the dialog element itself.
+    // The scrim is the dialog element itself; the press starts and ends there.
     act(() => {
+      fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+      fireEvent.pointerUp(dialog, {pointerType: 'touch'});
       fireEvent.click(dialog);
     });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);

@@ -18,6 +18,7 @@ import {logger} from '../../../api/logger.mjs';
 import {AstryxError} from '../../../api/error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {failAfterOutput} from '../lib/cli-error.mjs';
 import {upgrade as upgradeApi} from '../../../api/upgrade/upgrade.mjs';
 import {doc as upgradeCommand} from './upgrade.doc.mjs';
 import {doc as upgradeFn} from '../../../api/upgrade/upgrade.doc.mjs';
@@ -110,7 +111,7 @@ export function registerUpgrade(program) {
               if (isList) logger.error(e.message);
               for (const s of e.suggestions ?? [])
                 logger.error(`  ${formatCliCommand(s.name)}  (${s.reason})`);
-              process.exitCode = 1;
+              failAfterOutput(e.code, e);
             }
             return NO_RESULT_SET;
           }
@@ -137,7 +138,7 @@ export function registerUpgrade(program) {
                 : undefined;
         if (registrySummary && !registrySummary.ok) process.exitCode = 1;
         if (result.type === 'upgrade.run' && result.data.complete === false) {
-          process.exitCode = 1;
+          failAfterOutput(result.data.errorCode);
         }
 
         // `--list` is the one lookup here: which migrations exist for the

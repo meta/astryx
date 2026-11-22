@@ -5,7 +5,7 @@
  * `../_schema.mjs`; consumers call `parseSchema` or use `parseDoc`.
  */
 
-import {SchemaDocKindSchema} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').SchemaDoc} SchemaDoc */
@@ -18,7 +18,7 @@ import {formatZodError} from '../../_shared/errors.mjs';
  * @returns {SchemaDoc}
  */
 export function parseSchema(input, label = 'schema doc') {
-  const result = SchemaDocKindSchema.safeParse(input);
+  const result = docSchemas().SchemaDocKindSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

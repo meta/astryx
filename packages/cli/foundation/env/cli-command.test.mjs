@@ -10,7 +10,7 @@ import {
   declaredCliCommand,
   declaredCliCommandsOf,
   hasRecordedProject,
-  recordDeclaredCliCommands,
+  recordDeclaredSettings,
   runWithCliDoor,
 } from './cli-command.mjs';
 
@@ -91,13 +91,11 @@ describe('chooseDeclaredCliCommand', () => {
   });
 });
 
-describe('recordDeclaredCliCommands', () => {
+describe('recordDeclaredSettings', () => {
   it('answers for the project and any folder inside it', () => {
     const dir = makeProject();
     expect(hasRecordedProject(dir)).toBe(false);
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
     expect(hasRecordedProject(dir)).toBe(true);
     expect(declaredCliCommand(dir).command).toBe('acme astryx');
     expect(declaredCliCommand(path.join(dir, 'src')).command).toBe(
@@ -107,10 +105,8 @@ describe('recordDeclaredCliCommands', () => {
 
   it('lets the latest load win', () => {
     const dir = makeProject();
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
-    recordDeclaredCliCommands(dir, []);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
+    recordDeclaredSettings(dir, []);
     expect(hasRecordedProject(dir)).toBe(true);
     expect(declaredCliCommand(dir).command).toBeUndefined();
   });
@@ -120,9 +116,7 @@ describe('recordDeclaredCliCommands', () => {
     const nested = path.join(dir, 'packages', 'web');
     fs.mkdirSync(nested, {recursive: true});
     fs.writeFileSync(path.join(nested, 'package.json'), '{"name":"web"}');
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
     expect(hasRecordedProject(nested)).toBe(false);
     expect(declaredCliCommand(nested).command).toBeUndefined();
   });

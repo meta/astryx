@@ -1431,8 +1431,10 @@ describe('final pass', () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 'sea'});
     await stoppedAdd('login', 'pending', 1);
     write(`${ROUTE}/.theme-preview.pending.json`, '{');
-    // The stopped change ran in this process; a killed one is gone, so its
-    // temp files name a process that no longer runs.
+    // A killed change is gone, so its temp files name a process that no
+    // longer runs. The id is above the largest process id Linux gives
+    // (2 ** 22): a fixed id below it, such as 999999, can belong to a live
+    // process on a busy machine, and then the temp files rightly stay.
     for (const f of /** @type {string[]} */ (
       fs.readdirSync(path.join(cwd, ROUTE), {recursive: true})
     ).filter(x => /\.astryx-\d+-[a-z0-9]+\.tmp$/.test(String(x))))
@@ -1441,7 +1443,7 @@ describe('final pass', () => {
         path.join(
           cwd,
           ROUTE,
-          String(f).replace(/astryx-\d+-/, 'astryx-999999-'),
+          String(f).replace(/astryx-\d+-/, `astryx-${2 ** 22 + 7}-`),
         ),
       );
     await themeEditPreviewAdd(undefined, {cwd, template: 'blank'});
@@ -2881,9 +2883,9 @@ describe('final pass 5', () => {
       // A look that changes nothing in the app comes first; adding the
       // preview to the app comes last, as an option.
       expect(before.data.see).toMatch(
-        /^look without changing your app: open or screenshot themes\/see\/preview\.html .*--png .*; to see it inside your app, astryx experimental theme preview add/,
+        /^look without changing your app: astryx experimental theme editor show see --png writes themes\/see\/preview\.png .*; or open themes\/see\/preview\.html .*; to see it inside your app, astryx experimental theme preview add/,
       );
-      expect(before.data.see).toContain('themes/see/sheet.html');
+      expect(before.data.see).toContain('themes/see/sheet-overlays.png');
       const r = await themeEditPreviewAdd(undefined, {
         cwd,
         theme: 'see',

@@ -7,6 +7,7 @@ import path from 'node:path';
 import process from 'node:process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import {workflowRunPullCandidates} from './workflow-run-pulls.mjs';
 
 const require = createRequire(import.meta.url);
 const ciImpact = require('./ci-impact.js');
@@ -531,40 +532,18 @@ export async function resolveWorkflowRunPullRequest({
   run,
 }) {
   const baseRepository = `${owner}/${repo}`;
-  let candidates;
-  const directNumbers = [
-    ...new Set(
-      (run?.pull_requests ?? [])
-        .map(pull => Number(pull?.number))
-        .filter(number => Number.isSafeInteger(number) && number > 0),
-    ),
-  ];
-
-  if (directNumbers.length > 0) {
-    candidates = await Promise.all(
-      directNumbers.map(async pullNumber => {
-        const {data} = await github.rest.pulls.get({
-          owner,
-          repo,
-          pull_number: pullNumber,
-        });
-        return data;
-      }),
-    );
-  } else {
-    const headOwner = nonempty(
+  const candidates = await workflowRunPullCandidates({
+    github,
+    owner,
+    repo,
+    run,
+  });
+  if (candidates == null) {
+    nonempty(
       run?.head_repository?.owner?.login,
       'source head repository owner',
     );
-    const headRef = nonempty(run?.head_branch, 'source head branch');
-    const {data} = await github.rest.pulls.list({
-      owner,
-      repo,
-      state: 'open',
-      head: `${headOwner}:${headRef}`,
-      per_page: 100,
-    });
-    candidates = data;
+    nonempty(run?.head_branch, 'source head branch');
   }
 
   const matches = [];

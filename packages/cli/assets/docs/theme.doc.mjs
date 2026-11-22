@@ -22,7 +22,7 @@ export const docs = {
     'accent color',
   ],
   description:
-    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral` (the first sections of this topic give the rest).',
+    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral`. The steps follow, then how to publish a theme so other teams can use it.',
 
   sections: [
     {
@@ -66,12 +66,32 @@ export const docs = {
       ],
     },
     {
+      id: 'values-a-part-shows',
+      title: 'The values a part shows',
+      content: [
+        {
+          type: 'prose',
+          text: "Before you change a part in a theme, see what it draws now (a card's padding, a button's corners and colors) with the CLI, not the package source: `astryx experimental theme editor show <theme> --on <part>` gives each value, per mode where the modes differ, with the token behind it and whether Core, the base theme or the theme itself sets it. It writes nothing.",
+        },
+      ],
+    },
+    {
       id: 'no-app-yet',
       title: 'No app yet',
       content: [
         {
           type: 'prose',
           text: '`astryx experimental theme preview app <dir>` makes a starter app that shows the theme. How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+        },
+      ],
+    },
+    {
+      id: 'share-with-other-teams',
+      title: 'Share a theme with other teams',
+      content: [
+        {
+          type: 'prose',
+          text: 'To publish a theme so other teams can use it, ship it in a package: the package holds the theme in its themes folder, builds it with `{@command theme build}`, and is published like any package. Another team installs the package and runs `{@command theme add <name> --package <package>}`. See {@link generic:add-a-theme}.',
         },
       ],
     },
