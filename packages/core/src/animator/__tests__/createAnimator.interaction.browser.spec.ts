@@ -9,7 +9,8 @@
  * @output Proof of the public animator in a real engine. `animate` plays the
  *   `springs.stateChange` curve on screen, seeked frame by frame. It rests on
  *   its target when its promise resolves. With `at` it starts at that time
- *   at once, and without it the browser starts it at its commit. `decay` coasts to the analytic rest
+ *   at once, also after a long task, and without it the browser starts it
+ *   at its commit. `decay` coasts to the analytic rest
  *   of the normal deceleration. `stop` holds the box where it is. Under
  *   Reduce Motion, a move cross-fades on a touch screen, and the box jumps
  *   only while transparent. With a mouse, it lands at once.
@@ -160,6 +161,45 @@ test('animate with `at` starts at that time at once; without it, the call waits 
   expect(result.atReady).toEqual({startTime: result.at, pending: false});
   expect(result.laterCall).toEqual({startTime: result.later, pending: false});
   expect(result.defaultCall).toEqual({startTime: null, pending: true});
+});
+
+test('animate with `at` in a task that blocks 200 ms: once the timeline passes the block, the motion is the block’s length into its curve, not at its FLIP offset', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async () => {
+    const element = document.getElementById('card') as HTMLElement;
+    // A FLIP in a long commit: the card shows at its old place, the call
+    // dates the motion at the time it measured, and the rest of its task
+    // runs 200 ms.
+    window.card.set({y: 40});
+    const at = document.timeline.currentTime as number;
+    void window.card.animate({y: 0}, {at});
+    const blockEnd = performance.now() + 200;
+    while (performance.now() < blockEnd) {
+      // The rest of the commit holds the main thread.
+    }
+    // Chromium's first frame after a block can still read a frame time from
+    // before it, so frames run until the timeline passes the block.
+    for (
+      let frames = 0;
+      frames < 10 && Number(document.timeline.currentTime) < blockEnd;
+      frames++
+    ) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    const animation = element.getAnimations().at(-1);
+    const [, y = '0'] = getComputedStyle(element).translate.split(' ');
+    return {
+      passed: Number(document.timeline.currentTime) >= blockEnd,
+      currentTime: Number(animation?.currentTime ?? 0),
+      y: Number.parseFloat(y),
+    };
+  });
+  expect(result.passed).toBe(true);
+  // The motion runs from `at`, so the block delays none of it.
+  expect(result.currentTime).toBeGreaterThanOrEqual(190);
+  expect(result.y).toBeLessThan(30);
 });
 
 test('decay coasts to the rest of the normal deceleration', async ({page}) => {
