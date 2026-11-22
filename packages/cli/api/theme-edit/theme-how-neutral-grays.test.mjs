@@ -153,6 +153,7 @@ describe('neutral grays', () => {
       needsBases(test);
       for (const q of [
         'untinted cards, 12px corners, bold headings, untinted grays',
+        'untinted cards, 12px corners, neutral grays',
         'red buttons, rounder cards, 6px corners! untinted grays',
       ]) {
         const results = await answer(q, 'plain');

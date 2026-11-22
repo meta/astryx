@@ -5771,7 +5771,7 @@ export function draftAnswer(ctx, env, question) {
    * @type {WeakSet<Step>}
    */
   const untintedSeeds = new WeakSet();
-  /** Whether the bare neutral-grays clause was answered. */
+  /** Whether the answered neutral-grays clause said "untinted" itself. */
   let untintedAnswered = false;
   const untintedAsk =
     !setsColors &&
@@ -29075,7 +29075,7 @@ export function draftAnswer(ctx, env, question) {
       !given &&
       isBareGraysClause(c.text)
     ) {
-      untintedAnswered = true;
+      untintedAnswered = /\buntinted\b/i.test(String(c.text));
       const SEED = '#777777';
       const chroma = chromaOf;
       const modes = modesOf(env.data);
