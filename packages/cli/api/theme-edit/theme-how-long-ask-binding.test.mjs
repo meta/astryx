@@ -768,6 +768,13 @@ const ROWS = [
     },
   ],
   [
+    'a phrase of any length after an undo is never written',
+    {
+      q: 'Make the headings bold. Undo the heading change and the text input border color change.',
+      never: /border|font-weight/,
+    },
+  ],
+  [
     '"too" after the change it names adds nothing',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the heading change and the card change too.',

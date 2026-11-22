@@ -5291,15 +5291,15 @@ export function draftAnswer(ctx, env, question) {
         return `${r} color ${typed ?? color}`;
       },
     )
+    // ("… and the card change too": "too" adds nothing to a "the …
+    // change" an undo names.)
+    .replace(/(\band the (?:[\w-]+\s+)+?changes?)\s+too\b/gi, '$1')
     // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with
     // status said, each hue is its status's color, green success, amber
     // or yellow or orange warning, red danger, blue info.
     // (Only the list's own items: it ends at the first item that is not a
     // status hue, "…, and 8px corners", "with a blue accent", and the rest
     // is read on; an accent is never a status.)
-    // ("… and the card change too": "too" adds nothing to the change it
-    // names.)
-    .replace(/\b(changes?)\s+too\b/gi, '$1')
     .replace(/\bstatus(?:es)?\s+colou?rs?\s*:?\s*([^.;]*)/gi, (m, list) => {
       const ROLE = /** @type {Record<string, string>} */ ({
         green: 'success',
@@ -12112,7 +12112,7 @@ export function draftAnswer(ctx, env, question) {
       UNDO_VERB.test(clauses[i - 1].text) &&
       !c.colors.length &&
       !c.lengths.length &&
-      /^\s*(?:and\s+)?(?:also\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\s*$/i.test(
+      /^\s*(?:and\s+)?(?:also\s+)?the\s+(?:[\w-]+\s+)+?changes?\s*$/i.test(
         c.text,
       )
     )
@@ -29961,11 +29961,12 @@ export function draftAnswer(ctx, env, question) {
       if (uc0) answeredByUndo.add(uc0);
       continue;
     }
-    // An undo that names more than one part ("Undo the card and heading
-    // changes"), or a look that more than one earlier change could be, is
-    // not read for sure: nothing is taken back, and the answer says so. A
-    // bare "size" or "weights" said alone is read below. ("Undo the card
-    // change and the heading change" is two undos, each read in turn.)
+    // An undo whose one phrase names more than one part ("the card and
+    // button corners change"), or a look that more than one earlier change
+    // could be, is not read for sure: nothing is taken back, and the answer
+    // says so. A bare "size" or "weights" said alone is read below. ("Undo
+    // the card change and the heading change" is two undos, each read in
+    // turn.)
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
     const lookOf = (/** @type {any} */ d) =>
