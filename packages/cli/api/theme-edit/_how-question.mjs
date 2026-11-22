@@ -3296,6 +3296,19 @@ function namedLists(q, partWords, isVariant) {
 
 /** A mark the clause split reads as no word, taken out of each clause. */
 const JOINED = '\u2060';
+/**
+ * The ask with each abbreviation's periods dropped, so its period never
+ * ends a sentence: a bracketed "(e.g. snow)" or "(i.e. …)" reads as
+ * "(eg snow)", "vs." as "vs". "etc." keeps its period
+ * unless a comma, a bracket or the end follows it, since it can end a
+ * sentence ("buttons blue etc. header navy").
+ * @param {string} text
+ */
+const dropAbbreviationDots = text =>
+  text
+    .replace(/\(\s*([ei])\.([ge])\.?,?(?=\s)/gi, '($1$2')
+    .replace(/\b(vs)\.(?=\s)/gi, '$1')
+    .replace(/\betc\.(?=\s*(?:[,)]|$))/gi, 'etc');
 
 /**
  * The word every match of a made lexicon pattern holds: the first word of
@@ -3503,6 +3516,16 @@ function markFillColorWith(q) {
  */
 function clausesOf(q, partWords, words = null) {
   q = markFillColorWith(q);
+  // A bracketed example right after a part name, "the header (eg the top
+  // bar)", is an aside: it changes neither the part nor what is set.
+  q = q.replace(/\s*\(\s*(?:eg|ie)\s+[^()]*\)/gi, (m, at, whole) => {
+    const before = String(whole).slice(0, at).trim().split(/\s+/).slice(-2);
+    return partWords.some(([re]) =>
+      [before.join(' '), before.at(-1) ?? ''].some(w => re.test(` ${w} `)),
+    )
+      ? ''
+      : m;
+  });
   // "except primary and ghost buttons", "except hover or disabled": one
   // except list, never an except and a new clause (unless an ask follows:
   // "… except cards and make buttons bigger").
@@ -4788,10 +4811,13 @@ export function draftAnswer(ctx, env, question) {
     urls.push(m);
     return `url(uu${urls.length - 1}uu)`;
   });
-  // (The words as asked, for the readers that hold the whole question;
-  // their case too, which carries tone: an emphatic "SO" in a lowercase
-  // line.)
+  // (The words as asked, for the readers that hold the whole question and
+  // the notes that quote it; their case too, which carries tone: an
+  // emphatic "SO" in a lowercase line.)
   const raw0 = String(question);
+  // An abbreviation's period never ends a sentence, before any reader
+  // reads the words.
+  question = dropAbbreviationDots(question);
   const asked0 = raw0.toLowerCase();
   /** Text with each file set aside put back as typed. @param {string} s */
   const withUrls = s =>
@@ -11206,7 +11232,9 @@ export function draftAnswer(ctx, env, question) {
       // repeats changes it. Where the ask's line breaks or marks end
       // sentences the splitter does not count, the sentence is the one
       // that holds the words a rewrite keeps.)
-      const sentences = asked0.split(/[;!?\n]|\.(?!\d)/).filter(x => x.trim());
+      const sentences = dropAbbreviationDots(asked0)
+        .split(/[;!?\n]|\.(?!\d)/)
+        .filter(x => x.trim());
       const breaksBefore = clauses
         .slice(0, clauses.indexOf(c) + 1)
         .filter(x => joinOf.get(x)?.sep === 'break').length;
@@ -33952,7 +33980,7 @@ export function draftAnswer(ctx, env, question) {
     // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
       .replace(/url\([^()]*\)/gi, ' ')
-      .split(/[,;\n]|\band\b|\bthen\b/i)
+      .split(/[,;\n]|(?<!\b(?:e\.g|i\.e|vs))\.(?=\s|$)|\band\b|\bthen\b/i)
       .map(seg => seg.trim())
       .filter(Boolean);
     for (const words of typedSegments) {
