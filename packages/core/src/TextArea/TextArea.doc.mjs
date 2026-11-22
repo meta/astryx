@@ -31,7 +31,7 @@ const anatomy = [
     name: 'Start icon',
     required: false,
     description:
-      'Astryx Icon rendered at the start when startIcon is a semantic name or icon component.',
+      'Astryx Icon rendered at the start when startIcon is a built-in meaning or icon component.',
   },
   {
     name: 'Custom start content',
@@ -216,7 +216,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon rendered inside the leading edge of the textarea wrapper; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon rendered inside the leading edge of the textarea wrapper; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'hasSpellCheck',
@@ -535,7 +535,7 @@ export const docsZh = {
     {
       name: 'startIcon',
       type: 'ReactNode | IconType',
-      description: '在文本域包装器前端内部渲染的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+      description: '在文本域包装器前端内部渲染的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'hasSpellCheck',
@@ -802,7 +802,7 @@ export const docsDense = {
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'Tooltip in info icon at label end.',
-    startIcon: 'Icon inside leading edge of textarea wrapper; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    startIcon: 'Icon inside leading edge of textarea wrapper; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     hasSpellCheck: 'Enables/disables browser spell checking.',
     hasAutoFocus: 'Auto-focus textarea on mount.',
     size: 'Textarea size; affects internal padding. Height controlled by rows.',

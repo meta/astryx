@@ -252,7 +252,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 48 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -340,7 +340,7 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 48 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -754,6 +754,8 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 6
     permissions:
+      # checks: read lets the review read when the head was pushed.
+      checks: read
       contents: read
       pull-requests: read
       statuses: read
@@ -1821,12 +1823,13 @@ jobs:
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
-      # A Lab-only change may carry a Lab component's CLI discovery entry; the
-      # committed list must match its generator (spec:AST-030 FR26).
+      # A Lab-only change can change the CLI's official package list, which the
+      # CLI derives when it is packed: the list must still build from the
+      # repository (spec:AST-030 FR26).
       - name: 'Lab-only: CLI official-packages check'
         if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
         # One Node-project test file: Vitest finds its project from the path.
-        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
+        run: pnpm exec vitest run packages/cli/scripts/generate-official-packages.test.mjs --maxWorkers=1
 
   # The Node project's browser contracts run in a job of their own, beside the
   # Node legs: theme-family compilation (owned by `theme-build`, not Build,
@@ -3948,13 +3951,16 @@ jobs:
     # A status check: heavy-ci, which skips on every run but an agent push,
     # is an ancestor (spec:AST-030 FR20); its skip must not skip this job.
     if: (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check') && !cancelled() && needs.admission.result == 'success' && needs.build-storybook.result == 'success'
-    # Six legs: at three, the slowest leg took ~20 minutes, held by its longest
+    # Seven legs: at three, the slowest leg took ~20 minutes, held by its longest
     # spec file; files longer than a leg's share are now cut across legs
-    # (spec:AST-030 FR23).
+    # (spec:AST-030 FR23). One leg is the isolated Table virtualization spec;
+    # the other six plan at about 8 minutes of tests each, leaving room under
+    # the 15-minute job for setup and a slow runner.
+    # a11y-contract-shard.yml splits the same number of ways.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     # One core per worker: on two cores, four workers starved the CPU-bound
     # "every expectation" specs past their timeouts.
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -4685,6 +4691,20 @@ jobs:
         with:
           name: interaction-evidence-${{ matrix.leg }}
           path: test-results/interaction-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # A proof that keeps its failure output (BottomSheetDragRestyle: its
+      # Playwright trace and screenshot) uploads it here. Its rendering
+      # events go with the interaction evidence above.
+      - name: Upload failure traces
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-failure-traces-${{ matrix.leg }}-${{ github.run_attempt }}
+          path: |
+            interaction-proof-output/**/trace.zip
+            interaction-proof-output/**/test-failed-*.png
           if-no-files-found: ignore
           retention-days: 7
 

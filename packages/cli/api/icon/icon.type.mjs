@@ -88,7 +88,7 @@
  * @property {number} data.matchCount - Every match, before `limit`.
  * @property {IconMatchEntry[]} data.matches - The ranked matches, at most `limit`.
  * @property {string} [data.reason] - Present when no icon set is installed: why nothing matches.
- * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, at most `limit`.
+ * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, with the built-in that draws in place of a matching definition Core does not draw (`help` brings `info`) unless a match ranked above it has none, at most `limit`.
  * @property {string} [data.next] - Present when no icon set is installed: how to get one.
  */
 
@@ -447,6 +447,7 @@
  *   are the ranker's input, not a contract: they may change in any release,
  *   which is why `version` must match.
  * @property {Array<{name: string, package: string, reason: string}>} withdrawn - The sets read but withdrawn, and why, so a `set` that names one gives the same error as `icon()`.
+ * @property {string[]} [components] - The names of the folder's Core components, so a query's words that name one say where the icon goes, as with `icon()`.
  */
 
 export {};

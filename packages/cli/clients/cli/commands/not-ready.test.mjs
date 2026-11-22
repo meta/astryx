@@ -122,6 +122,7 @@ const NO_TEMPLATE_RESULTS = new Set([
   'themeEdit.new',
   'themeEdit.set',
   'themeEdit.show',
+  'themeEdit.showPart',
   'themeEdit.undo',
   'theme.eject',
   'theme.list',

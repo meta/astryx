@@ -103,13 +103,11 @@ export const doc = {
 
     {
       value: 'docs.skills',
-      description:
-        'Each skill here: {name, description, package}[].',
+      description: 'Each skill here: {name, description, package}[].',
     },
     {
       value: 'docs.skill',
-      description:
-        'One skill: {name, description, text}.',
+      description: 'One skill: {name, description, text}.',
     },
 
     // blog (read from the published RSS feed)
@@ -134,13 +132,19 @@ export const doc = {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
-        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), how many misses the changes to the theme leave (`missed`), on how many parts (`missedParts`; a part can miss two ways, its border and its shadow) and which (`missedOn`), all left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), the problems it moved but left failing (`leftProblems`, each with what it was and its fix, left out when none), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), the open fonts it names that do not load until installed (`fontNotLoaded`, each `family` with the line that installs it, left out when none), how many misses the changes to the theme leave (`missed`), on how many parts (`missedParts`; a part can miss two ways, its border and its shadow) and which (`missedOn`), and how many of them this change brought (`missedNew`; the text says the missed line only then), all left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
         'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `openProblems` (every contrast problem the theme has now, each with the command that fixes it; the text shows the first eight and counts the rest), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), `missed` (the parts the changes the theme makes did not reach, most flagged first, each with why and the line that reaches it), `unreached` (the parts with a fill of their own the theme leaves on the base look, most visible first: no setting on them and their fill or text color as the base gives it), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures` with the two to open (`look`, left out when none was taken), and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.showPart',
+      stability: 'experimental',
+      description:
+        'What one part of a theme shows (`show <theme> --on <part>`, which writes nothing): the `theme`, its `kind` (editor, local, package or bundled), the `part`, and `values`: each CSS `property` at rest and per variant (`when`, `state`, as `set` takes them; `notSettable`, with why, for a condition no flag reaches), its final `value` (per mode when the modes differ), the `expression` that gives it (per mode when a rule sets one mode), the `tokens` it reads, and who decides it (`source`: core, base or theme; which setting gives it is not shown yet). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
