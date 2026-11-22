@@ -62,11 +62,6 @@
       "tracking": "firefox-hover-placement-anchor"
     },
     {
-      "file": "packages/core/src/HoverCard/__tests__/HoverCardSecondDocument.a11y.chromium.spec.ts",
-      "title": "Escape pressed in a Picture-in-Picture window closes the card there, and focus returns to its trigger",
-      "tracking": "firefox-hover-specs-other-3"
-    },
-    {
       "file": "packages/core/src/Tooltip/__tests__/TooltipTallContent.a11y.browser.spec.ts",
       "title": "phone: with no room beside, it opens above when above has more room",
       "tracking": "firefox-hover-placement-anchor"
