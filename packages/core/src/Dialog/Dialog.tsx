@@ -101,7 +101,11 @@ import {
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {isHTMLElement} from '../utils/nodeType';
-import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
+import {
+  reducesMotion,
+  themeReducesMotion,
+  watchReduceMotionSetting,
+} from '../privateAttributes/reducedMotion.stylex';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 
@@ -111,7 +115,6 @@ declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 /**
  * Calculate a directional translate offset for dialog entry animation.
  * Returns a normalized vector from the trigger element toward the viewport
@@ -766,15 +769,18 @@ export function Dialog({
         dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
       }
     };
-    const view = dialog.ownerDocument.defaultView;
-    if (!matchesMediaQuery(view, REDUCED_MOTION_QUERY)) {
+    if (!reducesMotion(dialog)) {
       aimAtOpener();
       return;
     }
-    // Under reduced motion the entrance does not travel. When the preference
-    // ends while the dialog is open, the entrance replays and travels.
-    return watchMediaQuery(view, REDUCED_MOTION_QUERY, reducesMotion => {
-      if (!reducesMotion) {
+    // Under reduced motion, from the setting or a theme, the entrance does
+    // not travel. If the setting ends while the dialog is open and no theme's
+    // mark holds, the entrance replays and travels. A theme's mark is not watched.
+    if (themeReducesMotion(dialog)) {
+      return;
+    }
+    return watchReduceMotionSetting(dialog.ownerDocument.defaultView, isOn => {
+      if (!isOn && !themeReducesMotion(dialog)) {
         aimAtOpener();
       }
     });
