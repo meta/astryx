@@ -922,7 +922,9 @@ is the theme's own wash color at that strength. Neither takes `none`. A wash sho
 only where it differs from the fill under it: a white wash on a white fill,
 or a black one on a black fill, shows nothing. The looks Core paints with the same token at
 rest keep the theme's wash before the dial, an exact wash the theme saves
-included: an open menu's trigger, a toggle that is on. A highlighted option
+included, on the parts a theme can style: an open menu's trigger, a toggle
+button that is on. A list row's reorder handle in reorder mode follows the
+press dial. A highlighted option
 and a menu row's focus follow the pointer, so they follow the dial. A part whose pressed
 or hover background the theme sets keeps the theme's wash in the mode it is
 set for, and a part that saves the wash itself keeps its own. Parts that tint
