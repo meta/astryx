@@ -628,6 +628,23 @@ const ROWS = [
     },
   ],
   [
+    'an undo of a family and its own look keeps the member change written',
+    {
+      q: 'Make the text inputs rounder. Undo the input change and the input corners change.',
+      has: ['corners more --on text-input --only'],
+      says: /names more than one change/,
+      saysNot: /no inputs change was said earlier/,
+    },
+  ],
+  [
+    'an undo phrase that clashes with an earlier change reads as before',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Undo the heading change and the card corners change.',
+      says: /contradict each other/,
+      saysNot: /no card change was said earlier/,
+    },
+  ],
+  [
     'a step another clause also writes stays after the undo phrase',
     {
       q: 'Make the cards blue. Undo the card change and the heading weight change. Make the headings bold.',

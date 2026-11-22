@@ -29504,8 +29504,14 @@ export function draftAnswer(ctx, env, question) {
     const next = clauses[undoAt + 1];
     // (A phrase naming another part's change, "and the card corners
     // change", is part of the undo too: never a new change.)
+    // (A phrase whose change clashes with an earlier one, offered as one
+    // side of a pick, reads as before.)
+    const clashed = result.some(d =>
+      String(d.text).includes('which contradict each other'),
+    );
     const alsoNamed =
       next &&
+      !clashed &&
       !next.colors?.length &&
       /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\W*$/i.test(
         String(next.text ?? ''),
@@ -29712,7 +29718,7 @@ export function draftAnswer(ctx, env, question) {
                   !d.unmet &&
                   c &&
                   clauses.indexOf(c) < undoAt &&
-                  c.parts?.some((/** @type {{on: string}} */ p) => p.on === on)
+                  onIt(c, on)
                 );
               }),
           )
