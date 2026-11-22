@@ -5548,8 +5548,8 @@ export function draftAnswer(ctx, env, question) {
   };
   /**
    * The plain gray seed the bare neutral-grays clause writes: in a sequence
-   * it runs with the whole-theme asks at the start (a dial applies before
-   * every exact setting, whatever the order, so nothing it meets changes).
+   * it joins the first one when that has room (a dial applies before every
+   * exact setting, whatever the order, so nothing it meets changes).
    * @type {WeakSet<Step>}
    */
   const untintedSeeds = new WeakSet();
