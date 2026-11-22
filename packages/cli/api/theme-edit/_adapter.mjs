@@ -1010,8 +1010,9 @@ export function editorThemesAt(cwd) {
  * keep as designed, each with its theme, read by the editor's own reader,
  * whether it still covers a problem, and the ratio its place is drawn at
  * now when it does not: a record whose colors changed since covers
- * nothing (the place is a problem again, or passes). None when the folder
- * is in no app or a theme cannot be read.
+ * nothing (the place is a problem again, or passes). Where the components
+ * cannot be drawn, each record is listed as kept. None when the folder is
+ * in no app or a theme cannot be read.
  * @param {string} cwd
  * @returns {Promise<Array<{slug: string, part: string, ground: string, when?: string, mode: string, ratio: number, reason: string, inEffect: boolean, ratioNow: number | null}>>}
  */
@@ -1026,6 +1027,13 @@ export async function editorKeptContrastAt(cwd) {
         const kept = acceptedContrast(data);
         if (!kept.length) continue;
         const ctx = await context(root);
+        // (Where the components cannot be drawn nothing is measured: each
+        // record is listed as kept, never as lapsed.)
+        if (ctx.unchecked) {
+          for (const a of kept)
+            out.push({slug, ...a, inEffect: true, ratioNow: null});
+          continue;
+        }
         const res = await resolvedTokens(ctx, slug);
         const now = withAccepted(
           data,
