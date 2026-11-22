@@ -218,7 +218,14 @@ describe('layer focus return', () => {
       inside.addEventListener('focusout', () => restoreLayerFocus(record), {
         once: true,
       });
+      // jsdom finishes the move even after the close focuses the opener, so
+      // the case counts the opener's focus instead of reading where it ends.
+      let openerFocused = 0;
+      opener.addEventListener('focus', () => {
+        openerFocused += 1;
+      });
       elsewhere.focus();
+      expect(openerFocused).toBe(0);
       expect(elsewhere).toHaveFocus();
       expect(record.isDone).toBe(true);
     } finally {
@@ -242,7 +249,12 @@ describe('layer focus return', () => {
       inside.addEventListener('blur', () => restoreLayerFocus(record), {
         once: true,
       });
+      let openerFocused = 0;
+      opener.addEventListener('focus', () => {
+        openerFocused += 1;
+      });
       elsewhere.focus();
+      expect(openerFocused).toBe(0);
       expect(elsewhere).toHaveFocus();
     } finally {
       opener.remove();
