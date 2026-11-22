@@ -1200,13 +1200,27 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
             (p.parts ?? []).includes('segmented-control-item'),
         ),
       ).toBe(true);
-      // A dark bar's own track (its --color-neutral) under a filter in it:
-      // the repair gives the filter the theme's own track back.
+      // A dark bar's own see-through track tint is the bar showing
+      // through: not a fill of the filter's own, so no bar-fill.
+      const sheer = await check(
+        themeFile('sheertrack', READABLE, {
+          'app-shell-header': {
+            base: {
+              '--color-text-primary': '#ffffff',
+              '--color-neutral': '#ffffff2e',
+              backgroundColor: '#1e3a8a',
+            },
+          },
+        }),
+      );
+      expect(sheer.problems.some(p => p.kind === 'bar-fill')).toBe(false);
+      // An opaque light track the bar sets under its white text: the
+      // repair gives the filter the theme's own track back.
       const track = themeFile('track', READABLE, {
         'app-shell-header': {
           base: {
             '--color-text-primary': '#ffffff',
-            '--color-neutral': '#ffffff2e',
+            '--color-neutral': '#f0f0f0',
             backgroundColor: '#1e3a8a',
           },
         },
@@ -1218,7 +1232,7 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
       expect(fixed.problems.some(p => p.kind === 'bar-fill')).toBe(false);
       // The bar's track is named as a fill, with the value the bar sets.
       const line = fixed.fixed.find(f => f.token === '--color-neutral');
-      expect(line?.from).toBe('#ffffff2e');
+      expect(line?.from).toBe('#f0f0f0');
       expect(line?.why).toMatch(/the theme's own --color-neutral on them/);
     },
     T,
@@ -1446,6 +1460,9 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
             backgroundColor: '#002244',
             '--color-text-primary': '#ffffff',
             '--color-text-secondary': '#ffffff',
+            // The bar's own track tint, as create writes it: see-through
+            // over the bar, never a fill of the parts' own.
+            '--color-neutral': 'light-dark(#0000005d, #ffffff1a)',
           },
         },
       });

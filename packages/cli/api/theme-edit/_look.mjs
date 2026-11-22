@@ -757,7 +757,12 @@ function barTextProblems(look) {
             ) != null
           )
             continue;
-          const fill = shown(colorIn(value, res[m], m), bar);
+          // A fill that is see-through over the bar (its track tint) is the
+          // bar showing through: never a fill of the part's own. Its text
+          // is measured on the bar by the bar-ground measure.
+          const tint = colorIn(value, res[m], m);
+          if (tint == null || alphaOf(tint) < 1) continue;
+          const fill = shown(tint, bar);
           const tok = p.fg.tokens[0];
           const text =
             partValue(components, p.fg.target, ['color'], m, block) ??
