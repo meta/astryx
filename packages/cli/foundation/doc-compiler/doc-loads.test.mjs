@@ -85,12 +85,12 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a family build drops the modules it loaded from require.cache when it ends",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a base theme package a theme imports whole, to name the themes it exports by name; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
       '.import() ×2',
       'createJiti ×7',
-      'import(<computed>) ×2',
+      'import(<computed>) ×3',
       'require(<computed>)',
       'require.cache',
       'withEmptyStylesheets ×6',
@@ -404,6 +404,10 @@ const RUNNERS = {
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
+  },
+  'foundation/discovery/official-list.mjs': {
+    runs: "the CLI's own official-list generator, in a checkout with no packed list, to derive the list from the repository",
+    sites: ['child_process.execFileSync'],
   },
   'foundation/discovery/copied-passages.mjs': {
     runs: "the CLI's own guides and the package's topics, to compare their prose for passages two topics repeat",

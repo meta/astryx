@@ -9,7 +9,8 @@
 
 import {describe, it, expect, beforeAll, vi} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
-import {ProgressBar} from './ProgressBar';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import {ProgressBar, type ProgressBarVariant} from './ProgressBar';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -54,6 +55,19 @@ describe('ProgressBar', () => {
     expect(screen.getByText('75%')).toBeInTheDocument();
   });
 
+  it('writes the default value text as the provider locale writes a percentage', () => {
+    render(
+      <InternationalizationProvider locale="tr">
+        <ProgressBar value={45} label="Upload" hasValueLabel />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('%45')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      '%45',
+    );
+  });
+
   it('uses custom formatValueLabel', () => {
     render(
       <ProgressBar
@@ -89,8 +103,47 @@ describe('ProgressBar', () => {
 
   it('forwards ref to outer container', () => {
     const ref = {current: null as HTMLDivElement | null};
-    render(<ProgressBar ref={ref} value={50} label="Test" />);
+    const {container} = render(
+      <ProgressBar ref={ref} value={50} label="Test" />,
+    );
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
+    expect(ref.current).toBe(container.firstElementChild);
+  });
+
+  it('puts className, style, and DOM props on the root beside its own classes', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <ProgressBar
+        value={50}
+        label="Test"
+        className="caller-class"
+        style={{marginBlockStart: '12px'}}
+        id="upload-progress"
+        onClick={onClick}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass('astryx-progress-bar', 'caller-class');
+    expect(root.style.marginBlockStart).toBe('12px');
+    expect(root).toHaveAttribute('id', 'upload-progress');
+    root.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps its reflected variant when a caller passes its own data-variant', () => {
+    const {container} = render(
+      <ProgressBar
+        value={40}
+        label="Upload"
+        variant="success"
+        data-variant="error"
+        data-section="uploads"
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass('astryx-progress-bar');
+    expect(root).toHaveAttribute('data-variant', 'success');
+    expect(root).toHaveAttribute('data-section', 'uploads');
   });
 
   it('passes data-testid', () => {
@@ -117,7 +170,9 @@ describe('ProgressBar', () => {
 
   it('renders at fixed 8px track height', () => {
     render(<ProgressBar value={50} label="Progress" />);
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(getComputedStyle(screen.getByRole('progressbar')).height).toBe(
+      '8px',
+    );
   });
 
   it('shows value label with hidden label', () => {
@@ -274,8 +329,24 @@ describe('ProgressBar', () => {
       // reading flow (inline-start → inline-end, i.e. right → left).
       expect(css).toMatch(/translateX\(100%\)/);
       expect(css).toMatch(/translateX\(-250%\)/);
-      // The animation-name is swapped specifically under `[dir="rtl"]`.
-      expect(css).toMatch(/:is\(\[dir="rtl"\][^)]*\)[^{]*\{\s*animation-name:/);
+      // The RTL keyframe follows the bar's own direction (`:dir(rtl)`), so a
+      // bar in a left-to-right region of a right-to-left page slides with its
+      // label.
+      const rtlKeyframe =
+        /@keyframes ([\w-]+) \{\s*0% \{ transform: translateX\(100%\); \}\s*100% \{ transform: translateX\(-250%\); \}/.exec(
+          css,
+        )?.[1];
+      expect(rtlKeyframe).toBeDefined();
+      const selectors = [
+        ...css.matchAll(/([^{}]+)\{\s*animation-name: ([\w-]+);/g),
+      ]
+        .filter(match => match[2].toLowerCase() === rtlKeyframe?.toLowerCase())
+        .map(match => match[1]);
+      expect(selectors.length).toBeGreaterThan(0);
+      for (const selector of selectors) {
+        expect(selector).toContain(':dir(rtl)');
+        expect(selector).not.toContain('[dir="rtl"]');
+      }
     });
   });
 
@@ -896,6 +967,11 @@ describe('ProgressBar', () => {
         .join('\n');
       // Centered so any themed overhang stays symmetric.
       expect(css).toMatch(/translate\(-50%,\s*-50%\)/);
+      // The centering mirrors with the bar's own direction, not any
+      // right-to-left ancestor.
+      expect(css).toMatch(
+        /:dir\(rtl\)[^{]*\{\s*transform:\s*translate\(50%,\s*-50%\)/,
+      );
       expect(container.querySelectorAll(MARK)).toHaveLength(1);
     });
   });
@@ -1400,6 +1476,27 @@ describe('ProgressBar fill colors', () => {
     [{isDisabled: true} as const, '--color-text-secondary'],
   ])('fills %o with %s', (props, token) => {
     expect(fillColor(props)).toContain(token);
+  });
+
+  it('fills a theme-added variant with the default accent fill until a theme styles it', () => {
+    const added = 'brand' as unknown as ProgressBarVariant;
+    expect(fillColor({variant: added})).toContain('--color-accent');
+  });
+
+  it('gives a mark on a theme-added variant fill the default on-accent color', () => {
+    render(
+      <ProgressBar
+        value={60}
+        label="Progress"
+        variant={'brand' as unknown as ProgressBarVariant}
+        marks={[{value: 20, label: 'Start'}]}
+      />,
+    );
+    const mark = screen.getByRole('img', {name: 'Start'});
+    expect(mark).toHaveAttribute('data-placement', 'fill');
+    expect(getComputedStyle(mark).backgroundColor).toContain(
+      '--color-on-accent',
+    );
   });
 });
 

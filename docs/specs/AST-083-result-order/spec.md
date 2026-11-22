@@ -55,7 +55,10 @@ owns response fields and compatibility.
   `matchCount` equals its match count. Search never returns more results than
   the lexical ranker does for the same query and limit. In search's reading of
   the catalog, another entry's name is that entry's evidence: a component a
-  block uses never answers a query word for the block alone, and a title inside
+  block uses never answers a query word for the block alone, an entry that is not a doc
+  takes the every-word tier only with two strong query words, each a
+  keyword-strength hit or a word of its own name, display name or title, or the
+  start of one (a doc, which answers in prose, needs one), and a title inside
   the query reaches its tier only when no query word it leaves unanswered names
   a component or hook and no doc. In that reading, a doc that opens a level (a
   docs-tree namespace) does not answer a query word through its text (its prose,
@@ -76,7 +79,7 @@ owns response fields and compatibility.
   part's name that does not start a word of the root's name, and the query
   does not write the part's name of two or more words as one word, as is or
   misspelled (a typed word that is the root's own name, or its plural, is no
-  misspelling). A root leads its part from another run only when its own hits
+  misspelling), or spell it out as FR3's spelled-out-name lead reads it. A root leads its part from another run only when its own hits
   on the words the part answers have keyword strength (the whole name, the name's head word, or a keyword, also one edit away), not a word inside its name or a mention in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its hits are weaker; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
@@ -90,7 +93,12 @@ owns response fields and compatibility.
   `table-sortable-table`) leads the lexical answer, and the order inside runs
   keeps it first. It does not lead when a longer named run of the query
   contains that word, or when a block's display name or a doc's title or
-  heading that the query holds contains it.
+  heading that the query holds contains it. An entry whose name of three or
+  more words the query spells out as words apart, every word in order and at
+  most one word misspelled with its first letter kept, as the lexical ranker
+  reads a misspelled name, leads its band, also ahead of its family's root, unless a longer name the query
+  names contains it or another entry's display name or title the query holds
+  contains it.
 - **FR4 — build orders the block catalog for its block slots.**
   `spec:AST-048` owns which blocks build lists and delegates their order here.
   Build's `blocks` hold as many blocks as build itself lists, each once, each

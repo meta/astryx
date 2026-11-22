@@ -4147,6 +4147,248 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
   });
 });
 
+describe('PowerSearch step changes move focus and speak from the handler (architecture:react-component-runtime INV2, INV3)', () => {
+  // The controls focus lands on while `run` acts: a sheet panel or a dialog
+  // that the stack focuses on the way is not a control a person hears.
+  function focusedControls(run: () => void): HTMLElement[] {
+    const landed: HTMLElement[] = [];
+    const record = (event: FocusEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        target instanceof HTMLDialogElement ||
+        target.getAttribute('tabindex') === '-1'
+      ) {
+        return;
+      }
+      landed.push(target);
+    };
+    document.addEventListener('focusin', record);
+    try {
+      run();
+    } finally {
+      document.removeEventListener('focusin', record);
+    }
+    return landed;
+  }
+
+  // Every text the dialog's own live region receives while it is observed.
+  function observeAnnouncements(dialog: Element): {
+    texts: string[];
+    stop: () => void;
+  } {
+    // The region mounts with the dialog's first message, so the dialog is
+    // what is observed.
+    const texts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text = modalLiveRegion(dialog)?.textContent ?? '';
+      if (text !== '' && texts[texts.length - 1] !== text) {
+        texts.push(text);
+      }
+    });
+    observer.observe(dialog, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return {texts, stop: () => observer.disconnect()};
+  }
+
+  it('moves focus once, to the row, when a keyboard Cancel returns from the value step', async () => {
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <PowerSearch
+          config={config}
+          filters={[openFilter]}
+          onChange={vi.fn()}
+          presentation="bottom-sheet"
+        />
+      </StrictMode>,
+    );
+    openEditFlow('Status is Open');
+    const cancel = within(sheet()).getByRole('button', {name: 'Cancel'});
+    cancel.focus();
+    const landed: HTMLElement[] = [];
+    const record = (event: FocusEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        !(target instanceof HTMLDialogElement) &&
+        target.getAttribute('tabindex') !== '-1'
+      ) {
+        landed.push(target);
+      }
+    };
+    document.addEventListener('focusin', record);
+    try {
+      await user.keyboard('{Enter}');
+      settleSheets();
+    } finally {
+      document.removeEventListener('focusin', record);
+    }
+    const row = within(sheet()).getByRole('button', {name: 'Status is Open'});
+    expect(row).toHaveFocus();
+    expect(landed).toEqual([row]);
+  });
+
+  it('moves focus inside the action that changes the step, before any later work', () => {
+    render(
+      <PowerSearch
+        config={config}
+        filters={[openFilter]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+      />,
+    );
+    openEditFlow('Status is Open');
+    const cancel = within(sheet()).getByRole('button', {name: 'Cancel'});
+    // A listener on the document runs after the component's own handler,
+    // in the same dispatch, before React runs any Effect the update queued.
+    let focusedDuringAction: Element | null = null;
+    const readFocus = () => {
+      focusedDuringAction = document.activeElement;
+    };
+    document.addEventListener('click', readFocus);
+    try {
+      fireEvent.click(cancel);
+    } finally {
+      document.removeEventListener('click', readFocus);
+    }
+    const row = within(sheet()).getByRole('button', {name: 'Status is Open'});
+    expect(focusedDuringAction).toBe(row);
+    expect(row).toHaveFocus();
+  });
+
+  it('returns focus to the trigger when the field becomes disabled after a canceled creation from the entry Add filter', () => {
+    const {rerender} = setup({filters: []});
+    openSheet();
+    // Add filter opens directly: the field has no filters to manage.
+    tapRow('Author');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+    // Cancel returned to Add filter and named the Author row.
+    expect(within(sheet()).getByRole('button', {name: 'Author'})).toHaveFocus();
+    rerender(
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={vi.fn()}
+        presentation="bottom-sheet"
+        isDisabled
+      />,
+    );
+    settleSheets();
+    expect(isSheetOpen()).toBe(false);
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('moves focus once to a one-tap filter added from the keyboard, and speaks the addition once', async () => {
+    const spy = mockModalDialogs();
+    try {
+      const user = userEvent.setup();
+      function Harness() {
+        const [filters, setFilters] = useState<
+          ReadonlyArray<PowerSearchFilter>
+        >([openFilter]);
+        return (
+          <PowerSearch
+            config={config}
+            filters={filters}
+            onChange={setFilters}
+            presentation="bottom-sheet"
+          />
+        );
+      }
+      render(<Harness />);
+      openAddFlow();
+      const filtersDialog = document.querySelector<HTMLElement>(
+        'dialog[aria-label="Filters"]',
+      )!;
+      const announcements = observeAnnouncements(filtersDialog);
+      within(sheet()).getByRole('button', {name: 'Unassigned'}).focus();
+      const landed: HTMLElement[] = [];
+      const record = (event: FocusEvent) => {
+        const target = event.target as HTMLElement;
+        if (
+          !(target instanceof HTMLDialogElement) &&
+          target.getAttribute('tabindex') !== '-1'
+        ) {
+          landed.push(target);
+        }
+      };
+      document.addEventListener('focusin', record);
+      try {
+        await user.keyboard('{Enter}');
+        settleSheets();
+      } finally {
+        document.removeEventListener('focusin', record);
+      }
+      const added = within(filtersDialog).getByRole('button', {
+        name: 'Unassigned is true',
+      });
+      expect(added).toHaveFocus();
+      expect(landed).toEqual([added]);
+      await waitFor(() =>
+        expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
+          'Added Unassigned is true',
+        ),
+      );
+      announcements.stop();
+      expect(
+        announcements.texts.filter(text => text.includes('Added')),
+      ).toEqual(['Added Unassigned is true']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('moves no focus and speaks nothing again on a re-render that changes no step', async () => {
+    const spy = mockModalDialogs();
+    try {
+      function Harness({placeholder}: {placeholder: string}) {
+        const [filters, setFilters] = useState<
+          ReadonlyArray<PowerSearchFilter>
+        >([openFilter]);
+        return (
+          <PowerSearch
+            config={config}
+            filters={filters}
+            onChange={setFilters}
+            placeholder={placeholder}
+            presentation="bottom-sheet"
+          />
+        );
+      }
+      const {rerender} = render(<Harness placeholder="Filter" />);
+      openAddFlow();
+      tapRow('Unassigned');
+      settleSheets();
+      const filtersDialog = sheet();
+      await waitFor(() =>
+        expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
+          'Added Unassigned is true',
+        ),
+      );
+      const addButton = within(filtersDialog).getAllByRole('button', {
+        name: 'Add filter',
+      })[0];
+      addButton.focus();
+      const announcements = observeAnnouncements(filtersDialog);
+      const landed = focusedControls(() => {
+        rerender(<Harness placeholder="Filter issues" />);
+        rerender(<Harness placeholder="Filter" />);
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      announcements.stop();
+      expect(landed).toEqual([]);
+      expect(addButton).toHaveFocus();
+      expect(announcements.texts).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe('PowerSearch content search (FR13)', () => {
   it('opens empty content-search configurations directly to Add filter without focusing the search (FR13)', () => {
     setup({config: contentSearchConfig, placeholder: 'Search content…'});
@@ -5107,8 +5349,8 @@ describe('PowerSearch sheet value text', () => {
         );
       }
       render(<Harness />);
-      // The trigger shows the popover token as it is: the stored key.
-      expect(within(field()).getByText('3d_ago')).toBeTruthy();
+      // The trigger's token reads the value as the choice row does.
+      expect(within(field()).getByText('3 days ago')).toBeTruthy();
       openSheet();
       const row = within(sheet()).getByRole('button', {
         name: 'Age is newer than 3 days ago',
@@ -5227,7 +5469,7 @@ describe('PowerSearch sheet value text', () => {
     },
   );
 
-  it("reads a number with the locale's digits and decimal mark where they differ from the token's, differing only in notation (FR12)", () => {
+  it("reads a number with the locale's digits and decimal mark, unrounded, on the row and the trigger's token (FR12)", () => {
     render(
       <InternationalizationProvider locale="de">
         <PowerSearch
@@ -5267,9 +5509,9 @@ describe('PowerSearch sheet value text', () => {
         name: 'Cost > 0,000000000000000000001',
       }),
     ).toBeTruthy();
-    // The token keeps its own text.
-    expect(within(field()).getByText('1e-7')).toBeTruthy();
-    expect(within(field()).getByText('0')).toBeTruthy();
+    // The trigger's tokens read the same numbers.
+    expect(within(field()).getByText('0,0000001')).toBeTruthy();
+    expect(within(field()).getByText('-0')).toBeTruthy();
   });
 
   it('formats a list and a number on the Filters row and in Removed in the provider locale (INV1a, INV8)', async () => {
@@ -5305,7 +5547,7 @@ describe('PowerSearch sheet value text', () => {
       render(<Harness />);
       openSheet();
       // German list separators and digit grouping, not a literal ", " and
-      // `String()`; the popover token keeps its own literals (known gap).
+      // `String()`, on the row and on the trigger's token.
       const list = within(sheet()).getByRole('button', {
         name: 'ID is any of a, b und c',
       });
@@ -5316,13 +5558,13 @@ describe('PowerSearch sheet value text', () => {
           name: 'Lines is greater than 1234567',
         }),
       ).toBeTruthy();
-      expect(within(field()).getByText('a, b, c')).toBeTruthy();
+      expect(within(field()).getByText('a, b und c')).toBeTruthy();
       expect(within(field()).getByText('1234567')).toBeTruthy();
       // A float: the locale's decimal mark, no rounding.
       expect(
         within(sheet()).getByRole('button', {name: 'Cost > 2,3456'}),
       ).toBeTruthy();
-      expect(within(field()).getByText('2.3456')).toBeTruthy();
+      expect(within(field()).getByText('2,3456')).toBeTruthy();
       fireEvent.click(
         within(list.closest('li')!).getByRole('button', {
           name: 'Remove ID filter',
@@ -5367,8 +5609,8 @@ describe('PowerSearch sheet value text', () => {
       expect(
         within(sheet()).getByRole('button', {name: `ID is any of ${text}`}),
       ).toBeTruthy();
-      // The token keeps its literal join (known gap).
-      expect(within(field()).getByText('Bug, Feature, Docs')).toBeTruthy();
+      // The trigger's token joins the list the same way.
+      expect(within(field()).getByText(text)).toBeTruthy();
     },
   );
 
