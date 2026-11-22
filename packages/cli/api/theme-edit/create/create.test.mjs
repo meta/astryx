@@ -9,7 +9,7 @@
  * a written file is never written again; an unknown trait is refused.
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeEditCreate} from '../theme-edit.mjs';
@@ -158,16 +158,26 @@ const COLOR_TOKENS = Object.keys(tokenDefaults).filter(k =>
 /** @type {string} */
 let cwd;
 
-beforeAll(() => {
-  cwd = makeLinkedFixture('astryx-create-traits-', FIXTURE_PACKAGES);
+/**
+ * The app as a new one is: its entry loads Core's stylesheet, and no theme.
+ * Each test starts from it, so a create is not slowed by the themes the
+ * tests before it made (every create reads each theme the app has).
+ */
+function freshApp() {
+  fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
   fs.mkdirSync(path.join(cwd, 'src'));
   fs.writeFileSync(path.join(cwd, 'tsconfig.json'), '{}\n');
-  // The app's entry, as a new app has it: it loads Core's stylesheet.
   fs.writeFileSync(
     path.join(cwd, 'src/main.tsx'),
     "import '@astryxdesign/core/astryx.css';\n",
   );
+}
+
+beforeAll(() => {
+  cwd = makeLinkedFixture('astryx-create-traits-', FIXTURE_PACKAGES);
 });
+
+beforeEach(freshApp);
 
 afterAll(() => removeLinkedFixture(cwd));
 
