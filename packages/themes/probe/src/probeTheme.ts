@@ -1148,6 +1148,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(311.7 74% 25%)',
       },
     },
+    'chat-composer-body': {
+      base: {
+        backgroundColor: 'hsl(248.6 75% 48%)',
+        color: 'hsl(335.1 87% 12%)',
+        borderColor: 'hsl(201.8 79% 25%)',
+        outlineColor: 'hsl(214.7 92% 25%)',
+      },
+    },
     'chat-composer-drawer': {
       base: {
         backgroundColor: 'hsl(346.9 82% 51%)',

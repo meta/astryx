@@ -578,13 +578,16 @@ export function ChatComposer(props: ChatComposerProps) {
           onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
           onFocusCapture={handleBodyFocusCapture}
           onBlurCapture={handleBodyBlurCapture}
-          {...stylex.props(
-            styles.body,
-            inputWrapperStyles.textField,
-            elevationStyles[elevation],
-            hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
-            density === 'compact' && styles.compact,
-            xstyle,
+          {...mergeProps(
+            themeProps('chat-composer-body', {elevation}),
+            stylex.props(
+              styles.body,
+              inputWrapperStyles.textField,
+              elevationStyles[elevation],
+              hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
+              density === 'compact' && styles.compact,
+              xstyle,
+            ),
           )}>
           {(headerActions || headerContext) && (
             <div {...stylex.props(styles.header)}>
