@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {useState} from 'react';
+import {createRef, useState} from 'react';
 import {
   render,
   screen,
@@ -1729,30 +1729,21 @@ describe('Pagination', () => {
   // ---------------------------------------------------------------------------
 
   describe('page size selector', () => {
-    it('renders page size selector when pageSizeOptions provided', () => {
-      render(
+    it('shows an "Items per page" field only with pageSizeOptions', () => {
+      const {rerender} = render(
+        <Pagination page={1} onChange={() => {}} totalItems={100} />,
+      );
+      expect(screen.queryByText('Items per page')).not.toBeInTheDocument();
+      rerender(
         <Pagination
           page={1}
           onChange={() => {}}
           totalItems={100}
-          pageSize={10}
-          pageSizeOptions={[10, 20, 50]}
+          pageSizeOptions={[10, 20]}
           onPageSizeChange={() => {}}
         />,
       );
-      // The selector should be present (hidden label "Items per page")
-      const nav = screen.getByRole('navigation');
-      expect(nav).toBeInTheDocument();
-    });
-
-    it('does not render page size selector when pageSizeOptions not provided', () => {
-      render(<Pagination page={1} onChange={() => {}} totalPages={5} />);
-      // No selector trigger should be present
-      const nav = screen.getByRole('navigation');
-      // Only prev/next + page buttons should exist
-      const buttons = within(nav).getAllByRole('button');
-      // 2 nav buttons + page buttons
-      expect(buttons.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText('Items per page')).toBeInTheDocument();
     });
   });
 
@@ -2628,6 +2619,94 @@ describe('Pagination', () => {
         rerender(<LinksBesideButton page={2} />);
         expect(outside).toHaveFocus();
       });
+    });
+  });
+
+  describe('page count precedence', () => {
+    it('uses totalPages over the count derived from totalItems', () => {
+      render(
+        <Pagination
+          page={1}
+          onChange={() => {}}
+          totalItems={200}
+          pageSize={10}
+          totalPages={5}
+        />,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Go to page 5'}),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', {name: 'Go to page 6'}),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('ellipsis', () => {
+    it('hides each ellipsis from assistive technology', () => {
+      const {container} = render(
+        <Pagination page={5} onChange={() => {}} totalPages={10} />,
+      );
+      const ellipses = Array.from(container.querySelectorAll('nav *')).filter(
+        el => el.children.length === 0 && el.textContent?.trim() === '…',
+      );
+      expect(ellipses.length).toBe(2);
+      for (const el of ellipses) {
+        expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+      }
+    });
+  });
+
+  describe('landmark styling inputs and name', () => {
+    it('forwards ref, className and style to the landmark', () => {
+      const ref = createRef<HTMLElement>();
+      render(
+        <Pagination
+          ref={ref}
+          page={1}
+          onChange={() => {}}
+          totalPages={3}
+          className="caller-class"
+          style={{marginTop: 7}}
+        />,
+      );
+      const nav = screen.getByRole('navigation');
+      expect(ref.current).toBe(nav);
+      expect(nav).toHaveClass('caller-class');
+      expect(nav).toHaveClass('astryx-pagination');
+      expect(nav).toHaveStyle({marginTop: '7px'});
+    });
+
+    it('keeps the computed name when a caller passes aria-label', () => {
+      render(
+        <Pagination
+          page={1}
+          onChange={() => {}}
+          totalPages={3}
+          label="Results pages"
+          aria-label="Caller name"
+        />,
+      );
+      expect(
+        screen.getByRole('navigation', {name: 'Results pages'}),
+      ).toBeInTheDocument();
+    });
+
+    it('lets a caller aria-labelledby name the landmark', () => {
+      render(
+        <>
+          <h2 id="results-heading">Search results</h2>
+          <Pagination
+            page={1}
+            onChange={() => {}}
+            totalPages={3}
+            aria-labelledby="results-heading"
+          />
+        </>,
+      );
+      expect(
+        screen.getByRole('navigation', {name: 'Search results'}),
+      ).toBeInTheDocument();
     });
   });
 

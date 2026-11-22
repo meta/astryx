@@ -18,6 +18,8 @@ import {
   BRANCH,
   earlyWarning,
   medianTimes,
+  refreshRecord,
+  refreshTimes,
   prBody,
   specCoverage,
 } from './interaction-record-refresh.mjs';
@@ -67,6 +69,50 @@ describe('medianTimes', () => {
 
   it('averages the middle two of an even count', () => {
     expect(medianTimes([{a: 10}, {a: 20}])).toEqual({a: 15});
+  });
+});
+
+describe('refreshTimes', () => {
+  it("replaces each spec's time with its median over the runs", () => {
+    expect(refreshTimes({a: 4}, [{a: 5}, {a: 7}, {a: 6}], ['a'])).toEqual({
+      a: 6,
+    });
+  });
+
+  it('keeps the recorded time of a tracked spec no run timed', () => {
+    // b was timed by hand after the latest full run.
+    expect(refreshTimes({a: 4, b: 3}, [{a: 5}], ['a', 'b'])).toEqual({
+      a: 5,
+      b: 3,
+    });
+  });
+
+  it('drops a file git no longer tracks, recorded or timed by a run', () => {
+    expect(refreshTimes({a: 4, gone: 9}, [{a: 5, renamed: 3}], ['a'])).toEqual({
+      a: 5,
+    });
+  });
+
+  it("keeps the record's byte order", () => {
+    expect(
+      Object.keys(refreshTimes({b: 1, B: 2}, [{a: 3}], ['a', 'b', 'B'])),
+    ).toEqual(['B', 'a', 'b']);
+  });
+});
+
+describe('refreshRecord', () => {
+  it('writes the refreshed times and the spec files git tracks, sorted', () => {
+    expect(
+      refreshRecord(
+        {'interaction-chromium': {a: 4}, other: 1},
+        'interaction-chromium',
+        [{a: 5, b: 2}],
+        ['b', 'a'],
+      ),
+    ).toEqual({
+      'interaction-chromium': {a: 5, b: 2},
+      'interaction-specs-at-record': ['a', 'b'],
+    });
   });
 });
 

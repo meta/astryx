@@ -79,10 +79,7 @@ import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
 import {formatFilterValue} from './formatFilterValue';
 import {NestedEditor, PowerSearchEditPopover} from './PowerSearchEditPopover';
-import {
-  buildRelativeDateOptions,
-  PowerSearchValueEditor,
-} from './PowerSearchValueEditor';
+import {PowerSearchValueEditor} from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
@@ -306,7 +303,6 @@ const LazyPowerSearchBottomSheet = lazy(async () =>
 const SHEET_EDITORS: PowerSearchSheetEditors = {
   NestedEditor,
   PowerSearchValueEditor,
-  buildRelativeDateOptions,
 };
 
 /**
@@ -396,7 +392,10 @@ export interface PowerSearchProps extends Omit<
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
-  /** Max width for dropdown menu. */
+  /**
+   * Width in pixels of the main field/search menu. It never shrinks below the
+   * input width. It does not affect the field value editors.
+   */
   menuWidth?: number;
   /** Max display length for filter token values. @default 40 */
   maxTokenLength?: number;
@@ -763,8 +762,7 @@ export function PowerSearch({
             ),
             locale,
             calendar,
-            undefined,
-            undefined,
+            t,
             timezoneID,
           )
         : null;

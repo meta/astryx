@@ -220,9 +220,12 @@ describe('InputClearButton', () => {
     expect(declaredValue(screen.getByRole('button'), 'width')).toBe('999px');
   });
 
-  it("takes Button's shared touch band rather than a fixed 24px overlay of its own", () => {
+  it("takes Button's shared touch band under a finger, and its own 24px target only under a fine pointer", () => {
     // Under a finger the clear button's target grows toward 44 px where its
-    // neighbors leave room, through Button's band (AST-094 FR42).
+    // neighbors leave room, through Button's band (AST-094 FR42). Under a fine
+    // pointer its own ::after grows it to 24 px (WCAG 2.5.8), away from the
+    // text; it is off under a coarse pointer, so each pointer type has one hit
+    // area.
     render(<InputClearButton label="Clear" onClick={() => {}} />);
     const button = screen.getByRole('button', {name: 'Clear'});
     const bandClasses = (stylex.props(touchHitAreaStyles.layer).className ?? '')
@@ -238,7 +241,10 @@ describe('InputClearButton', () => {
       'utf-8',
     );
     expect(source).not.toContain('--_input-clear-hit-inset');
-    expect(source).not.toContain("'::after'");
+    expect(source).toContain("const FINE_POINTER = '@media (pointer: fine)';");
+    expect(source).toContain(
+      "'--_input-clear-target': {default: null, [FINE_POINTER]: '\"\"'}",
+    );
   });
 
   it('exposes input-clear-button so a theme controls the button size and hover', () => {

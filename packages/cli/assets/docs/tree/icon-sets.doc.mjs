@@ -60,7 +60,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Related meanings belong to a `group`, such as `notifications` for `notification`, `notificationActive` and `notificationOff`. A match in `astryx experimental icon` lists the other meanings of its group as `relatives`, so an agent that asked for the bell sees that "mute" has a meaning of its own; a group never changes which icon comes first. A meaning can also declare `replaces`, naming an older meaning it takes the place of: the old name keeps answering, in an icon set\'s `map`, in a template\'s `icons` and in the search, and `integration check` names each `map` key to rename. A meaning your icon set adds may join an Astryx group or start its own, and may replace another of your own meanings, never an Astryx one.',
+          text: 'Related meanings belong to a `group`, such as `notifications` for `notification`, `notificationActive` and `notificationOff`. In the JSON of `astryx experimental icon`, every match lists the other meanings of its group as `relatives`; the text answer names them only under the first match, at most four. So an agent that asked for the bell sees that "mute" has a meaning of its own; a group never changes which icon comes first. A meaning can also declare `replaces`, naming an older meaning it takes the place of: the old name keeps answering, in an icon set\'s `map`, in a template\'s `icons` and in the search, and `integration check` names each `map` key to rename. A meaning your icon set adds may join an Astryx group or start its own, and may replace another of your own meanings, never an Astryx one.',
         },
         {
           type: 'prose',
@@ -382,7 +382,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
         },
         {
           type: 'prose',
-          text: 'The other Astryx definitions your set leaves unmapped are not issues: a library need not draw every definition. They are listed under "Unmapped icon definitions (optional)", and in the JSON as the validate result\'s `iconSets`: for each set, `unmappedDefinitions` (each `{name, description, words}`) and `suggestions` (each `{definition, icon}`, for any unmapped definition one of your icons fits). They are never counted and never fail a check.',
+          text: 'The other Astryx definitions your set leaves unmapped are not issues: a library need not draw every definition. They are listed under "Unmapped icon meanings (optional)", and in the JSON as the validate result\'s `iconSets`: for each set, `unmappedDefinitions` (each `{name, description, words}`) and `suggestions` (each `{definition, icon}`, for any unmapped definition one of your icons fits). They are never counted and never fail a check.',
         },
         {
           type: 'prose',
@@ -483,7 +483,7 @@ astryx experimental icon use brand --variant filled   # every icon in its filled
         },
         {
           type: 'prose',
-          text: "`astryx experimental icon --list` shows the order: the project's `order` (each set as `<package>/<set>`), and each set's `role` (`main`, `backup`, or not listed) and `rank`. Its coverage columns count the definitions each set maps: `builtIn` of the built-in names (a valid set maps them all, and `missing` lists any it lacks), and `definitions` of every Astryx definition. When two or more sets are installed and none is the main set, `--list` says so with the command to run, `astryx experimental icon use <main> --backup <set>`. When no set is installed, `--list` and `experimental icon <words>` say so and how to get one, and the search names the icon definitions that match, built-in ones first: Core draws those by name with no set. The `use` receipt (`icon.use`) names the main set (`iconSet`, `set`) and each backup (`backups`), and lists installed sets the list leaves out (`unlisted`) with the command that adds them (`next`): `astryx doctor` fails a project that installs more than one set and leaves one out of the list.",
+          text: "`astryx experimental icon --list` shows the order: the project's `order` (each set as `<package>/<set>`), and each set's `role` (`main`, `backup`, or not listed) and `rank`. Its coverage columns count the definitions each set maps: `builtIn` of the built-in names (a valid set maps them all, and `missing` lists any it lacks), and `definitions` of every Astryx definition. When two or more sets are installed and none is the main set, `--list` says so with the command to run, `astryx experimental icon use <main> --backup <set>`. When no set is installed, `--list` and `experimental icon <words>` say so and how to get one, and the search names the icon definitions that match, built-in ones first: Core draws those by name with no set. A matching definition that Core does not draw brings the built-in that draws in its place (`help` brings `info`), unless a match ranked above it has none. The `use` receipt (`icon.use`) names the main set (`iconSet`, `set`) and each backup (`backups`), and lists installed sets the list leaves out (`unlisted`) with the command that adds them (`next`): `astryx doctor` fails a project that installs more than one set and leaves one out of the list.",
         },
         {
           type: 'prose',

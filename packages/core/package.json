@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.17",
+  "version": "0.7.18",
   "displayName": "Astryx Core",
   "description": "The Astryx component library: accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -898,6 +898,11 @@
       "source": "./src/internal/virtualization.ts",
       "types": "./dist/internal/virtualization.d.ts",
       "default": "./dist/internal/virtualization.js"
+    },
+    "./internal/module-loader": {
+      "source": "./src/internal/module-loader.ts",
+      "types": "./dist/internal/module-loader.d.ts",
+      "default": "./dist/internal/module-loader.js"
     },
     "./internal/committed-ref": {
       "source": "./src/internal/committed-ref.ts",

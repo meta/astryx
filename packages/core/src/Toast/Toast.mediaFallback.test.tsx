@@ -13,6 +13,8 @@
 import {describe, expect, it} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {Theme, defineTheme} from '../theme';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {Toast} from './Toast';
 
 /** A theme whose inverted surface is `surface` in both modes. */
@@ -124,5 +126,49 @@ describe('Toast media side before measurement', () => {
     expect(markup(withSurface('#0a1317'), 'system')).not.toContain(
       'data-astryx-media-dark-page',
     );
+  });
+});
+
+// FR14: the card's text takes the on-color of the side it picks, so a caller's
+// text follows it. Core's defaults set no media-side text of their own, so
+// without this the card paints the page scheme's text (3.61:1 on the dark
+// error card).
+describe('Toast text on its media side', () => {
+  const onDarkText = stylex
+    .props(
+      stylex.create({
+        text: {'--color-text-primary': colorVars['--color-on-dark']},
+      }).text,
+    )
+    .className!.split(' ')
+    .filter(name => !name.includes('__'));
+
+  const markup = (type: 'info' | 'error') =>
+    renderToStaticMarkup(
+      <Toast
+        type={type}
+        body="Changes saved"
+        isAutoHide={false}
+        autoHideDuration={0}
+        onDismiss={() => {}}
+      />,
+    );
+
+  it("gives a dark error card the dark side's on-color text", () => {
+    const html = markup('error');
+    const inside = html.slice(html.indexOf('data-astryx-media='));
+    for (const name of onDarkText) {
+      expect(inside).toContain(name);
+    }
+  });
+
+  it('keeps the ambient text on a server render whose two sides differ', () => {
+    // Core's info surface is dark in light mode and light in dark mode, so a
+    // system-mode server render does not know the reader's side.
+    const html = markup('info');
+    const inside = html.slice(html.indexOf('data-astryx-media='));
+    for (const name of onDarkText) {
+      expect(inside).not.toContain(name);
+    }
   });
 });

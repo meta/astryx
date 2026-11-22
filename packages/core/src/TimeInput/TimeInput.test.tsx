@@ -942,6 +942,29 @@ describe('TimeInput locale time text (issue 8992)', () => {
     });
   });
 
+  it.each([
+    ['en-US', 'ltr'],
+    ['ar-EG', 'rtl'],
+    ['he-IL', 'rtl'],
+  ])(
+    'reads its time text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <TimeInput
+              label="Time"
+              value={'09:00' as ISOTimeString}
+              onChange={() => {}}
+              presentation="text-input"
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute('dir', direction);
+    },
+  );
+
   it('shows the catalog format hint for the resolved hour format', () => {
     renderIn('de-DE', {value: undefined});
     fireEvent.focus(screen.getByRole('textbox'));

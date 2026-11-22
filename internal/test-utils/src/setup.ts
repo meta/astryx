@@ -5,7 +5,8 @@
  * @input Uses @testing-library/jest-dom/vitest
  * @output Extends Vitest expect with jest-dom matchers (toBeInTheDocument, etc.),
  *   jsdom polyfills, and keeps the group last-member rule out of jsdom's
- *   stylesheet
+ *   stylesheet. Waits for each file's pending `import()` calls before its
+ *   environment closes
  * @position Test setup; loaded by vitest.config.ts before all tests
  *
  * SYNC: When modified, update this header and /internal/test-utils/src/README.md
@@ -14,7 +15,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
-import {afterEach} from 'vitest';
+import {afterAll, afterEach, vi} from 'vitest';
 import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
 import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 
@@ -43,6 +44,15 @@ configure({
 // guard as each test ends.
 afterEach(() => {
   __resetClickGuardForTest();
+});
+
+// A component can start an `import()` that no test waits for: Tokenizer
+// preloads its sheet module while the sheet presentation is active. When a
+// file ends before that module loads, Vitest loads it after it closes the
+// environment, and reports an unhandled error. Wait for every pending import
+// as each file ends.
+afterAll(async () => {
+  await vi.dynamicImportSettled();
 });
 
 // jsdom's selector engine evaluates the group last-member rule,

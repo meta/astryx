@@ -31,11 +31,8 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {
-  isTooltipDescription,
-  TooltipDescribesContext,
-} from '../Tooltip/tooltipPresentInterest';
-import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
+import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
+import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
@@ -93,6 +90,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Button/Button.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 registerEnglishFallback(english);
 
@@ -783,25 +781,6 @@ function addsNoName(node: ReactNode): boolean {
 }
 
 /**
- * Whether a caller's Tooltip already describes the Button. Its tooltip
- * replaces the cut-label one, so one tooltip shows at one spot.
- */
-function hasCallerTooltip(button: HTMLElement): boolean {
-  const ids = button.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
-  return ids.some(id => {
-    const described =
-      id === '' ? null : button.ownerDocument.getElementById(id);
-    // A tooltip's description is a hidden copy of its text after the
-    // trigger until its layer mounts, then the content inside the layer.
-    return (
-      described != null &&
-      (described.closest('[role="tooltip"]') != null ||
-        isTooltipDescription(described))
-    );
-  });
-}
-
-/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -959,7 +938,7 @@ export function Button({
     anchorRef: buttonRef,
     measureRef: labelRef,
     isEnabled: canShowCutLabel,
-    isSuppressed: hasCallerTooltip,
+    yieldsToCallerTooltip: true,
   });
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1105,7 +1084,10 @@ export function Button({
           </span>
         )}
         {isIconOnly ? null : (
-          <span ref={labelRef} {...stylex.props(styles.labelText)}>
+          <span
+            ref={labelRef}
+            {...textDirectionProps(children ?? label)}
+            {...stylex.props(styles.labelText, truncatedTextStyles.pageAlign)}>
             {children ?? label}
           </span>
         )}
@@ -1249,13 +1231,7 @@ export function Button({
           {tooltipHook.renderTooltip(tooltip)}
         </TooltipDescribesContext>
       ) : null}
-      {canShowCutLabel && cutLabel.cutText != null && cutLabel.Tooltip ? (
-        <cutLabel.Tooltip
-          anchorRef={buttonRef}
-          content={cutLabel.cutText}
-          onHide={cutLabel.hide}
-        />
-      ) : null}
+      {cutLabel.tooltip}
     </>
   );
 }

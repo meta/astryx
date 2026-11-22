@@ -41,6 +41,7 @@ import {getInteractionModality} from '../utils/interactionModality';
 import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
+  noInvoker,
   useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
@@ -410,6 +411,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     keepsAnchorClear: true,
     lazyMount: true,
     keepsMountAfterShow: true,
+    getInvoker: noInvoker,
   });
   const {
     ref: layerRef,

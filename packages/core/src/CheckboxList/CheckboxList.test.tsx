@@ -209,7 +209,7 @@ describe('CheckboxList', () => {
     // orphaned htmlFor.
     const group = screen.getByRole('group', {name: 'Preferences'});
     expect(group).toBeInTheDocument();
-    const label = screen.getByText('Preferences');
+    const label = screen.getByText('Preferences').parentElement!;
     expect(label.tagName).toBe('SPAN');
     expect(label.closest('label')).toBeNull();
     expect(label).not.toHaveAttribute('for');
@@ -233,7 +233,7 @@ describe('CheckboxList', () => {
         <CheckboxListItem label="Option A" value="a" />
       </CheckboxList>,
     );
-    const label = screen.getByText('Preferences');
+    const label = screen.getByText('Preferences').parentElement!;
     expect(within(label).getByText('Optional')).toBeInTheDocument();
     // A checkbox group has no required state to announce or validate.
     expect(

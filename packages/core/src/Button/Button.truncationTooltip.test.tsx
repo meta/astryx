@@ -366,6 +366,31 @@ describe('Button label truncation tooltip', () => {
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 
+  it('shows on keyboard focus after a press that left focus outside the Button', async () => {
+    restore = withOverflow(true);
+    render(
+      <>
+        <p>Text beside it</p>
+        <Button label={LABEL} />
+      </>,
+    );
+    const button = screen.getByRole('button');
+    // A Button click in macOS Safari or Firefox, or a press on plain text,
+    // moves no focus into the Button.
+    act(() => {
+      fireEvent.pointerDown(screen.getByText('Text beside it'), {
+        pointerType: 'mouse',
+      });
+      fireEvent.pointerDown(button, {pointerType: 'mouse'});
+      fireEvent.click(button);
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+    });
+    await showByFocus(button);
+    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+      LABEL,
+    );
+  });
+
   it('closes when the Button is pressed', async () => {
     restore = withOverflow(true);
     render(<Button label={LABEL} />);

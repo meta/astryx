@@ -7,6 +7,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
 import {VStack} from '@astryxdesign/core/Layout';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -308,6 +309,53 @@ export const TriggerModes: Story = {
     );
   },
   decorators: [Story => <Story />],
+};
+
+// Labels in two directions: each label and the overflow count keep their own order.
+export const MixedDirectionLabels: Story = {
+  render: () => {
+    const [value, setValue] = useState<string[]>([
+      'Design',
+      'עיצוב',
+      'שיווק',
+      'Sales',
+      'Support',
+    ]);
+    return (
+      <MultiSelector
+        label="Team"
+        options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        value={value}
+        onChange={setValue}
+        triggerDisplay="labels"
+      />
+    );
+  },
+};
+
+// The same labels under a right-to-left locale: the overflow count keeps the
+// locale's form.
+export const MixedDirectionLabelsHebrew: Story = {
+  render: () => {
+    const [value, setValue] = useState<string[]>([
+      'Design',
+      'עיצוב',
+      'שיווק',
+      'Sales',
+      'Support',
+    ]);
+    return (
+      <InternationalizationProvider locale="he-IL">
+        <MultiSelector
+          label="Team"
+          options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          value={value}
+          onChange={setValue}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>
+    );
+  },
 };
 
 // Disabled items
