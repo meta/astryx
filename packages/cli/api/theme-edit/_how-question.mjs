@@ -34379,6 +34379,8 @@ function fontIn(cl, question) {
     "([A-Z][\\w-]*(?:'[\\w-]+)*(?: (?:[A-Z][\\w-]*(?:'[\\w-]+)*|\\d+)){0,3})";
   /** @type {string | undefined} */
   let typed;
+  /** The kind said beside a family the font is like, when it wins. @type {string | null} */
+  let likeKind = null;
   for (const re of [
     new RegExp(
       `\\b(?:[Uu]se|[Ff]ont|[Tt]ypeface|[Tt]o|in)s?:?\\s+["']?${NAME}`,
@@ -34420,7 +34422,12 @@ function fontIn(cl, question) {
           : /(?<!sans[\s-])\bserif\b/.test(rest)
             ? 'serif'
             : null;
-        if (said && said !== familyKind(name)) continue;
+        if (said && said !== familyKind(name)) {
+          // (The kind said is written instead: "a font like Tiempos for
+          // code" is a monospace font.)
+          likeKind = said;
+          continue;
+        }
         // (A shipped font whose family the name begins, "Comic Sans-like",
         // is that font, with its own fallbacks.)
         const shipped = known
@@ -34457,6 +34464,7 @@ function fontIn(cl, question) {
   )
     return presetOf(typed) ?? typed;
   if (known) return known;
+  if (likeKind) return likeKind;
   // "the default Mac font": the system font.
   if (OS_FONT.test(c)) return 'system';
   // A family every machine has, named with its capitals ("use Menlo").

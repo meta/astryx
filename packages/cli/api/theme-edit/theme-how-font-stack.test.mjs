@@ -75,9 +75,20 @@ describe('a family said as like another', () => {
     expect(await commandsFor('a typeface like Tiempos')).toContain(
       `font Tiempos`,
     );
-    expect(
-      await commandsFor('a font like Tiempos for monospace numbers'),
-    ).not.toContainEqual(expect.stringMatching(/^font Tiempos/));
+    const numbers = await commandsFor(
+      'a font like Tiempos for monospace numbers',
+    );
+    expect(numbers).toMatch(/ font mono(\s|$)/);
+    expect(numbers).not.toMatch(/ font Tiempos(\s|$)/);
+    expect(await commandsFor('a font like Tiempos for code')).toMatch(
+      / font mono --on code(\s|$)/,
+    );
+    expect(await commandsFor('serif headings in a font like NYT')).toMatch(
+      / font serif --on heading(\s|$)/,
+    );
+    expect(await commandsFor('a font like Comic Sans')).toMatch(
+      / font comic(\s|$)/,
+    );
     // ("sans-serif" and "sans serif" name no serif.)
     expect(
       await commandsFor('Type: MS Sans Serif-like pixel sans-serif 11px'),
