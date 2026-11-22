@@ -295,6 +295,10 @@
     "frame": {
       "lucide": "Frame"
     },
+    "fullScreen": {
+      "heroicons": "ArrowsPointingOutIcon",
+      "fallback": "expand"
+    },
     "funnel": {
       "heroicons": "FunnelIcon"
     },
