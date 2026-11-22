@@ -3,9 +3,7 @@
 /**
  * @file A whole-theme color said once covers both modes: a border ("1px
  * #ccc borders") at its twin as far off the dark page, a link color the
- * dark page leaves under 4.5:1 at its twin that reads there. A border also
- * reaches the surfaces and controls Core draws with none, never a
- * small box nor the layout frame.
+ * dark page leaves under 4.5:1 at its twin that reads there.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -67,93 +65,6 @@ describe('a whole-theme border said once', () => {
     expect((await commands('border color #ffd6e0')).join('\n')).toMatch(
       /--color-border 'light-dark\(#ffd6e0, #[0-9a-f]{6}\)'/,
     );
-  }, 240_000);
-
-  it('reaches the surfaces, fields and controls drawn with none', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('br', {cwd, like: 'neutral'});
-    const cmds = await commands('1px #ccc borders', 'br');
-    /** @param {string} part */
-    const bordered = part =>
-      cmds.some(c =>
-        new RegExp(`^set br border '1px solid .* --on ${part}$`).test(c),
-      );
-    for (const part of ['button', 'table', 'popover', 'dropdown-menu'])
-      expect(bordered(part), part).toBe(true);
-    for (const part of ['badge', 'layout-header', 'avatar', 'collapsible'])
-      expect(bordered(part), part).toBe(false);
-    // A muted card (a neutral look Core draws borderless) takes it; a hue's
-    // look keeps its own.
-    // (A muted card draws its selection in its border too, with no color
-    // of its own at rest, so it is left; a muted clickable card is not.)
-    expect(
-      cmds.some(x => / --on clickable-card --when variant:muted$/.test(x)),
-    ).toBe(true);
-    expect(cmds.some(x => /--on card --when variant:blue/.test(x))).toBe(false);
-    // Flat surfaces said with it: the cards keep a border too.
-    expect(
-      (
-        await themeEditHow(
-          'Surface: flat, subtle shadow only on overlays. Edges: 6px corners, 1px #d0d7de borders.',
-          {cwd, theme: 'br'},
-        )
-      ).data.results
-        .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
-        .some((/** @type {string} */ x) =>
-          /border-width 1px --on card$/.test(x),
-        ),
-    ).toBe(true);
-    // A selectable card draws its box only when selected, in the accent:
-    // it keeps that.
-    expect(
-      (
-        await themeEditHow(
-          'Surface: flat. Edges: 6px corners, 1px #d0d7de borders.',
-          {cwd, theme: 'br'},
-        )
-      ).data.results
-        .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
-        .some((/** @type {string} */ x) => / --on selectable-card$/.test(x)),
-    ).toBe(false);
-    // A card draws its selection in its border: it takes the width and
-    // style alone, so the accent stays when selected.
-    const flat = (
-      await themeEditHow(
-        'Surface: flat. Edges: 6px corners, 1px #d0d7de borders.',
-        {cwd, theme: 'br'},
-      )
-    ).data.results.flatMap(
-      (/** @type {{commands: string[]}} */ r) => r.commands,
-    );
-    expect(
-      flat.some((/** @type {string} */ x) =>
-        /border-width 1px --on card$/.test(x),
-      ),
-    ).toBe(true);
-    expect(
-      flat.some((/** @type {string} */ x) =>
-        /set br border '.*--on card$/.test(x),
-      ),
-    ).toBe(false);
-    // "On everything" reaches at least what a plain border does.
-    const all = await commands('1px #ccc borders on everything', 'br');
-    for (const part of ['table', 'button', 'popover'])
-      expect(
-        all.some(x => new RegExp(` --on ${part}$`).test(x)),
-        part,
-      ).toBe(true);
-    // A role word is read as main reads it: the border is the whole
-    // theme's, and the role word is named as not used.
-    for (const [q, word] of [
-      ['controls with 12px padding, 1px #cccccc borders', 'controls'],
-      ['overlays with a 1px #4d4d4d border', 'overlays'],
-    ]) {
-      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
-      expect(
-        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
-        q,
-      ).toMatch(new RegExp(`not used: [^\\n]*"${word}"`));
-    }
   }, 240_000);
 });
 

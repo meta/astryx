@@ -52,7 +52,6 @@ import {
   HEADING_WEIGHTS,
   P,
   CORNERS,
-  EDGE_PARTS,
   FAMILIES,
   FONTS,
   HOW,
@@ -23793,132 +23792,19 @@ export function draftAnswer(ctx, env, question) {
             // indicator lines (a tab's underline), at the border width.
             const selectedOnly = everywhere ? selectedBoxes(C) : [];
             const lines = everywhere && wide ? indicatorLines(C) : [];
-            // A plain "1px borders" (no "everything") reaches the surfaces,
-            // fields and controls Core draws with none (a card, a menu, a
-            // button, a table), never a small box (a badge) nor the layout
-            // frame: those take a border said for them by name.
-            const edgeParts = EDGE_PARTS;
-            // (Flat surfaces said in the same ask take the panels' border
-            // away; a border said there too puts it back on them, as a
-            // part's own setting wins over the dial.)
-            const flatToo =
-              /\bsurfaces?\s*:?\s*flat\b|\bflat\s+surfaces?\b/i.test(
-                question,
-              ) && edgeParts.includes('containers');
-            const edged = [
-              // (Only a panel that draws its box at rest: one that draws
-              // it only when selected, a selectable card, keeps its
-              // accent selection border.)
-              ...(flatToo
-                ? (FAMILIES.containers ?? []).filter(
-                    pt =>
-                      C.MAP[pt] &&
-                      !borderless.includes(pt) &&
-                      Object.keys(C.MAP[pt]?.at?.['border-width'] ?? {}).some(
-                        sel => !/:|selected/.test(sel),
-                      ),
-                  )
-                : []),
-              ...borderless.filter(pt =>
-                edgeParts.some(f => (FAMILIES[f] ?? [f]).includes(pt)),
-              ),
-              ...edgeParts.filter(
-                pt =>
-                  !FAMILIES[pt] &&
-                  !borderless.includes(pt) &&
-                  C.MAP[pt] &&
-                  !(C.partReads(pt, 'border') ?? []).length,
-              ),
-            ];
-            // (A neutral look of a bordered panel that Core draws with no
-            // border, a muted card, takes it too; a hue's look, or one with
-            // no fill of its own, keeps its own.)
-            const neutralLooks = edgeParts
-              .flatMap(f => FAMILIES[f] ?? [f])
-              .filter(pt => C.MAP[pt] && !edged.includes(pt))
-              .flatMap(pt =>
-                (C.partReads(pt, 'background') ?? [])
-                  .filter((/** @type {{token: string}} */ r) =>
-                    /^--color-background-(?:muted|surface|card|popover)$/.test(
-                      r.token,
-                    ),
-                  )
-                  .flatMap((/** @type {{when: string[]}} */ r) =>
-                    r.when
-                      .filter(w => !/:|selected/.test(w))
-                      .map(w => /(?:^|\s)variant=([\w-]+)/.exec(w)?.[1])
-                      .filter(
-                        v =>
-                          v &&
-                          Object.entries(
-                            C.MAP[pt]?.at?.['border-width'] ?? {},
-                          ).some(
-                            ([sel, bw]) =>
-                              sel.split(',').includes(`variant=${v}`) &&
-                              !/selected/.test(sel) &&
-                              /^\s*0(?:px)?\s*$/.test(String(bw)),
-                          ),
-                      )
-                      .map(v => ({on: pt, when: `variant:${v}`})),
-                  ),
-              );
-            /**
-             * Whether a part (or one look of it) draws its selection in its
-             * border color (a card under a selectable card): a border
-             * written on it at rest would also paint over that, and the
-             * editor cannot address the selected look.
-             * @param {string} pt @param {string} [v] the variant
-             */
-            const selectsInBorder = (pt, v) =>
-              (C.partReads(pt, 'border') ?? []).some(
-                (/** @type {{props?: string[], when: string[]}} */ r) =>
-                  (r.props ?? []).includes('border-color') &&
-                  r.when.some(
-                    w =>
-                      /selected=(?:true|selected)/.test(w) &&
-                      (v
-                        ? w.split(/[\s,]+/).includes(`variant=${v}`)
-                        : /variant=default\b/.test(w) || !/variant=/.test(w)),
-                  ),
-              );
-            /**
-             * The border a part takes: the whole shorthand, or, on a part
-             * that draws its selection in its border, its width and style
-             * alone, so its own colors (the shared border color at rest, the
-             * accent when selected) stay.
-             * @param {{on: string, when?: string}} x
-             * @returns {Step[]}
-             */
-            const borderOn = x =>
-              selectsInBorder(x.on, x.when?.replace(/^variant:/, ''))
-                ? [
-                    set('border-width', wide ?? bwNow0, x),
-                    set('border-style', 'solid', x),
-                  ]
-                : [
-                    set('border', `${wide ?? bwNow0} solid ${color}`, {
-                      ...x,
-                      ...modeOf(c),
-                    }),
-                  ];
             /** @type {Step[]} */
             const steps = [
               ...(wide ? [set('--border-width', wide)] : []),
               set('--color-border', color, modeOf(c)),
               set('--color-border-emphasized', color, modeOf(c)),
-              // (A neutral look with no border color of its own at rest
-              // that draws its selection in its border is left: a color
-              // written there would paint over the selection.)
-              ...neutralLooks
-                .filter(
-                  x => !selectsInBorder(x.on, x.when?.replace(/^variant:/, '')),
-                )
-                .flatMap(borderOn),
-              // ("Everything" reaches what the shared tokens never do as
-              // well as what a plain border reaches.)
-              ...[
-                ...new Set([...(everywhere ? borderless : []), ...edged]),
-              ].flatMap(pt => borderOn({on: pt})),
+              ...(everywhere
+                ? borderless.map(pt =>
+                    set('border', `${wide ?? bwNow0} solid ${color}`, {
+                      on: pt,
+                      ...modeOf(c),
+                    }),
+                  )
+                : []),
               ...selectedOnly.map(pt =>
                 set('border', `${wide ?? bwNow0} solid ${color}`, {
                   on: pt,
@@ -23932,7 +23818,7 @@ export function draftAnswer(ctx, env, question) {
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${edged.length ? `, and a border on the surfaces and controls drawn with none (${edged.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };
