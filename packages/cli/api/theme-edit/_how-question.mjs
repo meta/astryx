@@ -20037,6 +20037,27 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
+   * The theme's spacing stop next past a length, up or down: the nearest
+   * `--spacing-<n>` token above it (or below it, and above 0), with its
+   * length in px. Null at the end of the scale.
+   * @param {number} px
+   * @param {'up' | 'down'} way
+   * @returns {{token: string, px: number} | null}
+   */
+  function spacingStop(px, way) {
+    /** @type {Array<{token: string, px: number}>} */
+    const stops = [];
+    for (const t of Object.keys(TOKENS)) {
+      if (!/^--spacing-[\d-]+$/.test(t)) continue;
+      const v = lengthPx(String(resolvedValue(t) || current(t) || ''));
+      if (v != null && (way === 'up' ? v > px : v < px && v > 0))
+        stops.push({token: t, px: v});
+    }
+    stops.sort((a, b) => (way === 'up' ? a.px - b.px : b.px - a.px));
+    return stops[0] ?? null;
+  }
+
+  /**
    * A part's padding box now from the base theme's rule, else from the
    * token Core reads for each side (a button is 8px block, 12px inline).
    * @param {string} part
@@ -24752,9 +24773,10 @@ export function draftAnswer(ctx, env, question) {
           : c.lengths.find(l => !/%$/.test(l));
         const gap = /\b(gaps?|between)\b/.test(c.text);
         // ("list items more spacing between them": the room between the
-        // items is the gap of the part that holds them. A way with no
-        // amount is no step of the holder's whole room, which also pads
-        // it: its gap is named, for a value.)
+        // items is the gap of the part that holds them, never the items'
+        // padding. "More" with no amount steps that gap up from what it has
+        // now; with no gap to step, or another way, the gap is named, for a
+        // value.)
         const between = /** @type {{between?: string}} */ (
           c.parts.find(x => x.on === on) ?? {}
         ).between;
@@ -24762,8 +24784,41 @@ export function draftAnswer(ctx, env, question) {
           const gapRead = (C.partReads(one(String(on)), 'spacing') ?? []).find(
             r => r.props.some(x => /^(?:row-)?gap$/.test(x)),
           );
+          // ("a little more space between list items": the holder's gap one
+          // stop up the theme's own spacing scale from what it has now, as a
+          // bounded step does; a gap of 0 takes the first stop. A gap set as
+          // a token, "var(--spacing-1)", is measured as that token is.)
+          const gapNow =
+            nowIn(String(on), 'gap') ??
+            (gapRead ? `var(${gapRead.token})` : null);
+          const gapTok = /^var\(\s*(--[\w-]+)\s*\)$/.exec(
+            String(gapNow ?? '').trim(),
+          )?.[1];
+          // (A token set on the part itself, "--spacing-0-5 10px --on list",
+          // is the part's own length for it.)
+          const gapLen = gapTok
+            ? (tokenSetOn(String(on), gapTok) ??
+              (resolvedValue(gapTok) || current(gapTok)))
+            : gapNow;
+          const gapSaid = gapTok ? `${gapTok}, ${gapLen}` : String(gapNow);
+          // ("more crowded" is less room.)
+          const more =
+            !exactFactor(c.text) &&
+            !new RegExp(`\\b(?:${densityWords('crowded', 'dense')})\\b`).test(
+              c.text,
+            ) &&
+            (c.dir === 'more' ||
+              new RegExp(`\\b(?:${densityWords('roomy')})\\b`).test(c.text));
+          const gapPx =
+            more && gapNow != null ? lengthPx(String(gapLen ?? '')) : null;
+          const stop = gapPx == null ? null : spacingStop(gapPx, 'up');
+          if (stop)
+            return {
+              text: `the room between ${between}s is ${on}'s gap: ${stop.token} (${resolvedValue(stop.token)}), the next stop up the theme's spacing scale (now ${gapSaid}), not ${between}'s padding; give a value, such as gap 8px --on ${on}, for an exact one`,
+              options: [[set('gap', `var(${stop.token})`, f)]],
+            };
           return {
-            text: `the room between ${between}s is ${on}'s gap${gapRead ? ` (${gapRead.token}, now ${current(gapRead.token)})` : ''}, not ${between}'s padding: give it a value, such as gap 8px --on ${on}`,
+            text: `the room between ${between}s is ${on}'s gap${gapNow != null ? ` (now ${gapSaid})` : ''}, not ${between}'s padding: give it a value, such as gap 8px --on ${on}`,
             options: [],
             lookup: `${HOW} ${on}`,
           };
@@ -25113,22 +25168,19 @@ export function draftAnswer(ctx, env, question) {
                   )
                 )
                   return null;
-                const px = (/** @type {string} */ t) =>
-                  lengthPx(String(resolvedValue(t) || current(t) || ''));
-                const now = px(/** @type {string} */ (inner[0].tok));
+                const tok = /** @type {string} */ (inner[0].tok);
+                const now = lengthPx(
+                  String(resolvedValue(tok) || current(tok) || ''),
+                );
                 if (now == null) return null;
-                const down = Object.keys(TOKENS)
-                  .filter(t => /^--spacing-[\d-]+$/.test(t))
-                  .map(t => ({t, v: px(t)}))
-                  .filter(x => x.v != null && x.v < now && x.v > 0)
-                  .sort((a, b) => Number(b.v) - Number(a.v))[0];
+                const down = spacingStop(now, 'down');
                 return down
                   ? {
                       parts: inner.map(x => x.k),
                       from: inner[0].tok,
-                      to: down.t,
+                      to: down.token,
                       // (Rounded as a length is said: no float tail.)
-                      by: Math.round(2 * (now - Number(down.v)) * 100) / 100,
+                      by: Math.round(2 * (now - down.px) * 100) / 100,
                     }
                   : null;
               })()
