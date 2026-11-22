@@ -2181,6 +2181,17 @@ export function exactFactor(text) {
     const f = fraction(cut[2]);
     if (f != null) return by(f, !/^(increase|raise|grow)$/.test(cut[1]));
   }
+  // "drop the line height by 10%", "increase it by 50%": a change by a
+  // percent the verb says the way of.
+  const cutPct =
+    /\b(cut|reduce|lower|shrink|decrease|drop|lessen|compress|tighten|increase|raise|grow|loosen|expand)\b[^.]*?\bby (\d{1,3}(?:\.\d+)?)\s?%/.exec(
+      t,
+    );
+  if (cutPct && Number(cutPct[2]) > 0)
+    return by(
+      Number(cutPct[2]) / 100,
+      !/^(increase|raise|grow|loosen|expand)$/.test(cutPct[1]),
+    );
   // "+50%", "-25%", "50% bigger", "100% smaller".
   const signed = /(^|[\s(])([+-])\s?(\d{1,3}(?:\.\d+)?)\s?%/.exec(t);
   if (signed) return by(Number(signed[3]) / 100, signed[2] === '-');
@@ -5029,7 +5040,11 @@ export function draftAnswer(ctx, env, question) {
   // the pronoun.)
   question = String(question).replace(
     /(^|[,;.!?\n]\s*)([^,;.!?\n]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)[^,;.!?\n]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b(?=\s*(?:[.!?\n]|$))/gi,
-    (m, lead, said) => {
+    (
+      /** @type {string} */ m,
+      /** @type {string} */ lead,
+      /** @type {string} */ said,
+    ) => {
       // ("it" is the nearest look said before it.)
       const looks = [
         ...said.matchAll(
@@ -5043,29 +5058,171 @@ export function draftAnswer(ctx, env, question) {
       const word = look.toLowerCase().replace(/s$/, '');
       // (Only an ask said on its own: one joined to another by "and",
       // "but" or "then" keeps the reading it has without the pronoun.)
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      // ("the shadow and border on cards are ugly, remove them": looks
+      // listed with "and" on one part each go.)
+      if (
+        looks.length > 1 &&
+        /\bthem\b\s*[.!]?$/i.test(m) &&
+        !/\b(?:but|then)\b/i.test(said)
+      ) {
+        const found2 = partLexicon(ctx)
+          .parts.map(([re, p]) => ({
+            hit: re.exec(` ${said.toLowerCase()} `),
+            on: /** @type {any} */ (p).on,
+          }))
+          .filter(x => x.hit != null)
+          .sort(
+            (x, y) =>
+              /** @type {RegExpExecArray} */ (y.hit)[0].length -
+              /** @type {RegExpExecArray} */ (x.hit)[0].length,
+          )[0];
+        const hit = /** @type {RegExpExecArray | undefined} */ (found2?.hit);
+        // (A word just before the part that is one of its variant values,
+        // "strong dividers", keeps the earlier reading.)
+        const wordBefore = hit
+          ? said
+              .toLowerCase()
+              .slice(0, Math.max(0, hit.index - 1))
+              .trim()
+              .split(/\s+/)
+              .pop()
+          : '';
+        if (
+          wordBefore &&
+          Object.values(ctx.C.variantValues(found2?.on) ?? {})
+            .flat()
+            .some(v => String(v).toLowerCase() === wordBefore)
+        )
+          return m;
+        // (A look word inside the part's own name, "outline indicator", is
+        // no look said.)
+        const from = hit ? hit.index - 1 : 0;
+        const said2 = hit
+          ? looks.filter(
+              l =>
+                /** @type {number} */ (l.index) < from ||
+                /** @type {number} */ (l.index) >= from + hit[0].length,
+            )
+          : [];
+        const left = hit
+          ? said2
+              .reduce(
+                (/** @type {string} */ t, l) =>
+                  t.replace(new RegExp(`\\b${l[1]}\\b`, 'i'), ' '),
+                ` ${said.toLowerCase()} `.replace(hit[0], ' '),
+              )
+              .split(/[^a-z]+/)
+              .filter(w => w && w !== 'and')
+          : ['?'];
+        if (hit && said2.length > 1 && left.every(w => JUDGING.test(w)))
+          return `${String(lead).replace(/[!?]/, '.')}${said2
+            .map(
+              l =>
+                `no ${l[1].toLowerCase().replace(/s$/, '')} on ${hit[0].trim()}`,
+            )
+            .join(', ')}`;
+      }
       if (/\b(?:and|but|then)\b/i.test(said)) return m;
-      const own = String(said);
+      const own = said;
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
-        .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
-        .filter(x => x != null);
-      const longest = /** @type {RegExpExecArray[]} */ (found).sort(
-        (x, y) => y[0].length - x[0].length,
+        .parts.map(([re, p]) => ({
+          hit: re.exec(` ${own.toLowerCase()} `),
+          on: /** @type {any} */ (p).on,
+        }))
+        .filter(x => x.hit != null);
+      const best = found.sort(
+        (x, y) =>
+          /** @type {RegExpExecArray} */ (y.hit)[0].length -
+          /** @type {RegExpExecArray} */ (x.hit)[0].length,
       )[0];
+      const longest = /** @type {RegExpExecArray | undefined} */ (best?.hit);
       if (!longest) return m;
       const part = longest[0].trim();
       // (Every other word only judges the look: "the copy button border is
       // ugly", "the shadow on the cards is too strong". Any other word, a
       // side, a state, a variant, a mode or a second part, keeps the
       // earlier reading.)
-      const others = own
+      // (A mode said with the look, "the card border in dark mode", takes it
+      // away in that mode only.)
+      const mode = /\b(?:in\s+)?(dark|light)\s+(?:mode|theme)\b/i.exec(
+        own,
+      )?.[1];
+      // (A state word said just before the part, "the border on the selected
+      // tab", "hovered cards", takes the look away in that state only. It is
+      // read with the part, so "active tab" is the selected one; the part's
+      // own words never name a state, "hover card".)
+      const before = own
+        .slice(0, own.toLowerCase().indexOf(longest[0].trim()))
+        .trim()
+        .split(/\s+/)
+        .pop()
+        ?.toLowerCase();
+      // (Only a plain word names the state: "non-hovered", "hovered/pressed"
+      // or "*selected*" keeps the earlier reading.)
+      if (before && !/^[a-z]+$/.test(before) && stateWord(before)) return m;
+      // (A state said after "not", "not hovered cards", keeps the earlier
+      // reading too.)
+      if (
+        before &&
+        stateWord(before) &&
+        /\b(?:not|never|no)\s+\S+\s*$/i.test(
+          own.slice(0, own.toLowerCase().indexOf(longest[0].trim())),
+        )
+      )
+        return m;
+      const state = before
+        ? stateWord(
+            before === 'active' ? `${before} ${longest[0].trim()}` : before,
+          )
+        : null;
+      // (A state and a mode said together keep the earlier reading.)
+      if (mode && state) return m;
+      // (A variant of the part said just before its name, "the muted card
+      // border", takes it away on that variant only. A judging word that is
+      // also a value, "too strong" on a divider, names no variant.)
+      const axes = ctx.C.variantValues(best.on) ?? {};
+      const isValue = (/** @type {string} */ w) =>
+        Object.values(axes)
+          .flat()
+          .some(v => String(v).toLowerCase() === w);
+      // (Only a part whose own name is one word, "card", "badge", "button",
+      // keeps a variant said before it through the later readers; a part
+      // named in several words, "clickable card", keeps the earlier
+      // reading.)
+      if (!state && String(best.on).includes('-') && isValue(before ?? ''))
+        return m;
+      const variant = state
+        ? undefined
+        : /** @type {any} */ (axes.variant ?? [])
+            .map((/** @type {unknown} */ v) => String(v).toLowerCase())
+            .find((/** @type {string} */ v) => v === before);
+      // (A variant word that is also a part's name, "input" on a selector,
+      // or a going-back word, "standard" on a dialog, keeps the earlier
+      // reading.)
+      if (
+        variant &&
+        (partLexicon(ctx).parts.some(([re]) => re.test(` ${variant} `)) ||
+          /^(?:standard|normal|original|plain|regular|basic)$/.test(variant))
+      )
+        return m;
+      // (A value of another axis, "the high card shadow", keeps the earlier
+      // reading.)
+      if (!variant && !state && isValue(before ?? '')) return m;
+      // (A variant and a mode said together keep the earlier reading.)
+      if (variant && mode) return m;
+      const besidePart = own
         .toLowerCase()
+        .replace(/\b(?:in\s+)?(?:dark|light)\s+(?:mode|theme)\b/, ' ')
         .replace(longest[0].trim(), ' ')
+        .replace(state ? new RegExp(`\\b${before}\\b`) : /$^/, ' ')
+        .replace(variant ? new RegExp(`\\b${variant}\\b`) : /$^/, ' ');
+      const others = besidePart
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
-      const JUDGING =
-        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
       if (!others.every(w => JUDGING.test(w))) return m;
       // ("them" names more than one thing: read it only over one part said
       // in the plural.)
@@ -5073,7 +5230,13 @@ export function draftAnswer(ctx, env, question) {
         return m;
       // (A "!" or "?" before it ends the ask before, as a full stop does.)
       const stop = String(lead).replace(/[!?]/, '.');
-      return `${stop}no ${word} on ${part}`;
+      const inMode = mode ? ` in ${mode.toLowerCase()} mode` : '';
+      const when = state ? ` when ${state}` : '';
+      // ("gray cards: no border": the form every later reader keeps the
+      // variant in.)
+      return variant
+        ? `${stop}${variant} ${part}: no ${word}`
+        : `${stop}no ${word} on ${part}${when}${inMode}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
@@ -13137,6 +13300,57 @@ export function draftAnswer(ctx, env, question) {
   };
   const seenAspect = (/** @type {string} */ a) => {
     if (!aspectsSeen.includes(a)) aspectsSeen.push(a);
+  };
+  /**
+   * The text size in pixels another clause of the question says ("13px
+   * text", "font size 13px", "Type: Helvetica 13px"), for a leading said
+   * in pixels on its own. Only a clause on the body or the whole theme that
+   * a text-size answer reads counts, so the size the leading is measured
+   * against is the size written. `unread` when a body clause says a size
+   * no answer reads ("13px body text with 18px leading"): the leading then
+   * keeps its plain reading.
+   * @param {Clause} c the leading's own clause
+   * @returns {number | 'unread' | null}
+   */
+  const saidTextPx = c => {
+    const onBody = (/** @type {Clause} */ o) =>
+      o.parts.every(x => x.on === 'body');
+    const SAID =
+      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b|\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b/i;
+    const others = clauses.filter(
+      x =>
+        x !== c &&
+        onBody(x) &&
+        !/\b(?:line[- ]?height|leading)\b/i.test(x.text),
+    );
+    // (A size the text-size answer writes as typed only: a size in another
+    // unit, "font size 1rem", or a change, "the text 2px bigger", is no
+    // pixel size to divide by.)
+    const asTyped = (/** @type {Clause} */ o) =>
+      o.lengths.every(l => /^\d+(?:\.\d+)?px$/i.test(String(l).trim())) &&
+      // (A size typed in pt, rem or em reaches the clause as pixels already,
+      // so the ask as typed is checked.)
+      !/\d\s?(?:pt|rem|em)\b/i.test(asked0) &&
+      !/\b(?:bigger|smaller|larger|more|less|up|down|increase\w*|decrease\w*|by)\b/i.test(
+        o.text,
+      );
+    let unread = false;
+    for (const o of others) {
+      const read = o.aspects.includes('fontsize');
+      // (Or the whole theme's text size another clause asks, "Type:
+      // Helvetica 13px".)
+      const m =
+        SAID.exec(o.text) ??
+        (read ? /\b(\d+(?:\.\d+)?)\s?px\b/i.exec(o.text) : null);
+      if (read && !(o.lengths.length && asTyped(o))) {
+        unread = true;
+        continue;
+      }
+      if (!m) continue;
+      if (read) return Number(m[1] ?? m[2]);
+      unread = true;
+    }
+    return unread ? 'unread' : null;
   };
   // The theme's own value (its settings applied), else the base theme's.
   /** @param {string} token @param {'light' | 'dark'} [mode] @param {number} [depth] @returns {string} */
@@ -22748,19 +22962,97 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'leading': {
-        // An amount ("1.5x", "half") or a percent ("150%": of the line
-        // height there now) is a factor, never a typed number.
+        // A leading in pixels ("18px leading") is that many pixels over the
+        // text size: the size the question says for the text ("13px text,
+        // 18px leading" is 1.385), else the size the text has now.
+        // (Only a clause whose one length is the leading: a text size in
+        // the same clause keeps the plain reading.)
+        const pxLengths = c.text.match(/\b\d+(?:\.\d+)?\s?px\b/gi) ?? [];
+        // (Never a size labeled as the text's, "font size 16px line height
+        // 150%", nor beside a line height said another way.)
+        const pxLeading =
+          pxLengths.length === 1 &&
+          !/\b(?:text|font|copy|type)\b/i.test(c.text) &&
+          !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(?:\d+(?:\.\d+)?(?!\s?px\b|[\d.])|normal\b|tight\w*|loose\w*|more\b|less\b)/i.test(
+            c.text,
+          )
+            ? /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)|\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/i.exec(
+                c.text,
+              )
+            : null;
+        // (On a part, the pixels as typed: its text size is its own.)
+        const leadOnBody = !on || on === 'body' || p?.role === 'body';
+        const textSaid =
+          pxLeading == null || !leadOnBody ? null : saidTextPx(c);
+        const leadPx =
+          pxLeading == null || textSaid === 'unread'
+            ? null
+            : Number(pxLeading[1] ?? pxLeading[2]);
+        const textPxSaid = typeof textSaid === 'number' ? textSaid : null;
+        const textPx =
+          textPxSaid ??
+          (leadPx == null || !leadOnBody
+            ? null
+            : lengthPx(
+                String(
+                  resolvedValue('--text-body-size') ||
+                    current('--text-body-size'),
+                ),
+              ));
+        const pxRatio =
+          leadPx == null
+            ? null
+            : !leadOnBody
+              ? `${leadPx}px`
+              : textPx
+                ? String(Number((leadPx / textPx).toFixed(3)))
+                : null;
+        // A percent said as the line height ("line height 150%") is that
+        // share of the text size, as CSS reads it: 1.5. A percent said as a
+        // change ("50% taller", "increase it by 50%") and an amount ("1.5x",
+        // "half") scale the line height there now.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
+        const pct = pctLeading ? Number(pctLeading[1]) / 100 : null;
+        const byPct = /\bby\s+\d{1,3}(?:\.\d+)?\s?%/i.test(c.text);
+        const asChange =
+          byPct ||
+          /\b(?:increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
+            c.text,
+          );
+        const factorSaid =
+          pxRatio != null ? null : exactFactor(c.text);
+        const pctAbsolute =
+          pxRatio == null &&
+          factorSaid == null &&
+          pct != null &&
+          !asChange
+            ? String(Number(pct.toFixed(3)))
+            : null;
+        // (A change "by N%" with no way said writes nothing and asks which
+        // way.)
+        if (
+          byPct &&
+          factorSaid == null &&
+          pctAbsolute == null &&
+          pxRatio == null
+        )
+          return {
+            text: `the line height${on ? ` on ${on}` : ''} by ${pctLeading?.[0] ?? 'that much'}, but which way? Say "raise the line height by ${pctLeading?.[0] ?? '10%'}" or "drop the line height by ${pctLeading?.[0] ?? '10%'}"`,
+            options: [],
+          };
         const leadFactor =
-          exactFactor(c.text) ??
-          (pctLeading ? Number(pctLeading[1]) / 100 : null);
+          pxRatio != null || pctAbsolute != null
+            ? null
+            : (factorSaid ?? (pct == null || byPct ? null : pct));
         const n =
-          leadFactor != null
+          pxRatio ??
+          pctAbsolute ??
+          (leadFactor != null
             ? null
             : (/\b(normal)\b/.exec(c.text)?.[1] ??
               /(?:^|\s)(\d(?:\.\d+)?)(?![\d.]|\s*(px|rem|em|%|x\b|times\b))/.exec(
                 c.text,
-              )?.[1]);
+              )?.[1]));
         const tok =
           !on || on === 'body' || p?.role === 'body'
             ? '--text-body-leading'
@@ -22791,7 +23083,9 @@ export function draftAnswer(ctx, env, question) {
               : '1.6');
         if (tok)
           return {
-            text: `body line height: --text-body-leading${now ? ` (now ${now})` : ''}`,
+            // (A leading typed in pixels names its reading, so the answer
+            // says what it read.)
+            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}`,
             options: [[set(tok, value)]],
           };
         return {
