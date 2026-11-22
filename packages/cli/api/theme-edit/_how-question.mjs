@@ -8315,6 +8315,30 @@ export function draftAnswer(ctx, env, question) {
     value: valueWord,
     verb: verbWord,
   });
+  // "silver page, surfaces and cards": the grounds listed after a page
+  // color take that color, as one ask with the page.
+  for (let i = 1; i < clauses0.length; i++) {
+    const prev = clauses0[i - 1];
+    const c = clauses0[i];
+    if (
+      prev.parts.some(p => p.on === 'page') &&
+      prev.colors.length &&
+      !c.colors.length &&
+      // (Only a list that names the surfaces, or the cards after them: a
+      // lone "cards" keeps its own clause.)
+      (/\bsurfaces?\b/i.test(c.text) || /\bsurfaces?\b/i.test(prev.text)) &&
+      /^(?:(?:and|the|all)\s+)*(?:surfaces?|cards?)(?:\s*(?:,|and)\s*(?:and\s+)?(?:the\s+)?(?:surfaces?|cards?))*$/i.test(
+        c.text.trim(),
+      )
+    ) {
+      prev.text = `${prev.text}, ${c.text.trim()}`;
+      c.text = '';
+      c.parts = [];
+      c.aspects = [];
+      i--;
+      clauses0.splice(i + 1, 1);
+    }
+  }
   // ("label badges: …": a part word right before another part word, its
   // modifier, names a kind of that part, never a second part; "dialog
   // buttons", a part that holds the other, stays the place.)
@@ -11793,27 +11817,6 @@ export function draftAnswer(ctx, env, question) {
       prev.text = `${prev.text} ${c.lengths.join(' ')}`;
       c.lengths = [];
       c.text = '';
-    }
-  }
-  // "silver page, surfaces and cards": the grounds listed after a page
-  // color take that color, as one ask with the page.
-  for (let i = 1; i < clauses.length; i++) {
-    const prev = clauses[i - 1];
-    const c = clauses[i];
-    if (
-      prev.parts.some(p => p.on === 'page') &&
-      prev.colors.length &&
-      !c.colors.length &&
-      /^(?:(?:and|the|all)\s+)*(?:surfaces?|cards?)(?:\s*(?:,|and)\s*(?:the\s+)?(?:surfaces?|cards?))*$/i.test(
-        c.text.trim(),
-      )
-    ) {
-      prev.text = `${prev.text}, ${c.text.trim()}`;
-      c.text = '';
-      c.parts = [];
-      c.aspects = [];
-      i--;
-      clauses.splice(i + 1, 1);
     }
   }
   // "every part bold except body text": the body is left as it is, so the
@@ -22288,12 +22291,23 @@ export function draftAnswer(ctx, env, question) {
         ...(grounds.length ? {sequence: true} : {}),
         options: [
           withGrounds([set('--color-background-body', color, pm)]),
-          [
-            set('background', color, {on: 'app-shell', ...pm}),
-            ...(panel
-              ? [set('background-color', color, {on: 'layout-content', ...pm})]
-              : []),
-          ],
+          // (With the surfaces filled, the frame and the main panel follow
+          // them; no second line is offered.)
+          ...(grounds.length
+            ? []
+            : [
+                [
+                  set('background', color, {on: 'app-shell', ...pm}),
+                  ...(panel
+                    ? [
+                        set('background-color', color, {
+                          on: 'layout-content',
+                          ...pm,
+                        }),
+                      ]
+                    : []),
+                ],
+              ]),
         ],
       };
     }

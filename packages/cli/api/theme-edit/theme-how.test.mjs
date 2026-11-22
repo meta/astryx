@@ -3548,7 +3548,6 @@ const QUESTIONS_J = [
   ['tighten line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
   ['change the line height by 10%', {top: null}],
   ['line height 150% by default', {top: /^set q --text-body-leading 1\.5$/}],
-  // superlatives
   // one color named for the page, the surfaces and the cards fills all
   // three, in each mode the page takes it
   [
@@ -3563,6 +3562,18 @@ const QUESTIONS_J = [
       top: /^set q --color-background-body '#eff1f7' --mode light && set q --color-background-surface '#eff1f7' --mode light && set q --color-background-card '#eff1f7' --mode light && set q --color-background-body '#0d193b' --mode dark && set q --color-background-surface '#0d193b' --mode dark && set q --color-background-card '#0d193b' --mode dark$/,
     },
   ],
+  [
+    'beige page, surfaces and cards',
+    {
+      top: /^set q --color-background-body '#f5f5dc' --mode light && set q --color-background-surface '#f5f5dc' --mode light && set q --color-background-card '#f5f5dc' --mode light$/,
+    },
+  ],
+  // (a lone "cards" after the page keeps its own answer)
+  [
+    'silver page, cards',
+    {parts: ['page', 'card'], top: /--color-background-body/},
+  ],
+  // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],
   [
