@@ -33249,7 +33249,7 @@ export function draftAnswer(ctx, env, question) {
       return [...env.data.settings, ...steps].some(
         x =>
           x.on &&
-          (/^(?:background|background-color|color)$/.test(x.thing) ||
+          (/^(?:background(?:-color|-image)?|color)$/.test(x.thing) ||
             /^--color-/.test(x.thing)) &&
           partsOf(ctx, /** @type {any} */ (x)).some(t => near.has(t)),
       );

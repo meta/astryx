@@ -204,6 +204,15 @@ describe('page text reads', () => {
       'the popover color set for the theme',
       ['--color-background-popover', '#1e1e1e'],
     ],
+    [
+      'the menu filled with a gradient',
+      [
+        'background-image',
+        'linear-gradient(#0f172a, #000000)',
+        '--on',
+        'dropdown-menu',
+      ],
+    ],
     ['the menu filled in another clause of the ask', null],
   ])(
     'leaves menu rows alone with %s',
