@@ -4,21 +4,23 @@
  * @file The lookup commands' shared hint: when `astryx component`, `hook`,
  * `template` or `docs` finds no entry for a name, and the name matches an
  * entry another of those commands reads, the not-found error suggests that
- * command (`astryx hook useHotkeys`). A name matches at one of six tiers,
+ * command (`astryx hook useHotkeys`). A name matches at one of seven tiers,
  * best first: exact (the whole name, any case), folded (without spaces and
  * hyphens, a hook with or without `use`), last segment (of a path name, exact
  * or folded; for a docs miss, also a Core component or hook that the typed
  * name's last path segment names, as typed or with its words singular), near
  * hook (a `use…` name a slip or two from a hook's name, or one whose every
  * word the hook's name carries), hook keyword (two or more words that are a
- * keyword one hook's doc declares), and word cover (every word of the name); word
- * cover gives no hint. The near hook tier gives one when a component or
- * template lookup misses and no better tier matches; the hook keyword tier
- * only for a component lookup, the one lookup that knows its suggestions'
- * declared keywords. A better tier wins; inside a tier, commands win in
- * {@link LOOKUP_COMMANDS} order, and docs routes with the fewest segments
- * first, then in tree order. The hint goes right after the command's own
- * suggestions that match at its tier or a better one (an own suggestion that
+ * keyword one hook's doc declares), hook stem (a run of the typed words that
+ * is a hook's name without its first word, the verb: `TopLayer` names
+ * `useLayer`), and word cover (every word of the name); word cover gives no
+ * hint. The near hook tier gives one when a component or
+ * template lookup misses and no better tier matches; the hook keyword and
+ * hook stem tiers only for a component lookup, the one lookup that knows its
+ * suggestions' declared keywords. A better tier wins; inside a tier,
+ * commands win in {@link LOOKUP_COMMANDS} order, and docs routes with the
+ * fewest segments first, then in tree order. The hint goes right after the
+ * command's own suggestions that match at its tier or a better one (an own suggestion that
  * declares the name as a keyword or synonym matches at the folded tier), and the list never
  * grows: the last suggestion drops, and a hint that would come last is left
  * out.
@@ -74,8 +76,9 @@ const NAMES_CODE = [
  * @typedef {{components?: string[], hooks?: string[], templates?: string[], docs?: string[]}} LookupNames
  * @typedef {import('../response/base').Suggestion} Suggestion
  * @typedef {{name: string, reason: string}} Hint
- * @typedef {{hint: Hint, tier: number}} Found a hint and the tier its entry
- *   matches the typed name at
+ * @typedef {{hint: Hint, tier: number, stem?: string}} Found a hint and the
+ *   tier its entry matches the typed name at; for the hook stem tier, also
+ *   the folded stem the typed words carry
  */
 
 /** The lookup commands, in the order the hint prefers them. */
@@ -127,10 +130,15 @@ export const MATCH_TIER = /** @type {const} */ ({
    * more.
    */
   keyword: 4,
+  /**
+   * A hook whose name without its first word (the verb) is a run of the
+   * typed words, and the longest such run.
+   */
+  stem: 5,
   /** A name that carries every typed word. */
-  words: 5,
+  words: 6,
   /** None of the above. */
-  none: 6,
+  none: 7,
 });
 
 /** The lookups whose misses can get a near hook hint. */
@@ -292,7 +300,9 @@ export function otherCommand(typed, entries, from) {
  * near hook or hook keyword hint, a suggestion also matches as well when one
  * of its names is a near name or carries every typed word, and, for a hook
  * keyword hint, when one of its `keywordsOf` has exactly the typed words.
- * The first `pinned` suggestions always stay ahead of the hint.
+ * For a hook stem hint, a suggestion matches as well when its folded name
+ * carries the folded stem. The first `pinned` suggestions always stay ahead
+ * of the hint.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
  * @param {Found | null} found
@@ -322,7 +332,9 @@ export function withOtherCommand(
 ) {
   if (!found) return suggestions;
   if (alone || !suggestions || suggestions.length === 0) return [found.hint];
-  const byHook = found.tier >= MATCH_TIER.near;
+  const byHook =
+    found.tier >= MATCH_TIER.near && found.tier <= MATCH_TIER.keyword;
+  const stem = found.tier === MATCH_TIER.stem ? (found.stem ?? '') : null;
   const wanted = foldEntryName(typed);
   /** @param {T} suggestion */
   const declares = suggestion =>
@@ -331,6 +343,10 @@ export function withOtherCommand(
   /** @param {T} suggestion */
   const matchesAsWell = suggestion =>
     declares(suggestion) ||
+    (stem !== null &&
+      namesOf(suggestion).some(
+        name => name && foldEntryName(name).includes(stem),
+      )) ||
     namesOf(suggestion).some(
       name =>
         name &&
@@ -547,8 +563,12 @@ export async function findOtherCommand(
     try {
       const found = hookByMeaning(typed, await coreHookKeywords(coreDir), {
         keywords: from === 'component',
+        stems: from === 'component',
       });
-      if (found) best = hintFor('hook', found.name, from, found.tier);
+      if (found) {
+        best = hintFor('hook', found.name, from, found.tier);
+        if (found.stem) best.stem = found.stem;
+      }
     } catch {
       // A check that fails gives no hint.
     }
@@ -606,13 +626,32 @@ export async function coreHookKeywords(coreDir) {
  * means the one hook whose doc declares a keyword with exactly those words
  * (suggest-order.mjs synonymMatches); one word names a topic many hooks
  * share, not a hook. A tie, or a keyword more than one hook declares, means
- * no hook.
+ * no hook. With `stems`, a name that means no hook so far means the hook
+ * whose name without its first word, the verb, is the longest run of the
+ * typed words ({@link hookByStem}).
  * @param {string} typed
  * @param {Array<{name: string, keywords: string[]}>} hooks
- * @param {{keywords?: boolean}} [options]
+ * @param {{keywords?: boolean, stems?: boolean}} [options]
+ * @returns {{name: string, tier: number, stem?: string} | null}
+ */
+export function hookByMeaning(
+  typed,
+  hooks,
+  {keywords = true, stems = false} = {},
+) {
+  const found = hookBySpelling(typed, hooks, keywords);
+  return found ?? (stems ? hookByStem(typed, hooks) : null);
+}
+
+/**
+ * The hook a `use…` name nearly spells, or the one whose keyword has the
+ * typed words ({@link hookByMeaning}), or null.
+ * @param {string} typed
+ * @param {Array<{name: string, keywords: string[]}>} hooks
+ * @param {boolean} keywords
  * @returns {{name: string, tier: number} | null}
  */
-export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
+function hookBySpelling(typed, hooks, keywords) {
   if (HOOK_SHAPED.test(typed)) {
     let best = 0;
     /** @type {string | null} */
@@ -641,6 +680,52 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
 }
 
 /**
+ * The hook whose stem is the longest run of the typed words, with its tier
+ * and folded stem, or null. A hook's name is a verb and what it acts on
+ * (`useLayer`, `createReorderable`), so its stem is its words without the
+ * first. A tie in length means no hook.
+ * @param {string} typed
+ * @param {Array<{name: string}>} hooks
+ * @returns {{name: string, tier: number, stem: string} | null}
+ */
+export function hookByStem(typed, hooks) {
+  const words = nameWords(typed);
+  let best = 0;
+  /** @type {{name: string, tier: number, stem: string} | null} */
+  let found = null;
+  for (const hook of hooks) {
+    const stem = nameWords(hook.name).slice(1);
+    if (stem.length === 0 || stem.length < best || !hasRun(words, stem)) {
+      continue;
+    }
+    if (stem.length === best) {
+      found = null;
+      continue;
+    }
+    best = stem.length;
+    found = {
+      name: hook.name,
+      tier: MATCH_TIER.stem,
+      stem: foldEntryName(hook.name).slice(nameWords(hook.name)[0].length),
+    };
+  }
+  return found;
+}
+
+/**
+ * Whether `run` appears in `words` as consecutive words.
+ * @param {string[]} words
+ * @param {string[]} run
+ * @returns {boolean}
+ */
+function hasRun(words, run) {
+  for (let at = 0; at + run.length <= words.length; at++) {
+    if (run.every((word, offset) => words[at + offset] === word)) return true;
+  }
+  return false;
+}
+
+/**
  * The root routes of the docs tree whose names `isWanted` accepts, from file
  * names and doc text: the CLI's flat topics and root namespaces, the levels
  * that hold the flat topics, and each integration's topics and root
@@ -661,9 +746,9 @@ async function rootDocNames(docsDirs, index, wanted, isWanted) {
   // A level exists while a topic sits in it; an integration's topic keeps
   // its level on any base.
   const filled = new Set(
-    index.docs.flat().flatMap(({declared}) =>
-      declared?.level ? [declared.level] : [],
-    ),
+    index.docs
+      .flat()
+      .flatMap(({declared}) => (declared?.level ? [declared.level] : [])),
   );
   const builtin = [
     ...index.topics.filter(served),
