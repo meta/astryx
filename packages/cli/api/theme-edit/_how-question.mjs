@@ -4849,6 +4849,8 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:in the day|during the day|day ?(?:mode|theme)|day ?time)\b/gi,
       'in light mode',
     );
+  /** @type {string[]} Looks taken away by a pronoun with no part of their own. */
+  const partlessLooks = [];
   // (A look said, then taken away by a pronoun: "the copy button border is
   // ugly, hide it", "the shadow on the cards is too strong, remove it". The
   // pronoun is that look on one part, never the part. Only a plain ask is
@@ -4858,7 +4860,11 @@ export function draftAnswer(ctx, env, question) {
   // the pronoun.)
   question = String(question).replace(
     /(^|[,;.!?\n]\s*)([^,;.!?\n]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)[^,;.!?\n]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b(?=\s*(?:[.!?\n]|$))/gi,
-    (m, lead, said) => {
+    (
+      /** @type {string} */ m,
+      /** @type {string} */ lead,
+      /** @type {string} */ said,
+    ) => {
       // ("it" is the nearest look said before it.)
       const looks = [
         ...said.matchAll(
@@ -4872,8 +4878,49 @@ export function draftAnswer(ctx, env, question) {
       const word = look.toLowerCase().replace(/s$/, '');
       // (Only an ask said on its own: one joined to another by "and",
       // "but" or "then" keeps the reading it has without the pronoun.)
-      if (/\b(?:and|but|then)\b/i.test(said)) return m;
-      const own = String(said);
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      const joins = [...said.matchAll(/\b(?:and|but|then)\s+/gi)];
+      if (joins.length) {
+        // ("make the buttons blue and the border is ugly, hide it": a bare
+        // look with words that only judge it, after another ask, is never
+        // that ask's part. Nothing is written for it, and the answer asks
+        // for the part.)
+        const j = joins[joins.length - 1];
+        const after = said.slice(/** @type {number} */ (j.index) + j[0].length);
+        const bare = after
+          .toLowerCase()
+          .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
+          .split(/[^a-z]+/)
+          .filter(Boolean);
+        const before = said.slice(0, j.index);
+        const partIn = (/** @type {string} */ t) =>
+          partLexicon(ctx).parts.some(([re]) =>
+            re.test(` ${t.toLowerCase()} `),
+          );
+        if (
+          /\b(?:is|are|looks?|seems?)\b/i.test(after) &&
+          bare.every(w => JUDGING.test(w)) &&
+          !partIn(after) &&
+          partIn(before) &&
+          // (The ask before is a change, with its own verb; a complaint
+          // about a look, "the border on cards is ugly", is no ask here.)
+          looks.length === 1 &&
+          /^\W*(?:make|set|use|give|add|change|turn)\b/i.test(before) &&
+          // (A question said before the ask keeps the earlier reading.)
+          !/\?/.test(
+            question.slice(
+              0,
+              question.toLowerCase().indexOf(said.toLowerCase()),
+            ),
+          )
+        ) {
+          partlessLooks.push(word);
+          return `${lead}${before}`;
+        }
+        return m;
+      }
+      const own = said;
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
         .parts.map(([re, p]) => ({
@@ -4980,8 +5027,6 @@ export function draftAnswer(ctx, env, question) {
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
-      const JUDGING =
-        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
       if (!others.every(w => JUDGING.test(w))) return m;
       // ("them" names more than one thing: read it only over one part said
       // in the plural.)
@@ -33229,6 +33274,11 @@ export function draftAnswer(ctx, env, question) {
         options: [],
       });
   }
+  for (const look of partlessLooks)
+    result.push({
+      text: `the ${look} taken away names no part of its own, so nothing is written for it; say which part ("the card ${look} is ugly, hide it")`,
+      options: [],
+    });
   const unsure = gateAll;
   if (unsure && result.some(d => d.options.some(o => o.length))) {
     const part = partsSeen[0];

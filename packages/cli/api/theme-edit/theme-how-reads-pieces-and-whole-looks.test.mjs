@@ -671,6 +671,72 @@ describe('a border side taken away by a pronoun', () => {
   );
 });
 
+describe('a look taken away by a pronoun with no part of its own', () => {
+  it(
+    "is never the earlier ask's part: nothing is written for it and the answer asks for the part",
+    async () => {
+      for (const [q, keep] of [
+        [
+          'make the buttons blue and the border is ugly, hide it',
+          /background-color '#2563eb' --on button\b/,
+        ],
+        [
+          'make the cards rounder but the shadow is too strong, remove it',
+          /corners more --on card\b/,
+        ],
+      ]) {
+        const data = await answer(String(q));
+        const lines = (first(data) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (keep));
+        expect(lines, String(q)).not.toMatch(/\b(?:border|box-shadow)\b/);
+        expect(
+          (data.results ?? []).some((/** @type {any} */ r) =>
+            /names no part of its own/.test(r.text),
+          ),
+          String(q),
+        ).toBe(true);
+      }
+    },
+    T,
+  );
+
+  it(
+    'leaves a complaint before it, and a question before the ask, as they read',
+    async () => {
+      const complaint = (
+        first(
+          await answer(
+            'the border on cards is ugly and the shadow is heavy, remove it',
+          ),
+        ) ?? []
+      ).join('\n');
+      expect(complaint).not.toMatch(/border '1px/);
+      const asked = (
+        first(
+          await answer(
+            'how rounded are cards? make the buttons blue and the border is ugly, hide it',
+          ),
+        ) ?? []
+      ).join('\n');
+      expect(asked).toMatch(/background-color '#2563eb' --on button\b/);
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading for the edges not read yet',
+    async () => {
+      for (const q of [
+        'make the buttons blue and the border and shadow are ugly, hide them',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on/);
+      }
+    },
+    T,
+  );
+});
+
 describe('a nav said as a bar', () => {
   it(
     'is the top nav beside a side nav; a side nav bar is the side nav',
