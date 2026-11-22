@@ -143,6 +143,11 @@ describe('Popover children mode', () => {
     expect(compact).not.toBe(wide);
     expect(compact).toHaveAttribute('aria-haspopup');
     expect(compact).toHaveAttribute('aria-expanded', 'false');
+    // The new trigger's own click listener opens the popover.
+    act(() => {
+      fireEvent.click(compact);
+    });
+    expect(compact).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('attaches a trigger that remounts under a new key', () => {
@@ -166,6 +171,10 @@ describe('Popover children mode', () => {
     const second = screen.getByRole('button', {name: 'Open'});
     expect(second).not.toBe(first);
     expect(second).toHaveAttribute('aria-haspopup');
+    act(() => {
+      fireEvent.click(second);
+    });
+    expect(second).toHaveAttribute('aria-expanded', 'true');
   });
 });
 
@@ -234,5 +243,9 @@ describe('Popover sibling mode', () => {
     const second = screen.getByRole('button', {name: 'Open'});
     expect(second).not.toBe(first);
     expect(second).toHaveAttribute('aria-haspopup');
+    act(() => {
+      fireEvent.click(second);
+    });
+    expect(second).toHaveAttribute('aria-expanded', 'true');
   });
 });

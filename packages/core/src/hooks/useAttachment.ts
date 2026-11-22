@@ -28,17 +28,17 @@ export type AttachmentTarget<T extends Node> =
   RefObject<T | null> | (() => T | null);
 
 /**
- * Keep `attach` bound to the node `ref` holds after each commit: an element,
+ * Keep `attach` bound to the node `target` finds after each commit: an element,
  * or the document. A replaced node is released and the new one attached, a
  * changed `key` re-attaches, and the last attachment is released on unmount;
  * a commit that changes neither does nothing (react-component-runtime INV3).
  */
 export function useAttachment<T extends Node = Element>(
-  ref: AttachmentTarget<T>,
+  target: AttachmentTarget<T>,
   attach: (element: T) => () => void,
   key: unknown,
 ): void {
-  useAttachedNodes([ref], ([node]) => attach(node as T), key);
+  useAttachedNodes([target], ([node]) => attach(node as T), key);
 }
 
 /**
