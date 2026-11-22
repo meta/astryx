@@ -1011,6 +1011,9 @@ describe('stripe answers keep to the stripe', () => {
     'odd rows #f9f9f9 on striped tables and plain ones too',
     'odd rows #f9f9f9 on striped tables and on non-striped ones',
     'odd rows #f9f9f9 on striped tables and every non striped table',
+    'odd rows #f9f9f9 on striped tables and on regular tables',
+    'odd rows #f9f9f9 on striped tables and normal tables',
+    'odd rows #f9f9f9 on striped tables and the rest of the tables',
   ])('stays on every table for %s', async question => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     expect(
@@ -1138,30 +1141,44 @@ describe('stripe answers keep to the stripe', () => {
       .join('\n');
     expect(commands).toMatch(want);
   });
-  // The stripe answer keeps the tables apart itself, so no note says they
-  // cannot be.
+  // The stripe answer keeps the tables apart itself: it says what is kept,
+  // never that they cannot be.
   it.each([
-    'odd rows #f9f9f9 but not on striped tables',
-    'odd rows #f9f9f9 on striped tables, not on plain tables',
-    'odd rows #f9f9f9 on striped tables, leave other tables alone',
-    'odd rows #f9f9f9 on striped tables other than plain tables',
-  ])('says no part is kept apart wrongly for %s', async question => {
+    [
+      'odd rows #f9f9f9 but not on striped tables',
+      /except table-row in tables marked isStriped, which keep their rows as Core draws them/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, not on plain tables',
+      /except table-row in tables not marked isStriped, which the stripe leaves as they are/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables, leave other tables alone',
+      /except table-row in tables not marked isStriped, which the stripe leaves as they are/,
+    ],
+    [
+      'odd rows #f9f9f9 on striped tables other than plain tables',
+      /except table-row in tables not marked isStriped, which the stripe leaves as they are/,
+    ],
+  ])('says what it keeps apart for %s', async (question, kept) => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     const text = (data.results ?? [])
       .map((/** @type {{text: string}} */ r) => r.text)
       .join('\n');
+    expect(text).toMatch(kept);
     expect(text).not.toMatch(/cannot be kept apart/);
-    expect(
-      (data.results ?? []).flatMap(
-        (/** @type {{commands: string[]}} */ r) => r.commands,
-      ),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(
-          /--on table-row --when parity:odd --state striped/,
-        ),
-      ]),
-    );
+  });
+  // A stripe on every table keeps no table apart: the note says so.
+  it.each([
+    'odd rows #f9f9f9, not on plain tables',
+    'odd rows #f9f9f9 except on plain tables',
+    'odd rows #f9f9f9, leave other tables alone',
+  ])('says the tables cannot be kept apart for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const text = (data.results ?? [])
+      .map((/** @type {{text: string}} */ r) => r.text)
+      .join('\n');
+    expect(text).toMatch(/table-row is the part being changed, so it cannot be kept apart/);
   });
   it('writes nothing for zebra rows on striped tables beside every card white', async () => {
     const {data} = await themeEditHow(

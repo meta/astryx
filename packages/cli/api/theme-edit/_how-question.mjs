@@ -2710,10 +2710,43 @@ function addsTables(q) {
     )
   )
     return true;
-  // ("every other table", "every non striped table", "plain ones":
-  // tables other than the striped ones.)
-  const TABLES =
-    /\b(?:the\s+)?(?:(?:every|all|any)\s+(?:(?:other|plain|non[\s-]?striped|unstriped)\s+)?tables?|(?:other|plain|non[\s-]?striped|unstriped)\s+(?:tables?|ones))\b/;
+  // Tables named besides the striped ones ("plain tables", "regular
+  // tables", "the rest of the tables", "plain ones"): never "striped
+  // tables", "tables marked isStriped", or a table part ("table header").
+  /** @param {string} piece @returns {{index: number, at: number, end: number} | null} */
+  const otherTables = piece => {
+    for (const m of piece.matchAll(/\btables?\b/g)) {
+      const before = piece.slice(0, m.index);
+      const after = piece.slice(m.index + m[0].length);
+      if (
+        /\bstriped\s*$/.test(before) &&
+        !/\b(?:non[\s-]?|un)striped\s*$/.test(before)
+      )
+        continue;
+      if (
+        /^\s+(?:rows?|cells?|headers?|heads?|footers?)\b/.test(after) ||
+        /^\s+(?:that\s+(?:are|is)\s+|marked\s+)(?:is\s*)?striped\b/.test(after)
+      )
+        continue;
+      // (The words before the tables, back to the last joiner: "the rest
+      // of the".)
+      const lead =
+        /\b(?:on|in|for|to|at|across|and|plus|also|with)\s+((?:[\w-]+\s+){0,4})$/.exec(
+          before,
+        ) ?? /^((?:[\w-]+\s+){0,4})$/.exec(before);
+      return {
+        index: lead ? lead.index + lead[0].length - lead[1].length : m.index,
+        at: m.index,
+        end: m.index + m[0].length,
+      };
+    }
+    const ones = /\b(?:other|plain|regular|normal|remaining|non[\s-]?striped|unstriped)\s+ones\b/.exec(
+      piece,
+    );
+    return ones
+      ? {index: ones.index, at: ones.index, end: ones.index + ones[0].length}
+      : null;
+  };
   /** Whether a piece asks something of its own. @param {string} text */
   const asks = text =>
     colorsIn(text).length > 0 ||
@@ -2722,14 +2755,14 @@ function addsTables(q) {
     text
       .split(/\s+/)
       .some(w => w && !/^tables?$/.test(w) && partForWord(w) != null);
-  for (const clause of q.split(/[,;()]|\bbut\b/)) {
+  for (const clause of q.split(/[,;()!?]|\.(?=\s|$)|\bbut\b/)) {
     const pieces = clause.split(/\band\b/).map(x => x.trim());
     for (const [i, piece] of pieces.entries()) {
-      const m = TABLES.exec(piece);
+      const m = otherTables(piece);
       if (
         !m ||
         /\b(?:not|except|without|leave|leaving|besides|excluding|other\s+than|apart\s+from)\b/.test(
-          piece.slice(0, m.index),
+          piece.slice(0, m.at),
         )
       )
         continue;
@@ -2738,9 +2771,7 @@ function addsTables(q) {
       // taller rows", asks something of its own.)
       if (/\b(?:odd|even|zebra|stripes?|striping|alternat\w*)\b/.test(piece))
         return true;
-      const rest = (
-        piece.slice(0, m.index) + piece.slice(m.index + m[0].length)
-      )
+      const rest = (piece.slice(0, m.index) + ' ' + piece.slice(m.end))
         .replace(
           /\b(?:also|plus|along|together|with|as|well|too|on|in|for|even|including|both|modes?|dark|light|only)\b/g,
           ' ',
@@ -16188,8 +16219,22 @@ export function draftAnswer(ctx, env, question) {
         } else if (!p.when && !p.state && p.on === priorOn) {
           // (A stripe the answer already keeps to the striped tables, or
           // takes back from them, has kept those tables apart itself:
-          // "…but not on striped tables", "…, not on plain tables".)
-          if (!prior.steps.some(st => st.on === p.on && st.state === 'striped'))
+          // "…on striped tables, not on plain tables", "…but not on striped
+          // tables". Only the stripe's own fill or take-back counts, never
+          // the other stripe's clear.)
+          const ownWhen = prior.steps.find(
+            st => st.on === p.on && /^parity:/.test(String(st.when ?? '')),
+          )?.when;
+          const own = prior.steps.filter(
+            st => st.on === p.on && ownWhen && st.when === ownWhen,
+          );
+          if (own.some(st => st.state === 'striped'))
+            said.push(
+              own[0].state === 'striped'
+                ? `${name} in tables not marked isStriped, which the stripe leaves as they are`
+                : `${name} in tables marked isStriped, which keep their rows as Core draws them`,
+            );
+          else
             said.push(
               `${name} is the part being changed, so it cannot be kept apart`,
             );
