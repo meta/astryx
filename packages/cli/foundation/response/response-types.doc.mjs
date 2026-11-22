@@ -401,7 +401,7 @@ export const doc = {
     {
       value: 'theme.build.check',
       description:
-        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, when any is stale or missing, code ERR_THEME_STALE, and settingIssues and notices as on the build receipt when any. Writes nothing.',
+        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, when any is stale or missing, code ERR_THEME_STALE, and settingIssues, notices and contrast as on the build receipt when any. Writes nothing.',
     },
     {
       value: 'theme.build.batch',

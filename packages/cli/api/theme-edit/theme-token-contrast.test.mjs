@@ -13,7 +13,8 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {plainFix, themeTokenContrast} from './_theme-contrast.mjs';
-import {themeBuild} from '../theme/build/build.mjs';
+import {themeBuild, themeBuildFamily} from '../theme/build/build.mjs';
+import {spawnSync} from 'node:child_process';
 import {themeAdd} from '../theme/add/add.mjs';
 import {checkAppThemes} from '../doctor/theme-checks.mjs';
 import {logger} from '../logger.mjs';
@@ -88,6 +89,18 @@ describe("a theme's own color tokens", () => {
     expect(
       plainFix("astryx experimental theme editor set t --color-x '#000000'"),
     ).toBe('set --color-x to #000000 in tokens');
+    expect(
+      plainFix(
+        "astryx experimental theme editor set t --color-text-primary '#000000' --on button --when variant:secondary --state hover --mode dark",
+      ),
+    ).toBe(
+      "set --color-text-primary to #000000 in components['button']['variant:secondary+hover'] for dark mode",
+    );
+    expect(
+      plainFix(
+        "astryx experimental theme editor set t color '#1b1b1b' --on tab --only",
+      ),
+    ).toBe("set color to #1b1b1b in components['tab']");
     expect(plainFix(null)).toBeNull();
   });
 
@@ -119,7 +132,9 @@ export const luxTheme = defineTheme({extends: neutralTheme, name: 'lux', tokens:
     expect(
       r.data.contrast.some((/** @type {string} */ w) => line.test(w)),
     ).toBe(true);
-    expect(warned.some(w => line.test(w.replace(/^Warning: /, '')))).toBe(true);
+    expect(warned.some(w => line.test(w.replace(/^\s*\[warn\] /, '')))).toBe(
+      true,
+    );
     // (One line per fix: the texts it reads again are counted on it.)
     const fixes = r.data.contrast
       .filter((/** @type {string} */ w) => /; fix: /.test(w))
@@ -152,4 +167,72 @@ export const luxTheme = defineTheme({extends: neutralTheme, name: 'lux', tokens:
     );
     expect(row?.fix).toMatch(/^lux: set --color-text-secondary to #/);
   }, 300_000);
+
+  it('reach --check, a family build and a batch build, in plain ASCII', async () => {
+    const src = (/** @type {string} */ name) =>
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral/built';
+export const ${name}Theme = defineTheme({extends: neutralTheme, name: '${name}', tokens: ${JSON.stringify(LUX)}});
+`;
+    fs.writeFileSync(path.join(cwd, 'aa.theme.mjs'), src('aa'));
+    fs.writeFileSync(path.join(cwd, 'bb.theme.mjs'), src('bb'));
+    // (A family has one root; its member extends it.)
+    fs.writeFileSync(
+      path.join(cwd, 'cc.theme.mjs'),
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {aaTheme} from './aa.theme.mjs';
+export const ccTheme = defineTheme({extends: aaTheme, name: 'cc'});
+`,
+    );
+    const quiet = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      await themeBuild('aa.theme.mjs', {}, {cwd});
+      const check = /** @type {any} */ (
+        await themeBuild('aa.theme.mjs', {check: true}, {cwd})
+      );
+      expect(check.type).toBe('theme.build.check');
+      expect(
+        check.data.contrast.some((/** @type {string} */ w) =>
+          /^text in segmented-control-item /.test(w),
+        ),
+      ).toBe(true);
+      const family = /** @type {any} */ (
+        await themeBuildFamily(
+          ['aa.theme.mjs', 'cc.theme.mjs'],
+          {familyKey: 'ac-family'},
+          {cwd},
+        )
+      );
+      expect(
+        family.data.contrast.some((/** @type {string} */ w) =>
+          /^cc\.theme\.mjs: text in segmented-control-item /.test(w),
+        ),
+      ).toBe(true);
+    } finally {
+      quiet.mockRestore();
+    }
+    // (The CLI's own default run: a batch names each theme's file.)
+    const bin = path.resolve(
+      import.meta.dirname,
+      '../../clients/cli/bin/astryx.mjs',
+    );
+    const run = spawnSync(
+      process.execPath,
+      [bin, 'theme', 'build', 'aa.theme.mjs', 'bb.theme.mjs'],
+      {
+        cwd,
+        encoding: 'utf8',
+        env: {...process.env, CI: '1', NO_COLOR: '1'},
+      },
+    );
+    const out = `${run.stdout}${run.stderr}`;
+    expect(run.status, out).toBe(0);
+    expect(out).toMatch(
+      /\[warn\] aa\.theme\.mjs: text in segmented-control-item /,
+    );
+    expect(out).toMatch(
+      /\[warn\] bb\.theme\.mjs: text in segmented-control-item /,
+    );
+    expect(/[^\t\n\r\x20-\x7e]/.test(out), out).toBe(false);
+  }, 600_000);
 });

@@ -12,20 +12,50 @@
  */
 
 /**
- * A fix line of the editor's check as plain words: the token, the part it
- * is set on, the mode and the value. Null for any other line.
+ * Text as plain ASCII, as the CLI prints: a sample the census read from a
+ * page ("Delete item…") keeps its words.
+ * @param {string} text
+ * @returns {string}
+ */
+function plainAscii(text) {
+  return text
+    .replace(/[\u2014\u2013]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/\u2192/g, '->')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[^\x20-\x7e]/g, '?');
+}
+
+/**
+ * A fix line of the editor's check as plain words: the token or property,
+ * the part and block it is set on, the mode and the value. Null for any
+ * other line.
  * @param {string | null | undefined} fix
  * @returns {string | null}
  */
 export function plainFix(fix) {
   const m =
-    /\bset \S+ (--[\w-]+) '([^']+)'(?: --on ([\w-]+))?(?: --only)?(?: --mode (light|dark))?$/.exec(
+    /\bset \S+ (\S+) '([^']+)'((?: --(?:on|when|state|mode) \S+| --only)*)$/.exec(
       String(fix ?? ''),
     );
   if (!m) return null;
-  const [, token, value, on, mode] = m;
-  const where = on ? `in components['${on}']` : 'in tokens';
-  return `set ${token} to ${value} ${where}${mode ? ` for ${mode} mode` : ''}`;
+  const [, thing, value, flags] = m;
+  /** @param {string} name */
+  const flag = name => new RegExp(`--${name} (\\S+)`).exec(flags)?.[1];
+  const on = flag('on');
+  // (The overlays are the editor's group for the popover family: a theme
+  // file sets it on the popover, which a menu's surface is.)
+  const part = on === 'overlays' ? 'popover' : on;
+  // (A block of a part is its variant and its state, joined as a theme
+  // file writes the key: 'variant:secondary+hover'.)
+  const block = [flag('when'), flag('state')].filter(Boolean).join('+');
+  const mode = flag('mode');
+  const where = part
+    ? `in components['${part}']${block ? `['${block}']` : ''}`
+    : 'in tokens';
+  return `set ${thing} to ${value} ${where}${mode ? ` for ${mode} mode` : ''}`;
 }
 
 /**
@@ -43,19 +73,17 @@ export async function themeTokenContrast(cwd, theme) {
   const {contrastProblems, themeResolved} = await import('./_settings.mjs');
   const ctx = await context(cwd);
   if (ctx.unchecked) return null;
-  const {core} = ctx.project;
-  const defaults = core.defineTheme({name: 'astryx-defaults'});
+  const {themeBase} = await import('./_project.mjs');
+  // (Core's own tokens, under the theme's own part rules: what a setting of
+  // the theme's tokens is measured over.)
+  const own = themeBase(ctx.project, theme);
   const base = {
-    light: core.resolveThemeTokens(defaults, {mode: 'light'}),
-    dark: core.resolveThemeTokens(defaults, {mode: 'dark'}),
-    components: theme.components ?? {},
-    onDark: /** @type {Record<string, string>} */ (
-      Object.fromEntries(
-        Object.entries(theme.__onDark?.tokens ?? {}).filter(
-          ([k, v]) => k.startsWith('--') && typeof v === 'string',
-        ),
-      )
+    ...themeBase(
+      ctx.project,
+      ctx.project.core.defineTheme({name: 'astryx-defaults'}),
     ),
+    components: own.components,
+    onDark: own.onDark,
   };
   const settings = Object.entries(theme.tokens ?? {})
     .filter(([thing, v]) => /^--color-/.test(thing) && v != null)
@@ -83,9 +111,11 @@ export async function themeTokenContrast(cwd, theme) {
     else byFix.set(fix ?? p.text, {text: p.text, fix, more: 0});
   }
   return [...byFix.values()].map(({text, fix, more}) => ({
-    text: more
-      ? `${text} (and ${more} more text${more === 1 ? '' : 's'} the same fix reads)`
-      : text,
+    text: plainAscii(
+      more
+        ? `${text} (and ${more} more text${more === 1 ? '' : 's'} the same fix reads)`
+        : text,
+    ),
     fix,
   }));
 }

@@ -52,7 +52,7 @@
  * `settingIssues`, present when there are any, is the build receipt's
  * list of settings the browser does not show as written; `notices`, one per
  * generated file whose settings do not show.
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[]}} data
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[], contrast?: string[]}} data
  *   `code` is set when the outputs are stale or missing (exit 1).
  */
 

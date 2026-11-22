@@ -6212,13 +6212,8 @@ async function themeBuildInternal(
   // The text contrast the theme's color tokens give, measured as the theme
   // editor's check measures a setting: a warning only, so the build's exit
   // status stays the same. The receipt carries them as `contrast`.
-  /** @type {string[]} */
-  const contrastWarnings = [];
-  for (const p of (await tokenContrastWarnings(cwd, resolvedTheme)) ?? []) {
-    const w = `${p.text}${p.fix ? `; fix: ${p.fix}` : ''}`;
-    contrastWarnings.push(w);
-    logger.warn(`Warning: ${w}`);
-  }
+  const contrastWarnings = await contrastLines(cwd, resolvedTheme);
+  for (const w of contrastWarnings) logger.warn(`  [warn] ${source}${w}`);
 
   // A named pipe, a device or a socket where an output goes is never read
   // or replaced: an open of one can wait for good. A check refuses it too.
@@ -6309,6 +6304,7 @@ async function themeBuildInternal(
         ...(settingNotices.length
           ? {notices: settingNotices.map(note => note.text)}
           : {}),
+        ...(contrastWarnings.length ? {contrast: contrastWarnings} : {}),
       },
     });
   }
@@ -6778,6 +6774,19 @@ export async function themeBuildFamily(files, options, ctx = {}, handOff = {}) {
   }
 }
 
+/**
+ * The text contrast lines a theme's color tokens give, each with its plain
+ * fix (see tokenContrastWarnings).
+ * @param {string} cwd
+ * @param {any} theme a defined theme
+ * @returns {Promise<string[]>}
+ */
+async function contrastLines(cwd, theme) {
+  return ((await tokenContrastWarnings(cwd, theme)) ?? []).map(
+    p => `${p.text}${p.fix ? `; fix: ${p.fix}` : ''}`,
+  );
+}
+
 /** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string}} options @param {{cwd?: string}} [ctx] @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint */
 async function buildFamily(
   files,
@@ -7176,6 +7185,13 @@ async function buildFamily(
     members.map(member => ({notes: member.settingNotices ?? []})),
   ).map(note => note.text);
   for (const text of familySettingNotices) logger.log(`  [note] ${text}`);
+  // Each member's contrast lines name the member they are about.
+  /** @type {string[]} */
+  const familyContrast = [];
+  for (const member of members)
+    for (const w of await contrastLines(cwd, member.theme))
+      familyContrast.push(`${path.relative(cwd, member.filePath)}: ${w}`);
+  for (const w of familyContrast) logger.warn(`  [warn] ${w}`);
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
@@ -7217,6 +7233,7 @@ async function buildFamily(
           ? {settingIssues: familySettingIssues}
           : {}),
         ...(familySettingNotices.length ? {notices: familySettingNotices} : {}),
+        ...(familyContrast.length ? {contrast: familyContrast} : {}),
       },
     });
   }
@@ -7295,6 +7312,7 @@ Or load the same stylesheet natively:
       // Each member's settings that do not show as written, at the member's
       // file when its own source writes them.
       settingIssues: familySettingIssues,
+      ...(familyContrast.length ? {contrast: familyContrast} : {}),
       // The base the family's root extends that the family does not select:
       // a requirement of the outputs (an installed package the app keeps).
       ...(familyBase ? {base: familyBase} : {}),
