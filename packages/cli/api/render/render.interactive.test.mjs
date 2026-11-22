@@ -1480,6 +1480,9 @@ import '@astryxdesign/core/astryx.css';
       });
       await pageDrawn(dom);
       dom.window.document.querySelector('button')?.click();
+      // The file decides once the page has loaded, and fills the notice's text a moment after it shows.
+      await pageWaitFor(() => expect(dom.window.document.readyState).toBe('complete'));
+      await new Promise(resolve => setTimeout(resolve, 200));
       const notice = dom.window.document.querySelector('[role="status"]');
       return {dom, calls, notice};
     };
@@ -1488,8 +1491,13 @@ import '@astryxdesign/core/astryx.css';
     expect(refused.notice?.textContent).toContain(
       'Printing works when this file is opened in its own browser tab.',
     );
+    // A print that starts later never prints the notice.
+    refused.dom.window.dispatchEvent(new refused.dom.window.Event('beforeprint'));
+    expect(refused.notice?.isConnected).toBe(false);
+    refused.dom.window.document.querySelector('button')?.click();
+    await new Promise(resolve => setTimeout(resolve, 200));
     /** @type {HTMLButtonElement | null | undefined} */ (
-      refused.notice?.querySelector('button')
+      refused.dom.window.document.querySelector('[role="status"] button')
     )?.click();
     expect(refused.dom.window.document.querySelector('[role="status"]')).toBeNull();
     refused.dom.window.close();

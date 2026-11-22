@@ -425,7 +425,6 @@ const show = () => {
     'font-family:var(--font-family-body,system-ui,sans-serif);font-size:var(--text-body-size,14px);line-height:var(--text-body-leading,1.4)';
   const text = document.createElement('span');
   text.style.flex = '1';
-  text.textContent = 'Printing works when this file is opened in its own browser tab.';
   const close = document.createElement('button');
   close.type = 'button';
   close.textContent = 'Dismiss';
@@ -433,18 +432,32 @@ const show = () => {
   close.addEventListener('click', () => notice.remove());
   notice.append(text, close);
   document.body.append(notice);
+  // A screen reader announces text that arrives in a status region already
+  // in the page, not text the region holds when it is added.
+  setTimeout(() => {
+    text.textContent = 'Printing works when this file is opened in its own browser tab.';
+  }, 100);
 };
+// A print that starts later, as one asked for before the page loaded, never
+// prints the notice.
+window.addEventListener('beforeprint', () => notice?.remove(), true);
 window.print = function () {
   let printing = false;
   const started = () => {
     printing = true;
   };
   window.addEventListener('beforeprint', started, true);
+  const decide = () => {
+    window.removeEventListener('beforeprint', started, true);
+    if (!printing) show();
+  };
   try {
     return print.call(window);
   } finally {
-    window.removeEventListener('beforeprint', started, true);
-    if (!printing) show();
+    // Before the page has loaded, a browser that prints waits for the load
+    // and prints in the task that fires it.
+    if (printing || document.readyState === 'complete') decide();
+    else window.addEventListener('load', () => setTimeout(decide), {once: true});
   }
 };
 }`;
