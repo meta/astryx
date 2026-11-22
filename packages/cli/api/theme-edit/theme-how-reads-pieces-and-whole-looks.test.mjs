@@ -415,7 +415,6 @@ describe('a look said, then taken away by a pronoun', () => {
     async () => {
       for (const q of [
         'the card border is ugly in dark, hide it',
-        'the border on the selected tab is ugly, hide it',
         'the muted card border is ugly, hide it',
         'the bottom border on the cards is ugly, hide it',
         'the shadows on cards and buttons in dark mode are too strong, remove them',
@@ -498,6 +497,77 @@ describe('a look taken away by a pronoun in one mode', () => {
         ) ?? []
       ).join('\n');
       expect(lines).not.toMatch(/box-shadow none --on card$/m);
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun in one state', () => {
+  it(
+    'takes it away in that state only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the border on the selected tab is ugly, hide it',
+          /border none --on tab --state selected\b/,
+        ],
+        [
+          'the border on clicked buttons is ugly, hide it',
+          /border none --on button --state active\b/,
+        ],
+        [
+          'the shadow on hovered cards is too strong, remove it',
+          /box-shadow none --on card --state hover\b/,
+        ],
+        [
+          'the disabled button background is ugly, hide it',
+          /background-color transparent --on button --state disabled\b/,
+        ],
+        // ("active tab" is the selected one.)
+        [
+          'the border on the active tab is ugly, hide it',
+          /border none --on tab --state selected\b/,
+        ],
+        // ("hover card" is a part, never a state.)
+        [
+          'the hover card shadow is too strong, remove it',
+          /box-shadow none --on hover-card$/m,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(
+          /(?:none|transparent) --on (?:tab|button|card)$/m,
+        );
+      }
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading for a state said with other marks, and never fails',
+    async () => {
+      for (const q of [
+        'the border on the *selected* tab is ugly, hide it',
+        'the shadow on non-hovered cards is too strong, remove it',
+        'the border on hovered/pressed buttons is ugly, hide it',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on/);
+      }
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading for the edges not read yet',
+    async () => {
+      for (const q of [
+        'the shadow on not hovered cards is too strong, remove it',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on/);
+      }
     },
     T,
   );
