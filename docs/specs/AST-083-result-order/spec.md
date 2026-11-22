@@ -146,26 +146,23 @@ owns response fields and compatibility.
   of the first three tiers, the command that reads that entry, by its full id
   (`astryx hook useHotkeys`), joins the list. When no entry matches at those
   three tiers and `astryx component` or `astryx template` misses, one hook can
-  join the same way at up to three more tiers, ranked after segment. Near
-  hook: an
-  argument shaped like a hook name (`use`, then a capital letter or a digit)
+  join the same way at up to three more tiers, ranked after segment. Near hook:
+  an argument shaped like a hook name (`use`, then a capital letter or a digit)
   means the closest hook whose name it nearly spells (one slip from five
   letters, two from eight; an edit or two swapped neighboring letters count as
   one slip) or whose name carries every word of the argument. Hook keyword, for
   `astryx component` only: any other argument of two or more words means the one
   hook whose doc declares a keyword with exactly those words. Hook stem, for
-  `astryx component` only, when neither tier above names a hook: the hook
-  whose name without its first word (its verb) is the longest run of
-  consecutive words of the argument (`TopLayer` means `useLayer`). A tie, or a
-  keyword that more than one hook declares, means no hook. At near hook and
-  hook keyword, a suggestion also matches as well when one of its names is a
-  near name or
+  `astryx component` only, when neither tier above names a hook: the hook whose
+  name without its first word (its verb) is the longest run of consecutive words
+  of the argument (`TopLayer` means `useLayer`). A tie, or a keyword that more
+  than one hook declares, means no hook. At near hook and hook keyword, a
+  suggestion also matches as well when one of its names is a near name or
   carries every word of the argument, or, at hook keyword, when its doc's
-  keywords or its search card's synonyms hold the same keyword. At hook stem,
-  a suggestion matches as well when its name, folded, carries the hook's name
-  without its verb, folded. A better tier
-  wins; inside a
-  tier, a component wins over a hook, a hook over a template, and a template
+  keywords or its search card's synonyms hold the same keyword. At hook stem, a
+  suggestion matches as well when its name, folded, carries the hook's name
+  without its verb, folded. A better tier wins; inside a tier, a component wins
+  over a hook, a hook over a template, and a template
   over a docs topic; among docs routes, the route with the fewest segments
   wins, then the first in tree order. That command goes right after the last
   suggestion that matches at its tier or a better one, so it goes first when
