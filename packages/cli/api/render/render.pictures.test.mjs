@@ -3,6 +3,7 @@
 /**
  * @file Tests for `--pictures` on an export: the one line it says when no
  * browser is there (first: Node remembers where a package resolved), the
+ * fix it names when there is no temp folder to write to, the
  * pictures it takes of the written file with a browser on the machine, the
  * refusal with `--reverse`, and an export without the flag, which takes no
  * pictures and says nothing new.
