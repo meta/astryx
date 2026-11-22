@@ -555,8 +555,39 @@ describe('a resting background shorthand', () => {
     ]) {
       await themeEditNew(name, {cwd, like: 'neutral'});
       await themeEditSet(name, 'background', image, {cwd, on: 'button'});
-      expect(cssOf(name), image).not.toMatch(/revert-layer/);
+      const rules = cssOf(name).match(/[^{}]+\{[^}]*\}/g) ?? [];
+      // (Only the disabled look takes the image off, so a disabled button
+      // shows the theme's disabled treatment.)
+      expect(
+        rules.filter(r => /revert-layer/.test(r) && !/disabled/.test(r)),
+        image,
+      ).toEqual([]);
     }
+  }, 240_000);
+
+  it('keeps a resting background image in hover, press and focus', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('ihf', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'ihf',
+      'background',
+      'linear-gradient(#111111, #333333)',
+      {
+        cwd,
+        on: 'button',
+      },
+    );
+    const states = (cssOf('ihf').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r =>
+        /\.astryx-button/.test(r) &&
+        /:hover|:active|:focus|data-pressed|data-hovered/.test(r) &&
+        !/disabled/.test(r),
+    );
+    // (No state rule takes the image off or swaps it for a plain fill.)
+    for (const r of states)
+      expect(r).not.toMatch(
+        /background(?:-image)?:\s*(?:revert-layer|none|initial|unset)/,
+      );
   }, 240_000);
 
   it('leaves a variant hover the theme sets itself under a whole-part background', async ctx => {
