@@ -43,19 +43,19 @@ export function useAttachment<T extends Node = Element>(
 
 /**
  * `useAttachment` for two elements. It keeps `attach` bound to the pair the
- * refs hold after each commit, once both are there. Replacing either element
+ * targets find after each commit, once both are there. Replacing either element
  * releases the attachment and attaches the new pair. A changed `key`
  * re-attaches, and the last attachment is released on unmount. A commit that
  * changes neither does nothing.
  */
 export function useAttachmentPair<A extends Element, B extends Element>(
-  firstRef: AttachmentTarget<A>,
-  secondRef: AttachmentTarget<B>,
+  firstTarget: AttachmentTarget<A>,
+  secondTarget: AttachmentTarget<B>,
   attach: (first: A, second: B) => () => void,
   key: unknown,
 ): void {
   useAttachedNodes(
-    [firstRef, secondRef],
+    [firstTarget, secondTarget],
     ([first, second]) => attach(first as A, second as B),
     key,
   );
