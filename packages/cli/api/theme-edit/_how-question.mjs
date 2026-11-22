@@ -34203,7 +34203,7 @@ function fontIn(cl, question) {
         const rest = c.replace(name.toLowerCase(), '');
         const said = /\bmono(?:space|spaced)?\b|\bcode\b/.test(rest)
           ? 'mono'
-          : /\bserif\b/.test(rest)
+          : /(?<!sans-)\bserif\b/.test(rest)
             ? 'serif'
             : null;
         if (said && said !== familyKind(name)) continue;

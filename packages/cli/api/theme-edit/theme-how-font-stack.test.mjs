@@ -69,6 +69,10 @@ describe('a family said as like another', () => {
     expect(await commandsFor('Font: MS Sans Serif-like pixel sans')).toContain(
       `font 'MS Sans Serif'`,
     );
+    // ("sans-serif" names no serif.)
+    expect(
+      await commandsFor('Type: MS Sans Serif-like pixel sans-serif 11px'),
+    ).toContain(`font 'MS Sans Serif'`);
     // (A kind said as a whole word wins; a word that only holds one,
     // "artisans", "monoline", is no kind.)
     expect(await commandsFor('NYT-style serif headings')).toMatch(
