@@ -4954,8 +4954,9 @@ describe('BottomSheet', () => {
           matches:
             query === '(prefers-reduced-motion: reduce)' ||
             (coarse &&
-              query ===
-                '(prefers-reduced-motion: reduce) and (pointer: coarse)'),
+              (query === '(pointer: coarse)' ||
+                query ===
+                  '(prefers-reduced-motion: reduce) and (pointer: coarse)')),
           media: query,
           onchange: null,
           addEventListener: vi.fn(),

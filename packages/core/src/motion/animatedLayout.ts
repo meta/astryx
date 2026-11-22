@@ -112,7 +112,7 @@ import {
   toSpring,
   type SpringDescription,
 } from './spring';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
 import {
   batchPresented,
@@ -231,10 +231,7 @@ function releaseGlideFor(area: Element): GlideProgress | undefined {
 
 /** The motion a change in `area` plays now. */
 function layoutMotion(area: Element): LayoutMotion {
-  if (
-    matches(area, '(prefers-reduced-motion: reduce)') ||
-    themeReducesMotion(area)
-  ) {
+  if (reducesMotion(area)) {
     if (!matches(area, '(pointer: coarse)')) {
       return {kind: 'instant'};
     }
