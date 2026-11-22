@@ -2087,23 +2087,40 @@ export async function addSharedThemeToApp(source, options) {
       if (
         changed.length &&
         working &&
-        Object.keys(working).length &&
+        previous?.editor &&
+        // (Every working file the add copied is listed, there and
+        // unchanged: a deleted one is a change too.)
+        Object.keys(working).length > 0 &&
+        Object.keys(working).length ===
+          Object.keys(previous.editor.files).length &&
+        Object.keys(working).every(file =>
+          fs.existsSync(path.join(editorDir, file)),
+        ) &&
         !changedSharedFiles(editorDir, {files: working}).length
       ) {
         await import('../theme-edit/_adapter.mjs');
-        const {themeSource} = await import('../theme-edit/_settings.mjs');
+        const {themeSource, loadTheme, staleBuild} =
+          await import('../theme-edit/_settings.mjs');
         const source = path.join(editorDir, `${name}.theme.ts`);
         // (The theme's source is the builder's to edit: built files from an
-        // edited source are their work, never replaced.)
-        const ownSource =
-          !fs.existsSync(source) ||
-          fs.readFileSync(source, 'utf-8') === themeSource(name);
-        if (ownSource) {
-          const {appCopyBuiltCurrent} =
-            await import('../theme-edit/_preview.mjs');
-          const current = appCopyBuiltCurrent(projectDir, name);
-          changed = changed.filter(file => !current.has(file));
+        // edited or deleted source are their work, never replaced. And the
+        // build compared with is the one made from these files now: the
+        // editor's own check of the build against its inputs.)
+        let current = /** @type {Set<string>} */ (new Set());
+        try {
+          if (
+            fs.existsSync(source) &&
+            fs.readFileSync(source, 'utf-8') === themeSource(name) &&
+            !staleBuild(projectDir, name, loadTheme(projectDir, name))
+          ) {
+            const {appCopyBuiltCurrent} =
+              await import('../theme-edit/_preview.mjs');
+            current = appCopyBuiltCurrent(projectDir, name);
+          }
+        } catch {
+          // A theme the editor cannot read leaves every change in place.
         }
+        changed = changed.filter(file => !current.has(file));
       }
       if (!previous || changed.length > 0) {
         throw new AstryxError(
