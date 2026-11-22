@@ -152,7 +152,12 @@ import {
   STATUS_TOKEN,
   settingsBeforeChange,
 } from './_palette.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  isFolderOrLinkToOne,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -203,7 +208,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, themeSettings?: Setting[], sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -297,41 +302,7 @@ export function themeFiles(cwd, slug) {
   };
 }
 
-/** Files a system or a tool puts in any folder; a folder of only these is empty. */
-export const FOLDER_JUNK = new Set([
-  '.DS_Store',
-  '.gitkeep',
-  'Thumbs.db',
-  'desktop.ini',
-]);
-
-/**
- * Whether `dir` holds nothing of anyone's: absent, empty, or only system
- * files (what `git rm -r` or a branch switch leaves). A path that is not a
- * folder, or one that does not read, is not empty.
- * @param {string} dir
- * @returns {boolean}
- */
-export function folderIsEmpty(dir) {
-  if (!fs.existsSync(dir)) return true;
-  try {
-    // A folder holding only empty folders (an empty tokens/) holds nothing
-    // either; a link is never followed.
-    return (
-      fs.lstatSync(dir).isDirectory() &&
-      fs
-        .readdirSync(dir)
-        .every(
-          n =>
-            FOLDER_JUNK.has(n) ||
-            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
-              folderIsEmpty(path.join(dir, n))),
-        )
-    );
-  } catch {
-    return false;
-  }
-}
+export {FOLDER_JUNK, folderIsEmpty};
 
 /**
  * Whether a dial takes a value of its own kind beside its named words (a
@@ -594,12 +565,7 @@ export function refuseUnreadableFiles(cwd, slug) {
 export function refuseThemesNotFolder(cwd) {
   const root = path.join(cwd, 'themes');
   const st = fs.lstatSync(root, {throwIfNoEntry: false});
-  if (!st) return;
-  const isDir =
-    st.isDirectory() ||
-    (st.isSymbolicLink() &&
-      fs.statSync(root, {throwIfNoEntry: false})?.isDirectory());
-  if (isDir) return;
+  if (!st || isFolderOrLinkToOne(root)) return;
   refuse(
     ERROR_CODES.ERR_FILE_EXISTS,
     `themes in this app is ${st.isSymbolicLink() ? 'a link that does not lead to a folder' : 'a file, not a folder'}, so no editor theme can be read or made: every theme goes in themes/<name>/. Rename or move it, then run the command again.`,
@@ -5252,7 +5218,41 @@ export function partsOf(ctx, s) {
         .filter(takesWhen)
         .filter(keepsOwnHeight),
     );
-  return [s.on];
+  const frame = boxFrameOf(ctx, s);
+  return frame ? [frame] : [s.on];
+}
+
+/**
+ * The row a whole border, border radius or shadow set on a part goes on
+ * instead (a pager's control row, for one set on the pager): the part
+ * paints no box of its own, and its controls sit side by side in a row
+ * that frames them as one strip. On the part it would land on the whole
+ * bar, or show nothing; on each control it would box each one apart. Null
+ * for every other setting: a side's border, the corners dial (it rounds
+ * each control), and any of them on a part the theme fills.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'> & {mode?: unknown, when?: unknown}} s
+ * @returns {string | null}
+ */
+export function boxFrameOf(ctx, s) {
+  if (!s.on || FAMILIES[s.on]) return null;
+  const thing = kebab(String(s.thing ?? ''));
+  // Only the whole outline goes on the row: a side's border is a rule
+  // across the part, said of the part.
+  if (!FRAME_THING.test(thing)) return null;
+  // (A piece of the frame set for one mode or variant goes where the frame
+  // it narrows draws, so every piece of one frame lands on one box: a
+  // dark-mode border color follows the border it colors.)
+  const wider = widerFrameOf(ctx.themeSettings ?? [], s);
+  if (wider) return boxFrameOf(ctx, wider);
+  // (On a part the theme fills, the fill is its box: its border, radius
+  // and shadow stay on it, as they always did.)
+  if (fillsPart(ctx.themeSettings ?? [], s.on, {mode: s.mode, when: s.when}))
+    return null;
+  const own = ctx.C?.MAP?.[s.on]?.own ?? {};
+  if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
+    return null;
+  return rowFrameOf(ctx, s.on);
 }
 
 /**
@@ -5288,6 +5288,58 @@ function drawnAlike(ctx, s, member) {
 }
 
 /**
+ * Whether a part is the row that frames another part's controls as one
+ * strip (a pager's control row).
+ * @param {Ctx} ctx
+ * @param {string} part
+ */
+export function isRowFrame(ctx, part) {
+  return [...ctx.project.target.keys()].some(
+    k => k !== part && rowFrameOf(ctx, k) === part,
+  );
+}
+
+/**
+ * The part of a component that holds its controls side by side and frames
+ * them as one strip (a pager's control row around its page cells), when a
+ * part draws no edge of its own and its edges are those controls': a part
+ * of the same component inside it that draws every one of them again and
+ * again (a slider's track and thumb, drawn once each, sit in no such row)
+ * and draws no border itself. Null when there is none (a date and time field's two
+ * boxes sit in no such row). A border or corners asked of the part belong
+ * on this row: on each control they would box each one apart.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function rowFrameOf(ctx, part) {
+  const componentOf = (/** @type {string} */ t) =>
+    ctx.project.target.get(t)?.component;
+  const component = componentOf(part);
+  if (!component) return null;
+  const edges = roundedPartsInside(ctx, part);
+  const own = edges.filter(t => t !== part && componentOf(t) === component);
+  if (!own.length) return null;
+  const contains = (/** @type {string} */ t) =>
+    /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []);
+  return (
+    contains(part)
+      .filter(
+        t =>
+          !edges.includes(t) &&
+          componentOf(t) === component &&
+          !Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k =>
+            /^border(?!.*radius)/.test(k),
+          ) &&
+          own.every(e =>
+            /** @type {string[]} */ (ctx.C.MAP[t]?.repeats ?? []).includes(e),
+          ),
+      )
+      .sort((a, b) => contains(a).length - contains(b).length)[0] ?? null
+  );
+}
+
+/**
  * The parts that draw a part's border: the part itself, or, when it draws
  * none of its own and its edges are the borders of parts inside it (a date
  * and time field's date and time boxes), those parts. Only pieces that draw
@@ -5300,7 +5352,7 @@ function drawnAlike(ctx, s, member) {
 export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
-  const inner = cornerParts(ctx, part).filter(
+  const inner = roundedPartsInside(ctx, part).filter(
     t => t !== part && drawsBorder(ctx, t),
   );
   return inner.length ? inner : [part];
@@ -6024,6 +6076,48 @@ export function fieldEdgeTokens(ctx) {
 }
 
 /**
+ * Whether the theme pins a token in a mode, so it does not follow the
+ * surface: a value in the theme's own source, or an exact setting of it.
+ * @param {ThemeData} data
+ * @param {Record<string, string>} own the theme's own source values
+ * @param {string} k @param {'light' | 'dark'} m
+ */
+export function tokenPinned(data, own, k, m) {
+  return (
+    k in own ||
+    data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === k &&
+        !x.on &&
+        !x.when &&
+        !x.state &&
+        (!x.mode || x.mode === m),
+    )
+  );
+}
+
+/**
+ * Whether a theme's code blocks draw on the surface in a mode: the code
+ * background follows the surface (the theme pins no value of its own for
+ * it) and no setting fills the code block or its header, as a part or
+ * scoped to it.
+ * @param {ThemeData} data
+ * @param {Record<string, string>} own the theme's own source values
+ * @param {'light' | 'dark'} m
+ */
+export function codeBlocksOnSurface(data, own, m) {
+  const code = '--color-syntax-background';
+  if (tokenPinned(data, own, code, m)) return false;
+  return !data.settings.some(
+    x =>
+      (!x.mode || x.mode === m) &&
+      /^code-block/.test(String(x.on ?? '')) &&
+      (x.thing === code || /^background(?:-color)?$/.test(x.thing)),
+  );
+}
+
+/**
  * A color itself where it reads at `min` on the ground, else the nearest
  * shade of it (its hue and chroma, its lightness stepped away from the
  * ground) that does; null when none does.
@@ -6419,6 +6513,7 @@ export function roleReach(ctx, data, base) {
  * @returns {any}
  */
 export function compileTheme(ctx, data, base) {
+  ctx.themeSettings = data.settings;
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
   // A setting the editor no longer accepts never reaches the build; a
@@ -7626,6 +7721,14 @@ export function compileTheme(ctx, data, base) {
             delete mb[k];
       mb[prop] = v;
     } else b[prop] = v;
+    if (/^outline(-style|-width)?$/.test(kebab(prop)) && !s.state)
+      withFocusOutline(s, target);
+    if (
+      kebab(prop) === 'background' &&
+      !s.state &&
+      !/gradient\(|url\(|image-set\(/i.test(String(v))
+    )
+      withOverlayStates(s, target);
     if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
     // A hover or press shadow on a ringed part: Core draws its hover ring
     // only while the part is not focused, so a focused part keeps its
@@ -7685,12 +7788,301 @@ export function compileTheme(ctx, data, base) {
     }
   };
   /**
+   * A resting background shorthand on a part whose hover and press Core
+   * draws as a background image (a layer over the fill): the shorthand
+   * resets that image too, so the part would show nothing under the
+   * pointer. Each such state, in the shorthand's own scope, takes the image
+   * back from Core's layer (`revert-layer`), so Core's own conditions hold:
+   * its enabled guard, its hover-capable media and its touch press. A state
+   * background the theme sets for this scope, or for a wider one, keeps
+   * what it set; one set for a narrower scope wins by its selector.
+   * @param {Setting} s @param {string} target
+   */
+  const withOverlayStates = (s, target) => {
+    const at = ctx.C.MAP[target]?.at?.['background-image'] ?? {};
+    /** The `key:value` pieces of a scope. @param {unknown} when */
+    const piecesOf = when =>
+      when == null ? [] : String(when).split('+').filter(Boolean);
+    const scope = piecesOf(s.when);
+    /**
+     * A census element the setting's scope reaches. Core's overlay does not
+     * change with a size, a density or an elevation, and the census draws
+     * one of each only, so those pieces never rule an element out.
+     * @param {string} attrs
+     */
+    const inScope = attrs => {
+      const held = new Map(
+        attrs
+          .split(',')
+          .map(a => /** @type {[string, string]} */ (a.split('='))),
+      );
+      return scope.every(p => {
+        const [key, value] = p.split(':');
+        return (
+          /^(?:size|density|elevation)$/.test(key) ||
+          !held.has(key) ||
+          held.get(key) === value
+        );
+      });
+    };
+    // (A part whose plain resting image is Core's own, a tint, is no
+    // overlay part: the shorthand replaces that image in every state. A
+    // look under an attribute state, "aria-expanded", is no plain rest.)
+    const restingImage = Object.entries(at).some(([k, val]) => {
+      const [attrs, ...rest] = k.split(' ');
+      return (
+        !rest.join(' ').trim() &&
+        attrs
+          .split(',')
+          .every(a => /^(?:variant|size|elevation|shape|density)=/.test(a)) &&
+        !/^\s*none\s*$/i.test(String(val)) &&
+        inScope(attrs)
+      );
+    });
+    if (restingImage) return;
+    for (const state of ['hover', 'active']) {
+      const drawn = Object.entries(at).some(([k, val]) => {
+        const [attrs, ...rest] = k.split(' ');
+        return (
+          new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' ')) &&
+          !/^\s*none\s*$/i.test(String(val)) &&
+          inScope(attrs)
+        );
+      });
+      if (!drawn) continue;
+      const setByTheme = data.settings.filter(
+        y =>
+          y.source === 'property' &&
+          /^background(-image)?$/.test(kebab(y.thing)) &&
+          y.state === state &&
+          piecesOf(y.when).every(p => scope.includes(p)) &&
+          partsOf(ctx, y).includes(target),
+      );
+      // (One set for this very scope is the theme's own rule here.)
+      const sameScope = (/** @type {Setting} */ y) =>
+        piecesOf(y.when).length === scope.length;
+      if (setByTheme.some(y => sameScope(y) && !y.mode)) continue;
+      // (One set for a wider scope loses here to the resting rule, which
+      // is written later at the same weight: it is written again at the
+      // resting scope, the widest first so the nearest wins.)
+      for (const y of setByTheme
+        .filter(z => !sameScope(z))
+        .sort((a, b) => piecesOf(a.when).length - piecesOf(b.when).length))
+        if (!setByTheme.some(z => sameScope(z) && z.mode === y.mode))
+          putComp(
+            {...y, when: s.when, state},
+            target,
+            y.thing,
+            String(y.value),
+          );
+      if (setByTheme.some(y => !y.mode)) continue;
+      // (A state background the theme sets for one mode keeps that mode:
+      // the other mode alone takes Core's back.)
+      const ownModes = new Set(setByTheme.map(y => y.mode));
+      if (!ownModes.size)
+        block({...s, state}, target).backgroundImage = 'revert-layer';
+      else
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          if (!ownModes.has(m))
+            modeBlock({...s, state}, target, m).backgroundImage =
+              'revert-layer';
+    }
+  };
+  /**
+   * A resting outline on a part that draws its keyboard focus as an
+   * outline would hide that focus (an outline of none, or one of the
+   * theme's that replaces Core's): the part's focus state gets Core's focus
+   * outline back, for each variant that draws its own. An outline
+   * property the theme sets for that state itself (for the whole part, or
+   * for that variant) keeps what it set; the others still come back.
+   * @param {Setting} s @param {string} target
+   */
+  const withFocusOutline = (s, target) => {
+    const at = ctx.C.MAP[target]?.at ?? {};
+    const state = focusStateOf(ctx, target) ?? 'focus-visible';
+    const ownFocus = data.settings.filter(
+      y =>
+        y.source === 'property' &&
+        /^outline/.test(kebab(y.thing)) &&
+        /^focus/.test(String(y.state ?? '')) &&
+        partsOf(ctx, y).includes(target),
+    );
+    /**
+     * Writes Core's focus value of an outline property for a scope, unless
+     * the theme sets that property for the focus state itself (for the
+     * whole part, for that variant, or for a scope the written one
+     * holds; '' for the whole). One the theme sets for one mode keeps that
+     * mode: the other mode alone takes Core's.
+     * @param {string} p @param {string} variant
+     * @param {string | undefined} when @param {string} x
+     */
+    const putFocus = (p, variant, when, x) => {
+      const held = String(when ?? '').split('+');
+      const own = ownFocus.filter(
+        y =>
+          (kebab(y.thing) === 'outline' || kebab(y.thing) === p) &&
+          (y.when == null ||
+            (variant && y.when === `variant:${variant}`) ||
+            String(y.when)
+              .split('+')
+              .every(piece => held.includes(piece))),
+      );
+      // (A wider one is written at the resting scope before this runs.)
+      if (own.some(y => !y.mode)) return;
+      const ownModes = new Set(own.map(y => y.mode));
+      if (!ownModes.size) {
+        block({...s, state, when}, target)[camel(p)] = x;
+        return;
+      }
+      for (const m of /** @type {const} */ (['light', 'dark']))
+        if (!ownModes.has(m))
+          modeBlock({...s, state, when}, target, m)[camel(p)] = x;
+    };
+    /** Core's focus values of a property, by the variant each is for ('' for all). @param {string} p */
+    const focusValues = p => {
+      /** @type {Map<string, string>} */
+      const out = new Map();
+      for (const [k, val] of Object.entries(at[p] ?? {})) {
+        const [attrs, ...rest] = k.split(' ');
+        if (!/:focus/.test(rest.join(' '))) continue;
+        const variant =
+          attrs
+            .split(',')
+            .map(a => a.split('='))
+            .find(([key]) => key === 'variant')?.[1] ?? '';
+        if (!out.has(variant)) out.set(variant, String(val));
+      }
+      return out;
+    };
+    // The variants Core draws at all, and whether each draws its focus as an
+    // outline: one that shows focus another way (an input-like selector's
+    // ring) gets no outline.
+    const variants = new Set(
+      Object.values(at)
+        .flatMap(m => Object.keys(m ?? {}))
+        .map(
+          k =>
+            k
+              .split(' ')[0]
+              .split(',')
+              .map(a => a.split('='))
+              .find(([key]) => key === 'variant')?.[1] ?? '',
+        ),
+    );
+    const drawn = ['outline-style', 'outline-width'].some(p =>
+      [...focusValues(p).values()].some(
+        x => !/^(none|0(px)?|hidden)$/i.test(x),
+      ),
+    );
+    // (A focus outline value the theme sets for a wider scope loses, at
+    // the same weight, to the resting rule written later: it is written
+    // again at the resting scope, once for every outline property, the
+    // widest first so the nearest one wins.)
+    if (s.when) {
+      /** @param {unknown} w */
+      const pieces = w =>
+        String(w ?? '')
+          .split('+')
+          .filter(Boolean);
+      const held = pieces(s.when);
+      const sameScope = (/** @type {Setting} */ y) =>
+        String(y.when ?? '') === String(s.when);
+      /**
+       * The outline longhands a value sets: a shorthand's style, width and
+       * color, or the one longhand itself.
+       * @param {Setting} y
+       * @returns {Array<[string, string]>}
+       */
+      const longhands = y => {
+        const v = String(y.value);
+        if (kebab(y.thing) !== 'outline') return [[kebab(y.thing), v]];
+        /** @type {Record<string, string>} */
+        const got = {};
+        /** @type {string[]} */
+        const open = [];
+        for (const w of splitTop(v, ' ').filter(Boolean))
+          if (
+            /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i.test(
+              w,
+            )
+          )
+            got['outline-style'] = w;
+          else if (
+            /^(?:thin|medium|thick|-?[\d.]+[a-z%]*|(?:calc|min|max|clamp)\(.*\))$/i.test(
+              w,
+            )
+          )
+            got['outline-width'] = w;
+          else if (/^(?:var|env)\(/i.test(w)) open.push(w);
+          else got['outline-color'] = w;
+        // (A variable is the one part still unsaid; with more than one
+        // unsaid part, the shorthand is copied as written, as before, so
+        // the ring still shows.)
+        const unsaid = [
+          'outline-style',
+          'outline-width',
+          'outline-color',
+        ].filter(k => !(k in got));
+        if (open.length > 1 || (open.length === 1 && unsaid.length !== 1))
+          return [['outline', v]];
+        if (open.length === 1) got[unsaid[0]] = open[0];
+        return Object.entries(got);
+      };
+      // (A longhand the resting scope sets itself, in every mode or the
+      // wider value's mode, is that scope's own: no wider value is copied
+      // over it; the others still are.)
+      for (const y of ownFocus
+        .filter(
+          z => !sameScope(z) && pieces(z.when).every(p => held.includes(p)),
+        )
+        .sort((a, b) => pieces(a.when).length - pieces(b.when).length))
+        for (const [long, v] of longhands(y))
+          if (
+            !ownFocus.some(
+              z =>
+                sameScope(z) &&
+                (z.mode == null || z.mode === y.mode) &&
+                (kebab(z.thing) === 'outline' || kebab(z.thing) === long),
+            )
+          )
+            putComp({...y, thing: long, when: s.when, state}, target, long, v);
+    }
+    if (!drawn) return;
+    for (const p of [
+      'outline-style',
+      'outline-width',
+      'outline-color',
+      'outline-offset',
+    ]) {
+      const vals = focusValues(p);
+      if (!vals.size) continue;
+      // (The variant a combined scope names, "variant:ghost+size:sm".)
+      const asked = String(s.when ?? '')
+        .split('+')
+        .map(piece => /^variant:(.+)$/.exec(piece)?.[1])
+        .find(Boolean);
+      const counts = new Map();
+      for (const x of vals.values()) counts.set(x, (counts.get(x) ?? 0) + 1);
+      const common = [...counts].sort((a, b) => b[1] - a[1])[0][0];
+      if (asked) {
+        const x = vals.get(asked) ?? vals.get('');
+        if (x != null) putFocus(p, asked, s.when, x);
+        continue;
+      }
+      const everyVariant =
+        vals.has('') || [...variants].every(x => !x || vals.has(x));
+      if (everyVariant) putFocus(p, '', undefined, common);
+      for (const [variant, x] of vals)
+        if (variant && (!everyVariant || x !== common))
+          putFocus(p, variant, `variant:${variant}`, x);
+    }
+  };
+  /**
    * A resting shadow on a part that draws rings in its box-shadow in some
    * states (an input's hover and focus rings): for each set of the part's
    * renders Core styles apart (a variant, each status), in each state Core
-   * rings any of them in, the theme's shadow with what Core draws for that
-   * set in that state after it (`<shadow>, <ring>`), so every ring still
-   * shows and a set that draws none there (a focused status input) gets the
+   * rings any of them in, what Core draws for that set in that state over
+   * the theme's shadow (`<ring>, <shadow>`), so every ring still shows and a set that draws none there (a focused status input) gets the
    * shadow alone. A shadow of none puts the rings back in their states and
    * keeps a set's own none where the ring of the set it refines would
    * reach it. A write for one set (`--when status:error`) composes that set
@@ -7814,7 +8206,10 @@ export function compileTheme(ctx, data, base) {
           {...s, state, when: set.pairs.join('+') || undefined},
           target,
         );
-        rb.boxShadow = none ? core : coreNone ? v : `${v}, ${core}`;
+        // Core's ring goes first, over the theme's shadow: a shadow with
+        // inset layers of its own (a bevel) would cover a ring drawn under
+        // it, and the state would show nothing.
+        rb.boxShadow = none ? core : coreNone ? v : `${core}, ${v}`;
       }
     }
   };
@@ -9002,17 +9397,7 @@ export function compileTheme(ctx, data, base) {
   // step from it, and the emphasized border is an opaque border's own
   // color. An exact setting or the theme's own source value always wins.
   /** @param {string} k @param {'light' | 'dark'} m */
-  const pinned = (k, m) =>
-    k in ownTokenValues() ||
-    data.settings.some(
-      x =>
-        x.source === 'token' &&
-        x.thing === k &&
-        !x.on &&
-        !x.when &&
-        !x.state &&
-        (!x.mode || x.mode === m),
-    );
+  const pinned = (k, m) => tokenPinned(data, ownTokenValues(), k, m);
   /** The color a token shows in a mode, opaque, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
   const written = (k, m) => {
     // (A value written for both modes in one light-dark() is read by its
@@ -15687,13 +16072,144 @@ export const DIAL_RADII = [
 export function cornerParts(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [part];
-  const inner = (rec.contains ?? []).filter(
+  const inner = roundedPartsInside(ctx, part);
+  return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a theme's settings fill a part at rest where a setting draws: a
+ * background on the part itself that is not none or transparent, set for
+ * every mode and variant or for the one the setting is for. A fill for one
+ * mode or one variant leaves the part unfilled everywhere else.
+ * @param {ReadonlyArray<Partial<Setting>>} settings
+ * @param {string} part
+ * @param {{mode?: unknown, when?: unknown}} [scope] where the setting draws
+ */
+export function fillsPart(settings, part, scope = {}) {
+  return settings.some(
+    x =>
+      x.on === part &&
+      x.source === 'property' &&
+      !x.state &&
+      (!x.mode || x.mode === scope.mode) &&
+      whenCovers(x.when, scope.when) &&
+      FILL_THING.test(kebab(String(x.thing))) &&
+      givesEdge(x),
+  );
+}
+
+/** A frame's whole outline: its border (and width, style, color), radius or shadow. */
+export const FRAME_THING =
+  /^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius|border-(?:start|end)-(?:start|end)-radius)$/;
+
+/**
+ * The saved frame setting a piece set for one mode or variant narrows: a
+ * border, radius or shadow on the same part, at rest, for a strictly wider
+ * scope that holds the piece's. Undefined when there is none.
+ * @param {ReadonlyArray<Setting>} settings
+ * @param {Pick<Setting, 'on' | 'thing'> & {mode?: unknown, when?: unknown}} s
+ * @returns {Setting | undefined}
+ */
+export function widerFrameOf(settings, s) {
+  if (!s.mode && !s.when) return undefined;
+  const pieces = (/** @type {unknown} */ w) =>
+    String(w ?? '')
+      .split('+')
+      .filter(Boolean).length;
+  return settings.find(
+    x =>
+      x !== s &&
+      x.on === s.on &&
+      x.source === 'property' &&
+      !x.state &&
+      FRAME_THING.test(kebab(String(x.thing))) &&
+      (!x.mode || x.mode === s.mode) &&
+      whenCovers(x.when, s.when) &&
+      // (Strictly wider, so the search ends.)
+      ((!!s.mode && !x.mode) || pieces(x.when) < pieces(s.when)),
+  );
+}
+
+/** A background longhand that paints: the fill color or image. */
+export const FILL_THING = /^background(?:-color|-image)?$/;
+
+/**
+ * Whether a `--when` scope reaches where another draws: no scope reaches
+ * everywhere, and `variant:dots` reaches `variant:dots+size:sm` (each of
+ * its pieces is one of the other's).
+ * @param {unknown} wide
+ * @param {unknown} narrow
+ */
+export function whenCovers(wide, narrow) {
+  if (!wide) return true;
+  const pieces = new Set(
+    String(narrow ?? '')
+      .split('+')
+      .filter(Boolean),
+  );
+  return String(wide)
+    .split('+')
+    .every(p => pieces.has(p));
+}
+
+/**
+ * Whether a value paints nothing: a keyword that draws no paint, or a
+ * color with zero alpha (read by the shared color reader).
+ * @param {unknown} value
+ */
+export function seeThrough(value) {
+  return (
+    /^(?:none|hidden|initial|unset|0(?:px)?|transparent)$/i.test(
+      String(value ?? '').trim(),
+    ) || alphaOf(value) === 0
+  );
+}
+
+/**
+ * Whether a setting or step rounds corners: the corners dial or a border
+ * radius.
+ * @param {unknown} thing
+ */
+export function roundsCorners(thing) {
+  return thing === 'corners' || /^border(?:-\w+)*-radius$/.test(String(thing));
+}
+
+/**
+ * Whether a setting gives its part an edge that shows its corners: a fill,
+ * border, shadow or outline that is not none, zero or transparent, at rest
+ * or in the state the corners are for ("disabled links: a fill and 12px
+ * corners"), or in any state when `state` is true (corners show whenever
+ * that edge does).
+ * @param {{thing?: unknown, value?: unknown, state?: unknown}} x
+ * @param {unknown} [state] the corners' own state, or true for any
+ */
+export function givesEdge(x, state) {
+  return (
+    (!x.state || state === true || x.state === state) &&
+    (FILL_THING.test(kebab(String(x.thing ?? ''))) ||
+      /^(?:border(?!.*radius)|box-shadow|outline)/.test(
+        kebab(String(x.thing ?? '')),
+      )) &&
+    !seeThrough(x.value)
+  );
+}
+
+/**
+ * The parts of a part's own inside it that round their own corners (a
+ * date and time field's two boxes, a pager's cells).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+function roundedPartsInside(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec || rec.own?.['border-radius']) return [];
+  return (rec.contains ?? []).filter(
     (/** @type {string} */ t) =>
       ctx.C.MAP[t]?.own?.['border-radius'] &&
       t.startsWith(`${part}-`) &&
       ctx.project.target.has(t),
   );
-  return inner.length ? inner : [part];
 }
 
 /** The table boxes CSS draws no padding on: rows, row groups and columns. */

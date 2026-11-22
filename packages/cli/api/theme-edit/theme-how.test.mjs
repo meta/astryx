@@ -566,6 +566,13 @@ const QUESTIONS = [
       adds: /avatar\.base\.borderRadius=/,
     },
   ],
+  // (A role or a part named before the corner size keeps it: never the
+  // whole theme's corners.)
+  ['controls with 12px corners', {top: /^set q --radius-element 12px$/}],
+  ['give overlays 12px corners', {top: /^set q --radius-container 12px$/}],
+  ['surfaces with 12px corners', {top: /^set q --radius-container 12px$/}],
+  // (The glass look's own reading is never a role's corners.)
+  ['glass with 8px corners', {top: /set q corners 8px/}],
   ['corners: 12', {top: /^set q corners 12px$/, adds: /--radius-element=12px/}],
   [
     'rounder corners but not on inputs',

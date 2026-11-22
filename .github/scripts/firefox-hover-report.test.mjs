@@ -6,7 +6,8 @@
  *   Firefox spec list
  * @output Proof that the Firefox report counts known and new failures apart,
  *   names known failures that now pass, never passes a run that left no
- *   results, and that each known failure names a listed spec and its issue
+ *   results, and that each known failure names a listed spec and a cause
+ *   label
  * @position Node coverage for the Firefox hover runs' report
  */
 
@@ -110,6 +111,22 @@ describe('the Firefox report', () => {
     expect(result.fixed.map(each => each.title)).toEqual(['known break']);
   });
 
+  it('counts a test a serial file skipped after a failure as not run, and one skipped on purpose as run', () => {
+    const report = reportOf([
+      ['known break', 'unexpected'],
+      ['after the break', 'skipped'],
+      ['skipped on purpose', 'skipped'],
+    ]);
+    const tests = report.suites[0].specs;
+    tests[1].tests[0].results = [{status: 'skipped'}];
+    tests[2].tests[0].results = [{status: 'skipped'}];
+    tests[2].tests[0].annotations = [
+      {type: 'skip', description: 'Chromium-only'},
+    ];
+    const result = buildReport(report, [entry('known break')]);
+    expect(result.summary).toBe('Firefox: 1 known failure, 0 new, 1 not run');
+  });
+
   it('counts a flaky test as a failure', () => {
     const result = buildReport(reportOf([['wobbles', 'flaky']]), []);
     expect(result.summary).toBe('Firefox: 0 known failures, 1 new');
@@ -124,7 +141,7 @@ describe('the Firefox report', () => {
 });
 
 describe('the known Firefox failures', () => {
-  it('each names a listed hover spec, a test title and its issue, once, in order', () => {
+  it('each names a listed hover spec, a test title and a cause label, once, in order', () => {
     expect(known.length).toBeGreaterThan(0);
     for (const failure of known) {
       expect(FIREFOX_HOVER_SPECS, failure.file).toContain(failure.file);

@@ -21,7 +21,7 @@ const CONFIG = 'playwright.config.ts';
 /**
  * Every test in a Playwright JSON report, with its outcome.
  * @param {any} report Playwright's JSON report
- * @returns {{file: string, line: number, title: string, status: string, ran: boolean, error: string}[]}
+ * @returns {{file: string, line: number, title: string, status: string, ran: boolean, skippedOnPurpose: boolean, error: string}[]}
  */
 export function testsOf(report) {
   const tests = [];
@@ -56,6 +56,7 @@ export function testsOf(report) {
           title: [...here, spec.title].join(' › '),
           status: test.status,
           ran,
+          skippedOnPurpose,
           error:
             message
               .replace(/\x1b\[[0-9;]*m/g, '')

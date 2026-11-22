@@ -586,10 +586,15 @@ function resolveFile(base) {
  * @param {string} file
  * @param {string} module the specifier, for messages
  * @param {string} exportName
+ * @param {{own?: string}} [options] `own`: the set's generated module, whose
+ *   names are never the library's ({@link iconCandidates})
  */
-export function assertIconExport(file, module, exportName) {
-  if (!moduleExportOrigin(file, exportName)) {
-    const names = followedExportNames(file);
+export function assertIconExport(file, module, exportName, {own} = {}) {
+  const names = followedExportNames(file, ownModules(own));
+  const exported =
+    moduleExportOrigin(file, exportName) != null &&
+    (own == null || exportName === 'default' || names.includes(exportName));
+  if (!exported) {
     throw new IconSetAuthoringError(
       exportName === 'default'
         ? `"${module}" has no default export.`
@@ -612,6 +617,27 @@ export function assertIconExport(file, module, exportName) {
   }
 }
 
+/**
+ * The files a library read does not follow into: the set's generated module,
+ * by its path and its real path. A library that re-exports the set (its root
+ * entry has `export * from` the generated module) then gives only its
+ * own icons.
+ * @param {string} [own] the generated module's absolute path
+ * @returns {Set<string>}
+ */
+function ownModules(own) {
+  /** @type {Set<string>} */
+  const files = new Set();
+  if (own == null) return files;
+  files.add(own);
+  try {
+    files.add(fs.realpathSync(own));
+  } catch {
+    // Not written yet: nothing re-exports it.
+  }
+  return files;
+}
+
 /** A SCREAMING_CASE name: two or more capitals, digits, or underscores. */
 const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
 
@@ -622,15 +648,17 @@ const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
  * Left out: `default`, `Icon`, `…Provider` and `…Context` components, SCREAMING_CASE constants, number and boolean
  * exports, packs of other exports ({@link isIconPack}), and `exclude`.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[]}} [options] `exclude`: export
- *   names that are not icons
+ * @param {{adapter?: boolean, exclude?: string[], own?: string}} [options]
+ *   `exclude`: export names that are not icons; `own`: the set's generated
+ *   module, whose names are the set's own and never the library's, even when
+ *   the library re-exports it
  * @returns {Array<{name: string, adapt: boolean, scalar: string | null}>}
  */
-function iconCandidates(file, {adapter = false, exclude = []} = {}) {
+function iconCandidates(file, {adapter = false, exclude = [], own} = {}) {
   const skipped = new Set(exclude);
   /** @type {Array<{name: string, adapt: boolean, scalar: string | null}>} */
   const out = [];
-  const names = followedExportNames(file);
+  const names = followedExportNames(file, ownModules(own));
   const exported = new Set(names);
   for (const name of names) {
     if (name === 'default' || name === 'Icon' || skipped.has(name)) continue;
@@ -772,9 +800,10 @@ export function modulePrefix(file, options) {
  * ({@link lookPositions}), read from its icon exports once. A large module
  * reports its reading, as {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, module?: string, progress?: (line: string) => void}} [options]
- *   `module`: the module as the author named it, for progress; `progress`:
- *   hears the reading of a large module
+ * @param {{adapter?: boolean, own?: string, module?: string, progress?: (line: string) => void}} [options]
+ *   `own`: the set's generated module, never read as the library's
+ *   ({@link iconCandidates}); `module`: the module as the author named it,
+ *   for progress; `progress`: hears the reading of a large module
  * @returns {{prefix: string[], positions: Array<Set<string>>}}
  */
 export function moduleNaming(file, options = {}) {
@@ -782,7 +811,7 @@ export function moduleNaming(file, options = {}) {
   let count = 0;
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => {
       const candidates = iconCandidates(file, options);
       count = candidates.length;
@@ -1016,9 +1045,10 @@ export function preferredLook(positions, prefer = []) {
  * and name without the look words (`XOutline24WGHT500Icon` is `x`,
  * `XIcon`), and its `looks`, every export that draws the glyph.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], prefer?: string[] | ((positions: Array<Set<string>>) => string[]), module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], own?: string, prefer?: string[] | ((positions: Array<Set<string>>) => string[]), module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
  *   `adapter`: whether the set declares one; `exclude`: export names that
- *   are not icons; `prefer`: look words to prefer (the set's default
+ *   are not icons; `own`: the set's generated module, never read as the
+ *   library's ({@link iconCandidates}); `prefer`: look words to prefer (the set's default
  *   variant), or a function that gives them from the library's look
  *   positions before any glyph is picked; `module`: the module as the author named it, for progress;
  *   `progress`: hears the reading of a large module;
@@ -1031,7 +1061,7 @@ export function libraryIcons(file, options = {}) {
   let all = [];
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => {
       all = collectLibraryIcons(file, options);
       const prefer =
@@ -1061,14 +1091,17 @@ export function libraryIcons(file, options = {}) {
  * runs and the line `found` gives after.
  * @template T
  * @param {string} file
- * @param {{label: string, progress?: (line: string) => void}} reading
- *   `label`: the module as the author named it
+ * @param {{label: string, progress?: (line: string) => void, own?: string}} reading
+ *   `label`: the module as the author named it; `own`: the set's generated
+ *   module, left out of the count ({@link iconCandidates})
  * @param {() => T} read
  * @param {(result: T) => string} found
  * @returns {T}
  */
-function readingLibrary(file, {label, progress}, read, found) {
-  const exportCount = progress ? followedExportNames(file).length : 0;
+function readingLibrary(file, {label, progress, own}, read, found) {
+  const exportCount = progress
+    ? followedExportNames(file, ownModules(own)).length
+    : 0;
   if (progress == null || exportCount < PROGRESS_FROM) return read();
   progress(`Reading ${exportCount} exports of ${label}...`);
   const result = read();
@@ -1143,7 +1176,7 @@ export function libraryLooks(all, prefer = []) {
  * looks are grouped. A large module reports its reading, as
  * {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], module?: string, progress?: (line: string) => void}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], own?: string, module?: string, progress?: (line: string) => void}} [options]
  *   `module`: the module as the author named it, for progress; `progress`:
  *   hears the reading of a large module
  * @returns {LibraryIcon[]}
@@ -1152,7 +1185,7 @@ export function everyLibraryIcon(file, options = {}) {
   const label = options.module ?? path.basename(file);
   return readingLibrary(
     file,
-    {label, progress: options.progress},
+    {label, progress: options.progress, own: options.own},
     () => collectLibraryIcons(file, options),
     icons => `Found ${icons.length} exports in ${label}.`,
   );
@@ -1161,7 +1194,7 @@ export function everyLibraryIcon(file, options = {}) {
 /**
  * {@link everyLibraryIcon} without progress.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[]}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], own?: string}} [options]
  * @returns {LibraryIcon[]}
  */
 function collectLibraryIcons(file, options = {}) {
@@ -1601,6 +1634,17 @@ const REACT_IMPORT = "import {createElement} from 'react'";
 
 /** The built-in icon definitions: the shared names a theme map covers. */
 const BUILT_IN = new Set(ICON_NAMES);
+
+/**
+ * The set's generated module as an absolute path: the `own` file a library
+ * read leaves out ({@link iconCandidates}).
+ * @param {DiscoveredIconSet} set
+ * @param {string} packageDir
+ * @returns {string}
+ */
+export function ownModuleOf(set, packageDir) {
+  return path.resolve(packageDir, generatedModulePath(set, packageDir));
+}
 
 /**
  * The generated icons module of a set, from the package root: `generated`
