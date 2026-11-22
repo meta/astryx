@@ -29,13 +29,14 @@ export const WEBKIT_A11Y_SPEC_GLOBS = Object.freeze([
 ]);
 
 /**
- * The hover specs that also run in Firefox. Firefox orders pointer and mouse
- * events differently from Chromium and WebKit: it can fire `pointermove`
- * before `mouseenter`. So each spec here opens or moves a hover surface
- * (Tooltip, InfoTip, HoverCard, a menu row or submenu, a navigation menu) by
- * moving the pointer. The list names files, not globs: a file named
- * `.a11y.chromium.spec.ts` runs here too, and a case in it that depends on a
- * Chromium-only API skips in Firefox where the case says why.
+ * The hover components' own accessibility specs that move the pointer, which
+ * also run in Firefox. Firefox orders pointer and mouse events differently from
+ * Chromium and WebKit: it can fire `pointermove` before `mouseenter`. Each spec
+ * here is in the Tooltip, InfoTip, HoverCard, DropdownMenu or NavMenu folder
+ * and opens or moves a hover surface by moving the pointer; specs of other
+ * components that open one are not listed. The list names files, not globs: a
+ * file named `.a11y.chromium.spec.ts` runs here too, and a case in it that
+ * needs a Chromium-only API skips in other browsers and says why.
  */
 export const FIREFOX_HOVER_SPECS = Object.freeze([
   'packages/core/src/DropdownMenu/__tests__/DropdownMenuAudit.a11y.chromium.spec.ts',
