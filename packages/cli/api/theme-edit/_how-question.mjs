@@ -4967,7 +4967,16 @@ export function draftAnswer(ctx, env, question) {
         .replace(longest[0].trim(), ' ')
         .replace(state ? new RegExp(`\\b${before}\\b`) : /$^/, ' ')
         .replace(variant ? new RegExp(`\\b${variant}\\b`) : /$^/, ' ');
+      // (A side said with a border, "the bottom border on the cards", "the
+      // card border-top", takes that side away only; a side said with a
+      // state, a variant or a mode keeps the earlier reading.)
+      const side =
+        word === 'border'
+          ? /\b(top|bottom|left|right)\b/.exec(besidePart)?.[1]
+          : undefined;
+      if (side && (mode || state || variant)) return m;
       const others = besidePart
+        .replace(side ? new RegExp(`\\b${side}\\b`) : /$^/, ' ')
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
@@ -4986,7 +4995,7 @@ export function draftAnswer(ctx, env, question) {
       // variant in.)
       return variant
         ? `${stop}${variant} ${part}: no ${word}`
-        : `${stop}no ${word} on ${part}${when}${inMode}`;
+        : `${stop}no ${side ? `${side} ` : ''}${word} on ${part}${when}${inMode}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
