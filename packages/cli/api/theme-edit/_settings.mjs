@@ -5040,8 +5040,9 @@ export function groupReachesByDefault(name) {
  * @param {Pick<Setting, 'on' | 'thing' | 'only'> & {state?: string | null}} s
  */
 export function spreads(ctx, s) {
-  // (A setting whose record reaches past its own part spreads as it did
-  // when it was made, an effect saved with a family record included.)
+  // (A setting whose record reaches past its own place spreads as it did
+  // when it was made, an effect saved with a family record included. A
+  // whole outline's row frame is its own place, not a reach.)
   const reached = /** @type {any} */ (s).reached;
   return Boolean(
     s.on &&
@@ -5049,7 +5050,7 @@ export function spreads(ctx, s) {
       (!s.only &&
         (reachGroupOf(ctx, s) ||
           (Array.isArray(reached) &&
-            reached.some(t => String(t) !== String(s.on)))))),
+            reached.some(t => !ownsPlace(ctx, s, String(t))))))),
   );
 }
 
@@ -6278,7 +6279,11 @@ export function partsOf(ctx, s) {
         ...new Set([
           ...reached.filter(t => ownsPlace(ctx, s, t) || pin.includes(t)),
           ...(isEffect(s)
-            ? pin.map(String).filter(t => ctx.project?.target?.has(t))
+            ? pin
+                .map(String)
+                .filter(
+                  t => ctx.project?.target?.has(t) && !ownsPlace(ctx, s, t),
+                )
             : []),
         ]),
       ]

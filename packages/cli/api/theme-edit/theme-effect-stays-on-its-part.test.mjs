@@ -249,4 +249,23 @@ describe('an effect set on one part', () => {
     expect(partsWith('pe', OWN).has(String(member))).toBe(true);
     expect(partsWith('pe', SHADOW).has(String(member))).toBe(false);
   }, 240_000);
+
+  it('a pager shadow saved with no record draws on one box, before and after a fill', async ctx => {
+    if (needBases(ctx)) return;
+    const RING = '0 2px 6px rgba(0,0,0,.2)';
+    await themeEditNew('px', {cwd, like: 'neutral'});
+    await themeEditSet('px', 'box-shadow', RING, {cwd, on: 'pagination'});
+    const file = path.join(cwd, 'themes', 'px', 'px.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    delete data.reached;
+    for (const x of data.settings) delete x.reached;
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    await themeEditSet('px', 'corners', '8px', {cwd});
+    expect(partsWith('px', RING).size).toBe(1);
+    await themeEditSet('px', 'background-color', '#f8f9fa', {
+      cwd,
+      on: 'pagination',
+    });
+    expect([...partsWith('px', RING)]).toEqual(['pagination']);
+  }, 240_000);
 });
