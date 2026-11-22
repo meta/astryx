@@ -112,4 +112,14 @@ describe('reduced-motion script readers', () => {
       .map(({name}) => name);
     expect(callers).toEqual([]);
   });
+
+  it("call reducesMotion with no element, the setting alone, only in the animator's setting-only read", () => {
+    const callers = files
+      .filter(({name}) => name !== 'motion/animator.ts')
+      .filter(({lines}) =>
+        lines.some(line => isCode(line) && /\breducesMotion\(\s*\)/.test(line)),
+      )
+      .map(({name}) => name);
+    expect(callers).toEqual([]);
+  });
 });
