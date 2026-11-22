@@ -5322,8 +5322,11 @@ export function holdCopies(ctx, data, s) {
       const copied = new Map();
       for (const m of stateModes)
         for (const st of states) {
+          // (A one-mode theme reads its settings in the mode it shows: a
+          // half saved for the other mode is never drawn.)
+          const mm = m ?? (drawn.length === 1 ? drawn[0] : undefined);
           /** @param {Setting} x */
-          const inMode = x => !m || !x.mode || x.mode === m;
+          const inMode = x => !mm || !x.mode || x.mode === mm;
           // (The fill the build paints for that state in this placement and
           // mode: one set for the placement wins over one set at rest, the
           // later of each.)
@@ -5341,7 +5344,7 @@ export function holdCopies(ctx, data, s) {
             y.on &&
             kebab(String(y.thing)) === kebab(String(s.thing)) &&
             (y.state ?? '') === st &&
-            (!y.mode || !m || y.mode === m) &&
+            (!y.mode || !mm || y.mode === mm) &&
             writtenPartsOf(ctx, data, y).includes(String(s.on));
           // (The theme's own color for the state there, ranked like the
           // fill: one set for the placement wins over one set at rest, the
@@ -13635,15 +13638,15 @@ export async function contrastProblems(ctx, data, res) {
       .sort((a, b) => Number(!!b.state) - Number(!!a.state))
       .find(
         x =>
-          // (Only a fill the build writes on the part: a part's own `--only`
-          // fill keeps it under a later group one.)
-          written(x).includes(/** @type {string} */ (side.target)) &&
           (!x.when || x.when === when) &&
           (!x.state || (state != null && x.state === state)) &&
           (!x.mode || x.mode === m) &&
           ((x.source === 'property' &&
             ['background', 'background-color'].includes(x.thing)) ||
-            (x.source === 'token' && side.tokens.includes(x.thing))),
+            (x.source === 'token' && side.tokens.includes(x.thing))) &&
+          // (Only a fill the build writes on the part: a part's own `--only`
+          // fill keeps it under a later group one.)
+          written(x).includes(/** @type {string} */ (side.target)),
       );
     return hit?.value ?? null;
   };

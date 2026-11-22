@@ -523,6 +523,33 @@ describe('a top nav link colored for a dark bar', () => {
     expect(rules.some(r => /revert-layer/.test(r))).toBe(false);
   }, 240_000);
 
+  it('reads a one-mode theme in the mode it shows for the phone-menu copy', async ctx => {
+    if (needBases(ctx)) return;
+    // (A selected fill saved for dark, then the theme made light-only: the
+    // light phone menu draws Core's selected fill, so no copy is written.)
+    await themeEditNew('o1m', {cwd, like: 'neutral'});
+    await themeEditSet('o1m', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('o1m', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      mode: 'dark',
+      only: true,
+    });
+    await themeEditSet('o1m', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    await themeEditSet('o1m', 'mode', 'light-only', {cwd});
+    const rules = (cssOf('o1m').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r =>
+        /top-nav-item/.test(r) &&
+        /drawer/.test(r) &&
+        /selected|aria-current/.test(r),
+    );
+    expect(rules.some(r => /#bfbfbf/.test(r))).toBe(false);
+  }, 240_000);
+
   it('holds nothing for a text variant or a heading level', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('tx', {cwd, like: 'neutral'});
