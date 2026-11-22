@@ -127,8 +127,15 @@ describe('page text reads', () => {
   }, 240_000);
 
   it('a status color other parts fill or edge with is made readable on the part whose text fails, never on the whole theme', async () => {
-    const lines = (await how('silver #c0c0c0 everywhere')).flatMap(
-      r => r.commands,
+    const rs = await how('silver #c0c0c0 everywhere');
+    const lines = rs.flatMap(r => r.commands);
+    // (The answer names each part and what its text sits on.)
+    const said = rs.find(r => /^readable text on parts there/.test(r.text));
+    expect(said?.text).toMatch(
+      /dropdown-menu-item draws --color-text-error at [\d.]+:1 on #c0c0c0/,
+    );
+    expect(said?.text).toMatch(
+      /selector \(secondary\) draws --color-text-secondary at [\d.]+:1 on its own fill over #c0c0c0/,
     );
     // (The destructive menu item's red label, on the silver menu.)
     expect(lines).toContainEqual(

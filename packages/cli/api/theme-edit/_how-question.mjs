@@ -33204,7 +33204,7 @@ export function draftAnswer(ctx, env, question) {
    * @param {boolean} moded
    * @param {Step[]} fixed the whole-theme text lines already written
    * @param {Step[]} steps the answer's lines: colors are read as they build
-   * @returns {Step[]}
+   * @returns {Array<{step: Step, ratio: number, under: string, washed: boolean}>}
    */
   const partTextFixes = (ground, m, moded, fixed, steps) => {
     pageTextTokens();
@@ -33219,7 +33219,7 @@ export function draftAnswer(ctx, env, question) {
         );
       return /** @type {string} */ (built.get(token));
     };
-    /** @type {Map<string, Step>} */
+    /** @type {Map<string, {step: Step, ratio: number, under: string, washed: boolean}>} */
     const out = new Map();
     for (const part of Object.keys(C.MAP)) {
       const bg = (C.partReads(part, 'background') ?? []).filter(
@@ -33262,15 +33262,37 @@ export function draftAnswer(ctx, env, question) {
           const when = washed && variant ? `variant:${variant}` : undefined;
           const key = [part, r.token, when ?? ''].join('\0');
           if (!out.has(key))
-            out.set(
-              key,
-              set(r.token, to, {on: part, when, ...(moded ? {mode: m} : {})}),
-            );
+            out.set(key, {
+              step: set(r.token, to, {
+                on: part,
+                when,
+                ...(moded ? {mode: m} : {}),
+              }),
+              ratio: ratio(ink, under),
+              under: hex(under),
+              washed,
+            });
         }
       }
     }
     return [...out.values()];
   };
+  /**
+   * The answer line for text fixed on one part each: every part named, with
+   * its look and what its text sits on, so no reader takes it for the whole
+   * theme's text color.
+   * @param {Array<{step: Step, ratio: number, under: string, washed: boolean, page: string}>} list
+   */
+  const partAnswer = list => ({
+    text: `readable text on parts there, each on that part only (the shared colors keep their other uses): ${list
+      .map(
+        f =>
+          `${f.step.on}${f.step.when ? ` (${String(f.step.when).replace(/^variant:/, '')})` : ''} draws ${f.step.thing} at ${ratioWords(f.ratio)}:1 on ${f.washed ? `its own fill over ${f.page}, ${f.under}` : f.page}${f.step.mode ? ` in ${f.step.mode} mode` : ''}, so ${f.step.value}`,
+      )
+      .join('; ')}`,
+    options: [list.map(f => f.step)],
+    ...(list.length > 1 ? {sequence: true} : {}),
+  });
   for (const [di, d] of [...result.entries()].reverse()) {
     // (A page answer's own second line, the frame and the main panel, is
     // part of the same answer.)
@@ -33300,6 +33322,8 @@ export function draftAnswer(ctx, env, question) {
     const fixes = [];
     /** @type {Set<string>} */
     const unread = new Set();
+    /** The lines on one part each, with what each was measured on. @type {Array<{step: Step, ratio: number, under: string, washed: boolean, page: string}>} */
+    const partFixes = [];
     for (const st of pages) {
       const ground = /** @type {number[]} */ (
         parseColor(String(st.value))
@@ -33395,16 +33419,36 @@ export function draftAnswer(ctx, env, question) {
         }
       if (everyGround)
         for (const m of modes)
-          for (const f of partTextFixes(
-            ground,
-            m,
-            modes.length > 1 || !!st.mode,
-            fixes,
-            d.options[0],
-          )) {
-            unread.add(String(st.value));
-            fixes.push(f);
-          }
+          partFixes.push(
+            ...partTextFixes(
+              ground,
+              m,
+              modes.length > 1 || !!st.mode,
+              fixes,
+              d.options[0],
+            ).map(f => ({...f, page: String(st.value)})),
+          );
+    }
+    const partSteps = partFixes.map(f => f.step);
+    if (
+      partSteps.length &&
+      !env.check([...d.options[0], ...fixes, ...partSteps]).ok
+    )
+      partFixes.splice(0);
+    if (!fixes.length && partFixes.length) {
+      // (Only parts' own text fails: the whole answer carries their lines,
+      // and one line names each part and what its text sits on.)
+      for (const o of result)
+        if (
+          o !== d &&
+          o.options.length === 1 &&
+          pages.every(st => o.options[0].includes(st))
+        )
+          o.options[0].push(
+            ...partSteps.filter(f => !o.options[0].includes(f)),
+          );
+      result.splice(di + 1, 0, partAnswer(partFixes));
+      continue;
     }
     if (!fixes.length || !env.check([...d.options[0], ...fixes]).ok) continue;
     const at = [...new Set(fixes.map(x => x.mode).filter(Boolean))]
@@ -33426,6 +33470,18 @@ export function draftAnswer(ctx, env, question) {
       options: [fixes],
       ...(fixes.length > 1 ? {sequence: true} : {}),
     });
+    if (partFixes.length) {
+      for (const o of result)
+        if (
+          o !== d &&
+          o.options.length === 1 &&
+          pages.every(st => o.options[0].includes(st))
+        )
+          o.options[0].push(
+            ...partSteps.filter(f => !o.options[0].includes(f)),
+          );
+      result.splice(di + 2, 0, partAnswer(partFixes));
+    }
   }
   // "make the info banner navy": one status's fill on one part, or that
   // status's color for the whole theme (its banners, badges and toasts
