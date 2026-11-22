@@ -47,8 +47,9 @@ export const TooltipPresentInterestContext =
 TooltipPresentInterestContext.displayName = 'TooltipPresentInterestContext';
 
 /**
- * Whether the tooltip describes its anchor: a hidden copy of its text that
- * the anchor's `aria-describedby` names. Core components set it `false` for a
+ * Whether the tooltip describes its anchor. The anchor's `aria-describedby`
+ * names a hidden copy of its text until the layer first mounts, then the
+ * layer's content. Core components set it `false` for a
  * tooltip whose text is already the anchor's own content or name. It is not
  * exported from the package entry.
  */

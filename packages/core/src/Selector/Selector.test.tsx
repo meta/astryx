@@ -3734,7 +3734,7 @@ describe('Selector statusVariant forwarding', () => {
     ).toContain(tooltip.id);
   });
 
-  it('keeps the written order of the status tooltip message under right-to-left', () => {
+  it('keeps the written order of the status tooltip message under right-to-left', async () => {
     render(
       <div dir="rtl">
         <Selector
@@ -3746,7 +3746,9 @@ describe('Selector statusVariant forwarding', () => {
         />
       </div>,
     );
-    const tooltip = screen.getByRole('tooltip', h);
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(screen.getByRole('button', {name: /warning details/i}));
+    const tooltip = await screen.findByRole('tooltip', h);
     expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
       'dir',
       'ltr',

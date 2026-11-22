@@ -138,11 +138,16 @@ test.describe('every tooltip expectation is exercised by a Tooltip state', () =>
     expect(results.map(result => result.state).sort()).toEqual(
       TOOLTIP_BINDING_STATES.map(state => state.id).sort(),
     );
-    // Every Astryx tooltip describes its trigger with a hidden copy, so no
-    // state meets the row for a trigger described by the tooltip itself.
+    // A state that describes with a hidden copy cannot meet the row for a
+    // trigger described by the tooltip itself. Skip that row only while
+    // every state describes with a copy.
+    const everyStateUsesCopy = TOOLTIP_BINDING_STATES.every(
+      state => state.facts.describesWithCopy === true,
+    );
     expect(
       neverExercised(results).filter(
-        id => id !== 'tooltip.trigger.described-by-tooltip',
+        id =>
+          !everyStateUsesCopy || id !== 'tooltip.trigger.described-by-tooltip',
       ),
     ).toEqual([]);
   });
