@@ -30,6 +30,7 @@ import {
   headerOverflowStyles,
   overflowStyles,
   containerEdgeStyles,
+  cutHeadingStyles,
 } from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {
@@ -62,18 +63,6 @@ export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
    */
   contextMenuActions?: TableContextActions;
 }
-
-// A plain-text heading that truncates is cut by its own box, so the box can
-// take the text's direction (cutTextDirection) without moving the cell's
-// padding or dividers.
-const cutHeadingStyles = stylex.create({
-  label: {
-    display: 'block',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-});
 
 // The end padding is also the room header content may grow into before its
 // label wraps or truncates (BaseTable, sort plugin). The last column takes the
