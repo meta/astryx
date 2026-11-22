@@ -391,9 +391,7 @@ Tooltip.displayName = 'Tooltip';
  * as they open a Tooltip. Internal: the truncation tooltip module loads it
  * with this module; the Tooltip entry does not export it.
  */
-export function UndescribedTooltip(
-  props: UndescribedTooltipProps,
-): ReactNode {
+export function UndescribedTooltip(props: UndescribedTooltipProps): ReactNode {
   // No hidden copy: the anchor's own text is the tooltip's content.
   return (
     <TooltipDescribesContext value={false}>
