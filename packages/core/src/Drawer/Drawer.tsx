@@ -95,6 +95,11 @@ import {
 } from '../Layout/padding.stylex';
 import type {SpacingStep, SpacingToken} from '../Layout';
 import {useDrawerDialogPresence} from './useDrawerDialogPresence';
+import {devMissingCallback} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 
@@ -131,6 +136,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     boxShadow: shadowVars['--shadow-high'],
     // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
     // Chromium then holds a finger's drag on the page beside an open
@@ -462,6 +471,16 @@ export function Drawer({
   ref,
   ...props
 }: DrawerProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'Drawer',
+      'onOpenChange',
+      'is required to close the drawer, for example onOpenChange={setIsOpen}. Drawer has no onClose prop.',
+    );
+  }
   // A drawer open on the server renders closed until hydration, and opens in
   // the render after it, the first one that can enter its native host: a
   // <dialog> painted open with aria-modal before it is modal claims a state it

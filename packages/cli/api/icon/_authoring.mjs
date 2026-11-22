@@ -553,9 +553,15 @@ export async function addIconSet(name, options) {
     const typescript = resolveProjectTypeScript([packageDir]);
     /** @type {Record<string, any>} */
     const packageAfter = pkgUpdate ? JSON.parse(pkgUpdate.contents) : pkg;
+    // npm refuses to publish a package whose package.json sets
+    // `"private": true`, such as an app that holds its own set. Peers, the
+    // strict check, and the public description are publishing steps, so its
+    // receipt leaves them out, and its notes end with the step that turns
+    // the set on.
+    const isPrivate = packageAfter.private === true;
     result.data.notes = [
       // First, so a long receipt never hides it: the strict check needs it.
-      ...(typescript?.ts
+      ...(typescript?.ts || isPrivate
         ? []
         : [
             typescript
@@ -566,10 +572,10 @@ export async function addIconSet(name, options) {
       // (architecture:cli-surface INV16), each as the exact change to make.
       ...[
         entryWiringNote(packageDir, packageAfter, generated),
-        peerNote(packageAfter),
-        typecheckNote(packageAfter),
+        isPrivate ? null : peerNote(packageAfter),
+        isPrivate ? null : typecheckNote(packageAfter),
       ].filter(note => note != null),
-      ...(options.description?.trim()
+      ...(options.description?.trim() || isPrivate
         ? []
         : [
             `The set's description is a placeholder ("${displayName} icons."): apps and discover show it. Pass --description when you create a set, or edit ${projectPath(path.relative(packageDir, docFile))}.`,
@@ -589,6 +595,11 @@ export async function addIconSet(name, options) {
       ...mappedNotes(map, name),
       ...suggestionNotes(suggestions, name),
       'Run `astryx integration check` to see the icon definitions still to map.',
+      ...(isPrivate
+        ? [
+            `When \`integration check\` passes, turn the set on in the app: \`astryx experimental icon use ${name}\`. Run it in the app's folder; when this package is not the app, install it in the app first.`,
+          ]
+        : []),
     ];
     if (missingNotice) {
       result.data.licenseNoticeMissing = missingNotice.receipt;
@@ -726,7 +737,7 @@ async function redeclareIconSet(
         .map(icon => icon.id);
       if (asExtra.length > 0) {
         throw new AstryxError(
-          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another look (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
+          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another variant (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
           undefined,
           ERROR_CODES.ERR_INVALID_ARGUMENT,
         );
@@ -789,7 +800,7 @@ async function redeclareIconSet(
         : `Updated icon set "${name}" in place; its icons, map and generated module are unchanged.`,
       ...(added.length > 0
         ? [
-            `Give each icon its ${added.join(', ')} look: ${added.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${fromFor(variant)} --all --set ${name}\``).join(', ')}, or one icon with \`astryx experimental icon add <Export> --from <module> --id <icon> --variant <name> --set ${name}\`.`,
+            `Give each icon its ${added.join(', ')} variant${added.length > 1 ? 's' : ''}: ${added.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${fromFor(variant)} --all --set ${name}\``).join(', ')}, or one icon with \`astryx experimental icon add <Export> --from <module> --id <icon> --variant <name> --set ${name}\`.`,
           ]
         : []),
     ];
@@ -816,10 +827,10 @@ function lookNotes(summary, count, from, looks, name) {
     variant => variant !== looks?.default && styles.has(variant),
   );
   return [
-    `Found ${count} icons in ${from}, each drawn in several looks (${described}) by ${summary.exports} exports. The set wraps each icon once, in the ${taken} look, named without the look words (\`x\`, \`XIcon\`).`,
+    `Found ${count} icons in ${from}, each drawn in several styles, sizes and weights (${described}) by ${summary.exports} exports. The set wraps each icon once, as its ${taken} export, named without those words (\`x\`, \`XIcon\`).`,
     others.length > 0
-      ? `Add the ${others.join(', ')} look${others.length > 1 ? 's' : ''} as variant${others.length > 1 ? 's' : ''}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
-      : `To offer another look as a variant, declare it with \`astryx experimental icon new-set ${name} --variants ${[...summary.preferred].reverse()[0]},<look>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <look> --from ${from} --all --set ${name}\`.`,
+      ? `Add ${others.join(', ')} as ${others.length > 1 ? 'variants' : 'a variant'}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
+      : `To offer another variant, declare it with \`astryx experimental icon new-set ${name} --variants ${[...summary.preferred].reverse()[0]},<variant>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <variant> --from ${from} --all --set ${name}\`.`,
   ];
 }
 
@@ -1143,7 +1154,7 @@ async function refreshIconSet(
         .map(icon => icon.id);
       if (asExtra.length > 0) {
         throw new AstryxError(
-          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another look (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
+          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another variant (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
           undefined,
           ERROR_CODES.ERR_INVALID_ARGUMENT,
         );
@@ -1429,13 +1440,16 @@ async function refreshIconSet(
         generated,
         next,
         rewritten,
-        // The icons the library no longer exports leave the module too; a
-        // renamed icon keeps its export. An icon moved to the new default
+        // The icons the library no longer exports leave the module too, in
+        // every look they drew; a renamed icon keeps its export. An icon moved to the new default
         // look keeps its export, which now names that look. An export moved
         // to the root is written again with the root import. Every other
         // export stays as it is, because the data file still lists it.
         [
-          ...gone.map(icon => icon.export),
+          ...gone.flatMap(icon => [
+            icon.export,
+            ...(icon.variants ?? []).map(variant => variant.export),
+          ]),
           ...repicked,
           ...[...rootMoves.keys()].filter(name => rewrittenNames.has(name)),
         ],

@@ -16,8 +16,10 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Badge} from '@astryxdesign/core/Badge';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutShowcase() {
+  const showToast = useToast();
   return (
     <Section padding={4}>
       <Layout
@@ -52,7 +54,12 @@ export default function LayoutShowcase() {
         footer={
           <LayoutFooter hasDivider>
             <HStack gap={2} hAlign="end">
-              <Button label="New Project" variant="primary">
+              <Button
+                label="New Project"
+                variant="primary"
+                onClick={() =>
+                  showToast({body: 'Demo: a new project would be created here'})
+                }>
                 New Project
               </Button>
             </HStack>

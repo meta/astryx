@@ -10,6 +10,7 @@
  */
 
 import {Activity, use, useRef, useState, type ReactNode} from 'react';
+import {createPortal} from 'react-dom';
 import {
   afterEach,
   beforeAll,
@@ -501,6 +502,14 @@ describe('Item', () => {
     expect(followed).not.toHaveBeenCalled();
   });
 
+  it('does not follow a List link row’s link for a click in content the caller portals out of the row', () => {
+    const {followed} = linkRow(
+      createPortal(<span data-testid="portaled">Portaled</span>, document.body),
+    );
+    fireEvent.click(screen.getByTestId('portaled'), {detail: 1});
+    expect(followed).not.toHaveBeenCalled();
+  });
+
   it('under a finger, does not follow a List link row’s link on the click that ends a text selection in it', () => {
     const {followed, row} = linkRow();
     // Present first: the same tap with no selection follows the link.
@@ -815,6 +824,272 @@ describe('Item', () => {
       <Item label="Step" isSelected aria-current="step" data-testid="item" />,
     );
     expect(screen.getByTestId('item')).toHaveAttribute('aria-current', 'step');
+  });
+
+  describe('current marker on an interactive row', () => {
+    it('puts the marker on the button of an onClick row, not the root', () => {
+      render(
+        <Item
+          label="Billing"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Billing',
+      );
+    });
+
+    it('puts the marker on the link of an href row, not the root', () => {
+      render(
+        <Item label="Billing" isSelected href="/billing" data-testid="row" />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('link', {current: true})).toHaveTextContent(
+        'Billing',
+      );
+    });
+
+    it('moves a caller-provided marker to the focusable element', () => {
+      render(
+        <Item
+          label="Billing"
+          href="/billing"
+          aria-current="page"
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('link', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('marks the control a delegated row hands focus to', () => {
+      function Row({isSelected}: {isSelected: boolean}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            data-testid="row"
+            endContent={
+              <button type="button" ref={ref}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      expect(screen.getByTestId('row')).not.toHaveAttribute('aria-current');
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open',
+      );
+      rerender(<Row isSelected={false} />);
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('keeps a delegated control’s own marker', () => {
+      function Row() {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current="page">
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      render(<Row />);
+      expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('marks a delegated control that mounts after the row', () => {
+      function Row({hasControl}: {hasControl: boolean}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              hasControl ? (
+                <button type="button" ref={ref}>
+                  Open
+                </button>
+              ) : null
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row hasControl={false} />);
+      rerender(<Row hasControl />);
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open',
+      );
+    });
+
+    it('marks a delegated control that is replaced', () => {
+      function Row({version}: {version: number}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              <button type="button" key={version} ref={ref}>
+                Open {version}
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row version={1} />);
+      rerender(<Row version={2} />);
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open 2',
+      );
+    });
+
+    it('leaves a marker the caller adds to its control after selection', () => {
+      function Row({
+        isSelected,
+        controlCurrent,
+      }: {
+        isSelected: boolean;
+        controlCurrent?: 'page';
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current={controlCurrent}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      rerender(<Row isSelected controlCurrent="page" />);
+      rerender(<Row isSelected={false} controlCurrent="page" />);
+      expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
+    });
+
+    it('treats a caller marker with the row’s value as the row’s', () => {
+      function Row({
+        isSelected,
+        controlCurrent,
+      }: {
+        isSelected: boolean;
+        controlCurrent?: 'true';
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current={controlCurrent}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      rerender(<Row isSelected controlCurrent="true" />);
+      expect(screen.getByRole('button', {current: true})).toBeInTheDocument();
+      // The caller should not mark a control the row marks: on deselect the
+      // row removes the "true" it cannot tell from its own.
+      rerender(<Row isSelected={false} controlCurrent="true" />);
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('marks only the root of a delegated row with a parent role', () => {
+      function Row() {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            role="menuitem"
+            isSelected
+            interactiveRef={ref}
+            data-testid="row"
+            endContent={
+              <button type="button" ref={ref}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      render(<Row />);
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByRole('button', {name: 'Open'})).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('keeps the marker on the root of a row with a parent role', () => {
+      render(
+        <Item
+          label="Billing"
+          role="menuitem"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps the marker on a link root', () => {
+      const RootLink = ({ref, ...props}: React.ComponentProps<'a'>) => (
+        <a ref={ref} {...props} />
+      );
+      render(
+        <Item
+          as={RootLink}
+          label="Billing"
+          href="/billing"
+          isSelected
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps data-selected on the root for styling', () => {
+      render(
+        <Item
+          label="Billing"
+          isSelected
+          onClick={() => {}}
+          data-testid="row"
+        />,
+      );
+      expect(screen.getByTestId('row')).toHaveAttribute(
+        'data-selected',
+        'selected',
+      );
+    });
   });
 
   // ===========================================================================
@@ -3466,6 +3741,143 @@ describe('swipe', () => {
       return {row};
     }
 
+    it('keep an open row open through a condition that relabels its entry, and so does the codemod’s output for it: one id at that place in both swipes', async () => {
+      // The codemod's output for `isUnread ? {leading: [{label: 'Read', …}]}
+      // : {leading: [{label: 'Unread', …}]}`. With no id, both branches keyed
+      // their entry as '', so the row stayed open as the label changed.
+      const migrated = {
+        read: createSwipe({
+          leading: [{id: 'leading-0', label: 'Read', onActivate: vi.fn()}],
+        }),
+        unread: createSwipe({
+          leading: [{id: 'leading-0', label: 'Unread', onActivate: vi.fn()}],
+        }),
+      };
+      function Row({isUnread, form}: {isUnread: boolean; form: string}) {
+        return form === 'deprecated' ? (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipeActions={
+              isUnread
+                ? {leading: [{label: 'Read', onActivate: vi.fn()}]}
+                : {leading: [{label: 'Unread', onActivate: vi.fn()}]}
+            }
+          />
+        ) : (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipe={isUnread ? migrated.read : migrated.unread}
+          />
+        );
+      }
+      for (const form of ['deprecated', 'migrated']) {
+        const {rerender, unmount} = render(<Row isUnread form={form} />);
+        const row = screen.getByTestId('row');
+        layOut(row);
+        dragLeading(row, 45);
+        await settled();
+        expect(xOf(row), form).toBe(72);
+        expect(screen.getByRole('button', {name: 'Read'})).toBeInTheDocument();
+        rerender(<Row isUnread={false} form={form} />);
+        await settled();
+        expect(xOf(row), `${form}: open after the flip`).toBe(72);
+        expect(
+          screen.getByRole('button', {name: 'Unread'}),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Read'})).toBeNull();
+        unmount();
+      }
+    });
+
+    it('keep a row open on its trailing side through a condition with one entry against none on the leading side, which both key alike, so the codemod leaves those props as they are', async () => {
+      // One entry with no id and an empty side both key as ''. Ids on every
+      // action would key the branches apart, and the row would close.
+      function Row({isUnread}: {isUnread: boolean}) {
+        return (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipeActions={
+              isUnread
+                ? {
+                    leading: [{label: 'Read', onActivate: vi.fn()}],
+                    trailing: [{label: 'Delete', onActivate: vi.fn()}],
+                  }
+                : {trailing: [{label: 'Delete', onActivate: vi.fn()}]}
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isUnread />);
+      const row = screen.getByTestId('row');
+      layOut(row);
+      const f = finger(row);
+      f.down(200);
+      f.move(185);
+      f.move(170);
+      f.move(150);
+      f.move(130);
+      f.rest();
+      f.up();
+      await settled();
+      expect(xOf(row)).toBe(-72);
+      rerender(<Row isUnread={false} />);
+      await settled();
+      expect(xOf(row), 'open after the flip').toBe(-72);
+      expect(screen.getByRole('button', {name: 'Delete'})).toBeInTheDocument();
+      expect(screen.queryByRole('button', {name: 'Read'})).toBeNull();
+    });
+
+    it('keep a row open through a condition whose branches set one place’s id as a name and as a string literal of the same value, whose props the codemod leaves as they are', async () => {
+      const READ_ID = 'read';
+      // The codemod cannot read READ_ID, so it keeps these props.
+      function Row({isUnread}: {isUnread: boolean}) {
+        return (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipeActions={
+              isUnread
+                ? {
+                    leading: [
+                      {id: READ_ID, label: 'Read', onActivate: vi.fn()},
+                    ],
+                    trailing: [{label: 'Delete', onActivate: vi.fn()}],
+                  }
+                : {
+                    leading: [{id: 'read', label: 'Read', onActivate: vi.fn()}],
+                    trailing: [{label: 'Archive', onActivate: vi.fn()}],
+                  }
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isUnread />);
+      const row = screen.getByTestId('row');
+      layOut(row);
+      const f = finger(row);
+      f.down(200);
+      f.move(185);
+      f.move(170);
+      f.move(150);
+      f.move(130);
+      f.rest();
+      f.up();
+      await settled();
+      expect(xOf(row)).toBe(-72);
+      rerender(<Row isUnread={false} />);
+      await settled();
+      expect(xOf(row), 'open after the flip').toBe(-72);
+      expect(screen.getByRole('button', {name: 'Archive'})).toBeInTheDocument();
+      expect(screen.queryByRole('button', {name: 'Delete'})).toBeNull();
+    });
+
     it('still rest a row open and fire a tapped entry, as released', async () => {
       const onActivate = vi.fn();
       const {row} = renderDeprecatedRow({
@@ -3656,5 +4068,92 @@ describe('Item empty slots', () => {
       <Item label="Item" startContent={0} endContent={0} description={0} />,
     );
     expect(screen.getAllByText('0')).toHaveLength(3);
+  });
+});
+
+describe('Item row onClick: clicks that belong to something else', () => {
+  it('runs for a click on the row itself', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(<Item label="Invoice 42" onClick={onClick} />);
+    await user.click(screen.getByText('Invoice 42'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run for a click inside a portal rendered from the row', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onPortalClick = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={createPortal(
+          <div data-testid="portal-content" onClick={onPortalClick}>
+            Edit
+          </div>,
+          document.body,
+        )}
+      />,
+    );
+    await user.click(screen.getByTestId('portal-content'));
+    expect(onPortalClick).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it.each(['tab', 'switch', 'menuitem', 'checkbox', 'option'])(
+    'does not run for a click on a role="%s" control in endContent',
+    async role => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      render(
+        <Item
+          label="Invoice 42"
+          onClick={onClick}
+          endContent={
+            <div role={role} tabIndex={0} data-testid="control">
+              Control
+            </div>
+          }
+        />,
+      );
+      await user.click(screen.getByTestId('control'));
+      expect(onClick).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not run for a click on a read-only native input in endContent', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={
+          <input
+            type="checkbox"
+            aria-readonly="true"
+            aria-label="Paid"
+            readOnly
+          />
+        }
+      />,
+    );
+    await user.click(screen.getByRole('checkbox', {name: 'Paid'}));
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not run for a click on a native control in endContent', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={<button type="button">Action</button>}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Action'}));
+    expect(onClick).not.toHaveBeenCalled();
   });
 });

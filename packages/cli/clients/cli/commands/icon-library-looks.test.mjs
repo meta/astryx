@@ -248,9 +248,9 @@ describe('new-set --from a library of looks', () => {
     expect(data.map).toMatchObject({arrowDown: 'arrow-down', star: 'star'});
     const notes = body.data.notes.join('\n');
     expect(notes).toContain(
-      'Found 6 icons in @acme/vector-icons, each drawn in several looks (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
+      'Found 6 icons in @acme/vector-icons, each drawn in several styles, sizes and weights (filled or outline; 24; wght300, wght400, wght500) by 33 exports.',
     );
-    expect(notes).toContain('in the outline 24 wght400 look');
+    expect(notes).toContain('as its outline 24 wght400 export');
     expect(body.data.suggestions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({definition: 'close', icon: 'x'}),
@@ -629,7 +629,7 @@ describe('generated files a formatter rewrote', () => {
         'trash',
       ]);
       expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
-      expect(generatedOf('brand')).toContain('close: createElement(TrashIcon');
+      expect(generatedOf('brand')).toContain('close: /* @__PURE__ */ createElement(TrashIcon');
       const added = await json([
         'experimental',
         'icon',
@@ -731,7 +731,7 @@ describe('reading a large library', () => {
       'Reading 1021 exports of @acme/vector-icons...',
     );
     expect(text.stderr).toContain(
-      'Found 170 icons in @acme/vector-icons, drawn by 1020 exports in their looks.',
+      'Found 170 icons in @acme/vector-icons, drawn by 1020 exports across its look words.',
     );
     const asJson = await runCli([...NEW_SET, '--dry-run', '--json'], pkg);
     expect(asJson.stderr).not.toContain('Reading');
@@ -1494,7 +1494,7 @@ describe('the default variant on every path', () => {
         ? looks.drawn
         : looks.other;
     const withLook = command
-      .replaceAll('<look>', another)
+      .replaceAll('<variant>', another)
       .replaceAll('<name>', another)
       .replaceAll('<default>', looks.drawn);
     const variant = /--variant (\S+)/u.exec(withLook)?.[1] ?? looks.other;
@@ -1908,7 +1908,7 @@ describe('the default variant on every path', () => {
         // Every icon's own export comes from this module: the variant is
         // the look they draw now, the default the set must declare.
         expect(res.body.error).toBe(
-          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the look they draw now, so "${looks.drawn}" is that look and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports already draw those icons as "${looks.drawn}", so "${looks.drawn}" can't be another variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
         );
         expect(suggestions).toEqual([
           `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,
@@ -1930,7 +1930,7 @@ describe('the default variant on every path', () => {
       case 'keep': {
         // No run moves the default; each printed command runs, the
         // module placeholder filled with the module that draws the look.
-        expect(res.body.error).toContain('export names name no looks');
+        expect(res.body.error).toContain('export names carry no look words');
         expect(suggestions.length).toBeGreaterThan(0);
         for (const command of suggestions) {
           expect(command).not.toMatch(/new-set brand --from /u);
@@ -2007,4 +2007,58 @@ describe('the default variant on every path', () => {
       }
     }
   }
+});
+
+describe('a refresh after the library drops a glyph it drew in several looks', () => {
+  it('removes every look of that glyph from the generated module and its declarations', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    const ADD_FILLED = [
+      'experimental',
+      'icon',
+      'add',
+      '--variant',
+      'filled',
+      '--from',
+      '@acme/vector-icons',
+      '--all',
+    ];
+    await json(ADD_FILLED);
+    const declarationsOf = (/** @type {string} */ set) =>
+      fs.readFileSync(
+        path.join(pkg, 'icon-sets', set, `${set}.generated.d.ts`),
+        'utf-8',
+      );
+    expect(generatedOf('brand')).toContain('StarFilled24WGHT400Icon');
+
+    writeVectorLibrary(GLYPHS.filter(glyph => glyph !== 'Star'));
+    const refreshed = await json([...NEW_SET, '--variants', 'outline,filled']);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(refreshed.body.data.notes).toEqual(
+      expect.arrayContaining([
+        '1 icons the library no longer exports were removed from the set: star.',
+      ]),
+    );
+    const library = fs.readFileSync(
+      path.join(pkg, 'node_modules', '@acme', 'vector-icons', 'index.js'),
+      'utf-8',
+    );
+    for (const text of [generatedOf('brand'), declarationsOf('brand')]) {
+      expect(text).not.toMatch(/Star/u);
+      // Every name the module re-exports is one the library still exports.
+      for (const [, name] of text.matchAll(/\{(\w+) as \w+\}/gu)) {
+        expect(library).toContain(`as ${name}}`);
+      }
+      expect(text).toContain('XFilled24WGHT400Icon as XFilledIcon');
+    }
+    expect(
+      dataOf('brand').icons.map((/** @type {{id: string}} */ icon) => icon.id),
+    ).not.toContain('star');
+
+    // A second refresh, and the add after it, change nothing.
+    const before = [generatedOf('brand'), declarationsOf('brand')];
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    await json(ADD_FILLED);
+    expect([generatedOf('brand'), declarationsOf('brand')]).toEqual(before);
+  });
 });

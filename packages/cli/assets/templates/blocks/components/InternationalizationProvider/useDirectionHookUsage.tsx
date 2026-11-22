@@ -70,7 +70,7 @@ function Sparkline() {
       height={60}
       data-testid="sparkline-canvas"
       data-direction={direction}
-      style={{border: '1px solid #e1e4e8', borderRadius: 4}}
+      style={{border: '1px solid var(--color-border)', borderRadius: 4}}
     />
   );
 }

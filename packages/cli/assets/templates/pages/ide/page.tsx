@@ -23,11 +23,13 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
+  ClockIcon,
   FolderIcon,
-  DocumentTextIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+  SearchIcon,
+} from '@astryxdesign/template-icons';
 
 const styles: Record<string, CSSProperties> = {
   contentFill: {
@@ -49,14 +51,6 @@ const styles: Record<string, CSSProperties> = {
   },
   metadataCompact: {
     gap: 'var(--spacing-1) var(--spacing-3)',
-  },
-  historyTimelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    backgroundColor: 'var(--color-border-emphasized)',
-    marginTop: 6,
-    flexShrink: 0,
   },
   editorArea: {
     overflow: 'auto',
@@ -141,7 +135,7 @@ function buildFileTree(
   const file = (id: string): TreeListItemData => ({
     id,
     label: label(id),
-    startContent: <Icon icon={DocumentTextIcon} size="xsm" />,
+    startContent: <Icon icon={DocumentIcon} size="xsm" />,
     onClick: () => onFileClick(id),
   });
   return [
@@ -239,7 +233,8 @@ export default function ResizableWorkspacePage() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
+          <VisuallyHidden as="h1">Code editor</VisuallyHidden>
           <Layout
             height="fill"
             start={
@@ -260,7 +255,7 @@ export default function ResizableWorkspacePage() {
                           value=""
                           placeholder="Search"
                           size="md"
-                          startIcon={MagnifyingGlassIcon}
+                          startIcon={SearchIcon}
                         />
                         <TreeList items={fileTree} density="compact" />
                       </Stack>
@@ -405,7 +400,10 @@ export default function ResizableWorkspacePage() {
                                   gap={3}
                                   style={styles.propertiesContent}>
                                   <Stack direction="vertical" gap={1}>
-                                    <Heading level={3} maxLines={1}>
+                                    <Heading
+                                      level={3}
+                                      accessibilityLevel={2}
+                                      maxLines={1}>
                                       {activeFile}
                                     </Heading>
                                     <Text
@@ -435,7 +433,7 @@ export default function ResizableWorkspacePage() {
                                       onClick={() =>
                                         // Demo only: replace this toast with the call that performs the action.
                                         showToast({
-                                          body: `${activeFile} formatted`,
+                                          body: `Demo: ${activeFile} would be formatted here`,
                                           uniqueID: 'format',
                                         })
                                       }
@@ -444,11 +442,25 @@ export default function ResizableWorkspacePage() {
                                       label="Go to Definition"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the definition would open here',
+                                          uniqueID: 'go-to-definition',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Find References"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: references would be listed here',
+                                          uniqueID: 'find-references',
+                                        })
+                                      }
                                     />
                                   </Stack>
                                 </Stack>
@@ -468,8 +480,10 @@ export default function ResizableWorkspacePage() {
                                           </Text>
                                         }
                                         startContent={
-                                          <span
-                                            style={styles.historyTimelineDot}
+                                          <Icon
+                                            icon={ClockIcon}
+                                            size="xsm"
+                                            color="secondary"
                                           />
                                         }
                                       />

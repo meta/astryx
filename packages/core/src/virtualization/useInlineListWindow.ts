@@ -80,14 +80,16 @@ interface InlinePending {
   snapshot: InlineListWindowGeometry;
   to: number;
 }
+// The items the window last planned for, and an anchor scroll still to land.
+// A scroll changes none of it, so a scroll sets no state.
 interface InlineTracking {
   source: InlineListWindowGeometrySource;
-  snapshot: InlineListWindowGeometry;
   keys: ReadonlyArray<ListWindowKey>;
   offsets: ReadonlyArray<number>;
-  firstVisibleIndex: number;
-  /** The scrolled part of the first visible item, as a fraction of it. */
-  fraction: number;
+  // The insets the items were laid out between. Pinning or unpinning an end
+  // item changes them together with the items.
+  insetStart: number;
+  insetEnd: number;
   pending: InlinePending | undefined;
 }
 
@@ -101,6 +103,70 @@ function writeInlineScroll(viewport: HTMLElement, logical: number): void {
     viewport.ownerDocument.defaultView?.getComputedStyle(viewport).direction ===
     'rtl';
   viewport.scrollLeft = isReversed ? -logical : logical;
+}
+
+interface InlineRangeInputs {
+  offsets: ReadonlyArray<number>;
+  insetStart: number;
+  insetEnd: number;
+  initialViewportWidth: number;
+  overscan: number;
+}
+
+/** Whether a geometry snapshot gives a usable inline measurement. */
+function isInlineMeasured(snapshot: InlineListWindowGeometry): boolean {
+  return (
+    snapshot.isMeasured &&
+    isPositiveFinite(snapshot.viewportWidth ?? 0) &&
+    Number.isFinite(snapshot.scrollLeft ?? 0)
+  );
+}
+
+/** The space between the insets that shows items, for a snapshot. */
+function getInlineViewportSize(
+  snapshot: InlineListWindowGeometry,
+  {insetStart, insetEnd, initialViewportWidth}: InlineRangeInputs,
+): number {
+  return (
+    (isInlineMeasured(snapshot)
+      ? (snapshot.viewportWidth ?? 0)
+      : initialViewportWidth) -
+    insetStart -
+    insetEnd
+  );
+}
+
+/**
+ * Reads the geometry as the window uses it. While no anchor scroll is
+ * pending, a snapshot whose mounted range and viewport match the last one
+ * returns the last one, so a scroll that keeps the range renders nothing.
+ */
+function createRangeSelector(
+  read: () => InlineListWindowGeometry,
+  inputs: InlineRangeInputs,
+): () => InlineListWindowGeometry {
+  let last: InlineListWindowGeometry | undefined;
+  let lastKey = '';
+  return () => {
+    const snapshot = read();
+    if (last === snapshot) {
+      return snapshot;
+    }
+    const isMeasured = isInlineMeasured(snapshot);
+    const range = calculateVariableListRange({
+      offsets: inputs.offsets,
+      viewportSize: getInlineViewportSize(snapshot, inputs),
+      scrollOffset: isMeasured ? (snapshot.scrollLeft ?? 0) : 0,
+      isMeasured,
+      overscan: inputs.overscan,
+    });
+    const key = `${isMeasured}:${snapshot.viewportWidth}:${range.start}:${range.end}`;
+    if (last === undefined || key !== lastKey) {
+      last = snapshot;
+      lastKey = key;
+    }
+    return last;
+  };
 }
 
 function hasSameValues<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean {
@@ -122,12 +188,40 @@ export function useInlineListWindow({
   viewport,
   focusContainer,
 }: UseInlineListWindowOptions): InlineListWindowResult {
+  const [tracking, setTracking] = useState<InlineTracking | undefined>();
+  const pending = tracking?.pending;
+  // New offsets or insets make a new selector, which reads the current
+  // snapshot. Table rebuilds the offsets whenever its column keys change. While an anchor scroll is pending, the window reads every
+  // snapshot, so it sees the scroll land.
+  const getSnapshot = useMemo(
+    () =>
+      !canWindow
+        ? getUnmeasured
+        : pending !== undefined
+          ? geometry.getSnapshot
+          : createRangeSelector(geometry.getSnapshot, {
+              offsets,
+              insetStart,
+              insetEnd,
+              initialViewportWidth,
+              overscan,
+            }),
+    [
+      canWindow,
+      pending,
+      geometry,
+      offsets,
+      insetStart,
+      insetEnd,
+      initialViewportWidth,
+      overscan,
+    ],
+  );
   const snapshot = useSyncExternalStore(
     canWindow ? geometry.subscribeInline : subscribeToNothing,
-    canWindow ? geometry.getSnapshot : getUnmeasured,
+    getSnapshot,
     canWindow ? geometry.getServerSnapshot : getUnmeasured,
   );
-  const [tracking, setTracking] = useState<InlineTracking | undefined>();
   const count = Math.max(0, offsets.length - 1);
   // Key work runs when the items change, never on a scroll.
   const keyIndices = useMemo(
@@ -141,16 +235,16 @@ export function useInlineListWindow({
     focusContainer,
   });
 
-  const isMeasured =
-    snapshot.isMeasured &&
-    isPositiveFinite(snapshot.viewportWidth ?? 0) &&
-    Number.isFinite(snapshot.scrollLeft ?? 0);
+  const isMeasured = isInlineMeasured(snapshot);
   // The insets cover the viewport's edges, so only the space between them
   // shows items. The first frame plans for the same space.
-  const viewportSize =
-    (isMeasured ? (snapshot.viewportWidth ?? 0) : initialViewportWidth) -
-    insetStart -
-    insetEnd;
+  const viewportSize = getInlineViewportSize(snapshot, {
+    offsets,
+    insetStart,
+    insetEnd,
+    initialViewportWidth,
+    overscan,
+  });
   // A change of item keys or sizes keeps the first visible item's key and
   // its fractional offset. New arrays with the same values are no change,
   // so a caller that rebuilds its items on each render gets no scroll write.
@@ -158,26 +252,48 @@ export function useInlineListWindow({
   const hasItemChange =
     last !== undefined &&
     (!hasSameValues(last.keys, keys) || !hasSameValues(last.offsets, offsets));
-  const anchorScroll =
-    canWindow && isMeasured && last !== undefined && hasItemChange
-      ? reconcileListAnchor({
-          previousKeys: last.keys,
-          keys,
-          keyIndices,
-          firstVisibleIndex: last.firstVisibleIndex,
-          offset: last.fraction,
-          offsets,
-          rowHeight: 0,
-          viewportHeight: viewportSize,
-          startOffset: 0,
-        })
-      : undefined;
-  const pending = tracking?.pending;
   const isAwaitingAnchor =
     tracking?.source === geometry &&
     pending !== undefined &&
     pending.snapshot.scrollLeft === snapshot.scrollLeft &&
     (pending.to !== snapshot.scrollLeft || pending.snapshot === snapshot);
+  // The first visible item before the change, read from the previous items
+  // at the scroll position the window shows.
+  const previousRange =
+    canWindow && isMeasured && last !== undefined && hasItemChange
+      ? calculateVariableListRange({
+          offsets: last.offsets,
+          // The previous items showed between the previous insets.
+          viewportSize:
+            viewportSize +
+            insetStart +
+            insetEnd -
+            last.insetStart -
+            last.insetEnd,
+          scrollOffset: isAwaitingAnchor
+            ? pending.to
+            : (snapshot.scrollLeft ?? 0),
+          isMeasured,
+          overscan,
+        })
+      : undefined;
+  let anchorScroll: number | undefined;
+  if (previousRange !== undefined && last !== undefined) {
+    const firstSize =
+      last.offsets[previousRange.firstVisibleIndex + 1] -
+      last.offsets[previousRange.firstVisibleIndex];
+    anchorScroll = reconcileListAnchor({
+      previousKeys: last.keys,
+      keys,
+      keyIndices,
+      firstVisibleIndex: previousRange.firstVisibleIndex,
+      offset: firstSize > 0 ? previousRange.offset / firstSize : 0,
+      offsets,
+      rowHeight: 0,
+      viewportHeight: viewportSize,
+      startOffset: 0,
+    });
+  }
   const pendingScroll =
     anchorScroll ?? (isAwaitingAnchor ? pending.to : undefined);
   const range = canWindow
@@ -191,30 +307,29 @@ export function useInlineListWindow({
         overscan,
       })
     : undefined;
-  // The last window feeds the anchor, so it lives in state. Immutable inputs
-  // limit this update to one extra render.
+  // The planned items feed the anchor, so they live in state.
   if (range !== undefined && isMeasured) {
+    const nextPending =
+      anchorScroll !== undefined
+        ? {snapshot, to: anchorScroll}
+        : isAwaitingAnchor
+          ? pending
+          : undefined;
     if (
       tracking === undefined ||
       tracking.source !== geometry ||
-      tracking.snapshot !== snapshot ||
-      hasItemChange
+      hasItemChange ||
+      tracking.insetStart !== insetStart ||
+      tracking.insetEnd !== insetEnd ||
+      tracking.pending !== nextPending
     ) {
-      const firstSize =
-        offsets[range.firstVisibleIndex + 1] - offsets[range.firstVisibleIndex];
       setTracking({
         source: geometry,
-        snapshot,
         keys,
         offsets,
-        firstVisibleIndex: range.firstVisibleIndex,
-        fraction: firstSize > 0 ? range.offset / firstSize : 0,
-        pending:
-          anchorScroll !== undefined
-            ? {snapshot, to: anchorScroll}
-            : isAwaitingAnchor
-              ? pending
-              : undefined,
+        insetStart,
+        insetEnd,
+        pending: nextPending,
       });
     }
   } else if (tracking !== undefined && !canWindow) {

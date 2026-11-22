@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach} from 'vitest';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import fsMutable from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
@@ -9,15 +9,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   cachedRelease,
+  failedInstallWaitMs,
   forgetVerifiedReleases,
   ensureRelease,
   isInReleaseCache,
+  recentFailedInstall,
   releasesDir,
   resolvePublishedVersion,
   isVersionRange,
   npmCommand,
   resolveLatestRelease,
   runNpm,
+  npmEnvironment,
+  readNpmNoProxy,
   tryLock,
   endRecordedInstall,
   isReleaseInstall,
@@ -157,6 +161,155 @@ describe('ensureRelease', () => {
     }
   });
 
+  it('remembers a failed install for its registry only, and names that registry', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    const offline = fakeNpm({outcome: 'offline'});
+    const online = fakeNpm();
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      return (registry.startsWith('http://127.0.0.1') ? offline : online).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    expect('reason' in again && again.reason).toBe(
+      "the registry http://127.0.0.1:9/ could not be reached; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes",
+    );
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+    expect(fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'))).toBe(false);
+  });
+
+  it("reads the @astryxdesign scope's registry first: changing only that registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let scoped = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=${scoped}\nregistry=https://registry.npmjs.org/\n`, stderr: ''};
+      }
+      installs.push(args);
+      return fakeNpm({outcome: scoped.startsWith('http://127.0.0.1') ? 'offline' : 'ok'}).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    // npm's error names no address and the two settings differ: no registry is named.
+    expect('reason' in first && first.reason).toBe('the registry could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    scoped = 'https://astryx.example/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("with a scope registry set, names the registry npm's error names, and changing only npm's registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=https://astryx.example/\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      if (registry.startsWith('http://127.0.0.1')) {
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'npm error code ECONNREFUSED\nnpm error request to http://127.0.0.1:9/react failed, reason: connect ECONNREFUSED',
+        };
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("names the registry from npm's timeout and 404 forms, and none when npm names none and the settings differ", () => {
+    const cases = /** @type {const} */ ([
+      ['npm error code ETIMEDOUT\nnpm error network timeout at: https://deps.example/react', 'the registry https://deps.example/ could not be reached'],
+      ['npm error code E404\nnpm error 404 Not Found - GET https://deps.example/react - Not found', 'the registry https://deps.example/ does not have it'],
+      ['npm error code ENOTFOUND\nnpm error network request failed', 'the registry could not be reached'],
+    ]);
+    for (const [stderr, reason] of cases) {
+      const cacheDir = tempDir('cache');
+      /** @type {import('./cache.mjs').runNpm} */
+      const run = args =>
+        args[0] === 'config'
+          ? {status: 0, stdout: '@astryxdesign:registry=https://astryx.example/\nregistry=https://deps.example/\n', stderr: ''}
+          : {status: 1, stdout: '', stderr};
+      const result = ensureRelease('0.6.8', {cacheDir, run});
+      expect('reason' in result && result.reason).toBe(reason);
+    }
+  });
+
+  it('a failure without a registry error (the install time limit) still records the settings, and a registry change retries it', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'https://slow.example/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      installs.push(args);
+      if (registry === 'https://slow.example/') {
+        return /** @type {any} */ ({status: null, signal: null, stdout: '', stderr: '', error: Object.assign(new Error('timed out'), {code: 'ETIMEDOUT'})});
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toMatch(/did not finish within/);
+    const record = JSON.parse(fs.readFileSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'), 'utf8'));
+    expect(record.registries).toEqual({scoped: null, registry: 'https://slow.example/'});
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in again && again.reason).toMatch(/or at once when npm's registry changes$/);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it('a record without registry settings (an older CLI wrote it) waits out its time and says nothing about registry changes', () => {
+    const cacheDir = tempDir('cache');
+    fs.mkdirSync(releasesDir(cacheDir), {recursive: true});
+    fs.writeFileSync(
+      path.join(releasesDir(cacheDir), '.failed-0.6.8.json'),
+      `${JSON.stringify({at: Date.now(), reason: 'the registry could not be reached', failures: 1})}\n`,
+    );
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: '@astryxdesign:registry=undefined\nregistry=https://registry.npmjs.org/\n', stderr: ''};
+      installs.push(args);
+      return fakeNpm().run(args, opts);
+    };
+    const result = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(0);
+    expect('reason' in result && result.reason).toBe(
+      'the registry could not be reached; last tried 1 minute ago, tried again after 2 minutes',
+    );
+  });
+
   it("refuses a release this computer's Node cannot run", () => {
     const cacheDir = tempDir('cache');
     const result = ensureRelease('0.9.0', {
@@ -189,6 +342,303 @@ describe('ensureRelease', () => {
       waitMs: 300,
     });
     expect('reason' in result && result.reason).toMatch(/still installing/);
+  });
+});
+
+const MINUTE = 60_000;
+
+/**
+ * Write the record a failed install of `version` leaves in the cache: the
+ * file `recentFailedInstall` reads. A string is written as it is, to seed a
+ * record that cannot be read.
+ * @param {string} cacheDir
+ * @param {string} version
+ * @param {string | Record<string, unknown>} record
+ * @returns {string} the record's path
+ */
+function seedFailure(cacheDir, version, record) {
+  const file = path.join(releasesDir(cacheDir), `.failed-${version}.json`);
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(
+    file,
+    typeof record === 'string' ? record : JSON.stringify(record),
+  );
+  return file;
+}
+
+/**
+ * The npm runs that install, leaving out the `npm config get` read that
+ * checks whether the registries changed since the failure.
+ * @param {string[][]} calls
+ * @returns {string[][]}
+ */
+function installRuns(calls) {
+  return calls.filter(args => args[0] !== 'config');
+}
+
+describe('failedInstallWaitMs', () => {
+  it('waits 2 minutes after a first failure and 10 after a second in a row', () => {
+    expect(failedInstallWaitMs(1)).toBe(2 * MINUTE);
+    expect(failedInstallWaitMs(2)).toBe(10 * MINUTE);
+    expect(failedInstallWaitMs(3)).toBe(10 * MINUTE);
+    expect(failedInstallWaitMs(50)).toBe(10 * MINUTE);
+  });
+});
+
+describe('recentFailedInstall', () => {
+  const now = 1_700_000_000_000;
+
+  it('is null for a release that never failed', () => {
+    expect(recentFailedInstall('0.6.8', tempDir('cache'), now)).toBeNull();
+  });
+
+  it('holds a failure for its wait and not a moment longer', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - (2 * MINUTE - 1),
+      reason: 'offline',
+      failures: 1,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toEqual({
+      at: now - (2 * MINUTE - 1),
+      reason: 'offline',
+      failures: 1,
+      registries: null,
+      waitMs: 2 * MINUTE,
+    });
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - 2 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toBeNull();
+  });
+
+  it('holds a second failure in a row for 10 minutes', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - (10 * MINUTE - 1),
+      reason: 'offline',
+      failures: 2,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)?.waitMs).toBe(
+      10 * MINUTE,
+    );
+    seedFailure(cacheDir, '0.6.8', {
+      at: now - 10 * MINUTE,
+      reason: 'offline',
+      failures: 2,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toBeNull();
+  });
+
+  it('holds a failure from this very moment, but not one from the future', () => {
+    // A failure dated ahead of now means the clock was set back; waiting out
+    // an hour of it would block the release for that long.
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {at: now, reason: 'offline', failures: 1});
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).not.toBeNull();
+    seedFailure(cacheDir, '0.6.8', {
+      at: now + 60 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).toBeNull();
+  });
+
+  it('ignores a record it cannot read', () => {
+    const cacheDir = tempDir('cache');
+    for (const record of [
+      '',
+      '{not json',
+      '[]',
+      'null',
+      JSON.stringify({reason: 'offline', failures: 1}),
+      JSON.stringify({at: 'yesterday', reason: 'offline', failures: 1}),
+      // A number written as text still counts: `now - '1700...'` is a number.
+      JSON.stringify({at: String(now), reason: 'offline', failures: 1}),
+      JSON.stringify({at: now, failures: 1}),
+      JSON.stringify({at: now, reason: 5, failures: 1}),
+    ]) {
+      seedFailure(cacheDir, '0.6.8', record);
+      expect(recentFailedInstall('0.6.8', cacheDir, now), record).toBeNull();
+    }
+  });
+
+  it('reads a failure count it cannot use as one failure', () => {
+    const cacheDir = tempDir('cache');
+    for (const failures of [undefined, 0, -1, 2.5, '2', null]) {
+      seedFailure(cacheDir, '0.6.8', {
+        at: now - 30_000,
+        reason: 'offline',
+        failures,
+      });
+      const failed = recentFailedInstall('0.6.8', cacheDir, now);
+      expect(failed?.failures, String(failures)).toBe(1);
+      expect(failed?.waitMs, String(failures)).toBe(2 * MINUTE);
+    }
+  });
+
+  it('is kept for each release on its own', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {at: now, reason: 'offline', failures: 1});
+    expect(recentFailedInstall('0.6.8', cacheDir, now)).not.toBeNull();
+    expect(recentFailedInstall('0.6.9', cacheDir, now)).toBeNull();
+  });
+});
+
+describe('ensureRelease after a failed install (FR2)', () => {
+  it('does not install again for a release whose install just failed', () => {
+    const cacheDir = tempDir('cache');
+    const first = fakeNpm({outcome: 'offline'});
+    const failed = ensureRelease('0.6.8', {cacheDir, run: first.run});
+    expect(first.calls.length).toBeGreaterThan(0);
+
+    // Even an npm that would work is not asked: offline runs would otherwise
+    // start npm and wait for it on every run.
+    const second = fakeNpm();
+    const again = ensureRelease('0.6.8', {cacheDir, run: second.run});
+    expect(installRuns(second.calls)).toHaveLength(0);
+    expect('reason' in failed && 'reason' in again).toBe(true);
+    // The new reason keeps the old one, and says when it tried and how long
+    // until it tries again.
+    const reason = 'reason' in again ? again.reason : '';
+    expect(reason.startsWith(`${'reason' in failed && failed.reason}; `)).toBe(
+      true,
+    );
+    expect(reason).toMatch(/last tried 1 minute ago/);
+    expect(reason).toMatch(/after 2 minutes$/);
+    expect(cachedRelease('0.6.8', cacheDir)).toBeNull();
+  });
+
+  it('says how long ago it tried, in whole minutes', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 90_000,
+      reason: 'the registry could not be reached',
+      failures: 1,
+    });
+    const npm = fakeNpm();
+    const result = ensureRelease('0.6.8', {cacheDir, run: npm.run});
+    expect(installRuns(npm.calls)).toHaveLength(0);
+    const reason = 'reason' in result ? result.reason : '';
+    expect(reason.startsWith('the registry could not be reached; ')).toBe(true);
+    expect(reason).toMatch(/last tried 2 minutes ago/);
+    expect(reason).toMatch(/after 2 minutes$/);
+  });
+
+  it('tries again once the wait has passed', () => {
+    const cacheDir = tempDir('cache');
+    const record = seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 3 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    const npm = fakeNpm();
+    const release = ensureRelease('0.6.8', {cacheDir, run: npm.run});
+    expect(npm.calls.length).toBeGreaterThan(0);
+    expect('bin' in release && release.version).toBe('0.6.8');
+    expect(fs.existsSync(record)).toBe(false);
+  });
+
+  it('waits longer after a second failure in a row', () => {
+    const cacheDir = tempDir('cache');
+    seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 3 * MINUTE,
+      reason: 'offline',
+      failures: 2,
+    });
+    const held = fakeNpm();
+    const result = ensureRelease('0.6.8', {cacheDir, run: held.run});
+    expect(installRuns(held.calls)).toHaveLength(0);
+    expect('reason' in result && result.reason).toMatch(/after 10 minutes$/);
+
+    seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 11 * MINUTE,
+      reason: 'offline',
+      failures: 2,
+    });
+    const retried = fakeNpm();
+    ensureRelease('0.6.8', {cacheDir, run: retried.run});
+    expect(retried.calls.length).toBeGreaterThan(0);
+  });
+
+  it('counts the failures in a row, so the next wait is longer', () => {
+    const cacheDir = tempDir('cache');
+    ensureRelease('0.6.8', {
+      cacheDir,
+      run: fakeNpm({outcome: 'offline'}).run,
+    });
+    const first = recentFailedInstall('0.6.8', cacheDir);
+    expect(first?.failures).toBe(1);
+    expect(first?.waitMs).toBe(2 * MINUTE);
+
+    // Let that wait pass, and fail again.
+    const record = path.join(releasesDir(cacheDir), '.failed-0.6.8.json');
+    const aged = JSON.parse(fs.readFileSync(record, 'utf-8'));
+    writeJson(record, {...aged, at: Date.now() - 3 * MINUTE});
+    const retry = fakeNpm({outcome: 'offline'});
+    ensureRelease('0.6.8', {cacheDir, run: retry.run});
+    expect(retry.calls.length).toBeGreaterThan(0);
+    const second = recentFailedInstall('0.6.8', cacheDir);
+    expect(second?.failures).toBe(2);
+    expect(second?.waitMs).toBe(10 * MINUTE);
+  });
+
+  it('forgets a failure once the release installs', () => {
+    const cacheDir = tempDir('cache');
+    const record = seedFailure(cacheDir, '0.6.8', {
+      at: Date.now() - 3 * MINUTE,
+      reason: 'offline',
+      failures: 1,
+    });
+    ensureRelease('0.6.8', {cacheDir, run: fakeNpm().run});
+    expect(fs.existsSync(record)).toBe(false);
+    expect(recentFailedInstall('0.6.8', cacheDir)).toBeNull();
+  });
+
+  it('forgets a failure when another copy installed the release meanwhile', () => {
+    const cacheDir = tempDir('cache');
+    seedRelease(cacheDir, '0.6.8');
+    const record = seedFailure(cacheDir, '0.6.8', {
+      at: Date.now(),
+      reason: 'offline',
+      failures: 1,
+    });
+    const npm = fakeNpm();
+    const release = ensureRelease('0.6.8', {cacheDir, run: npm.run});
+    expect('bin' in release && release.version).toBe('0.6.8');
+    expect(npm.calls).toHaveLength(0);
+    expect(fs.existsSync(record)).toBe(false);
+  });
+
+  it('does not remember a run that only waited on another install', () => {
+    const cacheDir = tempDir('cache');
+    fs.mkdirSync(path.join(releasesDir(cacheDir), '.lock-0.6.8'), {
+      recursive: true,
+    });
+    const result = ensureRelease('0.6.8', {
+      cacheDir,
+      run: fakeNpm().run,
+      waitMs: 300,
+    });
+    expect('reason' in result && result.reason).toMatch(/still installing/);
+    expect(recentFailedInstall('0.6.8', cacheDir)).toBeNull();
+    expect(
+      fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json')),
+    ).toBe(false);
+  });
+
+  it('holds back only the release that failed', () => {
+    const cacheDir = tempDir('cache');
+    ensureRelease('0.6.8', {
+      cacheDir,
+      run: fakeNpm({outcome: 'offline'}).run,
+    });
+    const npm = fakeNpm();
+    const other = ensureRelease('0.6.9', {cacheDir, run: npm.run});
+    expect('bin' in other && other.version).toBe('0.6.9');
+    expect(npm.calls.length).toBeGreaterThan(0);
   });
 });
 
@@ -1015,6 +1465,79 @@ const waitFor = async (done, ms) => {
   return done();
 };
 
+describe("npm's own noproxy setting", () => {
+  /** npm as a script that answers `config get noproxy` with `answer`. */
+  const npmAnswering = (/** @type {string} */ answer, status = 0) => ({
+    command: process.execPath,
+    prefix: [
+      '-e',
+      `process.stdout.write(${JSON.stringify(answer)}); process.exit(${status});`,
+    ],
+    shell: /** @type {const} */ (false),
+  });
+
+  it('is read from npm, and is none when npm sets none or cannot say', () => {
+    expect(readNpmNoProxy(npmAnswering('localhost,127.0.0.1,::1\n'))).toBe(
+      'localhost,127.0.0.1,::1',
+    );
+    expect(readNpmNoProxy(npmAnswering('\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('null\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('localhost', 1))).toBeNull();
+  });
+
+  it('replaces a NO_PROXY that names the registry, so npm uses the proxy it is configured with', () => {
+    const shell = {
+      PATH: '/usr/bin',
+      NO_PROXY: 'localhost,.example.net',
+      no_proxy: 'localhost,.example.net',
+      npm_config_proxy: 'http://proxy.example:8080',
+    };
+    expect(npmEnvironment(shell, 'localhost')).toEqual({
+      ...shell,
+      NO_PROXY: 'localhost',
+      no_proxy: 'localhost',
+    });
+    // Nothing set in npm, or the same list: the shell's stands.
+    expect(npmEnvironment(shell, null)).toBe(shell);
+    expect(
+      npmEnvironment(
+        {NO_PROXY: 'localhost', no_proxy: 'localhost'},
+        'localhost',
+      ),
+    ).toEqual({NO_PROXY: 'localhost', no_proxy: 'localhost'});
+  });
+
+  it('reaches the npm runNpm starts, through the guard it runs under', () => {
+    const shell = {
+      NO_PROXY: process.env.NO_PROXY,
+      no_proxy: process.env.no_proxy,
+    };
+    process.env.NO_PROXY = '.example.net';
+    process.env.no_proxy = '.example.net';
+    try {
+      const result = runNpm(['view'], {
+        timeoutMs: 30_000,
+        noProxy: 'localhost',
+        npm: {
+          command: process.execPath,
+          prefix: [
+            '-e',
+            'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
+          ],
+          shell: false,
+        },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('localhost|localhost');
+    } finally {
+      for (const [name, value] of Object.entries(shell)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+});
+
 describe('runNpm time limit', () => {
   it('ends a package manager that ignores SIGTERM, leaving no process behind', async () => {
     const marker = tempDir('npm-pid');
@@ -1120,4 +1643,63 @@ describe('no install outlives its run', () => {
       await waitFor(() => !alive(/** @type {number} */ (leftover.pid)), 5_000),
     ).toBe(true);
   }, 30_000);
+});
+
+describe('a stop signal during the install', () => {
+  const CACHE = new URL('./cache.mjs', import.meta.url).href;
+  /**
+   * Run `ensureRelease` in a child Node with a stand-in npm, at the top level
+   * or inside an I/O callback, and print what the run does after it.
+   * @param {'term-during-install' | 'npm-stopped'} what
+   * @param {'top' | 'io-callback'} where
+   */
+  const child = (what, where) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stop-'));
+    const script = path.join(dir, 'run.mjs');
+    fs.writeFileSync(
+      script,
+      `import * as fs from 'node:fs';
+import {ensureRelease, settleSignals} from ${JSON.stringify(CACHE)};
+const run = args => {
+  if (args[0] !== 'install')
+    return {status: 0, stdout: 'https://registry.example/\\n', stderr: ''};
+  if (${JSON.stringify(what)} === 'npm-stopped')
+    return {status: null, signal: 'SIGINT', stdout: '', stderr: ''};
+  // A signal sent to this process while npm runs synchronously.
+  process.kill(process.pid, 'SIGTERM');
+  return {status: 1, stdout: '', stderr: 'npm error code ECONNREFUSED'};
+};
+const go = async () => {
+  const release = ensureRelease('0.6.8', {cacheDir: ${JSON.stringify(dir)}, run});
+  console.log('returned', 'reason' in release);
+  await settleSignals();
+  console.log('answered');
+};
+if (${JSON.stringify(where)} === 'io-callback') fs.readFile(${JSON.stringify(script)}, () => go());
+else go();
+`,
+    );
+    try {
+      return spawnSync(process.execPath, [script], {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+
+  for (const where of /** @type {const} */ (['top', 'io-callback'])) {
+    it(`stops the run before it answers (${where})`, () => {
+      const result = child('term-during-install', where);
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.stdout).not.toContain('answered');
+    });
+  }
+
+  it('ends the run at once when the signal stopped npm', () => {
+    const result = child('npm-stopped', 'io-callback');
+    expect(result.signal).toBe('SIGINT');
+    expect(result.stdout).toBe('');
+  });
 });

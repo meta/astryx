@@ -29,6 +29,22 @@ beforeAll(() => {
 });
 
 describe('MobileNav', () => {
+  it('carries mobile-nav-drawer on the painted panel, with the resolved side', () => {
+    render(
+      <MobileNav isOpen={true} onOpenChange={() => {}} side="start">
+        <span>Nav content</span>
+      </MobileNav>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const drawer = dialog.querySelector('.astryx-mobile-nav-drawer');
+    expect(drawer).not.toBeNull();
+    expect(drawer).toHaveAttribute('data-side', 'start');
+    expect(drawer).toContainElement(screen.getByText('Nav content'));
+    // (The overlay keeps its own target; the panel's is not on it.)
+    expect(dialog).toHaveClass('astryx-mobile-nav');
+    expect(dialog).not.toHaveClass('astryx-mobile-nav-drawer');
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <MobileNav isOpen={true} onOpenChange={() => {}}>
@@ -353,5 +369,27 @@ describe('MobileNav', () => {
     // The requested width is the width, not a cap on a full-viewport one.
     expect(drawer.style.getPropertyValue('--x-width')).toBe('300px');
     expect(declaredValue(drawer, 'width')).toBe('var(--x-width)');
+  });
+});
+
+describe('MobileNav panel text color', () => {
+  it("draws the panel's own text in the surface's text color", () => {
+    // The browser gives a dialog `color: CanvasText`, which follows the
+    // color scheme and not the theme. Text in the panel that sets no color
+    // of its own (a selected nav row) inherits the panel's color, so the
+    // panel sets the surface's. The real-browser proof is
+    // MobileNav.textColor.a11y.chromium.spec.ts.
+    render(
+      <MobileNav isOpen onOpenChange={() => {}} data-testid="mobile-nav">
+        <span>Content</span>
+      </MobileNav>,
+    );
+    const drawer = screen
+      .getByTestId('mobile-nav')
+      .querySelector<HTMLElement>('[tabindex="-1"]');
+    if (drawer == null) {
+      throw new Error('no drawer panel');
+    }
+    expect(declaredValue(drawer, 'color')).toMatch(/color-text-primary/);
   });
 });

@@ -31,6 +31,8 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
   sizeVars,
@@ -318,9 +320,13 @@ const elevationStyles = stylex.create({
  * Focus outline is shared across variants for consistent keyboard affordance.
  */
 const variants = stylex.create({
+  // Primary and destructive pass their colour pair to their content. A neutral
+  // Badge there paints the pair inverted, so it keeps the pair's contrast.
   primary: {
     backgroundColor: colorVars['--color-accent'],
     color: colorVars['--color-on-accent'],
+    '--_button-fill': colorVars['--color-accent'],
+    '--_button-on-fill': colorVars['--color-on-accent'],
   },
   secondary: {
     backgroundColor: colorVars['--color-neutral'],
@@ -333,6 +339,8 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    '--_button-fill': colorVars['--color-error'],
+    '--_button-on-fill': colorVars['--color-on-error'],
     // Forced colors replace the fill with ButtonFace; the solid-variant edge
     // (`forcedColorsEdge`) keeps the destructive fill's shape visible
     // (architecture:theme-tokens INV11), in this color. A border, not an
@@ -917,6 +925,18 @@ export function Button({
     isEnabled: tooltip != null,
   });
 
+  // A label cut short by its row shows in full in a tooltip when keyboard
+  // focus reaches the Button; a caller's own tooltip replaces it.
+  const buttonRef = useRef<HTMLElement | null>(null);
+  const labelRef = useRef<HTMLSpanElement | null>(null);
+  const canShowCutLabel = !isIconOnly && tooltip == null;
+  const cutLabel = useCutTextOnKeyboardFocus({
+    anchorRef: buttonRef,
+    measureRef: labelRef,
+    isEnabled: canShowCutLabel,
+    yieldsToCallerTooltip: true,
+  });
+
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
     // a re-click while pending starts a fresh action that interrupts the prior.
@@ -1060,7 +1080,9 @@ export function Button({
           </span>
         )}
         {isIconOnly ? null : (
-          <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
+          <span ref={labelRef} {...stylex.props(styles.labelText)}>
+            {children ?? label}
+          </span>
         )}
         {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
@@ -1121,6 +1143,7 @@ export function Button({
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
     hitAreaRef,
+    buttonRef,
   );
 
   let element: ReactNode;
@@ -1146,6 +1169,12 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          cutLabel.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, cutLabel.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1171,6 +1200,12 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          cutLabel.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, cutLabel.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1178,16 +1213,15 @@ export function Button({
     );
   }
 
-  if (tooltip) {
-    return (
-      <>
-        {element}
-        {tooltipHook.renderTooltip(tooltip)}
-      </>
-    );
-  }
-
-  return element;
+  // One shape whether or not a tooltip shows, so a label that becomes cut
+  // short keeps the same button element (and its focus).
+  return (
+    <>
+      {element}
+      {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
+      {cutLabel.tooltip}
+    </>
+  );
 }
 
 Button.displayName = 'Button';

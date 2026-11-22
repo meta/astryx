@@ -417,6 +417,8 @@ const styles = stylex.create({
     isolation: 'isolate',
     zIndex: 0,
   },
+  // Each card is a stacking context at rest, as a transform makes it during a
+  // transition. So screen content with any z-index stays under the bar.
   card: {
     position: 'absolute',
     inset: 0,
@@ -1035,13 +1037,123 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
   return isRtlElement(element) ? 'rtl' : 'ltr';
 }
 
+/** When a transition's animations start, as the animator's call options. */
+type TransitionClock = {at?: number; start?: 'next-frame'};
+
+/**
+ * The clock of a transition. A finger's release keeps its release time, so
+ * the spring continues from the frame the finger left. A transition from rest
+ * leaves its start to the animator. The browser's commit then dates it. So a
+ * heavy commit or a later listener's block delays the motion. It never skips
+ * ahead. In an input event's own task (a tap on a row, a key), the motion
+ * starts at the first frame after that task.
+ */
+function transitionClock(
+  releasedAt: number | undefined,
+  isInputTask: boolean,
+): TransitionClock {
+  if (releasedAt != null) {
+    return {at: releasedAt};
+  }
+  return isInputTask ? {start: 'next-frame'} : {};
+}
+
+/** The pointer, key and touch events a person's press dispatches. */
+const INPUT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'click',
+  'pointerdown',
+  'pointerup',
+  'mousedown',
+  'mouseup',
+  'touchstart',
+  'touchend',
+  'keydown',
+  'keyup',
+]);
+
+/**
+ * The page is dispatching an input event (a pointer, a key, a touch) now.
+ * The fallback for a push the app starts outside the stack's own handlers.
+ */
+function isDispatchingInput(
+  view: (Window & typeof globalThis) | null | undefined,
+): boolean {
+  if (view == null) {
+    return false;
+  }
+  const event: unknown = Reflect.get(view, 'event');
+  return event instanceof view.Event && INPUT_EVENT_TYPES.has(event.type);
+}
+
+/**
+ * Whether the browser has just animated a history traversal itself, such as
+ * Safari's edge swipe. The browser says so with `hasUAVisualTransition` on
+ * the Navigation API's `navigate` event and on `popstate`. The mark lasts two
+ * frames, long enough for the app to commit the path change the traversal
+ * causes. `take` reads the mark and clears it, so it applies to one
+ * transition only. `attach` listens on an element's window and returns the
+ * removal.
+ */
+function usePlatformAnimatedTraversal(): {
+  attach: (element: Element) => () => void;
+  take: () => boolean;
+} {
+  const markRef = useRef(false);
+  return useMemo(
+    () => ({
+      attach: (element: Element) => {
+        const view = element.ownerDocument.defaultView;
+        if (view == null) {
+          return () => {};
+        }
+        let frame = 0;
+        const mark = (event: Event) => {
+          if (Reflect.get(event, 'hasUAVisualTransition') !== true) {
+            return;
+          }
+          markRef.current = true;
+          view.cancelAnimationFrame(frame);
+          frame = view.requestAnimationFrame(() => {
+            frame = view.requestAnimationFrame(() => {
+              markRef.current = false;
+            });
+          });
+        };
+        // Capture runs first at the window, before an app's own popstate
+        // listener commits the path change.
+        view.addEventListener('popstate', mark, {capture: true});
+        const historyNavigation: unknown = Reflect.get(view, 'navigation');
+        const navigationTarget =
+          historyNavigation instanceof view.EventTarget
+            ? historyNavigation
+            : null;
+        navigationTarget?.addEventListener('navigate', mark);
+        return () => {
+          view.cancelAnimationFrame(frame);
+          // The frame that clears the mark does not run, so clear it here.
+          markRef.current = false;
+          view.removeEventListener('popstate', mark, {capture: true});
+          navigationTarget?.removeEventListener('navigate', mark);
+        };
+      },
+      take: () => {
+        const isMarked = markRef.current;
+        markRef.current = false;
+        return isMarked;
+      },
+    }),
+    [],
+  );
+}
+
 /**
  * A push/pop navigator: UINavigationController's transitions, back button
  * and back swipes, on the compositor.
  *
  * The app owns the path (`path` + `onPathChange`). The stack renders the
  * root screen and one screen per entry, top last. It animates the change
- * whenever the path gains or loses its top entry.
+ * whenever the path gains or loses its top entry, except after a history
+ * traversal the browser has animated itself.
  *
  * Motion is UIKit's, measured on iOS 26.2 (motion/uikit/navigation.ts). A
  * push is a critically damped spring (response 0.3 s) that starts at 8.773
@@ -1085,7 +1197,8 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
  * pointer.
  *
  * Accessibility: covered screens are `inert`. A push moves focus to the new
- * screen's title; a pop returns it to the control that pushed the screen.
+ * screen's title, unless focus is already in that screen; a pop returns it
+ * to the control that pushed the screen.
  * The back button is a real button named by the screen it returns to.
  */
 export function NavigationStack<T>({
@@ -1103,6 +1216,7 @@ export function NavigationStack<T>({
   const t = useTranslator();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const platformTraversal = usePlatformAnimatedTraversal();
   const [registry] = useState<Registry>(() => new Map());
   // The last input decides whether a moved focus shows its ring.
   const {ref: trackModality, readModality} = useInteractionModalityTracking();
@@ -1110,12 +1224,15 @@ export function NavigationStack<T>({
     (element: HTMLDivElement | null) => {
       containerRef.current = element;
       const release = trackModality(element);
+      const detachTraversal =
+        element == null ? null : platformTraversal.attach(element);
       return () => {
         release?.();
+        detachTraversal?.();
         containerRef.current = null;
       };
     },
-    [trackModality],
+    [trackModality, platformTraversal],
   );
   // Screens whose large title has scrolled under the bar. The ref holds the
   // same set for the handlers and effects below; only the handler changes it.
@@ -1313,9 +1430,12 @@ export function NavigationStack<T>({
   // ---------------------------------------------------------------------------
 
   const runningRef = useRef<{id: number; done: boolean} | null>(null);
-  // The clock the last transition's screens run on (their start time), so
-  // the back chevron keeps time with them.
-  const startedRef = useRef<number | undefined>(undefined);
+  // The clock the last transition's screens run on (their start), so the
+  // back chevron keeps time with them.
+  const startedRef = useRef<TransitionClock>({});
+  // A click or key press in the stack is being handled in this task
+  // (rememberActivation).
+  const inputTaskRef = useRef(false);
   // A pop's focus return, waiting for the commit that drops the leaving
   // screen (until then every screen is `inert` and cannot take focus).
   const pendingFocusRef = useRef<{popped: string; revealed: string} | null>(
@@ -1451,6 +1571,8 @@ export function NavigationStack<T>({
   /**
    * Springs the layers to progress `to`. `dp` is the progress velocity to
    * start from (omit it to keep the velocity the layers have on screen).
+   * `releasedAt` is a finger's release time; without it the springs start on
+   * the animator's clock (transitionClock).
    */
   const animateProgress = useCallback(
     (
@@ -1461,18 +1583,18 @@ export function NavigationStack<T>({
       dp: number | undefined,
       release: boolean,
       underBar: 'rest' | 'ride',
-      startAt?: number,
+      releasedAt?: number,
     ): Promise<boolean> => {
       const width = cardsRef.current?.clientWidth ?? 0;
       const direction = writingDirection(containerRef.current);
       const values = layersAt(to, width, direction);
       const velocity =
         dp == null ? null : layerVelocities(dp, width, direction);
-      // A change from rest takes no start time: the animator starts it at its
-      // commit, so a heavy commit delays the motion and skips none of it. A
-      // finger's release passes its own start, and a retarget continues from
-      // the frame on screen by the animator's own rule.
-      const at = startAt;
+      const clock = transitionClock(
+        releasedAt,
+        inputTaskRef.current ||
+          isDispatchingInput(containerRef.current?.ownerDocument.defaultView),
+      );
       const topLayers = layersOf(top);
       const underLayers = layersOf(under);
       const handles = [];
@@ -1485,13 +1607,13 @@ export function NavigationStack<T>({
             {x: values.topX},
             {spring, velocity: velocity ? {x: velocity.topX} : undefined},
             {
-              at,
+              ...clock,
               touchRelease: release,
               crossfadeAs: to === 0 ? 'entrance' : 'exit',
             },
           ),
         );
-        startedRef.current = at;
+        startedRef.current = clock;
       }
       // The bars move with their cards (each screen's bar is part of it in
       // UIKit): the incoming one covers the outgoing title.
@@ -1500,7 +1622,7 @@ export function NavigationStack<T>({
           topLayers.bar.animate(
             {x: values.topX},
             {spring, velocity: velocity ? {x: velocity.topX} : undefined},
-            {at, touchRelease: release},
+            {...clock, touchRelease: release},
           ),
         );
       }
@@ -1509,7 +1631,7 @@ export function NavigationStack<T>({
           underLayers.bar.animate(
             {x: values.underX},
             {spring, velocity: velocity ? {x: velocity.underX} : undefined},
-            {at, touchRelease: release},
+            {...clock, touchRelease: release},
           ),
         );
       }
@@ -1519,7 +1641,7 @@ export function NavigationStack<T>({
             {x: values.underX},
             {spring, velocity: velocity ? {x: velocity.underX} : undefined},
             {
-              at,
+              ...clock,
               touchRelease: release,
               crossfadeAs: to === 1 ? 'entrance' : 'exit',
             },
@@ -1559,7 +1681,7 @@ export function NavigationStack<T>({
                 spring,
                 velocity: clipVelocity == null ? undefined : {x: clipVelocity},
               },
-              {at, touchRelease: release},
+              {...clock, touchRelease: release},
             ),
             underLayers.barClipContent.animate(
               {x: -clipTo},
@@ -1567,7 +1689,7 @@ export function NavigationStack<T>({
                 spring,
                 velocity: clipVelocity == null ? undefined : {x: -clipVelocity},
               },
-              {at, touchRelease: release},
+              {...clock, touchRelease: release},
             ),
           );
         }
@@ -1593,7 +1715,7 @@ export function NavigationStack<T>({
                 spring,
                 velocity: velocity ? {opacity: velocity.dim} : undefined,
               },
-              {at, touchRelease: release},
+              {...clock, touchRelease: release},
             ),
           );
         }
@@ -1648,7 +1770,7 @@ export function NavigationStack<T>({
             velocity: t => (t < delayS ? 0 : fade.velocity(t - delayS)),
           },
         },
-        {at: startedRef.current, touchRelease: release},
+        {...startedRef.current, touchRelease: release},
       );
     },
     [view.models, backControl.animator, backChevron.animator],
@@ -1704,6 +1826,17 @@ export function NavigationStack<T>({
       if (container == null || !isFocusLost(container)) {
         return;
       }
+      // Nor from the screen now on top: focus a person moved into it before
+      // the transition settled (a tap on its field mid-push) stays there.
+      const target = revealed ?? key;
+      const active = container.ownerDocument.activeElement;
+      // This stack's own cards only: a stack nested in a screen has cards too.
+      const topCard = [...(cardsRef.current?.children ?? [])].find(
+        card => card.getAttribute('data-navigation-screen') === target,
+      );
+      if (topCard != null && active != null && topCard.contains(active)) {
+        return;
+      }
       // The moved focus shows its ring by the last input, as Core's overlays
       // do. After a key it shows; after a tap it does not.
       const modality = readModality();
@@ -1723,7 +1856,6 @@ export function NavigationStack<T>({
       }
       // Else the screen now on top (the one pushed, or the one revealed): its
       // visible title, the large title while it shows, else the bar's.
-      const target = revealed ?? key;
       const layers = layersOf(target);
       const large = layers?.largeTitleElement;
       const title =
@@ -1792,6 +1924,29 @@ export function NavigationStack<T>({
     const release = releaseRef.current;
     releaseRef.current = null;
     pendingFocusRef.current = null;
+    // The platform already animated this traversal: the stack applies it at
+    // once, so the screen does not move twice.
+    if (release == null && platformTraversal.take()) {
+      runningRef.current = {id, done: true};
+      if (transition.kind === 'pop') {
+        setView(current =>
+          current.transition.id === id ? {...current, leaving: null} : current,
+        );
+        if (under != null) {
+          settle(under, 'top');
+          pendingFocusRef.current = {popped: top, revealed: under};
+        }
+      } else {
+        if (under != null) {
+          settle(under, 'covered');
+        }
+        settle(top, 'top');
+        focusAfter('push', top);
+      }
+      backControl.animator.set({opacity: 1});
+      backChevron.animator.set({opacity: 1});
+      return;
+    }
     const at = performance.now();
     let promise: Promise<boolean>;
     if (transition.kind === 'push') {
@@ -1897,6 +2052,7 @@ export function NavigationStack<T>({
     animateProgress,
     focusAfter,
     focusIsIn,
+    platformTraversal,
     layersOf,
     readClearBars,
     setProgress,
@@ -2048,6 +2204,15 @@ export function NavigationStack<T>({
   // from the container's own capture handlers. A press on a control's label or
   // icon remembers the control itself.
   const rememberActivation = useCallback((event: SyntheticEvent) => {
+    // A transition this click or key starts runs in its task: React commits
+    // it before the task ends, and the next task clears the mark. A click
+    // from script commits after window.event is restored. The mark still
+    // sees that task.
+    inputTaskRef.current = true;
+    const view = containerRef.current?.ownerDocument.defaultView;
+    view?.setTimeout(() => {
+      inputTaskRef.current = false;
+    }, 0);
     const {target} = event;
     if (isElement(target)) {
       // The scroller is focusable while it overflows, but it is not a

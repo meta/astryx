@@ -130,3 +130,10 @@ export {usePressTracker} from '../gestures/usePressTracker';
 
 // Lab's TabBar finds a panel's scroll area with Core's scroll test.
 export {measureLogicalScrollAxis} from '../hooks/scrollGeometry';
+
+// A Lab group shares Core's group press tracking and the group-item mark.
+export {
+  useGroupPressTracking,
+  GROUP_PRESS_POINTERS,
+} from '../hooks/useGroupPressTracking';
+export {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
