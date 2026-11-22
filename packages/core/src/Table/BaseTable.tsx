@@ -52,7 +52,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {warnOnce} from '../utils/devWarning';
 // Bundlers replace this value at build time; production builds drop the
 // activation diagnostics below with it, so tables that never import the
-// plugin carry none of their bytes (INV10).
+// plugin carry none of their bytes.
 declare const process: {readonly env: {readonly NODE_ENV?: string}};
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
