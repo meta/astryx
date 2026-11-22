@@ -2346,10 +2346,10 @@ function canonicalCode(text) {
 
 /**
  * The hashes contentHash gave last, by the full text they hash: a command,
- * and a caller that keeps running (the hosted editor), hashes the same page
- * and route texts again and again, and each text's code is read once. Only
- * the full text is the key; the hash, not the code's form, is kept, so an
- * entry stays small.
+ * and a program that calls the editor's functions again and again in one
+ * process, hashes the same page and route texts many times, and each kept
+ * text's code is read once. Only the full text is the key; the hash, not
+ * the code's form, is kept, so an entry stays small.
  * @type {Map<string, string>}
  */
 export const CONTENT_HASHES = new Map();

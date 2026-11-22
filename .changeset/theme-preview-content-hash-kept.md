@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[perf] The theme editor's previews work out each file's hash once for each text in one process, so repeat previews in a hosted editor, and a command that hashes the same page twice, are faster. Every recorded hash and every preview answer is unchanged.
+[perf] The theme editor's previews keep the hashes of the last 64 file texts they hashed in one process, so a command that hashes the same page twice, and repeated previews through `@astryxdesign/cli/api/experimental` in one process, are faster. Every recorded hash and every preview answer is unchanged.
 
 @josephfarina
