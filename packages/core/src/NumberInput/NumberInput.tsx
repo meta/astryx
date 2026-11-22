@@ -10,7 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
- * - /packages/core/src/NumberInput/numberGrouping.ts (grouping while editing, loaded by useNumberGrouping.ts)
+ * - /packages/core/src/NumberInput/groupedEditing.ts (grouping while editing, loaded by useNumberGrouping.ts)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
  * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
  * - /packages/core/src/Field/useValueReplacesEntry.ts (when a new value replaces a kept draft)
@@ -29,7 +29,6 @@ import {
   useCallback,
   useEffect,
   useRef,
-  type CompositionEvent,
   type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
@@ -235,7 +234,6 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {toAsciiDigits} from '../utils/unicodeDigits';
 import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
 import {useNumberGrouping} from './useNumberGrouping';
@@ -734,8 +732,6 @@ export function NumberInput({
   hasClear,
   onEnter,
   onKeyDown,
-  onCompositionStart,
-  onCompositionEnd,
   width,
   containerXstyle,
   containerClassName,
@@ -769,19 +765,6 @@ export function NumberInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const isComposingRef = useRef(false);
-  // The text when a composition started. Regrouping at compositionend reads
-  // it to tell the field's own separators, which a composed digit shifted,
-  // from ones the person typed.
-  const compositionStartTextRef = useRef<string | undefined>(undefined);
-  const compositionStartTypedGroupsRef = useRef<ReadonlyArray<number>>([]);
-  // The draft text that holds group characters the person typed, with their
-  // indexes, or null. Keyed by text so a draft the field rewrote (commit,
-  // stepping) drops them.
-  const typedGroupDraftRef = useRef<{
-    text: string;
-    indexes: ReadonlyArray<number>;
-  } | null>(null);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -918,13 +901,9 @@ export function NumberInput({
 
   const grouping = useNumberGrouping(isGroupedWhileEditing);
 
-  const formatFocusedNumber = useCallback(
-    (number: number) =>
-      grouping
-        ? grouping.formatGroupedEditableNumber(number, locale)
-        : formatEditableNumber(number, locale),
-    [grouping, locale],
-  );
+  // Formats the number a focused field edits.
+  const formatFocusedNumber =
+    grouping?.formatGroupedEditableNumber ?? formatEditableNumber;
 
   const formattedValue = useMemo(() => {
     if (value == null) {
@@ -938,7 +917,7 @@ export function NumberInput({
   // separator.
   const displayValue = useMemo(() => {
     if (holdDraft !== null) {
-      return formatFocusedNumber(holdDraft);
+      return formatFocusedNumber(holdDraft, locale);
     }
     if (pendingInput !== null) {
       return pendingInput;
@@ -946,12 +925,13 @@ export function NumberInput({
     if (value == null) {
       return '';
     }
-    return isFocused ? formatFocusedNumber(value) : formattedValue;
+    return isFocused ? formatFocusedNumber(value, locale) : formattedValue;
   }, [
     formatFocusedNumber,
     formattedValue,
     holdDraft,
     isFocused,
+    locale,
     pendingInput,
     value,
   ]);
@@ -983,62 +963,6 @@ export function NumberInput({
     [rejectionRules, reportEntryError, shownRejection],
   );
 
-  // The indexes of the group characters the person typed when `text` is the
-  // current draft, so regrouping leaves them as typed.
-  const getTypedGroups = useCallback(
-    (text: string): ReadonlyArray<number> =>
-      holdDraft === null &&
-      pendingInput !== null &&
-      text === pendingInput &&
-      typedGroupDraftRef.current?.text === text
-        ? typedGroupDraftRef.current.indexes
-        : [],
-    [holdDraft, pendingInput],
-  );
-
-  const applyGroupedDraft = useCallback(
-    (
-      input: HTMLInputElement,
-      text: string,
-      caret: number,
-      previousText?: string,
-      previousTypedGroups: ReadonlyArray<number> = [],
-    ) => {
-      const activeGrouping = isComposingRef.current ? null : grouping;
-      const next = activeGrouping
-        ? activeGrouping.groupEditableDraft(
-            text,
-            caret,
-            locale,
-            previousText,
-            previousTypedGroups,
-          )
-        : {text, caret};
-      // A draft that holds typed group characters stays as typed, so their
-      // indexes still match `next.text`.
-      const indexes = activeGrouping
-        ? activeGrouping.typedGroupIndexes(
-            text,
-            locale,
-            previousText,
-            previousTypedGroups,
-          )
-        : [];
-      typedGroupDraftRef.current =
-        indexes.length > 0 ? {text: next.text, indexes} : null;
-      if (next.text !== input.value) {
-        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the grouped text must be in the input before this event restores the caret
-        flushSync(() => {
-          commitDraftText(next.text);
-        });
-        input.setSelectionRange(next.caret, next.caret);
-      } else {
-        commitDraftText(next.text);
-      }
-    },
-    [commitDraftText, grouping, locale],
-  );
-
   // Keep the whole text edit as a draft until an explicit commit boundary.
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1048,100 +972,9 @@ export function NumberInput({
       if (isDisabled || isReadOnly) {
         return;
       }
-      const input = e.currentTarget;
-      if (
-        isGroupedWhileEditing &&
-        (isComposingRef.current ||
-          (e.nativeEvent instanceof InputEvent && e.nativeEvent.isComposing))
-      ) {
-        commitDraftText(input.value);
-        return;
-      }
-      const caret = input.selectionStart ?? input.value.length;
-      // A keystroke can insert full-width or other script digits with no IME
-      // composition. Regrouping reads ASCII digits, so fold them first, as
-      // composition end does and as the parser does at commit.
-      const text = isGroupedWhileEditing
-        ? (toAsciiDigits(input.value) ?? input.value)
-        : input.value;
-      const foldedCaret =
-        text === input.value
-          ? caret
-          : (toAsciiDigits(input.value.slice(0, caret))?.length ?? caret);
-      // The previous draft shows which separators the field wrote. An edit
-      // can move them off their grouping boundaries.
-      applyGroupedDraft(
-        input,
-        text,
-        foldedCaret,
-        displayValue,
-        getTypedGroups(displayValue),
-      );
+      commitDraftText(e.target.value);
     },
-    [
-      applyGroupedDraft,
-      commitDraftText,
-      displayValue,
-      getTypedGroups,
-      isDisabled,
-      isGroupedWhileEditing,
-      isReadOnly,
-    ],
-  );
-
-  // The field owns the input's composition handlers, so it runs the caller's
-  // too, except while disabled, where caller handlers are withheld.
-  const handleCompositionStart = useCallback(
-    (e: CompositionEvent<HTMLInputElement>) => {
-      isComposingRef.current = true;
-      compositionStartTextRef.current = e.currentTarget.value;
-      compositionStartTypedGroupsRef.current = getTypedGroups(
-        e.currentTarget.value,
-      );
-      if (!isDisabled) {
-        onCompositionStart?.(e);
-      }
-    },
-    [getTypedGroups, isDisabled, onCompositionStart],
-  );
-
-  const handleCompositionEnd = useCallback(
-    (e: CompositionEvent<HTMLInputElement>) => {
-      isComposingRef.current = false;
-      const previousText = compositionStartTextRef.current;
-      const previousTypedGroups = compositionStartTypedGroupsRef.current;
-      compositionStartTextRef.current = undefined;
-      compositionStartTypedGroupsRef.current = [];
-      if (!isDisabled) {
-        onCompositionEnd?.(e);
-      }
-      if (isDisabled || isReadOnly || !isGroupedWhileEditing) {
-        return;
-      }
-      const input = e.currentTarget;
-      const caret = input.selectionStart ?? input.value.length;
-      // An IME can compose full-width or other script digits. Regrouping reads
-      // ASCII digits, so fold them first, as the parser does at commit.
-      const text = toAsciiDigits(input.value) ?? input.value;
-      const foldedCaret =
-        text === input.value
-          ? caret
-          : (toAsciiDigits(input.value.slice(0, caret))?.length ?? caret);
-      applyGroupedDraft(
-        input,
-        text,
-        foldedCaret,
-        previousText,
-        previousTypedGroups,
-      );
-    },
-    [
-      applyGroupedDraft,
-      isDisabled,
-      isGroupedWhileEditing,
-      isReadOnly,
-      onCompositionEnd,
-    ],
+    [commitDraftText, isDisabled, isReadOnly],
   );
 
   // Handle focus
@@ -1156,7 +989,8 @@ export function NumberInput({
     (e: FocusEvent<HTMLInputElement>) => {
       const input = e.currentTarget;
       const editableText =
-        pendingInput ?? (value == null ? '' : formatFocusedNumber(value));
+        pendingInput ??
+        (value == null ? '' : formatFocusedNumber(value, locale));
       const shouldReselect =
         input.value.length > 0 &&
         input.value !== editableText &&
@@ -1171,7 +1005,7 @@ export function NumberInput({
         input.setSelectionRange(0, input.value.length);
       }
     },
-    [formatFocusedNumber, onFocus, pendingInput, value],
+    [formatFocusedNumber, locale, onFocus, pendingInput, value],
   );
 
   const commitPendingInput = useCallback(
@@ -1475,62 +1309,13 @@ export function NumberInput({
         stepValue(e.key === 'ArrowUp' ? 1 : -1);
         return;
       }
-      if (
-        grouping &&
-        !isReadOnly &&
-        !hasModifier &&
-        (e.key === 'Backspace' || e.key === 'Delete')
-      ) {
-        const input = e.currentTarget;
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        // A typed group character is the person's own, so the browser
-        // deletes just that character.
-        if (
-          start != null &&
-          start === end &&
-          getTypedGroups(input.value).length === 0
-        ) {
-          const result = grouping.deleteDigitAcrossGroupSeparator(
-            input.value,
-            start,
-            e.key,
-            locale,
-          );
-          if (result != null) {
-            onKeyDown?.(e);
-            if (e.defaultPrevented) {
-              return;
-            }
-            e.preventDefault();
-            typedGroupDraftRef.current = null;
-            // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the regrouped draft must be in the input before this keydown restores the caret
-            flushSync(() => {
-              commitDraftText(result.text);
-            });
-            input.setSelectionRange(result.caret, result.caret);
-            return;
-          }
-        }
-      }
       if (e.key === 'Enter') {
         commitPendingInput('Enter');
         onEnter?.();
       }
       onKeyDown?.(e);
     },
-    [
-      commitDraftText,
-      commitPendingInput,
-      getTypedGroups,
-      grouping,
-      isDisabled,
-      isReadOnly,
-      locale,
-      onEnter,
-      onKeyDown,
-      stepValue,
-    ],
+    [commitPendingInput, isDisabled, onEnter, onKeyDown, stepValue],
   );
 
   // React's delegated wheel listener can be passive, so use a native,
@@ -1669,8 +1454,17 @@ export function NumberInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
+        // With `isGroupedWhileEditing`, the grouped-editing module's change,
+        // keydown and composition handlers wrap the field's and the caller's.
+        {...grouping?.groupedInputProps({
+          locale,
+          draft: holdDraft === null ? pendingInput : null,
+          displayValue,
+          commitDraftText,
+          handleKeyDown,
+          onKeyDown,
+          props: fieldProps,
+        })}
         placeholder={placeholder}
         // A disabled input keeps its place in the tab order (spec:AST-085):
         // aria-disabled instead of the native attribute, with readOnly + the

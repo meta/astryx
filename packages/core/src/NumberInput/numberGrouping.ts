@@ -7,12 +7,13 @@
  * @output Exports formatGroupedEditableNumber, groupEditableDraft,
  *   typedGroupIndexes, and deleteDigitAcrossGroupSeparator
  * @position Internal to NumberInput; not part of the public surface. Only
- *   `isGroupedWhileEditing` uses it, so useNumberGrouping.ts loads it with a
- *   deferred import, and a page whose NumberInput does not set the prop does
- *   not load it
+ *   `isGroupedWhileEditing` uses it, through groupedEditing.ts, which
+ *   useNumberGrouping.ts loads with a deferred import, so a page whose
+ *   NumberInput does not set the prop does not load it
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale symbols)
+ * - /packages/core/src/NumberInput/groupedEditing.ts
  * - /packages/core/src/NumberInput/useNumberGrouping.ts
  * - /packages/core/src/NumberInput/NumberInput.tsx
  * - /packages/core/src/NumberInput/numberParser.test.ts

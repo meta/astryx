@@ -4,14 +4,15 @@
 
 /**
  * @file useNumberGrouping.ts
- * @input Uses React useState and useEffect, and numberGrouping.ts through a
+ * @input Uses React useState and useEffect, and groupedEditing.ts through a
  *   deferred import with createModuleLoader
- * @output Exports useNumberGrouping, which returns the grouping helpers once
- *   they load, and numberGroupingModule, which loads them without rendering
+ * @output Exports useNumberGrouping, which returns the grouped-editing module
+ *   once it loads, and numberGroupingModule, which loads it without rendering
  * @position Internal to NumberInput: the deferred load of
  *   `isGroupedWhileEditing`'s code
  *
- * Only `isGroupedWhileEditing` regroups a draft, so its helpers load after
+ * Only `isGroupedWhileEditing` regroups a draft, so its code (the grouping
+ * helpers and the change, composition and keydown handling) loads after
  * the first render that turns it on. A page whose NumberInput does not set
  * the prop does not load them. The load starts in an Effect, so it never
  * starts on the server or in the render that hydrates server HTML. Until it
@@ -21,18 +22,18 @@
 
 import {useEffect, useState} from 'react';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type * as NumberGrouping from './numberGrouping';
+import type * as GroupedEditing from './groupedEditing';
 
-export type NumberGroupingModule = typeof NumberGrouping;
+export type NumberGroupingModule = typeof GroupedEditing;
 
-/** The grouping helpers, loaded once on demand. */
+/** The grouped-editing module, loaded once on demand. */
 export const numberGroupingModule = createModuleLoader<NumberGroupingModule>(
-  async () => import('./numberGrouping'),
+  async () => import('./groupedEditing'),
 );
 
 /**
- * The grouping helpers while `isEnabled`, or null while they load or when it
- * is off.
+ * The grouped-editing module while `isEnabled`, or null while it loads or
+ * when it is off.
  */
 export function useNumberGrouping(
   isEnabled: boolean,
