@@ -1962,7 +1962,8 @@ export const typoLimit = typed => {
 };
 
 /** A bare ask for grays without a hue of their own, and nothing else. */
-const BARE_GRAYS = /^(?:neutral gr[ae]ys|untinted gr[ae]ys)$/;
+// (Spelled "grays": "neutral greys" keeps its earlier reading.)
+const BARE_GRAYS = /^(?:neutral grays|untinted grays)$/;
 
 /**
  * Whether a question holds a bare ask for neutral grays ("neutral grays",

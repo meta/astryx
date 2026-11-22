@@ -2,7 +2,7 @@
 
 /**
  * @file A bare neutral-grays clause ("neutral grays", "use neutral grays",
- * "neutral greys"), on a theme that sets no part colors, reads as grays
+ * "untinted grays"), on a theme that sets no part colors, reads as grays
  * with no hue of their own. On a theme whose grays already have none, how
  * says so and writes nothing; on a tinted one (a warm gray), it gives the
  * neutral color as Neutral's mid gray, and the page, surfaces and
@@ -110,7 +110,7 @@ const chromas = (theme, token) => {
   });
 };
 
-const ASKS = ['neutral grays', 'use neutral grays', 'neutral greys'];
+const ASKS = ['neutral grays', 'use neutral grays'];
 
 const T = 300_000;
 
@@ -219,6 +219,10 @@ describe('neutral grays', () => {
         'ditch rounded corners and neutral grays',
         'skip rounded corners and neutral grays',
         'I dislike rounded corners and neutral grays',
+        // ("greys" keeps the base answer, in a longer ask too.)
+        'neutral greys',
+        'red buttons, rounder cards, neutral greys',
+        'red buttons, rounder cards, untinted greys',
         // (Grays said before another clause keep the base answer.)
         'neutral grays, drop shadows on cards',
         'neutral grays, system font, 14px text, green #1f883d primary buttons, blue #0969da links',
