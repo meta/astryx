@@ -45,6 +45,7 @@ import {
   getLogicalPositionRenderer,
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 import {isRenderable} from '../utils/isRenderable';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
@@ -966,9 +967,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
       const hasSlots =
         before != null || after != null || overlay != null || below != null;
 
+      // The label cuts its own text before the "after" controls, so a
+      // plain-text label takes its text's direction.
+      const labelDirection = textDirectionProps(resolvedContent);
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
-          <span {...stylex.props(styles.headerLabel)}>{resolvedContent}</span>
+          <span
+            {...labelDirection}
+            {...stylex.props(
+              styles.headerLabel,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
+            )}>
+            {resolvedContent}
+          </span>
           {after}
         </div>
       ) : (
