@@ -30,7 +30,7 @@ describe('ChatToolCalls', () => {
     expect(screen.getByText('קובץ')).toHaveAttribute('dir', 'rtl');
   });
 
-  it("gives the collapsed summary's Latin name and target their own direction, and leaves right-to-left text in the page direction", () => {
+  it("gives the collapsed summary's Latin name and target their own direction, and right-to-left text its own right-to-left direction", () => {
     const {unmount} = render(
       <div dir="rtl">
         <ChatToolCalls
