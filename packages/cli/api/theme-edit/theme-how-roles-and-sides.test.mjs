@@ -117,6 +117,42 @@ describe('a light neutral', () => {
       "set q0 --color-background-card '#c0c0c0' --mode light",
     ]);
     expect(silver.text).toMatch(/dark mode keeps the dark shades/);
+    // (Text a part draws straight on the silver surfaces, a code block's
+    // title, takes the nearest shade that reads there.)
+    const silverAll = (await how('q0', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(silverAll).toContain(
+      "set q0 --color-syntax-comment '#4f4f4f' --mode light",
+    );
+    // (So does a light tan.)
+    expect(
+      (await how('q0', 'neutral #d2b48c')).flatMap(r => r.commands),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^set q0 --color-syntax-comment '#[0-9a-f]{6}' --mode light$/,
+        ),
+      ]),
+    );
+    // (A code background the theme sets itself stays, so its title color
+    // is left as it is.)
+    await themeEditNew('q2', {cwd, like: 'neutral'});
+    await themeEditSet('q2', '--color-syntax-background', '#1e1e1e', {cwd});
+    const own = (await how('q2', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(own.join('\n')).not.toMatch(/--color-syntax-comment/);
+    // (So does a code block filled as a part.)
+    await themeEditNew('q3', {cwd, like: 'neutral'});
+    await themeEditSet('q3', 'background-color', '#1e1e1e', {
+      cwd,
+      on: 'code-block',
+    });
+    const part = (await how('q3', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(part.join('\n')).not.toMatch(/--color-syntax-comment/);
     const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
     expect(slate).toContain("set q0 neutral '#64748b'");
     expect(slate.join('\n')).not.toMatch(/--color-background-/);

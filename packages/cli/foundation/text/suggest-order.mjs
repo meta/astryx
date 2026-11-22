@@ -604,7 +604,7 @@ function namePartMatch(typed, name) {
  * @param {string[]} run
  * @returns {boolean}
  */
-function containsRun(words, run) {
+export function containsRun(words, run) {
   for (let i = 0; i + run.length <= words.length; i++) {
     if (run.every((w, j) => words[i + j] === w)) return true;
   }
