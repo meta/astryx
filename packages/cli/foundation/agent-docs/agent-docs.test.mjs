@@ -209,6 +209,7 @@ describe('generateCompressedIndex', () => {
     // never :root overrides; extending a theme and eject-to-fork stay named.
     expect(result).toMatch(/astryx experimental theme editor new <name>/);
     expect(result).toMatch(/prefer the experimental theme editor/);
+    expect(result).toContain("in a theme made with the editor, make every change with `editor set` and hand-edit `<slug>.theme.ts` only for what `editor how` says it can't set");
     expect(result).toMatch(/never :root overrides/);
     expect(result).toContain('astryx docs theme');
     expect(result).toContain('theme eject <slug>');
