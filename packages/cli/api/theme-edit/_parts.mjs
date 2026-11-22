@@ -38,6 +38,7 @@ import {
 } from '../../foundation/render/render-page.mjs';
 import {
   SAMPLE_PAGE,
+  SAMPLE_DAYS,
   SAMPLE_PRESETS,
   SAMPLE_SOURCE,
   elementNames,
@@ -127,9 +128,6 @@ const LIFECYCLE_FLAGS = new Set([
  *   through a see-through background of the part's own, else the page
  * @typedef {{censusKey: string, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
-
-/** The days a sample date and range of days stand on. */
-const SAMPLE_DAYS = {start: '2026-01-12', end: '2026-01-16'};
 
 /**
  * A sample value for a required prop the doc declares, from its type: the

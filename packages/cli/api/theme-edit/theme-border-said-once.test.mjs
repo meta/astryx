@@ -7,7 +7,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -123,5 +123,19 @@ describe('a whole-theme link color said once', () => {
     const border = (await themeEditHow('borders 1px #ccc', {cwd, theme: 'lk'}))
       .data.results[0].text;
     expect(border).not.toMatch(/in light mode only/);
+    // (A dark-only theme draws no light fill: no light shade for the chip.)
+    await themeEditNew('lkd', {cwd, like: 'neutral'});
+    await themeEditSet('lkd', 'mode', 'dark-only', {cwd});
+    const dark = await themeEditHow('blue #0969da links', {
+      cwd,
+      theme: 'lkd',
+    });
+    expect(
+      dark.data.results
+        .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+        .some((/** @type {string} */ x) =>
+          / --on date-range-input-preset /.test(x),
+        ),
+    ).toBe(false);
   }, 240_000);
 });

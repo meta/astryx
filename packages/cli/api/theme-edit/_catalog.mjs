@@ -216,6 +216,18 @@ export const SAMPLE_SOURCE = Object.freeze({__code: 'SAMPLE_SOURCE'});
  */
 export const SAMPLE_PRESETS = Object.freeze({__code: 'SAMPLE_PRESETS'});
 
+/** The days a sample date and range of days stand on. */
+export const SAMPLE_DAYS = Object.freeze({
+  start: '2026-01-12',
+  end: '2026-01-16',
+});
+
+/**
+ * The page line that defines {@link SAMPLE_PRESETS}: the first preset the
+ * sample range, the second the week after it.
+ */
+export const SAMPLE_PRESETS_SOURCE = `const SAMPLE_PRESETS = [{label: 'This week', getRange: () => (${JSON.stringify(SAMPLE_DAYS)})}, {label: 'Next week', getRange: () => ({start: '2026-01-19', end: '2026-01-23'})}];`;
+
 /**
  * Overlays the overlays section draws open in a deeper state than their docs
  * show: a menu with its submenu open, a popover that holds a form, a date and
@@ -516,7 +528,7 @@ export function pageSource({
   lines.push(`const SAMPLE_ITEMS = ${JSON.stringify(SAMPLE_SEARCH_ITEMS)};`);
   lines.push(
     'const SAMPLE_SOURCE = {search: q => SAMPLE_ITEMS.filter(i => i.label.toLowerCase().includes(String(q).toLowerCase())), bootstrap: () => SAMPLE_ITEMS, cancel: () => {}};',
-    "const SAMPLE_PRESETS = [{label: 'This week', getRange: () => ({start: '2026-01-12', end: '2026-01-16'})}, {label: 'Next week', getRange: () => ({start: '2026-01-19', end: '2026-01-23'})}];",
+    SAMPLE_PRESETS_SOURCE,
   );
   lines.push(
     'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && v.__code === "SAMPLE_SOURCE" ? SAMPLE_SOURCE : v && typeof v === "object" && v.__code === "SAMPLE_PRESETS" ? SAMPLE_PRESETS : isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',

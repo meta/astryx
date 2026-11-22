@@ -26957,7 +26957,8 @@ export function draftAnswer(ctx, env, question) {
               ? ratio(rgb, lightMuted).toFixed(2)
               : null;
           const shade =
-            mutedMiss && lightMuted && !holder
+            // (Only a theme that draws light mode has the light fill.)
+            mutedMiss && lightMuted && !holder && env.data.mode !== 'dark-only'
               ? readableShade(color, lightMuted, 4.5)
               : null;
           const onFill = shade ? accentOnMuted() : [];

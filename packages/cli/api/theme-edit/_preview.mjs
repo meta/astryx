@@ -25,6 +25,7 @@ import {
   pageSource,
   bindingFrom,
   SAMPLE_SEARCH_ITEMS,
+  SAMPLE_PRESETS_SOURCE,
   SAMPLE_SOURCE,
   OPEN_SCENES,
   sampleControls,
@@ -1472,9 +1473,7 @@ const SAMPLE_SOURCE_LINES = [
 ];
 
 /** The preset ranges the page hands a date range input: two fixed ones. */
-const SAMPLE_PRESETS_LINES = [
-  "const SAMPLE_PRESETS = [{label: 'This week', getRange: () => ({start: '2026-01-12', end: '2026-01-16'})}, {label: 'Next week', getRange: () => ({start: '2026-01-19', end: '2026-01-23'})}];",
-];
+const SAMPLE_PRESETS_LINES = [SAMPLE_PRESETS_SOURCE];
 
 /**
  * A copy of an element tree in which every part that requires a search
