@@ -1556,6 +1556,34 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
             /see-through fill/.test(p.message),
         ),
       ).toBe(true);
+      // A see-through secondary button inside a dark bar is measured too
+      // (a button is no menu, though menus hold buttons), and the step
+      // names the tint the bar sets.
+      const sheerButton = await themeEditCheck(
+        themeFile('sheerbutton', READABLE, {
+          'app-shell-header': {
+            base: {
+              backgroundColor: '#1e3a8a',
+              '--color-text-primary': '#ffffff',
+              '--color-neutral': '#ffffffd9',
+            },
+          },
+        }),
+        {cwd, fix: true},
+      ).catch(e => e);
+      const sb = sheerButton.data ?? sheerButton.details?.data;
+      expect(
+        sb.problems.some(
+          (/** @type {any} */ p) =>
+            p.kind === 'bar-fill' && (p.parts ?? []).includes('button'),
+        ),
+      ).toBe(true);
+      expect(
+        sb.problems.find(
+          (/** @type {any} */ p) =>
+            p.kind === 'bar-fill' && (p.parts ?? []).includes('button'),
+        )?.message,
+      ).toMatch(/Change --color-neutral in app-shell-header's own style/);
       // (2) A block under `[data-x]` is one the build drops: the header's
       // text stays the theme's, which is said on the dark header.
       const dropped = await check(

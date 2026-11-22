@@ -2278,11 +2278,10 @@ function checkNextEdit(p, file, kept, shared) {
     return `${at}take ${p.token} out of ${ownText}'s own style so its text follows ${p.part}, or give it a color that reads on both`;
   if (p.kind === 'part-text' && /'s (hover|press) fill/.test(p.message))
     return `${at}${p.message.split(': ').slice(-1)[0]}`;
-  if (
-    (p.kind === 'bar-text' || p.kind === 'bar-fill') &&
-    /see-through fill under their text/.test(p.message)
-  )
-    return `${at}give the text ${(p.parts ?? []).slice(0, 3).join(', ')} draw inside ${p.part} a color that reads on the bar, in ${p.part}'s own style`;
+  if (p.kind === 'bar-fill' && /a see-through fill/.test(p.message))
+    return `${at}change ${p.token} in ${p.part}'s own style so the text of ${(p.parts ?? []).slice(0, 3).join(', ')} reads on it laid over ${p.part}`;
+  if (p.kind === 'bar-text' && /their see-through fill/.test(p.message))
+    return `${at}set ${p.token} in ${(p.parts ?? [])[0]}'s own style to a color that reads on its fill laid over ${p.part}, or give it a fill of its own`;
   if (p.kind === 'bar-ground' && p.token)
     return `${at}set ${p.token} in ${p.part}'s own style to a color that reads on its fill`;
   if (p.kind === 'bar-fill')

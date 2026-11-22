@@ -636,13 +636,14 @@ function barTextProblems(look) {
   const {res, components, map, pairs} = look;
   /** @type {Map<string, LookProblem>} */
   const out = new Map();
-  /** The parts a menu holds: they sit on the menu, not on a bar. */
-  const inMenus = new Set(
-    menuParts(map).flatMap(({part: menu}) => [
-      menu,
-      ...(map[menu]?.contains ?? []),
-    ]),
-  );
+  /** The menus: text the census draws inside one sits on the menu. */
+  const menus = new Set(menuParts(map).map(({part: menu}) => menu));
+  /** Whether the census drew a pair's text inside a menu. @param {TextPair} p */
+  const inMenu = p =>
+    menus.has(String(p.bg.target)) ||
+    /** @type {any} */ (p.within ?? []).some((/** @type {string} */ w) =>
+      menus.has(w),
+    );
   for (const [part, blocks] of Object.entries(components ?? {})) {
     if (!blocks || typeof blocks !== 'object') continue;
     const within = inside(map, part);
@@ -698,7 +699,7 @@ function barTextProblems(look) {
           if (own == null) continue;
           const sheer = alphaOf(own) < 1;
           // (A part a menu holds sits on the menu's own fill, not the bar.)
-          if (sheer && inMenus.has(q)) continue;
+          if (sheer && inMenu(p)) continue;
           const fill = shown(own, bar);
           if (!fill) continue;
           const r = ratio(fg, fill);
@@ -774,7 +775,7 @@ function barTextProblems(look) {
           const tint = colorIn(value, res[m], m);
           if (tint == null) continue;
           const sheer = alphaOf(tint) < 1;
-          if (sheer && inMenus.has(q)) continue;
+          if (sheer && inMenu(p)) continue;
           const fill = shown(tint, bar);
           const tok = p.fg.tokens[0];
           if (/disabled/.test(tok ?? '')) continue;
@@ -851,7 +852,7 @@ function barTextProblems(look) {
         // text in a menu the bar opens sits on the menu's own fill; text
         // drawn disabled has no reading floor.)
         if (!q || q === part || !sits) continue;
-        if (inMenus.has(String(p.fg.target)) || inMenus.has(q)) continue;
+        if (inMenu(p)) continue;
         if (/disabled/.test(p.fg.tokens[0] ?? '')) continue;
         const block = pairBlock(map, p);
         // A ground inside the bar that paints its own fill is the text's;
@@ -929,7 +930,11 @@ function barTextProblems(look) {
     // Parts that show the bar through a see-through fill are not
     // repaired: the edit is the text they draw there.
     if (!BAR_BLOCKS.get(p)?.size) {
-      p.message = `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it show the bar through a see-through fill under their text: ${p.ratio}:1 in ${p.mode}. Give the text they draw there (in ${p.part}'s own style) a color that reads on the bar`;
+      const first = (p.parts ?? [])[0];
+      p.message =
+        p.kind === 'bar-fill'
+          ? `${p.part} sets ${p.token}, a see-through fill ${(p.parts ?? []).slice(0, 3).join(', ')} inside it lay over its own: their text reads at ${p.ratio}:1 on the two in ${p.mode}. Change ${p.token} in ${p.part}'s own style so their text reads on it`
+          : `${p.part} sets ${p.token}, so ${(p.parts ?? []).slice(0, 3).join(', ')} inside it draw that text on their see-through fill laid over ${p.part}: ${p.ratio}:1 in ${p.mode}. Set ${p.token} in ${first}'s own style to a color that reads there, or give ${first} a fill of its own`;
       continue;
     }
     p.message =
