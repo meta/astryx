@@ -678,19 +678,101 @@ const ROWS = [
     },
   ],
   [
-    'an undo that names two changes takes nothing back and says so',
+    'an undo that names two changes takes back each',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the card change and the heading change.',
-      has: ['corners more --on card', 'headings bold'],
-      says: /names more than one change, so none is taken back and each stays written/,
+      never: /corners|font-weight|headings bold/,
+      says: /the card change said earlier in this ask is taken back[\s\S]*the heading change said earlier/,
     },
   ],
   [
-    'an undo that names two changes, only one said earlier, takes nothing back and says so',
+    'an undo that names two changes, only one said earlier, takes that one back and names the other',
     {
       q: 'Make the headings bold. Undo the card change and the heading change.',
+      never: /font-weight|headings bold/,
+      says: /sets nothing for everything on card/,
+    },
+  ],
+  [
+    'a part named after an undo with no change of its own is never written',
+    {
+      q: 'Make the headings bold. Undo the heading change and the card corners change.',
+      never: /corners|font-weight/,
+      says: /sets nothing for corners on card/,
+    },
+  ],
+  [
+    'the same for a look of another part',
+    {
+      q: 'Make the cards blue. Undo the card change and the heading weight change.',
+      never: /font-weight|headings bold|background/,
+    },
+  ],
+  [
+    'a later clause that asks for the change again writes it',
+    {
+      q: 'Make the cards blue. Undo the card change and the heading weight change. Make the headings bold.',
       has: ['headings bold'],
-      says: /names more than one change, so none is taken back and each stays written/,
+    },
+  ],
+  [
+    'a phrase that asks for a change is its own ask',
+    {
+      q: 'Make the cards blue. Undo the card change and change the headings to 12px.',
+      has: ['font-size 12px --on heading'],
+    },
+  ],
+  [
+    'a look the undo names keeps the other looks of the part',
+    {
+      q: 'Make the headings bigger. Make the headings bold. Make the cards rounder. Undo the heading size change and the card change.',
+      has: ['headings bold'],
+      never: /corners|--text-heading-\d-size/,
+    },
+  ],
+  [
+    'a second look of the same part with no change of its own is never written',
+    {
+      q: 'Make the headings bigger. Undo the heading size change and the heading bold change.',
+      never: /font-weight|headings bold|--text-heading-\d-size/,
+    },
+  ],
+  [
+    'a family name takes back the change of its member',
+    {
+      q: 'Make the text inputs rounder. Make the headings bold. Undo the heading change and the input change.',
+      never: /corners|font-weight/,
+    },
+  ],
+  [
+    'changes of the part that clash are taken back with their choice',
+    {
+      q: 'Make the cards rounder. Make the card corners round. Make the headings bold. Undo the heading change and the card change.',
+      never: /corners|font-weight/,
+      says: /which clash, are taken back/,
+    },
+  ],
+  [
+    'also through a family name',
+    {
+      q: 'Make the cards rounder. Make the card corners round. Make the headings bold. Undo the heading change and the container corners change.',
+      never: /corners|font-weight/,
+      says: /which clash, are taken back/,
+    },
+  ],
+  [
+    'a clash on another part keeps its choice',
+    {
+      q: 'Make the buttons rounder. Make the button corners round. Make the headings bold. Undo the heading change and the card corners change.',
+      says: /contradict each other[\s\S]*sets nothing for corners on card/,
+    },
+  ],
+  [
+    '"too" after the change it names adds nothing',
+    {
+      q: 'Make the cards rounder. Make the headings bold. Undo the heading change and the card change too.',
+      never: /corners|font-weight/,
+      says: /^(?![\s\S]*no part is called)/,
     },
   ],
   [
@@ -718,10 +800,10 @@ const ROWS = [
     },
   ],
   [
-    'an undo followed by another change phrase reads as before',
+    'an undo of two looks of one part takes back each',
     {
       q: 'Make the headings bigger. Make the headings bold. Undo the heading size change and the heading bold change.',
-      has: ['--text-heading-1-size 1.725rem'],
+      never: /--text-heading-\d-size|font-weight|headings bold/,
     },
   ],
   [

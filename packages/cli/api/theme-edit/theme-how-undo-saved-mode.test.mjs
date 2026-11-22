@@ -120,6 +120,15 @@ const ROWS = [
     },
   ],
   [
+    'each change an undo names takes back the change said, not the saved setting',
+    {
+      theme: 'mc',
+      q: 'make the cards blue. undo the card change and the heading change',
+      lines: [],
+      says: /the card change said earlier in this ask is taken back/,
+    },
+  ],
+  [
     'an undo of one mode beside a setting for both modes and the other mode',
     {
       theme: 'mx',

@@ -5297,6 +5297,9 @@ export function draftAnswer(ctx, env, question) {
     // (Only the list's own items: it ends at the first item that is not a
     // status hue, "…, and 8px corners", "with a blue accent", and the rest
     // is read on; an accent is never a status.)
+    // ("… and the card change too": "too" adds nothing to the change it
+    // names.)
+    .replace(/\b(changes?)\s+too\b/gi, '$1')
     .replace(/\bstatus(?:es)?\s+colou?rs?\s*:?\s*([^.;]*)/gi, (m, list) => {
       const ROLE = /** @type {Record<string, string>} */ ({
         green: 'success',
@@ -12099,6 +12102,21 @@ export function draftAnswer(ctx, env, question) {
       c.parts.every(p => prev.parts.some(h => p.on.startsWith(`${h.on}-`)))
     )
       c.state = prev.state;
+  }
+  // ("Undo the heading change and the card corners change": each "the …
+  // change" said after an undo is an undo of its own. It takes back that
+  // change, or names that there is none; it never asks for a change.)
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    if (
+      UNDO_VERB.test(clauses[i - 1].text) &&
+      !c.colors.length &&
+      !c.lengths.length &&
+      /^\s*(?:and\s+)?(?:also\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\s*$/i.test(
+        c.text,
+      )
+    )
+      c.text = `undo ${c.text.trim().replace(/^(?:and\s+)?(?:also\s+)?/i, '')}`;
   }
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
@@ -29943,19 +29961,13 @@ export function draftAnswer(ctx, env, question) {
       if (uc0) answeredByUndo.add(uc0);
       continue;
     }
-    // An undo that names more than one change ("Undo the card change and
-    // the heading change"), or a look that more than one earlier change
-    // could be, is not read for sure: nothing is taken back, and the
-    // answer says so. A bare "size" or "weights" said alone is read below.
+    // An undo that names more than one part ("Undo the card and heading
+    // changes"), or a look that more than one earlier change could be, is
+    // not read for sure: nothing is taken back, and the answer says so. A
+    // bare "size" or "weights" said alone is read below. ("Undo the card
+    // change and the heading change" is two undos, each read in turn.)
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
-    const alsoNamed =
-      next &&
-      !next.aspects?.length &&
-      !next.colors?.length &&
-      /^\W*(?:and\s+)?the\s+(?:[\w-]+\s+){0,3}changes?\b/i.test(
-        String(next.text ?? ''),
-      );
     const lookOf = (/** @type {any} */ d) =>
       /** @type {string[]} */ (
         /** @type {any} */ (draftClause.get(d))?.aspects ?? []
@@ -29972,7 +29984,7 @@ export function draftAnswer(ctx, env, question) {
         ? ['said']
         : []),
     ];
-    const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    const several = (uc?.parts?.length ?? 0) > 1;
     // ("Make the headings bigger. Make the headings bold. Undo the heading
     // size change.": a look the undo names, read by `aspectsOf`, takes back
     // only the earlier change of that look. A bare "size" is the part's
@@ -30043,7 +30055,6 @@ export function draftAnswer(ctx, env, question) {
           ? `the undo does not say which earlier change it means, so nothing is taken back; name the part ("undo the card corners")`
           : `the undo could mean more than one earlier change, so nothing is taken back; undo them one at a time`;
       if (uc) answeredByUndo.add(uc);
-      if (alsoNamed) answeredByUndo.add(next);
       continue;
     }
     // (A whole answer that holds every line, "all of it, in order", loses
