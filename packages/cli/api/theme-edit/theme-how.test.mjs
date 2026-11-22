@@ -3408,6 +3408,14 @@ const QUESTIONS_J = [
     'font size 16px line height 150%',
     {top: /^set q --text-body-leading 2\.14$/},
   ],
+  [
+    'font size 16px line height normal',
+    {top: /^(?!.*--text-body-leading 1\.143)/},
+  ],
+  [
+    'make the text bigger, 18px leading',
+    {top: /^(?!.*--text-body-leading 1\.286)/},
+  ],
   ['body text 18px leading', {top: /^set q --text-body-leading 1\.286$/}],
   [
     'heading font size 24px, body 14px text, 20px leading',

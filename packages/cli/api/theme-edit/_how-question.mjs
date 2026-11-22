@@ -12705,7 +12705,7 @@ export function draftAnswer(ctx, env, question) {
       const m =
         SAID.exec(o.text) ??
         (read ? /\b(\d+(?:\.\d+)?)\s?px\b/i.exec(o.text) : null);
-      if (read && o.lengths.length && !asTyped(o)) {
+      if (read && !(o.lengths.length && asTyped(o))) {
         unread = true;
         continue;
       }
@@ -22270,10 +22270,8 @@ export function draftAnswer(ctx, env, question) {
         // 150%", nor beside a line height said another way.)
         const pxLeading =
           pxLengths.length === 1 &&
-          !/\b(?:text|font)(?:[- ]size)?\s*:?\s*\d+(?:\.\d+)?\s?px\b(?!\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i.test(
-            c.text,
-          ) &&
-          !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*\d+(?:\.\d+)?(?!\s?px\b|[\d.])/i.test(
+          !/\b(?:text|font)[- ]size\s*:?\s*\d+(?:\.\d+)?\s?px\b/i.test(c.text) &&
+          !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(?:\d+(?:\.\d+)?(?!\s?px\b|[\d.])|normal\b|tight\w*|loose\w*|more\b|less\b)/i.test(
             c.text,
           )
             ? /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)|\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/i.exec(
