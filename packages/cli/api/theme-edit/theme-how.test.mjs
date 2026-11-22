@@ -3571,7 +3571,7 @@ const QUESTIONS_J = [
   // (a lone "cards" after the page keeps its own answer)
   [
     'silver page, cards',
-    {parts: ['page', 'card'], top: /--color-background-body/},
+    {text: /what card reads/, top: /--color-background-body/},
   ],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
