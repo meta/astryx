@@ -282,13 +282,15 @@ function checkGroup(
         continue;
       }
       const [ox, oy] = center(other);
+      const boxClearance =
+        2 *
+        Math.hypot(
+          Math.max(other.left - x, 0, x - other.right),
+          Math.max(other.top - y, 0, y - other.bottom),
+        );
       const clearance = undersized(other)
-        ? Math.hypot(ox - x, oy - y)
-        : 2 *
-          Math.hypot(
-            Math.max(other.left - x, 0, x - other.right),
-            Math.max(other.top - y, 0, y - other.bottom),
-          );
+        ? Math.min(boxClearance, Math.hypot(ox - x, oy - y))
+        : boxClearance;
       check(
         clearance >= MIN_TARGET_PX,
         `${radio.label}: ${radio.right - radio.left}x${radio.bottom - radio.top} row, clearance ${Math.round(clearance)} px from ${other.label}`,
