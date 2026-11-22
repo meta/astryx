@@ -479,6 +479,14 @@ const ROWS = [
     },
   ],
   [
+    'a bracketed example after a part is an aside',
+    {
+      q: 'Header (e.g. the top bar): navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /border-top/,
+    },
+  ],
+  [
     'an example said as "for example" restates the color',
     {
       q: 'Header: navy, for example a dark blue. Cards: white background, gray header.',

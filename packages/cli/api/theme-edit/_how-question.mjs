@@ -3287,6 +3287,16 @@ function markFillColorWith(q) {
  */
 function clausesOf(q, partWords, words = null) {
   q = markFillColorWith(q);
+  // A bracketed example right after a part name, "the header (eg the top
+  // bar)", is an aside: it changes neither the part nor what is set.
+  q = q.replace(/\s*\(\s*(?:eg|ie)\s+[^()]*\)/gi, (m, at, whole) => {
+    const before = String(whole).slice(0, at).trim().split(/\s+/).slice(-2);
+    return partWords.some(([re]) =>
+      [before.join(' '), before.at(-1) ?? ''].some(w => re.test(` ${w} `)),
+    )
+      ? ''
+      : m;
+  });
   // "except primary and ghost buttons", "except hover or disabled": one
   // except list, never an except and a new clause (unless an ask follows:
   // "… except cards and make buttons bigger").
