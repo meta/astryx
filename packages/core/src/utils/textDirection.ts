@@ -40,11 +40,11 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
   return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
 }
 
-// An element's own `dir` would otherwise move its text to the other side: a
-// field's text, or the span `withTextDirection` adds, which a flex parent such
-// as Field's label makes a block. `match-parent` takes the parent's alignment
-// and resolves `start` and `end` in the parent's direction, so a centred label
-// stays centred. Chromium supports only the prefixed keyword.
+// An element's own `dir` moves its text to the other side. A field's text and
+// the `withTextDirection` span (a block inside a flex parent such as Field's
+// label) need the parent's alignment instead. `match-parent` resolves `start`
+// and `end` in the parent's direction, so a centred label stays centred.
+// Chromium supports only the prefixed keyword.
 export const localeTextStyles = stylex.create({
   pageAlign: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
