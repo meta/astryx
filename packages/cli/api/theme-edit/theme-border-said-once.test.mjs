@@ -146,6 +146,65 @@ describe('a whole-theme border said once', () => {
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
     expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);
     expect(overlays.some(x => / --on button$/.test(x))).toBe(false);
+    // The ask's leading role word before "with" narrows it too, and is
+    // what the border took: never "not used". One mid-ask stays unused.
+    for (const q of [
+      'overlays with a 1px #4d4d4d border',
+      'the overlays with a 1px #4d4d4d border',
+      'controls with 2px #999999 borders',
+    ]) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
+      const cmds = data.results.flatMap(
+        (/** @type {{commands: string[]}} */ r) => r.commands,
+      );
+      const said = data.results
+        .map((/** @type {any} */ r) => r.text)
+        .join('\n');
+      expect(said, q).not.toMatch(/not used/);
+      const on = (/** @type {string} */ part) =>
+        cmds.some((/** @type {string} */ x) => x.endsWith(` --on ${part}`));
+      if (/controls/.test(q)) {
+        expect(on('button'), q).toBe(true);
+        expect(on('dialog'), q).toBe(false);
+      } else {
+        expect(on('dialog'), q).toBe(true);
+        expect(on('button'), q).toBe(false);
+      }
+    }
+    // Mid-ask too: the role word leads its own clause, so the border goes
+    // to the controls alone and the corners to the whole theme.
+    {
+      const q = '8px corners, controls with 2px #999999 borders';
+      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
+      const cmds = data.results.flatMap(
+        (/** @type {{commands: string[]}} */ r) => r.commands,
+      );
+      const on = (/** @type {string} */ part) =>
+        cmds.some((/** @type {string} */ x) => x.endsWith(` --on ${part}`));
+      expect(on('button'), q).toBe(true);
+      expect(on('dialog'), q).toBe(false);
+      expect(cmds.join('\n'), q).toMatch(/corners|radius/);
+      expect(
+        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
+        q,
+      ).not.toMatch(/not used/);
+    }
+    // A word that names no part takes the whole-theme border, named unused.
+    {
+      const q = '8px corners, wobbles with 2px #999999 borders';
+      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
+      const cmds = data.results.flatMap(
+        (/** @type {{commands: string[]}} */ r) => r.commands,
+      );
+      expect(
+        cmds.some((/** @type {string} */ x) => x.endsWith(' --on dialog')),
+        q,
+      ).toBe(true);
+      expect(
+        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
+        q,
+      ).toMatch(/not used: [^\n]*"wobbles"/);
+    }
   }, 240_000);
 });
 

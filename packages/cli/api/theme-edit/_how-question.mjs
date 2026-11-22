@@ -23800,10 +23800,17 @@ export function draftAnswer(ctx, env, question) {
             // frame: those take a border said for them by name.
             // (A role word leading the ask, "overlays: …", narrows it to
             // that role's share.)
+            // ("overlays with a 1px border", "8px corners, controls with 2px
+            // borders": the role word leads its own clause, split at the
+            // "with" before this one, wherever it sits in the ask.)
+            const roleWord =
+              /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(controls?|overlays?|surfaces?|containers?)\b/;
             const role =
-              /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(controls?|overlays?|surfaces?|containers?)\b/.exec(
-                c.text.trim(),
-              )?.[1];
+              roleWord.exec(c.text.trim())?.[1] ??
+              new RegExp(
+                `(?:^|[,;:.]\\s*|\\band\\s+)(?:the\\s+|all\\s+|give\\s+(?:the\\s+|all\\s+)?)?(controls?|overlays?|surfaces?|containers?)\\s+with\\b[^,;:]*${String(color).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+                'i',
+              ).exec(question.trim())?.[1];
             const edgeParts = role
               ? (EDGE_ROLES[role.replace(/s?$/, 's')] ?? EDGE_PARTS)
               : EDGE_PARTS;
@@ -33612,6 +33619,24 @@ export function draftAnswer(ctx, env, question) {
       const modeOnly =
         /^(?:(?:in|for|on)\s+)?(?:the\s+)?(dark|light)(?:[- ]mode)?$/.exec(t);
       if (modeOnly && steps.some(st => st.mode === modeOnly[1])) return false;
+      // ("overlays with a 1px border", "8px corners, controls with 2px
+      // borders": a role word leading its own clause before a "with" is the
+      // one the border reading after it narrowed to.)
+      {
+        const next = clauses[clauses.indexOf(c) + 1];
+        if (
+          next &&
+          /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(?:controls?|overlays?|surfaces?|containers?)$/i.test(
+            t,
+          ) &&
+          new RegExp(
+            `(?:^|[,;:.]\\s*|\\band\\s+)${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+with\\b`,
+            'i',
+          ).test(raw0.trim()) &&
+          steps.some(st => /^border/.test(String(st.thing)))
+        )
+          return false;
+      }
       if (
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),
