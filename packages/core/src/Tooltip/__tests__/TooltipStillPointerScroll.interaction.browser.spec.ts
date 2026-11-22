@@ -7,8 +7,10 @@
  * @output Real-engine proof that a wheel or keyboard scroll that brings the
  *   trigger under a mouse that does not move opens no tooltip, and that the
  *   first move over it then opens the tooltip. After the scroll WebKit sends
- *   the trigger a move with no movement at the arrival's point; it opens
- *   nothing either.
+ *   the trigger a move at the arrival's point; it opens nothing either. A
+ *   mouse that moves onto the trigger in one step still opens it: WebKit's
+ *   only move then is at the arrival's point too, but the mouse came from
+ *   elsewhere.
  * @position Run with `pnpm test:interaction`. An interaction spec, so CI's
  *   WebKit leg runs it on a Tooltip change; the other still-pointer cases are
  *   in TooltipStillPointer.a11y.browser.spec.ts.
@@ -125,3 +127,26 @@ for (const how of ['wheel', 'keyboard'] as const) {
     }
   });
 }
+
+test('a mouse that moves onto the trigger in one step opens the tooltip', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 900, height: 600},
+  });
+  const page = await context.newPage();
+  try {
+    const trigger = await openTooltipStory(page);
+    const box = await trigger.boundingBox();
+    if (box == null) {
+      throw new Error('the trigger has no layout box');
+    }
+    await page.mouse.move(REST.x, REST.y);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.getByRole('tooltip')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

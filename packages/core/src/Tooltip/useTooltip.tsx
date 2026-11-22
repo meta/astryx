@@ -23,6 +23,12 @@ import {
   type RefCallback,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {
+  getLastMousePoint,
+  subscribeInput,
+  type MousePoint,
+} from '../utils/inputStream';
+import {sharedWeakSet} from '../utils/sharedRealm';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -54,6 +60,20 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+
+/**
+ * The windows whose input stream hears mouse moves for the tooltips, so a
+ * trigger can tell where the mouse last moved before it arrived.
+ */
+const restingMouseViews = sharedWeakSet<Window>('tooltip/resting-mouse', 1);
+
+function trackRestingMouse(view: Window): void {
+  if (restingMouseViews.has(view)) {
+    return;
+  }
+  restingMouseViews.add(view);
+  subscribeInput(view, 'pointermove', () => {});
+}
 
 /**
  * Whether `element` is a text field in any state: a text-like `<input>`, a
@@ -548,14 +568,19 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // tooltip. A pointer that moves onto the trigger also moves over it in the
   // same frame, so a real hover opens after `delay`. Firefox sends that
   // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
-  // counts too. After a scroll WebKit also sends a move with no movement at
-  // the arrival's point: that is the arrival again, not a move.
+  // counts too. After a scroll WebKit also sends a move at the arrival's
+  // point. When the mouse last moved at that point before the arrival, it was
+  // at rest there, so that move is the arrival again, not a move.
   const isArrivalUnmovedRef = useRef(false);
-  const arrivalPointRef = useRef<{x: number; y: number} | null>(null);
+  const restingArrivalRef = useRef<MousePoint | null>(null);
   const handleMouseEnter = useCallback(
     (event: MouseEvent) => {
       isArrivalUnmovedRef.current = !isTouchPointerRef.current;
-      arrivalPointRef.current = {x: event.clientX, y: event.clientY};
+      const rest = getLastMousePoint(event.view ?? window);
+      restingArrivalRef.current =
+        rest != null && rest.x === event.clientX && rest.y === event.clientY
+          ? rest
+          : null;
     },
     [isTouchPointerRef],
   );
@@ -567,14 +592,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       ) {
         return;
       }
-      const arrival = arrivalPointRef.current;
+      const rest = restingArrivalRef.current;
       if (
         event.isTrusted &&
-        event.movementX === 0 &&
-        event.movementY === 0 &&
-        arrival != null &&
-        event.clientX === arrival.x &&
-        event.clientY === arrival.y
+        rest != null &&
+        event.clientX === rest.x &&
+        event.clientY === rest.y
       ) {
         return;
       }
@@ -822,6 +845,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       detachTriggerRef.current?.();
       const latest = () => handlersRef.current;
+      trackRestingMouse(el.ownerDocument.defaultView ?? window);
       // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
       // which is what lets the hover path know it is looking at a finger.
       const onPointerEnter = (e: PointerEvent) =>
