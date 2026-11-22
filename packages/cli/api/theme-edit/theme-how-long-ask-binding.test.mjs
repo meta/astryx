@@ -129,6 +129,13 @@ const ROWS = [
     },
   ],
   [
+    'a clash said after the undo keeps its choice',
+    {
+      q: 'undo the light mode accent change. make the accent red in light mode. make the accent blue in light mode',
+      says: /contradict each other/,
+    },
+  ],
+  [
     "an undo's mode is never the clause before it",
     {
       q: 'make the cards blue. undo the light mode accent change',

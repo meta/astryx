@@ -137,7 +137,7 @@ const OVERRIDE_RES = new Set(OVERRIDES.map(([re]) => re));
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, clash?: boolean, batch?: {leftOut: string}, offer?: boolean, already?: boolean, joined?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string, clash?: number, batch?: {leftOut: string}, offer?: boolean, already?: boolean, joined?: boolean}} Draft
  */
 
 /** The words a badge style ask is made of when the style is all it asks. */
@@ -29338,6 +29338,8 @@ export function draftAnswer(ctx, env, question) {
   const last = new Map();
   /** @type {Array<[Step, Step]>} */
   const clashes = [];
+  /** The later clause of each clash. @type {Map<unknown, unknown>} */
+  const clashLater = new Map();
   /** (A step toward a rung said beside the rung.) @type {Step[]} */
   const relDropped = [];
   /**
@@ -29492,7 +29494,10 @@ export function draftAnswer(ctx, env, question) {
           last.set(key, {step: merged, clause});
           continue;
         } else {
-          clashes.push([prior.step, st]);
+          /** @type {[Step, Step]} */
+          const pair = [prior.step, st];
+          clashes.push(pair);
+          clashLater.set(pair, clause);
           clashClauses.add(prior.clause);
           clashClauses.add(clause);
         }
@@ -29679,12 +29684,15 @@ export function draftAnswer(ctx, env, question) {
       );
   }
   // (Each clash its own choice, so none goes unanswered.)
-  for (const [a, b] of clashes)
+  // (Each carries where its later clause stands, for an undo after it.)
+  for (const pair of clashes) {
+    const [a, b] = pair;
     result.push({
       text: `the question asks for ${a.thing} ${a.value} and ${b.thing} ${b.value}${a.on ? ` on ${a.on}` : ''}, which contradict each other; pick one${unclashed.size ? ' (the rest of the ask is answered without them)' : ''}`,
       options: [[a], [b]],
-      clash: true,
+      clash: clauses.indexOf(/** @type {any} */ (clashLater.get(pair))),
     });
+  }
   // (A draft whose every step a later "then" clause replaces is not
   // offered: the sequence ends at the later value.)
   const replaced = new Set(
@@ -29837,7 +29845,13 @@ export function draftAnswer(ctx, env, question) {
       (!undoMode || !st.mode || st.mode === undoMode);
     const clashGone = undone.length
       ? []
-      : result.filter(d => d.clash && d.options.flat().every(ofUndo));
+      : result.filter(
+          d =>
+            typeof d.clash === 'number' &&
+            d.clash >= 0 &&
+            (undoAt < 0 || d.clash < undoAt) &&
+            d.options.flat().every(ofUndo),
+        );
     if (clashGone.length) {
       result.splice(
         0,
