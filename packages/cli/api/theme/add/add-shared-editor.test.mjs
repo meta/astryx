@@ -374,6 +374,8 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
     expect(shown['--color-accent-muted']).toMatch(
       new RegExp(`^light-dark\\(${stop90}`),
     );
+    // (Showing it first builds it there: that build keeps them too.)
+    await themeEditShow('harbor', {cwd: app});
     await themeEditSet('harbor', 'corners', 'square', {cwd: app});
     const after = shades(fs.readFileSync(copyCss, 'utf-8'));
     expect(Object.keys(shown).filter(k => after[k] !== shown[k])).toEqual([]);

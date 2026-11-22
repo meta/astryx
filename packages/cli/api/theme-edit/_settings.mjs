@@ -5833,7 +5833,7 @@ const KEPT_PAIRS_LINE =
  * each color token, light and dark, as the palette stop that holds its
  * color in that mode (a see-through one as that stop with its alpha), as
  * the base theme's value where it shows that, else as the color it shows;
- * a token no stop draws in either mode is left out. The copy's stylesheet is read as text, and the
+ * a token the base draws in both modes is left out. The copy's stylesheet is read as text, and the
  * first declaration of each token counts. Null when the theme has no app
  * copy, or no palette kept as saved.
  * @param {string} cwd
@@ -5879,8 +5879,13 @@ function stopsShownInCopy(cwd, slug, base) {
     String.raw`(--color-[\w-]+)\s*:\s*(?:light-dark\(\s*(${hexColor})\s*,\s*(${hexColor})\s*\)|(${hexColor}))\s*;`,
     'g',
   );
+  /** @type {Set<string>} */
+  const seen = new Set();
   for (const m of css.matchAll(decl)) {
-    if (out[m[1]]) continue;
+    // (The theme root comes first: a later rule, on a part or a media
+    // surface, is never the theme-wide shade.)
+    if (seen.has(m[1])) continue;
+    seen.add(m[1]);
     const pair = {
       light: half(m[1], m[2] ?? m[4], 'light'),
       dark: half(m[1], m[3] ?? m[4], 'dark'),
@@ -11310,6 +11315,20 @@ async function buildThemeSteps(ctx, slug, data) {
         kept,
       );
     }
+  }
+  // A theme added from a shared theme with a palette kept as saved has no
+  // settings module here until the editor first builds it (the sharer's
+  // module is code and stays behind): that build keeps the shades the app
+  // copy shows, whatever command starts it, unless the base changed since
+  // the copy was built (a new base moves the shades it draws).
+  if (
+    ctx.keepStops == null &&
+    !fs.existsSync(f.settingsTs) &&
+    paletteKeptAsSaved(cwd, slug, data, base)
+  ) {
+    const builtFrom = settingsBeforeChange(cwd, slug);
+    if (!builtFrom || (builtFrom.like ?? null) === (data.like ?? null))
+      ctx.keepStops = paletteStopsOnly(stopsShownInCopy(cwd, slug, base), data);
   }
   const theme = compileTheme(ctx, data, base);
   const pal = keepShades(
@@ -18122,16 +18141,7 @@ export async function commitTheme(
   const stopsNow =
     keptPalette && moduleNow && moduleUnedited(moduleNow) !== false
       ? paletteStopsOnly(stopsIn(moduleNow, true), before, moduleNow)
-      : keptPalette && !fs.existsSync(f.settingsTs)
-        ? paletteStopsOnly(
-            stopsShownInCopy(
-              cwd,
-              slug,
-              await baseResolved(ctx.project, data.like),
-            ),
-            before,
-          )
-        : null;
+      : null;
   // (A kept palette always keeps what its module showed, less what a token
   // setting wrote: `stopsNow`.)
   ctx.keepStops =
