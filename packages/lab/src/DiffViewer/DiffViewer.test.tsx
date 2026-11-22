@@ -582,6 +582,29 @@ describe('DiffViewer', () => {
     }
   });
 
+  it('gives a tint-only change a bar that shows only in forced colors', () => {
+    const forcedOnly = (container: HTMLElement) =>
+      Array.from(
+        container.querySelectorAll('span[aria-hidden="true"]:empty'),
+      ).filter(span => !span.hasAttribute('data-diff-bar'));
+    const {container, rerender} = render(
+      <DiffViewer file={FILE} changeIndicator="none" />,
+    );
+    // One per changed line, hidden until forced colors drop the tint.
+    expect(forcedOnly(container)).toHaveLength(3);
+    // Without the tint, nothing marks the change on screen in any mode.
+    rerender(
+      <DiffViewer
+        file={FILE}
+        changeIndicator="none"
+        hasChangeBackground={false}
+      />,
+    );
+    expect(forcedOnly(container)).toHaveLength(0);
+    rerender(<DiffViewer file={FILE} changeIndicator="classic" />);
+    expect(forcedOnly(container)).toHaveLength(0);
+  });
+
   it('drops the row tint when hasChangeBackground is false', () => {
     const {container, rerender} = render(<DiffViewer file={FILE} />);
     const tinted = container.querySelector('[data-diff="added"]')?.className;
