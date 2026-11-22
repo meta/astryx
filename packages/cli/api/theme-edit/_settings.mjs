@@ -6177,8 +6177,11 @@ export function partsOf(ctx, s) {
   const pin =
     /** @type {any} */ (s).reached ??
     (UNRECORDED.has(s) ? savedReach(ctx, /** @type {any} */ (s)) : null);
+  // (The box a whole outline draws on, the part's own or the row that frames
+  // its controls, is the setting's own place, not a reach to pin.)
+  const box = boxFrameOf(ctx, s);
   const all = reachedPartsOf(ctx, s).filter(
-    t => !Array.isArray(pin) || t === s.on || pin.includes(t),
+    t => !Array.isArray(pin) || t === s.on || t === box || pin.includes(t),
   );
   // (Members the setting keeps out, where it would make text unreadable.)
   const keep = /** @type {any} */ (s).keep;
