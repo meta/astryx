@@ -766,16 +766,12 @@ async function runCase(page: Page, item: AuditCase) {
 }
 
 for (const group of [...new Set(cases.map(item => item.group))]) {
-  test(group, async ({browser, browserName}) => {
+  test(group, async ({browser}) => {
     const context = await browser.newContext({deviceScaleFactor: 2});
     try {
       const page = await context.newPage();
       const failures: string[] = [];
-      // Only Chromium emulates forced colors.
-      for (const item of cases.filter(
-        c =>
-          c.group === group && (!c.forcedColors || browserName === 'chromium'),
-      )) {
+      for (const item of cases.filter(c => c.group === group)) {
         failures.push(...(await runCase(page, item)));
       }
       expect(failures).toEqual([]);
