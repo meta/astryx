@@ -2312,7 +2312,13 @@ export function sizeChangeNote(changes, cause) {
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
+import {
+  appCopyDescriptor,
+  appCopyHead,
+  appCopyMarkedNames,
+  carriesAppCopyMark,
+} from './_marks.mjs';
+import {readThemeDescriptorValue} from '../../foundation/discovery/theme-discovery.mjs';
 import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
 /**
@@ -2425,6 +2431,31 @@ export function themeLocalModules(cwd, slug) {
 }
 
 /**
+ * The display name and description an app copy's descriptor gives now, read
+ * without running it as discovery reads it; none when it does not read.
+ * @param {string} doc
+ * @returns {{displayName?: string, description?: string}}
+ */
+function copyWords(doc) {
+  if (!fs.existsSync(doc)) return {};
+  try {
+    const value = /** @type {any} */ (
+      readThemeDescriptorValue(doc, path.basename(doc))
+    );
+    return {
+      ...(typeof value?.displayName === 'string'
+        ? {displayName: value.displayName}
+        : {}),
+      ...(typeof value?.description === 'string'
+        ? {description: value.description}
+        : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
  * The files of a theme's app copy as the editor would write them now, by
  * name; null with no build to copy. Font stylesheets as given, or null for
  * the copy's own.
@@ -2440,7 +2471,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
   const source = `src/themes/${slug}/${name}.ts`;
   const head = (/** @type {string} */ open, /** @type {string} */ close) =>
-    `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+    appCopyHead(slug, open, close);
   const keptFonts = path.join(dir, `${slug}.fonts.css`);
   const fonts =
     fontsCss ??
@@ -2466,8 +2497,11 @@ function appCopyFiles(cwd, slug, fontsCss) {
   // (`colorModes`); the copy's source re-exports it, so a build of the copy
   // writes it too and `theme add` reads it.
   const oneMode = builtColorMode(f.js).mode;
+  // (The copy's display name and description stay as they are: a shared
+  // theme added with its editor state keeps its own.)
+  const doc = path.join(dir, `${name}.doc.mjs`);
   const files = {
-    [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
+    [`${name}.doc.mjs`]: appCopyDescriptor(slug, copyWords(doc)),
     [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
     // The theme folder's own modules the build imports, as they are, under
@@ -2646,7 +2680,7 @@ export function appCopyBlocker(cwd, slug) {
     } catch {
       text = '';
     }
-    if (!text.includes(APP_COPY_MARK))
+    if (!carriesAppCopyMark(text))
       return `${rel}/${r} is a file the editor did not write, at a name the copy carries themes/${slug}/${r} to; move it, then any set or show writes the copy`;
   }
   // Nothing is written through a link on the way from the app to the copy
@@ -2682,7 +2716,7 @@ export function appCopyBlocker(cwd, slug) {
   /** @param {string} n */
   const marked = n => {
     try {
-      return fs.readFileSync(path.join(dir, n), 'utf8').includes(APP_COPY_MARK);
+      return carriesAppCopyMark(fs.readFileSync(path.join(dir, n), 'utf8'));
     } catch {
       return false;
     }
@@ -2703,7 +2737,7 @@ export function appCopyBlocker(cwd, slug) {
   // The copy is the editor's when any of its marked files carries the
   // mark (one of them deleted is written back); then only a marked name
   // without the mark is yours.
-  const markedNames = [`${name}.doc.mjs`, `${name}.ts`, `${slug}.fonts.css`];
+  const markedNames = appCopyMarkedNames(name, slug);
   // A build output of the copy's source carries the build's own header.
   const generated = (/** @type {string} */ n) => {
     try {

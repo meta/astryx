@@ -152,7 +152,12 @@ import {
   STATUS_TOKEN,
   settingsBeforeChange,
 } from './_palette.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  isFolderOrLinkToOne,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -297,41 +302,7 @@ export function themeFiles(cwd, slug) {
   };
 }
 
-/** Files a system or a tool puts in any folder; a folder of only these is empty. */
-export const FOLDER_JUNK = new Set([
-  '.DS_Store',
-  '.gitkeep',
-  'Thumbs.db',
-  'desktop.ini',
-]);
-
-/**
- * Whether `dir` holds nothing of anyone's: absent, empty, or only system
- * files (what `git rm -r` or a branch switch leaves). A path that is not a
- * folder, or one that does not read, is not empty.
- * @param {string} dir
- * @returns {boolean}
- */
-export function folderIsEmpty(dir) {
-  if (!fs.existsSync(dir)) return true;
-  try {
-    // A folder holding only empty folders (an empty tokens/) holds nothing
-    // either; a link is never followed.
-    return (
-      fs.lstatSync(dir).isDirectory() &&
-      fs
-        .readdirSync(dir)
-        .every(
-          n =>
-            FOLDER_JUNK.has(n) ||
-            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
-              folderIsEmpty(path.join(dir, n))),
-        )
-    );
-  } catch {
-    return false;
-  }
-}
+export {FOLDER_JUNK, folderIsEmpty};
 
 /**
  * Whether a dial takes a value of its own kind beside its named words (a
@@ -594,12 +565,7 @@ export function refuseUnreadableFiles(cwd, slug) {
 export function refuseThemesNotFolder(cwd) {
   const root = path.join(cwd, 'themes');
   const st = fs.lstatSync(root, {throwIfNoEntry: false});
-  if (!st) return;
-  const isDir =
-    st.isDirectory() ||
-    (st.isSymbolicLink() &&
-      fs.statSync(root, {throwIfNoEntry: false})?.isDirectory());
-  if (isDir) return;
+  if (!st || isFolderOrLinkToOne(root)) return;
   refuse(
     ERROR_CODES.ERR_FILE_EXISTS,
     `themes in this app is ${st.isSymbolicLink() ? 'a link that does not lead to a folder' : 'a file, not a folder'}, so no editor theme can be read or made: every theme goes in themes/<name>/. Rename or move it, then run the command again.`,
