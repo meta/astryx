@@ -86,6 +86,12 @@ describe('leftovers', () => {
     );
     expect(lines).toEqual([
       `set ${t} background-color 'var(--color-text-accent)' --on button`,
+      `set ${t} color '#ffffff' --on button --when variant:secondary --mode light`,
+      `set ${t} color '#000000' --on button --when variant:secondary --mode dark`,
+      `set ${t} color '#ffffff' --on button --when variant:ghost --mode light`,
+      `set ${t} color '#000000' --on button --when variant:ghost --mode dark`,
+      `set ${t} color '#ffffff' --on button --when variant:destructive --mode light`,
+      `set ${t} color '#000000' --on button --when variant:destructive --mode dark`,
     ]);
     await follow(lines);
   }, 240_000);
@@ -116,6 +122,8 @@ describe('leftovers', () => {
     );
     expect(tab).toEqual([
       `set q0 background-color '#2563eb' --on tab --state selected+hover`,
+      `set q0 color '#ffffff' --on tab --state selected+hover --mode light`,
+      `set q0 color '#ffffff' --on tab --state selected+hover --mode dark`,
     ]);
   }, 240_000);
 });

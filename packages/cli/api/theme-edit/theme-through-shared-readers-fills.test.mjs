@@ -84,6 +84,8 @@ describe('wrong writes that are no longer accepted', () => {
         (await answer('primary buttons should be #ff0000', 'b')).first,
       ).toEqual([
         "set b background-color '#ff0000' --on button --when variant:primary",
+        "set b color '#000000' --on button --when variant:primary --mode light",
+        "set b color '#000000' --on button --when variant:primary --mode dark",
       ]);
     },
     T,
@@ -411,6 +413,7 @@ describe('asks it used to drop', () => {
         (await answer('make primary buttons a lighter purple')).first,
       ).toEqual([
         "set n background-color '#ede9fe' --on button --when variant:primary",
+        "set n color '#000000' --on button --when variant:primary --mode light",
       ]);
     },
     T,

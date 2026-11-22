@@ -338,6 +338,9 @@ describe('parts named once for two removals, the page, steps', () => {
         [
           'set q box-shadow none --on button',
           "set q background-color '#dc2626' --on button",
+          "set q color '#ffffff' --on button --when variant:secondary --mode light",
+          "set q color '#ffffff' --on button --when variant:ghost --mode light",
+          "set q color '#ffffff' --on button --when variant:destructive --mode dark",
         ],
       ],
       [

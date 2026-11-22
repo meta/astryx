@@ -33189,7 +33189,9 @@ export function draftAnswer(ctx, env, question) {
       .filter(y => y.thing === 'color' && y.on)
       .map(y => `${y.on}|${y.when ?? ''}`),
   );
-  for (const [di, d] of [...result.entries()].reverse()) {
+  /** The text lines a fill's answer carries so its text reads. @type {Set<Step>} */
+  const readableText = new Set();
+  for (const d of [...result].reverse()) {
     // (The one fill asked, in one line or in a line for each variant it
     // goes to: each line's look is measured, never only a lone line's.)
     const isFill = (/** @type {Step} */ x) =>
@@ -33291,9 +33293,44 @@ export function draftAnswer(ctx, env, question) {
       for (const look of looks) {
         const tok = restRead(textReads, look);
         if (!tok) continue;
+        // (The text the look draws now, in a mode: the theme's own text
+        // color for that look and state, or for the whole part, said for
+        // the mode or for both,
+        // else the base theme's rule for that state or look (a part with
+        // no variants has its own rule), else the token Core reads.)
+        /** @param {'light' | 'dark'} m @returns {string} */
+        const labelIn = m => {
+          // (Its own look first, then the whole part; each said for the
+          // mode, then for both.)
+          /** @param {string} state */
+          const own = state =>
+            [look, ...(look ? [''] : [])]
+              .flatMap(w =>
+                [m, undefined].map(md =>
+                  env.data.settings.find(
+                    x =>
+                      x.thing === 'color' &&
+                      x.on === st.on &&
+                      (x.when ?? '') === w &&
+                      (x.state ?? '') === state &&
+                      x.mode === md,
+                  ),
+                ),
+              )
+              .find(Boolean)?.value;
+          const state = st.state ? String(st.state) : '';
+          return String(
+            (state ? own(state) : null) ??
+              (state ? baseOwnLook(String(st.on), 'color', state) : null) ??
+              own('') ??
+              baseOwnLook(String(st.on), 'color', look || 'base') ??
+              `var(${tok})`,
+          );
+        };
         for (const m of modes) {
-          const ink = parseColor(String(current(tok, m) ?? ''));
-          if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
+          const drawn = inMode(labelIn(m), m);
+          const ink = parseColor(drawn);
+          if (!ink || alphaOf(drawn) < 1) continue;
           const under = tintPair
             ? (fillSteps.find(
                 x => x.mode === m && (x.when ?? '') === (look || ''),
@@ -33350,8 +33387,7 @@ export function draftAnswer(ctx, env, question) {
         fixes.splice(k, 1);
       }
       if (!fixes.length || !env.check([...fillSteps, ...fixes]).ok) continue;
-      // (Its own line beside the fill's, so the fill reads as asked and the
-      // text as measured.)
+      // (Where the text would not read, for the answer's own words.)
       const where = fixes
         .map(x =>
           `${x.when ? `${x.when.replace(':', ' ')} ` : ''}${x.mode ? `in ${x.mode} mode` : ''}`.trim(),
@@ -33368,43 +33404,43 @@ export function draftAnswer(ctx, env, question) {
         d.text = `${d.text}; ${st.value}'s choice also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on}${at}, since its text would not read on that fill`;
         continue;
       }
-      d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
-      result.splice(di + 1, 0, {
-        text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
-        options: [fixes],
-        ...(fixes.length > 1 ? {sequence: true} : {}),
-      });
-      // (A theme color's fill, "selected tab accent", in a whole ask: the
-      // answer that runs it in order carries that text line right after the
-      // fill, so running it never leaves the text unreadable.)
-      if (/^var\(/.test(String(st.value ?? '').trim()))
-        for (const seq of result) {
-          if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
-          const steps = seq.options[0];
-          const at = steps.findIndex(x =>
-            fillSteps.some(
-              f =>
-                f.thing === x.thing &&
-                f.on === x.on &&
-                String(f.value) === String(x.value) &&
-                (f.when ?? '') === (x.when ?? '') &&
-                (f.state ?? '') === (x.state ?? '') &&
-                (f.mode ?? '') === (x.mode ?? ''),
-            ),
-          );
-          if (at < 0) continue;
-          const missing = fixes.filter(
+      // (The fill's own answer carries its text lines: the readable text
+      // for each look and mode the fill fails in, after the fill.)
+      for (const o of d.options)
+        if (o.some(x => fillSteps.includes(x))) o.push(...fixes);
+      for (const f of fixes) readableText.add(f);
+      if (d.options.length > 1) d.joined = true;
+      d.text = `${d.text}; its text would not read on that fill${at}, so the answer also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on} (${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value})`;
+      // (In a whole ask, the answer that runs it in order carries those
+      // text lines right after the fill too, so running it never leaves the
+      // text unreadable.)
+      for (const seq of result) {
+        if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
+        const steps = seq.options[0];
+        const at = steps.findIndex(x =>
+          fillSteps.some(
             f =>
-              !steps.some(
-                x =>
-                  x.thing === f.thing &&
-                  x.on === f.on &&
-                  (x.state ?? '') === (f.state ?? '') &&
-                  (x.when ?? '') === (f.when ?? ''),
-              ),
-          );
-          steps.splice(at + 1, 0, ...missing);
-        }
+              f.thing === x.thing &&
+              f.on === x.on &&
+              String(f.value) === String(x.value) &&
+              (f.when ?? '') === (x.when ?? '') &&
+              (f.state ?? '') === (x.state ?? '') &&
+              (f.mode ?? '') === (x.mode ?? ''),
+          ),
+        );
+        if (at < 0) continue;
+        const missing = fixes.filter(
+          f =>
+            !steps.some(
+              x =>
+                x.thing === f.thing &&
+                x.on === f.on &&
+                (x.state ?? '') === (f.state ?? '') &&
+                (x.when ?? '') === (f.when ?? ''),
+            ),
+        );
+        steps.splice(at + 1, 0, ...missing);
+      }
     }
   }
   // "dark mode should be chocolate brown": a page color typed for a mode
@@ -33597,8 +33633,10 @@ export function draftAnswer(ctx, env, question) {
   // status's color for the whole theme (its banners, badges and toasts
   // together), the dial; both are offered, the part's first.
   for (const d of result) {
+    // (The fill's own answer may carry the text that reads on it.)
     const st =
-      d.options.length === 1 && d.options[0].length === 1
+      d.options.length === 1 &&
+      d.options[0].slice(1).every(x => readableText.has(x))
         ? d.options[0][0]
         : null;
     const role = st?.when
@@ -33620,6 +33658,7 @@ export function draftAnswer(ctx, env, question) {
       continue;
     const dial = /^(?:error|danger|destructive)$/.test(role) ? 'danger' : role;
     d.options.push([set(dial, String(st.value))]);
+    if (d.options[0].length > 1) d.joined = true;
     d.text = `${d.text}; or, the second line, the ${dial} color for the whole theme (every ${role} banner, badge and toast follows it): set ${env.slug} ${dial} <color>`;
   }
   // ("the blue info banner clashes with the green"): a complaint that a

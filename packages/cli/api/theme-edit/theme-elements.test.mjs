@@ -80,6 +80,8 @@ describe('an element named in a part', () => {
       (await top('make the hovered item in menus in cards red', 'e')).commands,
     ).toEqual([
       "set e background-color '#dc2626' --on dropdown-menu-item --state hover",
+      "set e color '#ffffff' --on dropdown-menu-item --when variant:default --state hover --mode light",
+      "set e color '#ffffff' --on dropdown-menu-item --when variant:destructive --state hover --mode light",
     ]);
     expect((await top('make the dot in radios red', 'e')).commands).toEqual([
       "set e background-color '#dc2626' --on radio-indicator-dot",
@@ -133,6 +135,7 @@ describe('an element named in a part', () => {
         .commands,
     ).toEqual([
       "set e background-color '#2563eb' --on selector-option-row --state highlighted",
+      "set e color '#ffffff' --on selector-option-row --state highlighted --mode light",
     ]);
   }, 240_000);
 });

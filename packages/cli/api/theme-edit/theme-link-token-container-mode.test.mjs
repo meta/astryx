@@ -179,7 +179,8 @@ describe('link token container mode', () => {
       needsBases(test);
       const r = await how('make buttons and badges rounder and red');
       expect(r[0].text).toMatch(/^all of it, in order; left out: .*badge/);
-      expect(r[0].commands).toHaveLength(3);
+      // (The red fill carries the readable text for each button look.)
+      expect(r[0].commands).toHaveLength(10);
       const two = await answer(
         'make buttons 2 steps rounder and 1 step taller',
       );

@@ -96,6 +96,7 @@ describe('a part named as the color', () => {
     );
     expect(err).toEqual([
       `set ${t} background-color 'var(--color-error-muted)' --on button`,
+      `set ${t} color 'var(--color-on-error-muted)' --on button --when variant:primary --mode light`,
     ]);
     await follow(err);
     expect(
@@ -106,6 +107,8 @@ describe('a part named as the color', () => {
         ),
       ),
     ).toEqual([
+      // (The primary label written above, the muted error text, reads on
+      // the muted success fill too: no new text line.)
       `set ${t} background-color 'var(--color-success-muted)' --on button`,
     ]);
     // (Neutral writes its destructive button's own fill: the muted error.)
@@ -113,6 +116,9 @@ describe('a part named as the color', () => {
       writes(await how(t, 'make the badges the color of the danger buttons')),
     ).toEqual([
       `set ${t} background-color 'var(--color-error-muted)' --on badge`,
+      `set ${t} color 'var(--color-on-error-muted)' --on badge --when variant:info --mode light`,
+      `set ${t} color 'var(--color-on-error-muted)' --on badge --when variant:success --mode light`,
+      `set ${t} color 'var(--color-on-error-muted)' --on badge --when variant:error --mode light`,
     ]);
   }, 240_000);
 
@@ -210,6 +216,12 @@ describe('words', () => {
   it("an open part is its open state; a state's fill token is set in that state", async () => {
     expect(writes(await how('q0', 'make the open select red'))).toEqual([
       "set q0 background-color '#dc2626' --on selector --state expanded --only",
+      "set q0 color '#ffffff' --on selector --when variant:input --state expanded --mode light --only",
+      "set q0 color '#ffffff' --on selector --when variant:input --state expanded --mode dark --only",
+      "set q0 color '#ffffff' --on selector --when variant:secondary --state expanded --mode light --only",
+      "set q0 color '#ffffff' --on selector --when variant:secondary --state expanded --mode dark --only",
+      "set q0 color '#ffffff' --on selector --when variant:ghost --state expanded --mode light --only",
+      "set q0 color '#ffffff' --on selector --when variant:ghost --state expanded --mode dark --only",
     ]);
     const t = await fresh('w1');
     const toggle = writes(

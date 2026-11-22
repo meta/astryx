@@ -71,6 +71,9 @@ describe('parts joined by "and"', () => {
         'red background on buttons and cards on hover',
         [
           "set t background-color '#dc2626' --on button --state hover",
+          "set t color '#ffffff' --on button --when variant:secondary --state hover --mode light",
+          "set t color '#ffffff' --on button --when variant:ghost --state hover --mode light",
+          "set t color '#ffffff' --on button --when variant:destructive --state hover --mode dark",
           "set t background-color '#dc2626' --on card --state hover",
         ],
       ],

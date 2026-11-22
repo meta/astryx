@@ -95,6 +95,12 @@ describe('readers', () => {
     );
     expect(links).toEqual([
       `set ${t} background-color 'var(--color-text-accent)' --on button`,
+      `set ${t} color '#ffffff' --on button --when variant:secondary --mode light`,
+      `set ${t} color '#000000' --on button --when variant:secondary --mode dark`,
+      `set ${t} color '#ffffff' --on button --when variant:ghost --mode light`,
+      `set ${t} color '#000000' --on button --when variant:ghost --mode dark`,
+      `set ${t} color '#ffffff' --on button --when variant:destructive --mode light`,
+      `set ${t} color '#000000' --on button --when variant:destructive --mode dark`,
     ]);
     await follow(links);
     const div = writes(await how(t, 'make the dividers the card border color'));

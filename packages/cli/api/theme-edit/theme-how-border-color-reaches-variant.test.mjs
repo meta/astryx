@@ -100,6 +100,7 @@ describe('how border color reaches variant', () => {
         (await answer("make the dropdown menu's items red")).first,
       ).toEqual([
         "background-color '#dc2626' --on dropdown-menu-item --when variant:default",
+        "color '#ffffff' --on dropdown-menu-item --when variant:default --mode light",
       ]);
       const text = await answer("make the dropdown menu's item text bigger");
       expect(text.first[0]).toMatch(/--on dropdown-menu-item$/);

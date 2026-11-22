@@ -124,17 +124,21 @@ describe('looks', () => {
       ),
     ).toEqual([
       `set q0 background-color 'var(--color-accent)' --on button --when variant:destructive`,
+      `set q0 color 'var(--color-on-accent)' --on button --when variant:destructive`,
     ]);
   }, 240_000);
 
   it('a status word after a possessive is that look', async () => {
     // (The success color for the whole theme follows as the second line.)
-    expect(
-      writes(await how('q0', "make the badge's success background green")),
-    ).toEqual([
-      `set q0 background-color '#16a34a' --on badge --when variant:success`,
-      `set q0 success '#16a34a'`,
-    ]);
+    // (The fill's line carries the text that reads on it.)
+    const w = writes(
+      await how('q0', "make the badge's success background green"),
+    );
+    expect(w).toHaveLength(2);
+    expect(w[0]).toMatch(
+      /^set q0 background-color '#16a34a' --on badge --when variant:success && .* set q0 color '#000000' --on badge --when variant:success --mode light$/,
+    );
+    expect(w[1]).toBe(`set q0 success '#16a34a'`);
   }, 240_000);
 });
 

@@ -191,6 +191,7 @@ describe('and', () => {
       ).toEqual([
         "set n background-color '#dc2626' --on tab --state selected --mode light",
         "set n background-color '#2563eb' --on tab --state selected --mode dark",
+        "set n color '#ffffff' --on tab --state selected --mode dark",
       ]);
     },
     T,

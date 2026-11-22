@@ -118,6 +118,8 @@ describe('several states at once', () => {
     ).toEqual([
       // (In the tab's own order, as set saves it.)
       "set t background-color '#2563eb' --on tab --state selected+hover",
+      "set t color '#ffffff' --on tab --state selected+hover --mode light",
+      "set t color '#ffffff' --on tab --state selected+hover --mode dark",
     ]);
     await themeEditSet('t', 'background-color', '#ff0000', {
       cwd,

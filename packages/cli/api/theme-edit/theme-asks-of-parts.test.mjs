@@ -98,7 +98,11 @@ describe('asks of parts', () => {
       ).lines,
     ).toEqual([
       "set a background-color '#2563eb' --on dropdown-menu-item --state hover",
+      "set a color '#ffffff' --on dropdown-menu-item --when variant:default --state hover --mode light",
+      "set a color '#ffffff' --on dropdown-menu-item --when variant:destructive --state hover --mode light",
       "set a background-color '#9e9e9e' --on dropdown-menu-item --state disabled",
+      "set a color '#000000' --on dropdown-menu-item --when variant:default --state disabled --mode dark",
+      "set a color '#000000' --on dropdown-menu-item --when variant:destructive --state disabled --mode dark",
     ]);
     // A condition said with another state is both at once, with each one
     // alone as the other reading; moment states said together are each,
@@ -127,9 +131,14 @@ describe('asks of parts', () => {
       (await top('primary buttons blue and the others gray')).lines,
     ).toEqual([
       "set a background-color '#2563eb' --on button --when variant:primary",
+      "set a color '#ffffff' --on button --when variant:primary --mode dark",
       "set a background-color '#9e9e9e' --on button --when variant:secondary",
+      "set a color '#000000' --on button --when variant:secondary --mode dark",
       "set a background-color '#9e9e9e' --on button --when variant:ghost",
+      "set a color '#000000' --on button --when variant:ghost --mode dark",
       "set a background-color '#9e9e9e' --on button --when variant:destructive",
+      "set a color '#000000' --on button --when variant:destructive --mode light",
+      "set a color '#000000' --on button --when variant:destructive --mode dark",
     ]);
     expect(
       (await top('make the selected tab text white and the others gray')).lines,

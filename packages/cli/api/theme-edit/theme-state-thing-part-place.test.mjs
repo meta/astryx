@@ -81,6 +81,7 @@ describe('a state of an element in a part', () => {
       );
       expect(lines, ask).toEqual([
         "set p1 background-color '#2563eb' --on pagination-item --state selected",
+        "set p1 color '#ffffff' --on pagination-item --state selected --mode light",
       ]);
       expect(lines.join('\n')).not.toMatch(/--color-background-body|app-shell/);
     }

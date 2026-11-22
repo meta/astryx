@@ -142,6 +142,7 @@ describe('a reference named with its look', () => {
       ),
     ).toEqual([
       `set ${t} background-color 'var(--color-error-muted)' --on button`,
+      `set ${t} color 'var(--color-on-error-muted)' --on button --when variant:primary --mode light`,
     ]);
   }, 240_000);
 
