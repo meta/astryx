@@ -594,6 +594,40 @@ const ROWS = [
     },
   ],
   [
+    'an undo phrase naming a family takes back its member part',
+    {
+      q: 'Make the text inputs rounder. Make the headings bold. Undo the heading change and the input change.',
+      never: /--on text-input|^headings bold$/,
+      says: /the heading and inputs changes said earlier in this ask are taken back/,
+    },
+  ],
+  [
+    'an undo naming a family first takes back its member part',
+    {
+      q: 'Make the text inputs rounder. Make the headings bold. Undo the input change and the heading change.',
+      never: /--on text-input|^headings bold$/,
+      says: /the inputs and heading changes said earlier in this ask are taken back/,
+    },
+  ],
+  [
+    'an undo phrase naming a look no earlier change had keeps that part',
+    {
+      q: 'Make the card corners round. Make the headings bold. Undo the heading change and the card shadow change.',
+      has: ['corners round --on card'],
+      never: /^headings bold$/,
+      says: /no card change of that look was said earlier in this ask, so nothing is taken back for it/,
+    },
+  ],
+  [
+    'a named-look undo with a phrase after it writes nothing for the phrase',
+    {
+      q: 'Make the headings bold. Undo the heading size change and the card corners change.',
+      has: ['headings bold'],
+      never: /--on card\b/,
+      says: /no card change was said earlier in this ask, so nothing is written for it/,
+    },
+  ],
+  [
     'a step another clause also writes stays after the undo phrase',
     {
       q: 'Make the cards blue. Undo the card change and the heading weight change. Make the headings bold.',

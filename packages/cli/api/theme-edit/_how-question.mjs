@@ -29513,6 +29513,13 @@ export function draftAnswer(ctx, env, question) {
     // (A phrase whose parts had no change earlier, "and the card corners
     // change" after only a heading change, takes nothing back: the undo
     // reads as the undo of its own part alone.)
+    // (A part or its family, "inputs" for a text input, as the undo's own
+    // filter reads it.)
+    const onIt = (/** @type {any} */ c, /** @type {string} */ on) =>
+      c.parts?.some(
+        (/** @type {{on: string}} */ p) =>
+          p.on === on || (FAMILIES[on] ?? []).includes(p.on),
+      );
     const changedEarlier = (/** @type {string} */ on) =>
       result.some(d => {
         const c = /** @type {any} */ (draftClause.get(d));
@@ -29521,7 +29528,7 @@ export function draftAnswer(ctx, env, question) {
           !d.unmet &&
           c &&
           clauses.indexOf(c) < undoAt &&
-          c.parts?.some((/** @type {{on: string}} */ p) => p.on === on)
+          onIt(c, on)
         );
       });
     const nextNew =
@@ -29586,6 +29593,16 @@ export function draftAnswer(ctx, env, question) {
     const several =
       (uc?.parts?.length ?? 0) > 1 || (alsoNamed && !nextNew && !both);
     const ownChanged = both && changedEarlier(String(uc.parts[0].on));
+    let nextTaken = false;
+    // (The phrase is struck before the look is read, so a named look never
+    // leaves it as a new change.)
+    if (nextNew) {
+      strikeNext();
+      result.push({
+        text: `no ${[...new Set((next.parts ?? []).map((/** @type {{on: string}} */ p) => p.on))].join(' or ')} change was said earlier in this ask, so nothing is written for it`,
+        options: [],
+      });
+    }
     // ("Make the headings bigger. Make the headings bold. Undo the heading
     // size change.": a look the undo names, read by `aspectsOf`, takes back
     // only the earlier change of that look. A bare "size" is the part's
@@ -29623,28 +29640,32 @@ export function draftAnswer(ctx, env, question) {
     }
     if (both) {
       const nextLooks = /** @type {string[]} */ (next.aspects ?? []);
-      undone.push(
-        ...result.filter(d => {
-          const c = /** @type {any} */ (draftClause.get(d));
-          return (
-            d !== unmet &&
-            !d.unmet &&
-            d.options.length &&
-            c &&
-            clauses.indexOf(c) < undoAt &&
-            c.parts?.some(
-              (/** @type {{on: string}} */ p) => p.on === nextOn[0].on,
-            ) &&
-            (!nextLooks.length || nextLooks.some(a => lookOf(d).includes(a)))
-          );
-        }),
-      );
+      const ofNext = result.filter(d => {
+        const c = /** @type {any} */ (draftClause.get(d));
+        return (
+          d !== unmet &&
+          !d.unmet &&
+          d.options.length &&
+          c &&
+          clauses.indexOf(c) < undoAt &&
+          onIt(c, nextOn[0].on) &&
+          (!nextLooks.length || nextLooks.some(a => lookOf(d).includes(a)))
+        );
+      });
+      nextTaken = ofNext.length > 0;
+      undone.push(...ofNext);
       strikeNext();
       // ("Make the headings bold. Undo the card change and the heading
       // change.": the card had no change, so nothing is taken back for it.)
       if (!ownChanged)
         result.push({
           text: `no ${part} change was said earlier in this ask, so nothing is taken back for it`,
+          options: [],
+        });
+      // ("… and the card shadow change" after only a card corners change.)
+      if (!nextTaken)
+        result.push({
+          text: `no ${nextOn[0].on} change of that look was said earlier in this ask, so nothing is taken back for it`,
           options: [],
         });
     }
@@ -29665,13 +29686,6 @@ export function draftAnswer(ctx, env, question) {
           looksSaid.some(a => lookOf(d).includes(a))
         );
       });
-    if (nextNew) {
-      strikeNext();
-      result.push({
-        text: `no ${[...new Set((next.parts ?? []).map((/** @type {{on: string}} */ p) => p.on))].join(' or ')} change was said earlier in this ask, so nothing is written for it`,
-        options: [],
-      });
-    }
     if (!undone.length && !several && !loose) continue;
     const unsure =
       several ||
@@ -29775,9 +29789,9 @@ export function draftAnswer(ctx, env, question) {
     }
     result.push({
       text:
-        both && ownChanged
+        both && ownChanged && nextTaken
           ? `the ${part} and ${nextOn[0].on} changes said earlier in this ask are taken back by their undo, so they are not written`
-          : `the ${both ? `${nextOn[0].on} ` : part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
+          : `the ${both && !ownChanged ? `${nextOn[0].on} ` : part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
       options: [],
     });
   }
