@@ -12689,19 +12689,29 @@ export function draftAnswer(ctx, env, question) {
         onBody(x) &&
         !/\b(?:line[- ]?height|leading)\b/i.test(x.text),
     );
+    // (A size the text-size answer writes as typed only: a size in another
+    // unit, "font size 1rem", or a change, "the text 2px bigger", is no
+    // pixel size to divide by.)
+    const asTyped = (/** @type {Clause} */ o) =>
+      o.lengths.every(l => /^\d+(?:\.\d+)?px$/i.test(String(l).trim())) &&
+      !/\b(?:bigger|smaller|larger|more|less|up|down|increase\w*|decrease\w*|by)\b/i.test(
+        o.text,
+      );
     let unread = false;
     for (const o of others) {
-      const m = SAID.exec(o.text);
+      const read = o.aspects.includes('fontsize');
+      // (Or the whole theme's text size another clause asks, "Type:
+      // Helvetica 13px".)
+      const m =
+        SAID.exec(o.text) ??
+        (read ? /\b(\d+(?:\.\d+)?)\s?px\b/i.exec(o.text) : null);
+      if (read && o.lengths.length && !asTyped(o)) {
+        unread = true;
+        continue;
+      }
       if (!m) continue;
-      if (o.aspects.includes('fontsize')) return Number(m[1] ?? m[2]);
+      if (read) return Number(m[1] ?? m[2]);
       unread = true;
-    }
-    // (Or the whole theme's text size another clause asks, "Type:
-    // Helvetica 13px".)
-    for (const o of others) {
-      if (!o.aspects.includes('fontsize')) continue;
-      const m = /\b(\d+(?:\.\d+)?)\s?px\b/i.exec(o.text);
-      if (m) return Number(m[1]);
     }
     return unread ? 'unread' : null;
   };
@@ -22256,8 +22266,14 @@ export function draftAnswer(ctx, env, question) {
         // (Only a clause whose one length is the leading: a text size in
         // the same clause keeps the plain reading.)
         const pxLengths = c.text.match(/\b\d+(?:\.\d+)?\s?px\b/gi) ?? [];
+        // (Never a size labeled as the text's, "font size 16px line height
+        // 150%", nor beside a line height said another way.)
         const pxLeading =
-          pxLengths.length === 1
+          pxLengths.length === 1 &&
+          !/\b(?:text|font)(?:[- ]size)?\s*:?\s*\d+(?:\.\d+)?\s?px\b/i.test(c.text) &&
+          !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*\d+(?:\.\d+)?(?!\s?px\b|[\d.])/i.test(
+            c.text,
+          )
             ? /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)|\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/i.exec(
                 c.text,
               )
