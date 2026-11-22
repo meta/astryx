@@ -1524,6 +1524,22 @@ describe('Table', () => {
     expect(names(cellText)).toEqual(names(plainText));
   });
 
+  it('counts no Tooltip load that an earlier module graph makes after the count starts', async () => {
+    // An earlier test's page-wide preload runs from its own module graph.
+    // On a busy runner its import can resolve only after this count starts.
+    const {createModuleLoader} = await import('../utils/moduleLoader');
+    const earlierTooltip = createModuleLoader(
+      async () => import('../Tooltip/Tooltip'),
+    );
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      await earlierTooltip.load();
+      expect(fresh.loads.count).toBe(0);
+    } finally {
+      fresh.restore();
+    }
+  });
+
   it('loads the Tooltip module after a table of default cells paints, with no interaction', async () => {
     const fresh = await freshTableWithCountedTooltip();
     try {
