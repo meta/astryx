@@ -406,8 +406,41 @@ describe('a top nav link colored for a dark bar', () => {
       on: 'selected-items',
       state: 'selected',
     });
-    await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const g = /** @type {any} */ (
+      await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
     expect(drawerSelected('pgr').some(r => /#bfbfbf/.test(r))).toBe(true);
+    // (It is measured on the link's own block, not the group fill.)
+    expect(JSON.stringify(g.data.newProblems ?? [])).not.toMatch(
+      /top-nav-item \(mode drawer, selected\)/,
+    );
+    // (A group color set after the link's own `--only` selected color is not
+    // written on the link either: the copy keeps the link's own white.)
+    await themeEditNew('pgc', {cwd, like: 'neutral'});
+    await themeEditSet('pgc', 'mode', 'light-only', {cwd});
+    await themeEditSet('pgc', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pgc', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pgc', 'color', '#ffffff', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pgc', 'color', '#333333', {
+      cwd,
+      on: 'selected-items',
+      state: 'selected',
+    });
+    await themeEditSet('pgc', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    expect(drawerSelected('pgc').some(r => /#ffffff/.test(r))).toBe(true);
   }, 240_000);
 
   it('holds nothing in a mode a one-mode theme never shows', async ctx => {
