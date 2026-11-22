@@ -148,6 +148,24 @@ describe('neutral grays', () => {
   );
 
   it(
+    'an "untinted" said for something else is still named as not taken',
+    async test => {
+      needsBases(test);
+      for (const q of [
+        'untinted cards, 12px corners, bold headings, untinted grays',
+        'red buttons, rounder cards, 6px corners! untinted grays',
+      ]) {
+        const results = await answer(q, 'plain');
+        expect(
+          results.some(r => /not taken: .*untinted/.test(r.text)),
+          q,
+        ).toBe(true);
+      }
+    },
+    T,
+  );
+
+  it(
     'a closing mark after the grays in a longer ask still reads them',
     async test => {
       needsBases(test);

@@ -5771,6 +5771,8 @@ export function draftAnswer(ctx, env, question) {
    * @type {WeakSet<Step>}
    */
   const untintedSeeds = new WeakSet();
+  /** Whether the bare neutral-grays clause was answered. */
+  let untintedAnswered = false;
   const untintedAsk =
     !setsColors &&
     bareNeutralGrays(
@@ -29073,6 +29075,7 @@ export function draftAnswer(ctx, env, question) {
       !given &&
       isBareGraysClause(c.text)
     ) {
+      untintedAnswered = true;
       const SEED = '#777777';
       const chroma = chromaOf;
       const modes = modesOf(env.data);
@@ -34063,7 +34066,13 @@ export function draftAnswer(ctx, env, question) {
             // (A warm or cool look is read by the neutral dial's grays, and
             // so is the bare "untinted grays" ask it answered.)
             !/^(?:warm|cool)(?:er)?$/.test(w) &&
-            !(untintedAsk && w === 'untinted') &&
+            // (Only when that answer was given, and only its own word: an
+            // "untinted" said for something else is still named.)
+            !(
+              untintedAnswered &&
+              w === 'untinted' &&
+              (q.toLowerCase().match(/\buntinted\b/g) ?? []).length === 1
+            ) &&
             !/^(?:dark|light)(?:-only)?$/.test(w) &&
             // (A way, "softer", is read by the way readers.)
             !/[a-z]{3}er$/.test(w) &&
