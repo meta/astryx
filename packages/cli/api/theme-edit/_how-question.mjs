@@ -23808,7 +23808,7 @@ export function draftAnswer(ctx, env, question) {
             const role =
               roleWord.exec(c.text.trim())?.[1] ??
               new RegExp(
-                `(?:^|[,;:.]\\s*|\\band\\s+)(?:the\\s+|all\\s+|give\\s+(?:the\\s+|all\\s+)?)?(controls?|overlays?|surfaces?|containers?)\\s+with\\b[^,;:]*${String(color).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+                `(?:^|[,;:.]\\s*|\\band\\s+)(?:the\\s+|all\\s+|give\\s+(?:the\\s+|all\\s+)?)?(controls?|overlays?|surfaces?|containers?)\\s+with\\b[^,;:]*\\bborders?\\b`,
                 'i',
               ).exec(question.trim())?.[1];
             const edgeParts = role
@@ -23934,7 +23934,9 @@ export function draftAnswer(ctx, env, question) {
             const steps = [
               ...(role
                 ? roleOwn.flatMap(f => [
-                    ...(wide ? [set('--border-width', wide, {on: f})] : []),
+                    // (The parts' own edge: a divider inside keeps its
+                    // width.)
+                    ...(wide ? [set('border-width', wide, {on: f})] : []),
                     set('--color-border', color, {on: f, ...modeOf(c)}),
                     set('--color-border-emphasized', color, {
                       on: f,
@@ -23975,7 +23977,7 @@ export function draftAnswer(ctx, env, question) {
             ];
             if (role)
               return {
-                text: `borders${wide ? ` ${wide} wide` : ''} in ${color} on the ${role.replace(/s?$/, 's')} only: the border tokens set on ${roleOwn.join(', ') || 'none of them'}, the parts that draw a border${edged.length ? `, and a border on the ones drawn with none (${edged.join(', ')})` : ''}; the rest of the theme keeps its borders`,
+                text: `borders${wide ? ` ${wide} wide` : ''} in ${color} on the ${role.replace(/s?$/, 's')} only: the border color${wide ? ' and the width of their own edge' : ''} on ${roleOwn.join(', ') || 'none of them'}, the parts that draw a border${edged.length ? `, and a border on the ones drawn with none (${edged.join(', ')})` : ''}; the rest of the theme keeps its borders${wide ? ', and the dividers inside these parts keep their width' : ''}`,
                 options: [steps],
                 sequence: true,
               };
@@ -33662,7 +33664,7 @@ export function draftAnswer(ctx, env, question) {
             t,
           ) &&
           new RegExp(
-            `(?:^|[,;:.]\\s*|\\band\\s+)${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+with\\b`,
+            `(?:^|[,;:.]\\s*|\\band\\s+)${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+with\\b[^,;:]*\\bborders?\\b`,
             'i',
           ).test(raw0.trim()) &&
           steps.some(st => /^border/.test(String(st.thing)))

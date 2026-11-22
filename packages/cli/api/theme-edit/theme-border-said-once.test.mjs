@@ -220,6 +220,52 @@ describe('a whole-theme border said once', () => {
         q,
       ).not.toMatch(/not used/);
     }
+    // A role word with a border named in words ("black") narrows it too;
+    // one the border does not read ("overlays with a soft shadow, 1px …
+    // borders") keeps main's reading and is named as not used.
+    {
+      const {data} = await themeEditHow('controls with 2px black borders', {
+        cwd,
+        theme: 'br',
+      });
+      const cmds = data.results.flatMap(
+        (/** @type {{commands: string[]}} */ r) => r.commands,
+      );
+      expect(
+        cmds.some((/** @type {string} */ x) => x.endsWith(' --on dialog')),
+      ).toBe(false);
+      expect(
+        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
+      ).not.toMatch(/not used/);
+    }
+    {
+      const {data} = await themeEditHow(
+        'overlays with a soft shadow, 1px #cccccc borders',
+        {cwd, theme: 'br'},
+      );
+      expect(
+        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
+      ).toMatch(/not used: [^\n]*"overlays"/);
+    }
+    // A narrowed wider border sets the parts' own edge: the dividers inside
+    // keep their width (no border-width token anywhere).
+    for (const q of [
+      'surfaces with 2px #cccccc borders',
+      'controls with 2px #999999 borders',
+    ]) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
+      const cmds = data.results.flatMap(
+        (/** @type {{commands: string[]}} */ r) => r.commands,
+      );
+      expect(
+        cmds.filter((/** @type {string} */ x) => / --border-width /.test(x)),
+        q,
+      ).toEqual([]);
+      expect(
+        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
+        q,
+      ).toMatch(/dividers inside these parts keep their width/);
+    }
     // A word that names no part takes the whole-theme border, named unused.
     {
       const q = '8px corners, wobbles with 2px #999999 borders';
