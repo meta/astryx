@@ -5036,7 +5036,7 @@ export function groupReachesByDefault(name) {
 /**
  * Whether a setting reaches parts beyond the one it names: it names a
  * group, or it is set on a member of a family without `--only`.
- * @param {{project?: any, C?: any}} ctx
+ * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'thing' | 'only'> & {state?: string | null}} s
  */
 export function spreads(ctx, s) {
@@ -5845,7 +5845,7 @@ function plainPaint(v) {
  */
 export function writtenPartsOf(ctx, data, s) {
   const parts = partsOf(/** @type {any} */ (ctx), s);
-  if (!spreads(ctx, s)) return parts;
+  if (!spreads(/** @type {any} */ (ctx), s)) return parts;
   // A text color set beside a fill on the same part, in the same variant,
   // state and mode, goes where that fill goes: text and its ground come
   // from one setting, never from two members (white text from a selected
