@@ -69,6 +69,12 @@ describe('a family said as like another', () => {
     expect(await commandsFor('Font: MS Sans Serif-like pixel sans')).toContain(
       `font 'MS Sans Serif'`,
     );
+    // ("system sans" is the system font, never "without"; a size said
+    // beside a typeface is the base text size.)
+    const bulma = await commandsFor('system sans 16px, 1.5 leading.');
+    expect(bulma).toContain('font system');
+    expect(bulma).toContain('text-size 16');
+    expect(await commandsFor('serif 16px')).toContain('text-size 16');
     // ("sans-serif" and "sans serif" name no serif.)
     expect(
       await commandsFor('Type: MS Sans Serif-like pixel sans-serif 11px'),

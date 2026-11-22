@@ -9438,9 +9438,11 @@ export function draftAnswer(ctx, env, question) {
     if (
       c.lengths.some(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) &&
       // (Uppercase or italic is the text's look whatever the words: "table
-      // headers uppercase 11px".)
+      // headers uppercase 11px"; so is the theme's typeface, "system sans
+      // 16px", "serif 16px".)
       (/\b(?:text|labels?|font|type|letters)\b/.test(c.text) ||
-        c.aspects.some(a => a === 'case' || a === 'italic')) &&
+        c.aspects.some(a => a === 'case' || a === 'italic') ||
+        (!c.parts.length && c.aspects.includes('family'))) &&
       c.aspects.some(a =>
         ['case', 'weight', 'italic', 'tracking', 'family'].includes(a),
       ) &&
