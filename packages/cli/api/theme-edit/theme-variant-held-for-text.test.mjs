@@ -250,6 +250,41 @@ describe('a top nav link colored for a dark bar', () => {
     );
     expect(rules.some(r => /#ffffff|#fff\b/i.test(r))).toBe(true);
     expect(rules.some(r => /#bfbfbf/.test(r))).toBe(false);
+    // (A selected color set for the phone menu wins there over one set at
+    // rest later.)
+    await themeEditNew('powd', {cwd, like: 'neutral'});
+    await themeEditSet('powd', 'mode', 'light-only', {cwd});
+    await themeEditSet('powd', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('powd', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('powd', 'color', '#ffffff', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      when: 'mode:drawer',
+    });
+    await themeEditSet('powd', 'color', '#eeeeee', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('powd', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const drawn = (cssOf('powd').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
+      r =>
+        /top-nav-item/.test(r) &&
+        /drawer/.test(r) &&
+        /selected|aria-current/.test(r),
+    );
+    expect(drawn.some(r => /#eeeeee/.test(r))).toBe(false);
+    expect(drawn.some(r => /#ffffff|#fff\b/i.test(r))).toBe(true);
   }, 240_000);
 
   it('keeps a one-mode selected fill to its mode in the phone menu', async ctx => {

@@ -5335,18 +5335,22 @@ export function holdCopies(ctx, data, s) {
               .reverse()
               .find(x => x.state === st && !x.when && inMode(x));
           if (!painted) continue;
-          const own = [...data.settings]
-            .reverse()
-            .find(
-              y =>
-                y !== s &&
-                y.on &&
-                kebab(String(y.thing)) === kebab(String(s.thing)) &&
-                (y.state ?? '') === st &&
-                (!y.when || y.when === variant) &&
-                (!y.mode || !m || y.mode === m) &&
-                writtenPartsOf(ctx, data, y).includes(String(s.on)),
-            );
+          /** @param {Setting} y */
+          const ownColor = y =>
+            y !== s &&
+            y.on &&
+            kebab(String(y.thing)) === kebab(String(s.thing)) &&
+            (y.state ?? '') === st &&
+            (!y.mode || !m || y.mode === m) &&
+            writtenPartsOf(ctx, data, y).includes(String(s.on));
+          // (The theme's own color for the state there, ranked like the
+          // fill: one set for the placement wins over one set at rest, the
+          // later of each.)
+          const own =
+            [...data.settings]
+              .reverse()
+              .find(y => ownColor(y) && y.when === variant) ??
+            [...data.settings].reverse().find(y => ownColor(y) && !y.when);
           const value = String(own ? own.value : s.value);
           // (Only where that color reads 4.5:1 on the state's fill as built:
           // a light or see-through block keeps Core's color, the hold's.)
