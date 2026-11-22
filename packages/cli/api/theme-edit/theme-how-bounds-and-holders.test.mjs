@@ -108,13 +108,9 @@ describe('values and holders', () => {
     "%s steps up the list's gap",
     async question => {
       const rs = await how('q0', question);
-      expect(writes(rs)).toEqual([
-        expect.stringMatching(
-          /^set q0 gap 'var\(--spacing-[\w-]+\)' --on list$/,
-        ),
-      ]);
+      expect(writes(rs)).toEqual(["set q0 gap 'var(--spacing-1)' --on list"]);
       expect(texts(rs)).toMatch(
-        /the room between list-items is list's gap: --spacing-[\w-]+ \(\S+\), the next stop up/,
+        /the room between list-items is list's gap: --spacing-1 \(0\.25rem\), the next stop up the theme's spacing scale \(now --spacing-0-5, 0\.125rem\)/,
       );
     },
     240_000,
@@ -124,10 +120,24 @@ describe('values and holders', () => {
     const t = await fresh('g0');
     await follow([`set ${t} gap 0px --on list`]);
     const rs = await how(t, 'a little more space between list items');
-    expect(writes(rs)).toEqual([
-      expect.stringMatching(
-        new RegExp(`^set ${t} gap 'var\\(--spacing-[\\w-]+\\)' --on list$`),
-      ),
+    expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-0-5)' --on list`]);
+  }, 240_000);
+  // The offered line run, the same ask takes the next stop from there.
+  it('asked again after its line runs, the gap takes the next stop', async () => {
+    const t = await fresh('g1');
+    const first = writes(await how(t, 'more space between list items'));
+    expect(first).toEqual([`set ${t} gap 'var(--spacing-1)' --on list`]);
+    await follow(first);
+    const rs = await how(t, 'more space between list items');
+    expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-1-5)' --on list`]);
+    expect(texts(rs)).toMatch(/\(now --spacing-1, 0\.25rem\)/);
+  }, 240_000);
+  // A gap in em is measured too.
+  it('a gap in em takes the stop past it', async () => {
+    const t = await fresh('g2');
+    await follow([`set ${t} gap 0.5em --on list`]);
+    expect(writes(await how(t, 'more space between list items'))).toEqual([
+      `set ${t} gap 'var(--spacing-3)' --on list`,
     ]);
   }, 240_000);
   // No way, another way, or an exact amount said: still asked for a value.
