@@ -586,10 +586,15 @@ function resolveFile(base) {
  * @param {string} file
  * @param {string} module the specifier, for messages
  * @param {string} exportName
+ * @param {{own?: string}} [options] `own`: the set's generated module, whose
+ *   names are never the library's ({@link iconCandidates})
  */
-export function assertIconExport(file, module, exportName) {
-  if (!moduleExportOrigin(file, exportName)) {
-    const names = followedExportNames(file);
+export function assertIconExport(file, module, exportName, {own} = {}) {
+  const names = followedExportNames(file, ownModules(own));
+  const exported =
+    moduleExportOrigin(file, exportName) != null &&
+    (own == null || exportName === 'default' || names.includes(exportName));
+  if (!exported) {
     throw new IconSetAuthoringError(
       exportName === 'default'
         ? `"${module}" has no default export.`
@@ -1629,6 +1634,17 @@ const REACT_IMPORT = "import {createElement} from 'react'";
 
 /** The built-in icon definitions: the shared names a theme map covers. */
 const BUILT_IN = new Set(ICON_NAMES);
+
+/**
+ * The set's generated module as an absolute path: the `own` file a library
+ * read leaves out ({@link iconCandidates}).
+ * @param {DiscoveredIconSet} set
+ * @param {string} packageDir
+ * @returns {string}
+ */
+export function ownModuleOf(set, packageDir) {
+  return path.resolve(packageDir, generatedModulePath(set, packageDir));
+}
 
 /**
  * The generated icons module of a set, from the package root: `generated`

@@ -38,6 +38,7 @@ import {
   mappableDefinitions,
   exportValueKind,
   generatedModulePath,
+  ownModuleOf,
   generatedNamesOf,
   generatedOrigins,
   iconModulePackage,
@@ -187,7 +188,9 @@ export async function iconAdd(exportName, options) {
         : definitionNameOf(givenDefinition, mappableDefinitions(set), set);
     const source = resolveIconSource(from, where);
     const sourceExport = useDefault ? 'default' : exportName;
-    assertIconExport(source.file, source.module, sourceExport);
+    assertIconExport(source.file, source.module, sourceExport, {
+      own: ownModuleOf(set, packageDir),
+    });
 
     // A component is re-exported; anything else goes through the set's
     // adapter. Either way the icon is an export of the set's own module.
@@ -212,7 +215,7 @@ export async function iconAdd(exportName, options) {
         ? {prefix: [], positions: []}
         : moduleNaming(source.file, {
             adapter: Boolean(set.data.adapter),
-            own: path.resolve(packageDir, generated),
+            own: ownModuleOf(set, packageDir),
             module: source.module,
             progress: line => logger.warn(line),
           });
@@ -628,7 +631,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   let positions = [];
   const found = libraryIcons(source.file, {
     adapter: Boolean(set.data.adapter),
-    own: path.resolve(packageDir, generatedModulePath(set, packageDir)),
+    own: ownModuleOf(set, packageDir),
     prefer: [variant],
     module: source.module,
     progress: line => logger.warn(line),

@@ -33,6 +33,7 @@ import {
   definitionFile,
   findLocalIconSet,
   generatedModulePath,
+  ownModuleOf,
   generatedModuleText,
   generatedOrigins,
   sameIconModule,
@@ -704,7 +705,7 @@ async function redeclareIconSet(
               module,
               where,
               Boolean(set.data.adapter),
-              path.resolve(packageDir, generatedModulePath(set, packageDir)),
+              ownModuleOf(set, packageDir),
             ),
           )
         : null;
@@ -1137,7 +1138,7 @@ async function refreshIconSet(
     const everyIcon = everyLibraryIcon(source.file, {
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
-      own: path.resolve(packageDir, generatedModulePath(set, packageDir)),
+      own: ownModuleOf(set, packageDir),
       module: source.module,
       progress: line => logger.warn(line),
     });

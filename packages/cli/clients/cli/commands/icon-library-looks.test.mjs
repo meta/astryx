@@ -2170,6 +2170,25 @@ describe('a refresh of a set the library ships itself, whose root re-exports the
     expect(listed.code, JSON.stringify(listed.body)).toBe(0);
     expect(listed.body.data.id).toBe('heart');
 
+    // The set's own name is not an export of the library, and never offered.
+    const own = await json([
+      'experimental',
+      'icon',
+      'add',
+      'ArrowDownIcon',
+      '--from',
+      '@acme/icons',
+      '--set',
+      'own',
+    ]);
+    expect(own.code).not.toBe(0);
+    expect(own.body.code).toBe('ERR_NOT_FOUND');
+    expect(
+      (own.body.suggestions ?? []).map(
+        (/** @type {{name: string}} */ each) => each.name,
+      ),
+    ).not.toContain('ArrowDownIcon');
+
     // A default-look change without --from reads the looks the icons draw.
     const moved = await json([
       'experimental',
