@@ -934,9 +934,9 @@ nothing for it. Both dials take no `--on`, `--mode`, `--state` or `--when`. `set
 either dial; for darker, lighter or stronger it names the line that sets that
 mode's wash token, and for a percent it names the token. `how` writes that
 line for darker, lighter or stronger asked for one mode, and names the token
-for a percent. `how` reads
-a feel said with its moment ("darker on press", "darker on click", "8% tint
-on hover") as the dial; a border, text or shadow said with its moment stays
+for a percent. `how` reads a feel said plainly with its moment ("darker on press", "darker
+on click", "8% tint on hover") as the dial; a feel in a question that wonders,
+asks back, or uses could, would or should is read as before the dials; a border, text or shadow said with its moment stays
 that look's, and "hover #0065ff" said of a part stays that part's hover. A
 wash said as a tint or a moment's background ("hover tint 8%", "stronger
 hover tint", "make the pressed background darker") writes the exact per-mode
