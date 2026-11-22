@@ -38,6 +38,8 @@ export function useNumberGrouping(
   isEnabled: boolean,
 ): NumberGroupingModule | null {
   const [grouping, setGrouping] = useState(numberGroupingModule.loaded);
+  // Syncs with the module loader: the grouping helpers load after the first
+  // render that sets the prop.
   useEffect(() => {
     if (!isEnabled || grouping !== null) {
       return;
