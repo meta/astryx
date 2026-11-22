@@ -676,6 +676,16 @@ describe('theme add with a shared theme', () => {
     expect(
       fs.existsSync(path.join(app, 'themes/ocean/ocean.settings.json')),
     ).toBe(true);
+    // (A re-add over its own kept working files keeps the copy the editor's.)
+    expect(fs.existsSync(path.join(app, 'src/themes/ocean'))).toBe(false);
+    const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(again.data.copy?.workingFiles?.notCopied).toMatch(/already holds/);
+    const doc = fs.readFileSync(
+      path.join(app, 'src/themes/ocean/oceanTheme.doc.mjs'),
+      'utf8',
+    );
+    expect(doc).toMatch(/^\/\/ Written by `astryx experimental theme editor/);
+    expect(doc).toMatch(/maintained: false/);
   });
 
   it('leaves editor state it did not write in place, and says so', async () => {
@@ -694,6 +704,13 @@ describe('theme add with a shared theme', () => {
       notCopied: expect.stringMatching(/already holds files/),
     });
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
+    // (The builder's own settings are never adopted: the copy stays plain.)
+    expect(
+      fs.readFileSync(
+        path.join(app, 'src/themes/ocean/oceanTheme.doc.mjs'),
+        'utf8',
+      ),
+    ).not.toMatch(/Written by/);
     await themeRemove('ocean', {cwd: app});
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
   });
