@@ -5327,7 +5327,9 @@ export function holdCopies(ctx, data, s) {
         x.state &&
         /^background(-color|-image)?$/.test(kebab(String(x.thing))) &&
         (!x.when || x.when === variant) &&
-        partsOf(ctx, x).includes(String(s.on)),
+        // (Only a fill the build writes on the part: a part's own fill set
+        // `--only` keeps its block under a later group fill.)
+        writtenPartsOf(ctx, data, x).includes(String(s.on)),
     );
     for (const mode of modes) {
       out.push({
@@ -5344,15 +5346,10 @@ export function holdCopies(ctx, data, s) {
       });
       // (A copy per mode where the theme draws both, so each mode takes
       // its own fill and color, a pair's half included.)
-      const oneMode = ['light-only', 'dark-only'].includes(String(data.mode));
-      const stateModes = mode
-        ? [mode]
-        : oneMode
-          ? [undefined]
-          : /** @type {Array<'light' | 'dark' | undefined>} */ ([
-              'light',
-              'dark',
-            ]);
+      const drawn = /** @type {Array<'light' | 'dark'>} */ (modesOf(data));
+      const stateModes = /** @type {Array<'light' | 'dark' | undefined>} */ (
+        mode ? [mode] : drawn.length > 1 ? drawn : [undefined]
+      );
       const states = [...new Set(fills.map(x => String(x.state)))];
       /** @type {Map<string, Set<string>>} the modes each state got a copy in */
       const copied = new Map();
@@ -5386,11 +5383,7 @@ export function holdCopies(ctx, data, s) {
           const value = String(own ? own.value : s.value);
           // (Only where that color reads 4.5:1 on the state's fill as built:
           // a light or see-through block keeps Core's color, the hold's.)
-          const checked = m
-            ? [m]
-            : oneMode
-              ? [String(data.mode).replace('-only', '')]
-              : ['light', 'dark'];
+          const checked = m ? [m] : drawn;
           if (
             !checked.every(mm =>
               readsOn(
