@@ -56,8 +56,8 @@ export const OVERRIDES = [
   [/\bicons?\b/, {on: 'icons'}],
   [
     // (The header row is the header cells: "table header row gray" is
-    // never every row.)
-    /\b(table header rows?|header rows?|table headers?|column headers?|table headings?)\b/,
+    // never every row, and "header cells" never every cell.)
+    /\b(table header (?:rows?|cells?)|header (?:rows?|cells?)|table headers?|column headers?|table headings?)\b/,
     {on: 'table-header-cell'},
   ],
   [
@@ -187,7 +187,10 @@ export const OVERRIDES = [
   // (A large title, the biggest title a screen has, is its top heading.)
   [/\blarge titles?\b/, {on: 'heading', level: '1'}],
   // (A display heading is the heading's largest display look.)
-  [/\bdisplay (?:headings?|titles?|text)\b/, {on: 'heading', when: 'type:display-1'}],
+  [
+    /\bdisplay (?:headings?|titles?|text)\b/,
+    {on: 'heading', when: 'type:display-1'},
+  ],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],

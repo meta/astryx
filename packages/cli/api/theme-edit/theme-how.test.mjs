@@ -5025,6 +5025,8 @@ describe('r19 (2): not dark enough / not light enough', () => {
     'bold header rows on all tables',
     'bold table headers on every table',
     'bold table header cells on all tables',
+    'bold header cells',
+    'make header cells bold',
   ])('bolds the table header cells for %s', async question => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     const commands = (data.results ?? [])
@@ -5035,6 +5037,43 @@ describe('r19 (2): not dark enough / not light enough', () => {
     ).toBe(true);
     expect(commands.some(x => /--on table-row\b/.test(x))).toBe(false);
     expect(commands.some(x => /--on heading\b/.test(x))).toBe(false);
+  });
+  // A part word inside or right before another part's name in the place,
+  // "icon buttons", "input groups", "code blocks", names that part: the
+  // place stays, and nothing is written on parts the ask never named.
+  it.each([
+    [
+      'make the icons in icon buttons gray',
+      /--color-icon-primary [^\n]*--on button$/,
+      /background-color [^\n]*--on button/,
+    ],
+    ['bigger icons in icon buttons', null, /spacing more --on button/],
+    ['make inputs in input groups taller', null, /spacing more/],
+    ['make code in code blocks red', /'#dc2626' --on code$/, /--on code-block/],
+  ])('keeps the place for %s', async (question, want, never) => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .filter((/** @type {string} */ x) => / set /.test(x));
+    if (want) expect(commands.some(x => want.test(x))).toBe(true);
+    expect(commands.some(x => never.test(x))).toBe(false);
+  });
+  // "Header title" is the app header's own title: its text, never every
+  // heading.
+  it('sizes the app header title for make the header title bigger', async () => {
+    const {data} = await themeEditHow('make the header title bigger', {
+      cwd,
+      theme: 'q',
+    });
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .filter((/** @type {string} */ x) => / set /.test(x));
+    expect(
+      commands.some(x => /font-size \S+ --on app-shell-header$/.test(x)),
+    ).toBe(true);
+    expect(
+      commands.some(x => /--text-heading-1-size|type editorial/.test(x)),
+    ).toBe(false);
   });
   // A place outside the part's own family stays a place.
   it('keeps buttons on every card a place', async () => {

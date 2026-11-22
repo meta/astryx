@@ -11408,16 +11408,31 @@ export function draftAnswer(ctx, env, question) {
     if (!place || c.parts.length < 2) continue;
     const at = c.text.indexOf(place[0]);
     // (A part whose word is said in the place, wherever else it is said
-    // too: "table headers on every table" places them in tables.)
+    // too: "table headers on every table" places them in tables. A word
+    // inside another part's longer name, "code" in "code blocks", or right
+    // before another part's word, "icon" in "icon buttons", names that
+    // part, not its own.)
+    const spans = lex.parts.flatMap(([re, y]) =>
+      [...c.text.matchAll(globalOf(re))].map(w => ({
+        on: y.on,
+        start: w.index,
+        end: w.index + w[0].length,
+      })),
+    );
     const inPlace = c.parts.filter(x =>
-      lex.parts.some(
-        ([re, y]) =>
-          y.on === x.on &&
-          [
-            ...c.text.matchAll(
-              new RegExp(re.source, `${re.flags.replace('g', '')}g`),
-            ),
-          ].some(w => w.index >= at),
+      spans.some(
+        w =>
+          w.on === x.on &&
+          w.start >= at &&
+          !spans.some(
+            v =>
+              v.on !== x.on &&
+              ((v.start <= w.start &&
+                v.end >= w.end &&
+                v.end - v.start > w.end - w.start) ||
+                (v.start > w.end &&
+                  /^\s+$/.test(c.text.slice(w.end, v.start)))),
+          ),
       ),
     );
     if (!inPlace.length || inPlace.length === c.parts.length) continue;
