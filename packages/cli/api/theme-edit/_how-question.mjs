@@ -5031,8 +5031,14 @@ export function draftAnswer(ctx, env, question) {
       // ugly", "the shadow on the cards is too strong". Any other word, a
       // side, a state, a variant, a mode or a second part, keeps the
       // earlier reading.)
+      // (A mode said with the look, "the card border in dark mode", takes it
+      // away in that mode only.)
+      const mode = /\b(?:in\s+)?(dark|light)\s+(?:mode|theme)\b/i.exec(
+        own,
+      )?.[1];
       const others = own
         .toLowerCase()
+        .replace(/\b(?:in\s+)?(?:dark|light)\s+(?:mode|theme)\b/, ' ')
         .replace(longest[0].trim(), ' ')
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
@@ -5046,7 +5052,8 @@ export function draftAnswer(ctx, env, question) {
         return m;
       // (A "!" or "?" before it ends the ask before, as a full stop does.)
       const stop = String(lead).replace(/[!?]/, '.');
-      return `${stop}no ${word} on ${part}`;
+      const inMode = mode ? ` in ${mode.toLowerCase()} mode` : '';
+      return `${stop}no ${word} on ${part}${inMode}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every

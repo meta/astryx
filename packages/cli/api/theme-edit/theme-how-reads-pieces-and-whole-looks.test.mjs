@@ -414,9 +414,7 @@ describe('a look said, then taken away by a pronoun', () => {
     'keeps the earlier reading for a side, a state, a variant, a mode, a list or a joined ask',
     async () => {
       for (const q of [
-        'the card border in dark mode is ugly, hide it',
         'the card border is ugly in dark, hide it',
-        'the shadow on the cards in dark mode is too strong, remove it',
         'the border on the selected tab is ugly, hide it',
         'the muted card border is ugly, hide it',
         'the bottom border on the cards is ugly, hide it',
@@ -455,6 +453,51 @@ describe('a look said, then taken away by a pronoun', () => {
       expect(two).toMatch(/box-shadow none --on card/);
       expect(two).toMatch(/border none --on input/);
       expect(two).not.toMatch(/border '1px/);
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun in one mode', () => {
+  it(
+    'takes it away in that mode only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the card border in dark mode is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
+          'the dark mode card border is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
+          'the card border in dark theme is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
+          'the card border in light mode is ugly, hide it',
+          /border-color transparent --on card --mode light\b/,
+        ],
+        [
+          'the button background in dark mode is ugly, hide it',
+          /background-color transparent --on button --mode dark\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(/(?:none|transparent) --on \S+$/m);
+      }
+      // (A card draws no shadow of its own and set takes --mode only for
+      // colors: the look is never taken away in both modes.)
+      const lines = (
+        first(
+          await answer(
+            'the shadow on the cards in dark mode is too strong, remove it',
+          ),
+        ) ?? []
+      ).join('\n');
+      expect(lines).not.toMatch(/box-shadow none --on card$/m);
     },
     T,
   );
