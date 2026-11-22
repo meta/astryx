@@ -6,6 +6,7 @@ import {ChartSwatch} from '@astryxdesign/charts';
 const meta: Meta<typeof ChartSwatch> = {
   title: 'Charts/Chrome/Swatch',
   component: ChartSwatch,
+  tags: ['autodocs'],
   argTypes: {
     color: {control: 'color'},
     variant: {control: 'inline-radio', options: ['square', 'line']},
