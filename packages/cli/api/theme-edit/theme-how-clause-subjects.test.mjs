@@ -479,26 +479,19 @@ const ROWS = [
     },
   ],
   [
-    'a bracketed example after a part is an aside',
+    'a bracketed example with a comma after "e.g." is an aside',
     {
-      q: 'Header (e.g. the top bar): navy',
+      q: 'Header (e.g., the top bar): navy',
       has: ["background-color '#1e3a8a' --on app-shell-header"],
       never: /border-top/,
     },
   ],
   [
-    'an example said as "for example" restates the color',
+    'a bracketed example after a part is an aside',
     {
-      q: 'Header: navy, for example a dark blue. Cards: white background, gray header.',
+      q: 'Header (e.g. the top bar): navy',
       has: ["background-color '#1e3a8a' --on app-shell-header"],
-      never: /#1e40af/,
-    },
-  ],
-  [
-    'a typed value in an example is never dropped',
-    {
-      q: 'Make the cards white, e.g. #fafafa',
-      has: ["background-color '#fafafa' --on card --mode light"],
+      never: /border-top/,
     },
   ],
   [

@@ -3068,16 +3068,16 @@ function namedLists(q, partWords, isVariant) {
 /** A mark the clause split reads as no word, taken out of each clause. */
 const JOINED = '\u2060';
 /**
- * The ask with each abbreviation's periods dropped ("e.g." is "eg",
- * "i.e." is "ie"), so its period never ends a sentence: "Header: navy,
- * e.g. a dark blue. Cards: …" is two sentences. "etc." keeps its period
+ * The ask with each abbreviation's periods dropped, so its period never
+ * ends a sentence: a bracketed "(e.g. snow)" or "(i.e. …)" reads as
+ * "(eg snow)", "vs." as "vs". "etc." keeps its period
  * unless a comma, a bracket or the end follows it, since it can end a
  * sentence ("buttons blue etc. header navy").
  * @param {string} text
  */
 const dropAbbreviationDots = text =>
   text
-    .replace(/\b([ei])\.([ge])\.?(?=\s|,|\)|$)/gi, '$1$2')
+    .replace(/\(\s*([ei])\.([ge])\.?,?(?=\s)/gi, '($1$2')
     .replace(/\b(vs)\.(?=\s)/gi, '$1')
     .replace(/\betc\.(?=\s*(?:[,)]|$))/gi, 'etc');
 
@@ -3369,26 +3369,6 @@ function clausesOf(q, partWords, words = null) {
       }
       const text = piece.replaceAll(JOINED, '').trim();
       if (!text) continue;
-      // An example of the color just said ("navy, eg a dark blue") restates
-      // it: never a second color for the same part. Only one joined by a
-      // comma that names no part; "For example buttons red" on its own
-      // line is an ask.
-      const prev = pieces.at(-1)?.text ?? '';
-      if (
-        /^\s*,\s*$/.test(joint) &&
-        /^(?:eg|ie|for example|such as)\b/i.test(text) &&
-        !partWords.some(([re]) => re.test(` ${text} `)) &&
-        colorsIn(text).length &&
-        // (A typed value always wins over a color word: "white, eg
-        // #fafafa" keeps it.)
-        !/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\(/i.test(
-          text,
-        ) &&
-        colorsIn(prev).length
-      ) {
-        joint = '';
-        continue;
-      }
       pieces.push({text, joint});
       joint = '';
     }
