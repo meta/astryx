@@ -648,6 +648,50 @@ describe('a look taken away by a pronoun on one variant', () => {
   );
 });
 
+describe('two looks taken away by a pronoun', () => {
+  it(
+    'takes each away on that part',
+    async () => {
+      for (const [q, ...want] of [
+        [
+          'the shadow and border on cards are ugly, remove them',
+          /box-shadow none --on card\b/,
+          /border none --on card\b/,
+        ],
+        // (A look word inside the part's name is no look said.)
+        [
+          'the shadow and border on the outline indicator are ugly, remove them',
+          /box-shadow none --on outline-indicator\b/,
+          /border none --on outline-indicator\b/,
+        ],
+        [
+          'the card border and shadow are ugly, remove them',
+          /box-shadow none --on card\b/,
+          /border none --on card\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        for (const w of want) expect(lines, String(q)).toMatch(w);
+        expect(lines, String(q)).not.toMatch(
+          /--shadow-|border '1px|outline none/,
+        );
+      }
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading when a variant word comes just before the part',
+    async () => {
+      const q =
+        'the border and shadow on strong dividers are ugly, remove them';
+      const lines = (first(await answer(q)) ?? []).join('\n');
+      expect(lines, q).not.toMatch(/border none --on divider$/m);
+    },
+    T,
+  );
+});
+
 describe('a nav said as a bar', () => {
   it(
     'is the top nav beside a side nav; a side nav bar is the side nav',
