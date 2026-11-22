@@ -114,8 +114,7 @@ public behavior and evidence, without privately replacing the Table renderer.
   described as preservation.
 - Bounded block size (FR26, DEC-8): a Table whose parent gives it a definite
   block size scrolls on both axes inside its own Scroll region and keeps its
-  header row in view, where the released Table grows past that size with its
-  header row. Compatibility
+  header row in view. Compatibility
   class: breaking (`spec:AST-017` FR1), released in a minor as `[breaking]`: an
   app that listens to scroll events on its own element around the Table
   (infinite loading, scroll restore, a toolbar keyed to that element) stops
