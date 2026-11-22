@@ -137,3 +137,73 @@ it('a saved sized gradient made darker for one mode is answered for that mode', 
     ),
   ).toBe(true);
 }, 240_000);
+
+it('a sized gradient with its mode said at the end is written whole, in that mode', async () => {
+  expect(
+    await commands(
+      'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+    ),
+  ).toContain(
+    "set pg background 'linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+}, 240_000);
+
+it('a slash between two asks after a sized gradient still splits them', async () => {
+  const lines = await commands(
+    'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode / buttons blue',
+  );
+  expect(lines).toContain(
+    "set pg background 'linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+  expect(lines).toContain("set pg background-color '#2563eb' --on button");
+  expect(lines.some(l => /linear-gradient.*--on button/.test(l))).toBe(false);
+}, 240_000);
+
+it('a size right after a gradient with no position is a new ask', async () => {
+  const lines = await commands(
+    'header background linear-gradient(#ffffff, #eeeeee) / 12px radius on cards',
+  );
+  expect(lines.some(l => /\/ 12px/.test(l))).toBe(false);
+}, 240_000);
+
+it('a trailing mode after a gradient with a nested stop reads as that mode', async () => {
+  expect(
+    await commands(
+      'header background linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+    ),
+  ).toContain(
+    "set pg background 'linear-gradient(rgb(0 0 max(10, 15)) 1px, transparent 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+  );
+}, 240_000);
+
+it.each([
+  'dark mode header background linear-gradient(transparent calc(100% - 1px), #dddddd 1px) 0 0 / 24px 24px',
+  'header background linear-gradient(transparent calc(100% - 1px), #dddddd 1px) 0 0 / 24px 24px in dark mode',
+])(
+  '%s: a stop with calc() is written as typed',
+  async ask => {
+    expect(await commands(ask)).toContain(
+      "set pg background 'linear-gradient(transparent calc(100% - 1px), #dddddd 1px) 0 0 / 24px 24px' --on app-shell-header --mode dark",
+    );
+  },
+  240_000,
+);
+
+it('two sized layers with the mode said at the end answer as main does', async () => {
+  const {data} = /** @type {any} */ (
+    await themeEditHow(
+      'header background linear-gradient(#0001 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, #0001 1px, transparent 1px) 0 0 / 24px 24px in dark mode',
+      {cwd, theme: 'pg'},
+    )
+  );
+  const texts = /** @type {Array<{text: string}>} */ (data.results ?? []).map(
+    r => r.text,
+  );
+  // (Nothing is dropped silently: the second layer and the mode are named
+  // as not used.)
+  expect(
+    texts.some(
+      t => /^not used/.test(t) && t.includes('24px 24px in dark mode'),
+    ),
+  ).toBe(true);
+}, 240_000);

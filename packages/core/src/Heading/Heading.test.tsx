@@ -560,6 +560,10 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         },
         {timeout: 3000},
       );
+      // The tooltip's text is the heading's own: no description, read once.
+      expect(screen.getByRole('heading', {level: 2})).not.toHaveAttribute(
+        'aria-describedby',
+      );
     } finally {
       restore();
     }

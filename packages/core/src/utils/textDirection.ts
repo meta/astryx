@@ -8,7 +8,7 @@
  *   right-to-left letter), withTextDirection (that text in a `dir` span),
  *   isolatedText (one item's text in its own isolated span), and
  *   localeTextStyles and truncatedTextStyles (`pageAlign` for an element
- *   with its own `dir`)
+ *   with its own `dir`), and cutText (a label in a span that cuts it)
  * @position Core-internal helper, not exported from the package: the one
  *   owner of direction decisions for caller text (a locale's own direction
  *   comes from getLocaleDirection)
@@ -103,6 +103,27 @@ export function isolatedText(
       key,
       dir: dir ?? textDirectionProps(text).dir,
       ...stylex.props(styles.isolate),
+    },
+    text,
+  );
+}
+
+/**
+ * The text in a span that cuts it with an ellipsis (`style`). Plain text with
+ * no right-to-left letter takes `dir="ltr"` with the page's alignment, so a
+ * cut Latin label keeps its start on a right-to-left page. Other text keeps
+ * the page's direction and is cut at its own end.
+ */
+export function cutText(
+  text: ReactNode,
+  style: stylex.StyleXStyles,
+): ReactElement {
+  const {dir} = textDirectionProps(text);
+  return createElement(
+    'span',
+    {
+      dir,
+      ...stylex.props(style, dir != null && truncatedTextStyles.pageAlign),
     },
     text,
   );
