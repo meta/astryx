@@ -88,26 +88,6 @@ function baseDialWords() {
 export const EDGE_PARTS = ['containers', 'menus', 'inputs', 'button', 'table'];
 
 /**
- * The share of {@link EDGE_PARTS} a role word at the start of the ask
- * names ("overlays: a 1px border"): the controls, the surfaces, or the
- * overlays alone.
- * @type {Record<string, string[]>}
- */
-export const EDGE_ROLES = {
-  controls: ['inputs', 'button'],
-  surfaces: ['containers', 'menus', 'table'],
-  containers: ['containers', 'menus', 'table'],
-  overlays: [
-    'menus',
-    'dialog',
-    'drawer',
-    'popover',
-    'hover-card',
-    'bottom-sheet',
-  ],
-};
-
-/**
  * Groups of parts that should look alike. `--on <group>` styles every member.
  * @type {Record<string, string[]>}
  */

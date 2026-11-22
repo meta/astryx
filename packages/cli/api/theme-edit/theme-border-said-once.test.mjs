@@ -4,7 +4,7 @@
  * @file A whole-theme color said once covers both modes: a border ("1px
  * #ccc borders") at its twin as far off the dark page, a link color the
  * dark page leaves under 4.5:1 at its twin that reads there. A border also
- * reaches the surfaces, fields and controls Core draws with none, never a
+ * reaches the surfaces and controls Core draws with none, never a
  * small box nor the layout frame.
  */
 
@@ -142,145 +142,17 @@ describe('a whole-theme border said once', () => {
         all.some(x => new RegExp(` --on ${part}$`).test(x)),
         part,
       ).toBe(true);
-    // A role word leading the ask narrows it: overlays get no button border.
-    const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
-    expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);
-    expect(overlays.some(x => / --on button$/.test(x))).toBe(false);
-    // (Narrowed, it touches that role's parts only: no theme-wide border
-    // tokens.)
-    expect(
-      /** @type {string[]} */ (overlays).filter(
-        (/** @type {string} */ x) =>
-          /--(?:border-width|color-border(?:-emphasized)?) /.test(x) &&
-          !/ --on /.test(x),
-      ),
-    ).toEqual([]);
-    // The ask's leading role word before "with" narrows it too, and is
-    // what the border took: never "not used". One mid-ask stays unused.
-    for (const q of [
-      'overlays with a 1px #4d4d4d border',
-      'the overlays with a 1px #4d4d4d border',
-      'controls with 2px #999999 borders',
+    // A role word is read as main reads it: the border is the whole
+    // theme's, and the role word is named as not used.
+    for (const [q, word] of [
+      ['controls with 12px padding, 1px #cccccc borders', 'controls'],
+      ['overlays with a 1px #4d4d4d border', 'overlays'],
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'br'});
-      const cmds = data.results.flatMap(
-        (/** @type {{commands: string[]}} */ r) => r.commands,
-      );
-      const said = data.results
-        .map((/** @type {any} */ r) => r.text)
-        .join('\n');
-      expect(said, q).not.toMatch(/not used/);
-      const on = (/** @type {string} */ part) =>
-        cmds.some((/** @type {string} */ x) => x.endsWith(` --on ${part}`));
-      expect(
-        /** @type {string[]} */ (cmds).filter(
-          (/** @type {string} */ x) =>
-            /--(?:border-width|color-border(?:-emphasized)?) /.test(x) &&
-            !/ --on /.test(x),
-        ),
-        q,
-      ).toEqual([]);
-      if (/controls/.test(q)) {
-        expect(on('button'), q).toBe(true);
-        expect(on('dialog'), q).toBe(false);
-        expect(
-          cmds.some((/** @type {string} */ x) =>
-            /--color-border-emphasized .* --on inputs\b/.test(x),
-          ),
-          q,
-        ).toBe(true);
-      } else {
-        expect(on('dialog'), q).toBe(true);
-        expect(on('button'), q).toBe(false);
-      }
-    }
-    // Mid-ask too: the role word leads its own clause, so the border goes
-    // to the controls alone and the corners to the whole theme.
-    {
-      const q = '8px corners, controls with 2px #999999 borders';
-      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
-      const cmds = data.results.flatMap(
-        (/** @type {{commands: string[]}} */ r) => r.commands,
-      );
-      const on = (/** @type {string} */ part) =>
-        cmds.some((/** @type {string} */ x) => x.endsWith(` --on ${part}`));
-      expect(on('button'), q).toBe(true);
-      expect(on('dialog'), q).toBe(false);
-      expect(
-        /** @type {string[]} */ (cmds).filter(
-          (/** @type {string} */ x) =>
-            /--(?:border-width|color-border(?:-emphasized)?) /.test(x) &&
-            !/ --on /.test(x),
-        ),
-        q,
-      ).toEqual([]);
-      expect(cmds.join('\n'), q).toMatch(/corners|radius/);
       expect(
         data.results.map((/** @type {any} */ r) => r.text).join('\n'),
         q,
-      ).not.toMatch(/not used/);
-    }
-    // A role word with a border named in words ("black") narrows it too;
-    // one the border does not read ("overlays with a soft shadow, 1px …
-    // borders") keeps main's reading and is named as not used.
-    {
-      const {data} = await themeEditHow('controls with 2px black borders', {
-        cwd,
-        theme: 'br',
-      });
-      const cmds = data.results.flatMap(
-        (/** @type {{commands: string[]}} */ r) => r.commands,
-      );
-      expect(
-        cmds.some((/** @type {string} */ x) => x.endsWith(' --on dialog')),
-      ).toBe(false);
-      expect(
-        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
-      ).not.toMatch(/not used/);
-    }
-    {
-      const {data} = await themeEditHow(
-        'overlays with a soft shadow, 1px #cccccc borders',
-        {cwd, theme: 'br'},
-      );
-      expect(
-        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
-      ).toMatch(/not used: [^\n]*"overlays"/);
-    }
-    // A narrowed wider border sets the parts' own edge: the dividers inside
-    // keep their width (no border-width token anywhere).
-    for (const q of [
-      'surfaces with 2px #cccccc borders',
-      'controls with 2px #999999 borders',
-    ]) {
-      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
-      const cmds = data.results.flatMap(
-        (/** @type {{commands: string[]}} */ r) => r.commands,
-      );
-      expect(
-        cmds.filter((/** @type {string} */ x) => / --border-width /.test(x)),
-        q,
-      ).toEqual([]);
-      expect(
-        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
-        q,
-      ).toMatch(/dividers inside these parts keep their width/);
-    }
-    // A word that names no part takes the whole-theme border, named unused.
-    {
-      const q = '8px corners, wobbles with 2px #999999 borders';
-      const {data} = await themeEditHow(q, {cwd, theme: 'br'});
-      const cmds = data.results.flatMap(
-        (/** @type {{commands: string[]}} */ r) => r.commands,
-      );
-      expect(
-        cmds.some((/** @type {string} */ x) => x.endsWith(' --on dialog')),
-        q,
-      ).toBe(true);
-      expect(
-        data.results.map((/** @type {any} */ r) => r.text).join('\n'),
-        q,
-      ).toMatch(/not used: [^\n]*"wobbles"/);
+      ).toMatch(new RegExp(`not used: [^\\n]*"${word}"`));
     }
   }, 240_000);
 });

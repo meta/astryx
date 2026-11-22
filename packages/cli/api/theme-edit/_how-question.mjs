@@ -53,7 +53,6 @@ import {
   P,
   CORNERS,
   EDGE_PARTS,
-  EDGE_ROLES,
   FAMILIES,
   FONTS,
   HOW,
@@ -23798,22 +23797,7 @@ export function draftAnswer(ctx, env, question) {
             // fields and controls Core draws with none (a card, a menu, a
             // button, a table), never a small box (a badge) nor the layout
             // frame: those take a border said for them by name.
-            // (A role word leading the ask, "overlays: …", narrows it to
-            // that role's share.)
-            // ("overlays with a 1px border", "8px corners, controls with 2px
-            // borders": the role word leads its own clause, split at the
-            // "with" before this one, wherever it sits in the ask.)
-            const roleWord =
-              /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(controls?|overlays?|surfaces?|containers?)\b/;
-            const role =
-              roleWord.exec(c.text.trim())?.[1] ??
-              new RegExp(
-                `(?:^|[,;:.]\\s*|\\band\\s+)(?:the\\s+|all\\s+|give\\s+(?:the\\s+|all\\s+)?)?(controls?|overlays?|surfaces?|containers?)\\s+with\\b[^,;:]*\\bborders?\\b`,
-                'i',
-              ).exec(question.trim())?.[1];
-            const edgeParts = role
-              ? (EDGE_ROLES[role.replace(/s?$/, 's')] ?? EDGE_PARTS)
-              : EDGE_PARTS;
+            const edgeParts = EDGE_PARTS;
             // (Flat surfaces said in the same ask take the panels' border
             // away; a border said there too puts it back on them, as a
             // part's own setting wins over the dial.)
@@ -23917,37 +23901,11 @@ export function draftAnswer(ctx, env, question) {
                       ...modeOf(c),
                     }),
                   ];
-            // (A border narrowed to a role touches that role's parts only:
-            // the ones that draw a border take the border tokens set on
-            // them, never on the whole theme.)
-            const roleOwn = role
-              ? edgeParts.filter(f =>
-                  (FAMILIES[f] ?? [f]).some(
-                    pt =>
-                      C.MAP[pt] &&
-                      !edged.includes(pt) &&
-                      (C.partReads(pt, 'border') ?? []).length,
-                  ),
-                )
-              : [];
             /** @type {Step[]} */
             const steps = [
-              ...(role
-                ? roleOwn.flatMap(f => [
-                    // (The parts' own edge: a divider inside keeps its
-                    // width.)
-                    ...(wide ? [set('border-width', wide, {on: f})] : []),
-                    set('--color-border', color, {on: f, ...modeOf(c)}),
-                    set('--color-border-emphasized', color, {
-                      on: f,
-                      ...modeOf(c),
-                    }),
-                  ])
-                : [
-                    ...(wide ? [set('--border-width', wide)] : []),
-                    set('--color-border', color, modeOf(c)),
-                    set('--color-border-emphasized', color, modeOf(c)),
-                  ]),
+              ...(wide ? [set('--border-width', wide)] : []),
+              set('--color-border', color, modeOf(c)),
+              set('--color-border-emphasized', color, modeOf(c)),
               // (A neutral look with no border color of its own at rest
               // that draws its selection in its border is left: a color
               // written there would paint over the selection.)
@@ -23971,16 +23929,8 @@ export function draftAnswer(ctx, env, question) {
               ...lines.map(x =>
                 set(x.side, /** @type {string} */ (wide), {on: x.part}),
               ),
-              ...(role
-                ? []
-                : dividers.map(pt => set('--border-width', bwNow0, {on: pt}))),
+              ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
-            if (role)
-              return {
-                text: `borders${wide ? ` ${wide} wide` : ''} in ${color} on the ${role.replace(/s?$/, 's')} only: the border color${wide ? ' and the width of their own edge' : ''} on ${roleOwn.join(', ') || 'none of them'}, the parts that draw a border${edged.length ? `, and a border on the ones drawn with none (${edged.join(', ')})` : ''}; the rest of the theme keeps its borders${wide ? ', and the dividers inside these parts keep their width' : ''}`,
-                options: [steps],
-                sequence: true,
-              };
             return {
               text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${edged.length ? `, and a border on the surfaces and controls drawn with none (${edged.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
@@ -33653,24 +33603,6 @@ export function draftAnswer(ctx, env, question) {
       const modeOnly =
         /^(?:(?:in|for|on)\s+)?(?:the\s+)?(dark|light)(?:[- ]mode)?$/.exec(t);
       if (modeOnly && steps.some(st => st.mode === modeOnly[1])) return false;
-      // ("overlays with a 1px border", "8px corners, controls with 2px
-      // borders": a role word leading its own clause before a "with" is the
-      // one the border reading after it narrowed to.)
-      {
-        const next = clauses[clauses.indexOf(c) + 1];
-        if (
-          next &&
-          /^(?:the\s+|all\s+|give\s+(?:the\s+|all\s+)?)?(?:controls?|overlays?|surfaces?|containers?)$/i.test(
-            t,
-          ) &&
-          new RegExp(
-            `(?:^|[,;:.]\\s*|\\band\\s+)${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+with\\b[^,;:]*\\bborders?\\b`,
-            'i',
-          ).test(raw0.trim()) &&
-          steps.some(st => /^border/.test(String(st.thing)))
-        )
-          return false;
-      }
       if (
         [...c.colors, ...c.lengths].some(v =>
           vals.some(x => x.includes(String(v).toLowerCase())),
