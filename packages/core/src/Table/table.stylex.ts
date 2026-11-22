@@ -4,12 +4,14 @@
  * @file table.stylex.ts
  * @input StyleX, theme tokens
  * @output Shared table styles used by TableCell, TableHeaderCell, TableRow
+ *   and BaseTable
  * @position Utility styles; consumed by cell and row components
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/TableCell.tsx
  * - /packages/core/src/Table/TableHeaderCell.tsx
  * - /packages/core/src/Table/TableRow.tsx
+ * - /packages/core/src/Table/BaseTable.tsx
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -76,6 +78,21 @@ export const headerOverflowStyles = stylex.create({
     whiteSpace: 'var(--_table-header-white-space, normal)',
     overflowWrap: 'break-word',
     wordBreak: 'var(--_table-cell-word-break, normal)',
+  },
+});
+
+/**
+ * A truncating plain-text heading cut by its own box, so the box can take the
+ * text's direction without moving the cell's padding, dividers or overlay.
+ * TableHeaderCell uses it for a plain heading and BaseTable for a heading
+ * beside a resize boundary, whose cell lets the boundary reach past its edge.
+ */
+export const cutHeadingStyles = stylex.create({
+  label: {
+    display: 'block',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 });
 
