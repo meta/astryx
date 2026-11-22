@@ -1584,6 +1584,27 @@ export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> 
             p.kind === 'bar-fill' && (p.parts ?? []).includes('button'),
         )?.message,
       ).toMatch(/Change --color-neutral in app-shell-header's own style/);
+      // Items the census draws outside a menu (a list, a field's options)
+      // are not on the bar, even though a menu the bar opens holds items.
+      const items = await check(
+        themeFile('itemsoff', READABLE, {
+          'app-shell-header': {
+            base: {
+              backgroundColor: '#002244',
+              '--color-text-primary': '#ffffff',
+              '--color-text-secondary': '#ffffff',
+              '--color-neutral': 'light-dark(#0000005d, #ffffff1a)',
+            },
+          },
+          item: {selected: {'--color-text-secondary': '#474747'}},
+        }),
+      );
+      expect(
+        items.problems.some(
+          p =>
+            p.part === 'app-shell-header' && (p.parts ?? []).includes('item'),
+        ),
+      ).toBe(false);
       // (2) A block under `[data-x]` is one the build drops: the header's
       // text stays the theme's, which is said on the dark header.
       const dropped = await check(

@@ -644,6 +644,28 @@ function barTextProblems(look) {
     /** @type {any} */ (p.within ?? []).some((/** @type {string} */ w) =>
       menus.has(w),
     );
+  /** The parts a menu holds, by name. */
+  const menuHeld = new Set(
+    [...menus].flatMap(menu => [menu, ...(map[menu]?.contains ?? [])]),
+  );
+  /**
+   * Whether a pair's text sits on a bar: a part the bar holds itself (its
+   * own parts, or a control an app puts in it), drawn outside any menu.
+   * A part only menus hold (an item) is on the bar only where a menu the
+   * bar opens draws it, and there it sits on the menu's own fill.
+   * @param {string} bar @param {TextPair} p
+   */
+  const onBar = (bar, p) => {
+    if (inMenu(p)) return false;
+    const q = String(p.bg.target);
+    const held = map[bar]?.contains ?? [];
+    return (
+      !menuHeld.has(q) ||
+      FREE_PARTS.includes(q) ||
+      held.includes(q) ||
+      /** @type {any} */ (p.within ?? []).includes(bar)
+    );
+  };
   for (const [part, blocks] of Object.entries(components ?? {})) {
     if (!blocks || typeof blocks !== 'object') continue;
     const within = inside(map, part);
@@ -699,7 +721,7 @@ function barTextProblems(look) {
           if (own == null) continue;
           const sheer = alphaOf(own) < 1;
           // (A part a menu holds sits on the menu's own fill, not the bar.)
-          if (sheer && inMenu(p)) continue;
+          if (sheer && !onBar(part, p)) continue;
           const fill = shown(own, bar);
           if (!fill) continue;
           const r = ratio(fg, fill);
@@ -775,7 +797,7 @@ function barTextProblems(look) {
           const tint = colorIn(value, res[m], m);
           if (tint == null) continue;
           const sheer = alphaOf(tint) < 1;
-          if (sheer && inMenu(p)) continue;
+          if (sheer && !onBar(part, p)) continue;
           const fill = shown(tint, bar);
           const tok = p.fg.tokens[0];
           if (/disabled/.test(tok ?? '')) continue;
@@ -852,7 +874,7 @@ function barTextProblems(look) {
         // text in a menu the bar opens sits on the menu's own fill; text
         // drawn disabled has no reading floor.)
         if (!q || q === part || !sits) continue;
-        if (inMenu(p)) continue;
+        if (!onBar(part, p)) continue;
         if (/disabled/.test(p.fg.tokens[0] ?? '')) continue;
         const block = pairBlock(map, p);
         // A ground inside the bar that paints its own fill is the text's;
