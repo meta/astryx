@@ -4,21 +4,12 @@
  * @file textDirection.ts
  * @input For textDirectionProps, a component's text content (a string, a
  *   number, or a rich node)
- * @output textDirectionProps: `dir="ltr"` for plain text that holds no
- *   right-to-left letter, otherwise nothing, so the text keeps the page's
- *   direction. withTextDirection: the same text, inside a `dir="ltr"` span
- *   when it needs one. isolatedText: text in its own isolated span, for one
- *   item among others. localeTextStyles: `pageAlign` for a field that shows
- *   text a locale formats
- * @position Core-internal helper, not exported from the package. Badge and
- *   Token put textDirectionProps on the element that holds caller text,
- *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
- *   description, FieldStatus and the status tooltip use withTextDirection.
- *   MultiSelector's labels trigger puts each label in isolatedText.
- *   TimeInput and DateTimeInput put localeTextStyles, with
- *   `getLocaleDirection` as `dir`, on the fields that show their formatted
- *   time and date text; DateTimeInput's time options use isolatedText with
- *   that direction.
+ * @output textDirectionProps (`dir="ltr"` for plain text with no
+ *   right-to-left letter), withTextDirection (that text in a `dir` span),
+ *   isolatedText (one item's text in its own isolated span), and
+ *   localeTextStyles (`pageAlign` for a field that shows locale text)
+ * @position Core-internal helper, not exported from the package: the one
+ *   owner of direction decisions for caller text and locale-formatted text
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
