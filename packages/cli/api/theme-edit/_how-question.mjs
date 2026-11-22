@@ -29596,8 +29596,8 @@ export function draftAnswer(ctx, env, question) {
     });
     // An undo that names more than one change ("Undo the card change and
     // the heading change"), or a look that more than one earlier change
-    // could be ("the heading size change" after a size and a bold), is not
-    // read for sure: nothing is taken back, and the answer says so.
+    // could be, is not read for sure: nothing is taken back, and the
+    // answer says so. A bare "size" or "weights" said alone is read below.
     const uc = /** @type {any} */ (draftClause.get(unmet));
     const next = clauses[undoAt + 1];
     const alsoNamed =
@@ -29623,8 +29623,42 @@ export function draftAnswer(ctx, env, question) {
         ? ['said']
         : []),
     ];
-    const looks = new Set(undone.flatMap(lookOf));
     const several = (uc?.parts?.length ?? 0) > 1 || alsoNamed;
+    // ("Make the headings bigger. Make the headings bold. Undo the heading
+    // size change.": a look the undo names, read by `aspectsOf`, takes back
+    // only the earlier change of that look. A bare "size" is the part's
+    // text size or its room.)
+    const said = String(uc?.text ?? '').toLowerCase();
+    const lookNamed = [
+      ...new Set([
+        ...aspectsOf(said.replace(/\bweights\b/g, 'weight'))
+          .filter(a => a !== 'text' && a !== 'background')
+          .flatMap(a => (a === 'size' ? ['fontsize', 'size', 'spacing'] : [a])),
+        ...(/\bsizes?\b/.test(said) && !/\bfont[- ]?sizes?\b/.test(said)
+          ? ['fontsize', 'size', 'spacing']
+          : []),
+      ]),
+    ];
+    // (Only an undo said alone: one followed by another "… change" phrase
+    // reads as before.)
+    const followed =
+      next &&
+      !GOING_BACK.test(String(next.text ?? '')) &&
+      /\bchanges?\W*$/i.test(String(next.text ?? ''));
+    if (lookNamed.length && !several && !colorSaid && !followed) {
+      const ofLook = undone.filter(d =>
+        lookNamed.some(a => lookOf(d).includes(a)),
+      );
+      if (!ofLook.length && undone.length) {
+        // ("Make the headings bold. Undo the heading size change.": no
+        // change of that look was said, so nothing is taken back.)
+        unmet.text = `no ${part ? `${part} ` : ''}change of that look was said earlier in this ask, so nothing is taken back`;
+        if (uc) answeredByUndo.add(uc);
+        continue;
+      }
+      undone.splice(0, undone.length, ...ofLook);
+    }
+    const looks = new Set(undone.flatMap(lookOf));
     // ("Make the cards rounder. Undo the corner change.": an earlier change
     // the undo could mean, though it does not name it for sure.)
     const loose =
@@ -32817,8 +32851,17 @@ export function draftAnswer(ctx, env, question) {
     ) ||
     q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   if (!gateAll && lookAsk) {
-    const answeredText = result
-      .map(d => `${d.text} ${JSON.stringify(d.options)}`)
+    // (The words an undo reads, "undo", "change" and the look it names,
+    // were read with it; any other word of its clause is still named.)
+    const answeredText = [
+      ...result.map(d => `${d.text} ${JSON.stringify(d.options)}`),
+      ...[...answeredByUndo].flatMap(
+        c =>
+          String(/** @type {any} */ (c).text ?? '')
+            .toLowerCase()
+            .match(/\b(?:undo|changes?|sizes?|weights?)\b/g) ?? [],
+      ),
+    ]
       .join(' ')
       .toLowerCase();
     const STOP =
