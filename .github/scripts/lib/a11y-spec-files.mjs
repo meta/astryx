@@ -4,7 +4,8 @@
  * @file a11y-spec-files.mjs
  * @input Repository-relative paths
  * @output The browser accessibility spec globs `playwright.config.ts` runs,
- *   `isA11ySpecFile`, and `globToRegExp`, which the Node leg planner's file
+ *   the hover specs its Firefox project runs, `isA11ySpecFile`, and
+ *   `globToRegExp`, which the Node leg planner's file
  *   list (scripts/vitest-node-files.mjs) shares
  * @position The one list of browser accessibility spec files. The Playwright
  *   config matches them, and the default touched-components check (spec:AST-030
@@ -25,6 +26,33 @@ export const A11Y_SPEC_GLOBS = Object.freeze([
 /** The specs that also run in WebKit. */
 export const WEBKIT_A11Y_SPEC_GLOBS = Object.freeze([
   'packages/*/src/**/*.a11y.browser.spec.ts',
+]);
+
+/**
+ * The hover specs that also run in Firefox. Firefox orders pointer and mouse
+ * events differently from Chromium and WebKit: it can fire `pointermove`
+ * before `mouseenter`. So each spec here opens or moves a hover surface
+ * (Tooltip, InfoTip, HoverCard, a menu row or submenu, a navigation menu) by
+ * moving the pointer. The list names files, not globs: a file named
+ * `.a11y.chromium.spec.ts` runs here too, and a case in it that depends on a
+ * Chromium-only API skips in Firefox where the case says why.
+ */
+export const FIREFOX_HOVER_SPECS = Object.freeze([
+  'packages/core/src/DropdownMenu/__tests__/DropdownMenuAudit.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/DropdownMenuItemAudit.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/DropdownMenuRadioItemAudit.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/DropdownMenuTooltip.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/MenuHoverFocus.a11y.chromium.spec.ts',
+  'packages/core/src/DropdownMenu/__tests__/SubMenuHeaderFooter.a11y.chromium.spec.ts',
+  'packages/core/src/HoverCard/__tests__/HoverCardAudit.a11y.chromium.spec.ts',
+  'packages/core/src/HoverCard/__tests__/HoverCardSecondDocument.a11y.chromium.spec.ts',
+  'packages/core/src/InfoTip/__tests__/InfoTipAudit.a11y.chromium.spec.ts',
+  'packages/core/src/NavMenu/__tests__/NavHeadingMenuAudit.a11y.chromium.spec.ts',
+  'packages/core/src/NavMenu/__tests__/NavMenusSlideSelection.a11y.chromium.spec.ts',
+  'packages/core/src/Tooltip/__tests__/TooltipDecorator.a11y.browser.spec.ts',
+  'packages/core/src/Tooltip/__tests__/TooltipHoverBridge.a11y.chromium.spec.ts',
+  'packages/core/src/Tooltip/__tests__/TooltipTallContent.a11y.browser.spec.ts',
 ]);
 
 /**
