@@ -69,6 +69,7 @@ import {
   contrastPlace,
   officialThemePackage,
   drawnPair,
+  inOwnScheme,
   contrastProblems,
   describe,
   entryDamage,
@@ -2329,7 +2330,7 @@ async function acceptContrast(slug, reason, options) {
   const res = await resolvedTokens(ctx, slug);
   const found = await contrastProblems(ctx, data, res);
   const atPlace = found.filter(p => {
-    const at = contrastPlace(p);
+    const at = inOwnScheme(p) ? null : contrastPlace(p);
     return at != null && same(at);
   });
   const here = atPlace[0];
