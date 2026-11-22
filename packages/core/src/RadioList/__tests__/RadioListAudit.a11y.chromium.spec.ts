@@ -258,6 +258,10 @@ function checkGroup(
       radio.itemSize === expected.size,
       `${radio.label}: item data-size ${radio.itemSize}`,
     );
+    check(
+      radio.bottom - radio.top >= MIN_TARGET_PX,
+      `${radio.label}: row height ${radio.bottom - radio.top}`,
+    );
   }
   // A disabled group's dimmed label belongs to an inactive control, which
   // WCAG 1.4.3 exempts. The receipt still records the ratio.
