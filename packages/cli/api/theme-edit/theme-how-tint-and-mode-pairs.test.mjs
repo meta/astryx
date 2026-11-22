@@ -278,6 +278,27 @@ describe('a tint word', () => {
   );
 
   it(
+    'says why text asked with a tint is not written when it reads in no mode, with no command',
+    async test => {
+      needsBases(test);
+      const {data} = await themeEditHow('cards tinted blue with #808080 text', {
+        cwd,
+        theme: 'n',
+      });
+      // (The text clause's own answer.)
+      const text = (data.results ?? []).find(r =>
+        /^text color on card/.test(r.text),
+      );
+      expect(text?.text).toMatch(/so it is not written/);
+      expect(text?.text).not.toMatch(/nothing to change/);
+      expect(
+        (text?.commands ?? []).filter(c => / editor set /.test(c)),
+      ).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'writes a color said with its own shade word as said',
     async test => {
       needsBases(test);

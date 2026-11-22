@@ -31847,6 +31847,14 @@ export function draftAnswer(ctx, env, question) {
             d.text += ` (${said}: ${ratioWords(x.ratio)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratioWords(ratio(betterRgb, x.under))}:1)`;
         }
       }
+  // (Text that reads in no mode leaves its line empty: the answer then
+  // writes nothing and says why, never an empty change.)
+  for (const d of tintFills.size ? result : []) {
+    const kept = d.options.filter(o => o.length);
+    if (kept.length === d.options.length) continue;
+    d.options = kept;
+    if (!kept.length) delete d.sequence;
+  }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides
