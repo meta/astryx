@@ -54,8 +54,13 @@ describe('unreached', () => {
     // reached.
     expect(list).not.toContain('banner');
     // Overlays come first: in the ten the text names.
+    // progress-bar-track is a part of another category that an accent
+    // alone leaves unreached.
+    expect(list).toContain('progress-bar-track');
     for (const part of ['toast', 'tooltip'])
-      expect(list.indexOf(part)).toBeLessThan(list.indexOf('badge'));
+      expect(list.indexOf(part)).toBeLessThan(
+        list.indexOf('progress-bar-track'),
+      );
     // (Before any part of another category. Among the overlays the order is
     // the census order, which no rule fixes, so a tooltip whose layer mounts
     // at its first show can come after the ten.)
