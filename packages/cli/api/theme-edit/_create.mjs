@@ -174,13 +174,20 @@ async function traitsInput(ctx, traits) {
   /** @type {string[]} What create changed from the traits, said in the result. */
   const notes = [];
   // Colors: the traits' colors, each in the mode it belongs to. The
-  // palette Core's generator makes from the page (the neutral seed) and the
-  // accent names the colors `theme check --fix` fills; the file leaves
-  // those to it.
+  // palette Core's generator makes from the page, else the surface (the
+  // neutral seed), and the accent names the colors `theme check --fix`
+  // fills; the file leaves those to it.
   const page = halves(traits.page, 'ground', look);
+  const surfaceSeed = halves(traits.surface, 'ground', look);
   const accent = halves(traits.accent, 'brand', look);
   const seedMode = look === 'dark' ? 'dark' : 'light';
-  const neutralSeed = page[seedMode] ?? page.light ?? page.dark;
+  const neutralSeed =
+    page[seedMode] ??
+    page.light ??
+    page.dark ??
+    surfaceSeed[seedMode] ??
+    surfaceSeed.light ??
+    surfaceSeed.dark;
   const accentSeed = accent[seedMode] ?? accent.light ?? accent.dark;
   /** @type {any} */
   let palette;
@@ -579,7 +586,7 @@ async function traitsInput(ctx, traits) {
       const {values, grounds, text, k} = best;
       if (k > 0 && (look === 'both' || look === m))
         notes.push(
-          `The bar's hover, press and track tints are lighter than Core's in ${m} (${values.join(', ')}), so its text reads on them.`,
+          `The bar's hover, press and track tints are fainter than Core's in ${m} (${values.join(', ')}), so its text reads on them.`,
         );
       const written = hex(text);
       if (given && written.toLowerCase() !== given.toLowerCase()) {

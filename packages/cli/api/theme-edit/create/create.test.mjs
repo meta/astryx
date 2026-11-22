@@ -517,7 +517,7 @@ describe('the notes a fitted bar gives', () => {
       {cwd},
     );
     expect(lowered.data.notes.join('\n')).toMatch(
-      /tints are lighter than Core's in light/,
+      /tints are fainter than Core's in light/,
     );
     const moved = await themeEditCreate(
       'notetext',
@@ -562,6 +562,18 @@ describe('flat surfaces on a colored card', () => {
     expect(card).toContain('base: {...surfaces},');
     expect(card).toMatch(/'variant:[a-z]+': \{\.\.\.surfaceFill\}/);
     expect(card).not.toMatch(/'variant:blue': \{\.\.\.surfaceFill/);
+    expect(r.data.check.problems).toEqual([]);
+  }, 120_000);
+});
+
+describe('a surface with no page', () => {
+  it("grows the page and edges from the surface, never Core's gray", async () => {
+    const r = await themeEditCreate('surfonly', {surface: '#fdf6e3'}, {cwd});
+    const source = read(r.data.file);
+    // The page grows from the surface (its own warm color), not Core's.
+    expect(source).toMatch(
+      /'--color-background-body': \['#fdf6e3', '#[0-9a-f]{6}'\]/,
+    );
     expect(r.data.check.problems).toEqual([]);
   }, 120_000);
 });
