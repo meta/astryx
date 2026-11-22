@@ -63,9 +63,6 @@ export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
   contextMenuActions?: TableContextActions;
 }
 
-// The end padding is also the room header content may grow into before its
-// label wraps or truncates (BaseTable, sort plugin). The last column takes the
-// container edge inset.
 // A plain-text heading that truncates is cut by its own box, so the box can
 // take the text's direction (textDirectionProps) without moving the cell's
 // padding or dividers.
@@ -78,6 +75,9 @@ const cutHeadingStyles = stylex.create({
   },
 });
 
+// The end padding is also the room header content may grow into before its
+// label wraps or truncates (BaseTable, sort plugin). The last column takes the
+// container edge inset.
 const densityStyles = stylex.create({
   compact: {
     paddingBlock: spacingVars['--spacing-1'],

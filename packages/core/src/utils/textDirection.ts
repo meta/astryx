@@ -92,12 +92,12 @@ export function isolatedText(
 }
 
 /**
- * For an element that cuts its own text with an ellipsis. Its own direction
- * decides which end the cut takes, so under a right-to-left page a Latin
- * label lost its start ("…onth"). With `textDirectionProps` the label keeps
- * its start ("Mon…"); a label with a right-to-left letter keeps the page's
- * direction and is cut at its own end. Put `pageAlign` beside the `dir` so
- * the element keeps the page's alignment.
+ * For an element that cuts its own text with an ellipsis. The element's own
+ * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
+ * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
+ * a right-to-left letter keeps the page's direction and is cut at its own
+ * end. Put `pageAlign` beside the `dir` so the element keeps the page's
+ * alignment.
  */
 export const truncatedTextStyles = stylex.create({
   pageAlign: {
