@@ -237,4 +237,17 @@ describe('one joined strip', () => {
       expect(sets, q).not.toMatch(/--on pagination-item\b/);
     }
   }, 240_000);
+
+  it('leaves corners said without a length to their own answer', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    const results = await answer(
+      'pagination pages in one bordered strip with square corners',
+    );
+    const strip = results.find(r => /as one strip/.test(r.text));
+    expect(strip?.text).not.toContain('square corners');
+    expect(results.some(r => r !== strip && /corners/.test(r.text))).toBe(true);
+  }, 240_000);
 });

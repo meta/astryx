@@ -15563,8 +15563,9 @@ export function draftAnswer(ctx, env, question) {
           (a, b) => contains(a.key).length - contains(b.key).length,
         )[0]?.key;
       if (!row) continue;
-      /** A clause that says only the strip's corners. @param {Clause} x */
+      /** A clause that says only the strip's corners, as a length. @param {Clause} x */
       const cornersOnly = x =>
+        x.lengths.length > 0 &&
         /\b(?:corners?|radius|rounded)\b/.test(x.text) &&
         !x.colors.length &&
         !STRIP_OTHER.test(noMode(x.text));
