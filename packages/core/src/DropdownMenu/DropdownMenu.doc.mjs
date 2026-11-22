@@ -29,7 +29,7 @@ const anatomy = [
     name: 'Icon-rendered item icon',
     required: false,
     description:
-      'Optional semantic or component icon rendered through Icon at the start of an action row.',
+      'Optional built-in meaning or icon component rendered through Icon at the start of an action row.',
   },
   {
     name: 'Caller-rendered item start content',

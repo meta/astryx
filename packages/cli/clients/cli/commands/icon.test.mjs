@@ -406,7 +406,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(res.stdout).toMatch(
       /import: +import \{XIcon\} from '@acme\/glyphs';/,
     );
-    expect(res.stdout).toMatch(/look: +no solid look; draws outline/);
+    expect(res.stdout).toMatch(/look: +no solid variant; draws outline/);
     const json = JSON.parse(
       (
         await runCli(

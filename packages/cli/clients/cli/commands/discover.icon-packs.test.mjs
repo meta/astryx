@@ -435,10 +435,10 @@ describe('experimental icon with no icon set names discover only where it lists 
         }),
       );
       expect(await nextOf(cwd)).toBe(
-        `Find an icon pack with \`${FIND}\`, install it, then run \`astryx experimental icon use <set>\`. To make your own set, read \`astryx docs cli/experimental/icon-sets\`.`,
+        `Find an icon set with \`${FIND}\`, install it, then run \`astryx experimental icon use <set>\`. To make your own set, read \`astryx docs cli/experimental/icon-sets\`.`,
       );
       expect(await run(cwd, ['experimental', 'icon', '--list'])).toMatch(
-        /^\[next\] Find an icon pack with `.*discover "icon set"`, install it, then run `.*experimental icon use <set>`\. To make your own set, read `.*docs cli\/experimental\/icon-sets`\.$/m,
+        /^\[next\] Find an icon set with `.*discover "icon set"`, install it, then run `.*experimental icon use <set>`\. To make your own set, read `.*docs cli\/experimental\/icon-sets`\.$/m,
       );
       expect(
         JSON.parse(await run(cwd, ['experimental', 'icon', '--list', '--json']))

@@ -521,6 +521,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // control — a theme reaches them by setting the vars directly.
   '--_item-label-color',
   '--_item-description-color',
+  // Set by an open row expansion on its row, read by that row's cells: 0, so
+  // the panel below carries the divider. A theme's `borderBottomWidth` on
+  // the row must not write it, or an open row would draw a divider again.
+  '--_table-open-row-divider-width',
 ]);
 
 // ---------------------------------------------------------------------------

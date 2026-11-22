@@ -386,18 +386,6 @@ describe('tempFolderOf', () => {
     if (home === undefined) delete process.env.HOME;
     else process.env.HOME = home;
   });
-  /** @param {string} root @param {string} at */
-  const inside = (root, at) => {
-    const rel = path.relative(root, at);
-    return !rel.startsWith('..') && !path.isAbsolute(rel);
-  };
-  // In some containers the home folder is in /tmp, which then takes no
-  // scratch copy.
-  const tmpHoldsHome =
-    process.platform !== 'win32' &&
-    ['/tmp', fs.realpathSync('/tmp')].some(tmp =>
-      [os.homedir(), fs.realpathSync(os.homedir())].some(h => inside(tmp, h)),
-    );
 
   it('names the system temp folder that holds a path, and nothing for any other path', () => {
     expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
@@ -410,18 +398,34 @@ describe('tempFolderOf', () => {
     ).toBeNull();
   });
 
+  // A test run's home folder sits in /tmp, so these cases give themselves a
+  // home folder outside it; the case below covers one that /tmp holds.
+  const homeOutsideTmp = '/astryx-home-outside-tmp';
+
   it.skipIf(process.platform === 'win32')(
-    'takes /tmp on a POSIX system, unless /tmp holds the home folder',
+    'takes /tmp on a POSIX system when it does not hold the home folder',
     () => {
-      expect(tempFolderOf('/tmp/astryx/x')).toBe(tmpHoldsHome ? null : '/tmp');
+      process.env.HOME = homeOutsideTmp;
+      expect(tempFolderOf('/tmp/astryx/x')).toBe('/tmp');
     },
   );
 
   it.skipIf(process.platform === 'win32')(
     'lists the temp folder and /tmp once each',
     () => {
+      process.env.HOME = homeOutsideTmp;
       process.env.TMPDIR = '/tmp';
-      expect(tempFolders()).toEqual(tmpHoldsHome ? [] : ['/tmp']);
+      expect(tempFolders()).toEqual(['/tmp']);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'takes no /tmp that holds the home folder',
+    () => {
+      process.env.HOME = '/tmp/astryx-home-in-tmp';
+      process.env.TMPDIR = '/tmp';
+      expect(tempFolders()).toEqual([]);
+      expect(tempFolderOf('/tmp/astryx/x')).toBeNull();
     },
   );
 
