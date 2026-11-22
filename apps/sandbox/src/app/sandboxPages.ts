@@ -154,6 +154,12 @@ export const categories: SandboxCategory[] = [
           'A push and a pop with extra work in the commit or from the first frame, under a ruler of travel marks, for filming the first frame on a phone',
       },
       {
+        name: 'Motion Start Clock',
+        href: '/pages/motion-start-clock/',
+        description:
+          'A card a tap slides in and Back slides out on the push spring, with each way a motion from rest takes its start, for filming the first frame on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:

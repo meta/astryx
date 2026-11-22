@@ -24,6 +24,7 @@ const QUERY_RENDERED_PAGES = new Set([
   '/pages/navstack-inert-cost/',
   '/pages/navstack-kept-layout/',
   '/pages/navstack-heavy-commit/',
+  '/pages/motion-start-clock/',
 ]);
 
 export function canHydrate(route: string | undefined, search: string): boolean {
