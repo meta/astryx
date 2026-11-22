@@ -52,7 +52,7 @@ references:
 | Behavior                | Fixed-height flat-row windowing with four internal overscan rows per side, at most one retained focused row, native table semantics and parent-owned pre-cell planning.                                                                |
 | End-user impact         | Mounted rows preserve selection, controls, focus and truthful full-table positions; unmounted rows are not promised virtual-cursor discovery.                                                                                          |
 | Builder impact          | Callers declare the row pitch, which is also each row's minimum height, in CSS pixels, give the Table's parent a height, and accept constrained single-line content; unsupported content falls back to full rendering.                 |
-| Compatibility/readiness | Additive, unreleased capability; legacy output remains unchanged without opt-in. Module and parent contract decisions are complete; implementation and numerical verification remain separate release requirements.                    |
+| Compatibility/readiness | Released, additive capability in `@astryxdesign/core` 0.7.12 and later; legacy output remains unchanged without opt-in.                                                                                                                |
 | Review checks           | Reject render-then-hide, independent keys or scroll owners, invalid native structure, silent clipping/drift, lost focus, unbounded retention, window-relative metadata and unmeasured budget claims.                                   |
 | Governing rules         | `component:Table` owns identity, context, admission, render planning, viewport and logical appearance. `spec:AST-025` FR18/FR19 constrain scrolling; `spec:AST-002` and runtime/accessibility architecture constrain API and evidence. |
 
@@ -68,7 +68,8 @@ Virtualization limits DOM, not product data, fetching, pagination or cache lifet
 
 - Released default preserved: `yes`; absent `Table.virtualization`, rendering, identity and nonvirtualized paginated `rowIndexStart`/`rowCount` output remain unchanged.
 - Compatibility class: additive hook, opaque capability and parent opt-in. Virtualized data mode requires valid explicit identity and constrained content; conflicting legacy offset/count inputs use full-render fallback.
-- Migration decision: `module:Table/useTableRowsVirtualization/DEC-1` and `component:Table/DEC-4`/`DEC-5`. The normative module and parent contracts are complete; implementation and release verification remain separate.
+- Migration decision: `module:Table/useTableRowsVirtualization/DEC-1` and `component:Table/DEC-4`/`DEC-5`.
+- Release: the hook and its Table capability are in `@astryxdesign/core` 0.7.12 and later. A Table that does not pass `virtualization` renders without windowing, so no caller migrates.
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -96,14 +97,14 @@ seeds the first window; it sizes no element. The Table's scroll area takes its
 height from its parent, and after mount the measured viewport sets the window. The hook reads the measured height of the Table's scroll area and never defines it. Table consumes it with its existing
 `data`, `columns`, `idKey` and `plugins` and owns types/runtime admission.
 
-| Concept       | Values or states                                                  | Meaning                                                              | Default               | Owner                                               | Stability          |
-| ------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------- | --------------------------------------------------- | ------------------ |
-| Geometry      | Positive finite CSS-pixel `rowHeight` and `initialViewportHeight` | Declared row pitch and minimum; the initial window's viewport height | Both required         | This module                                         | Stable; unreleased |
-| Capability    | Opaque Table-compatible value                                     | Carries geometry intent, not sliced props or an engine handle        | Absent without opt-in | This module; parent consumption                     | Stable; unreleased |
-| Identity/data | Ordered mutable-compatible `T[]`; valid explicit `idKey`          | One complete logical dataset and parent-resolved key source          | Required for opt-in   | `component:Table`                                   | Parent dependency  |
-| Range         | Half-open contiguous logical interval                             | Viewport-intersecting rows before overscan                           | Derived               | `architecture:list-windowing`                       | Stable; unreleased |
-| Focus island  | Absent or one retained product-row subtree                        | Preserves the focused row outside the ordinary window                | Absent                | `architecture:list-windowing`; existing focus owner | Stable; unreleased |
-| Metadata      | Logical index/count, header count, parity and final-row state     | One source for distinct ARIA and visible numbering                   | Derived               | `component:Table`                                   | Parent dependency  |
+| Concept       | Values or states                                                  | Meaning                                                              | Default               | Owner                                               | Stability         |
+| ------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------- | --------------------------------------------------- | ----------------- |
+| Geometry      | Positive finite CSS-pixel `rowHeight` and `initialViewportHeight` | Declared row pitch and minimum; the initial window's viewport height | Both required         | This module                                         | Stable            |
+| Capability    | Opaque Table-compatible value                                     | Carries geometry intent, not sliced props or an engine handle        | Absent without opt-in | This module; parent consumption                     | Stable            |
+| Identity/data | Ordered mutable-compatible `T[]`; valid explicit `idKey`          | One complete logical dataset and parent-resolved key source          | Required for opt-in   | `component:Table`                                   | Parent dependency |
+| Range         | Half-open contiguous logical interval                             | Viewport-intersecting rows before overscan                           | Derived               | `architecture:list-windowing`                       | Stable            |
+| Focus island  | Absent or one retained product-row subtree                        | Preserves the focused row outside the ordinary window                | Absent                | `architecture:list-windowing`; existing focus owner | Stable            |
+| Metadata      | Logical index/count, header count, parity and final-row state     | One source for distinct ARIA and visible numbering                   | Derived               | `component:Table`                                   | Parent dependency |
 
 ## Behavioral contract
 

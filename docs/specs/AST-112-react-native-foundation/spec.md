@@ -458,7 +458,7 @@ shared icon names under FR17.
 - The package's `./unstable/*` names are experimental under `spec:AST-017`
   FR21 and FR22 (FR5).
 - `spec:AST-082` DEC-2 gains one sentence, with **Decider:** cixzhang,
-  2026-11-18: `surface` on `Button` and `IconButton` is a situational,
+  2026-11-18 13:08:46 PT: `surface` on `Button` and `IconButton` is a situational,
   per-call-site appearance choice, and the look of that surface stays the
   native theme's `material` member.
 - `spec:AST-082` DEC-7's existing sentence on where the React Native
@@ -613,7 +613,7 @@ platform's native code reaches JavaScript is `spec:AST-140/FR1`'s.
 ### DEC-11 — The Expo package is a lightweight wrapper
 
 **Reference:** `spec:AST-112/DEC-11`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 13:13:22 PT
 
 The Expo piece stays a thin wrapper, so the main package owns lifecycle
 hookup through one neutral app-lifecycle entry that any native project calls.
@@ -665,7 +665,7 @@ implementation or an open-source library for it (FR20).
 ### DEC-17 — Push notifications and background work are out of scope for v0
 
 **Reference:** `spec:AST-112/DEC-17`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 12:59:34 PT
 
 Astryx React Native v0 covers the app's interface and its device features, so
 push notifications and background work are out of scope for v0, and an app
@@ -674,7 +674,7 @@ gets them from its host platform or a third-party SDK.
 ### DEC-18 — Astryx Stage and Preview are separate tools
 
 **Reference:** `spec:AST-112/DEC-18`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 12:54:00 PT
 
 Astryx Stage and Preview in the Astryx app are separate tools outside Astryx,
 and Astryx specs, releases and docs don't require them.
@@ -682,7 +682,7 @@ and Astryx specs, releases and docs don't require them.
 ### DEC-19 — The contracts are internal and built into each package
 
 **Reference:** `spec:AST-112/DEC-19`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 13:23:06 PT
 
 Each package stays self-contained while every platform derives from one
 contract. The contracts are a private workspace package, `packages/contracts`,
@@ -694,7 +694,7 @@ deprecated, since the shared contracts replace it.
 ### DEC-20 — NavigationStack starts in the React Native lab
 
 **Reference:** `spec:AST-112/DEC-20`
-**Decider:** cixzhang, 2026-11-18
+**Decider:** cixzhang, 2026-11-18 13:06:03 PT
 
 Web's `NavigationStack` is still in Lab, so the React Native `NavigationStack`,
 with `Screen`, `useScreenScrollProps()`, and the stack navigator, starts in the

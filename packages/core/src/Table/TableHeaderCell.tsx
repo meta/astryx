@@ -40,7 +40,7 @@ import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
-import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
+import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -231,13 +231,7 @@ export function TableHeaderCell({
         cutHeading.onPointerDown,
       )}>
       {content}
-      {cutHeading.cutText != null && cutHeading.Tooltip ? (
-        <cutHeading.Tooltip
-          anchorRef={cellRef}
-          content={cutHeading.cutText}
-          onHide={cutHeading.hide}
-        />
-      ) : null}
+      {cutHeading.tooltip}
     </th>
   );
 }

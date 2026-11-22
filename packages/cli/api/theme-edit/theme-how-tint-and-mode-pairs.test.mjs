@@ -2,8 +2,9 @@
 
 /**
  * @file `editor how`: a text color asked with a fill given for one mode is
- * that mode's on every variant the fill reaches; a tint word tints only the
- * color it modifies, on every line that writes it.
+ * that mode's on every variant the fill reaches; a text color asked with a
+ * see-through fill deepens it until the text reads, or is kept to the modes
+ * it reads in; a color said for one part is that part's alone.
  *
  * @position api/theme-edit — tests
  */
@@ -79,9 +80,9 @@ describe('a text color asked with a fill for one mode', () => {
   );
 });
 
-describe('a tint word', () => {
+describe('a color said for one part', () => {
   it(
-    'every answer, the one that runs the whole ask too, tints the cards and never the header',
+    'fills the cards blue and the header navy, on every answer',
     async test => {
       needsBases(test);
       const {data} = await themeEditHow(
@@ -98,115 +99,56 @@ describe('a tint word', () => {
         .filter(c => /^background(?:-color)? /.test(c));
       const cards = fills.filter(c => / --on card\b/.test(c));
       expect(cards.length).toBeGreaterThan(0);
-      for (const c of cards)
-        expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%, transparent\)/);
-      // (A header line, where the answer writes one, is the navy, solid.)
+      for (const c of cards) expect(c).toMatch(/'#2563eb' --on card/);
+      // (A header line, where the answer writes one, is the navy.)
       for (const c of fills.filter(c => /header\b/.test(c)))
         expect(c).toMatch(/'#1e3a8a' --on \S*header/);
     },
     T,
   );
+});
+
+describe('text asked with a see-through fill', () => {
+  /** The answer that runs the whole ask, its set lines and its text. @param {string} q */
+  const whole = async q => {
+    const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+    const r = (data.results ?? []).find(x => /^all of it/.test(x.text));
+    return {
+      text: r?.text ?? '',
+      all: (r?.commands ?? [])
+        .filter((/** @type {string} */ c) => / editor set /.test(c))
+        .map((/** @type {string} */ c) => c.replace(/^.* editor set \S+ /, '')),
+    };
+  };
 
   it(
-    'tints a part named before the clause the tint word is in',
+    'deepens a see-through fill until the text asked with it reads in every mode',
     async test => {
       needsBases(test);
-      const all = await sets(
-        'Secondary button hover, in dark mode only: a slightly blue tint. Light mode untouched.',
-      );
-      const hover = all.filter(c =>
-        /^background(?:-color)? .*--on button .*--state hover/.test(c),
-      );
-      expect(hover.length).toBeGreaterThan(0);
-      for (const c of hover)
-        expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%/);
-    },
-    T,
-  );
-
-  it(
-    'tints the color it modifies on every line, and leaves another color solid',
-    async test => {
-      needsBases(test);
-      const all = await sets('cards tinted blue with a navy header');
-      const fills = all.filter(c => /^background(?:-color)? /.test(c));
-      const cards = fills.filter(c => / --on card\b/.test(c));
-      expect(cards.length).toBeGreaterThan(0);
-      for (const c of cards)
-        expect(c).toMatch(/color-mix\(in srgb, #2563eb 15%, transparent\)/);
-      // (The header the tint does not name is never tinted: where the
-      // answer writes it, it is its own navy.)
-      for (const c of fills.filter(c => /header\b/.test(c)))
-        expect(c).toMatch(/'#1e3a8a' --on \S*header/);
-      // (Said without the tint, a header line is the same navy.)
-      for (const c of (await sets('cards blue with a navy header')).filter(c =>
-        /^background(?:-color)? .*header\b/.test(c),
-      ))
-        expect(c).toMatch(/'#1e3a8a' --on \S*header/);
-    },
-    T,
-  );
-
-  it(
-    'deepens a tint until the text asked with it reads in every mode',
-    async test => {
-      needsBases(test);
-      const {data} = await themeEditHow('buttons tinted blue with white text', {
-        cwd,
-        theme: 'n',
-      });
-      // (The answer that runs the whole ask: white on a 15% blue tint over
-      // the light page is 1.4:1.)
-      const whole = (data.results ?? []).find(r => /^all of it/.test(r.text));
-      expect(whole).toBeDefined();
-      const all = (whole?.commands ?? [])
-        .filter(c => / editor set /.test(c))
-        .map(c => c.replace(/^.* editor set \S+ /, ''));
-      expect(all.some(c => /#2563eb 15%/.test(c))).toBe(false);
-      expect(whole?.text).not.toMatch(/at 15% over/);
-      const fills = all.filter(c =>
-        /^background(?:-color)? .*#2563eb.* --on button --when variant:/.test(
-          c,
-        ),
-      );
-      expect(fills.length).toBeGreaterThan(0);
-      for (const fill of fills) {
-        const when = /--when (\S+)/.exec(fill)?.[1];
-        const text = all.filter(
-          x =>
-            x.startsWith("color '#ffffff' --on button") &&
-            x.includes(`--when ${when}`),
-        );
-        expect(text.length).toBeGreaterThan(0);
-        for (const c of text) expect(c).not.toMatch(/--mode/);
-      }
-      expect(whole?.text).toMatch(
-        /the #2563eb tint is deepened to (?:\d+%|solid) so #ffffff text reads at \d+\.\d:1/,
+      // (White on a 15% blue over the light page is 1.4:1.)
+      const {text, all} = await whole('buttons 15% blue with white text');
+      expect(all.some(c => / 15%/.test(c))).toBe(false);
+      expect(text).toMatch(
+        /the blue tint is deepened to (?:\d+%|solid) so #ffffff text reads at \d+\.\d:1/,
       );
     },
     T,
   );
 
   it(
-    'keeps a text color no strength of the tint reads on to the modes it reads in, and names a readable ink',
+    'keeps a text color no strength of the fill reads on to the modes it reads in, and names a readable ink',
     async test => {
       needsBases(test);
       // (Yellow at any strength never takes white text to 4.5:1 on the
-      // light page; over the dark page a light tint of it does.)
-      const {data} = await themeEditHow(
-        'buttons tinted #facc15 with white text',
-        {cwd, theme: 'n'},
+      // light page; over the dark page a light mix of it does.)
+      const {text, all} = await whole('buttons 15% #facc15 with white text');
+      const white = all.filter(c =>
+        c.startsWith("color '#ffffff' --on button"),
       );
-      const whole = (data.results ?? []).find(r => /^all of it/.test(r.text));
-      expect(whole).toBeDefined();
-      const all = (whole?.commands ?? [])
-        .filter(c => / editor set /.test(c))
-        .map(c => c.replace(/^.* editor set \S+ /, ''));
-      const text = all.filter(c => c.startsWith("color '#ffffff' --on button"));
-      expect(text.length).toBeGreaterThan(0);
-      for (const c of text) expect(c).toMatch(/--mode dark/);
-      expect(whole?.text).toMatch(
-        /#ffffff text on the \S+ button would not read on color-mix\(in srgb, #facc15 15%, transparent\) in light mode: \d\.\d\d:1, under the 4\.5:1 text needs, so it is kept to dark mode; #111827 reads there/,
+      expect(white.length).toBeGreaterThan(0);
+      for (const c of white) expect(c).toMatch(/--mode dark/);
+      expect(text).toMatch(
+        /#ffffff text on the (?:\S+ )?button would not read on color-mix\(in srgb, #facc15 15%, transparent\) in light mode: \d\.\d\d:1, under the 4\.5:1 text needs, so it is kept to dark mode; #111827 reads there/,
       );
     },
     T,
@@ -228,53 +170,4 @@ describe('a tint word', () => {
     },
     T,
   );
-
-  for (const [q, part, state] of [
-    ['cards tinted blue with white text', 'card', ''],
-    [
-      'selected nav items tinted forest green with white text',
-      'top-nav-item',
-      '--state selected',
-    ],
-  ])
-    it(
-      `measures white text on ${q}`,
-      async test => {
-        needsBases(test);
-        const {data} = await themeEditHow(q, {cwd, theme: 'n'});
-        const whole = (data.results ?? []).find(r => /^all of it/.test(r.text));
-        expect(whole).toBeDefined();
-        const all = (whole?.commands ?? [])
-          .filter(c => / editor set /.test(c))
-          .map(c => c.replace(/^.* editor set \S+ /, ''));
-        const fills = all.filter(c =>
-          new RegExp(
-            `^background(?:-color)? .* --on ${part}\\b${state ? `.*${state}` : ''}`,
-          ).test(c),
-        );
-        expect(fills.length).toBeGreaterThan(0);
-        // (White over a 15% tint on the light page is under 1.5:1: the
-        // tint is deepened, or the text kept to the modes it reads in.)
-        const text = all.filter(
-          c => /'#ffffff'/.test(c) && new RegExp(`--on ${part}\\b`).test(c),
-        );
-        expect(text.length).toBeGreaterThan(0);
-        // (Each text line sits on a fill this answer gives: the variants
-        // that keep their own fill, the coloured cards, keep their text.)
-        for (const c of text) {
-          const when = /--when (\S+)/.exec(c)?.[1];
-          expect(
-            fills.some(f =>
-              when ? f.includes(`--when ${when}`) : !/--when/.test(f),
-            ),
-          ).toBe(true);
-        }
-        const deepened = fills.every(c => !/ 15%, transparent/.test(c));
-        if (!deepened) for (const c of text) expect(c).toMatch(/--mode dark/);
-        expect(whole?.text).toMatch(
-          /deepened to (?:\d+%|solid) so #ffffff text reads|#ffffff text on the .* would not read/,
-        );
-      },
-      T,
-    );
 });

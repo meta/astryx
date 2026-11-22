@@ -189,6 +189,14 @@ const ROWS = [
     },
   ],
   [
+    "a part's fill keeps one readable-text line, for the look it fills",
+    {
+      q: 'badges: red',
+      has: ["background-color '#dc2626' --on badge --when variant:neutral"],
+      says: /^(?![\s\S]*variant warning in light mode)/,
+    },
+  ],
+  [
     'a color after a part is its text; the next color before accents is the accent',
     {
       q: 'bold headings, red #c8102e and blue #003da5 accents',
@@ -197,6 +205,14 @@ const ROWS = [
         "color '#c8102e' --on heading",
         "accent '#003da5'",
       ],
+    },
+  ],
+  [
+    'two colors said before accents: the last one is the accent, as on main',
+    {
+      q: '#ff0000 and #00ff00 accents',
+      has: ["accent '#00ff00'"],
+      never: /^accent '#ff0000'/,
     },
   ],
   [
@@ -383,6 +399,122 @@ const ROWS = [
   [
     'a comparative of angular is a step, never square',
     {q: 'Ecken eckiger', has: ['corners less']},
+  ],
+  [
+    'every part said before a colon is a subject of the list',
+    {
+      q: 'popover, tooltip and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a head with its own colon keeps its items, never the app's part",
+    {
+      q: 'cards: white background, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    'every part before the colon of a two-part list is a subject',
+    {
+      q: 'popover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a list with its colon after several parts keeps its items, never the app's part",
+    {
+      q: 'cards, dialogs: white background, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    'an item after a rewritten colon stays an item, never a theme-wide dial',
+    {q: 'dialogs: no border, title: bold', never: /^headings /},
+  ],
+  [
+    "a decimal in the list's first item keeps its items, never the app's part",
+    {
+      q: 'cards: 0.5rem corners, header: navy',
+      never: /--on app-shell-header/,
+    },
+  ],
+  [
+    "a part named before another sentence's colon stays an item of this list",
+    {
+      q: 'Header: navy with white text. Cards: white background, header: gray.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+    },
+  ],
+  [
+    'a subject stays a subject when a later sentence repeats its look',
+    {
+      q: 'The popover and hover card: dark. Make the text darker.',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'a subject after a prohibition read later stays a subject',
+    {
+      q: "Don't change the sidebar. Make the popover and hover card: dark.",
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'an example said inside a sentence never frees another sentence\'s item',
+    {
+      q: 'Header: navy, e.g. a dark blue. Cards: white background, gray header.',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+      ],
+    },
+  ],
+  [
+    'a subject on its own line stays a subject',
+    {
+      q: 'Sidebar: navy\nPopover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    "a word another sentence names before its colon never frees this list's item",
+    {
+      q: 'Header: navy. Cards: white background, gray header.',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#ffffff' --on card --when variant:default --mode light",
+      ],
+    },
+  ],
+  [
+    'a part inside a longer name before the colon stays an item',
+    {
+      q: 'icon buttons: round, blue icon',
+      // (The icon color stays on the button, never theme-wide.)
+      never: /^--color-icon-[a-z-]+ '[^']*'$/,
+    },
+  ],
+  [
+    'the middle part of a three-part list is a subject',
+    {
+      q: 'sidebar, header and footer: navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+    },
+  ],
+  [
+    'a word before the first subject keeps the list',
+    {
+      q: 'the popover and hover card: dark',
+      has: ["background-color '#1f2937' --on hover-card"],
+    },
+  ],
+  [
+    'a head with its own colon keeps a button item, never every button',
+    {
+      q: 'toasts: dark, close button: white',
+      never: /--on button\b|--when variant:(?:secondary|ghost)/,
+    },
   ],
   [
     'a part that paints no shadow takes the large shared shadow',

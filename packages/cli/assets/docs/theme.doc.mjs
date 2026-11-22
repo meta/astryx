@@ -66,6 +66,16 @@ export const docs = {
       ],
     },
     {
+      id: 'values-a-part-shows',
+      title: 'The values a part shows',
+      content: [
+        {
+          type: 'prose',
+          text: "Before you change a part in a theme, see what it draws now (a card's padding, a button's corners and colors) with the CLI, not the package source: `astryx experimental theme editor show <theme> --on <part>` gives each value, per mode where the modes differ, with the token behind it and whether Core, the base theme or the theme itself sets it. It writes nothing.",
+        },
+      ],
+    },
+    {
       id: 'no-app-yet',
       title: 'No app yet',
       content: [
