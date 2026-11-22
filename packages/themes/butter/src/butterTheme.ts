@@ -410,8 +410,8 @@ export const butterTheme = defineTheme({
     // Typography override
     '--text-supporting-size': '0.75rem', // 12px at the default root size
 
-    // Element sizes — slightly taller defaults so the new input padding
-    // (--spacing-2 block) has room to breathe.
+    // Element sizes — slightly taller defaults. The text fields keep their
+    // own block padding (--spacing-2).
     '--size-element-sm': '32px',
     '--size-element-md': '40px',
     '--size-element-lg': '48px',
@@ -806,7 +806,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Inputs — softer border than default, more vertical breathing room.
+    // Inputs — softer border than default; the text fields get more block
+    // padding.
     // Status modifiers also remap the semantic tokens locally so the
     // status icon + border read as the same vivid hue as the banner
     // (icons inherit from --color-{success,warning,error}).
@@ -851,8 +852,8 @@ export const butterTheme = defineTheme({
       ...INPUT_STATUS_VARS,
     },
     selector: {
+      // Inline padding only: Core sizes the control to its size's height.
       base: {
-        paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
@@ -860,8 +861,8 @@ export const butterTheme = defineTheme({
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'multi-selector': {
+      // Inline padding only: Core sizes the control to its size's height.
       base: {
-        paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
@@ -870,16 +871,16 @@ export const butterTheme = defineTheme({
     },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
     typeahead: {
+      // Inline padding only: Core sizes the control to its size's height.
       base: {
-        paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
       ...INPUT_STATUS_VARS,
     },
     tokenizer: {
+      // Inline padding only: Core sizes the control to its size's height.
       base: {
-        paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
