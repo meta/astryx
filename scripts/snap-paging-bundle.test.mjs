@@ -38,7 +38,9 @@ const PAGER_CODE = new RegExp(
     'Layer/inputHold\\.ts',
     // primaryClick and isApplePlatform are the press controller's too.
     'utils/(clickGuard|selectionLock)\\.ts',
-    'privateAttributes/(hapticSwitch|reducedMotion)\\.stylex\\.ts',
+    // The reduced-motion mark's owner module is every script reader's rule
+    // (spec:AST-108 FR6), so Carousel's own scrolls load it too.
+    'privateAttributes/hapticSwitch\\.stylex\\.ts',
   ].join('|')})`,
 );
 

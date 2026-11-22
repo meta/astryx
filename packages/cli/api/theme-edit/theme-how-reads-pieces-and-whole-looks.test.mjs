@@ -414,11 +414,7 @@ describe('a look said, then taken away by a pronoun', () => {
     'keeps the earlier reading for a side, a state, a variant, a mode, a list or a joined ask',
     async () => {
       for (const q of [
-        'the card border in dark mode is ugly, hide it',
         'the card border is ugly in dark, hide it',
-        'the shadow on the cards in dark mode is too strong, remove it',
-        'the border on the selected tab is ugly, hide it',
-        'the muted card border is ugly, hide it',
         'the bottom border on the cards is ugly, hide it',
         'the shadows on cards and buttons in dark mode are too strong, remove them',
         'the shadows are too strong on cards and buttons in dark mode, remove them',
@@ -455,6 +451,242 @@ describe('a look said, then taken away by a pronoun', () => {
       expect(two).toMatch(/box-shadow none --on card/);
       expect(two).toMatch(/border none --on input/);
       expect(two).not.toMatch(/border '1px/);
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun in one mode', () => {
+  it(
+    'takes it away in that mode only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the card border in dark mode is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
+          'the dark mode card border is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
+          'the card border in dark theme is ugly, hide it',
+          /border-color transparent --on card --mode dark\b/,
+        ],
+        [
+          'the card border in light mode is ugly, hide it',
+          /border-color transparent --on card --mode light\b/,
+        ],
+        [
+          'the button background in dark mode is ugly, hide it',
+          /background-color transparent --on button --mode dark\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(/(?:none|transparent) --on \S+$/m);
+      }
+      // (A card draws no shadow of its own and set takes --mode only for
+      // colors: the look is never taken away in both modes.)
+      const lines = (
+        first(
+          await answer(
+            'the shadow on the cards in dark mode is too strong, remove it',
+          ),
+        ) ?? []
+      ).join('\n');
+      expect(lines).not.toMatch(/box-shadow none --on card$/m);
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun in one state', () => {
+  it(
+    'takes it away in that state only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the border on the selected tab is ugly, hide it',
+          /border none --on tab --state selected\b/,
+        ],
+        [
+          'the border on clicked buttons is ugly, hide it',
+          /border none --on button --state active\b/,
+        ],
+        [
+          'the shadow on hovered cards is too strong, remove it',
+          /box-shadow none --on card --state hover\b/,
+        ],
+        [
+          'the disabled button background is ugly, hide it',
+          /background-color transparent --on button --state disabled\b/,
+        ],
+        // ("active tab" is the selected one.)
+        [
+          'the border on the active tab is ugly, hide it',
+          /border none --on tab --state selected\b/,
+        ],
+        // ("hover card" is a part, never a state.)
+        [
+          'the hover card shadow is too strong, remove it',
+          /box-shadow none --on hover-card$/m,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(
+          /(?:none|transparent) --on (?:tab|button|card)$/m,
+        );
+      }
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading for a state said with other marks, and never fails',
+    async () => {
+      for (const q of [
+        'the border on the *selected* tab is ugly, hide it',
+        'the shadow on non-hovered cards is too strong, remove it',
+        'the border on hovered/pressed buttons is ugly, hide it',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on/);
+      }
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading for the edges not read yet',
+    async () => {
+      for (const q of [
+        'the shadow on not hovered cards is too strong, remove it',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on/);
+      }
+    },
+    T,
+  );
+});
+
+describe('a look taken away by a pronoun on one variant', () => {
+  it(
+    'takes it away on that variant only',
+    async () => {
+      for (const [q, want] of [
+        [
+          'the muted card border is ugly, hide it',
+          /border none --on card --when variant:muted\b/,
+        ],
+        [
+          'the error badge border is ugly, hide it',
+          /border none --on badge --when variant:error\b/,
+        ],
+        [
+          'the gray card border is ugly, hide it',
+          /border none --on card --when variant:gray\b/,
+        ],
+        [
+          'the green badge border is ugly, hide it',
+          /border none --on badge --when variant:green\b/,
+        ],
+        [
+          'the border on the ghost buttons is ugly, hide it',
+          /border none --on button --when variant:ghost\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        expect(lines, String(q)).toMatch(/** @type {RegExp} */ (want));
+        expect(lines, String(q)).not.toMatch(
+          /(?:none|transparent) --on (?:card|badge|button)$/m,
+        );
+      }
+    },
+    T,
+  );
+  it(
+    'reads a value only just before the part, and only of its variants',
+    async () => {
+      // ("too strong" on a divider names no variant: every divider.)
+      const divider = (
+        first(await answer('the divider border is too strong, hide it')) ?? []
+      ).join('\n');
+      expect(divider).not.toMatch(/--when variant:strong/);
+      // (A value of another axis keeps the earlier reading.)
+      const high = (
+        first(await answer('the high card shadow is too strong, remove it')) ??
+        []
+      ).join('\n');
+      expect(high).not.toMatch(/box-shadow none --on card$/m);
+      // (A part named in several words keeps the earlier reading.)
+      const clickable = (
+        first(
+          await answer('the muted clickable card border is ugly, hide it'),
+        ) ?? []
+      ).join('\n');
+      expect(clickable).not.toMatch(/border none --on clickable-card$/m);
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading for the edges not read yet',
+    async () => {
+      for (const q of [
+        'the input selector border is ugly, hide it',
+        'the standard dialog border is ugly, hide it',
+        'the label citation border is ugly, hide it',
+      ]) {
+        const lines = (first(await answer(q)) ?? []).join('\n');
+        expect(lines, q).not.toMatch(/(?:border|box-shadow) none --on/);
+      }
+    },
+    T,
+  );
+});
+
+describe('two looks taken away by a pronoun', () => {
+  it(
+    'takes each away on that part',
+    async () => {
+      for (const [q, ...want] of [
+        [
+          'the shadow and border on cards are ugly, remove them',
+          /box-shadow none --on card\b/,
+          /border none --on card\b/,
+        ],
+        // (A look word inside the part's name is no look said.)
+        [
+          'the shadow and border on the outline indicator are ugly, remove them',
+          /box-shadow none --on outline-indicator\b/,
+          /border none --on outline-indicator\b/,
+        ],
+        [
+          'the card border and shadow are ugly, remove them',
+          /box-shadow none --on card\b/,
+          /border none --on card\b/,
+        ],
+      ]) {
+        const lines = (first(await answer(String(q))) ?? []).join('\n');
+        for (const w of want) expect(lines, String(q)).toMatch(w);
+        expect(lines, String(q)).not.toMatch(
+          /--shadow-|border '1px|outline none/,
+        );
+      }
+    },
+    T,
+  );
+
+  it(
+    'keeps the earlier reading when a variant word comes just before the part',
+    async () => {
+      const q =
+        'the border and shadow on strong dividers are ugly, remove them';
+      const lines = (first(await answer(q)) ?? []).join('\n');
+      expect(lines, q).not.toMatch(/border none --on divider$/m);
     },
     T,
   );
