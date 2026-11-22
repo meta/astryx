@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A part's two gradient layers said in a `how` ask stay one value: the
+ * @file A part's gradient layers said in a `how` ask stay one value: the
  * comma between them is no break. A comma before a color, after a plain
  * color, before a layer said with a part of its own, or in an ask without
  * the `background` word still starts a new ask, and the page keeps its own
@@ -95,6 +95,14 @@ it.each([
     null,
   ],
   ['page background linear-gradient(#ffffff, #f8fafc), #eeeeee', null],
+  [
+    'cards background on hover linear-gradient(#ffffff, #eeeeee), linear-gradient(#000000, #111111)',
+    null,
+  ],
+  [
+    'cards background-color linear-gradient(#ffffff, #eeeeee), linear-gradient(#000000, #111111)',
+    null,
+  ],
 ])(
   '%s: the comma still starts a new ask',
   async (ask, line) => {

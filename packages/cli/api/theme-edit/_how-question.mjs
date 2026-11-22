@@ -7690,7 +7690,10 @@ export function draftAnswer(ctx, env, question) {
             re.test(` ${next.replace(GRADIENT_LAYER, ' ')} `),
           );
         const join =
-          /\bbackground(?:-image)?\b/.test(lead) &&
+          // (The property word comes straight before the first layer:
+          // "background on hover …" and "background-color …" are not a
+          // layer list.)
+          /\bbackground(?:-image)?\s*:?\s*$/i.test(lead) &&
           !/\bpage\b|(?<!\btable\s)\bbody\b/.test(lead) &&
           !ownPart &&
           new RegExp(`^\\s*${GRADIENT_START.source}`).test(next);
