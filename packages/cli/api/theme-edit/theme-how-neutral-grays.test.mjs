@@ -173,6 +173,10 @@ describe('neutral grays', () => {
         "neutral grays, don't make buttons rounder",
         "Don't make buttons rounder, neutral grays",
         'neutral grays, never hide the tab underline',
+        // (Typographic apostrophes read the same.)
+        'I don\u2019t like rounded corners and neutral grays',
+        'neutral grays, don\u2019t make buttons rounder',
+        'buttons shouldn\u2019t be round, neutral grays',
         // (A removal before the grays turns them away even when they carry
         // a verb of their own.)
         'remove rounded corners and use neutral grays',
