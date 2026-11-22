@@ -387,6 +387,27 @@ describe('a top nav link colored for a dark bar', () => {
     expect(drawerSelected('pdm').some(r => /light-dark\(#bfbfbf/.test(r))).toBe(
       false,
     );
+    // (A group fill set after the link's own `--only` block is not written
+    // on the link: the copy reads on the link's own black block.)
+    await themeEditNew('pgr', {cwd, like: 'neutral'});
+    await themeEditSet('pgr', 'mode', 'light-only', {cwd});
+    await themeEditSet('pgr', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pgr', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pgr', 'background-color', '#f0f0f0', {
+      cwd,
+      on: 'selected-items',
+      state: 'selected',
+    });
+    await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    expect(drawerSelected('pgr').some(r => /#bfbfbf/.test(r))).toBe(true);
   }, 240_000);
 
   it('holds nothing in a mode a one-mode theme never shows', async ctx => {
