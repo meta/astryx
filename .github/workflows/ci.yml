@@ -5434,15 +5434,10 @@ jobs:
       # A head from before the Firefox project has no Firefox specs to run.
       - name: Find the Firefox project in the head
         id: project
-        if: hashFiles('.github/scripts/firefox-hover-report.mjs') != ''
         run: |
           if grep -q "name: 'firefox'" playwright.config.ts; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Name a head without the Firefox project
-        if: steps.project.outputs.present != 'true'
-        run: echo "This head has no Firefox hover project yet; merge main to run the Firefox hover specs." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Node and pnpm
         if: steps.project.outputs.present == 'true'
@@ -5472,8 +5467,12 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
         run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
 
+      - name: Name a head without the Firefox hover report
+        if: (always()) && hashFiles('.github/scripts/firefox-hover-report.mjs') == ''
+        run: echo "::notice::This head predates the Firefox hover specs; merge main to run them."
+
       - name: Report the Firefox hover results
-        if: always() && steps.project.outputs.present == 'true' && hashFiles('.github/scripts/firefox-hover-report.mjs') != ''
+        if: always() && hashFiles('.github/scripts/firefox-hover-report.mjs') != ''
         run: |
           node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
           cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"
