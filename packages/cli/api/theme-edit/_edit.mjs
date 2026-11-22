@@ -2271,7 +2271,7 @@ const EMPTY_REASON =
  */
 async function acceptContrast(slug, reason, options) {
   const cwd = options.cwd ?? process.cwd();
-  const line = `${P} set ${slug} contrast-accepted '<why the original draws it so>' --on <text part> [--when <prop>:<value>] --ground <part under it> --mode <light|dark>`;
+  const line = `${P} set ${slug} contrast-accepted '<why the original draws it so>' --on <text part> --ground <part under it> --mode <light|dark>`;
   const part = options.on;
   // One variant of the part (`variant:info`), as the problem's accept line
   // names it; none for the part as a whole.
@@ -2281,7 +2281,7 @@ async function acceptContrast(slug, reason, options) {
   if (!part || !ground || (mode !== 'light' && mode !== 'dark'))
     refuse(
       E.ERR_MISSING_ARGUMENT,
-      `contrast-accepted keeps one contrast problem as designed: name the text part (--on), the part under it (--ground) and the mode (--mode), as the problem's own accept line does.`,
+      `contrast-accepted keeps one contrast problem as designed: name the text part (--on), the part under it (--ground) and the mode (--mode), as the problem's own accept line does; add --when <prop>:<value> for a miss in one variant, as show names it.`,
       {run: [`${P} show ${slug}`, line]},
     );
   const ctx = await context(cwd);
@@ -2336,7 +2336,12 @@ async function acceptContrast(slug, reason, options) {
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `A contrast problem is kept only with the reason the original draws it so, said specifically (what it copies, and from where: "matches the original's .btn-info label"): "${reason.slice(0, 80)}" does not say.`,
-        {run: [line]},
+        // (The caller's own place, with only the reason left to say.)
+        {
+          run: [
+            `${P} set ${slug} contrast-accepted '<why the original draws it so>' ${scope}`,
+          ],
+        },
       );
     if (!here)
       refuse(

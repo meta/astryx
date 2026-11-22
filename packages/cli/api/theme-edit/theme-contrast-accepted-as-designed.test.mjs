@@ -259,6 +259,42 @@ describe('a contrast problem in one variant, kept as designed', () => {
   );
 });
 
+describe('the line a refusal prints', () => {
+  it('runs as printed, with --when said in words', async () => {
+    if (unbuilt) return;
+    await themeEditNew('ul', {cwd, like: 'neutral'});
+    const e = /** @type {any} */ (
+      await themeEditSet('ul', 'contrast-accepted', 'matches the original', {
+        cwd,
+      }).catch(x => x)
+    );
+    expect(e.message).toMatch(
+      /add --when <prop>:<value> for a miss in one variant/,
+    );
+    // (Every line it offers, the usage line among them, runs as printed.)
+    const all = JSON.stringify(e);
+    expect(all).toMatch(/contrast-accepted '<why the original draws it so>'/);
+    expect(all).not.toMatch(/\[--when/);
+  }, 240_000);
+
+  it("keeps the caller's place, variant included, when only the reason is short", async () => {
+    if (unbuilt) return;
+    const e = /** @type {any} */ (
+      await themeEditSet('ul', 'contrast-accepted', 'same', {
+        cwd,
+        on: 'badge',
+        when: 'variant:info',
+        ground: 'badge',
+        mode: 'light',
+      }).catch(x => x)
+    );
+    expect(e.message).toMatch(/said specifically/);
+    expect(JSON.stringify(e)).toMatch(
+      /contrast-accepted '<why the original draws it so>' --on badge --when variant:info --ground badge --mode light/,
+    );
+  }, 240_000);
+});
+
 describe('the accept line', () => {
   const data = /** @type {any} */ ({
     name: 't',
