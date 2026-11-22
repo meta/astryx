@@ -4,7 +4,7 @@
  * @file A part's gradient layers said in a `how` ask stay one value: the
  * comma between them is no break. A comma before a color, after a plain
  * color, before a layer said with a part of its own, or in an ask without
- * the `background` word still starts a new ask, and the page keeps its own
+ * the property word straight before the first layer still starts a new ask, and the page keeps its own
  * reading.
  */
 
@@ -108,10 +108,13 @@ it.each([
   async (ask, line) => {
     const lines = await commands(ask);
     if (line) expect(lines).toContain(line);
-    // (No value joins the two layers or the gradient and the color.)
-    expect(lines.some(l => /\), (?:linear-gradient|#|white)/.test(l))).toBe(
-      false,
-    );
+    // (No value joins the two layers or the gradient and the color, and no
+    // gradient is made of both layers' colors.)
+    expect(
+      lines.some(l =>
+        /\), (?:linear-gradient|#|white)|#eeeeee, #000000/.test(l),
+      ),
+    ).toBe(false);
   },
   240_000,
 );
