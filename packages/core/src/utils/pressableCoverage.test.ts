@@ -67,8 +67,13 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 const files = walk(SRC);
+// Keyed by a POSIX relative path: every key this file compares against is
+// written with `/`, and `path.relative` writes `\` on Windows.
 const source = new Map(
-  files.map(file => [path.relative(SRC, file), fs.readFileSync(file, 'utf8')]),
+  files.map(file => [
+    path.relative(SRC, file).split(path.sep).join('/'),
+    fs.readFileSync(file, 'utf8'),
+  ]),
 );
 
 // A press arm keys on `:active` or on the attribute the controller writes, as
@@ -138,9 +143,10 @@ function importers(file: string): string[] {
       if (other === file) {
         return false;
       }
-      const dir = path.dirname(other);
+      // Keys are POSIX relative paths, so the specifier joins with `/` too.
+      const dir = path.posix.dirname(other);
       const specifiers = [...text.matchAll(/from\s+'([^']+)'/g)].map(m =>
-        path.normalize(path.join(dir, m[1])),
+        path.posix.normalize(path.posix.join(dir, m[1])),
       );
       return specifiers.includes(stem);
     })
@@ -240,5 +246,17 @@ describe('every surface that paints a press is reachable by the touch press cont
       );
     });
     expect(unexplained).toEqual([]);
+  });
+
+  it('keys the source map by POSIX paths, so the model list matches on every OS', () => {
+    // `path.relative` writes `\` on Windows, so a raw key would miss the `/`
+    // entries MODEL_FILES holds and the model files would be treated as
+    // unmarked surfaces.
+    for (const file of source.keys()) {
+      expect(file).not.toContain('\\');
+    }
+    for (const modelFile of MODEL_FILES) {
+      expect(source.has(modelFile), `${modelFile} is not a key`).toBe(true);
+    }
   });
 });
