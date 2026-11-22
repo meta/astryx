@@ -16904,7 +16904,9 @@ function scopedTextProblems(ctx, data, res) {
         (scoped
           ? (y.state ?? null) === st && (y.when ?? null) === when
           : !y.state && !y.when) &&
-        partsOf(ctx, y).includes(t);
+        // (Only what the build writes on the part: a part's own `--only`
+        // look keeps it under a later group one.)
+        writtenPartsOf(ctx, data, y).includes(t);
       /** The latest setting matching, scoped first, then at rest. @param {(y: Setting) => boolean} test @param {string} m */
       const latest = (test, m) =>
         [...data.settings].reverse().find(y => test(y) && here(y, m, true)) ??

@@ -441,6 +441,33 @@ describe('a top nav link colored for a dark bar', () => {
     });
     await themeEditSet('pgc', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
     expect(drawerSelected('pgc').some(r => /#ffffff/.test(r))).toBe(true);
+    // (A phone-menu block of the link's own under a later group one: the
+    // check measures the link on its own block.)
+    await themeEditNew('pgw', {cwd, like: 'neutral'});
+    await themeEditSet('pgw', 'mode', 'light-only', {cwd});
+    await themeEditSet('pgw', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('pgw', 'background-color', '#000000', {
+      cwd,
+      on: 'top-nav-item',
+      when: 'mode:drawer',
+      state: 'selected',
+      only: true,
+    });
+    await themeEditSet('pgw', 'background-color', '#f0f0f0', {
+      cwd,
+      on: 'selected-items',
+      when: 'mode:drawer',
+      state: 'selected',
+    });
+    const w = /** @type {any} */ (
+      await themeEditSet('pgw', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    expect(JSON.stringify(w.data.newProblems ?? [])).not.toMatch(
+      /top-nav-item \(mode drawer, selected\)/,
+    );
   }, 240_000);
 
   it('holds nothing in a mode a one-mode theme never shows', async ctx => {
