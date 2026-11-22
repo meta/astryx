@@ -59,7 +59,8 @@ import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs
 import {corePropUsesOf} from '../discovery/core-props.mjs';
 import {writtenValue} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
-import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
+import {LAYER_GLOBAL, LAYER_PLACEHOLDER, answerFor, countQueuedImmediates, drawnWhole, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
+import {PHONE_WINDOW} from './picture-window.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -692,13 +693,14 @@ function nestedLayers(open) {
 
 /**
  * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
- * as nothing when nothing opens), or `mounted`, as the browser shows the part
- * once it runs, nothing opened.
- * @type {Array<{element: unknown, ifOpen: boolean, mounted: boolean}>}
+ * as nothing when nothing opens), `mounted`, as the browser shows the part
+ * once it runs, nothing opened, or `phone`, mounted in a phone's window and
+ * drawn whole (a piece it loads on showing, an open navigation drawer).
+ * @type {Array<{element: unknown, ifOpen: boolean, mounted: boolean, phone?: boolean}>}
  */
 const layers = [];
-/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, /** @type {boolean | 'mounted'} */ how = false) =>
-  layerPlaceholder(layers.push({element, ifOpen: how === true, mounted: how === 'mounted'}) - 1);
+/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, /** @type {boolean | 'mounted' | 'phone'} */ how = false) =>
+  layerPlaceholder(layers.push({element, ifOpen: how === true, mounted: how === 'mounted' || how === 'phone', phone: how === 'phone'}) - 1);
 
 /**
  * Run `fn` with a document in place, as a browser page has one, then put
@@ -772,17 +774,19 @@ async function drawLayers(markup, server) {
   const g = /** @type {any} */ (globalThis);
   /** @type {string[]} */
   const drawings = [];
-  for (const {element, ifOpen, mounted} of layers) {
+  for (const {element, ifOpen, mounted, phone} of layers) {
     /** @type {string | null} */
     let out = null;
     if (client) {
       const host = g.document.createElement('div');
       g.document.body.appendChild(host);
       const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+      const was = phone ? answerFor(PHONE_WINDOW) : null;
       try {
         flushSync(() => root.render(element));
         if (mounted) {
           await settled();
+          if (phone) await drawnWhole(host);
           // A part that draws nothing in this window (a narrow screen's
           // navigation, in a desktop's) is its server render.
           out = host.innerHTML.replace(/<template><\/template>/g, '') || null;
@@ -811,6 +815,7 @@ async function drawLayers(markup, server) {
         // A part that failed to draw unmounts as nothing.
       }
       host.remove();
+      if (was) answerFor(was);
     }
     if (out == null && ifOpen) out = '';
     if (out == null)

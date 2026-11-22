@@ -478,10 +478,13 @@ export function catalogItems(project) {
     if (!mobile) continue;
     const demo = demoProps(project, name);
     if (!demo) continue;
+    // (Drawn in a phone's window as the browser runs it: Core loads the
+    // drawer on its first open, so a server render holds an empty one.)
     items.push({
       name,
       label: 'mobile',
       tree: {__element: name, props: {...demo, ...mobile}},
+      phone: true,
     });
   }
   /** @type {Record<string, string>} */

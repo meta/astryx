@@ -3,7 +3,8 @@
 /**
  * @file The window the editor's pictures are taken in.
  * @input None.
- * @output `PICTURE_WINDOW`: its width and height in CSS pixels;
+ * @output `PICTURE_WINDOW`: its width and height in CSS pixels; `PHONE_WINDOW`,
+ *   a phone's; `windowMatches(query, win)`: a query read in either;
  *   `desktopMatches(query)`: whether a media query matches there.
  * @position Read by the picture scripts (picture-chrome.mjs,
  *   picture-playwright.mjs), which open the browser at this size, by the
@@ -191,6 +192,16 @@ export const PLACE_LAYERS = `(() => {
 export const PICTURE_WINDOW = Object.freeze({width: 1280, height: 900});
 
 /**
+ * A phone's window: a part drawn for its phone layout (AppShell's open
+ * navigation drawer) is drawn in it, with touch for the pointer.
+ */
+export const PHONE_WINDOW = Object.freeze({
+  width: 390,
+  height: 844,
+  mobile: true,
+});
+
+/**
  * The DevTools commands that size a Chrome page for a picture: the editor's
  * window, or a job's own window. A phone's window also gets touch, as
  * Playwright's phone does, so a page laid out for touch (`pointer: coarse`)
@@ -229,6 +240,14 @@ const DESKTOP_POINTER = Object.freeze({
   'any-hover': 'hover',
 });
 
+/** The pointer of a phone's window: a finger, which does not hover. */
+const PHONE_POINTER = Object.freeze({
+  pointer: 'coarse',
+  'any-pointer': 'coarse',
+  hover: 'none',
+  'any-hover': 'none',
+});
+
 /** CSS pixels in an em or a rem, at the browser's default font size. */
 const EM_PX = 16;
 
@@ -262,18 +281,19 @@ const DESKTOP_DISPLAY = Object.freeze({
  * mouse for the pointer, and its display (DESKTOP_DISPLAY). Null for a
  * feature the window does not judge (motion, the color scheme).
  * @param {string} feature what the parentheses hold
+ * @param {{width: number, height: number, mobile?: boolean}} [win] the window (the picture's by default)
  * @returns {boolean | null}
  */
-function featureHolds(feature) {
-  const {width, height} = PICTURE_WINDOW;
+function featureHolds(feature, win = PICTURE_WINDOW) {
+  const {width, height} = win;
   /** @type {Record<string, number>} */
   const size = {width, height};
   const plain = /^\s*([a-z-]+)\s*(?::\s*(.*?))?\s*$/i.exec(feature);
   if (plain) {
     const [, name, value] = plain;
-    const pointer = /** @type {Record<string, string>} */ (DESKTOP_POINTER)[
-      name
-    ];
+    const pointer = /** @type {Record<string, string>} */ (
+      win.mobile ? PHONE_POINTER : DESKTOP_POINTER
+    )[name];
     if (pointer != null) return value == null || value.trim() === pointer;
     const display = /** @type {Record<string, string>} */ (DESKTOP_DISPLAY)[
       name
@@ -349,9 +369,10 @@ const INVALID_QUERY = new SyntaxError('invalid media query');
  * @param {string} text
  * @param {boolean} sure
  * @param {boolean} [withoutOr]
+ * @param {{width: number, height: number, mobile?: boolean}} [win]
  * @returns {Answer}
  */
-function conditionAnswer(text, sure, withoutOr = false) {
+function conditionAnswer(text, sure, withoutOr = false, win = PICTURE_WINDOW) {
   let at = 0;
   const skip = () => {
     while (at < text.length && /\s/.test(text[at])) at += 1;
@@ -405,7 +426,7 @@ function conditionAnswer(text, sure, withoutOr = false) {
     const feature = text.slice(at, end);
     if (end < 0 || feature.includes('(')) throw new SyntaxError(text);
     at = end + 1;
-    return featureHolds(feature) ?? (sure ? null : true);
+    return featureHolds(feature, win) ?? (sure ? null : true);
   };
   /** @param {boolean} top @returns {Answer} */
   const condition = top => {
@@ -443,18 +464,21 @@ function conditionAnswer(text, sure, withoutOr = false) {
  * conditionAnswer cannot read.
  * @param {string} part
  * @param {boolean} sure
+ * @param {{width: number, height: number, mobile?: boolean}} [win]
  * @returns {Answer}
  */
-function queryAnswer(part, sure) {
+function queryAnswer(part, sure, win = PICTURE_WINDOW) {
   const text = part.trim();
-  if (/^(\(|not\s*\()/i.test(text)) return conditionAnswer(text, sure);
+  if (/^(\(|not\s*\()/i.test(text))
+    return conditionAnswer(text, sure, false, win);
   const head = /^(?:(not|only)\s+)?([a-z]+)(?:\s+and\s+([\s\S]+))?$/i.exec(
     text,
   );
   if (!head) throw new SyntaxError(text);
   const [, modifier, type, rest] = head;
   const screen = !/^(print|speech)$/i.test(type);
-  const condition = rest == null ? true : conditionAnswer(rest, sure, true);
+  const condition =
+    rest == null ? true : conditionAnswer(rest, sure, true, win);
   const answer = screen ? condition : false;
   return modifier?.toLowerCase() === 'not' ? not(answer) : answer;
 }
@@ -464,13 +488,14 @@ function queryAnswer(part, sure) {
  * innermost parentheses must hold, and a leading `not` turns it round.
  * @param {string} part
  * @param {boolean} sure
+ * @param {{width: number, height: number, mobile?: boolean}} [win]
  * @returns {boolean}
  */
-function featuresMatch(part, sure) {
+function featuresMatch(part, sure, win = PICTURE_WINDOW) {
   const type = /^\s*(?:not\s+|only\s+)?([a-z]+)\s*(?:and\b|$)/i.exec(part)?.[1];
   const screen = type == null || !/^(print|speech)$/i.test(type);
   const answers = [...part.matchAll(/\(([^()]*)\)/g)].map(([, feature]) =>
-    featureHolds(feature),
+    featureHolds(feature, win),
   );
   if (sure && answers.includes(null)) return false;
   const all = screen && answers.every(a => a !== false);
@@ -508,13 +533,26 @@ function queryList(query) {
  * @returns {boolean}
  */
 export function desktopMatches(query, {sure = false} = {}) {
+  return windowMatches(query, PICTURE_WINDOW, {sure});
+}
+
+/**
+ * Whether a media query matches in a window, read as desktopMatches reads
+ * it: the picture's window, or a phone's (PHONE_WINDOW), with a finger for
+ * the pointer.
+ * @param {string} query
+ * @param {{width: number, height: number, mobile?: boolean}} win
+ * @param {{sure?: boolean}} [options]
+ * @returns {boolean}
+ */
+export function windowMatches(query, win, {sure = false} = {}) {
   return queryList(String(query)).some(part => {
     let answer;
     try {
-      answer = queryAnswer(part, sure);
+      answer = queryAnswer(part, sure, win);
     } catch (error) {
       if (error === INVALID_QUERY) return false;
-      return featuresMatch(part, sure);
+      return featuresMatch(part, sure, win);
     }
     return answer === true;
   });

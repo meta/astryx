@@ -22,7 +22,7 @@
  *   theme editor writes (_catalog.mjs)
  */
 
-import {desktopMatches} from './picture-window.mjs';
+import {PICTURE_WINDOW, windowMatches} from './picture-window.mjs';
 import {promisify} from 'node:util';
 import {chartDocument} from './charts.mjs';
 
@@ -80,7 +80,7 @@ export async function layerDocument() {
   // hovers. A part that asks about the pointer (a submenu flies out beside a
   // mouse and drills in under a finger) draws as it does there.
   g.window.matchMedia = g.matchMedia = (/** @type {string} */ query) => ({
-    matches: desktopMatches(query),
+    matches: windowMatches(query, drawWindow),
     media: query,
     addEventListener() {},
     removeEventListener() {},
@@ -350,6 +350,82 @@ export function countQueuedImmediates() {
     return nativeClearImmediate(handle);
   };
 }
+
+/** The window media queries are answered for: the picture's, or a phone's while a part is drawn for its phone layout. */
+let drawWindow =
+  /** @type {{width: number, height: number, mobile?: boolean}} */ (
+    PICTURE_WINDOW
+  );
+
+/**
+ * Answer media queries for a window from now on (a phone's while a part is
+ * drawn for its phone layout), and give back the one answered before.
+ * @param {{width: number, height: number, mobile?: boolean}} win
+ * @returns {{width: number, height: number, mobile?: boolean}}
+ */
+export function answerFor(win) {
+  const was = drawWindow;
+  drawWindow = win;
+  phoneDialogs(Boolean(win.mobile));
+  return was;
+}
+
+/** The dialog calls a phone draw gives the document's elements, to take back after it. */
+const PHONE_DIALOG_CALLS = ['show', 'showModal', 'close'];
+
+/**
+ * Give the document's elements a dialog's calls while a part is drawn for
+ * its phone layout, and take them back after: the layer document's dialog
+ * is a plain element, and a navigation drawer opens with `showModal`.
+ * Other draws keep the document as it is, so the overlays they open stay
+ * as they were.
+ * @param {boolean} on
+ */
+function phoneDialogs(on) {
+  const g = /** @type {any} */ (globalThis);
+  const proto = g.window?.Element?.prototype;
+  if (!proto || g.window.HTMLDialogElement?.prototype?.showModal) return;
+  for (const name of PHONE_DIALOG_CALLS)
+    if (!on) {
+      if (proto[name]?.[PHONE_CALL]) delete proto[name];
+    } else if (!(name in proto)) {
+      const call =
+        name === 'close'
+          ? /** @this {any} */ function () {
+              this.removeAttribute('open');
+            }
+          : /** @this {any} */ function () {
+              this.setAttribute('open', '');
+            };
+      /** @type {any} */ (call)[PHONE_CALL] = true;
+      proto[name] = call;
+    }
+}
+
+/** Marks a dialog call phoneDialogs added. */
+const PHONE_CALL = Symbol('astryx.render.phone-dialog-call');
+
+/**
+ * Wait until a drawn part stops changing: a part that loads a piece of
+ * itself when it shows (an open navigation drawer, loaded on first open)
+ * draws it a few tasks later. Bounded, so a part that never settles is read
+ * as it is then.
+ * @param {any} host
+ * @returns {Promise<void>}
+ */
+export async function drawnWhole(host) {
+  let was = host.innerHTML;
+  for (let i = 0, same = 0; i < WHOLE_TURNS && same < 2; i++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await settled();
+    const now = host.innerHTML;
+    same = now === was ? same + 1 : 0;
+    was = now;
+  }
+}
+
+/** The most turns drawnWhole waits for a part to stop changing. */
+const WHOLE_TURNS = 100;
 
 /** The global the render worker installs for parts a page shows open in place. SYNC: page-worker.mjs assigns it by this name. */
 export const LAYER_GLOBAL = '__astryxRenderLayer';

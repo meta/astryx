@@ -4,13 +4,18 @@
  * @file The part census renders a component's mobile layout too: a doc's
  * `playground.mobile` props over its demo are one more catalog item, so the
  * parts only that layout draws (AppShell's menu button in the top bar, its
- * open drawer) are recorded like any part.
+ * open drawer) are recorded like any part. The item is drawn in a phone's
+ * window as the browser runs it, so the drawer Core loads on its first open
+ * is drawn whole.
  *
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {catalogItems} from './_parts.mjs';
+import {context} from './_context.mjs';
+import {themeEditNew} from './theme-edit.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 import {openProject} from './_project.mjs';
 import {
   makeLinkedFixture,
@@ -18,11 +23,20 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
+
 /** @type {string} */
 let cwd;
+/** @type {string | null} */
+let unbuilt = null;
 
-beforeAll(() => {
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-census-mobile-', FIXTURE_PACKAGES);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
 }, 300_000);
 
 afterAll(() => {
@@ -50,6 +64,15 @@ describe('the census of a mobile layout', () => {
       ),
     ).toEqual(['Inbox', 'Reports']);
   });
+
+  it("records the open drawer's parts, which Core loads on the drawer's first open", async ctx => {
+    if (unbuilt) return ctx.skip(unbuilt);
+    await themeEditNew('mob', {cwd, like: 'neutral'});
+    // (The phone menu draws the top bar's links in the drawer: the census
+    // reads them there, under the drawer's mode.)
+    const {C} = /** @type {any} */ (await context(cwd));
+    expect(JSON.stringify(C.MAP['top-nav-item'] ?? {})).toMatch(/mode=drawer/);
+  }, 240_000);
 
   it('adds no item for a component that declares no mobile layout', async () => {
     const project = await openProject(cwd);

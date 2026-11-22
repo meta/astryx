@@ -16,11 +16,13 @@
 
 /**
  * @typedef {{__element: string, props?: Record<string, unknown>, children?: unknown}} Tree
- * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, mounted?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown, strip?: boolean, anchored?: boolean, states?: boolean}} CatalogItem
+ * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, mounted?: boolean, phone?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown, strip?: boolean, anchored?: boolean, states?: boolean}} CatalogItem
  *   `open`: drawn open in a document after the server render (a popover,
  *   tooltip or menu, which Core places only once mounted: layers.mjs);
  *   `mounted`: drawn as the browser shows it once it runs, nothing opened
  *   (a part Core finishes as it mounts: a table's selected row);
+ *   `phone`: mounted in a phone's window and drawn whole, with any piece it
+ *   loads as it shows (AppShell's open navigation drawer);
  *   `openable`: also shown open in the overlays section when it holds an
  *   overlay a press opens (a dropdown's menu, a selector's list);
  *   `onlyOpen`: in the page for that open look alone; `openTree`: the part
@@ -531,7 +533,7 @@ export function pageSource({
     // date), so a part that holds it is drawn as the browser mounts it; so
     // is an overlay shown open with no layer, which loads what it lists once
     // mounted (a command palette's items).
-    `function html(tree, mode = MODE, open = false) { try { const node = el(tree); const whole = theme ? React.createElement(Theme, {theme, mode}, node) : node; const markup = renderToStaticMarkup(whole); const layered = markup.includes('<template></template>'); if (open === 'ifOpen' && !layered) return null; const mounted = open === 'mounted' || open === true && !layered || !open && markup.includes(' inert=""'); const draw = (open && layered) || mounted ? globalThis[${JSON.stringify(LAYER_GLOBAL)}] : null; return draw ? draw(whole, mounted ? 'mounted' : open === 'ifOpen') : markup; } catch { return null; } }`,
+    `function html(tree, mode = MODE, open = false) { try { const node = el(tree); const whole = theme ? React.createElement(Theme, {theme, mode}, node) : node; const markup = renderToStaticMarkup(whole); const layered = markup.includes('<template></template>'); if (open === 'ifOpen' && !layered) return null; const mounted = open === 'mounted' || open === 'phone' || open === true && !layered || !open && markup.includes(' inert=""'); const draw = (open && layered) || mounted ? globalThis[${JSON.stringify(LAYER_GLOBAL)}] : null; return draw ? draw(whole, open === 'phone' ? 'phone' : mounted ? 'mounted' : open === 'ifOpen') : markup; } catch { return null; } }`,
   );
   // A theme with both modes: each part is rendered in light and in dark, as
   // the app renders it in each (a part that picks its look from the mode as
@@ -561,11 +563,11 @@ export function openLayerElements() {
 export default function Page() {
   if (LAYOUT === 'catalog') {
     return h('div', null, ITEMS.map((it, i) => {
-      const markup = html(it.tree);
+      const markup = html(it.tree, MODE, it.phone ? 'phone' : false);
       return markup == null ? null : h('section', {key: i, 'data-cat': it.name, dangerouslySetInnerHTML: {__html: markup}});
     }));
   }
-  const rendered = ITEMS.map(it => ({...it, markup: modes(it.tree, it.mounted ? 'mounted' : it.open)})).filter(it => it.markup != null);
+  const rendered = ITEMS.map(it => ({...it, markup: modes(it.tree, it.phone ? 'phone' : it.mounted ? 'mounted' : it.open)})).filter(it => it.markup != null);
   // A part only in this page for its open look (the overlays section alone)
   // is not shown closed.
   const done = rendered.filter(it => !it.onlyOpen);
