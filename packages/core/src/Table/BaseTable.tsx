@@ -50,6 +50,10 @@ import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import {isRenderable} from '../utils/isRenderable';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {warnOnce} from '../utils/devWarning';
+// Bundlers replace this value at build time; production builds drop the
+// activation diagnostics below with it, so tables that never import the
+// plugin carry none of their bytes (INV10).
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -243,7 +247,10 @@ function isActivationNeutralized<T extends Record<string, unknown>>(
   if (claims.length > 1) {
     // The diagnostic names activation: two non-activation owners leave the
     // pipeline unchanged for activation, so they stay silent here.
-    if (claims.some(plugin => plugin.wholeRowOwner === 'activation')) {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      claims.some(plugin => plugin.wholeRowOwner === 'activation')
+    ) {
       warnOnce(
         'table-whole-row-owner',
         'Table',
@@ -1304,6 +1311,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // Parent-owned identity diagnostics. The resolved identity array carries
   // every row's status, so these read it instead of recomputing keys.
   if (
+    process.env.NODE_ENV !== 'production' &&
     canonicalIdentityOptIn &&
     idKey != null &&
     hasData &&
@@ -1319,7 +1327,12 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // An identity-dependent plugin without an explicit idKey stays inert on
   // every row: the plugin cannot tell a missing idKey from an invalid value,
   // so the parent owns this diagnostic and the plugin stays silent.
-  if (canonicalIdentityOptIn && idKey == null && hasData) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    canonicalIdentityOptIn &&
+    idKey == null &&
+    hasData
+  ) {
     warnOnce(
       'table-identity-plugin-without-idkey',
       'Table',
