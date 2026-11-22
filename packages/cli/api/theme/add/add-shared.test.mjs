@@ -698,7 +698,7 @@ describe('theme add with a shared theme', () => {
     expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
   });
 
-  it('adds the theme but not editor state when a file stands where its folder goes, and says so', async () => {
+  it('adds the theme but not editor state when a file or a dangling link stands where its folder goes, and says so', async () => {
     fs.writeFileSync(path.join(app, 'themes'), 'not a folder\n');
     writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean', {editor: true});
     fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
@@ -709,11 +709,20 @@ describe('theme add with a shared theme', () => {
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
     expect(result.data.copy?.workingFiles).toMatchObject({
       files: [],
-      notCopied: expect.stringMatching(/themes is a file, not a folder/),
+      notCopied: expect.stringMatching(/themes is not a folder/),
     });
     expect(fs.readFileSync(path.join(app, 'themes'), 'utf8')).toBe(
       'not a folder\n',
     );
+    fs.rmSync(path.join(app, 'themes'));
+    // (A link that leads nowhere holds no folder either.)
+    fs.symlinkSync(path.join(app, 'nowhere'), path.join(app, 'themes'));
+    await themeRemove('ocean', {cwd: app});
+    const linked = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(linked.data.copy?.workingFiles).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(/themes is not a folder/),
+    });
     fs.rmSync(path.join(app, 'themes'));
   });
 
