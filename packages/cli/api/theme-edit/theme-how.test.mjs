@@ -3492,6 +3492,50 @@ const QUESTIONS_J = [
     'one and a half line height for body',
     {top: /^set q --text-body-leading 1\.5$/},
   ],
+  // a leading in pixels, said on its own, is a ratio of the text size
+  // another clause says, else of the body text size now
+  [
+    '13px text, 18px leading',
+    {top: /^set q text-size 13 && set q --text-body-leading 1\.385$/},
+  ],
+  ['18px leading', {top: /^set q --text-body-leading 1\.286$/}],
+  // (only a pixel size the text-size answer writes as typed; a size labeled
+  // as the text's is never the leading)
+  [
+    'make the text 2px bigger, 20px line height',
+    {top: /^set q text-size 16 && set q --text-body-leading 1\.57$/},
+  ],
+  [
+    'font size 1rem, 24px leading',
+    {top: /^set q text-size 16 && set q --text-body-leading 1\.57$/},
+  ],
+  [
+    'font size 16px line height 150%',
+    {top: /^set q --text-body-leading 2\.14$/},
+  ],
+  [
+    'font size 16px line height normal',
+    {top: /^(?!.*--text-body-leading 1\.143)/},
+  ],
+  [
+    'make the text bigger, 18px leading',
+    {top: /^(?!.*--text-body-leading 1\.286)/},
+  ],
+  [
+    'body text 16px line height relaxed',
+    {top: /^(?!.*--text-body-leading 1\.143)/},
+  ],
+  ['text size 12pt, 18px leading', {top: /^(?!.*--text-body-leading 1\.125)/}],
+  [
+    'heading font size 24px, body 14px text, 20px leading',
+    {top: /--text-body-leading 1\.429$/},
+  ],
+  [
+    'Type: Helvetica 13px body, 18px leading, headings 24px',
+    {top: /--text-body-leading 1\.385/},
+  ],
+  ['headings 32px line height', {top: /^set q line-height 32px --on heading$/}],
+  ['Type: Helvetica 13px, 18px leading', {top: /--text-body-leading 1\.385$/}],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],

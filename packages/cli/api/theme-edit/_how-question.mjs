@@ -13290,6 +13290,57 @@ export function draftAnswer(ctx, env, question) {
   const seenAspect = (/** @type {string} */ a) => {
     if (!aspectsSeen.includes(a)) aspectsSeen.push(a);
   };
+  /**
+   * The text size in pixels another clause of the question says ("13px
+   * text", "font size 13px", "Type: Helvetica 13px"), for a leading said
+   * in pixels on its own. Only a clause on the body or the whole theme that
+   * a text-size answer reads counts, so the size the leading is measured
+   * against is the size written. `unread` when a body clause says a size
+   * no answer reads ("13px body text with 18px leading"): the leading then
+   * keeps its plain reading.
+   * @param {Clause} c the leading's own clause
+   * @returns {number | 'unread' | null}
+   */
+  const saidTextPx = c => {
+    const onBody = (/** @type {Clause} */ o) =>
+      o.parts.every(x => x.on === 'body');
+    const SAID =
+      /\b(\d+(?:\.\d+)?)\s?px\s+(?:(?:body|base|main)\s+)?(?:text|font|type)\b|\b(?:text|font)(?:[- ]size)?\s*:?\s*(\d+(?:\.\d+)?)\s?px\b/i;
+    const others = clauses.filter(
+      x =>
+        x !== c &&
+        onBody(x) &&
+        !/\b(?:line[- ]?height|leading)\b/i.test(x.text),
+    );
+    // (A size the text-size answer writes as typed only: a size in another
+    // unit, "font size 1rem", or a change, "the text 2px bigger", is no
+    // pixel size to divide by.)
+    const asTyped = (/** @type {Clause} */ o) =>
+      o.lengths.every(l => /^\d+(?:\.\d+)?px$/i.test(String(l).trim())) &&
+      // (A size typed in pt, rem or em reaches the clause as pixels already,
+      // so the ask as typed is checked.)
+      !/\d\s?(?:pt|rem|em)\b/i.test(asked0) &&
+      !/\b(?:bigger|smaller|larger|more|less|up|down|increase\w*|decrease\w*|by)\b/i.test(
+        o.text,
+      );
+    let unread = false;
+    for (const o of others) {
+      const read = o.aspects.includes('fontsize');
+      // (Or the whole theme's text size another clause asks, "Type:
+      // Helvetica 13px".)
+      const m =
+        SAID.exec(o.text) ??
+        (read ? /\b(\d+(?:\.\d+)?)\s?px\b/i.exec(o.text) : null);
+      if (read && !(o.lengths.length && asTyped(o))) {
+        unread = true;
+        continue;
+      }
+      if (!m) continue;
+      if (read) return Number(m[1] ?? m[2]);
+      unread = true;
+    }
+    return unread ? 'unread' : null;
+  };
   // The theme's own value (its settings applied), else the base theme's.
   /** @param {string} token @param {'light' | 'dark'} [mode] @param {number} [depth] @returns {string} */
   const current = (token, mode = 'light', depth = 0) => {
@@ -22900,19 +22951,67 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'leading': {
+        // A leading in pixels ("18px leading") is that many pixels over the
+        // text size: the size the question says for the text ("13px text,
+        // 18px leading" is 1.385), else the size the text has now.
+        // (Only a clause whose one length is the leading: a text size in
+        // the same clause keeps the plain reading.)
+        const pxLengths = c.text.match(/\b\d+(?:\.\d+)?\s?px\b/gi) ?? [];
+        // (Never a size labeled as the text's, "font size 16px line height
+        // 150%", nor beside a line height said another way.)
+        const pxLeading =
+          pxLengths.length === 1 &&
+          !/\b(?:text|font|copy|type)\b/i.test(c.text) &&
+          !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(?:\d+(?:\.\d+)?(?!\s?px\b|[\d.])|normal\b|tight\w*|loose\w*|more\b|less\b)/i.test(
+            c.text,
+          )
+            ? /\b(\d+(?:\.\d+)?)\s?px\b(?=\s*(?:of\s+)?(?:line[- ]?height|leading)\b)|\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*(\d+(?:\.\d+)?)\s?px\b/i.exec(
+                c.text,
+              )
+            : null;
+        // (On a part, the pixels as typed: its text size is its own.)
+        const leadOnBody = !on || on === 'body' || p?.role === 'body';
+        const textSaid =
+          pxLeading == null || !leadOnBody ? null : saidTextPx(c);
+        const leadPx =
+          pxLeading == null || textSaid === 'unread'
+            ? null
+            : Number(pxLeading[1] ?? pxLeading[2]);
+        const textPxSaid = typeof textSaid === 'number' ? textSaid : null;
+        const textPx =
+          textPxSaid ??
+          (leadPx == null || !leadOnBody
+            ? null
+            : lengthPx(
+                String(
+                  resolvedValue('--text-body-size') ||
+                    current('--text-body-size'),
+                ),
+              ));
+        const pxRatio =
+          leadPx == null
+            ? null
+            : !leadOnBody
+              ? `${leadPx}px`
+              : textPx
+                ? String(Number((leadPx / textPx).toFixed(3)))
+                : null;
         // An amount ("1.5x", "half") or a percent ("150%": of the line
         // height there now) is a factor, never a typed number.
         const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
         const leadFactor =
-          exactFactor(c.text) ??
-          (pctLeading ? Number(pctLeading[1]) / 100 : null);
+          pxRatio != null
+            ? null
+            : (exactFactor(c.text) ??
+              (pctLeading ? Number(pctLeading[1]) / 100 : null));
         const n =
-          leadFactor != null
+          pxRatio ??
+          (leadFactor != null
             ? null
             : (/\b(normal)\b/.exec(c.text)?.[1] ??
               /(?:^|\s)(\d(?:\.\d+)?)(?![\d.]|\s*(px|rem|em|%|x\b|times\b))/.exec(
                 c.text,
-              )?.[1]);
+              )?.[1]));
         const tok =
           !on || on === 'body' || p?.role === 'body'
             ? '--text-body-leading'
@@ -22943,7 +23042,9 @@ export function draftAnswer(ctx, env, question) {
               : '1.6');
         if (tok)
           return {
-            text: `body line height: --text-body-leading${now ? ` (now ${now})` : ''}`,
+            // (A leading typed in pixels names its reading, so the answer
+            // says what it read.)
+            text: `body line height: --text-body-leading${pxRatio != null && textPx ? `, ${leadPx}px over ${textPx}px text: ${pxRatio}` : ''}${now ? ` (now ${now})` : ''}`,
             options: [[set(tok, value)]],
           };
         return {
