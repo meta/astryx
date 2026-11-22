@@ -202,7 +202,7 @@ export const doc = {
       value: 'icon.search',
       stability: 'experimental',
       description:
-        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when a definition names the icon: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
+        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when the set's `map` names the icon for a meaning: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
     },
     {
       value: 'icon.detail',
@@ -214,7 +214,7 @@ export const doc = {
       value: 'icon.list',
       stability: 'experimental',
       description:
-        "The project's icon-set state (status, projectSet, reason), each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers (built-in, all of Astryx's, and its own), and each withdrawn set with its reason.",
+        "The project's icon-set state (status, projectSet, reason), each installed set with its package, license, icon count, default variant, declared variants, and the icon meanings its `map` covers (built-in, all of Astryx's, and its own), and each withdrawn set with its reason.",
     },
     {
       value: 'icon.use',
@@ -232,19 +232,19 @@ export const doc = {
       value: 'icon.map',
       stability: 'experimental',
       description:
-        'One `map` entry of the icon set being authored: the set, its package, the data file, the definition, the icon id now mapped (null after --remove), the id it replaced, and whether the file changed.',
+        'One `map` entry of the icon set being authored: the set, its package, the data file, the meaning, the icon id now mapped (null after --remove), the id it replaced, and whether the file changed.',
     },
     {
       value: 'icon.add',
       stability: 'experimental',
       description:
-        "One icon registered in the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the definition mapped to it, the definition file written when it added the set's own, the files written, and whether anything changed.",
+        "One icon added to the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the meaning mapped to it, the definition file written when it added the set's own meaning, the files written, and whether anything changed.",
     },
     {
       value: 'icon.definitions',
       stability: 'experimental',
       description:
-        'Every Astryx icon definition (--definitions): each {name, builtIn, description, words}.',
+        'Every Astryx icon meaning (--definitions): each {name, builtIn, description, words}.',
     },
     {
       value: 'icon.setIcons',
@@ -262,7 +262,7 @@ export const doc = {
       value: 'icon.definitionMatches',
       stability: 'experimental',
       description:
-        "The icon definitions that fit an export, before it is added: the export, its source module, the id it would get, at most 10 matches {name, description, source (astryx or set), score, reason, command}, and the command that adds the set's own definition when none fits.",
+        "The icon meanings that fit an export, before it is added: the export, its source module, the id it would get, at most 10 matches {name, description, source (astryx or set), score, reason, command}, and the command that adds the set's own meaning when none fits.",
     },
     {
       value: 'icon.newSet',
@@ -274,7 +274,7 @@ export const doc = {
       value: 'icon.newDefinition',
       stability: 'experimental',
       description:
-        "An icon set's own icon definition: its name, the manifest file, the files written (the definition and, with --icon, the data file), and whether they were written or only planned.",
+        "An icon set's own icon meaning: its name, the manifest file, the files written (the meaning and, with --icon, the data file), and whether they were written or only planned.",
     },
 
     // discover (external / integration packages)
