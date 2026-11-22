@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * A height set on a text input reaches the inputs drawn one line tall, never
- * the text area: a multi-line field grows with its rows, and a one-line
- * height would shut it to one line over its own text. The result names the
+ * A height, a min-height or a state's height set on a text input reaches the
+ * inputs drawn one line tall, never the text area: a multi-line field grows
+ * with its rows, and a one-line height would shut it to one line over its
+ * own text. The result names the
  * text area as not reached, with the line that sizes it too. Against a real
  * bundled base theme.
  */
@@ -74,4 +75,25 @@ describe('a height on a text input', () => {
     );
     expect(run.data.parts).toEqual(['text-area']);
   }, 240_000);
+
+  for (const [thing, state] of [
+    ['min-height', undefined],
+    ['height', 'hover'],
+  ])
+    it(`a ${thing}${state ? ` on ${state}` : ''} leaves the text area its own, and names it`, async ctx => {
+      if (needBases(ctx)) return;
+      const slug = `m${thing.length}${state ?? ''}`;
+      await themeEditNew(slug, {cwd, like: 'neutral'});
+      const r = /** @type {any} */ (
+        await themeEditSet(slug, thing, '40px', {
+          cwd,
+          on: 'text-input',
+          ...(state ? {state} : {}),
+        })
+      );
+      expect(r.data.parts).not.toContain('text-area');
+      expect(r.data.notes.join('\n')).toMatch(
+        new RegExp(`${thing} does not reach text-area`),
+      );
+    }, 240_000);
 });
