@@ -5036,10 +5036,42 @@ export function draftAnswer(ctx, env, question) {
       const mode = /\b(?:in\s+)?(dark|light)\s+(?:mode|theme)\b/i.exec(
         own,
       )?.[1];
-      const others = own
+      // (A state word said just before the part, "the border on the selected
+      // tab", "hovered cards", takes the look away in that state only. It is
+      // read with the part, so "active tab" is the selected one; the part's
+      // own words never name a state, "hover card".)
+      const before = own
+        .slice(0, own.toLowerCase().indexOf(longest[0].trim()))
+        .trim()
+        .split(/\s+/)
+        .pop()
+        ?.toLowerCase();
+      // (Only a plain word names the state: "non-hovered", "hovered/pressed"
+      // or "*selected*" keeps the earlier reading.)
+      if (before && !/^[a-z]+$/.test(before) && stateWord(before)) return m;
+      // (A state said after "not", "not hovered cards", keeps the earlier
+      // reading too.)
+      if (
+        before &&
+        stateWord(before) &&
+        /\b(?:not|never|no)\s+\S+\s*$/i.test(
+          own.slice(0, own.toLowerCase().indexOf(longest[0].trim())),
+        )
+      )
+        return m;
+      const state = before
+        ? stateWord(
+            before === 'active' ? `${before} ${longest[0].trim()}` : before,
+          )
+        : null;
+      // (A state and a mode said together keep the earlier reading.)
+      if (mode && state) return m;
+      const besidePart = own
         .toLowerCase()
         .replace(/\b(?:in\s+)?(?:dark|light)\s+(?:mode|theme)\b/, ' ')
         .replace(longest[0].trim(), ' ')
+        .replace(state ? new RegExp(`\\b${before}\\b`) : /$^/, ' ');
+      const others = besidePart
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
         .filter(Boolean);
@@ -5053,7 +5085,8 @@ export function draftAnswer(ctx, env, question) {
       // (A "!" or "?" before it ends the ask before, as a full stop does.)
       const stop = String(lead).replace(/[!?]/, '.');
       const inMode = mode ? ` in ${mode.toLowerCase()} mode` : '';
-      return `${stop}no ${word} on ${part}${inMode}`;
+      const when = state ? ` when ${state}` : '';
+      return `${stop}no ${word} on ${part}${when}${inMode}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
