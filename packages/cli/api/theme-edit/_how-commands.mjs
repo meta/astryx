@@ -373,7 +373,9 @@ export async function howTheme(ctx, cwd, name) {
           if (exact)
             return {
               ok: false,
-              why: `${slug} saves an exact ${token} (${exact.value}${exact.mode ? `, ${exact.mode} mode` : ''}), which wins over the dial; take it back with \`${P} undo ${slug} ${token}${exact.mode ? ` --mode ${exact.mode}` : ''}\` for the dial to show`,
+              why: exact.mode
+                ? `${slug} saves an exact ${token} (${exact.value}) for ${exact.mode} mode, which wins over the dial in ${exact.mode} mode; \`${P} set ${slug} ${st.thing} ${st.value}\` still sets the other mode, and \`${P} undo ${slug} ${token} --mode ${exact.mode}\` lets the dial reach ${exact.mode} mode too`
+                : `${slug} saves an exact ${token} (${exact.value}), which wins over the dial; take it back with \`${P} undo ${slug} ${token}\` for the dial to show`,
               fileWash: true,
             };
         }

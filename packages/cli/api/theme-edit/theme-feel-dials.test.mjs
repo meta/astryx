@@ -258,6 +258,20 @@ describe('the press and hover dials', () => {
       const text = JSON.stringify(r.results);
       expect(text).toContain('fe saves an exact --color-overlay-pressed');
       expect(text).not.toContain('already lighter');
+      // (Saved for one mode, it wins only there: the answer names the line
+      // that still sets the other mode.)
+      await themeEditNew('fm', {cwd, like: 'neutral'});
+      await themeEditSet('fm', '--color-overlay-pressed', '#ff000033', {
+        cwd,
+        mode: 'dark',
+      });
+      const one = JSON.stringify(
+        /** @type {any} */ (
+          (await themeEditHow('darker on press', {cwd, theme: 'fm'})).data
+        ).results,
+      );
+      expect(one).toContain('for dark mode, which wins over the dial in dark mode');
+      expect(one).toContain('set fm press darker');
     },
     T,
   );
