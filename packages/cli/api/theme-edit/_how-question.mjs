@@ -15752,14 +15752,38 @@ export function draftAnswer(ctx, env, question) {
     // selectors) and the surfaces' and overlays' (--radius-container:
     // cards, dialogs, popovers, menus), each said by its role.)
     {
+      // ("controls with 12px corners": the role leads the with-list, so
+      // the clause before it holds the role alone; "give overlays 12px
+      // corners": the role after the verb.)
+      // (Only the role itself before the size: "make the surfaces glass,
+      // 8px corners" is the glass look, never the containers' corners.)
+      const prev = clauses[clauses.indexOf(c) - 1];
+      const ROLE_WORD = String.raw`(?:the\s+|all\s+)?(controls?|elements?|overlays?|surfaces?|containers?)`;
+      const ledBy =
+        c.joint === 'with' &&
+        prev &&
+        !prev.parts.length &&
+        !prev.aspects.length &&
+        !prev.lengths.length &&
+        new RegExp(String.raw`^${ROLE_WORD}$`).test(
+          prev.text.toLowerCase().trim(),
+        )
+          ? prev
+          : null;
+      const own = c.text.toLowerCase().trim();
       const role =
         !c.parts.length &&
         c.aspects.length === 1 &&
         c.aspects[0] === 'corners' &&
         c.lengths.length === 1
-          ? /^(?:the\s+|all\s+)?(controls?|elements?|overlays?|surfaces?|containers?)\b/.exec(
-              c.text.toLowerCase(),
-            )?.[1]
+          ? ledBy
+            ? new RegExp(String.raw`^${ROLE_WORD}$`).exec(
+                ledBy.text.toLowerCase().trim(),
+              )?.[1]
+            : (new RegExp(String.raw`^${ROLE_WORD}\b`).exec(own)?.[1] ??
+              new RegExp(
+                String.raw`^(?:give|make|set|round)\s+${ROLE_WORD}\s+\d*\.?\d+(?:px|rem|em)?\s+(?:corners?|radius|radii)$`,
+              ).exec(own)?.[1])
           : undefined;
       const token = role
         ? /^(?:controls?|elements?)$/.test(role)
@@ -15767,6 +15791,7 @@ export function draftAnswer(ctx, env, question) {
           : '--radius-container'
         : undefined;
       if (token && Object.hasOwn(TOKENS, token)) {
+        if (ledBy) ledBy.text = '';
         const d = {
           text: `corners on ${role}: ${token} ${c.lengths[0]}, the corner size ${token === '--radius-element' ? 'controls (buttons, inputs, selectors)' : 'surfaces and overlays (cards, dialogs, popovers, menus)'} read`,
           options: [[set(token, c.lengths[0])]],
