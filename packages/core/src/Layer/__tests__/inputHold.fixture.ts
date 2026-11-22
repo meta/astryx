@@ -9,7 +9,8 @@
  *   popover (`#pop`) and a full-viewport layer (`#lift`) whose content and
  *   tint take the hits while a test may make its root take none, plus
  *   `window.__hold`: open a layer, hold and
- *   release it, release it inside a busy task, read what an element at a
+ *   release it, release it inside a busy task or around a planned time,
+ *   read what an element at a
  *   point is and what lies past a hold's shield there, a log of every
  *   click, tap recognition and popover toggle, and each finger press's time
  *   and when the page heard it
@@ -37,6 +38,7 @@ declare global {
       hold: (id: LayerId, scope: InputHoldScope) => void;
       release: () => void;
       releaseLate: (beforeMs: number, afterMs: number) => void;
+      releaseAt: (at: number, beforeMs: number, afterMs: number) => void;
       releasedAt: number;
       downs: {time: number; heardAt: number}[];
       hitAt: (x: number, y: number) => string;
@@ -146,6 +148,25 @@ window.__hold = {
       window.__hold.release();
       busy(afterMs);
     }, 0);
+  },
+  // One task around a planned page time `at`: it starts `beforeMs` before
+  // it, works until it, releases, then works `afterMs` more. A finger that
+  // goes down during it is dispatched after the release.
+  releaseAt(at, beforeMs, afterMs) {
+    const busyUntil = (end: number) => {
+      while (performance.now() < end) {
+        // The main thread stays busy.
+      }
+    };
+    setTimeout(
+      () => {
+        busyUntil(at);
+        window.__hold.releasedAt = performance.now();
+        window.__hold.release();
+        busyUntil(performance.now() + afterMs);
+      },
+      Math.max(0, at - beforeMs - performance.now()),
+    );
   },
   releasedAt: Number.NaN,
   downs,
