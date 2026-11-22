@@ -10,8 +10,9 @@
  *   mouse that does not move opens no tooltip, though the engine sends the
  *   trigger its arrival, and that the first move over it then opens the
  *   tooltip. A truncated Text that appears under a still mouse opens no
- *   tooltip either, nor does a wheel or keyboard scroll that brings the
- *   trigger under a still mouse. A mouse that moves onto the trigger opens it
+ *   tooltip either (the scroll cases are in
+ *   TooltipStillPointerScroll.interaction.browser.spec.ts, so CI's WebKit
+ *   leg runs them). A mouse that moves onto the trigger opens it
  *   as before, and a mouse already over the trigger when it mounts opens it
  *   on its first move.
  * @position Run with `pnpm test:a11y-contract`. Only a real engine sends the
@@ -180,81 +181,6 @@ test('a truncated Text that appears under a still mouse opens no tooltip until t
   await page.mouse.move(at.x + 1, at.y);
   await expect(page.getByRole('tooltip')).toBeVisible();
 });
-
-/**
- * Makes the page scroll and returns the trigger's centre. A spacer before the
- * story puts the trigger low enough to scroll up under the mouse, and one
- * after it gives the document room to scroll down.
- */
-async function scrollablePage(page: Page, trigger: Locator) {
-  await page.evaluate(() => {
-    const before = document.createElement('div');
-    before.style.height = '400px';
-    document.body.prepend(before);
-    const after = document.createElement('div');
-    after.style.height = '2000px';
-    document.body.append(after);
-  });
-  const box = await trigger.boundingBox();
-  if (box == null) {
-    throw new Error('the trigger has no layout box');
-  }
-  return {x: box.x + box.width / 2, y: box.y + box.height / 2};
-}
-
-const SCROLL_PX = 120;
-
-for (const how of ['wheel', 'keyboard'] as const) {
-  test(`a ${how} scroll that brings the trigger under a still mouse opens no tooltip until the mouse moves`, async ({
-    page,
-  }) => {
-    const trigger = await openStory(page);
-    const center = await scrollablePage(page, trigger);
-    const scrollBy = async () => {
-      if (how === 'wheel') {
-        await page.mouse.wheel(0, SCROLL_PX);
-      } else {
-        await page.evaluate(() => {
-          (document.activeElement as HTMLElement | null)?.blur();
-        });
-        await page.keyboard.press('ArrowDown');
-      }
-    };
-    // The distance one scroll step moves the page, measured with the mouse
-    // away from the trigger, then undone.
-    await page.mouse.move(REST.x, REST.y);
-    await scrollBy();
-    await expect
-      .poll(async () => page.evaluate(() => window.scrollY))
-      .toBeGreaterThan(0);
-    await page.waitForTimeout(300);
-    const step = await page.evaluate(() => window.scrollY);
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(0);
-
-    // The mouse rests where the trigger will be after one step.
-    const at = {x: center.x, y: center.y - step};
-    await page.mouse.move(at.x, at.y);
-    await scrollBy();
-    await expect
-      .poll(async () => page.evaluate(() => window.scrollY))
-      .toBe(step);
-    await expect
-      .poll(async () =>
-        trigger.evaluate(
-          (element, point) =>
-            element.contains(document.elementFromPoint(point.x, point.y)),
-          at,
-        ),
-      )
-      .toBe(true);
-    await page.waitForTimeout(WAIT_PAST_DELAY_MS);
-    await expect(page.getByRole('tooltip')).toBeHidden();
-
-    await page.mouse.move(at.x + 1, at.y);
-    await expect(page.getByRole('tooltip')).toBeVisible();
-  });
-}
 
 test('a mouse already over the trigger when it mounts opens the tooltip on its first move', async ({
   page,

@@ -548,16 +548,33 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // tooltip. A pointer that moves onto the trigger also moves over it in the
   // same frame, so a real hover opens after `delay`. Firefox sends that
   // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
-  // counts too.
+  // counts too. After a scroll WebKit also sends a move with no movement at
+  // the arrival's point: that is the arrival again, not a move.
   const isArrivalUnmovedRef = useRef(false);
-  const handleMouseEnter = useCallback(() => {
-    isArrivalUnmovedRef.current = !isTouchPointerRef.current;
-  }, [isTouchPointerRef]);
+  const arrivalPointRef = useRef<{x: number; y: number} | null>(null);
+  const handleMouseEnter = useCallback(
+    (event: MouseEvent) => {
+      isArrivalUnmovedRef.current = !isTouchPointerRef.current;
+      arrivalPointRef.current = {x: event.clientX, y: event.clientY};
+    },
+    [isTouchPointerRef],
+  );
   const handlePointerMove = useCallback(
     (event: MouseEvent) => {
       if (
         !isArrivalUnmovedRef.current ||
         (event as Partial<PointerEvent>).pointerType === 'touch'
+      ) {
+        return;
+      }
+      const arrival = arrivalPointRef.current;
+      if (
+        event.isTrusted &&
+        event.movementX === 0 &&
+        event.movementY === 0 &&
+        arrival != null &&
+        event.clientX === arrival.x &&
+        event.clientY === arrival.y
       ) {
         return;
       }
@@ -809,7 +826,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // which is what lets the hover path know it is looking at a finger.
       const onPointerEnter = (e: PointerEvent) =>
         latest().handlePointerEnter(e);
-      const onMouseEnter = () => latest().handleMouseEnter();
+      const onMouseEnter = (e: MouseEvent) => latest().handleMouseEnter(e);
       const onPointerMove = (e: MouseEvent) => latest().handlePointerMove(e);
       const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
       // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
