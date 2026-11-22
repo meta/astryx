@@ -117,10 +117,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept         | Closed values or states | Meaning                                                             | Availability by variant/orientation/state | Default         | Owner                   | Stability | Invalid-value behavior |
-| --------------- | ----------------------- | ------------------------------------------------------------------- | ----------------------------------------- | --------------- | ----------------------- | --------- | ---------------------- |
-| `isInline`      | `true`, `false`         | Renders the content inline as a non-modal preview (`role="group"`). | Always                                    | `false`         | `component:AlertDialog` | stable    | Type-rejected          |
-| `actionVariant` | Button variants         | The action button's emphasis.                                       | Always                                    | `'destructive'` | `component:Button`      | stable    | Button's behavior      |
+| Concept         | Closed values or states               | Meaning                                                                           | Availability by variant/orientation/state | Default         | Owner                   | Stability | Invalid-value behavior                                                                                                     |
+| --------------- | ------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------- | --------------- | ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `isInline`      | `true`, `false`                       | Renders the content inline as a non-modal preview (`role="group"`).               | Always                                    | `false`         | `component:AlertDialog` | stable    | Type-rejected                                                                                                              |
+| `actionVariant` | Button variants                       | The action button's emphasis.                                                     | Always                                    | `'destructive'` | `component:Button`      | stable    | Button's behavior                                                                                                          |
+| `description`   | Inline content: text, emphasis, links | States the consequence; may emphasize or link what is about to change (FR3, AR1). | Always                                    | Required        | `component:AlertDialog` | stable    | Not type-enforced: block content, controls other than links, and an empty description are unsupported, and the docs say so |
 
 ## Behavioral and layout contract
 
@@ -270,6 +271,22 @@ in every group of sibling actions (`spec:AST-094` DEC-17), so under the touch
 presentation an alert's two buttons behave like a button group.
 
 Rejected: keeping each action's activation on the browser's click alone.
+
+### DEC-5 — The description takes inline content
+
+**Reference:** `component:AlertDialog/DEC-5`
+**Decider:** proposed, pending `cixzhang`
+
+A confirmation often names exactly what is about to change: an old and a new
+setting, or the entity a delete removes. Emphasis or a link carries that
+meaning, so `description` takes inline content. It still renders in the body
+text that `aria-describedby` names, so its text is the dialog's accessible
+description. A link in it is an ordinary link in the dialog's Tab order;
+Cancel keeps initial focus (FR3).
+
+Rejected: a body slot of any content, which lets block content and controls
+other than links into an alert whose anatomy is title, description and two
+buttons.
 
 ## Open questions
 
