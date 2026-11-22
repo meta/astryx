@@ -4,10 +4,10 @@
 
 /**
  * @file useAttachment.ts
- * @input Node refs (an element's, or the document's) or functions that find
- *   a node after each commit, an attach function and a key
+ * @input Targets (a ref to an element or the document, or a function that
+ *   finds a node after each commit), an attach function and a key
  * @output Exports useAttachment and useAttachmentPair (two elements): they keep
- *   the attach function bound to the nodes the refs hold across commits
+ *   the attach function bound to the nodes the targets find across commits
  * @position Internal React helper, not in hooks/index.ts: the one attach and
  *   release lifecycle of the gesture hooks, the pager and useAnimator
  *
@@ -62,12 +62,12 @@ export function useAttachmentPair<A extends Element, B extends Element>(
 }
 
 /**
- * The lifecycle both share: one attachment of the nodes the refs hold. It is
+ * The lifecycle both share: one attachment of the nodes the targets find. It is
  * made once every node is there, and released when a node or `key` changes
  * and at unmount.
  */
 function useAttachedNodes(
-  refs: ReadonlyArray<AttachmentTarget<Node>>,
+  targets: ReadonlyArray<AttachmentTarget<Node>>,
   attach: (nodes: ReadonlyArray<Node>) => () => void,
   key: unknown,
 ): void {
@@ -77,10 +77,10 @@ function useAttachedNodes(
     release: () => void;
   } | null>(null);
 
-  // Syncs the attachment with the DOM nodes the refs hold after this commit.
+  // Syncs the attachment with the DOM nodes the targets find after this commit.
   useIsomorphicLayoutEffect(() => {
-    const nodes = refs.map(ref =>
-      typeof ref === 'function' ? ref() : ref.current,
+    const nodes = targets.map(target =>
+      typeof target === 'function' ? target() : target.current,
     );
     const current = attachmentRef.current;
     if (
