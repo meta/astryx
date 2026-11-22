@@ -1155,11 +1155,20 @@ export const HeadingOverflow: Story = {
   ),
 };
 
+// The longest heading sits in a resizable column. The last column takes the
+// remaining space and has no resize boundary.
+const resizableComparisonColumns: TableColumn<AppComparison>[] = [
+  {key: 'criterion', header: 'Criterion'},
+  {key: 'apple', header: 'Apple Notes'},
+  {key: 'obsidian', header: 'Obsidian'},
+  {key: 'notion', header: 'Notion'},
+];
+
 function ResizableHeadingTable() {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const resizePlugin = useTableColumnResize<AppComparison>({
     columnWidths,
-    columns: appComparisonColumns as TableColumn<Record<string, unknown>>[],
+    columns: resizableComparisonColumns as TableColumn<Record<string, unknown>>[],
     onColumnResizeEnd: updates => {
       setColumnWidths(previous => ({...previous, ...updates}));
     },
@@ -1167,7 +1176,7 @@ function ResizableHeadingTable() {
   return (
     <Table
       data={appComparison}
-      columns={appComparisonColumns}
+      columns={resizableComparisonColumns}
       idKey="id"
       density="compact"
       dividers="grid"
