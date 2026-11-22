@@ -373,6 +373,8 @@ describe("the weekly run's Firefox hover specs (report-only)", () => {
     expect(job.container.image).toBe(
       ci.jobs['pr-interaction-webkit'].container.image,
     );
+    // Firefox does not start as root in a HOME the runner's user owns.
+    expect(specs.env.HOME).toBe('/root');
   });
 
   it('stays out of the weekly verdict, so a red holds no release', () => {

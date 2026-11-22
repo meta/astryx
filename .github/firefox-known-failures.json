@@ -1,5 +1,5 @@
 {
-  "$comment": "The Firefox hover specs' known failures (FIREFOX_HOVER_SPECS in .github/scripts/lib/a11y-spec-files.mjs). Each one passes in Chromium on the same build. `tracking` names the issue it is filed under; failures with one cause share it. The Firefox report (.github/scripts/firefox-hover-report.mjs) counts these as known and every other failure as new. Remove an entry when its fix lands; the report names each known failure that now passes.",
+  "$comment": "The Firefox hover specs' known failures (FIREFOX_HOVER_SPECS in .github/scripts/lib/a11y-spec-files.mjs). Each one passes in Chromium on the same build. `tracking` is a short cause label: failures that look like one cause share it, and no issue is filed under it in this repository. The Firefox report (.github/scripts/firefox-hover-report.mjs) counts these as known and every other failure as new. Remove an entry when its fix lands; the report names each known failure that now passes.",
   "failures": [
     {
       "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuAudit.a11y.chromium.spec.ts",

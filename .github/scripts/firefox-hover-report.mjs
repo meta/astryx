@@ -8,8 +8,10 @@
  * @output A Markdown report on stdout (the step summary) and in
  *   `<out>/report.md`, with `<out>/report.json`. Its first line counts the
  *   known and the new failures. One annotation per failure: an error for a new
- *   one, a warning for a known one, and a notice for a known one that now
- *   passes. It always exits 0: the Firefox runs are report-only.
+ *   one, a warning for a known one (with its cause label), and a notice for a
+ *   known one that now passes. It always exits 0: the Firefox runs are
+ *   report-only. A run without results is never clean (noResultsReason, shared
+ *   with the WebKit report).
  * @position The Firefox steps in ci.yml run it after the specs.
  */
 
@@ -17,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import {testsOf} from './webkit-a11y-report.mjs';
+import {noResultsReason, runErrorsOf, testsOf} from './webkit-a11y-report.mjs';
 
 const CONFIG = 'playwright.config.ts';
 const KNOWN = path.resolve(
@@ -40,19 +42,9 @@ const cell = text => String(text).replace(/\|/g, '\\|');
 export function buildReport(report, known, {sha = ''} = {}) {
   const tests = report ? testsOf(report) : [];
   const knownByKey = new Map(known.map(entry => [keyOf(entry), entry]));
-  const errors = (report?.errors ?? []).map(
-    (/** @type {any} */ error) =>
-      String(error?.message ?? error)
-        .replace(/\x1b\[[0-9;]*m/g, '')
-        .split('\n')
-        .find(Boolean) ?? '',
-  );
-  if (!report || tests.length === 0) {
-    const why = !report
-      ? 'the specs did not run to the end'
-      : errors.length > 0
-        ? `the run stopped on ${plural(errors.length, 'error')}: ${errors.join('; ')}`
-        : 'no test ran (no spec file matched)';
+  const errors = runErrorsOf(report);
+  const why = noResultsReason(report, errors);
+  if (why) {
     return {
       summary: 'Firefox: no results',
       known: [],
@@ -124,7 +116,7 @@ export function buildReport(report, known, {sha = ''} = {}) {
       ? [
           '## Known failures',
           '',
-          '| Spec | Test | Error | Tracking | Run it again |',
+          '| Spec | Test | Error | Cause | Run it again |',
           '| --- | --- | --- | --- | --- |',
           ...rows(knownFailures),
           '',

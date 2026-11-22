@@ -5320,6 +5320,9 @@ jobs:
         id: specs
         continue-on-error: true
         env:
+          # The image runs as root, and a container job's HOME is a folder the
+          # runner's user owns: Firefox does not start as root there.
+          HOME: /root
           A11Y_CONTRACT_WORKERS: '4'
           PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
         run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
