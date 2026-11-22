@@ -340,6 +340,34 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
     ).rejects.toThrow(/astryx-oklch-v99 recipe, which this Astryx CLI/);
     expect(fs.readFileSync(kept, 'utf-8')).toBe(saved);
 
+    // (A receipt that names other bytes stays behind; the module still
+    // comes.)
+    const otherReceipt = path.join(
+      shared,
+      'editor/tokens/harbor.palette.receipt.json',
+    );
+    fs.writeFileSync(
+      otherReceipt,
+      JSON.stringify({
+        ...JSON.parse(fs.readFileSync(otherReceipt, 'utf-8')),
+        candidateSha256: '0'.repeat(64),
+      }),
+    );
+    const fourth = makeLinkedFixture(
+      'astryx-theme-add-kept4-',
+      FIXTURE_PACKAGES,
+    );
+    writeFixtureBaseTheme(fourth, 'neutral');
+    const unnamed = await themeAdd(shared, {cwd: fourth}).finally(() =>
+      removeLinkedFixture(fourth),
+    );
+    expect(unnamed.data.copy?.workingFiles?.files).toContain(
+      'tokens/harbor.palette.ts',
+    );
+    expect(unnamed.data.copy?.workingFiles?.files).not.toContain(
+      'tokens/harbor.palette.receipt.json',
+    );
+
     // (A module with anything past the generator's own form is code: the
     // theme is added without the editor state, and the add says why.)
     fs.writeFileSync(
