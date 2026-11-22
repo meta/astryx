@@ -13617,17 +13617,6 @@ export async function contrastProblems(ctx, data, res) {
     }
     return found;
   };
-  /** @type {Map<Setting, string[]>} */
-  const writtenBy = new Map();
-  /** The parts the build writes a setting on, read once. @param {Setting} x */
-  const written = x => {
-    let found = writtenBy.get(x);
-    if (found === undefined) {
-      found = writtenPartsOf(ctx, data, x);
-      writtenBy.set(x, found);
-    }
-    return found;
-  };
   /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string | null} [when] @param {string | null} [state] the state the pair is drawn in */
   const override = (side, _which, m, when, state = null) => {
     if (!side.target) return null;
@@ -13638,15 +13627,13 @@ export async function contrastProblems(ctx, data, res) {
       .sort((a, b) => Number(!!b.state) - Number(!!a.state))
       .find(
         x =>
+          parts(x).includes(/** @type {string} */ (side.target)) &&
           (!x.when || x.when === when) &&
           (!x.state || (state != null && x.state === state)) &&
           (!x.mode || x.mode === m) &&
           ((x.source === 'property' &&
             ['background', 'background-color'].includes(x.thing)) ||
-            (x.source === 'token' && side.tokens.includes(x.thing))) &&
-          // (Only a fill the build writes on the part: a part's own `--only`
-          // fill keeps it under a later group one.)
-          written(x).includes(/** @type {string} */ (side.target)),
+            (x.source === 'token' && side.tokens.includes(x.thing))),
       );
     return hit?.value ?? null;
   };
@@ -13951,7 +13938,7 @@ export async function contrastProblems(ctx, data, res) {
             test(x),
         ) ?? null;
     /** @param {Setting} x @param {string | null} t */
-    const on = (x, t) => t != null && written(x).includes(t);
+    const on = (x, t) => t != null && parts(x).includes(t);
     const own = p.fg.target;
     const around = p.bg.target !== own ? p.bg.target : null;
     const tokens = textTokens(p, m, value);
@@ -16924,26 +16911,24 @@ function scopedTextProblems(ctx, data, res) {
         (scoped
           ? (y.state ?? null) === st && (y.when ?? null) === when
           : !y.state && !y.when) &&
-        // (Only what the build writes on the part: a part's own `--only`
-        // look keeps it under a later group one.)
-        writtenPartsOf(ctx, data, y).includes(t);
+        partsOf(ctx, y).includes(t);
       /** The latest setting matching, scoped first, then at rest. @param {(y: Setting) => boolean} test @param {string} m */
       const latest = (test, m) =>
         [...data.settings].reverse().find(y => test(y) && here(y, m, true)) ??
         // (A state within a placement, a selected link in the phone menu,
         // draws the fill set for the state alone.)
         (st && when
-          ? [...data.settings].reverse().find(
-              y =>
-                test(y) &&
-                Boolean(y.on) &&
-                (!y.mode || y.mode === m) &&
-                (y.state ?? null) === st &&
-                !y.when &&
-                // (Only what the build writes on the part: its own
-                // `--only` state look keeps it under a later group one.)
-                writtenPartsOf(ctx, data, y).includes(t),
-            )
+          ? [...data.settings]
+              .reverse()
+              .find(
+                y =>
+                  test(y) &&
+                  Boolean(y.on) &&
+                  (!y.mode || y.mode === m) &&
+                  (y.state ?? null) === st &&
+                  !y.when &&
+                  partsOf(ctx, y).includes(t),
+              )
           : null) ??
         [...data.settings].reverse().find(y => test(y) && here(y, m, false)) ??
         null;
