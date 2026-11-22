@@ -444,10 +444,19 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderWidth: 0,
     borderStyle: 'none',
-    outline: 'none',
+    outlineStyle: 'none',
   },
   itemHighlighted: {
     backgroundColor: colorVars['--color-overlay-hover'],
+  },
+  // The fill alone does not reach 3:1 against the listbox. After keyboard
+  // input, the active option also draws the standard focus ring, inside the
+  // row by its own width, as Selector's active option does.
+  itemKeyboardHighlighted: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   itemDisabled: {
     opacity: 0.5,
@@ -1893,7 +1902,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     getItemId,
     getActionCellId,
     activeDescendantId,
-    onTriggerClick,
+    onTriggerClick: comboboxTriggerClick,
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
     setHighlightedIndex,
@@ -1937,12 +1946,37 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     setHighlightedIndex(-1);
   }
 
-  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
-    useKeyboardHighlight(
-      readModality,
-      onComboboxKeyDown,
-      onComboboxItemMouseEnter,
-    );
+  // Entering another option is pointer input, and so is moving from the
+  // active row's action cell back onto its option cell. Any other entry into
+  // the active row, such as a key scrolling a cell under a still pointer,
+  // keeps the ring.
+  const hoveredOptionOf = useCallback(
+    (...args: Parameters<typeof onComboboxItemMouseEnter>) =>
+      args[1] !== highlightedIndex ||
+      ((args[2] ?? 'option') === 'option' && highlightedCell === 'action')
+        ? args[1]
+        : null,
+    [highlightedIndex, highlightedCell],
+  );
+  const {
+    isKeyboardHighlight,
+    hoveredIndex,
+    setHoveredIndex,
+    noteHighlightMove,
+    onKeyDown,
+    onItemMouseEnter,
+  } = useKeyboardHighlight(
+    readModality,
+    onComboboxKeyDown,
+    onComboboxItemMouseEnter,
+    hoveredOptionOf,
+  );
+  // A press that opens the list is pointer input, so its opening highlight
+  // draws no ring.
+  const onTriggerClick = useCallback(() => {
+    comboboxTriggerClick();
+    noteHighlightMove();
+  }, [comboboxTriggerClick, noteHighlightMove]);
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the
@@ -2260,6 +2294,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           // In a grid the option cell is the click target, so a press on the
           // action cell never toggles (spec:AST-058 FR4).
           onClick={isGrid ? undefined : toggle}
+          // A press is pointer input, so the pressed option draws no ring,
+          // even when a key moved the highlight there.
+          onPointerDown={isGrid ? undefined : () => setHoveredIndex(flatIndex)}
           onMouseEnter={
             isGrid ? undefined : () => onItemMouseEnter(item, flatIndex)
           }
@@ -2280,6 +2317,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
               isSelectAll ? selectAllSizeStyles[size] : itemSizeStyles[size],
               isSelectAll && styles.selectAllWrapper,
               isHighlighted && styles.itemHighlighted,
+              // In a grid the action cell draws its own ring when it is the
+              // active cell.
+              isHighlighted &&
+                isKeyboardHighlight &&
+                flatIndex !== hoveredIndex &&
+                !(isGrid && highlightedCell === 'action') &&
+                styles.itemKeyboardHighlighted,
               item.disabled && styles.itemDisabled,
               isGrid && styles.gridRow,
             ),
@@ -2290,6 +2334,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                 role="gridcell"
                 id={`${getItemId(flatIndex)}-option`}
                 onClick={toggle}
+                onPointerDown={() => setHoveredIndex(flatIndex)}
                 onMouseEnter={() => onItemMouseEnter(item, flatIndex, 'option')}
                 {...stylex.props(styles.optionCell)}>
                 {content}
@@ -2323,6 +2368,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       isGrid,
       highlightedCell,
       isKeyboardHighlight,
+      hoveredIndex,
+      setHoveredIndex,
       getActionCellId,
       renderOption,
       indicatorPosition,
