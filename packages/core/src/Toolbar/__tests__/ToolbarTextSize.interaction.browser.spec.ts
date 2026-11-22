@@ -197,12 +197,12 @@ test('with a bottom divider a wrapped row paints its first frame with the indica
   // paints.
   await page.addInitScript(() => {
     const frameWindow = window as FirstFrameWindow;
-    new MutationObserver((_, mutations) => {
+    new MutationObserver((_records, observer) => {
       const row = document.querySelector('[role="toolbar"]');
       if (row == null) {
         return;
       }
-      mutations.disconnect();
+      observer.disconnect();
       const firstDelivery = new ResizeObserver(() => {
         firstDelivery.disconnect();
         const indicator = [
