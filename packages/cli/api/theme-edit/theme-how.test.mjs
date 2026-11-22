@@ -1024,14 +1024,36 @@ describe('stripe answers keep to the stripe', () => {
       /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
     );
   });
-  // Tables added after the striped ones keep every table with a mode said
-  // after them, or with another ask in a later clause; no odd line is scoped.
+  // Any other table named, with a mode, in a later ask or by its part name,
+  // keeps every table, as a stripe with no scope does; no odd line is scoped.
   it.each([
     'odd rows #f9f9f9 on striped tables and on plain tables in dark mode',
     'odd rows #f9f9f9 on striped tables and on plain tables in light mode',
     'odd rows #f9f9f9 on striped tables and on plain tables in dark mode only',
     'odd rows #f9f9f9 on striped tables and on plain tables in both modes',
     'odd rows #f9f9f9 on striped tables and on unstriped tables in dark mode',
+    'odd rows #f9f9f9 on striped tables and bold text in every table header',
+    'odd rows #f9f9f9 on striped tables, and a 1px border on every table',
+    'odd rows #f9f9f9 on striped tables and every table header bold',
+    'odd rows #f9f9f9 on striped tables, and every table gets a 1px border',
+    'odd rows #f9f9f9 on striped tables and all table headers bold',
+    'odd rows #f9f9f9 on striped tables, and all tables get rounded corners',
+    'odd rows #f9f9f9 on striped tables and plain tables get a 1px border',
+    'odd rows #f9f9f9 on striped tables, and all tables and buttons get rounded corners',
+    'odd rows #f9f9f9 on striped tables, and every table and card gets a 1px border',
+    'odd rows #f9f9f9 on striped tables and every table and every card get a 1px border',
+    'odd rows #f9f9f9 on striped tables, and all tables and badges get rounded corners',
+    'odd rows #f9f9f9 on striped tables, and all tables and menus get rounded corners',
+    'odd rows #f9f9f9 on striped tables, and all tables and inputs get rounded corners',
+    'odd rows #f9f9f9 on striped tables, and all tables and checkboxes get rounded corners',
+    'odd rows #f9f9f9 on striped tables, and all tables get taller rows',
+    'odd rows #f9f9f9 on striped tables and bold header rows on every table',
+    'odd rows #f9f9f9 on striped tables, and bold every table',
+    'odd rows #f9f9f9 on striped tables and outline every table',
+    'odd rows #f9f9f9 on striped tables, and round all tables',
+    'odd rows #f9f9f9 on striped tables and wider table columns',
+    'table-row odd rows #f9f9f9 on striped tables',
+    'odd rows #f9f9f9 on table-row in striped tables',
     'odd rows #f9f9f9 on striped tables and on plain tables, and buttons get rounded corners',
     'odd rows #f9f9f9 on striped tables and plain tables, and cards get a 1px border',
     'odd rows #f9f9f9 on striped tables and on every table, and buttons get rounded corners',
@@ -1070,76 +1092,28 @@ describe('stripe answers keep to the stripe', () => {
       'make all buttons rounder and odd rows #f9f9f9 on striped tables',
       /'#f9f9f9' --on table-row --when parity:odd --state striped/,
     ],
-    [
-      'odd rows #f9f9f9 on striped tables and bold text in every table header',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and a 1px border on every table',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables and every table header bold',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and every table gets a 1px border',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables and all table headers bold',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables get rounded corners',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables and plain tables get a 1px border',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables and buttons get rounded corners',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and every table and card gets a 1px border',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables and every table and every card get a 1px border',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables and badges get rounded corners',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables and menus get rounded corners',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables and inputs get rounded corners',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables and checkboxes get rounded corners',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables, and all tables get taller rows',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
-    [
-      'odd rows #f9f9f9 on striped tables and bold header rows on every table',
-      /'#f9f9f9' --on table-row --when parity:odd --state striped/,
-    ],
   ])('keeps the striped scope for %s', async (question, want) => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     const commands = (data.results ?? [])
       .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
       .join('\n');
     expect(commands).toMatch(want);
+  });
+  // Left out of striped tables, Core's own stripe is written back with its
+  // token there, never cleared.
+  it('takes back the even stripe with its token for even rows but not on striped tables', async () => {
+    const {data} = await themeEditHow('even rows #eeeeee but not on striped tables', {
+      cwd,
+      theme: 'q',
+    });
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+    expect(commands).toMatch(/'#eeeeee' --on table-row --when parity:even(?! --state)/);
+    expect(commands).toMatch(
+      /background-color 'var\(--color-background-muted\)' --on table-row --when parity:even --state striped/,
+    );
+    expect(commands).not.toMatch(/transparent --on table-row --when parity:even --state striped/);
   });
   // The stripe answer keeps the tables apart itself: it says what is kept,
   // never that they cannot be.

@@ -23,7 +23,7 @@ import {
   ratioWords,
 } from './_color.mjs';
 import {luminance} from '../theme/palette/generate/color.mjs';
-import {OVERRIDES, partForWord} from './_part-words.mjs';
+import {OVERRIDES} from './_part-words.mjs';
 import {DESIGN_WORDS, HUES, STATE_WORDS, TRANSLATE} from './_how-words.mjs';
 import {joinSideLists, sideColorsIn} from './_how-sides.mjs';
 import {outOfBounds, valueAsked} from './_how-values.mjs';
@@ -2692,15 +2692,11 @@ const ROW_METRICS = [
 ];
 
 /**
- * Whether a stripe asked on striped tables also names other tables to stripe
- * ("…and on plain tables", "…, plain tables too", "in every table, even on
- * striped tables"), read clause by clause: the clauses between commas,
- * semicolons, brackets and "but", and each "and" piece of one. The stripe's
- * own piece (its rows) adds the tables it names. Another piece adds them only
- * when it asks nothing of its own: "…and every table header bold" asks about
- * the headers, and "…, and all tables and buttons get rounded corners" joins
- * the tables to another ask's subject. Tables after "not", "except" or
- * "leave" are left out, never added.
+ * Whether a stripe asked on striped tables also names any other table
+ * ("…and on plain tables", "…, plain tables too", "…and every table header
+ * bold", "table-row …"): then it stays on every table, as a stripe with no
+ * scope does. Only striped tables named alone keep the scope. Tables after
+ * "not", "except", "leave" or "other than" are left out, never added.
  * @param {string} q the question as typed, lower-cased
  */
 function addsTables(q) {
@@ -2710,80 +2706,29 @@ function addsTables(q) {
     )
   )
     return true;
-  // Tables named besides the striped ones ("plain tables", "regular
-  // tables", "the rest of the tables", "plain ones"): never "striped
-  // tables", "tables marked isStriped", or a table part ("table header").
-  /** @param {string} piece @returns {{index: number, at: number, end: number} | null} */
-  const otherTables = piece => {
-    for (const m of piece.matchAll(/\btables?\b/g)) {
-      const before = piece.slice(0, m.index);
-      const after = piece.slice(m.index + m[0].length);
-      if (
-        /\bstriped\s*$/.test(before) &&
-        !/\b(?:non[\s-]?|un)striped\s*$/.test(before)
-      )
-        continue;
-      if (
-        /^\s+(?:rows?|cells?|headers?|heads?|footers?)\b/.test(after) ||
-        /^\s+(?:that\s+(?:are|is)\s+|marked\s+)(?:is\s*)?striped\b/.test(after)
-      )
-        continue;
-      // (The words before the tables, back to the last joiner: "the rest
-      // of the".)
-      const lead =
-        /\b(?:on|in|for|to|at|across|and|plus|also|with)\s+((?:[\w-]+\s+){0,4})$/.exec(
-          before,
-        ) ?? /^((?:[\w-]+\s+){0,4})$/.exec(before);
-      return {
-        index: lead ? lead.index + lead[0].length - lead[1].length : m.index,
-        at: m.index,
-        end: m.index + m[0].length,
-      };
-    }
-    const ones = /\b(?:other|plain|regular|normal|remaining|non[\s-]?striped|unstriped)\s+ones\b/.exec(
-      piece,
-    );
-    return ones
-      ? {index: ones.index, at: ones.index, end: ones.index + ones[0].length}
-      : null;
-  };
-  /** Whether a piece asks something of its own. @param {string} text */
-  const asks = text =>
-    colorsIn(text).length > 0 ||
-    /\d/.test(text) ||
-    aspectsOf(text).length > 0 ||
-    text
-      .split(/\s+/)
-      .some(w => w && !/^tables?$/.test(w) && partForWord(w) != null);
+  const EXCLUDE =
+    /\b(?:not|except|without|leave|leaving|besides|excluding|other\s+than|apart\s+from)\b/;
   for (const clause of q.split(/[,;()!?]|\.(?=\s|$)|\bbut\b/)) {
-    const pieces = clause.split(/\band\b/).map(x => x.trim());
-    for (const [i, piece] of pieces.entries()) {
-      const m = otherTables(piece);
-      if (
-        !m ||
-        /\b(?:not|except|without|leave|leaving|besides|excluding|other\s+than|apart\s+from)\b/.test(
-          piece.slice(0, m.at),
+    for (const piece of clause.split(/\band\b/)) {
+      for (const m of piece.matchAll(/\btables?\b/g)) {
+        const before = piece.slice(0, m.index);
+        const after = piece.slice(m.index + m[0].length);
+        if (
+          (/\bstriped\s*$/.test(before) &&
+            !/\b(?:non[\s-]?|un)striped\s*$/.test(before)) ||
+          /^\s+(?:that\s+(?:are|is)\s+|marked\s+)(?:is\s*)?striped\b/.test(
+            after,
+          ) ||
+          EXCLUDE.test(before)
         )
-      )
-        continue;
-      // (The stripe's own piece, "odd rows #f9f9f9 in every table", adds
-      // the tables it names; a piece about other rows, "all tables get
-      // taller rows", asks something of its own.)
-      if (/\b(?:odd|even|zebra|stripes?|striping|alternat\w*)\b/.test(piece))
+          continue;
         return true;
-      const rest = (piece.slice(0, m.index) + ' ' + piece.slice(m.end))
-        .replace(
-          /\b(?:also|plus|along|together|with|as|well|too|on|in|for|even|including|both|modes?|dark|light|only)\b/g,
-          ' ',
-        )
-        .trim();
-      if (asks(rest)) continue;
-      // ("all tables and buttons get…": tables with no "on" before an "and"
-      // piece that asks are that ask's subject, not a place for the stripe.)
-      const next = pieces[i + 1];
-      if (next && !/^(?:also\s+)?(?:on|in|for)\b/.test(piece) && asks(next))
-        continue;
-      return true;
+      }
+      const ones =
+        /\b(?:other|plain|regular|normal|remaining|non[\s-]?striped|unstriped)\s+ones\b/.exec(
+          piece,
+        );
+      if (ones && !EXCLUDE.test(piece.slice(0, ones.index))) return true;
     }
   }
   return false;
@@ -27087,12 +27032,17 @@ export function draftAnswer(ctx, env, question) {
               // draws it.)
               ...(keepsStriped
                 ? [
-                    set('background-color', 'transparent', {
+                    set(
+                      'background-color',
+                      // (Core's own stripe there is drawn with its token.)
+                      p === coreParity && stripe ? `var(${stripe})` : 'transparent',
+                      {
                       on: parityOn,
-                      when: `parity:${p}`,
-                      state: 'striped',
-                      ...modeOf(c),
-                    }),
+                        when: `parity:${p}`,
+                        state: 'striped',
+                        ...modeOf(c),
+                      },
+                    ),
                   ]
                 : []),
             ];
