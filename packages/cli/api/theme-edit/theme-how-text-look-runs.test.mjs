@@ -119,7 +119,9 @@ it(
   async test => {
     needsBases(test);
     const {sets} = await answer('a navy header and blue links');
-    expect(sets).toContain("--color-text-accent '#2563eb'");
+    expect(sets).toContain(
+      "--color-text-accent 'light-dark(#2563eb, #9db9f6)'",
+    );
     expect(sets.some(c => /top-nav-item/.test(c))).toBe(false);
   },
   T,
@@ -204,7 +206,9 @@ it(
       ),
     ).toBe(true);
     const list = (await answer('navy header, blue links, rounder cards')).sets;
-    expect(list).toContain("--color-text-accent '#2563eb'");
+    expect(list).toContain(
+      "--color-text-accent 'light-dark(#2563eb, #9db9f6)'",
+    );
     expect(list.some(c => /top-nav-item/.test(c))).toBe(false);
   },
   T,

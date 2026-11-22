@@ -79,7 +79,7 @@ const answer = async (q, theme = 'n') => {
  *   theme?: string,
  *   first?: string[],
  *   has?: string[],
- *   lead?: string,
+ *   lead?: string | RegExp,
  *   never?: RegExp,
  *   firstText?: RegExp,
  *   textNever?: RegExp,
@@ -342,7 +342,8 @@ const COLOR_RULE = [
       q: 'body text should be #1a1f36; borders #e3e8ee',
       first: [
         "--color-text-primary '#1a1f36' --mode light",
-        "--color-border '#e3e8ee' --mode light",
+        // (A light gray said once for the whole theme covers both modes.)
+        "--color-border 'light-dark(#e3e8ee, #262626)'",
       ],
     },
   ],
@@ -371,7 +372,8 @@ const COLOR_RULE = [
     'a link color a dark page would not read',
     {
       q: 'links dark blue #0033aa',
-      lead: "--color-text-accent '#0033aa' --mode light",
+      // (Said once for the whole theme: the dark mode takes its twin.)
+      lead: /^--color-text-accent 'light-dark\(#0033aa, #[0-9a-f]{6}\)'$/,
     },
   ],
   [
@@ -457,7 +459,10 @@ const LATER_ASKS = [
   ],
   [
     'a dark link color the dark page would not read',
-    {q: 'dark red links', lead: "--color-text-accent '#991b1b' --mode light"},
+    {
+      q: 'dark red links',
+      lead: /^--color-text-accent 'light-dark\(#991b1b, #[0-9a-f]{6}\)'$/,
+    },
   ],
   [
     'a token list: each item its own, light ones light mode',
@@ -526,7 +531,10 @@ describe('clause scope', () => {
           }
           const r = await answer(row.q, row.theme);
           if (row.first) expect(r.first, row.q).toEqual(row.first);
-          if (row.lead) expect(r.first[0], row.q).toBe(row.lead);
+          if (row.lead)
+            if (row.lead instanceof RegExp)
+              expect(r.first[0], row.q).toMatch(row.lead);
+            else expect(r.first[0], row.q).toBe(row.lead);
           for (const h of row.has ?? []) expect(r.all, row.q).toContain(h);
           if (row.never)
             for (const c of r.all) expect(c, row.q).not.toMatch(row.never);
