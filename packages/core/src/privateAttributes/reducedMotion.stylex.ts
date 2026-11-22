@@ -92,8 +92,8 @@ export function reducesMotion(element?: Element | null): boolean {
 /**
  * Calls `listener` when the person's Reduce Motion setting changes in
  * `view`, with whether it is on. Returns the stop. For code that must act
- * when the setting ends while something is open; a theme's mark does not
- * change while the element is mounted.
+ * when the setting ends while something is open. A theme's mark is not
+ * watched.
  */
 export function watchReduceMotionSetting(
   view: Window | null | undefined,

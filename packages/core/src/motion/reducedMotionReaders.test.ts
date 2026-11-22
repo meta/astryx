@@ -25,7 +25,6 @@ const SRC = path.resolve(__dirname, '..');
  */
 const ALLOWED: Readonly<Record<string, readonly [number, string]>> = {
   'privateAttributes/reducedMotion.stylex.ts': [1, 'the readers themselves'],
-  'motion/animatedLayout.ts': [1, 'ORs the setting with themeReducesMotion'],
   'motion/reducedMotion.ts': [
     2,
     'the setting split by pointer, for the CSS transition queries it exports',
