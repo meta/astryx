@@ -343,8 +343,23 @@ describe('a tint word', () => {
         theme: 'n',
       });
       const said = String(data.results?.[0]?.text ?? '');
-      expect(said).toMatch(/a tint of \S+ on card[^)]*#bfd5ff in light mode/);
-      expect(said).toMatch(/a tint of \S+ on button[^)]*#366ee6 in light mode/);
+      expect(said).toMatch(/a tint of \S+ on card[^:]*: #bfd5ff in light mode/);
+      expect(said).toMatch(/a tint of \S+ on button[^:]*: #366ee6 in light mode/);
+      // (One part's looks that take different pairs are named apart.)
+      const muted = String(
+        (
+          await themeEditHow('cards tinted blue, white text on muted cards', {
+            cwd,
+            theme: 'n',
+          })
+        ).data.results?.[0]?.text ?? '',
+      );
+      expect(muted).toMatch(
+        /on [^:]*card \(muted\)[^:]*: #366ee6 in light mode/,
+      );
+      expect(muted).toMatch(
+        /on [^:]*card \(default\)[^:]*: #bfd5ff in light mode/,
+      );
     },
     T,
   );

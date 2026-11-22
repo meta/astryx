@@ -32407,7 +32407,12 @@ export function draftAnswer(ctx, env, question) {
         tintNotes.set(d, noted);
         const said = `${st.value}: ${modes.map(m => `${shades[m]} in ${m} mode`).join(', ')}`;
         const parts = noted.get(said) ?? new Set();
-        parts.add(st.on ? String(st.on) : 'the page');
+        // (A look of the part that takes its own pair is named with it.)
+        parts.add(
+          st.on
+            ? `${st.on}${st.when ? ` (${String(st.when).replace(/^[a-z]+:/, '')})` : ''}`
+            : 'the page',
+        );
         noted.set(said, parts);
       }
   for (const [d, noted] of tintNotes)
