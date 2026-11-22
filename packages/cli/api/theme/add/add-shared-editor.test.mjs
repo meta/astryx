@@ -374,8 +374,18 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
     expect(shown['--color-accent-muted']).toMatch(
       new RegExp(`^light-dark\\(${stop90}`),
     );
-    // (Showing it first builds it there: that build keeps them too.)
+    // (Showing it first builds it there: that build keeps them too, with
+    // every rule the copy writes, a part's own secondary text and the
+    // focus outline among them.)
+    /** @param {string} css */
+    const rules = css =>
+      [...css.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+);/g)]
+        .filter(m => /^--(?:color-|focus-)/.test(m[1]))
+        .map(m => `${m[1]}=${m[2].replace(/\s/g, '').toLowerCase()}`)
+        .sort();
+    const before = rules(fs.readFileSync(copyCss, 'utf-8'));
     await themeEditShow('harbor', {cwd: app});
+    expect(rules(fs.readFileSync(copyCss, 'utf-8'))).toEqual(before);
     await themeEditSet('harbor', 'corners', 'square', {cwd: app});
     const after = shades(fs.readFileSync(copyCss, 'utf-8'));
     expect(Object.keys(shown).filter(k => after[k] !== shown[k])).toEqual([]);
@@ -383,6 +393,42 @@ it('carries a palette a newer CLI made exactly as saved: settings save, its colo
       themeEditSet('harbor', 'accent', '#ff0000', {cwd: app}),
     ).rejects.toThrow(/astryx-oklch-v99 recipe, which this Astryx CLI/);
     expect(fs.readFileSync(kept, 'utf-8')).toBe(saved);
+
+    // (A color setting removed by hand after the add stays removed: the
+    // working files no longer match the add's receipt, so the copy is not
+    // read.)
+    const hand = makeLinkedFixture('astryx-theme-add-kept5-', FIXTURE_PACKAGES);
+    writeFixtureBaseTheme(hand, 'neutral');
+    try {
+      await themeAdd(shared, {cwd: hand});
+      const settingsFile = path.join(
+        hand,
+        'themes/harbor/harbor.settings.json',
+      );
+      const saved2 = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+      saved2.settings = [
+        ...saved2.settings,
+        {thing: '--color-border', value: '#ff00ff', source: 'token'},
+      ];
+      fs.writeFileSync(settingsFile, JSON.stringify(saved2, null, 2));
+      await themeEditShow('harbor', {cwd: hand});
+      saved2.settings = saved2.settings.filter(
+        (/** @type {any} */ x) => x.thing !== '--color-border',
+      );
+      fs.writeFileSync(settingsFile, JSON.stringify(saved2, null, 2));
+      fs.rmSync(path.join(hand, 'themes/harbor/harbor.settings.ts'), {
+        force: true,
+      });
+      await themeEditShow('harbor', {cwd: hand});
+      expect(
+        fs.readFileSync(
+          path.join(hand, 'src/themes/harbor/harbor.css'),
+          'utf-8',
+        ),
+      ).not.toMatch(/#ff00ff/i);
+    } finally {
+      removeLinkedFixture(hand);
+    }
 
     // (A receipt that names other bytes stays behind; the module still
     // comes.)

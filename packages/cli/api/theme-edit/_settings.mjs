@@ -5839,9 +5839,10 @@ const KEPT_PAIRS_LINE =
  * @param {string} cwd
  * @param {string} slug
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base the base theme's resolved values
+ * @param {Record<string, string>} known Core's own tokens
  * @returns {Record<string, Record<'light' | 'dark', KeptHalf>> | null}
  */
-function stopsShownInCopy(cwd, slug, base) {
+function stopsShownInCopy(cwd, slug, base, known) {
   const kept = keptPaletteColors(cwd, slug);
   /** @type {string} */
   let css;
@@ -5875,27 +5876,71 @@ function stopsShownInCopy(cwd, slug, base) {
   /** @type {Record<string, Record<'light' | 'dark', KeptHalf>>} */
   const out = {};
   const hexColor = String.raw`#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?`;
-  const decl = new RegExp(
-    String.raw`(--color-[\w-]+)\s*:\s*(?:light-dark\(\s*(${hexColor})\s*,\s*(${hexColor})\s*\)|(${hexColor}))\s*;`,
-    'g',
+  const color = new RegExp(
+    String.raw`^(?:light-dark\(\s*(${hexColor})\s*,\s*(${hexColor})\s*\)|(${hexColor}))$`,
   );
+  // (Only the theme root's own rules, `:scope`, hold the theme-wide
+  // values: a rule on a part or a media surface never does.)
+  const root = [...css.matchAll(/(?:^|[}\s])(:scope)\s*\{([^{}]*)\}/g)]
+    .map(b => b[2])
+    .join(';');
   /** @type {Set<string>} */
   const seen = new Set();
-  for (const m of css.matchAll(decl)) {
-    // (The theme root comes first: a later rule, on a part or a media
-    // surface, is never the theme-wide shade.)
-    if (seen.has(m[1])) continue;
-    seen.add(m[1]);
+  for (const d of root.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+);/g)) {
+    // (Core's own tokens only: a base theme's private variables are its.)
+    if (seen.has(d[1]) || !Object.hasOwn(known, d[1])) continue;
+    seen.add(d[1]);
+    const m = color.exec(d[2].trim());
+    if (!m) continue;
     const pair = {
-      light: half(m[1], m[2] ?? m[4], 'light'),
-      dark: half(m[1], m[3] ?? m[4], 'dark'),
+      light: half(d[1], m[1] ?? m[3], 'light'),
+      dark: half(d[1], m[2] ?? m[3], 'dark'),
     };
     // (A token the base theme draws in both modes is not the palette's to
     // keep.)
     if (pair.light.base && pair.dark.base) continue;
-    out[m[1]] = pair;
+    out[d[1]] = pair;
   }
-  return Object.keys(out).length ? out : null;
+  if (!Object.keys(out).length) return null;
+  // (Whether the copy lifts secondary text on parts, as a built module
+  // records it: a rule other than the root declares it.)
+  out['lifted parts'] = /** @type {any} */ (
+    [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(
+      b => b[1].trim() !== ':scope' && /--color-text-secondary\s*:/.test(b[2]),
+    )
+  );
+  return out;
+}
+
+/**
+ * Whether a theme's working files are still the ones `theme add` copied
+ * from a shared theme: the app copy's receipt names each, by its hash, and
+ * none changed since. A file changed by hand means the copy no longer
+ * shows what the settings say.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+function sharedWorkingFilesUnchanged(cwd, slug) {
+  try {
+    const receipt = JSON.parse(
+      fs.readFileSync(
+        path.join(cwd, 'src', 'themes', slug, '.astryx-shared.json'),
+        'utf8',
+      ),
+    );
+    const files = Object.entries(receipt?.editor?.files ?? {});
+    return (
+      files.length > 0 &&
+      files.every(
+        ([file, hash]) =>
+          createHash('sha256')
+            .update(fs.readFileSync(path.join(cwd, 'themes', slug, file)))
+            .digest('hex') === hash,
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -11324,11 +11369,15 @@ async function buildThemeSteps(ctx, slug, data) {
   if (
     ctx.keepStops == null &&
     !fs.existsSync(f.settingsTs) &&
-    paletteKeptAsSaved(cwd, slug, data, base)
+    paletteKeptAsSaved(cwd, slug, data, base) &&
+    sharedWorkingFilesUnchanged(cwd, slug)
   ) {
     const builtFrom = settingsBeforeChange(cwd, slug);
     if (!builtFrom || (builtFrom.like ?? null) === (data.like ?? null))
-      ctx.keepStops = paletteStopsOnly(stopsShownInCopy(cwd, slug, base), data);
+      ctx.keepStops = paletteStopsOnly(
+        stopsShownInCopy(cwd, slug, base, ctx.project.core.tokenDefaults),
+        data,
+      );
   }
   const theme = compileTheme(ctx, data, base);
   const pal = keepShades(
