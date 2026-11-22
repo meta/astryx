@@ -414,8 +414,21 @@ if (clipboard == null) {
 export const VIEWER_PRINT = `if (window !== window.top) {
 const print = window.print;
 let notice = null;
+// Behind an open modal dialog the rest of the page is inert, so the notice
+// goes into the top dialog: the one that holds focus, else the last one.
+const place = () => {
+  let modals = [];
+  try {
+    modals = [...document.querySelectorAll('dialog:modal')];
+  } catch {
+    // A browser without the :modal selector puts the notice in the body.
+  }
+  return modals.filter(dialog => dialog.contains(document.activeElement)).at(-1) ?? modals.at(-1) ?? document.body;
+};
+// Each refused print shows a new notice where the reader is now, since an
+// earlier one can sit in a dialog that has closed since.
 const show = () => {
-  if (notice?.isConnected) return;
+  notice?.remove();
   notice = document.createElement('div');
   notice.setAttribute('role', 'status');
   notice.style.cssText = 'position:fixed;inset-block-end:16px;inset-inline:16px;margin-inline:auto;z-index:2147483647;' +
@@ -430,20 +443,13 @@ const show = () => {
   close.textContent = 'Dismiss';
   close.style.cssText = 'font:inherit;color:inherit;background:none;border:0;padding:4px 8px;cursor:pointer;text-decoration:underline';
   const back = document.activeElement;
+  const shown = notice;
   close.addEventListener('click', () => {
-    notice.remove();
+    shown.remove();
     if (back instanceof HTMLElement && back.isConnected) back.focus();
   });
   notice.append(text, close);
-  // Behind an open modal dialog the rest of the page is inert, so the notice
-  // goes into that dialog.
-  let modal = null;
-  try {
-    modal = document.querySelector('dialog:modal');
-  } catch {
-    // A browser without the :modal selector has no modal dialog to look for.
-  }
-  (modal ?? document.body).append(notice);
+  place().append(notice);
   // A screen reader announces text that arrives in a status region already
   // in the page, not text the region holds when it is added.
   setTimeout(() => {

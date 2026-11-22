@@ -1523,6 +1523,52 @@ import '@astryxdesign/core/astryx.css';
     }
   }, 120_000);
 
+  it('shows the print notice in the open modal dialog the reader prints from, and on the page once that dialog has closed', async () => {
+    put(
+      'src/print-dialog.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <button type="button" id="page-print" onClick={() => window.print()}>Print page</button>
+      <dialog id="sheet">
+        <button type="button" id="sheet-print" onClick={() => window.print()}>Print sheet</button>
+      </dialog>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/print-dialog.tsx', {cwd: dir, out: 'print-dialog.html'});
+    const dom = await pageDom(read('print-dialog.html'), {
+      beforeParse(window) {
+        // JSDOM's `top` cannot be redefined; its getter reads `_top`.
+        window._top = {};
+        window.print = () => {};
+        // JSDOM has no :modal selector: here an open dialog is a modal one.
+        const all = window.document.querySelectorAll;
+        window.document.querySelectorAll = function (/** @type {string} */ selector) {
+          return all.call(this, selector === 'dialog:modal' ? 'dialog[open]' : selector);
+        };
+      },
+    });
+    await pageDrawn(dom);
+    await pageWaitFor(() => expect(dom.window.document.readyState).toBe('complete'));
+    const {document} = dom.window;
+    const notices = () => [...document.querySelectorAll('[role="status"]')].filter(n => n.querySelector('button'));
+    const sheet = /** @type {HTMLDialogElement} */ (document.getElementById('sheet'));
+    sheet.setAttribute('open', '');
+    const sheetPrint = /** @type {HTMLButtonElement} */ (document.getElementById('sheet-print'));
+    sheetPrint.focus();
+    sheetPrint.click();
+    expect(notices().map(n => n.parentElement)).toEqual([sheet]);
+    // The reader closes the dialog without Dismiss, then prints from the page.
+    sheet.removeAttribute('open');
+    document.getElementById('page-print')?.click();
+    expect(notices().map(n => n.parentElement)).toEqual([document.body]);
+    dom.window.close();
+  }, 120_000);
+
   it('gives a page storage that lasts until it closes in a frame that blocks storage, and keeps real storage elsewhere', async () => {
     put(
       'src/filter.tsx',
