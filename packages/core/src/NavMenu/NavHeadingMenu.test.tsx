@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {beforeEach, describe, it, expect, vi} from 'vitest';
-import {Activity, type KeyboardEvent} from 'react';
+import {Activity, createRef, type KeyboardEvent} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link';
@@ -653,6 +654,34 @@ describe('NavHeadingMenuItem pass-through props', () => {
     expect(handleMouseEnter).toHaveBeenCalledOnce();
   });
 
+  it('puts its ref, className, style and xstyle on the row element', () => {
+    const linkRef = createRef<HTMLElement>();
+    const actionRef = createRef<HTMLElement>();
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem
+          ref={linkRef}
+          label="Docs"
+          href="/docs"
+          className="caller-class"
+          style={{marginBlockStart: '2px'}}
+          xstyle={itemTestStyles.offset}
+        />
+        <NavHeadingMenuItem
+          ref={actionRef}
+          label="Archive"
+          onClick={() => {}}
+        />
+      </NavHeadingMenu>,
+    );
+    const [link, action] = screen.getAllByRole('menuitem');
+    expect(linkRef.current).toBe(link);
+    expect(actionRef.current).toBe(action);
+    expect(link).toHaveClass('astryx-nav-heading-menu-item', 'caller-class');
+    expect(link.style.marginBlockStart).toBe('2px');
+    expect(itemDeclarations(link, '')).toMatch(/margin-inline-start:\s*4px/);
+  });
+
   it('keeps the menuitem contract over colliding pass-throughs', () => {
     render(
       <NavHeadingMenu>
@@ -750,6 +779,10 @@ describe('NavHeadingMenu as an action group (family:action-groups)', () => {
  * The declarations the item's own classes apply, joined into one string: on
  * `:focus-visible` (the ring), or unconditionally.
  */
+const itemTestStyles = stylex.create({
+  offset: {marginInlineStart: '4px'},
+});
+
 function itemDeclarations(
   item: HTMLElement,
   condition: ':focus-visible' | '' = ':focus-visible',
