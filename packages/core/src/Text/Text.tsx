@@ -292,6 +292,7 @@ export function Text({
   const tooltipInterest = useTruncationTooltipInterest(
     tooltipEnabled,
     truncation.measure,
+    textRef,
   );
 
   // Keep the merged ref stable across rerenders.

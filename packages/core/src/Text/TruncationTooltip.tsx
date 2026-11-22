@@ -28,7 +28,7 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
-import {isMouseMove, subscribeInput} from '../utils/inputStream';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -85,6 +85,9 @@ export function useTruncationTooltipInterest(
   // text is truncated, so the interaction that measures it can mount the
   // tooltip.
   measure?: () => boolean,
+  // The element, so the window it is in hears mouse moves while it can show
+  // a tooltip.
+  elementRef?: RefObject<HTMLElement | null>,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
@@ -160,8 +163,8 @@ export function useTruncationTooltipInterest(
     if (!isEnabled && measure == null) {
       return;
     }
-    return subscribeInput(window, 'pointermove', () => {});
-  }, [isEnabled, measure]);
+    return holdMouseMoves(elementRef?.current?.ownerDocument.defaultView);
+  }, [isEnabled, measure, elementRef]);
   // A hover counts once a mouse or pen moves over the element. The element
   // also gets a `pointerenter` when it appears or moves under a still
   // pointer, and the user did not point at it then; after a scroll WebKit

@@ -291,11 +291,15 @@ export function Heading({
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
     maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
-  // The tooltip mounts on the first hover, tap or focus, not with the text.
-  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
-
   // Ref for the heading element (used as tooltip anchor)
   const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // The tooltip mounts on the first hover, tap or focus, not with the text.
+  const tooltipInterest = useTruncationTooltipInterest(
+    tooltipEnabled,
+    undefined,
+    headingRef,
+  );
 
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, headingRef);

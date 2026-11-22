@@ -109,13 +109,18 @@ const touchRecords = realmValue(
 );
 
 /**
- * Each window's mouse point before its latest `pointermove` (`before`) and
- * at it (`at`), from the moves its stream delivered. Its own key keeps the
+ * Each held window's mouse point before its latest `pointermove` (`before`)
+ * and at it (`at`), from the moves its stream delivered, with the hold count
+ * (`holds`) and the hold's stop (holdMouseMoves). Its own key keeps the
  * stream's first state readable by copies built before it.
  */
 const mouseMoves = realmValue(
   sharedKey('input-stream/mouse-moves', 1),
-  () => new WeakMap<Window, {before?: MousePoint; at: MousePoint}>(),
+  () =>
+    new WeakMap<
+      Window,
+      {before?: MousePoint; at?: MousePoint; holds: number; stop: () => void}
+    >(),
 );
 
 /** A point in the viewport, in CSS pixels. */
@@ -141,6 +146,25 @@ export function getLastPointerType(view: Window): string | null {
  */
 export function getLastMousePoint(view: Window): MousePoint | null {
   return lastMousePoints.get(view) ?? null;
+}
+
+export function holdMouseMoves(view?: Window | null): () => void {
+  if (!view) {
+    return () => {};
+  }
+  let moves = mouseMoves.get(view);
+  if (!moves) {
+    moves = {holds: 0, stop: subscribeInput(view, 'pointermove', () => {})};
+    mouseMoves.set(view, moves);
+  }
+  const held = moves;
+  held.holds++;
+  return () => {
+    if (!--held.holds) {
+      held.stop();
+      mouseMoves.delete(view);
+    }
+  };
 }
 
 /**
@@ -289,8 +313,10 @@ function dispatch(view: Window, channel: Channel, event: Event): void {
   ) {
     const point = {x: clientX, y: clientY};
     lastMousePoints.set(view, point);
-    if (event.type === 'pointermove') {
-      mouseMoves.set(view, {before: mouseMoves.get(view)?.at, at: point});
+    const moves = mouseMoves.get(view);
+    if (moves && event.type === 'pointermove') {
+      moves.before = moves.at;
+      moves.at = point;
     }
   }
   if (pointerType === 'touch' || pointerType === 'pen') {

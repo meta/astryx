@@ -23,7 +23,7 @@ import {
   type RefCallback,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
-import {isMouseMove, subscribeInput} from '../utils/inputStream';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -808,13 +808,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       detachTriggerRef.current?.();
       const latest = () => handlersRef.current;
-      // Keeps the window's input stream hearing mouse moves (isMouseMove)
-      // while the trigger is mounted; the subscriber stores nothing.
-      const releaseStillPointer = subscribeInput(
-        el.ownerDocument.defaultView ?? window,
-        'pointermove',
-        () => {},
-      );
+      const releaseStillPointer = holdMouseMoves(el.ownerDocument.defaultView);
       // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
       // which is what lets the hover path know it is looking at a finger.
       const onPointerEnter = (e: PointerEvent) =>
