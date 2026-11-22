@@ -3,6 +3,7 @@
 /**
  * @file Tests for `--pictures` on an export: the one line it says when no
  * browser is there (first: Node remembers where a package resolved), the
+ * fix it names when there is no temp folder to write to, the
  * pictures it takes of the written file with a browser on the machine, the
  * refusal with `--reverse`, and an export without the flag, which takes no
  * pictures and says nothing new.
@@ -110,6 +111,28 @@ describe('render(): pictures of the written file', () => {
     expect(cli.status).toBe(0);
     expect(cli.stdout).toMatch(/^Pictures$/m);
     expect(cli.stdout).toMatch(/^skipped:\s+no browser was found; install Playwright with its browser, or Google Chrome or Chromium$/m);
+  }, 120_000);
+
+  it.skipIf(process.platform !== 'linux')('names the fix when there is no temp folder to write the pictures to, and writes the file as usual', async () => {
+    const saved = {HOME: process.env.HOME, TMPDIR: process.env.TMPDIR};
+    // A home folder inside /tmp leaves no temp folder that is outside it.
+    const home = fs.mkdtempSync('/tmp/astryx-home-');
+    process.env.HOME = home;
+    process.env.TMPDIR = '/tmp';
+    try {
+      fakePlaywright();
+      const r = /** @type {any} */ (await render('src/page.tsx', {cwd: dir, out: 'notemp.html', pictures: true}));
+      expect(fs.existsSync(path.join(dir, 'notemp.html'))).toBe(true);
+      expect(r.data.pictures).toEqual({
+        skipped:
+          'there is no system temp folder to write them to (a disk root or a folder holding the home folder is not one); set TMPDIR to a writable folder outside the home folder, then run the command again',
+      });
+    } finally {
+      process.env.HOME = saved.HOME;
+      if (saved.TMPDIR === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = saved.TMPDIR;
+      fs.rmSync(home, {recursive: true, force: true});
+    }
   }, 120_000);
 
   it('takes a phone picture in light and dark and a desktop one, in a temp folder, and lists them under their JSON keys', async () => {

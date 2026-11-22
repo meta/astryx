@@ -2306,35 +2306,37 @@ function askFrom(asked, at, isVerb, partWords) {
  * word of the ask must be one the clause reader placed in its clause (a
  * part, its mode or variant, a removable look) or one that only joins them.
  * When unsure, the clause keeps the reset reading.
- * @param {Clause} c the clause the ask starts
+ * @param {Clause[]} group the clause the ask starts, and the clauses the
+ *   clause reader made of the same ask for its other parts
  * @param {string} ask the ask as said, from its clear (see askFrom)
  * @param {Array<[RegExp, PartRef]>} partWords
  * @returns {boolean}
  */
-function clearTakesAway(c, ask, partWords) {
+function clearTakesAway(group, ask, partWords) {
+  const [first] = group;
+  const parts = group.flatMap(x => x.parts);
+  const aspects = [...new Set(group.flatMap(x => x.aspects))];
   if (
+    !first ||
     !new RegExp(`^${CLEAR_LEAD}`).test(ask) ||
-    !/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text) ||
-    !c.parts.length ||
-    !c.aspects.length ||
-    c.colors.length ||
-    c.lengths.length ||
-    c.named ||
-    c.state ||
-    c.dir
+    !/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(first.text) ||
+    group.some(x => !x.parts.length || !x.aspects.length) ||
+    group.some(
+      x => x.colors.length || x.lengths.length || x.named || x.state || x.dir,
+    )
   )
     return false;
   const removable = new RegExp(`^${REMOVABLE}$`);
-  if (!c.aspects.every(a => removable.test(a))) return false;
-  const ons = new Set(c.parts.map(p => p.on));
+  if (!aspects.every(a => removable.test(a))) return false;
+  const ons = new Set(parts.map(p => p.on));
   let rest = ` ${ask} `;
   for (const [re, ref] of partWords)
     if (ons.has(ref.on)) rest = rest.replace(globalOf(re), ' ');
-  for (const p of c.parts) {
+  for (const p of parts) {
     const value = /:([a-z-]+)$/.exec(p.when ?? '')?.[1];
     if (value) rest = rest.replace(new RegExp(`\\b${value}\\b`, 'g'), ' ');
   }
-  if (c.mode)
+  if (group.some(x => x.mode))
     rest = rest.replace(
       /\b(?:in\s+)?(?:dark|light)(?:\s+(?:mode|theme))?\b/g,
       ' ',
@@ -2343,9 +2345,14 @@ function clearTakesAway(c, ask, partWords) {
   // put in another clause, "and shadow", is a word this clause does not
   // explain.)
   rest = rest.replace(new RegExp(`\\b${REMOVABLE}\\b`, 'g'), w => {
-    const said = aspectsOf(w);
-    return said.length && said.every(a => c.aspects.includes(a)) ? ' ' : w;
+    // (A plural, "the card and button backgrounds", names the look too.)
+    const said = aspectsOf(w).length
+      ? aspectsOf(w)
+      : aspectsOf(w.replace(/s$/, ''));
+    return said.length && said.every(a => aspects.includes(a)) ? ' ' : w;
   });
+  // (An "and" between the parts the ask names joins them.)
+  if (ons.size > 1) rest = rest.replace(/\band\b/g, ' ');
   rest = rest
     .replace(/'s\b/g, ' ')
     .replace(
@@ -2684,6 +2691,7 @@ const ROLE_WORDS =
  * @property {'light' | 'dark' | null} mode
  * @property {boolean} except - "but not on X": X keeps what the clause before does
  * @property {Clause} [exceptOf] - the one list item an except keeps a state of ("gray text on the rest" keeps the selected tab's text): it belongs to that item only
+ * @property {Clause[]} [reads] - the clauses this one read and answers for: a mode said alone before it, the asks an except takes up
  * @property {Record<string, string>} decl - CSS written as `prop: value`
  * @property {string[]} [quoted] - family names the clause writes in quotes
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
@@ -4402,6 +4410,17 @@ const PROPERTY_WORDS = wordTable(
     'border colour': 'border-color',
   }),
 );
+
+/** The start of a CSS gradient. */
+const GRADIENT_START = /(?:repeating-)?(?:linear|radial|conic)-gradient\(/;
+
+/**
+ * One gradient layer of a background as text: the gradient with its
+ * position, size and repeat words ("linear-gradient(#0001 1px, transparent
+ * 1px) 0 0 / 24px 24px").
+ */
+const GRADIENT_LAYER =
+  /(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\([^()]*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|\/|repeat(?:-x|-y)?|no-repeat|space|round|center|top|bottom|left|right|fixed|scroll|local|cover|contain|auto))*/;
 
 /**
  * The words of a value, with each function call kept whole, nested calls
@@ -7050,6 +7069,10 @@ export function draftAnswer(ctx, env, question) {
   }
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
+  // (A gradient layer right after a joined one is in the same ask: its
+  // look-back is that ask's.)
+  let joinedEnd = -1;
+  let joinedLead = '';
   let q = question
     .normalize('NFKC')
     // The possessive reader: a part's possessive before a thing it has, or
@@ -7411,6 +7434,63 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /(\)|#[0-9a-f]{3,8}\b)\s*,\s*(?=(?:inset\s+)?-?\d+(?:px)?\s+-?\d)/g,
       '$1\u2e34 ',
+    )
+    // A background's gradient layers stay one value: a comma after a
+    // gradient layer (with its position, size and repeat words) that another
+    // gradient layer or the final color follows is not a clause break, in a
+    // background said with its property word. (A layer after it that names
+    // a part of its own, "… on cards", is an ask of its own.)
+    .replace(
+      new RegExp(`(${GRADIENT_LAYER.source})\\s*,\\s*`, 'gi'),
+      (m, layer, at, all) => {
+        const text = String(all);
+        // The ask this layer is in: back to the last break outside
+        // parentheses (a comma, a semicolon or a sentence's end).
+        let depth = 0;
+        let start = 0;
+        for (let i = at - 1; i >= 0; i--) {
+          const ch = text[i];
+          if (ch === ')') depth++;
+          else if (ch === '(') depth--;
+          else if (
+            depth === 0 &&
+            (ch === ',' ||
+              ch === ';' ||
+              (ch === '.' && /\s/.test(text[i + 1] ?? ' ')))
+          ) {
+            start = i + 1;
+            break;
+          }
+        }
+        const lead = at === joinedEnd ? joinedLead : text.slice(start, at);
+        const next =
+          text
+            .slice(at + m.length)
+            .match(/^(?:[^(),;.]|\.(?=\S)|\((?:[^()]|\([^()]*\))*\))*/)?.[0] ??
+          '';
+        // (A gradient layer after it belongs to the same value; a layer
+        // said with a part of its own is that part's ask; the page keeps its
+        // own reading.)
+        const ownPart =
+          /\b(?:on|for|in|of)\s+(?:the\s+|all\s+|every\s+)?[a-z]/.test(
+            next.replace(/\bin\s+(?:dark|light)\s+mode\b/g, ' '),
+          ) ||
+          lex.parts.some(([re]) =>
+            re.test(` ${next.replace(GRADIENT_LAYER, ' ')} `),
+          );
+        const join =
+          // (The property word comes straight before the first layer:
+          // "background on hover …" and "background-color …" are not a
+          // layer list.)
+          /\bbackground(?:-image)?\s*:?\s*$/i.test(lead) &&
+          !/\bpage\b|(?<!\btable\s)\bbody\b/.test(lead) &&
+          !ownPart &&
+          new RegExp(`^\\s*${GRADIENT_START.source}`).test(next);
+        if (!join) return m;
+        joinedEnd = at + m.length;
+        joinedLead = lead;
+        return `${layer}\u2e34 `;
+      },
     )
     // "font-family: Georgia, serif": the font list is one value.
     .replace(
@@ -8009,20 +8089,83 @@ export function draftAnswer(ctx, env, question) {
   // and says only the parts, their mode and variant, and removable looks
   // this reader found asks to take those looks away, as remove does. Any
   // other word in it, a way back included, leaves the reset reading.)
+  // ("clear the card and button borders": the clause reader says the ask
+  // once for each part, so each such clause whose parts the same ask names
+  // is read with it.)
   {
     const leads = [...asked0.matchAll(new RegExp(CLEAR_LEAD, 'g'))];
-    let k = 0;
+    const asks = leads.map(l =>
+      askFrom(asked0, l.index ?? 0, verbWord, lex.parts),
+    );
+    /** @type {Clause[][]} */
+    const groups = [];
+    let k = -1;
+    /** @type {Clause | null} */
+    let last = null;
+    const ons = (/** @type {Clause} */ c) => new Set(c.parts.map(p => p.on));
+    /** Whether an ask says every look of the clause, in the plural too ("backgrounds"). @param {Clause} c @param {string} ask */
+    const looksOf = (c, ask) => {
+      const said = [
+        ...aspectsOf(ask),
+        ...ask.split(/\s+/).flatMap(w => aspectsOf(w.replace(/s$/, ''))),
+      ];
+      return c.aspects.every(a => said.includes(a));
+    };
+    /** The parts an ask names, in the order it says them. @param {string} ask */
+    const partsSaid = ask =>
+      lex.parts
+        .flatMap(([re, ref]) => {
+          const m = globalOf(re).exec(` ${ask} `);
+          globalOf(re).lastIndex = 0;
+          return m ? [{on: ref.on, at: m.index}] : [];
+        })
+        .sort((a, b) => a.at - b.at)
+        .map(x => x.on);
     for (const c of clauses) {
-      if (!new RegExp(CLEAR_LEAD, 'i').test(c.text)) continue;
-      const at = leads[k++]?.index;
-      if (at == null) break;
-      if (
-        !clearTakesAway(c, askFrom(asked0, at, verbWord, lex.parts), lex.parts)
-      )
+      if (!/^(?:[^:]*:\s*)?(?:please\s+)?clear\b/i.test(c.text)) {
+        // (A clause that holds a clear it does not lead, "can you clear the
+        // card border", uses up that ask: it takes nothing away.)
+        for (const _ of c.text.matchAll(new RegExp(CLEAR_LEAD, 'gi')))
+          groups[++k] = [];
+        last = null;
         continue;
-      c.text = c.text.replace(/\bclear\b/i, 'remove');
-      c.neg = true;
+      }
+      const own = ons(c);
+      const group = groups[k] ?? [];
+      const taken = new Set(group.flatMap(x => x.parts.map(p => p.on)));
+      // (The clause reader's copy of the ask for another part: the ask
+      // names that part, and no clause of the group has it yet.)
+      const sameAsk =
+        last != null &&
+        own.size > 0 &&
+        looksOf(c, asks[k] ?? '') &&
+        [...own].every(
+          on => !taken.has(on) && partsSaid(asks[k] ?? '').includes(on),
+        );
+      if (!sameAsk) {
+        // (A clause opens the next ask when it says that ask's lead, or is
+        // the reader's copy of it for the first part the ask names.)
+        const next = asks[k + 1];
+        const opens =
+          next != null &&
+          (new RegExp(CLEAR_LEAD, 'i').test(c.text) ||
+            (own.has(partsSaid(next)[0] ?? '') && looksOf(c, next)));
+        if (!opens) {
+          last = null;
+          continue;
+        }
+        groups[++k] = [];
+      }
+      groups[k].push(c);
+      last = c;
     }
+    groups.forEach((group, i) => {
+      if (!clearTakesAway(group, asks[i], lex.parts)) return;
+      for (const c of group) {
+        c.text = c.text.replace(/\bclear\b/i, 'remove');
+        c.neg = true;
+      }
+    });
   }
   // ("display headings": a numbered look of a part said in the plural is
   // every look of that numbered family the part draws, display-1 to
@@ -12266,8 +12409,13 @@ export function draftAnswer(ctx, env, question) {
           ].includes(a),
         )
       )
-    )
+    ) {
       c.mode = prev.mode;
+      // (A clause that says nothing but the mode is read by the ones it
+      // gives the mode to.)
+      if (!prev.parts.length && !prev.aspects.length)
+        c.reads = [...(c.reads ?? []), prev];
+    }
     // "on focus, inputs get a 2px outline": a clause that only names a state
     // gives it to the clause after it.
     // (Never an except's state: "except when focused, and rounder".)
@@ -15680,14 +15828,38 @@ export function draftAnswer(ctx, env, question) {
     // selectors) and the surfaces' and overlays' (--radius-container:
     // cards, dialogs, popovers, menus), each said by its role.)
     {
+      // ("controls with 12px corners": the role leads the with-list, so
+      // the clause before it holds the role alone; "give overlays 12px
+      // corners": the role after the verb.)
+      // (Only the role itself before the size: "make the surfaces glass,
+      // 8px corners" is the glass look, never the containers' corners.)
+      const prev = clauses[clauses.indexOf(c) - 1];
+      const ROLE_WORD = String.raw`(?:the\s+|all\s+)?(controls?|elements?|overlays?|surfaces?|containers?)`;
+      const ledBy =
+        c.joint === 'with' &&
+        prev &&
+        !prev.parts.length &&
+        !prev.aspects.length &&
+        !prev.lengths.length &&
+        new RegExp(String.raw`^${ROLE_WORD}$`).test(
+          prev.text.toLowerCase().trim(),
+        )
+          ? prev
+          : null;
+      const own = c.text.toLowerCase().trim();
       const role =
         !c.parts.length &&
         c.aspects.length === 1 &&
         c.aspects[0] === 'corners' &&
         c.lengths.length === 1
-          ? /^(?:the\s+|all\s+)?(controls?|elements?|overlays?|surfaces?|containers?)\b/.exec(
-              c.text.toLowerCase(),
-            )?.[1]
+          ? ledBy
+            ? new RegExp(String.raw`^${ROLE_WORD}$`).exec(
+                ledBy.text.toLowerCase().trim(),
+              )?.[1]
+            : (new RegExp(String.raw`^${ROLE_WORD}\b`).exec(own)?.[1] ??
+              new RegExp(
+                String.raw`^(?:give|make|set|round)\s+${ROLE_WORD}\s+\d*\.?\d+(?:px|rem|em)?\s+(?:corners?|radius|radii)$`,
+              ).exec(own)?.[1])
           : undefined;
       const token = role
         ? /^(?:controls?|elements?)$/.test(role)
@@ -15695,6 +15867,7 @@ export function draftAnswer(ctx, env, question) {
           : '--radius-container'
         : undefined;
       if (token && Object.hasOwn(TOKENS, token)) {
+        if (ledBy) ledBy.text = '';
         const d = {
           text: `corners on ${role}: ${token} ${c.lengths[0]}, the corner size ${token === '--radius-element' ? 'controls (buttons, inputs, selectors)' : 'surfaces and overlays (cards, dialogs, popovers, menus)'} read`,
           options: [[set(token, c.lengths[0])]],
@@ -15871,6 +16044,8 @@ export function draftAnswer(ctx, env, question) {
           }
         : undefined;
       if (!prior) continue;
+      // (The except answers for the asks it takes up.)
+      c.reads = [...(c.reads ?? []), ...span.map(x => x.clause)];
       // The part being changed that the except names a variant of, else the
       // part of the latest ask.
       const ons = [
@@ -29120,6 +29295,8 @@ export function draftAnswer(ctx, env, question) {
   }
   /** @type {Draft[]} */
   const result = [];
+  /** The words a note already names as not taken (or not known as a look). */
+  const wordsNamed = new Set();
   // Several changes in one question: one answer that runs them all first,
   // with repeats dropped and a step dropped when a later one replaces it.
   // Two clauses that set one thing two ways contradict each other: they are
@@ -32999,6 +33176,7 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} "accent #2563eb, page #f8fafc, font Inter, corners round, spacing compact"`,
       });
     const rest = notTaken.filter(w => !namedFor.includes(w));
+    for (const w of notTaken) wordsNamed.add(w.replace(/-like$/, ''));
     if (rest.length)
       result.push({
         text: `not taken: ${rest.map(w => `"${w}"`).join(', ')}: no setting reads ${rest.length > 1 ? 'these words' : 'this word'}; the looks how sets are colors (accent, neutral, the page, the text), mode, spacing, corners, fonts and contrast (how --list dials lists each)`,
@@ -33128,11 +33306,28 @@ export function draftAnswer(ctx, env, question) {
       ...answeredByUndo,
       ...clashClauses,
     ]);
+    // (A clause an answered one read, a mode said alone before it or the
+    // asks an except takes up, is used too.)
+    // (Through every clause that one read in turn: a mode said before an
+    // ask an except took up.)
+    for (const c of taken)
+      for (const r of /** @type {Clause} */ (c).reads ?? []) taken.add(r);
     const silent = clauses.filter(c => {
       const t = c.text.trim();
       if (!t || c.except || taken.has(c)) return false;
+      // (A clause whose words a note names already, "not taken: \"cozy\"",
+      // is said once.)
+      {
+        const own = (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter(
+          w => !['and', 'the', 'for', 'with', 'all'].includes(w),
+        );
+        if (
+          wordsNamed.has(t.toLowerCase()) ||
+          (own.length && own.every(w => wordsNamed.has(w)))
+        )
+          return false;
+      }
       if (!/[a-z]{3,}|#[0-9a-f]{3}|\d/i.test(t)) return false;
-      if (texts.includes(t.toLowerCase())) return false;
       const vals = steps.map(st => String(st.value ?? '').toLowerCase());
       // ("in dark mode, cards …": a mode the other lines carry is used.)
       const modeOnly =
