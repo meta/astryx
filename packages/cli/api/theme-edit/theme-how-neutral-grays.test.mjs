@@ -158,6 +158,52 @@ describe('neutral grays', () => {
           q,
         ).toBe(false);
       }
+      // (A removal or a dislike before "and" turns the whole list away: the
+      // grays are never made plain.)
+      for (const q of [
+        'I hate rounded corners and neutral grays',
+        'remove rounded corners and neutral grays',
+        'get rid of rounded corners and neutral grays',
+        'ditch rounded corners and neutral grays',
+        'skip rounded corners and neutral grays',
+        'I dislike rounded corners and neutral grays',
+        // (A prohibition anywhere keeps the base answer.)
+        "buttons shouldn't be round, neutral grays",
+        "don't make buttons rounder, neutral grays",
+        "neutral grays, don't make buttons rounder",
+        "Don't make buttons rounder, neutral grays",
+        'neutral grays, never hide the tab underline',
+        // (A removal before the grays turns them away even when they carry
+        // a verb of their own.)
+        'remove rounded corners and use neutral grays',
+        'I hate rounded corners and want neutral grays',
+      ]) {
+        const results = await answer(q, 'warm');
+        expect(
+          results.flatMap(r => r.lines),
+          q,
+        ).not.toContain("neutral '#777777'");
+        expect(
+          results.some(r => /grays without a tint/.test(r.text)),
+          q,
+        ).toBe(false);
+      }
+      // (A removal word in another clause, or "drop shadows" as a thing,
+      // turns nothing away: the grays are read.)
+      for (const q of [
+        'neutral grays, drop shadows on cards',
+        'zero radius corners, neutral grays',
+        'remove the card borders, neutral grays',
+        'cards with drop shadows and neutral grays',
+        'cards with drop-shadows and neutral grays',
+        'zero radius corners and neutral grays',
+      ]) {
+        const results = await answer(q, 'warm');
+        expect(
+          results.flatMap(r => r.lines),
+          q,
+        ).toContain("neutral '#777777'");
+      }
       // A hue in the "with", "but" or comma clause after the grays keeps
       // the clause's own reading: no plain gray, and no "pick one".
       for (const q of [
@@ -218,7 +264,7 @@ describe('neutral grays', () => {
           JSON.parse(
             fs.readFileSync(
               new URL(
-                './__golden__/neutral-grays-base-answers.json',
+                './__tests__/neutral-grays-base-answers.json',
                 import.meta.url,
               ),
               'utf8',

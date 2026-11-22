@@ -1975,9 +1975,14 @@ const BARE_GRAYS = /^(?:neutral gr[ae]ys|untinted gr[ae]ys)$/;
  * ask.
  * @param {string} question
  * @param {(text: string) => boolean} [namesThing] - Whether a clause names a part, a dial or a value ("red buttons", "6px corners").
+ * @param {(text: string) => boolean} [turnsAway] - Whether the question turns something away ("avoid", "remove", "I hate").
  * @returns {boolean}
  */
-export function bareNeutralGrays(question, namesThing = () => false) {
+export function bareNeutralGrays(
+  question,
+  namesThing = () => false,
+  turnsAway = () => false,
+) {
   const clauses = question
     .split(/[,;.!?\n]|\band\b/i)
     .map(c => c.trim())
@@ -1989,13 +1994,9 @@ export function bareNeutralGrays(question, namesThing = () => false) {
       .replace(/\s+/g, ' ')
       .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, '');
   // (An ask that turns something away, "avoid rounded corners and neutral
-  // grays", is no bare ask: what it turns away is not read here.)
-  if (
-    /\b(?:avoid|no|not|never|don'?t|without|except|instead of)\b/i.test(
-      question,
-    )
-  )
-    return false;
+  // grays", is no bare ask: what it turns away is not read here. The caller
+  // gives the words, from the readers that read a removal or a dislike.)
+  if (turnsAway(question)) return false;
   const at = clauses.findIndex(c => BARE_GRAYS.test(bare(c)));
   return at >= 0 && clauses.every((c, i) => i === at || namesThing(c));
 }
