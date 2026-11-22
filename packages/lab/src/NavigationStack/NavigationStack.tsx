@@ -270,6 +270,9 @@ const styles = stylex.create({
   },
   // The bar overlays the screens, which scroll under it, as UIKit's content
   // extends under its bar.
+  // The strip itself takes no hit tests: a top screen that hides the bar
+  // keeps the taps on its own header. The bar's background, its layers and
+  // the back button take them.
   bar: {
     position: 'absolute',
     top: 0,
@@ -277,6 +280,7 @@ const styles = stylex.create({
     isolation: 'isolate',
     height: BAR_HEIGHT,
     zIndex: 1,
+    pointerEvents: 'none',
   },
   // The bar's own background and hairline, under every screen's bar layer,
   // which paints its own background over it. iOS 26.2's bar paints neither:
@@ -287,6 +291,7 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
     zIndex: -2,
+    pointerEvents: 'auto',
     backgroundColor: {
       default: colorVars['--color-background-surface'],
       '@media (pointer: coarse)': 'transparent',
@@ -309,6 +314,7 @@ const styles = stylex.create({
     // Below the back button: WebKit does not promote the static siblings a
     // moving layer crosses, so the moving one goes underneath.
     zIndex: -1,
+    pointerEvents: 'auto',
   },
   // The box that cuts the bar, moved by the stack. The row inside it moves
   // back by as much, so only the cut moves.
@@ -343,6 +349,7 @@ const styles = stylex.create({
     position: 'absolute',
     insetInlineStart: spacingVars['--spacing-4'],
     top: 0,
+    pointerEvents: 'auto',
     bottom: 0,
     display: 'flex',
     alignItems: 'center',
