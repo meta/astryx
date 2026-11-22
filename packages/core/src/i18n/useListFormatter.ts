@@ -5,7 +5,8 @@
 /**
  * @file useListFormatter.ts
  * @input InternationalizationContext (via use()), createListFormatter
- * @output A memoized function that joins strings as a list in the active locale
+ * @output Memoized functions that join strings as a list in the active locale,
+ *   as one string or as its parts
  * @position Internal provider-aware list-formatting hook
  *   (architecture:internationalization INV8). Components that show several
  *   catalog messages as one string join them here rather than at the call
@@ -23,7 +24,11 @@
 
 import {use, useMemo} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
-import {createListFormatter} from './listFormat';
+import {
+  createListFormatter,
+  createListPartsFormatter,
+  type ListPart,
+} from './listFormat';
 
 /**
  * Returns a function that joins items as a narrow conjunction list (`a, b, c`
@@ -33,4 +38,15 @@ import {createListFormatter} from './listFormat';
 export function useListFormatter(): (items: ReadonlyArray<string>) => string {
   const ctx = use(InternationalizationContext);
   return useMemo(() => createListFormatter(ctx.locale), [ctx.locale]);
+}
+
+/**
+ * The parts form of `useListFormatter`: the list's items and the locale's
+ * separators in order, memoized while the locale is unchanged.
+ */
+export function useListPartsFormatter(): (
+  items: ReadonlyArray<string>,
+) => ReadonlyArray<ListPart> {
+  const ctx = use(InternationalizationContext);
+  return useMemo(() => createListPartsFormatter(ctx.locale), [ctx.locale]);
 }

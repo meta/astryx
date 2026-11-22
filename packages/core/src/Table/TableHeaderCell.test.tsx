@@ -122,6 +122,19 @@ function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
 // =============================================================================
 
 describe('TableHeaderCell', () => {
+  it('gives a truncating plain-text heading its own direction, so a Latin heading keeps its start', () => {
+    renderChildrenMode('truncate');
+    const heading = screen.getByText('Jobs');
+    expect(heading.tagName).toBe('SPAN');
+    expect(heading).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByRole('columnheader', {name: 'Jobs'})).toBeTruthy();
+  });
+
+  it('keeps a wrapping heading as plain text in the cell', () => {
+    renderChildrenMode('wrap');
+    expect(screen.getByText('Jobs').tagName).toBe('TH');
+  });
+
   it('renders a th element around its children', () => {
     const {container} = renderStandalone(
       <TableHeaderCell>Name</TableHeaderCell>,

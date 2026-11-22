@@ -39,6 +39,7 @@ import {
 import {TableContext} from './TableContext';
 import {use} from 'react';
 import {
+  getWindowFallbackReason,
   isFixedHeightColumn,
   getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
@@ -614,6 +615,20 @@ const MemoizedTableRow = memo(TableRowInner, areRowPropsEqual) as <
 // =============================================================================
 
 /**
+ * The development warning's reason for a column that turns row windowing off:
+ * the first-party plugin's own reason, or a caller's renderCell and its remedy.
+ */
+function describeCustomCellFallback<T extends Record<string, unknown>>(
+  column: TableColumn<T>,
+): string {
+  const pluginReason = getWindowFallbackReason(column);
+  if (pluginReason != null) {
+    return `${pluginReason}, so row virtualization is off for this table`;
+  }
+  return `column "${column.key}" has a custom renderCell, which Table cannot check keeps the fixed row height, so row virtualization is off for this table. Columns without renderCell, the selection column and a row-number column that counts from 1 stay windowed; render this column's value without renderCell to window the rows`;
+}
+
+/**
  * Inner BaseTable implementation (generic-preserving).
  */
 function BaseTableInner<T extends Record<string, unknown>>({
@@ -730,7 +745,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
   }, [mode, ScrollWrapper, admission.rowModel, identity, textOverflowProp]);
   // Admission reads the resolved columns: widened row-number columns are new
   // objects that the admission registry does not know.
-  const hasFixedHeightColumns = resolvedColumns.every(isFixedHeightColumn);
+  const customCellColumn = resolvedColumns.find(
+    column => !isFixedHeightColumn(column),
+  );
+  const hasFixedHeightColumns = customCellColumn == null;
   const windowFallbackReason =
     invalidReason ??
     (config == null
@@ -738,8 +756,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       : (sharedFallbackReason ??
         (rowIndexStart != null || rowCount != null
           ? 'legacy row offsets or counts conflict with windowed metadata'
-          : !hasFixedHeightColumns
-            ? 'a custom cell renderer has no fixed-height admission'
+          : customCellColumn != null
+            ? describeCustomCellFallback(customCellColumn)
             : !Number.isFinite(config.rowHeight) ||
                 config.rowHeight <= 0 ||
                 !Number.isFinite(config.initialViewportHeight) ||
