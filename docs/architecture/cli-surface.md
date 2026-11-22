@@ -345,7 +345,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   Reading it so is a compatible `[fix]`. The one HTML file
   `astryx experimental export` writes may also go
   to an absolute path the caller names with `--out`, in any folder; it never
-  replaces a file that a render did not write (DEC-16).
+  replaces a file that a render did not write (DEC-16). With `--pictures`, the
+  pictures it takes of that file go into a new folder it makes in the system
+  temp folder, the same temp folder a template's scratch copy may use, and
+  stay there for the caller to read; the browser that takes them keeps its
+  profile in a folder of its own in `os.tmpdir()`, as the theme editor's
+  pictures do, removed when it is done (DEC-21).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
   When a current record already confines the writes of a CLI operation (a
   command or its programmatic API) to a root, a change that makes the operation
@@ -1000,6 +1005,9 @@ non-interactive guarantee.
   INV20 describes; each owns the `type` on its own envelope.
 - `api/<subject>/_adapter.mjs` — the subject's only access to the environment
   (INV21).
+- `foundation/pictures/pictures.mjs` — pictures of HTML pages through a
+  browser on the machine, for the theme editor's previews and
+  `astryx experimental export --pictures` (DEC-21).
 - `foundation/render/render-page.mjs` sizes and `clients/cli/commands/experimental/render-output.mjs`
   — the size output of `astryx experimental export`: a `bytes` line, with a
   note when the page's script is more than half of the file, then one line per
@@ -1418,6 +1426,25 @@ destination as an absolute path, which DEC-15 accepts as a scratch copy.
 
 Rejected: writing the named destination from the current folder (it leaves the
 folder a template write is confined to).
+
+### DEC-21 — An export can take pictures of the file it wrote
+
+**Decider:** `josephfarina`, `2026-11-21`
+
+Agents that share an exported page want to see it first: in blind runs, most
+asked for a picture of the page on a phone. An agent can open the file in a
+browser of its own, but that costs many steps. So `astryx experimental export
+--pictures` takes them with a browser already on the machine: a 375 by 812
+pixel phone with touch, in light and in dark, as the export's share guide and
+its chart warning model a phone, and the editor's 1280 by 900 desktop window.
+It narrows the command's own work, as its checks do: both look at the written
+file before it is shared, and neither changes it. The pictures are to check,
+not to send, so they go into a new folder in the system temp folder (INV10).
+The flag names what the caller gets: three pictures of one page. With no
+browser, the export says why in one line and writes the file as usual.
+
+Rejected: pictures beside the file (an agent could share them with it); the
+theme editor's `--png` (there it writes a PNG of each preview beside the theme).
 
 ## Verification
 

@@ -325,18 +325,39 @@ jobs:
       # main then reformats that file inside the merging pull request, which
       # fails Changeset coverage there for a change it never meant to make.
       # Check the files this pull request changes, with the Prettier and the
-      # file patterns the hook uses. The docs and spec lanes skip it with the
-      # rest of full lint, since they install no dependencies.
+      # file patterns the hook uses. The docs lane skips it with the rest of
+      # full lint. The spec lane runs it: an unformatted record that lands
+      # turns every later pull request that touches it red. That lane installs
+      # no dependencies, so it installs Prettier alone, at the version the
+      # lockfile pins.
       - name: Check formatting of changed files
-        if: github.event_name == 'pull_request' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: github.event_name == 'pull_request' && steps.scope.outputs.docsite_only != 'true'
         env:
           MERGE_SHA: ${{ github.sha }}
         run: |
           set -eu
           git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- '*.ts' '*.tsx' '*.md' \
             > "$RUNNER_TEMP/changed-files"
+          if [ ! -s "$RUNNER_TEMP/changed-files" ]; then
+            echo 'No changed TypeScript or Markdown files.'
+            exit 0
+          fi
+          prettier=./node_modules/.bin/prettier
+          if [ ! -x "$prettier" ]; then
+            version=$(awk '/^importers:/ {i = 1} i && /^  \.:$/ {r = 1; next} r && /^  [^ ]/ {exit} r && /^      prettier:$/ {p = 1; next} p && /version:/ {print $2; exit}' pnpm-lock.yaml | sed 's/(.*//')
+            if [ -z "$version" ]; then
+              echo '::error title=Prettier version::pnpm-lock.yaml pins no Prettier version for the root package.'
+              exit 1
+            fi
+            npm install --no-save --no-package-lock --ignore-scripts --loglevel=error \
+              --prefix "$RUNNER_TEMP/prettier" "prettier@$version" || {
+              echo "::error title=Prettier install::Prettier $version could not be installed; npm's error is above."
+              exit 1
+            }
+            prettier="$RUNNER_TEMP/prettier/node_modules/.bin/prettier"
+          fi
           status=0
-          xargs -0 -r ./node_modules/.bin/prettier --list-different --ignore-unknown \
+          xargs -0 -r "$prettier" --list-different --ignore-unknown \
             < "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/unformatted" || status=$?
           if [ -s "$RUNNER_TEMP/unformatted" ]; then
             # Quote each path so the printed command pastes into a shell even

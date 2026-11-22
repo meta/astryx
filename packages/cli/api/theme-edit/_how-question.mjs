@@ -2675,6 +2675,22 @@ const ROLE_WORDS =
  * @property {string} [within] - a container the clause's links are drawn in ("links on cards"): the token a link reads is set there
  */
 
+/** Words that ask for a part's fill ("transparent" is read apart: on one
+ * side of a border color it is that side's line). */
+const FILL_WORDS = /\b(background|bg|fill(ed)?|gradient|glossy|tint(ed)?)\b/;
+/** A row metric a clause can ask of zebra rows. */
+const ROW_METRICS = [
+  'size',
+  'spacing',
+  'weight',
+  'fontsize',
+  'italic',
+  'case',
+  'leading',
+  'tracking',
+  'family',
+];
+
 /**
  * The aspects a clause asks about, by its words. Order is the answer order.
  * @param {string} text
@@ -2875,9 +2891,8 @@ function aspectsOf(text) {
     x => x.toLowerCase() === 'transparent',
   );
   if (
-    /\b(background|bg|fill(ed)?|gradient|glossy|tint(ed)?|stripes|striped|zebra)\b/.test(
-      c,
-    ) ||
+    FILL_WORDS.test(c) ||
+    /\b(stripes|striped|zebra)\b/.test(c) ||
     (!seeThroughSide && /\btransparent\b/.test(c))
   )
     add('background');
@@ -11412,6 +11427,39 @@ export function draftAnswer(ctx, env, question) {
       stripeNamesOf(ctx.project)(c.text)
     )
       c.aspects = ['background'];
+  // "zebra rows taller", "zebra rows bold": the rows' size or weight, with
+  // no stripe, when "zebra" only names the rows and nothing in the ask is
+  // about a fill: no color, and no word of a color, fill, shading, stripe
+  // or lightness stem.
+  // (Read by word stems, so every form counts: "colored", "backgrounds",
+  // "darken", "shading"; a tone word, "more subtle", "warmer", is the
+  // stripes' too.)
+  const fillSaid =
+    colorsIn(asked0).length > 0 ||
+    FILL_WORDS.test(asked0) ||
+    /\btransparent\b/.test(asked0) ||
+    /\b(?:colou?r|fill|background|shad|tint|band|strip|dark|light|bright|pale|deep|warm|cool|subtle|mute|soft|vivid|vibran|saturat|intens|contrast)\w*/.test(
+      asked0,
+    );
+  for (const c of clauses) {
+    const others = c.aspects.filter(x => x !== 'background');
+    if (
+      !fillSaid &&
+      // ("add taller zebra rows", "I want zebra rows that are taller", "a
+      // table with taller zebra rows": an ask for zebra rows keeps them. A
+      // clause the reader starts at "with" has it in its joint.)
+      !/\b(?:add|want|need|give|like)\b[^,;.]*\bzebra\b/.test(c.text) &&
+      !/\bwith\b/.test(String(c.joint ?? '')) &&
+      // (Another clause that asks a fill, "…and more vibrant", is the
+      // stripes'.)
+      !clauses.some(k => k !== c && k.aspects.includes('background')) &&
+      others.length &&
+      others.length < c.aspects.length &&
+      others.every(x => ROW_METRICS.includes(x)) &&
+      /\bzebra\s+(?:table\s+)?(?:rows?|tables?)\b/.test(c.text)
+    )
+      c.aspects = others;
+  }
   // "shadow opacity 0.2", "card shadows with 30% alpha", "dialog shadows
   // 50% transparent": the layer's alpha is the ask, not the layer.
   for (const c of clauses)
@@ -13404,9 +13452,14 @@ export function draftAnswer(ctx, env, question) {
       )
         return inValue.has(st);
       if (st.thing.startsWith('--')) return C.typeOf(st.thing) === 'color';
-      // A gradient goes per mode too, as a background image (the other
-      // mode keeps its background color).
-      if (/^background(-image)?$/.test(st.thing) && gradientOnly(st.value))
+      // A gradient goes per mode too, as a background image or the
+      // shorthand with its size (the other mode keeps its background
+      // color).
+      if (
+        /^background(-image)?$/.test(st.thing) &&
+        /gradient\(/i.test(st.value ?? '') &&
+        !/url\(|light-dark\(/i.test(st.value ?? '')
+      )
         return true;
       if (st.thing === 'background')
         return (
@@ -13414,9 +13467,21 @@ export function draftAnswer(ctx, env, question) {
         );
       return COLOR_PROPS.test(st.thing);
     };
+    // (One gradient layer said with its position and size, "0 0 / 24px
+    // 24px", stays the shorthand: background-image takes no size. Any other
+    // gradient moves to background-image.)
     /** @param {string | undefined} v */
     const gradientOnly = v =>
-      /gradient\(/i.test(v ?? '') && !/url\(|light-dark\(/i.test(v ?? '');
+      /gradient\(/i.test(v ?? '') &&
+      !/url\(|light-dark\(/i.test(v ?? '') &&
+      (matchValue('background-image', String(v)) ||
+        !/\)[^()]*\s\/\s/.test(String(v)) ||
+        splitTop(String(v), ',').length > 1 ||
+        // (A layer the ask said more layers after is part of a value.)
+        new RegExp(
+          `${String(v).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\s*,\\s*(?:repeating-)?(?:linear|radial|conic)-gradient\\(`,
+          'i',
+        ).test(q));
     const options = d.options
       .map(o =>
         o.map(st =>
