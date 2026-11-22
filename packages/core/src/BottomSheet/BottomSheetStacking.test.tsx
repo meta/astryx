@@ -42,6 +42,14 @@ import {
 } from './bottomSheetStack';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 /**
  * Every native showModal/show/close, in order, with the dialog. The label is
  * read when a test asks, because a switcher labels its dialog from state its
@@ -1022,7 +1030,7 @@ describe('R5 dismissal', () => {
 
   it('a scrim tap closes only the top sheet', () => {
     render(<Pair />);
-    fireEvent.click(getDialog('B'));
+    pressScrim(getDialog('B'));
     expect(stackSummary()).toEqual(['A:top:0', 'B:exiting:0']);
     // Only the exiting sheet went; A is still open, and B's own callback was
     // the one called (A's state is untouched).
@@ -1111,7 +1119,7 @@ describe('R5 dismissal', () => {
       event = pressEscape();
     });
     expect(event.defaultPrevented).toBe(true);
-    fireEvent.click(getDialog('B'));
+    pressScrim(getDialog('B'));
     drag(getHandle(getDialog('B')), [{y: 0}, {y: 40}, {y: 120}]);
     fireCancel(getDialog('B'));
     expect(stackSummary()).toEqual(['A:covered:1', 'B:top:0']);
@@ -1119,7 +1127,7 @@ describe('R5 dismissal', () => {
 
   it('honours a form top sheet: Escape closes, scrim and swipe do not', () => {
     render(<Pair purposeB="form" />);
-    fireEvent.click(getDialog('B'));
+    pressScrim(getDialog('B'));
     drag(getHandle(getDialog('B')), [{y: 0}, {y: 40}, {y: 120}]);
     expect(stackSummary()).toEqual(['A:covered:1', 'B:top:0']);
     act(() => {
