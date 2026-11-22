@@ -201,6 +201,14 @@ describe('a color said for one mode is its page', () => {
         isShade,
       ),
     ).toBe('calm and minimal\n- dark mode: page deep dark plum');
+    // (A page clause after a comma and an "and" is a clause start.)
+    expect(
+      colorsSaidForPages(
+        'make the buttons rounder, and dark mode should be a deep dark plum',
+        isHue,
+        isShade,
+      ),
+    ).toBe('make the buttons rounder, and dark mode: page deep dark plum');
     // (The color reader's shade words count as tone words too.)
     expect(
       colorsSaidForPages('light mode is pastel pink', isHue, isShade),
@@ -319,6 +327,33 @@ describe('a color said for one mode is its page', () => {
       const accent = plum.filter(l => /^accent '#/.test(l));
       expect(accent.length).toBeGreaterThan(0);
       for (const l of accent) expect(l).not.toMatch(/--mode/);
+    },
+    T,
+  );
+
+  it(
+    'rounder buttons, and a deep dark plum dark mode: the plum is the dark page, never the buttons',
+    async test => {
+      needsBases(test);
+      const lines = /** @type {string[]} */ (
+        (
+          await themeEditHow(
+            'make the buttons rounder, and dark mode should be a deep dark plum',
+            {cwd, theme: 'c'},
+          )
+        ).data.results ?? []
+      )
+        .flatMap(r => r.commands ?? [])
+        .map(x =>
+          String(x)
+            .replace(/^.* editor /, '')
+            .replace(/^set c /, ''),
+        );
+      expect(pageIn(lines, 'dark')).not.toBeNull();
+      expect(lines.join('\n')).toMatch(/corners more --on button/);
+      expect(lines.join('\n')).not.toMatch(
+        /background-color '#[0-9a-f]+' --on button/,
+      );
     },
     T,
   );
