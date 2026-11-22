@@ -27507,6 +27507,17 @@ export function draftAnswer(ctx, env, question) {
               text: `${part} shows its hover and press by tinting its own fill, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
               options: [],
             };
+          // (A part that paints a fill of its own for a state, a current
+          // pagination dot or a selected row, would lose it under a gloss:
+          // nothing is written.)
+          const stateFill = paints.covered.find(x =>
+            /^--state /.test(String(x.flags ?? '')),
+          );
+          if (stateFill)
+            return {
+              text: `${part} paints a fill of its own when ${stateFill.cond.replace(/=.*$/, '')}, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
+              options: [],
+            };
           /** @type {Record<string, string[]>} */
           const looks = C.variantValues(one(part));
           // (A condition on another axis, "glossy small buttons", scopes

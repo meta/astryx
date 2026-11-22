@@ -297,6 +297,16 @@ describe("glossy is a gloss of the part's own fill", () => {
     );
   }, 240_000);
 
+  it('a part with a fill of its own for a state writes nothing and says why', async () => {
+    for (const ask of ['glossy pagination dots', 'glossy table rows']) {
+      const rs = await how('q0', ask);
+      expect(writes(rs), ask).toEqual([]);
+      expect(rs.map(r => r.text).join('\n'), ask).toMatch(
+        /paints a fill of its own when/,
+      );
+    }
+  }, 240_000);
+
   it('a switch writes nothing with a color said too', async () => {
     const rs = await how('q0', 'glossy blue toggles');
     expect(writes(rs).filter(l => / --on switch\b/.test(l))).toEqual([]);
