@@ -248,6 +248,9 @@ a consumer's bundler keeps.
   A push that focuses that element announces `title` once, as FR13 says.
   The stack's region and its name do not change.
 
+AR3, AR5 gap: no screen's content names its scroller, and no screen hides the
+bar.
+
 ## Design relationships
 
 | Anatomy or state  | Design requirement      | Representation authority | Hierarchy role | Component contract |
