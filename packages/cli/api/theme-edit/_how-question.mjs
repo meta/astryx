@@ -28103,7 +28103,18 @@ export function draftAnswer(ctx, env, question) {
             };
           // (A tinted color, "tinted blue", is a lighter or deeper tint in
           // each mode, which the gloss does not work out: nothing is written.)
-          if (said && /\btint(?:ed|s)?\b/.test(c.text))
+          if (
+            [
+              c,
+              ...clauses.filter(
+                o =>
+                  o !== c &&
+                  !o.state &&
+                  !o.neg &&
+                  o.parts.some(p => p.on === part),
+              ),
+            ].some(o => fillSaid(o) && TINT_WORD.test(o.text))
+          )
             return {
               text: `a gloss of a tinted color on ${part} is not worked out here, so nothing is written; ask for "${part} tinted" with the color for the tint alone`,
               options: [],
@@ -28138,8 +28149,7 @@ export function draftAnswer(ctx, env, question) {
           const filled = (looks[axis] ?? []).filter(
             v => lookToken(`${axis}:${v}`) != null,
           );
-          const filledLook =
-            filled.find(v => !Object.hasOwn(COLOR_NAMES, v)) ?? filled[0];
+          const filledLook = filled.find(v => !HUES[v]) ?? filled[0];
           if (
             said &&
             filledLook &&
@@ -28148,7 +28158,7 @@ export function draftAnswer(ctx, env, question) {
             modes.every(m => ownFill(f.when ?? null, m) == null)
           )
             return {
-              text: `${part} has a fill in each of its ${axis === 'variant' ? 'variants' : `${axis} looks`} but none of its own, and a color said for every ${part} is not split into them here, so nothing is written; name one ("glossy ${said.startsWith('#') ? 'blue' : said} ${filledLook} ${part}s")`,
+              text: `${part} has a fill in each of its ${axis === 'variant' ? 'variants' : `${axis} looks`} but none of its own, and a color said for every ${part} is not split into them here, so nothing is written; name one ("glossy ${(c.text.toLowerCase().match(/[a-z]+/g) ?? []).find(w => Boolean(HUES[w])) ?? said} ${filledLook} ${part}s")`,
               options: [],
             };
           /** @type {Step[]} */
