@@ -123,7 +123,7 @@ describe('a light neutral', () => {
       r => r.commands,
     );
     expect(silverAll).toContain(
-      "set q0 --color-syntax-comment '#4e4e4e' --mode light",
+      "set q0 --color-syntax-comment '#4f4f4f' --mode light",
     );
     // (So does a light tan.)
     expect(
@@ -143,6 +143,16 @@ describe('a light neutral', () => {
       r => r.commands,
     );
     expect(own.join('\n')).not.toMatch(/--color-syntax-comment/);
+    // (So does a code block filled as a part.)
+    await themeEditNew('q3', {cwd, like: 'neutral'});
+    await themeEditSet('q3', 'background-color', '#1e1e1e', {
+      cwd,
+      on: 'code-block',
+    });
+    const part = (await how('q3', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(part.join('\n')).not.toMatch(/--color-syntax-comment/);
     const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
     expect(slate).toContain("set q0 neutral '#64748b'");
     expect(slate.join('\n')).not.toMatch(/--color-background-/);

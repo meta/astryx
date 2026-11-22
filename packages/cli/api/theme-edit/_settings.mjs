@@ -6024,6 +6024,48 @@ export function fieldEdgeTokens(ctx) {
 }
 
 /**
+ * Whether the theme pins a token in a mode, so it does not follow the
+ * surface: a value in the theme's own source, or an exact setting of it.
+ * @param {ThemeData} data
+ * @param {Record<string, string>} own the theme's own source values
+ * @param {string} k @param {'light' | 'dark'} m
+ */
+export function tokenPinned(data, own, k, m) {
+  return (
+    k in own ||
+    data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === k &&
+        !x.on &&
+        !x.when &&
+        !x.state &&
+        (!x.mode || x.mode === m),
+    )
+  );
+}
+
+/**
+ * Whether a theme's code blocks draw on the surface in a mode: the code
+ * background follows the surface (the theme pins no value of its own for
+ * it) and no setting fills the code block or its header, as a part or
+ * scoped to it.
+ * @param {ThemeData} data
+ * @param {Record<string, string>} own the theme's own source values
+ * @param {'light' | 'dark'} m
+ */
+export function codeBlocksOnSurface(data, own, m) {
+  const code = '--color-syntax-background';
+  if (tokenPinned(data, own, code, m)) return false;
+  return !data.settings.some(
+    x =>
+      (!x.mode || x.mode === m) &&
+      /^code-block/.test(String(x.on ?? '')) &&
+      (x.thing === code || /^background(?:-color)?$/.test(x.thing)),
+  );
+}
+
+/**
  * A color itself where it reads at `min` on the ground, else the nearest
  * shade of it (its hue and chroma, its lightness stepped away from the
  * ground) that does; null when none does.
@@ -9002,17 +9044,7 @@ export function compileTheme(ctx, data, base) {
   // step from it, and the emphasized border is an opaque border's own
   // color. An exact setting or the theme's own source value always wins.
   /** @param {string} k @param {'light' | 'dark'} m */
-  const pinned = (k, m) =>
-    k in ownTokenValues() ||
-    data.settings.some(
-      x =>
-        x.source === 'token' &&
-        x.thing === k &&
-        !x.on &&
-        !x.when &&
-        !x.state &&
-        (!x.mode || x.mode === m),
-    );
+  const pinned = (k, m) => tokenPinned(data, ownTokenValues(), k, m);
   /** The color a token shows in a mode, opaque, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
   const written = (k, m) => {
     // (A value written for both modes in one light-dark() is read by its

@@ -104,6 +104,9 @@ import {
   growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
+  codeBlocksOnSurface,
+  ownSourceTokenValues,
+  shadeAt,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -32576,28 +32579,17 @@ export function draftAnswer(ctx, env, question) {
       // (The panels follow the surface only where the theme sets no color
       // of its own for them: a code background the theme sets, or one that
       // is not the surface's now, stays, and text on it is left as it is.)
-      const panelsFollow = (/** @type {'light' | 'dark'} */ m) => {
-        const code = '--color-syntax-background';
-        const set = env.data.settings.some(
-          x =>
-            x.source === 'token' &&
-            x.thing === code &&
-            !x.on &&
-            !x.when &&
-            !x.state &&
-            (!x.mode || x.mode === m),
-        );
-        const now = parseColor(String(current(code, m) ?? ''));
-        const surface = parseColor(
-          String(current('--color-background-surface', m) ?? ''),
-        );
-        return (
-          !set &&
-          !!now &&
-          !!surface &&
-          now.slice(0, 3).every((v, i) => Math.abs(v - surface[i]) < 1)
-        );
-      };
+      /** @type {Record<string, string>} */
+      let own = {};
+      try {
+        own = ctx.project?.cwd
+          ? ownSourceTokenValues(ctx.project.cwd, env.slug)
+          : {};
+      } catch {
+        own = {};
+      }
+      const panelsFollow = (/** @type {'light' | 'dark'} */ m) =>
+        codeBlocksOnSurface(env.data, own, m);
       for (const m of modes)
         for (const tok of [
           '--color-text-primary',
@@ -32625,17 +32617,13 @@ export function draftAnswer(ctx, env, question) {
               ? [255, 255, 255]
               : [0, 0, 0];
           let to = best;
-          if (!/^--color-text-(?:primary|secondary)$/.test(tok))
-            for (let k = 0.05; k <= 1; k += 0.05) {
-              const mix = ink
-                .slice(0, 3)
-                .map((v, i) => Math.round(v + (best[i] - v) * k));
-              if (ratio(mix, ground) >= 4.5) {
-                to = mix;
-                break;
-              }
-            }
-          else if (tok === '--color-text-secondary')
+          if (!/^--color-text-(?:primary|secondary)$/.test(tok)) {
+            // (The nearest shade of the color that reads, keeping its hue.)
+            const near = parseColor(
+              shadeAt(hex(ink.slice(0, 3)), hex(ground), 4.5) ?? hex(best),
+            );
+            if (near) to = near.slice(0, 3);
+          } else if (tok === '--color-text-secondary')
             for (let k = 0.6; k > 0; k -= 0.05) {
               const mix = best.map((v, i) =>
                 Math.round(v + (ground[i] - v) * k),
