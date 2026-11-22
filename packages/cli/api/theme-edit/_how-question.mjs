@@ -89,6 +89,9 @@ import {
   DIAL_RADII,
   borderParts,
   cornerParts,
+  rowFrameOf,
+  fillsPart,
+  givesEdge,
   focusStateOf,
   paddedParts,
   innerTextTokens,
@@ -12809,10 +12812,78 @@ export function draftAnswer(ctx, env, question) {
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
   // boxes): those parts (for a border, only pieces that draw one).
+  // (A row that frames a part's controls as one strip takes the border and
+  // shadow asked of the part, and its corners once the row has an edge at
+  // rest, from this ask or the theme; else each control rounds, as asked of
+  // the part on its own.)
+  const STRIP_ASPECTS = ['border', 'shadow'];
+  /** Whether this ask or the theme gives a row frame an edge at rest. @param {string} frame */
+  const framedEdge = frame =>
+    clauses.some(
+      o =>
+        !o.state &&
+        !o.neg &&
+        !sideOf(o.text) &&
+        o.aspects.some(a => STRIP_ASPECTS.includes(a)) &&
+        o.parts.some(q => q.on === frame || rowFrameOf(ctx, q.on) === frame),
+    ) ||
+    (env.data?.settings ?? []).some(
+      (/** @type {any} */ x) =>
+        x.source === 'property' &&
+        givesEdge(x) &&
+        partsOf(ctx, x).includes(frame),
+    );
+  /**
+   * Whether this ask or the theme fills a part at rest where a clause
+   * draws: in every mode and variant, or in the clause's own.
+   * @param {string} part @param {string | null | undefined} mode @param {string | undefined} when
+   */
+  const filled = (part, mode, when) =>
+    fillsPart(
+      [
+        ...(env.data?.settings ?? []),
+        // (The fills this ask says, read as the settings they write.)
+        ...clauses.flatMap(o =>
+          !o.state &&
+          !o.neg &&
+          o.aspects.includes('background') &&
+          !/\b(?:transparent|see-through|clear)\b/i.test(o.text)
+            ? o.parts.map(q => ({
+                source: /** @type {const} */ ('property'),
+                on: q.on,
+                thing: 'background',
+                value: o.colors[0] ?? 'currentColor',
+                mode: o.mode ?? undefined,
+                when: q.when,
+              }))
+            : [],
+        ),
+      ],
+      part,
+      {mode, when},
+    );
   for (const c of clauses)
-    if (c.aspects.some(a => a === 'border' || a === 'corners'))
+    if (
+      c.aspects.some(a =>
+        ['border', 'corners', 'shadow', 'background', 'outline'].includes(a),
+      )
+    )
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
+        const frame = rowFrameOf(ctx, p.on);
+        // (A side's border is a rule across the part, said of the part; on a
+        // part this ask or the theme fills, its border, shadow and corners
+        // stay on it, as `set` keeps them: the fill is its box.)
+        const keepsBox = filled(p.on, c.mode, p.when);
+        if (
+          frame &&
+          !keepsBox &&
+          ((!sideOf(c.text) &&
+            c.aspects.some(a => STRIP_ASPECTS.includes(a))) ||
+            (c.aspects.includes('corners') && framedEdge(frame)))
+        )
+          return [{...p, on: frame}];
+        if (!c.aspects.some(a => a === 'border' || a === 'corners')) return [p];
         const own = C.MAP[p.on]?.own ?? {};
         const inner = (
           c.aspects.includes('corners')
@@ -14931,7 +15002,7 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} text
    * @returns {'top' | 'bottom' | 'left' | 'right' | undefined}
    */
-  const sideOf = text => {
+  function sideOf(text) {
     let t = ` ${text.toLowerCase()} `;
     for (const [re] of lex.parts) {
       const m = re.exec(t);
@@ -14946,7 +15017,7 @@ export function draftAnswer(ctx, env, question) {
     return /** @type {'top' | 'bottom' | 'left' | 'right'} */ (
       m[1] ?? (m[2] ? 'bottom' : 'top')
     );
-  };
+  }
   /**
    * The side a clause says is drawn see-through: "a transparent bottom",
    * "a transparent bottom border", "the top edge transparent". A side word
