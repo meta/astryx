@@ -28,6 +28,13 @@ import {
   controlOf,
   editedThemes,
   loadTheme,
+  ownThemeInput,
+  readSavedStates,
+  refuseOwnTokens,
+  refuseThemeSource,
+  sourceChangedReason,
+  staleBuild,
+  withoutNullTokens,
   stateSlot,
 } from './_settings.mjs';
 import {censusStatesOf} from './_parts.mjs';
@@ -197,6 +204,16 @@ function tokenChain(value, map) {
 }
 
 /**
+ * Whether a stale build is one another CLI or base-theme release made from
+ * the same settings (the two release reasons of the editor's stale check).
+ * @param {string} why the reason `staleBuild` gives
+ */
+const releaseStale = why =>
+  /^it was built by CLI |^@astryxdesign\/theme-\S+ is \S+ now, and the build was made on /.test(
+    why,
+  );
+
+/**
  * Load a theme by name: an editor theme first (it is the one `show` names
  * without more), else a theme the project lists (local, package or
  * bundled), loaded as `theme build` loads it.
@@ -211,7 +228,9 @@ async function loadNamedTheme(ctx, cwd, name) {
   if (editedThemes(cwd).includes(name)) {
     const data = loadTheme(cwd, name);
     const base = await baseResolved(ctx.project, data.like);
-    const compiled = compileTheme(ctx, data, base);
+    // (Each saved state in the part's own spelling, which `settingAt`
+    // matches rules by.)
+    readSavedStates(ctx, data);
     /** @param {import('./_settings.mjs').ThemeData['settings'][number]} st @param {string} part */
     const reaches = (st, part) =>
       st.on == null
@@ -265,13 +284,63 @@ async function loadNamedTheme(ctx, cwd, name) {
         ? {when: null, state: copied.state ?? null, exact: false}
         : null;
     };
-    // (What the theme's settings make. What a person adds by hand below
-    // the settings in its theme file is not read here.)
-    const tokens = ownTokens(compiled, base, core);
-    const components = mergeComponents(
-      base.components,
-      compiled.components ?? {},
-    );
+    const stale = staleBuild(cwd, name, data);
+    /** @type {{light: Record<string, string>, dark: Record<string, string>}} */
+    let tokens = {light: {}, dark: {}};
+    /** @type {Record<string, any>} */
+    let components = {};
+    // What the saved settings make, without what the theme file adds by
+    // hand: the answer for a build another CLI or base-theme release made,
+    // and for a theme file with a null token.
+    const fromSettings = () => {
+      const compiled = compileTheme(ctx, data, base);
+      tokens = ownTokens(compiled, base, core);
+      components = mergeComponents(base.components, compiled.components ?? {});
+    };
+    if (stale && releaseStale(stale)) fromSettings();
+    else {
+      // What the app draws: the theme file as a build loads it, with what
+      // a person adds by hand below the settings. A file that does not
+      // parse or load, or no longer extends its settings, is refused, as
+      // `set` refuses it.
+      await refuseThemeSource(cwd, name);
+      // Its own token values, judged as a build judges them.
+      await refuseOwnTokens(ctx, name, data);
+      // A theme file changed by hand since the build is what this reads;
+      // any other stale build (a file missing or damaged, settings that no
+      // longer match, a generated file edited by hand, a command stopped
+      // part way) is refused: `show` builds it again.
+      if (stale && stale !== sourceChangedReason(name))
+        throw new AstryxError(
+          `The ${name} theme's build is not current (${stale}), so what it draws cannot be read yet. Build it again with show first.`,
+          [
+            {
+              name: `${P} show ${name}`,
+              reason: 'builds the theme from its settings',
+            },
+          ],
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
+      const loaded = await ownThemeInput(ctx, name, data.like ?? null);
+      if (!loaded?.theme) {
+        const rel = `themes/${name}/${name}.theme.ts`;
+        throw new AstryxError(
+          `The ${name} theme does not load${loaded?.error ? `: ${loaded.error.message}` : ''}. Fix ${rel}, or put back what was changed by hand.`,
+          [{name: `astryx theme build ${rel} --check`, reason: 'see why'}],
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
+      }
+      // A build writes a null token as it is and warns it. Core cannot
+      // resolve one, so a theme file with one gets the settings' answer.
+      if (withoutNullTokens(loaded.theme) !== loaded.theme) fromSettings();
+      else {
+        tokens = {
+          light: core.resolveThemeTokens(loaded.theme, {mode: 'light'}),
+          dark: core.resolveThemeTokens(loaded.theme, {mode: 'dark'}),
+        };
+        components = loaded.theme.components ?? {};
+      }
+    }
     return {
       kind: 'editor',
       tokens,

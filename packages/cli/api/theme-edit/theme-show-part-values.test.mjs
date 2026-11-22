@@ -530,6 +530,104 @@ describe('show --on: what one part of a theme shows', () => {
     expect(text.stdout).not.toMatch(/ - (?:dial|part|token|value)$/m);
   }, 120_000);
 
+  it('reads what an editor theme’s file adds by hand below its settings', async () => {
+    await themeEditNew('handy', {cwd, like: 'neutral'});
+    await themeEditSet('handy', 'corners', 'pill', {cwd});
+    const file = path.join(cwd, 'themes', 'handy', 'handy.theme.ts');
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          "name: 'handy',",
+          "name: 'handy',\n  tokens: {'--color-background-card': '#0a0b0c'},\n  components: {card: {base: {borderColor: '#0d0e0f'}}},",
+        ),
+    );
+    const r = /** @type {any} */ (
+      await themeEditShow('handy', {cwd, on: 'card'})
+    );
+    expect(valueOf(r, 'background-color')).toMatchObject({
+      value: '#0a0b0c',
+      source: 'theme',
+    });
+    expect(valueOf(r, 'border-color')).toMatchObject({
+      value: '#0d0e0f',
+      source: 'theme',
+    });
+    // A build that no longer matches the saved settings is refused, with
+    // show (which builds it again) as the next step.
+    const generated = path.join(cwd, 'themes', 'handy', 'handy.settings.ts');
+    const kept = fs.readFileSync(generated, 'utf8');
+    fs.rmSync(generated);
+    const stale = await refusal(() =>
+      themeEditShow('handy', {cwd, on: 'card'}),
+    );
+    expect(stale.code).toBe('ERR_THEME_INVALID');
+    expect(stale.run.join(' ')).toMatch(/editor show handy$/);
+    fs.writeFileSync(generated, kept);
+    // A build another CLI release made answers as before: what the saved
+    // settings make, without the hand additions, and is not refused.
+    fs.writeFileSync(
+      generated,
+      kept.replace(/\(CLI [^)]+\)\./, '(CLI 0.0.1).'),
+    );
+    const older = /** @type {any} */ (
+      await themeEditShow('handy', {cwd, on: 'card'})
+    );
+    expect(valueOf(older, 'background-color').value).not.toBe('#0a0b0c');
+    expect(valueOf(older, 'border-radius').value).toBe(
+      valueOf(r, 'border-radius').value,
+    );
+    fs.writeFileSync(generated, kept);
+    // A theme file that no longer extends its settings is refused, as set
+    // refuses it.
+    const source = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(file, source.replace(/extends: \w+,/, ''));
+    expect(
+      (await refusal(() => themeEditShow('handy', {cwd, on: 'card'}))).code,
+    ).toBe('ERR_THEME_INVALID');
+    fs.writeFileSync(file, source);
+    // A token value a build refuses is refused here too, not read.
+    for (const bad of ["'banana'", '12']) {
+      fs.writeFileSync(
+        file,
+        source.replace(
+          "'--color-background-card': '#0a0b0c'",
+          `'--color-background-card': ${bad}`,
+        ),
+      );
+      expect(
+        (await refusal(() => themeEditShow('handy', {cwd, on: 'card'}))).code,
+      ).toBe('ERR_THEME_INVALID');
+    }
+    // A null token, which a build writes as it is and warns, gets what the
+    // saved settings make, without the hand additions: no crash, and no
+    // Core default named as the theme's.
+    fs.writeFileSync(
+      file,
+      source.replace(
+        "'--color-background-card': '#0a0b0c'",
+        "'--color-background-card': '#0a0b0c', '--color-text-primary': null",
+      ),
+    );
+    const withNull = /** @type {any} */ (
+      await themeEditShow('handy', {cwd, on: 'card'})
+    );
+    expect(valueOf(withNull, 'background-color').value).not.toBe('#0a0b0c');
+    expect(valueOf(withNull, 'border-radius').value).toBe(
+      valueOf(r, 'border-radius').value,
+    );
+    fs.writeFileSync(file, source);
+    // A theme file that no longer loads is refused, as show refuses it.
+    fs.writeFileSync(
+      file,
+      `${fs.readFileSync(file, 'utf8')}\nexport const = ;\n`,
+    );
+    expect(
+      await refusal(() => themeEditShow('handy', {cwd, on: 'card'})),
+    ).toMatchObject({code: 'ERR_THEME_INVALID'});
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})

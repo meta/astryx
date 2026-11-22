@@ -11240,6 +11240,17 @@ export function setOwnTokenCheck(fn) {
 }
 
 /**
+ * Refuse the theme's own token values as a build judges them, before the
+ * theme is read or built.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {ThemeData} data
+ */
+export async function refuseOwnTokens(ctx, slug, data) {
+  await ownTokenCheck?.(ctx, slug, data);
+}
+
+/**
  * What runs after every build of a theme, set by the adapter (the app copy
  * of the theme): null until it is set.
  * @type {((ctx: Ctx, slug: string, data: ThemeData) => void) | null}
@@ -12124,7 +12135,7 @@ export function themeResolved(ctx, slug, theme) {
  * @param {any} theme
  * @returns {any}
  */
-function withoutNullTokens(theme) {
+export function withoutNullTokens(theme) {
   const MAPS = ['tokens', 'localTokens'];
   const SURFACES = ['onDark', 'onLight', '__onDark', '__onLight'];
   /** @param {any} map */
