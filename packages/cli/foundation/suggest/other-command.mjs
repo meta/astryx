@@ -15,9 +15,11 @@
  * is a hook's name without its first word, the verb: `TopLayer` names
  * `useLayer`), and word cover (every word of the name); word cover gives no
  * hint. The near hook tier gives one when a component or
- * template lookup misses and no better tier matches; the hook keyword and
- * hook stem tiers only for a component lookup, the one lookup that knows its
- * suggestions' declared keywords. A better tier wins; inside a tier,
+ * template lookup misses and no better tier matches; the hook keyword tier
+ * only for a component lookup, the one lookup that knows its suggestions'
+ * declared keywords; and the hook stem tier only for a component lookup too,
+ * since a template's or doc's name is a page or topic, not a thing a hook
+ * acts on. A better tier wins; inside a tier,
  * commands win in {@link LOOKUP_COMMANDS} order, and docs routes with the
  * fewest segments first, then in tree order. The hint goes right after the
  * command's own suggestions that match at its tier or a better one (an own suggestion that
@@ -52,6 +54,7 @@ import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
   closeNameScore,
+  containsRun,
   nameWords,
   synonymMatches,
 } from '../text/suggest-order.mjs';
@@ -373,8 +376,8 @@ export function withOtherCommand(
  * text, says first which catalogs can hold the name; a catalog is asked only
  * then, only for the names that fold to it, and only until a catalog before
  * it has an exact match. So a name no file carries reads no doc and loads no
- * discovery, except the hook discovery that the near hook and hook keyword
- * tiers read when a component or template lookup misses. The docs catalog is every route of the docs tree, from
+ * discovery, except the hook discovery that the near hook, hook keyword and
+ * hook stem tiers read when a component or template lookup misses. The docs catalog is every route of the docs tree, from
  * `docsRoutes`, which the docs lookup owns; the index keeps them where it is
  * kept, and they are worked out only when the name's last segment can end a
  * route. A check that fails gives no hint.
@@ -695,7 +698,7 @@ export function hookByStem(typed, hooks) {
   let found = null;
   for (const hook of hooks) {
     const stem = nameWords(hook.name).slice(1);
-    if (stem.length === 0 || stem.length < best || !hasRun(words, stem)) {
+    if (stem.length === 0 || stem.length < best || !containsRun(words, stem)) {
       continue;
     }
     if (stem.length === best) {
@@ -710,19 +713,6 @@ export function hookByStem(typed, hooks) {
     };
   }
   return found;
-}
-
-/**
- * Whether `run` appears in `words` as consecutive words.
- * @param {string[]} words
- * @param {string[]} run
- * @returns {boolean}
- */
-function hasRun(words, run) {
-  for (let at = 0; at + run.length <= words.length; at++) {
-    if (run.every((word, offset) => words[at + offset] === word)) return true;
-  }
-  return false;
 }
 
 /**
