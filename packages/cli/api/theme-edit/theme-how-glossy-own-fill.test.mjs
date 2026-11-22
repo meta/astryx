@@ -298,13 +298,30 @@ describe("glossy is a gloss of the part's own fill", () => {
   }, 240_000);
 
   it('a part with a fill of its own for a state writes nothing and says why', async () => {
-    for (const ask of ['glossy pagination dots', 'glossy table rows']) {
+    for (const ask of [
+      'glossy pagination dots',
+      'glossy table rows',
+      'glossy list items',
+      'glossy pagination items',
+      'glossy blue toggle buttons',
+    ]) {
       const rs = await how('q0', ask);
       expect(writes(rs), ask).toEqual([]);
       expect(rs.map(r => r.text).join('\n'), ask).toMatch(
-        /paints a fill of its own when/,
+        /paints another fill for some of its states|draws no fill of its own|has no plain fill/,
       );
     }
+  }, 240_000);
+
+  it('a state that keeps the look own fill, a disabled input, is glossed', async () => {
+    const g = glosses(writes(await how('q0', 'glossy inputs')));
+    expect(g.length).toBeGreaterThan(0);
+  }, 240_000);
+
+  it('a look read with another prop, a clickable card, glosses its own fill', async () => {
+    const g = glosses(writes(await how('q0', 'glossy clickable cards')));
+    const mids = new Set(g.map(x => x.stops[1]));
+    expect(mids.size).toBeGreaterThan(1);
   }, 240_000);
 
   it('a switch writes nothing with a color said too', async () => {

@@ -27368,6 +27368,34 @@ export function draftAnswer(ctx, env, question) {
           // (The paints Core gives the part's looks and states at rest, the
           // shared reader a plain-part fill is checked against.)
           const paints = coveredPaints(ctx, one(part), 'background-color');
+          // (A paint's condition read piece by piece: a look prop,
+          // "variant=blue elevation=none", or a state, "selected=selected",
+          // "aria-pressed=true".)
+          /** @param {[string, string]} piece */
+          const isState = ([k, v]) =>
+            /^aria-/.test(k) ||
+            v === k ||
+            v === 'true' ||
+            statesOf(part).includes(k);
+          /** @param {string} cond */
+          const piecesOf = cond =>
+            cond
+              .split(/\s+/)
+              .filter(p => p && !p.startsWith(':'))
+              .map(p => /** @type {[string, string]} */ (p.split(/[=:]/)));
+          /** The token Core paints for one look, `k:v`, at rest. @param {string} look */
+          const lookToken = look => {
+            const [k, v] = look.split(':');
+            return (
+              paints.covered.find(x => {
+                const ps = piecesOf(x.cond);
+                return (
+                  !ps.some(isState) &&
+                  ps.some(([pk, pv]) => pk === k && pv === v)
+                );
+              })?.token ?? null
+            );
+          };
           const modes = /** @type {Array<'light' | 'dark'>} */ (
             saidMode
               ? [saidMode]
@@ -27422,14 +27450,7 @@ export function draftAnswer(ctx, env, question) {
             if (look) return look;
             // (A look shows a token only where Core paints one for it: a
             // ghost button's see-through fill is none.)
-            const token = when
-              ? (paints.covered.find(x => x.flags === `--when ${when}`)
-                  ?.token ?? null)
-              : (paints.rest ??
-                restRead(
-                  C.partReads(one(part), 'background') ?? [],
-                  undefined,
-                ));
+            const token = when ? lookToken(when) : paints.rest;
             return token
               ? (tokenSetOn(part, token, m) ?? `var(${token})`)
               : null;
@@ -27507,15 +27528,30 @@ export function draftAnswer(ctx, env, question) {
               text: `${part} shows its hover and press by tinting its own fill, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
               options: [],
             };
-          // (A part that paints a fill of its own for a state, a current
-          // pagination dot or a selected row, would lose it under a gloss:
-          // nothing is written.)
-          const stateFill = paints.covered.find(x =>
-            /^--state /.test(String(x.flags ?? '')),
-          );
+          // (A part that paints another fill for a state of a look it
+          // fills, a current pagination dot, a pressed toggle, would lose
+          // it under a gloss: nothing is written. A state that keeps the
+          // look's own fill, a disabled input, is no other fill.)
+          const stateFill =
+            paints.covered.some(x => {
+              const ps = piecesOf(x.cond);
+              if (!ps.some(isState)) return false;
+              const lv = ps.find(([k]) => k === axis)?.[1];
+              const own = lv ? lookToken(`${axis}:${lv}`) : paints.rest;
+              return own != null && x.token !== own;
+            }) ||
+            // (An overlay painted at rest for a state, a pressed toggle's,
+            // is that state's fill; one under :hover or :active is a wash.)
+            (C.partReads(one(part), 'background') ?? []).some(
+              r =>
+                /^--color-overlay-/.test(r.token) &&
+                (r.when ?? []).some(
+                  w => !/(^|\s):/.test(w) && piecesOf(w).some(isState),
+                ),
+            );
           if (stateFill)
             return {
-              text: `${part} paints a fill of its own when ${stateFill.cond.replace(/=.*$/, '')}, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
+              text: `${part} paints another fill for some of its states, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
               options: [],
             };
           /** @type {Record<string, string[]>} */
