@@ -483,9 +483,8 @@ function digitIndexAfterGroup(
 }
 
 /**
- * Backspace after a group separator, or Delete before one, would otherwise
- * remove only the separator. The next keystroke then puts it back. Delete the
- * digit on the far side of the separator instead.
+ * Backspace after a separator, or Delete before one, would remove only the
+ * separator. Regrouping puts it back at once. So delete the digit beyond it.
  *
  * Only when the integer run carries exactly the field's own grouping. A group
  * character the person typed as a decimal (de-DE / vi-VN `1.5`) or a malformed
