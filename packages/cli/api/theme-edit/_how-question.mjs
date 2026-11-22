@@ -12694,7 +12694,9 @@ export function draftAnswer(ctx, env, question) {
     // pixel size to divide by.)
     const asTyped = (/** @type {Clause} */ o) =>
       o.lengths.every(l => /^\d+(?:\.\d+)?px$/i.test(String(l).trim())) &&
-      !/\d\s?(?:pt|rem|em)\b/i.test(o.text) &&
+      // (A size typed in pt, rem or em reaches the clause as pixels already,
+      // so the ask as typed is checked.)
+      !/\d\s?(?:pt|rem|em)\b/i.test(asked0) &&
       !/\b(?:bigger|smaller|larger|more|less|up|down|increase\w*|decrease\w*|by)\b/i.test(
         o.text,
       );
