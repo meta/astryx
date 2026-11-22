@@ -3747,7 +3747,9 @@ describe('Selector statusVariant forwarding', () => {
       </div>,
     );
     // The tooltip mounts on the first hover; its text keeps the written order.
-    await userEvent.hover(screen.getByRole('button', {name: /warning details/i}));
+    await userEvent.hover(
+      screen.getByRole('button', {name: /warning details/i}),
+    );
     const tooltip = await screen.findByRole('tooltip', h);
     expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
       'dir',
