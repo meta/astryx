@@ -495,6 +495,13 @@ const ROWS = [
     },
   ],
   [
+    'a typed value in an example is never dropped',
+    {
+      q: 'Make the cards white, e.g. #fafafa',
+      has: ["background-color '#fafafa' --on card --when variant:default --mode light"],
+    },
+  ],
+  [
     'an example-led ask on its own line is an ask',
     {
       q: 'Header: navy\nFor example buttons red',

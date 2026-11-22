@@ -3078,7 +3078,7 @@ const JOINED = '\u2060';
 const dropAbbreviationDots = text =>
   text
     .replace(/\b([ei])\.([ge])\.?(?=\s|,|\)|$)/gi, '$1$2')
-    .replace(/\b(vs|cf)\.(?=\s)/gi, '$1')
+    .replace(/\b(vs)\.(?=\s)/gi, '$1')
     .replace(/\betc\.(?=\s*(?:[,)]|$))/gi, 'etc');
 
 /**
@@ -3379,6 +3379,11 @@ function clausesOf(q, partWords, words = null) {
         /^(?:eg|ie|for example|such as)\b/i.test(text) &&
         !partWords.some(([re]) => re.test(` ${text} `)) &&
         colorsIn(text).length &&
+        // (A typed value always wins over a color word: "white, eg
+        // #fafafa" keeps it.)
+        !/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb|color)\(/i.test(
+          text,
+        ) &&
         colorsIn(prev).length
       ) {
         joint = '';
@@ -32774,7 +32779,7 @@ export function draftAnswer(ctx, env, question) {
     // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
       .replace(/url\([^()]*\)/gi, ' ')
-      .split(/[,;\n]|(?<!\b(?:e\.g|i\.e|vs|cf))\.(?=\s|$)|\band\b|\bthen\b/i)
+      .split(/[,;\n]|(?<!\b(?:e\.g|i\.e|vs))\.(?=\s|$)|\band\b|\bthen\b/i)
       .map(seg => seg.trim())
       .filter(Boolean);
     for (const words of typedSegments) {
