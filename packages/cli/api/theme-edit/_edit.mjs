@@ -2271,8 +2271,11 @@ const EMPTY_REASON =
  */
 async function acceptContrast(slug, reason, options) {
   const cwd = options.cwd ?? process.cwd();
-  const line = `${P} set ${slug} contrast-accepted '<why the original draws it so>' --on <text part> --ground <part under it> --mode <light|dark>`;
+  const line = `${P} set ${slug} contrast-accepted '<why the original draws it so>' --on <text part> [--when <prop>:<value>] --ground <part under it> --mode <light|dark>`;
   const part = options.on;
+  // One variant of the part (`variant:info`), as the problem's accept line
+  // names it; none for the part as a whole.
+  const when = options.when ?? '';
   const ground = /** @type {any} */ (options).ground;
   const mode = options.mode;
   if (!part || !ground || (mode !== 'light' && mode !== 'dark'))
@@ -2299,8 +2302,14 @@ async function acceptContrast(slug, reason, options) {
     );
   const kept = acceptedContrast(data);
   const same = (
-    /** @type {{part: string, ground: string, mode: string}} */ a,
-  ) => a.part === part && a.ground === ground && a.mode === mode;
+    /** @type {{part: string, ground: string, when?: string, mode: string}} */ a,
+  ) =>
+    a.part === part &&
+    a.ground === ground &&
+    (a.when ?? '') === when &&
+    a.mode === mode;
+  const where = `${part}${when ? ` (${when.replace(':', ' ')})` : ''} on ${ground} in ${mode}`;
+  const scope = `--on ${part}${when ? ` --when ${when}` : ''} --ground ${ground} --mode ${mode}`;
   const res = await resolvedTokens(ctx, slug);
   const found = await contrastProblems(ctx, data, res);
   const atPlace = found.filter(p => {
@@ -2312,7 +2321,7 @@ async function acceptContrast(slug, reason, options) {
     if (!kept.some(same))
       refuse(
         E.ERR_THEME_NOT_SET,
-        `${slug} accepts no contrast problem for ${part} on ${ground} in ${mode}.`,
+        `${slug} accepts no contrast problem for ${where}.`,
         {run: [`${P} show ${slug}`]},
       );
     const left = kept.filter(a => !same(a));
@@ -2332,7 +2341,7 @@ async function acceptContrast(slug, reason, options) {
     if (!here)
       refuse(
         E.ERR_NOT_FOUND,
-        `${slug} has no contrast problem for ${part} on ${ground} in ${mode} to keep.`,
+        `${slug} has no contrast problem for ${where} to keep.`,
         {run: [`${P} show ${slug}`]},
       );
     const at = /** @type {NonNullable<ReturnType<typeof contrastPlace>>} */ (
@@ -2346,7 +2355,7 @@ async function acceptContrast(slug, reason, options) {
     if (!pair)
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `${part} on ${ground} in ${mode} is not drawn in two fixed colors the editor can name, so it cannot be kept as one exact pair.`,
+        `${where} is not drawn in two fixed colors the editor can name, so it cannot be kept as one exact pair.`,
         {run: [`${P} show ${slug}`]},
       );
     const pairs = new Set(
@@ -2358,13 +2367,13 @@ async function acceptContrast(slug, reason, options) {
     if (pairs.size > 1)
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `${part} on ${ground} in ${mode} is drawn in ${pairs.size} pairs of colors (${[...pairs].filter(Boolean).join('; ')}), so no one pair can be kept there.`,
+        `${where} is drawn in ${pairs.size} pairs of colors (${[...pairs].filter(Boolean).join('; ')}), so no one pair can be kept there.`,
         {run: [`${P} show ${slug}`]},
       );
     if (!here?.accept && !here?.accepted)
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `${part} on ${ground} in ${mode} fails in a color the editor made, not one the theme typed: a made color must pass, so it cannot be kept as designed; follow its fix line instead.`,
+        `${where} fails in a color the editor made, not one the theme typed: a made color must pass, so it cannot be kept as designed; follow its fix line instead.`,
         {run: here?.fix ? [here.fix] : [`${P} show ${slug}`]},
       );
     const {color, groundColor} =
@@ -2374,6 +2383,7 @@ async function acceptContrast(slug, reason, options) {
       {
         part,
         ground,
+        ...(when ? {when} : {}),
         mode,
         ratio: at.ratio,
         color,
@@ -2397,6 +2407,7 @@ async function acceptContrast(slug, reason, options) {
         thing: 'contrast-accepted',
         value: reason.trim(),
         on: part,
+        ...(when ? {when} : {}),
         mode,
       },
       replaced: null,
@@ -2409,8 +2420,8 @@ async function acceptContrast(slug, reason, options) {
       acceptedContrast: acceptedContrast(data),
       notes: [
         reason.trim().toLowerCase() === 'none'
-          ? `${part} on ${ground} in ${mode} is a problem again: show lists it with its fix line`
-          : `${part} on ${ground} in ${mode} is kept as designed at ${contrastPlace(/** @type {any} */ (here))?.ratio}:1 (${reason.trim()}); a change to either of its colors makes it a problem again; to take this back: ${P} set ${slug} contrast-accepted none --on ${part} --ground ${ground} --mode ${mode}`,
+          ? `${where} is a problem again: show lists it with its fix line`
+          : `${where} is kept as designed at ${contrastPlace(/** @type {any} */ (here))?.ratio}:1 (${reason.trim()}); a change to either of its colors makes it a problem again; to take this back: ${P} set ${slug} contrast-accepted none ${scope}`,
       ],
     },
   });
@@ -9432,10 +9443,11 @@ export async function themeEditShow(theme, options = {}) {
               at != null &&
               at.part === a.part &&
               at.ground === a.ground &&
+              at.when === (a.when ?? '') &&
               at.mode === a.mode
             );
           })?.text ?? null,
-        undo: `${P} set ${theme} contrast-accepted none --on ${a.part} --ground ${a.ground} --mode ${a.mode}`,
+        undo: `${P} set ${theme} contrast-accepted none --on ${a.part}${a.when ? ` --when ${a.when}` : ''} --ground ${a.ground} --mode ${a.mode}`,
       })),
       openProblems: [
         ...problemLines(shownChecks),
