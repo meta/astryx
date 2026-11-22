@@ -175,7 +175,7 @@ export const docs = {
     },
     {
       name: 'ref',
-      type: 'Ref<HTMLDivElement>',
+      type: 'React.Ref<HTMLDivElement>',
       description: 'Ref forwarded to the role="radiogroup" element.',
     },
   ],

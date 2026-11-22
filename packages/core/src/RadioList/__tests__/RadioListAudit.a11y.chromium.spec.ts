@@ -23,8 +23,10 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 
-const OUTPUT = path.resolve('radio-list-audit-evidence');
+const EVIDENCE = path.resolve('test-results/radio-list-audit-evidence');
+let OUTPUT = EVIDENCE;
 
 type Mode = 'light' | 'dark';
 type Direction = 'ltr' | 'rtl';
@@ -48,7 +50,7 @@ type AuditCase = {
 const DESKTOP = {width: 900, height: 700};
 const NARROW = {width: 320, height: 700};
 
-/** WCAG 2.2 SC 2.5.8 target, SC 1.4.3 text, and SC 1.4.11 non-text contrast. */
+/** WCAG 2.2 SC 2.5.8 target and SC 1.4.3 text contrast. */
 const MIN_TARGET_PX = 24;
 const MIN_TEXT_CONTRAST = 4.5;
 
@@ -198,6 +200,8 @@ async function readGroup(page: Page) {
       invalid: group?.getAttribute('aria-invalid') ?? null,
       required: group?.getAttribute('aria-required') ?? null,
       width: box ? Math.round(box.width) : null,
+      rowGap: group ? parseFloat(getComputedStyle(group).rowGap) : null,
+      columnGap: group ? parseFloat(getComputedStyle(group).columnGap) : null,
       labelContrast: label ? textRatio(label) : null,
       focusInGroup: group?.contains(document.activeElement) ?? false,
       radios: radios.map(radio => {
@@ -260,26 +264,34 @@ function checkGroup(
     );
   }
   // WCAG 2.5.8: a row under 24 px passes when a 24 px circle on its center
-  // clears its neighbours, so the centers of adjacent rows must be 24 px apart.
+  // misses each neighbour row, and misses the circle of a neighbour that is
+  // also under 24 px.
+  const undersized = (r: Group['radios'][number]) =>
+    r.bottom - r.top < MIN_TARGET_PX || r.right - r.left < MIN_TARGET_PX;
+  const center = (r: Group['radios'][number]) => [
+    (r.left + r.right) / 2,
+    (r.top + r.bottom) / 2,
+  ];
   group.radios.forEach((radio, i) => {
-    const height = radio.bottom - radio.top;
-    const width = radio.right - radio.left;
-    if (height >= MIN_TARGET_PX && width >= MIN_TARGET_PX) {
+    if (!undersized(radio)) {
       return;
     }
-    const center = (r: typeof radio) => [
-      (r.left + r.right) / 2,
-      (r.top + r.bottom) / 2,
-    ];
     const [x, y] = center(radio);
     for (const other of [group.radios[i - 1], group.radios[i + 1]]) {
       if (other == null) {
         continue;
       }
       const [ox, oy] = center(other);
+      const clearance = undersized(other)
+        ? Math.hypot(ox - x, oy - y)
+        : 2 *
+          Math.hypot(
+            Math.max(other.left - x, 0, x - other.right),
+            Math.max(other.top - y, 0, y - other.bottom),
+          );
       check(
-        Math.hypot(ox - x, oy - y) >= MIN_TARGET_PX,
-        `${radio.label}: ${width}x${height} row, ${Math.round(Math.hypot(ox - x, oy - y))} px from ${other.label}`,
+        clearance >= MIN_TARGET_PX,
+        `${radio.label}: ${radio.right - radio.left}x${radio.bottom - radio.top} row, clearance ${Math.round(clearance)} px from ${other.label}`,
       );
     }
   });
@@ -333,10 +345,12 @@ for (const mode of ['light', 'dark'] as const) {
           rest.radios.every(radio => !radio.checked),
           'a radio is checked with an empty value',
         );
+        check(rest.rowGap != null && rest.rowGap > 0, `row gap ${rest.rowGap}`);
         for (let i = 1; i < rest.radios.length; i++) {
+          const gap = rest.radios[i].top - rest.radios[i - 1].bottom;
           check(
-            rest.radios[i].top >= rest.radios[i - 1].bottom,
-            `${rest.radios[i].label} is not below ${rest.radios[i - 1].label}`,
+            rest.rowGap != null && Math.abs(gap - rest.rowGap) <= 1,
+            `${rest.radios[i].label} sits ${gap}px below ${rest.radios[i - 1].label}, gap ${rest.rowGap}`,
           );
         }
         const result = await axe(page);
@@ -391,16 +405,34 @@ for (const mode of ['light', 'dark'] as const) {
             next.top === prev.top,
             `${next.label} is not on the same row as ${prev.label}`,
           );
-          check(
+          const gap =
             direction === 'ltr'
-              ? next.left >= prev.right
-              : next.right <= prev.left,
-            `${next.label} does not follow ${prev.label} in ${direction}`,
+              ? next.left - prev.right
+              : prev.left - next.right;
+          check(
+            rest.columnGap != null &&
+              rest.columnGap > 0 &&
+              Math.abs(gap - rest.columnGap) <= 1,
+            `${next.label} sits ${gap}px after ${prev.label} in ${direction}, gap ${rest.columnGap}`,
           );
         }
         const result = await axe(page);
         checkAxe(check, result);
         await frame('rest', {rest, axe: result});
+
+        // The same options laid out vertically sit closer together.
+        await page.goto(`${page.url()}&args=orientation:vertical`);
+        await page.locator('#storybook-root [role="radiogroup"]').waitFor();
+        await settle(page);
+        const vertical = await readGroup(page);
+        check(
+          vertical.orientation === 'vertical' &&
+            vertical.rowGap != null &&
+            rest.columnGap != null &&
+            rest.columnGap > vertical.rowGap,
+          `horizontal gap ${rest.columnGap}, vertical gap ${vertical.rowGap}`,
+        );
+        await frame('as-vertical', {vertical});
       },
     });
   }
@@ -616,6 +648,11 @@ for (const story of ['with-description', 'horizontal'] as const) {
         `horizontal scroll at 320px: ${JSON.stringify(scroll)}`,
       );
       const rest = await readGroup(page);
+      checkGroup(check, rest, {
+        name: story === 'horizontal' ? 'Size' : 'Notification preference',
+        orientation: story === 'horizontal' ? 'horizontal' : 'vertical',
+        size: 'md',
+      });
       for (const radio of rest.radios) {
         check(
           radio.right <= NARROW.width,
@@ -628,7 +665,7 @@ for (const story of ['with-description', 'horizontal'] as const) {
 }
 
 test.beforeAll(async () => {
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
