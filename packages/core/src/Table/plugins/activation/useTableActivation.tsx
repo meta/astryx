@@ -411,8 +411,7 @@ export function getForcedColorsBarClassNames(): ReadonlyArray<string> {
  * The consumer owns the `activeKey` state (via `useState`); the plugin adds
  * one whole-row press path — primary click or Enter/Space, after any earlier
  * row handlers run (`preventDefault` cancels) — and reflects the controlled
- * key as `data-active` plus component-owned active styling that reaches
- * pinned cells.
+ * key as `data-active`, `aria-current` and a leading-edge marker.
  *
  * Requires an explicit `idKey` on the Table: without stable row identity the
  * plugin stays inert. The eligible active row exposes `aria-current="true"`

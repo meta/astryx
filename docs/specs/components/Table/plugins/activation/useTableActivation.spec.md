@@ -258,9 +258,7 @@ and overflow engines cover behavior this module has none of, by contract. The
 remaining part — store-subscribed imperative reflection of tab stop, key
 announcements, active paint and current-state exposure per row — follows the
 selection store shape with activation-local state; no listed engine provides
-it. Rejected: adopting a focus engine for its entry-stop half while carrying
-unwanted focus movement, and unifying the selection and activation state
-machines across their separate release owners.
+it. Rejected: a focus engine for entry stops with its unwanted focus movement; one state machine for selection and activation across separate release owners.
 
 ## Open questions
 
