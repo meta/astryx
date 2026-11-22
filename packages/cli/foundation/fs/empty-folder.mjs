@@ -37,13 +37,18 @@ export function removeEmptyFolder(dir, opts = {}) {
  * @returns {boolean}
  */
 export function isFolderOrLinkToOne(at) {
-  const st = fs.lstatSync(at, {throwIfNoEntry: false});
-  if (!st) return false;
-  return (
-    st.isDirectory() ||
-    (st.isSymbolicLink() &&
-      Boolean(fs.statSync(at, {throwIfNoEntry: false})?.isDirectory()))
-  );
+  try {
+    const st = fs.lstatSync(at, {throwIfNoEntry: false});
+    if (!st) return false;
+    return (
+      st.isDirectory() ||
+      (st.isSymbolicLink() &&
+        Boolean(fs.statSync(at, {throwIfNoEntry: false})?.isDirectory()))
+    );
+  } catch {
+    // A path that does not read (a link loop, no permission) is not one.
+    return false;
+  }
 }
 
 /** Files a system or a tool puts in any folder; a folder of only these is empty. */
@@ -62,9 +67,10 @@ export const FOLDER_JUNK = new Set([
  * @returns {boolean}
  */
 export function folderIsEmpty(dir) {
-  // (A link is never followed: one that leads nowhere is not absent.)
-  if (!fs.lstatSync(dir, {throwIfNoEntry: false})) return true;
   try {
+    // (A link is never followed: one that leads nowhere is not absent.
+    // A path that does not read is not empty.)
+    if (!fs.lstatSync(dir, {throwIfNoEntry: false})) return true;
     // A folder holding only empty folders (an empty tokens/) holds nothing
     // either; a link is never followed.
     return (

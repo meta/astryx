@@ -2124,10 +2124,19 @@ export async function addSharedThemeToApp(source, options) {
     // editor state.)
     // (A link counts as what it leads to; one that leads nowhere holds no
     // folder either: the editor's own rule for its folder.)
-    const editorBlocked = [editorRoot, editorDir].find(
-      at =>
-        fs.lstatSync(at, {throwIfNoEntry: false}) && !isFolderOrLinkToOne(at),
-    );
+    const editorBlocked = staged.editor?.dir
+      ? [editorRoot, editorDir].find(at => {
+          try {
+            return (
+              fs.lstatSync(at, {throwIfNoEntry: false}) &&
+              !isFolderOrLinkToOne(at)
+            );
+          } catch {
+            // (A path that does not read holds no folder to copy into.)
+            return true;
+          }
+        })
+      : undefined;
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
     else if (staged.editor && editorBlocked)
       editorNote = `${relFrom(cwd, editorBlocked)} is not a folder; it is left as it is`;

@@ -730,6 +730,23 @@ describe('theme add with a shared theme', () => {
       fs.rmSync(path.join(app, at));
     }
     fs.rmSync(path.join(app, 'themes'), {recursive: true, force: true});
+    // (A link to itself, a loop, holds no folder either.)
+    fs.symlinkSync('themes', path.join(app, 'themes'));
+    const looped = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(looped.data.copy?.workingFiles).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(/themes is not a folder/),
+    });
+    await themeRemove('ocean', {cwd: app});
+    fs.rmSync(path.join(app, 'themes'));
+  });
+
+  it('adds a theme with no editor state as before, whatever stands where the editor folder goes', async () => {
+    fs.symlinkSync('themes', path.join(app, 'themes'));
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.workingFiles).toBeUndefined();
+    fs.rmSync(path.join(app, 'themes'));
   });
 
   it('adds the theme but not editor state whose theme source has edits of its own, and says why', async () => {
