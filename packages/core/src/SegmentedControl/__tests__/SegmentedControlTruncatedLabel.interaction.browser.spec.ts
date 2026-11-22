@@ -37,8 +37,13 @@ async function readCutLabels(page: Page, selector: string) {
           range.setStart(text, offset);
           range.setEnd(text, offset + 1);
           const letter = range.getBoundingClientRect();
+          // WebKit gives a letter the ellipsis hides a zero-width rect at the
+          // cut, inside the box; Chromium places it outside the box. A shown
+          // glyph can overhang its box by about 1 px in WebKit.
           return (
-            letter.left >= box.left - 0.5 && letter.right <= box.right + 0.5
+            letter.width > 0 &&
+            letter.left >= box.left - 1.5 &&
+            letter.right <= box.right + 1.5
           );
         };
         const content = text.data;
