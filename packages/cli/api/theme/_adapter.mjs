@@ -2073,7 +2073,38 @@ export async function addSharedThemeToApp(source, options) {
       ? previous.madeRoot === true
       : !fs.existsSync(root);
     if (fs.existsSync(target)) {
-      const changed = previous ? changedSharedFiles(target, previous) : [];
+      let changed = previous ? changedSharedFiles(target, previous) : [];
+      // (A built file of the copy that holds exactly what the editor builds
+      // from the working files this add copied, still unchanged, and the
+      // editor's own theme source, is the editor's own, which a re-add
+      // replaces. The copy's descriptor and font stylesheet, and any change
+      // beside changed working files or an edited source, stop it.)
+      const working = sharedEditorFiles(
+        previous,
+        path.join(projectDir, 'themes', name),
+      );
+      const editorDir = path.join(projectDir, 'themes', name);
+      if (
+        changed.length &&
+        working &&
+        Object.keys(working).length &&
+        !changedSharedFiles(editorDir, {files: working}).length
+      ) {
+        await import('../theme-edit/_adapter.mjs');
+        const {themeSource} = await import('../theme-edit/_settings.mjs');
+        const source = path.join(editorDir, `${name}.theme.ts`);
+        // (The theme's source is the builder's to edit: built files from an
+        // edited source are their work, never replaced.)
+        const ownSource =
+          !fs.existsSync(source) ||
+          fs.readFileSync(source, 'utf-8') === themeSource(name);
+        if (ownSource) {
+          const {appCopyBuiltCurrent} =
+            await import('../theme-edit/_preview.mjs');
+          const current = appCopyBuiltCurrent(projectDir, name);
+          changed = changed.filter(file => !current.has(file));
+        }
+      }
       if (!previous || changed.length > 0) {
         throw new AstryxError(
           previous
