@@ -165,10 +165,10 @@ export function useTruncationTooltipInterest(
     }
     return holdMouseMoves(elementRef?.current?.ownerDocument.defaultView);
   }, [isEnabled, measure, elementRef]);
-  // A hover counts once a mouse or pen moves over the element. The element
-  // also gets a `pointerenter` when it appears or moves under a still
-  // pointer, and the user did not point at it then; after a scroll WebKit
-  // also sends a move at the still mouse's point (isMouseMove).
+  // A hover starts at the first mouse or pen move over the element. A
+  // `pointerenter` also comes when the element appears or moves under a still
+  // pointer. After a scroll, WebKit also sends a move at the still point
+  // (isMouseMove).
   const onPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (

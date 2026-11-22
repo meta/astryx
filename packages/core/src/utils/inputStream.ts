@@ -7,7 +7,8 @@
  * @output subscribeInput. Its readers: getLastPointerType, the latest
  *   pointer's type; getLastMousePoint, the latest mouse point; getDownPresses,
  *   each finger and pen press that is down; getTouches, the fingers on the
- *   screen and how many touches started.
+ *   screen and how many touches started. holdMouseMoves and isMouseMove: a
+ *   still mouse's repeated point told from a move.
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
@@ -148,6 +149,12 @@ export function getLastMousePoint(view: Window): MousePoint | null {
   return lastMousePoints.get(view) ?? null;
 }
 
+/**
+ * Keeps `view`'s stream hearing mouse moves while a hover target is mounted,
+ * and records the window's last two mouse points for isMouseMove. One
+ * counted subscription per window; it ends with the last release. Without a
+ * window it holds nothing.
+ */
 export function holdMouseMoves(view?: Window | null): () => void {
   if (!view) {
     return () => {};
@@ -168,8 +175,8 @@ export function holdMouseMoves(view?: Window | null): () => void {
 }
 
 /**
- * Whether a `pointermove` or `mousemove` moved the mouse, while a subscriber
- * listens to `pointermove`. After a scroll WebKit sends a trusted move at
+ * Whether a `pointermove` or `mousemove` moved the mouse, while
+ * holdMouseMoves holds the event's window. After a scroll WebKit sends a trusted move at
  * the point where a still mouse already was: a move at the point before the
  * latest `pointermove` repeats it. The stream has heard this move first, and
  * a `mousemove` follows its `pointermove`. An untrusted event counts.
