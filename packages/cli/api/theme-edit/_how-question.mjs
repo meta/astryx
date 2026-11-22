@@ -27010,7 +27010,10 @@ export function draftAnswer(ctx, env, question) {
             const other = parities.find(v => v !== p);
             const clearsOther =
               !clears && !offStriped && !!coreParity && other === coreParity;
-            const keepsStriped = !clears && offStriped;
+            // (Left out of striped tables, the other stripe is taken back
+            // there; Core's own stripe, which Core already draws there, is
+            // not written.)
+            const keepsStriped = !clears && offStriped && p !== coreParity;
             const steps = [
               set('background-color', value ?? 'transparent', {
                 on: parityOn,
@@ -27032,17 +27035,12 @@ export function draftAnswer(ctx, env, question) {
               // draws it.)
               ...(keepsStriped
                 ? [
-                    set(
-                      'background-color',
-                      // (Core's own stripe there is drawn with its token.)
-                      p === coreParity && stripe ? `var(${stripe})` : 'transparent',
-                      {
+                    set('background-color', 'transparent', {
                       on: parityOn,
-                        when: `parity:${p}`,
-                        state: 'striped',
-                        ...modeOf(c),
-                      },
-                    ),
+                      when: `parity:${p}`,
+                      state: 'striped',
+                      ...modeOf(c),
+                    }),
                   ]
                 : []),
             ];

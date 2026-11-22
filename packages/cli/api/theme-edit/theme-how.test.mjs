@@ -1099,9 +1099,9 @@ describe('stripe answers keep to the stripe', () => {
       .join('\n');
     expect(commands).toMatch(want);
   });
-  // Left out of striped tables, Core's own stripe is written back with its
-  // token there, never cleared.
-  it('takes back the even stripe with its token for even rows but not on striped tables', async () => {
+  // Left out of striped tables, Core's own stripe (the even rows) is left to
+  // Core there: no take-back, as on main.
+  it('writes no take-back on striped tables for even rows but not on striped tables', async () => {
     const {data} = await themeEditHow('even rows #eeeeee but not on striped tables', {
       cwd,
       theme: 'q',
@@ -1110,10 +1110,7 @@ describe('stripe answers keep to the stripe', () => {
       .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
       .join('\n');
     expect(commands).toMatch(/'#eeeeee' --on table-row --when parity:even(?! --state)/);
-    expect(commands).toMatch(
-      /background-color 'var\(--color-background-muted\)' --on table-row --when parity:even --state striped/,
-    );
-    expect(commands).not.toMatch(/transparent --on table-row --when parity:even --state striped/);
+    expect(commands).not.toMatch(/--when parity:even --state striped/);
   });
   // The stripe answer keeps the tables apart itself: it says what is kept,
   // never that they cannot be.
