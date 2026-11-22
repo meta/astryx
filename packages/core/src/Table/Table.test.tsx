@@ -40,15 +40,17 @@ import {Text} from '../Text/Text';
  */
 async function freshTableWithCountedTooltip() {
   // An earlier test's page-wide preload runs from its own module graph. It
-  // waits a frame and a task before it imports, so wait the same here, then
-  // a little longer: it then imports before the counting mock below exists.
+  // waits a frame and a task before it imports. Its frame was asked for
+  // before the one below, so its task runs first and its import has started
+  // once this wait ends; then every import still loading is waited out, so
+  // none of it lands on the counting mock below, however slow the run is.
   await act(async () => {
     await new Promise(resolve => {
       requestAnimationFrame(() => {
         setTimeout(resolve, 0);
       });
     });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await vi.dynamicImportSettled();
   });
   vi.resetModules();
   const loads = {count: 0};
