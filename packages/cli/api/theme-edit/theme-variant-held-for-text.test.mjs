@@ -441,8 +441,15 @@ describe('a top nav link colored for a dark bar', () => {
       on: 'selected-items',
       state: 'selected',
     });
-    await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const g = /** @type {any} */ (
+      await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
     expect(drawerSelected('pgr').some(r => /#bfbfbf/.test(r))).toBe(true);
+    // (Measured on the link's own block in the phone menu, never on the
+    // group fill the link never draws.)
+    expect(JSON.stringify(g.data.newProblems ?? [])).not.toMatch(
+      /top-nav-item \(mode drawer, selected\)/,
+    );
     // (A group color set after the link's own `--only` selected color is not
     // written on the link either: the copy keeps the link's own white.)
     await themeEditNew('pgc', {cwd, like: 'neutral'});
