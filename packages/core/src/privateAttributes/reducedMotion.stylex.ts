@@ -19,6 +19,7 @@
 
 import {use} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {watchMediaQuery} from '../utils/coarsePointer';
 import {createSharedContext} from '../utils/sharedContext';
 
 const REDUCED_MOTION = 'data-astryx-reduced-motion';
@@ -77,11 +78,28 @@ ThemeReducesMotionContext.displayName = 'ThemeReducesMotionContext';
  * decides Reduce Motion here.
  */
 export function reducesMotion(element?: Element | null): boolean {
+  // The setting is read in the element's own window, so a frame's element
+  // follows that frame.
+  const view =
+    element?.ownerDocument?.defaultView ??
+    (typeof window === 'undefined' ? null : window);
   return (
-    (typeof window !== 'undefined' &&
-      window.matchMedia?.(REDUCE_MOTION_QUERY).matches === true) ||
+    view?.matchMedia?.(REDUCE_MOTION_QUERY).matches === true ||
     themeReducesMotion(element)
   );
+}
+
+/**
+ * Calls `listener` when the person's Reduce Motion setting changes in
+ * `view`, with whether it is on. Returns the stop. For code that must act
+ * when the setting ends while something is open. A theme's mark is not
+ * watched.
+ */
+export function watchReduceMotionSetting(
+  view: Window | null | undefined,
+  listener: (isOn: boolean) => void,
+): () => void {
+  return watchMediaQuery(view, REDUCE_MOTION_QUERY, listener);
 }
 
 /**

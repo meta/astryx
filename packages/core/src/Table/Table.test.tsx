@@ -726,6 +726,24 @@ describe('BaseTable', () => {
       expect(headers[0]).toHaveAttribute('data-column', 'name');
     });
 
+    it('gives a plain-text label beside an "after" control its own direction', () => {
+      const plugin: TablePlugin<User> = {
+        transformHeaderCell: props => ({...props, after: <span>after</span>}),
+      };
+      render(
+        <BaseTable
+          data={users}
+          columns={[
+            {key: 'name', header: 'Name'},
+            {key: 'email', header: 'אימייל'},
+          ]}
+          plugins={[plugin]}
+        />,
+      );
+      expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('אימייל')).not.toHaveAttribute('dir');
+    });
+
     it('applies transformBodyRow plugin with item and index', () => {
       const receivedItems: string[] = [];
       const plugin: TablePlugin<User> = {
