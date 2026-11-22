@@ -88,7 +88,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the theme does not build, its own <theme>.theme.ts does not parse, or a token in it is not text; the folder stays as it was. With options.on, also an editor theme file that no longer extends its settings, or a build that does not match its saved settings: missing, half done, damaged or older; a build another release made answers from the saved settings, as before (the suggestion is show)',
+      when: 'the theme does not build, its own <theme>.theme.ts does not parse, or a token in it is not text; the folder stays as it was. With options.on, also an editor theme file that no longer extends its settings, or a build that does not match its saved settings: missing, half done, damaged or older; a build another release made, or a theme file with a `null` token, answers from the saved settings, as before, without the hand additions (the suggestion is show)',
     },
     {
       code: 'ERR_DEP_MISSING',

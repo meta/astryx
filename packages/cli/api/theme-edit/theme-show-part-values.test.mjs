@@ -600,8 +600,9 @@ describe('show --on: what one part of a theme shows', () => {
         (await refusal(() => themeEditShow('handy', {cwd, on: 'card'}))).code,
       ).toBe('ERR_THEME_INVALID');
     }
-    // A null token, which a build writes as it is and warns, is read
-    // without it: the answer does not crash.
+    // A null token, which a build writes as it is and warns, gets what the
+    // saved settings make, without the hand additions: no crash, and no
+    // Core default named as the theme's.
     fs.writeFileSync(
       file,
       source.replace(
@@ -612,7 +613,10 @@ describe('show --on: what one part of a theme shows', () => {
     const withNull = /** @type {any} */ (
       await themeEditShow('handy', {cwd, on: 'card'})
     );
-    expect(valueOf(withNull, 'background-color').value).toBe('#0a0b0c');
+    expect(valueOf(withNull, 'background-color').value).not.toBe('#0a0b0c');
+    expect(valueOf(withNull, 'border-radius').value).toBe(
+      valueOf(r, 'border-radius').value,
+    );
     fs.writeFileSync(file, source);
     // A theme file that no longer loads is refused, as show refuses it.
     fs.writeFileSync(

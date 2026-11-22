@@ -286,16 +286,19 @@ async function loadNamedTheme(ctx, cwd, name) {
     };
     const stale = staleBuild(cwd, name, data);
     /** @type {{light: Record<string, string>, dark: Record<string, string>}} */
-    let tokens;
+    let tokens = {light: {}, dark: {}};
     /** @type {Record<string, any>} */
-    let components;
-    if (stale && releaseStale(stale)) {
-      // A build another CLI or base-theme release made: what the saved
-      // settings make, as before (its hand additions are not read yet).
+    let components = {};
+    // What the saved settings make, without what the theme file adds by
+    // hand: the answer for a build another CLI or base-theme release made,
+    // and for a theme file with a null token.
+    const fromSettings = () => {
       const compiled = compileTheme(ctx, data, base);
       tokens = ownTokens(compiled, base, core);
       components = mergeComponents(base.components, compiled.components ?? {});
-    } else {
+    };
+    if (stale && releaseStale(stale)) fromSettings();
+    else {
       // What the app draws: the theme file as a build loads it, with what
       // a person adds by hand below the settings. A file that does not
       // parse or load, or no longer extends its settings, is refused, as
@@ -327,14 +330,16 @@ async function loadNamedTheme(ctx, cwd, name) {
           ERROR_CODES.ERR_THEME_INVALID,
         );
       }
-      // (A null token is written as it is and warned by a build; Core
-      // cannot resolve one, so it is read without it.)
-      const drawn = withoutNullTokens(loaded.theme);
-      tokens = {
-        light: core.resolveThemeTokens(drawn, {mode: 'light'}),
-        dark: core.resolveThemeTokens(drawn, {mode: 'dark'}),
-      };
-      components = loaded.theme.components ?? {};
+      // A build writes a null token as it is and warns it. Core cannot
+      // resolve one, so a theme file with one gets the settings' answer.
+      if (withoutNullTokens(loaded.theme) !== loaded.theme) fromSettings();
+      else {
+        tokens = {
+          light: core.resolveThemeTokens(loaded.theme, {mode: 'light'}),
+          dark: core.resolveThemeTokens(loaded.theme, {mode: 'dark'}),
+        };
+        components = loaded.theme.components ?? {};
+      }
     }
     return {
       kind: 'editor',
