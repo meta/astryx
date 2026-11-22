@@ -13601,22 +13601,24 @@ export async function contrastProblems(ctx, data, res) {
         // inside the ground: a side nav's item in the side nav.)
         (p.within ?? []).includes(q) &&
         holds(g, q));
-    const fill = [...data.settings]
-      .reverse()
-      .find(
-        x =>
-          x.source === 'property' &&
-          /^background(-color)?$/.test(x.thing) &&
-          !x.when &&
-          !x.state &&
-          (!x.mode || x.mode === m) &&
-          x.on &&
-          partsOf(ctx, x).some(between),
-      );
+    const fill = [...data.settings].reverse().find(
+      x =>
+        x.source === 'property' &&
+        /^background(-color)?$/.test(x.thing) &&
+        !x.when &&
+        !x.state &&
+        (!x.mode || x.mode === m) &&
+        x.on &&
+        // (Only a fill the build writes there: a part's own `--only` fill
+        // keeps it under a later group one.)
+        writtenPartsOf(ctx, data, x).some(between),
+    );
     return fill
       ? {
           value: String(fill.value),
-          part: /** @type {string} */ (partsOf(ctx, fill).find(between)),
+          part: /** @type {string} */ (
+            writtenPartsOf(ctx, data, fill).find(between)
+          ),
         }
       : null;
   };
@@ -14797,7 +14799,7 @@ function barFitProblems(ctx, data, res) {
           !x.when &&
           !x.state &&
           (!x.mode || x.mode === 'light') &&
-          partsOf(ctx, x).includes(part),
+          writtenPartsOf(ctx, data, x).includes(part),
       );
     return hit ? String(hit.value) : null;
   };
@@ -14843,7 +14845,7 @@ function barFitProblems(ctx, data, res) {
                 x.on &&
                 !x.when &&
                 !x.state &&
-                partsOf(ctx, x).includes(child),
+                writtenPartsOf(ctx, data, x).includes(child),
             )
             .map(x => [x.thing, String(x.value)]),
         ),
@@ -15612,7 +15614,7 @@ function trackContrastProblems(ctx, data, res, base) {
           (!x.mode || x.mode === m) &&
           x.source === 'property' &&
           /^background(-color)?$/.test(x.thing) &&
-          partsOf(ctx, x).includes(t),
+          writtenPartsOf(ctx, data, x).includes(t),
       );
     const hit = sets.find(x => x.when) ?? sets[0];
     if (!hit) return null;
@@ -15758,7 +15760,7 @@ function floatingEdgeProblems(ctx, data, res, base) {
           !x.when &&
           (!m || !x.mode || x.mode === m) &&
           thing.test(x.thing) &&
-          (x.thing === 'surfaces' || partsOf(ctx, x).includes(t)),
+          (x.thing === 'surfaces' || writtenPartsOf(ctx, data, x).includes(t)),
       );
   /** A value in a mode: its half of light-dark(), its tokens read. @param {string} v @param {string} t @param {'light' | 'dark'} m */
   const read = (v, t, m) => {
