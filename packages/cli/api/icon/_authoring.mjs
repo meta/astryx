@@ -33,6 +33,7 @@ import {
   definitionFile,
   findLocalIconSet,
   generatedModulePath,
+  ownModuleOf,
   generatedModuleText,
   generatedOrigins,
   sameIconModule,
@@ -700,7 +701,12 @@ async function redeclareIconSet(
     const drawn =
       given && set.data.icons.length > 0
         ? drawnLooks(set, packageDir, module =>
-            libraryPositions(module, where, Boolean(set.data.adapter)),
+            libraryPositions(
+              module,
+              where,
+              Boolean(set.data.adapter),
+              ownModuleOf(set, packageDir),
+            ),
           )
         : null;
     const {looks} = resolveDefaultLook({
@@ -981,13 +987,15 @@ function variantOptions(options) {
  * @param {string} module
  * @param {{packageDir: string, pkg: Record<string, any>}} where
  * @param {boolean} adapter
+ * @param {string} own the set's generated module, never read as the library's
  * @returns {Array<Set<string>> | null}
  */
-function libraryPositions(module, where, adapter) {
+function libraryPositions(module, where, adapter, own) {
   try {
     const source = resolveIconSource(module, where);
     return moduleNaming(source.file, {
       adapter,
+      own,
       module,
       progress: line => logger.warn(line),
     }).positions;
@@ -1130,6 +1138,7 @@ async function refreshIconSet(
     const everyIcon = everyLibraryIcon(source.file, {
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
+      own: ownModuleOf(set, packageDir),
       module: source.module,
       progress: line => logger.warn(line),
     });

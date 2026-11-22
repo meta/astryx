@@ -62,6 +62,7 @@ import {
   fontShorthandStyle,
   fontShorthandWeight,
   namedFontFamilies,
+  systemFontSuccessor,
 } from '../theme/build/font-warning.mjs';
 import {
   customPropertyValues,
@@ -152,7 +153,12 @@ import {
   STATUS_TOKEN,
   settingsBeforeChange,
 } from './_palette.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  isFolderOrLinkToOne,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -203,7 +209,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: ReturnType<typeof stopsIn> | null, keepRadii?: Record<string, string> | null, themeSettings?: Setting[], sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -297,41 +303,7 @@ export function themeFiles(cwd, slug) {
   };
 }
 
-/** Files a system or a tool puts in any folder; a folder of only these is empty. */
-export const FOLDER_JUNK = new Set([
-  '.DS_Store',
-  '.gitkeep',
-  'Thumbs.db',
-  'desktop.ini',
-]);
-
-/**
- * Whether `dir` holds nothing of anyone's: absent, empty, or only system
- * files (what `git rm -r` or a branch switch leaves). A path that is not a
- * folder, or one that does not read, is not empty.
- * @param {string} dir
- * @returns {boolean}
- */
-export function folderIsEmpty(dir) {
-  if (!fs.existsSync(dir)) return true;
-  try {
-    // A folder holding only empty folders (an empty tokens/) holds nothing
-    // either; a link is never followed.
-    return (
-      fs.lstatSync(dir).isDirectory() &&
-      fs
-        .readdirSync(dir)
-        .every(
-          n =>
-            FOLDER_JUNK.has(n) ||
-            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
-              folderIsEmpty(path.join(dir, n))),
-        )
-    );
-  } catch {
-    return false;
-  }
-}
+export {FOLDER_JUNK, folderIsEmpty};
 
 /**
  * Whether a dial takes a value of its own kind beside its named words (a
@@ -594,12 +566,7 @@ export function refuseUnreadableFiles(cwd, slug) {
 export function refuseThemesNotFolder(cwd) {
   const root = path.join(cwd, 'themes');
   const st = fs.lstatSync(root, {throwIfNoEntry: false});
-  if (!st) return;
-  const isDir =
-    st.isDirectory() ||
-    (st.isSymbolicLink() &&
-      fs.statSync(root, {throwIfNoEntry: false})?.isDirectory());
-  if (isDir) return;
+  if (!st || isFolderOrLinkToOne(root)) return;
   refuse(
     ERROR_CODES.ERR_FILE_EXISTS,
     `themes in this app is ${st.isSymbolicLink() ? 'a link that does not lead to a folder' : 'a file, not a folder'}, so no editor theme can be read or made: every theme goes in themes/<name>/. Rename or move it, then run the command again.`,
@@ -5252,7 +5219,41 @@ export function partsOf(ctx, s) {
         .filter(takesWhen)
         .filter(keepsOwnHeight),
     );
-  return [s.on];
+  const frame = boxFrameOf(ctx, s);
+  return frame ? [frame] : [s.on];
+}
+
+/**
+ * The row a whole border, border radius or shadow set on a part goes on
+ * instead (a pager's control row, for one set on the pager): the part
+ * paints no box of its own, and its controls sit side by side in a row
+ * that frames them as one strip. On the part it would land on the whole
+ * bar, or show nothing; on each control it would box each one apart. Null
+ * for every other setting: a side's border, the corners dial (it rounds
+ * each control), and any of them on a part the theme fills.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'> & {mode?: unknown, when?: unknown}} s
+ * @returns {string | null}
+ */
+export function boxFrameOf(ctx, s) {
+  if (!s.on || FAMILIES[s.on]) return null;
+  const thing = kebab(String(s.thing ?? ''));
+  // Only the whole outline goes on the row: a side's border is a rule
+  // across the part, said of the part.
+  if (!FRAME_THING.test(thing)) return null;
+  // (A piece of the frame set for one mode or variant goes where the frame
+  // it narrows draws, so every piece of one frame lands on one box: a
+  // dark-mode border color follows the border it colors.)
+  const wider = widerFrameOf(ctx.themeSettings ?? [], s);
+  if (wider) return boxFrameOf(ctx, wider);
+  // (On a part the theme fills, the fill is its box: its border, radius
+  // and shadow stay on it, as they always did.)
+  if (fillsPart(ctx.themeSettings ?? [], s.on, {mode: s.mode, when: s.when}))
+    return null;
+  const own = ctx.C?.MAP?.[s.on]?.own ?? {};
+  if (Object.keys(own).some(k => /^(?:border(?!.*radius)|background)/.test(k)))
+    return null;
+  return rowFrameOf(ctx, s.on);
 }
 
 /**
@@ -5288,6 +5289,58 @@ function drawnAlike(ctx, s, member) {
 }
 
 /**
+ * Whether a part is the row that frames another part's controls as one
+ * strip (a pager's control row).
+ * @param {Ctx} ctx
+ * @param {string} part
+ */
+export function isRowFrame(ctx, part) {
+  return [...ctx.project.target.keys()].some(
+    k => k !== part && rowFrameOf(ctx, k) === part,
+  );
+}
+
+/**
+ * The part of a component that holds its controls side by side and frames
+ * them as one strip (a pager's control row around its page cells), when a
+ * part draws no edge of its own and its edges are those controls': a part
+ * of the same component inside it that draws every one of them again and
+ * again (a slider's track and thumb, drawn once each, sit in no such row)
+ * and draws no border itself. Null when there is none (a date and time field's two
+ * boxes sit in no such row). A border or corners asked of the part belong
+ * on this row: on each control they would box each one apart.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function rowFrameOf(ctx, part) {
+  const componentOf = (/** @type {string} */ t) =>
+    ctx.project.target.get(t)?.component;
+  const component = componentOf(part);
+  if (!component) return null;
+  const edges = roundedPartsInside(ctx, part);
+  const own = edges.filter(t => t !== part && componentOf(t) === component);
+  if (!own.length) return null;
+  const contains = (/** @type {string} */ t) =>
+    /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []);
+  return (
+    contains(part)
+      .filter(
+        t =>
+          !edges.includes(t) &&
+          componentOf(t) === component &&
+          !Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k =>
+            /^border(?!.*radius)/.test(k),
+          ) &&
+          own.every(e =>
+            /** @type {string[]} */ (ctx.C.MAP[t]?.repeats ?? []).includes(e),
+          ),
+      )
+      .sort((a, b) => contains(a).length - contains(b).length)[0] ?? null
+  );
+}
+
+/**
  * The parts that draw a part's border: the part itself, or, when it draws
  * none of its own and its edges are the borders of parts inside it (a date
  * and time field's date and time boxes), those parts. Only pieces that draw
@@ -5300,7 +5353,7 @@ function drawnAlike(ctx, s, member) {
 export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
-  const inner = cornerParts(ctx, part).filter(
+  const inner = roundedPartsInside(ctx, part).filter(
     t => t !== part && drawsBorder(ctx, t),
   );
   return inner.length ? inner : [part];
@@ -5442,15 +5495,33 @@ export function fontOf(value) {
 /**
  * The fallbacks a family typed alone gets, by the kind its name says, as
  * the open fonts get theirs: a monospace name (Mono, Code) monospace ones,
- * a serif name (but no sans) serif ones, any other sans-serif ones.
+ * a serif name (but no sans) serif ones, any other sans-serif ones; after
+ * the family that replaced it, for an older name of a system family.
  * @param {string} family
  * @returns {string[]}
  */
 function aloneFallbacks(family) {
-  if (/\b(mono|code)\b/i.test(family)) return ['ui-monospace', 'monospace'];
-  if (/serif/i.test(family) && !/sans/i.test(family))
-    return ['Georgia', 'serif'];
-  return ['system-ui', 'sans-serif'];
+  // (An older name of a system family, "MS Sans Serif", reaches the family
+  // that replaced it first.)
+  const successor = systemFontSuccessor(family);
+  const first = successor ? [`"${successor}"`] : [];
+  const kind = familyKind(family);
+  if (kind === 'mono') return [...first, 'ui-monospace', 'monospace'];
+  if (kind === 'serif') return [...first, 'Georgia', 'serif'];
+  return [...first, 'system-ui', 'sans-serif'];
+}
+
+/**
+ * The kind of font a family's name says: monospace for a Mono or Code
+ * name, serif for a serif name with no sans, sans-serif for any other.
+ * The fallbacks a family typed alone gets follow it.
+ * @param {string} family
+ * @returns {'mono' | 'serif' | 'sans'}
+ */
+export function familyKind(family) {
+  if (/\b(mono|code)\b/i.test(family)) return 'mono';
+  if (/serif/i.test(family) && !/sans/i.test(family)) return 'serif';
+  return 'sans';
 }
 
 /** A family name without its quotes. @param {string} family */
@@ -6024,6 +6095,48 @@ export function fieldEdgeTokens(ctx) {
 }
 
 /**
+ * Whether the theme pins a token in a mode, so it does not follow the
+ * surface: a value in the theme's own source, or an exact setting of it.
+ * @param {ThemeData} data
+ * @param {Record<string, string>} own the theme's own source values
+ * @param {string} k @param {'light' | 'dark'} m
+ */
+export function tokenPinned(data, own, k, m) {
+  return (
+    k in own ||
+    data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === k &&
+        !x.on &&
+        !x.when &&
+        !x.state &&
+        (!x.mode || x.mode === m),
+    )
+  );
+}
+
+/**
+ * Whether a theme's code blocks draw on the surface in a mode: the code
+ * background follows the surface (the theme pins no value of its own for
+ * it) and no setting fills the code block or its header, as a part or
+ * scoped to it.
+ * @param {ThemeData} data
+ * @param {Record<string, string>} own the theme's own source values
+ * @param {'light' | 'dark'} m
+ */
+export function codeBlocksOnSurface(data, own, m) {
+  const code = '--color-syntax-background';
+  if (tokenPinned(data, own, code, m)) return false;
+  return !data.settings.some(
+    x =>
+      (!x.mode || x.mode === m) &&
+      /^code-block/.test(String(x.on ?? '')) &&
+      (x.thing === code || /^background(?:-color)?$/.test(x.thing)),
+  );
+}
+
+/**
  * A color itself where it reads at `min` on the ground, else the nearest
  * shade of it (its hue and chroma, its lightness stepped away from the
  * ground) that does; null when none does.
@@ -6419,6 +6532,7 @@ export function roleReach(ctx, data, base) {
  * @returns {any}
  */
 export function compileTheme(ctx, data, base) {
+  ctx.themeSettings = data.settings;
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
   // A setting the editor no longer accepts never reaches the build; a
@@ -9302,17 +9416,7 @@ export function compileTheme(ctx, data, base) {
   // step from it, and the emphasized border is an opaque border's own
   // color. An exact setting or the theme's own source value always wins.
   /** @param {string} k @param {'light' | 'dark'} m */
-  const pinned = (k, m) =>
-    k in ownTokenValues() ||
-    data.settings.some(
-      x =>
-        x.source === 'token' &&
-        x.thing === k &&
-        !x.on &&
-        !x.when &&
-        !x.state &&
-        (!x.mode || x.mode === m),
-    );
+  const pinned = (k, m) => tokenPinned(data, ownTokenValues(), k, m);
   /** The color a token shows in a mode, opaque, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
   const written = (k, m) => {
     // (A value written for both modes in one light-dark() is read by its
@@ -15987,13 +16091,144 @@ export const DIAL_RADII = [
 export function cornerParts(ctx, part) {
   const rec = ctx.C.MAP[part];
   if (!rec || rec.own?.['border-radius']) return [part];
-  const inner = (rec.contains ?? []).filter(
+  const inner = roundedPartsInside(ctx, part);
+  return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a theme's settings fill a part at rest where a setting draws: a
+ * background on the part itself that is not none or transparent, set for
+ * every mode and variant or for the one the setting is for. A fill for one
+ * mode or one variant leaves the part unfilled everywhere else.
+ * @param {ReadonlyArray<Partial<Setting>>} settings
+ * @param {string} part
+ * @param {{mode?: unknown, when?: unknown}} [scope] where the setting draws
+ */
+export function fillsPart(settings, part, scope = {}) {
+  return settings.some(
+    x =>
+      x.on === part &&
+      x.source === 'property' &&
+      !x.state &&
+      (!x.mode || x.mode === scope.mode) &&
+      whenCovers(x.when, scope.when) &&
+      FILL_THING.test(kebab(String(x.thing))) &&
+      givesEdge(x),
+  );
+}
+
+/** A frame's whole outline: its border (and width, style, color), radius or shadow. */
+export const FRAME_THING =
+  /^(?:box-shadow|border(?:-(?:width|style|color))?|border(?:-(?:top|bottom)-(?:left|right))?-radius|border-(?:start|end)-(?:start|end)-radius)$/;
+
+/**
+ * The saved frame setting a piece set for one mode or variant narrows: a
+ * border, radius or shadow on the same part, at rest, for a strictly wider
+ * scope that holds the piece's. Undefined when there is none.
+ * @param {ReadonlyArray<Setting>} settings
+ * @param {Pick<Setting, 'on' | 'thing'> & {mode?: unknown, when?: unknown}} s
+ * @returns {Setting | undefined}
+ */
+export function widerFrameOf(settings, s) {
+  if (!s.mode && !s.when) return undefined;
+  const pieces = (/** @type {unknown} */ w) =>
+    String(w ?? '')
+      .split('+')
+      .filter(Boolean).length;
+  return settings.find(
+    x =>
+      x !== s &&
+      x.on === s.on &&
+      x.source === 'property' &&
+      !x.state &&
+      FRAME_THING.test(kebab(String(x.thing))) &&
+      (!x.mode || x.mode === s.mode) &&
+      whenCovers(x.when, s.when) &&
+      // (Strictly wider, so the search ends.)
+      ((!!s.mode && !x.mode) || pieces(x.when) < pieces(s.when)),
+  );
+}
+
+/** A background longhand that paints: the fill color or image. */
+export const FILL_THING = /^background(?:-color|-image)?$/;
+
+/**
+ * Whether a `--when` scope reaches where another draws: no scope reaches
+ * everywhere, and `variant:dots` reaches `variant:dots+size:sm` (each of
+ * its pieces is one of the other's).
+ * @param {unknown} wide
+ * @param {unknown} narrow
+ */
+export function whenCovers(wide, narrow) {
+  if (!wide) return true;
+  const pieces = new Set(
+    String(narrow ?? '')
+      .split('+')
+      .filter(Boolean),
+  );
+  return String(wide)
+    .split('+')
+    .every(p => pieces.has(p));
+}
+
+/**
+ * Whether a value paints nothing: a keyword that draws no paint, or a
+ * color with zero alpha (read by the shared color reader).
+ * @param {unknown} value
+ */
+export function seeThrough(value) {
+  return (
+    /^(?:none|hidden|initial|unset|0(?:px)?|transparent)$/i.test(
+      String(value ?? '').trim(),
+    ) || alphaOf(value) === 0
+  );
+}
+
+/**
+ * Whether a setting or step rounds corners: the corners dial or a border
+ * radius.
+ * @param {unknown} thing
+ */
+export function roundsCorners(thing) {
+  return thing === 'corners' || /^border(?:-\w+)*-radius$/.test(String(thing));
+}
+
+/**
+ * Whether a setting gives its part an edge that shows its corners: a fill,
+ * border, shadow or outline that is not none, zero or transparent, at rest
+ * or in the state the corners are for ("disabled links: a fill and 12px
+ * corners"), or in any state when `state` is true (corners show whenever
+ * that edge does).
+ * @param {{thing?: unknown, value?: unknown, state?: unknown}} x
+ * @param {unknown} [state] the corners' own state, or true for any
+ */
+export function givesEdge(x, state) {
+  return (
+    (!x.state || state === true || x.state === state) &&
+    (FILL_THING.test(kebab(String(x.thing ?? ''))) ||
+      /^(?:border(?!.*radius)|box-shadow|outline)/.test(
+        kebab(String(x.thing ?? '')),
+      )) &&
+    !seeThrough(x.value)
+  );
+}
+
+/**
+ * The parts of a part's own inside it that round their own corners (a
+ * date and time field's two boxes, a pager's cells).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+function roundedPartsInside(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec || rec.own?.['border-radius']) return [];
+  return (rec.contains ?? []).filter(
     (/** @type {string} */ t) =>
       ctx.C.MAP[t]?.own?.['border-radius'] &&
       t.startsWith(`${part}-`) &&
       ctx.project.target.has(t),
   );
-  return inner.length ? inner : [part];
 }
 
 /** The table boxes CSS draws no padding on: rows, row groups and columns. */

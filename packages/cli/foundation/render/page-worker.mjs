@@ -1661,8 +1661,9 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
 }
 // Imports between the files of an installed or a linked package resolve by
 // path (a Node without in-thread hooks resolves them itself). The hook
-// answers only relative imports inside a package, and single-copy-hooks.mjs
-// answers only package names, so neither changes what the other resolves.
+// answers relative imports inside a package, and a package name only with
+// the answer the next resolvers, single-copy-hooks.mjs among them, gave from
+// the same folder, so it never changes what single-copy-hooks.mjs resolves.
 // The page's own folders, and a folder that holds the page, are never a
 // linked package's: the page's modules compile as its own.
 const registerHooks = /** @type {any} */ (Module).registerHooks;

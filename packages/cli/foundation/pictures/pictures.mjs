@@ -44,7 +44,7 @@ const STOP_GRACE_MS = 5_000;
 const STOP_SIGNALS = /** @type {const} */ (['SIGINT', 'SIGTERM', 'SIGHUP']);
 
 /** How long a browser may take for one picture before it is stopped. */
-export const BROWSER_BOUND_MS = 60_000;
+const BROWSER_BOUND_MS = 60_000;
 
 /**
  * What the pictures of one run share: the browsers that failed or hung,
@@ -273,7 +273,7 @@ export function pictureFontNotes(stdout) {
  * @param {string} stdout what the picture script printed
  * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>}}
  */
-export function measuredCutShort(stdout) {
+function measuredCutShort(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
   if (!line) return {};
   /** @type {unknown} */
@@ -304,7 +304,7 @@ export function measuredCutShort(stdout) {
  * @param {string} stdout what the picture script printed
  * @returns {{lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>}}
  */
-export function measuredLowContrast(stdout) {
+function measuredLowContrast(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(LOW_CONTRAST_PREFIX));
   if (!line) return {};
   /** @type {unknown} */
@@ -334,7 +334,7 @@ export function measuredLowContrast(stdout) {
  * @param {string} stdout what the picture script printed
  * @returns {{boxes?: Record<string, Array<[number, number]>>}}
  */
-export function measuredBoxes(stdout) {
+function measuredBoxes(stdout) {
   const line = stdout.split('\n').find(l => l.startsWith(PART_BOXES_PREFIX));
   if (!line) return {};
   /** @type {unknown} */
@@ -359,7 +359,7 @@ export function measuredBoxes(stdout) {
 }
 
 /** A Chrome or Chromium on this machine, at a usual place or on PATH. */
-export function chromeBinary() {
+function chromeBinary() {
   const names = [
     'google-chrome',
     'google-chrome-stable',

@@ -73,6 +73,7 @@ export {
   mappableDefinitions,
   resolveIconSource,
   generatedModulePath,
+  ownModuleOf,
   generatedNamesOf,
   generatedOrigins,
   iconModulePackage,
