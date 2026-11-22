@@ -70,10 +70,6 @@
     "data-astryx-press",
     "data-astryx-press"
   ],
-  "packages/core/src/TabList/Tab.tsx": [
-    "data-astryx-press",
-    "data-astryx-press"
-  ],
   "packages/core/src/Table/glidingDivider.ts": [
     "data-astryx-cell-gliding",
     "data-astryx-cell-gliding",
@@ -91,12 +87,6 @@
     "data-astryx-press"
   ],
   "packages/core/src/Toast/useToast.tsx": ["data-astryx-toast-fallback"],
-  "packages/core/src/TopNav/TopNavItem.tsx": [
-    "data-astryx-press",
-    "data-astryx-press",
-    "data-astryx-press",
-    "data-astryx-press"
-  ],
   "packages/core/src/gestures/touchActionRule.ts": ["data-astryx-touch-action"],
   "packages/core/src/hooks/useAnnounce.ts": [
     "data-astryx-live-region",

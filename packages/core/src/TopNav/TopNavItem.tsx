@@ -37,6 +37,7 @@ import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOn
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {persistentSelectedPressStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
   disabledInteractionProps,
@@ -70,23 +71,6 @@ const styles = stylex.create({
   selected: {
     color: colorVars['--color-text-primary'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
-    backgroundColor: {
-      default: colorVars['--color-neutral'],
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': colorVars['--color-neutral'],
-      },
-      ':active': colorVars['--color-neutral'],
-      // The touch press model writes these instead of `:active`; the selected
-      // item keeps its fill under a finger the way it does under a mouse, and
-      // paints no overlay at any phase of the press.
-      '[data-astryx-press="on"]': colorVars['--color-neutral'],
-      '[data-astryx-press="fading"]': colorVars['--color-neutral'],
-    },
-    backgroundImage: {
-      default: null,
-      '[data-astryx-press="on"]': 'none',
-      '[data-astryx-press="fading"]': 'none',
-    },
   },
   iconOnly: {
     paddingInline: spacingVars['--spacing-2'],
@@ -350,6 +334,7 @@ export function TopNavItem({
           styles.base,
           interactionOverlayStyles.backgroundColor,
           isSelected && styles.selected,
+          isSelected && persistentSelectedPressStyles.neutral,
           isDisabled && navItemStyles.disabled,
           isIconOnly && styles.iconOnly,
           xstyle,
