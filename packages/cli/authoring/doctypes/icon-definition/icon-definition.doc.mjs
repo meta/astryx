@@ -13,7 +13,7 @@ export const doc = {
   namespace: 'authoring',
   stability: 'experimental',
   description:
-    "Experimental: may change or be removed in a patch release. One thing an icon can stand for, such as `close` or `delete`. Astryx ships one file per definition; an icon set adds its own in the same format. A set's data file `map` registers which of its icons draws each definition.",
+    "Experimental: may change or be removed in a patch release. One thing an icon can stand for, such as `close` or `delete`. Astryx ships one file per meaning; an icon set adds its own in the same format. A set's data file `map` registers which of its icons draws each meaning.",
   appliesTo: '<iconSetsRoot>/<set>/definitions/<name>.doc.mjs',
   fields: [
     {
@@ -33,7 +33,7 @@ export const doc = {
     {
       name: 'description',
       type: 'string',
-      description: 'One sentence: what an icon with this definition is for.',
+      description: 'One sentence: what an icon with this meaning is for.',
       required: true,
       example: "'Delete something permanently.'",
     },
@@ -48,14 +48,14 @@ export const doc = {
       name: 'builtIn',
       type: 'true',
       description:
-        "Only on Astryx's own definitions: the definition is a shared icon name Core renders, so every icon set maps it.",
+        "Only on Astryx's own meanings: the meaning is a shared icon name Core renders, so every icon set maps it.",
       required: false,
     },
     {
       name: 'group',
       type: 'string',
       description:
-        "camelCase name of the family the definition belongs to, such as `notifications` for `notification`, `notificationActive`, and `notificationOff`. The icon finder and the definition's docs page name the other members of its group, so a reader picks the one that fits. A set's own definition may join an Astryx group or name its own. It never changes ranking.",
+        "camelCase name of the family the meaning belongs to, such as `notifications` for `notification`, `notificationActive`, and `notificationOff`. The icon finder and the meaning's docs page name the other members of its group, so a reader picks the one that fits. A set's own meaning may join an Astryx group or name its own. It never changes ranking.",
       required: false,
       example: "'notifications'",
     },
@@ -63,7 +63,7 @@ export const doc = {
       name: 'replaces',
       type: 'string',
       description:
-        "The name of an older definition this one takes the place of. The old name keeps answering: a set's `map` key, a template's `icons` value, and `astryx experimental icon <old name>` resolve to this definition, through every later replacement too, and `integration check` warns with each `map` key to rename (`icon_definition_replaced`). The replaced definition's file may stay, so the old names it carries keep answering; it is not a current definition any more. Replacements stay within one folder: a set's own definition never replaces an Astryx definition. Two definitions cannot replace one name, and a built-in definition is never replaced.",
+        "The name of an older meaning this one takes the place of. The old name keeps answering: a set's `map` key, a template's `icons` value, and `astryx experimental icon <old name>` resolve to this meaning, through every later replacement too, and `integration check` warns with each `map` key to rename (`icon_definition_replaced`). The replaced meaning's file may stay, so the old names it carries keep answering; it is not a current meaning any more. Replacements stay within one folder: a set's own meaning never replaces an Astryx meaning. Two meanings cannot replace one name, and a built-in meaning is never replaced.",
       required: false,
       example: "'trash'",
     },
@@ -71,14 +71,14 @@ export const doc = {
       name: 'stability',
       type: "'experimental'",
       description:
-        'Marks the definition as experimental: the icon-definitions listing shows it as `[experimental]`. Omit it for a definition you mean to keep.',
+        'Marks the meaning as experimental: the icon meanings listing shows it as `[experimental]`. Omit it for a meaning you mean to keep.',
       required: false,
     },
   ],
   examples: [
     {
       label:
-        "A set's own definition at icon-sets/outline/definitions/random.doc.mjs",
+        "A set's own meaning at icon-sets/outline/definitions/random.doc.mjs",
       code: `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */
 export default {
   type: 'icon-definition',
@@ -91,7 +91,7 @@ export default {
   notes: [
     {
       type: 'prose',
-      text: "A set's own definitions sit in a `definitions` folder in the set's directory, one file per definition. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every definition: Astryx's and, where icon features are on (an installed icon-set package or `experimental.iconSet`), each installed icon set's own. A definition file refuses a field it does not know.",
+      text: "A set's own meanings sit in a `definitions` folder in the set's directory, one file per meaning. Its `map` registers icons for them like for Astryx's. `astryx docs cli/experimental/icon-definitions` lists every meaning: Astryx's and, where icon features are on (an installed icon-set package or `experimental.iconSet`), each installed icon set's own. A meaning file refuses a field it does not know.",
     },
     {
       type: 'prose',
@@ -99,7 +99,7 @@ export default {
     },
     {
       type: 'prose',
-      text: "To share a definition with every set, copy its file into Astryx's definitions folder in a pull request.",
+      text: "To share a meaning with every set, copy its file into Astryx's definitions folder in a pull request.",
     },
   ],
 };
