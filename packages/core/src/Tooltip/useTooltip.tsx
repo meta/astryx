@@ -603,12 +603,25 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // at rest there, so that move is the arrival again, not a move.
   const isArrivalUnmovedRef = useRef(false);
   const restingArrivalRef = useRef<MousePoint | null>(null);
+  // Where the trigger last heard a move before its arrival. Firefox sends
+  // the move that brings the mouse here before the `mouseenter`, at the same
+  // point: that mouse came from elsewhere, so it was not at rest.
+  const moveBeforeArrivalRef = useRef<MousePoint | null>(null);
   const handleMouseEnter = useCallback(
     (event: MouseEvent) => {
       isArrivalUnmovedRef.current = !isTouchPointerRef.current;
+      const point = {x: event.clientX, y: event.clientY};
+      const movedHere = moveBeforeArrivalRef.current;
       const rest = getLastMousePoint(event.view ?? window);
       restingArrivalRef.current =
-        rest != null && rest.x === event.clientX && rest.y === event.clientY
+        rest != null &&
+        rest.x === point.x &&
+        rest.y === point.y &&
+        !(
+          movedHere != null &&
+          movedHere.x === point.x &&
+          movedHere.y === point.y
+        )
           ? rest
           : null;
     },
@@ -616,10 +629,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   );
   const handlePointerMove = useCallback(
     (event: MouseEvent) => {
-      if (
-        !isArrivalUnmovedRef.current ||
-        (event as Partial<PointerEvent>).pointerType === 'touch'
-      ) {
+      if ((event as Partial<PointerEvent>).pointerType === 'touch') {
+        return;
+      }
+      if (!isArrivalUnmovedRef.current) {
+        moveBeforeArrivalRef.current = {x: event.clientX, y: event.clientY};
         return;
       }
       const rest = restingArrivalRef.current;
@@ -643,6 +657,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
       isArrivalUnmovedRef.current = false;
+      moveBeforeArrivalRef.current = null;
       if (isTouchPointerRef.current) {
         return;
       }
