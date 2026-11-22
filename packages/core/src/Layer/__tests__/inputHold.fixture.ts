@@ -9,9 +9,10 @@
  *   popover (`#pop`) and a full-viewport layer (`#lift`) whose content and
  *   tint take the hits while a test may make its root take none, plus
  *   `window.__hold`: open a layer, hold and
- *   release it, read what an element at a point is and what lies past a
- *   hold's shield there, and a log of every
- *   click, tap recognition and popover toggle
+ *   release it, release it inside a busy task, read what an element at a
+ *   point is and what lies past a hold's shield there, a log of every
+ *   click, tap recognition and popover toggle, and each finger press's time
+ *   and when the page heard it
  * @position Browser fixture of inputHold.interaction.browser.spec.ts;
  *   test-only
  */
@@ -35,11 +36,25 @@ declare global {
       open: (id: LayerId) => void;
       hold: (id: LayerId, scope: InputHoldScope) => void;
       release: () => void;
+      releaseLate: (beforeMs: number, afterMs: number) => void;
+      releasedAt: number;
+      downs: {time: number; heardAt: number}[];
       hitAt: (x: number, y: number) => string;
       hitPast: (x: number, y: number) => string;
     };
   }
 }
+
+// Each press's time and when the page heard it. Added before anything else
+// listens, so it hears every press, a held one included.
+const downs: {time: number; heardAt: number}[] = [];
+window.addEventListener(
+  'pointerdown',
+  event => {
+    downs.push({time: event.timeStamp, heardAt: performance.now()});
+  },
+  {capture: true},
+);
 
 document.body.style.margin = '0';
 document.body.innerHTML = `
@@ -116,6 +131,24 @@ window.__hold = {
     release?.();
     release = null;
   },
+  // One task: `beforeMs` of work, the release, then `afterMs` more. Input
+  // that arrives during it waits for its end.
+  releaseLate(beforeMs, afterMs) {
+    setTimeout(() => {
+      const busy = (ms: number) => {
+        const end = performance.now() + ms;
+        while (performance.now() < end) {
+          // The main thread stays busy.
+        }
+      };
+      busy(beforeMs);
+      window.__hold.releasedAt = performance.now();
+      window.__hold.release();
+      busy(afterMs);
+    }, 0);
+  },
+  releasedAt: Number.NaN,
+  downs,
   hitAt(x, y) {
     return describe(document.elementFromPoint(x, y));
   },

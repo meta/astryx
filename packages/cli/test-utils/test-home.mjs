@@ -21,6 +21,15 @@ import {
   userConfigDir,
 } from '../foundation/env/user-dirs.mjs';
 
+/** Package-manager folder settings that would point outside the run's home. */
+const PACKAGE_MANAGER_HOMES = [
+  'PNPM_HOME',
+  'COREPACK_HOME',
+  'BUN_INSTALL',
+  'YARN_GLOBAL_FOLDER',
+  'npm_config_global_folder',
+];
+
 /** The environment variable that names the run's home folder to workers. */
 export const TEST_HOME_ENV = 'ASTRYX_TEST_HOME';
 
@@ -79,11 +88,13 @@ export function gitGlobalConfig(env = process.env, home = os.homedir()) {
 
 /**
  * Points the home folder and every per-user folder setting at `home`, and
- * the temp folder at `tmp`. npm, pnpm and corepack keep their caches there
- * too, so they read none of the developer's. Playwright still finds the
- * browsers the developer installed, and git its global configuration:
- * each reads them in place and writes nothing there. The temp folder must not hold `home`: the CLI takes no
- * scratch copy in a temp folder that holds the home folder.
+ * the temp folder at `tmp`, and unsets the package managers' own folder
+ * settings, so pnpm, corepack, Yarn and Bun keep their folders in `home`, and
+ * npm its cache.
+ * Playwright still finds the browsers the developer installed, and git its
+ * global configuration: each reads them in place and writes nothing there.
+ * The temp folder must not hold `home`: the CLI takes no scratch copy in a
+ * temp folder that holds the home folder.
  * @param {string} home
  * @param {string} tmp
  * @param {Record<string, string | undefined>} [env]
@@ -109,6 +120,9 @@ export function moveUserHome(home, tmp, env = process.env) {
   env.APPDATA = path.join(home, 'AppData', 'Roaming');
   env.LOCALAPPDATA = path.join(home, 'AppData', 'Local');
   env.npm_config_cache = path.join(home, '.npm');
+  // Package managers that keep folders of their own outside the settings
+  // above. Unset, each takes its default under the moved home folder.
+  for (const key of PACKAGE_MANAGER_HOMES) delete env[key];
   env.TMPDIR = tmp;
   env.TEMP = tmp;
   env.TMP = tmp;
