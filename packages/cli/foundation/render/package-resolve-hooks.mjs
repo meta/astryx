@@ -174,7 +174,9 @@ const isBare = specifier =>
  * self-reference by the package scope of that folder, and a `#` import in
  * that scope's `imports`; the folder fixes all three, so its conditions, in
  * order, and its import attributes are all else that decides the answer.
- * Null for any other import.
+ * Import attributes with the same entries in another order give another
+ * key: that costs a second resolution, never a wrong answer. Null for any
+ * other import.
  * @param {string} specifier
  * @param {{parentURL?: string, conditions?: readonly string[], importAttributes?: object}} context
  * @returns {string | null}
