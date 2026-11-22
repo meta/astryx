@@ -33000,7 +33000,9 @@ export function draftAnswer(ctx, env, question) {
     ]);
     // (A clause an answered one read, a mode said alone before it or the
     // asks an except takes up, is used too.)
-    for (const c of [...taken])
+    // (Through every clause that one read in turn: a mode said before an
+    // ask an except took up.)
+    for (const c of taken)
       for (const r of /** @type {Clause} */ (c).reads ?? []) taken.add(r);
     const silent = clauses.filter(c => {
       const t = c.text.trim();

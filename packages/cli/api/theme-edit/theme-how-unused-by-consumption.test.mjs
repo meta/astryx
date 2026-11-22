@@ -48,6 +48,7 @@ describe('a clause no answer read', () => {
       ['colors with 2px #999999 borders', 'colors'],
       ['controls with 2px #999999 borders', 'controls'],
       ['8px corners, controls with 2px #999999 borders', 'controls'],
+      ['green, blue, red, yellow on badges and status', 'green'],
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'u'});
       const said = data.results
@@ -55,5 +56,13 @@ describe('a clause no answer read', () => {
         .join('\n');
       expect(said, q).toMatch(new RegExp(`not used: [^\\n]*"${word}"`));
     }
+    // A mode said before an ask an except takes up is read through it.
+    const {data} = await themeEditHow(
+      'in light mode, side nav items a gray border except the selected one',
+      {cwd, theme: 'u'},
+    );
+    expect(
+      data.results.map((/** @type {{text: string}} */ r) => r.text).join('\n'),
+    ).not.toMatch(/not used/);
   }, 240_000);
 });
