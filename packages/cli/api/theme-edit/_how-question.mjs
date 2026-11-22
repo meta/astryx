@@ -23395,9 +23395,9 @@ export function draftAnswer(ctx, env, question) {
               options: [[set('--border-width', '0px')]],
             };
           // "thick black borders on everything": the shared width (thick is
-          // one pixel past it), the shared border colors (inputs draw the
-          // emphasized one), and on "everything" a border on the surfaces
-          // that draw none (dialogs, popovers, menus).
+          // one pixel past it), the shared border colors (inputs and checkbox
+          // and radio boxes draw the control edge), and on "everything" a
+          // border on the surfaces that draw none (dialogs, popovers, menus).
           const bwNow0 = String(current('--border-width') ?? '1px');
           const onePast = (() => {
             const m = /^(\d*\.?\d+)(px|rem)$/.exec(bwNow0);

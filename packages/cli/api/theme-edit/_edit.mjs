@@ -8231,7 +8231,7 @@ async function changeOnce(
         s.thing !== '--color-border'
           ? "the fills made from the surface, at the base theme's step from it"
           : group[0] === '--color-border-control'
-            ? 'the frames of inputs and selectors, never fainter than the border'
+            ? 'the frames of inputs, selectors and checkbox and radio boxes, never fainter than the border'
             : 'cards, dividers and the other stronger edges, never fainter than the border';
       notes.push(
         `${group.join(', ')} ${group.length === 1 ? 'follows' : 'follow'} it (${what})${also.length ? `, and so do the parts the base theme draws from ${group.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${group.length === 1 ? 'it' : 'one'} keeps its own color`,
