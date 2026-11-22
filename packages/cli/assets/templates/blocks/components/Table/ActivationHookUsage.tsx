@@ -3,7 +3,9 @@
 'use client';
 
 import {useCallback, useState} from 'react';
+import {HStack, StackItem, VStack} from '@astryxdesign/core/Stack';
 import {Table, useTableActivation} from '@astryxdesign/core/Table';
+import {Text} from '@astryxdesign/core/Text';
 
 interface Order extends Record<string, unknown> {
   id: string;
@@ -40,8 +42,8 @@ export default function ActivationHookUsage() {
   const active = orders.find(order => order.id === activeKey) ?? null;
 
   return (
-    <div style={{display: 'flex', gap: 24, alignItems: 'flex-start'}}>
-      <div style={{flex: 3, minWidth: 0}}>
+    <HStack gap={6} align="start">
+      <StackItem size="fill">
         <Table
           data={orders}
           columns={columns}
@@ -49,21 +51,21 @@ export default function ActivationHookUsage() {
           hasHover
           plugins={{activation}}
         />
-      </div>
-      <div style={{flex: 2, minWidth: 0}}>
+      </StackItem>
+      <VStack gap={2}>
         {active == null ? (
-          <p>Select an order to inspect it here.</p>
+          <Text>Select an order to inspect it here.</Text>
         ) : (
-          <div>
-            <p>
-              <strong>Order {active.id}</strong>
-            </p>
-            <p>
+          <>
+            <Text type="body" weight="bold">
+              Order {active.id}
+            </Text>
+            <Text>
               {active.customer} — {active.total} ({active.status})
-            </p>
-          </div>
+            </Text>
+          </>
         )}
-      </div>
-    </div>
+      </VStack>
+    </HStack>
   );
 }
