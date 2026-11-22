@@ -45,7 +45,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatToolCalls.generated';
 import {devPropError} from '../utils/devWarning';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -160,7 +160,7 @@ const styles = stylex.create({
   // animates, so one element carries both the transform and the theme target.
   chevronTransition: {
     transition: {
-      default: `transform calc(${durationVars['--duration-fast']} * ${transformMotion.factor}) ${easeVars['--ease-standard']}`,
+      default: `transform calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor}) ${easeVars['--ease-standard']}`,
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },

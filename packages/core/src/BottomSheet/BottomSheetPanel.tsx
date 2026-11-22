@@ -82,7 +82,7 @@ import {
   type SheetDragExit,
 } from './useSheetGestures';
 import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -387,7 +387,7 @@ const styles = stylex.create({
     },
     transitionProperty: 'transform, opacity',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-medium']} * ${transformMotion.factor} + ${transformMotion.settle})`,
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor} + ${reducedMotionTransform.settle})`,
       '@media (prefers-reduced-motion: reduce)': {
         default: '0.01s',
         '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,

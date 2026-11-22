@@ -26,7 +26,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/groupedRows/useTableGroupedRows.generated';
-import {transformMotion} from '../../../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../../../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -188,8 +188,8 @@ const styles = stylex.create({
   chevronIcon: {
     transitionProperty: 'transform',
     transitionDuration: {
-      default: `calc(150ms * ${transformMotion.factor})`,
-      [transformMotion.reduce]: '0s',
+      default: `calc(150ms * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
   },
   // The RTL mirror is folded into each state's transform rather than living on

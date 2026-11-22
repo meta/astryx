@@ -1162,7 +1162,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     const touch = {coarse: true, reduce: false};
     // CSS scales the move by the theme's tempo.
     expect(valueUnder(fillOf(), 'transition-duration', touch)).toMatch(
-      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\)$/,
+      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\s*\*\s*\(1\s*-\s*var\(--_astryx-reduced-motion,\s*0\)\)\)$/,
     );
     expect(valueUnder(fillOf(), 'transition-timing-function', touch)).toMatch(
       /^var\(--_progress-bar-curve,\s*linear\)$/,
@@ -1174,7 +1174,11 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     expect(css).not.toContain('-webkit-touch-callout');
     // With a mouse or trackpad the theme's tokens still time it.
     const fine = rulesOf(fillOf(), null);
-    expect(valueOf(fine, 'transition-duration')[0]).toMatch(/^var\(--/);
+    // It also reads the reduced-motion factor, so the fill lands at once
+    // under a theme that reduces motion for everyone.
+    expect(valueOf(fine, 'transition-duration')[0]).toMatch(
+      /^calc\(var\(--duration-medium\) \* \(1 - var\(--_astryx-reduced-motion, 0\)\)\)$/,
+    );
     expect(valueOf(fine, 'transition-timing-function')[0]).toMatch(/^var\(--/);
   });
 
@@ -1215,7 +1219,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
       fill.indexOf('transitionTimingFunction:'),
     );
     expect(duration).toMatch(
-      /'@media\(pointer:coarse\)':\{default:[^}]*'@media\(forced-colors:active\)':'0s'/,
+      /'@media\(pointer:coarse\)':\{default:[\s\S]*?'@media\(forced-colors:active\)':'0s'/,
     );
     // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
     expect(view.emptyFillAlpha).toBe(0);

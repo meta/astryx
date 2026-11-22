@@ -24,7 +24,7 @@ import {MediaTheme} from '../theme/MediaTheme';
 import {mergeProps} from '../utils';
 import {overlayScope} from './overlay.markers.stylex';
 import {themeProps} from '../utils/themeProps';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // =============================================================================
 // Types (re-exported from index.ts for consumers)
@@ -58,7 +58,7 @@ const styles = stylex.create({
     pointerEvents: 'none',
     transitionProperty: 'opacity, visibility, transform',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],

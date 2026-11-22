@@ -58,7 +58,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Resizable/ResizeHandle.generated';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -205,8 +205,8 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-border'],
     transitionProperty: 'opacity, background-color, transform',
     transitionDuration: {
-      default: `${durationVars['--duration-fast']}, ${durationVars['--duration-fast']}, calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
-      [transformMotion.reduce]: `${durationVars['--duration-fast']}, ${durationVars['--duration-fast']}, 0s`,
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     top: '50%',

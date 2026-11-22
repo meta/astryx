@@ -57,7 +57,7 @@ import {
 } from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {devPropError} from '../utils/devWarning';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -114,8 +114,8 @@ const styles = stylex.create({
     fontSize: 'inherit',
     transitionProperty: 'transform',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
-      [transformMotion.reduce]: '0s',
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
@@ -205,8 +205,8 @@ const drawerStyles = stylex.create({
     fontSize: 'inherit',
     transitionProperty: 'transform',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
-      [transformMotion.reduce]: '0s',
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },

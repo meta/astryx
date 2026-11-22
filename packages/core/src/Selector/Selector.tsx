@@ -49,7 +49,10 @@ import {
 } from '../Field';
 import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {
+  reducedMotionFadeConsts,
+  reducedMotionTransform,
+} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
@@ -120,7 +123,6 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Selector/Selector.generated';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file.
@@ -269,8 +271,8 @@ const styles = stylex.create({
   triggerIconRotation: {
     transitionProperty: 'transform',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
-      [transformMotion.reduce]: '0s',
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     transformOrigin: 'center',

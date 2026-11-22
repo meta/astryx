@@ -66,7 +66,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -118,8 +118,8 @@ const styles = stylex.create({
     fontSize: 'inherit',
     transitionProperty: 'transform',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
-      [transformMotion.reduce]: '0s',
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
@@ -247,8 +247,8 @@ const styles = stylex.create({
     fontSize: 'inherit',
     transitionProperty: 'transform',
     transitionDuration: {
-      default: `calc(${durationVars['--duration-fast']} * ${transformMotion.factor})`,
-      [transformMotion.reduce]: '0s',
+      default: `calc(${durationVars['--duration-fast']} * ${reducedMotionTransform.factor})`,
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },

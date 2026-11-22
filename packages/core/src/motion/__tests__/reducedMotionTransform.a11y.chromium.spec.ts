@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/privateAttributes/transformMotion ^packages/core/src/theme/Theme
+// @pr-a11y scope ^packages/core/src/motion/reducedMotion ^packages/core/src/theme/Theme
 
 /**
- * @file transformMotion.a11y.chromium.spec.ts
+ * @file reducedMotionTransform.a11y.chromium.spec.ts
  * @input Stories whose parts transition a transform (chevrons, a resize
  *   handle, a toast, row expansion), in a built Storybook, in Chromium
  * @output Real-engine proof of each element's computed transition durations:

@@ -40,7 +40,7 @@ import {formatMotionRoleValue} from '../motion/roles';
 import {resolveMotion} from '../motion/resolveMotion';
 import {progressBar} from '../motion/uikit/progressBar';
 import {timing} from '../motion/uikit/timing';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
+import {reducedMotionTransform} from '../motion/reducedMotion.stylex';
 
 // Every mark is wrapped in a Tooltip (marks always carry a label), so load it
 // lazily: a ProgressBar with no marks never bundles the Tooltip chunk. While it
@@ -347,11 +347,11 @@ const styles = stylex.create({
     // queries, as the other transitions spell them. The coarse key comes after
     // the touch key, so it wins there.
     transitionDuration: {
-      default: `calc(${durationVars['--duration-medium']} * ${transformMotion.factor})`,
+      default: `calc(${durationVars['--duration-medium']} * ${reducedMotionTransform.factor})`,
       // The touch layer's move (the `progress.fillTrackMs` role times the
       // share moved), scaled by the theme's tempo.
       '@media (pointer: coarse)': {
-        default: `calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1) * ${transformMotion.factor})`,
+        default: `calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1) * ${reducedMotionTransform.factor})`,
         // Under forced colors the fill is sized by `width` instead. Touch
         // motion never animates a layout property, so with a finger the new
         // size lands at once there.

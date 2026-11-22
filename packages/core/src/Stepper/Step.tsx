@@ -60,6 +60,7 @@ import {
 } from '../utils';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -71,7 +72,6 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Stepper/Step.generated';
-import {transformMotion} from '../privateAttributes/transformMotion.stylex';
 
 registerEnglishFallback(english);
 
@@ -427,7 +427,7 @@ const styles = stylex.create({
       // slice of the animated span or a zero — so this is the fallback that
       // applies if a connector is ever rendered without it.
       transitionDuration: {
-        default: `calc(${FILL_SPAN_TIME} * ${transformMotion.factor})`,
+        default: FILL_SPAN_TIME,
         '@media (prefers-reduced-motion: reduce)': '0s',
       },
       // Linear, deliberately, and not the `--ease-standard` the rest of the
@@ -461,11 +461,11 @@ const styles = stylex.create({
   connectorTiming: (duration: string, delay: string) => ({
     '::before': {
       transitionDuration: {
-        default: `calc(${duration} * ${transformMotion.factor})`,
+        default: duration,
         '@media (prefers-reduced-motion: reduce)': '0s',
       },
       transitionDelay: {
-        default: `calc(${delay} * ${transformMotion.factor})`,
+        default: delay,
         '@media (prefers-reduced-motion: reduce)': '0s',
       },
     },
@@ -1116,6 +1116,8 @@ export function Step({
   // duration, so it lands at once and carries no stale delay into a later
   // change.
   const isSingleAdvance = activeStep === previousActiveStep + 1;
+  // Under reduced motion, from the setting or a theme, the fill lands at once.
+  const reducesMotion = useReducesMotion();
   const animatedSpan = previousActiveStep;
 
   /**
@@ -1123,7 +1125,7 @@ export function Step({
    * `spanIndex`, both expressed as fractions of that span.
    */
   const fillTiming = (spanIndex: number, offset: number, share: number) => {
-    if (!isSingleAdvance || spanIndex !== animatedSpan) {
+    if (reducesMotion || !isSingleAdvance || spanIndex !== animatedSpan) {
       return styles.connectorTiming('0s', '0s');
     }
     return styles.connectorTiming(
