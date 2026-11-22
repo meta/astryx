@@ -3,6 +3,7 @@
 'use client';
 
 import type {ComponentProps} from 'react';
+import {HelpIcon, SettingsIcon} from '@astryxdesign/template-icons';
 import {
   SideNav,
   SideNavHeading,
@@ -80,7 +81,14 @@ function DocumentTextIcon(props: ComponentProps<'svg'>) {
 
 export default function SideNavShowcase() {
   return (
-    <SideNav header={<SideNavHeading heading="My App" headingHref="/" />}>
+    <SideNav
+      header={<SideNavHeading heading="My App" headingHref="/" />}
+      footer={
+        <SideNavSection title="Support" isHeaderHidden>
+          <SideNavItem label="Help & docs" icon={HelpIcon} href="/help" />
+          <SideNavItem label="Settings" icon={SettingsIcon} href="/settings" />
+        </SideNavSection>
+      }>
       <SideNavSection title="Main">
         <SideNavItem
           label="Dashboard"

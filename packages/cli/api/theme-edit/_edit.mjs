@@ -8639,10 +8639,21 @@ const PHONE_SIZES_NOTE =
  * @experimental
  * @param {string} theme
  * @param {import('./theme-edit.type.mjs').ThemeEditShowOptions} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse | import('./theme-edit.type.mjs').ThemeEditShowPartResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
   const {cwd = process.cwd(), png = false} = options;
+  if (options.on != null) {
+    requireProject(cwd);
+    if (png || options.section)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--on looks up what one part shows and writes nothing; --png and --section are for the pages show writes, so drop ${png && options.section ? 'them' : png ? '--png' : '--section'}.`,
+        {run: [`${P} show ${theme} --on ${options.on}`]},
+      );
+    const {themePartValues} = await import('./_resolved.mjs');
+    return themePartValues(cwd, theme, String(options.on));
+  }
   // Without the theme lock (it cannot be taken), show writes nothing: it
   // reports the last build as it is.
   const readOnly = Boolean(/** @type {any} */ (options).readOnly);
@@ -8739,7 +8750,10 @@ export async function themeEditShow(theme, options = {}) {
             n === path.basename(f.settingsTs) ||
             (n.startsWith(`${theme}.`) &&
               /\.(css|js|d\.ts|css\.d\.ts|variants\.d\.ts)$/.test(n)) ||
-            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+            // (A picture cut from a tall one, sheet-inputs-2.png, too.)
+            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?(-\d+)?\.png)$/.test(
+              n,
+            ),
         )
         .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
     );
@@ -8979,15 +8993,15 @@ export async function themeEditShow(theme, options = {}) {
               png: out,
               most: FAMILY_PICTURE_HEIGHT,
             })),
-            // A section is photographed from its own sheet, a family cut
-            // as above. The full sheet, every component, is too tall to
+            // A section is photographed from its own sheet, a family or the
+            // pages cut as above. The full sheet, every component, is too tall to
             // read whole and slow to take: it is not photographed.
             ...(section
               ? [
                   {
                     html: path.join(f.dir, `sheet-${section}.html`),
                     png: path.join(f.dir, `sheet-${section}.png`),
-                    ...(FAMILY_SECTIONS.includes(section)
+                    ...(section !== OPEN_SECTION
                       ? {most: FAMILY_PICTURE_HEIGHT}
                       : {}),
                   },
