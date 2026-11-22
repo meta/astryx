@@ -203,6 +203,52 @@ describe('layer focus return', () => {
     expect(elsewhere).toHaveFocus();
   });
 
+  it('leaves focus that is moving to another control alone when the layer closes during the move', () => {
+    const opener = document.createElement('button');
+    const layer = document.createElement('div');
+    const inside = document.createElement('button');
+    const elsewhere = document.createElement('button');
+    layer.append(inside);
+    document.body.append(opener, layer, elsewhere);
+    try {
+      opener.focus();
+      const record = trackLayerFocus({getLayer: () => layer, opener});
+      inside.focus();
+      // A blur handler closes the layer while focus leaves it.
+      inside.addEventListener('focusout', () => restoreLayerFocus(record), {
+        once: true,
+      });
+      elsewhere.focus();
+      expect(elsewhere).toHaveFocus();
+      expect(record.isDone).toBe(true);
+    } finally {
+      opener.remove();
+      layer.remove();
+      elsewhere.remove();
+    }
+  });
+
+  it('still returns focus that the close strands when no control takes it', () => {
+    const opener = document.createElement('button');
+    const layer = document.createElement('div');
+    const inside = document.createElement('button');
+    layer.append(inside);
+    document.body.append(opener, layer);
+    try {
+      opener.focus();
+      const record = trackLayerFocus({getLayer: () => layer, opener});
+      inside.focus();
+      inside.addEventListener('focusout', () => restoreLayerFocus(record), {
+        once: true,
+      });
+      inside.blur();
+      expect(opener).toHaveFocus();
+    } finally {
+      opener.remove();
+      layer.remove();
+    }
+  });
+
   it('returns focus to the menu trigger when a dialog opened from a menu row closes', async () => {
     function MenuThenDialog() {
       const [isDialogOpen, setIsDialogOpen] = useState(false);
