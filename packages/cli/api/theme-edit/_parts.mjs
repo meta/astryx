@@ -1902,12 +1902,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
  *   whose fill follows a prop whose values name the theme's status roles
  *   (info, success, warning, error);
  * - `overlay-headers`: an Overlay component's part, not its surface, that
- *   holds a heading and a control (its title and its close button).
+ *   holds a heading and a control (its title and its close button);
+ * - `controls`: the parts that take their height from the control size
+ *   tokens (`--size-element-sm`, `-md`, `-lg`) and are a button, an input,
+ *   or a form control's own part (an input group): at each size they share
+ *   one height.
  * @param {{MAP: Record<string, any>}} C
  * @param {{target: Map<string, any>, components: Record<string, any>}} project
  * @param {string[]} inputs the inputs group's members
  * @param {string[]} statusWords the theme's status role words
- * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers', string[]>}
+ * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers' | 'controls', string[]>}
  */
 export function familyRoles(
   C,
@@ -1925,6 +1929,7 @@ export function familyRoles(
     'inset-fields': [],
     'status-surfaces': [],
     'overlay-headers': [],
+    controls: [],
   };
   /** @param {string} key @param {string} prop @param {(cond: string) => boolean} keep */
   const values = (key, prop, keep) =>
@@ -2038,9 +2043,41 @@ export function familyRoles(
       (rec.contains ?? []).includes('button')
     )
       out['overlay-headers'].push(key);
+    /** Whether a part's own height reads a control size token. @param {string} part */
+    const sizedOwn = part =>
+      Object.entries(C.MAP?.[part]?.own ?? {}).some(
+        ([prop, v]) =>
+          CONTROL_HEIGHT_PROPS.test(prop) &&
+          Object.keys(/** @type {any} */ (v)?.tokens ?? {}).some(t =>
+            CONTROL_SIZE_TOKEN.test(t),
+          ),
+      );
+    // (A field whose boxes are its parts, a date and time input's two
+    // segments, is sized through them: the token set on the field reaches
+    // them.)
+    const sizedByControlSize =
+      sizedOwn(key) ||
+      (own &&
+        inputs.includes(key) &&
+        [...project.target].some(
+          ([k, t]) => k !== key && t.component === tg.component && sizedOwn(k),
+        ));
+    if (
+      sizedByControlSize &&
+      (inputs.includes(key) ||
+        out['button-like'].includes(key) ||
+        (comp?.category === 'Form Controls' && own))
+    )
+      out.controls.push(key);
   }
   return /** @type {any} */ (out);
 }
+
+/** The properties a control's height is set by. */
+export const CONTROL_HEIGHT_PROPS = /^(height|min-height|block-size)$/;
+
+/** The tokens that hold a control's height at each size. */
+export const CONTROL_SIZE_TOKEN = /^--size-element-(sm|md|lg)$/;
 
 /**
  * The properties that size a part in the block direction: a part that sets

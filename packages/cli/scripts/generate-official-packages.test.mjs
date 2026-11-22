@@ -1,14 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Drift guard for the official package list the CLI carries for
- * `astryx discover` (spec:AST-051 FR11).
+ * @file Tests for the official package list the CLI carries for `astryx
+ * discover` (spec:AST-051 FR11).
  *
- * `scripts/generate-cli-official-packages.mjs` builds the list from the
- * packages the release workflow publishes, with the CLI's own readers. This
- * test pins the committed file to what the generator builds now, and checks
- * the selection rule on a stand-in repository. When a package changes, run
- * `pnpm bundle:cli-official-packages` and commit the regenerated list.
+ * `generate-official-packages.mjs` builds the list at `prepack` from the
+ * packages the release workflow publishes, with the CLI's own readers. These
+ * tests build it from this repository, so a package that stops reading fails
+ * here and not at `prepack`, and check the selection rule on a stand-in
+ * repository.
  */
 
 import fs from 'node:fs';
@@ -18,21 +18,27 @@ import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {
   buildOfficialList,
-  OFFICIAL_LIST_PATH,
   releaseChannel,
   serializeOfficialList,
-} from './generate-cli-official-packages.mjs';
+} from './generate-official-packages.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-describe('the official package list is in sync with the repository', () => {
-  it('matches what the generator builds (run `pnpm bundle:cli-official-packages`)', async () => {
-    const committed = fs.readFileSync(
-      path.join(REPO_ROOT, OFFICIAL_LIST_PATH),
-      'utf-8',
-    );
-    expect(committed).toBe(serializeOfficialList(await buildOfficialList()));
+describe('the official package list builds from this repository', () => {
+  it('lists the canary-only Lab and Charts packages, each with its components', async () => {
+    // A renamed or broken Lab or Charts package would drop out of the list,
+    // or stop the build, at `prepack`.
+    const {packages} = await buildOfficialList();
+    for (const name of ['@astryxdesign/lab', '@astryxdesign/charts']) {
+      const pkg = packages.find(p => p.package === name);
+      expect(pkg, name).toBeDefined();
+      expect(pkg?.canaryOnly, name).toBe(true);
+      expect(
+        pkg?.contributions.filter(c => c.kind === 'component').length,
+        name,
+      ).toBeGreaterThan(0);
+    }
   });
 
   it('releases every listed package with Core, unless it is canary-only', async () => {

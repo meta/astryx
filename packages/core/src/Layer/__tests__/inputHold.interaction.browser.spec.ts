@@ -19,8 +19,12 @@
  *   Each release gives input back. A hit test that skips shields
  *   (isInputShield) finds what lies beneath, and a layer above the held one
  *   still wins. A one-finger pan on the shield scrolls nothing, while a pinch
- *   on it still zooms the page. It proves spec:AST-094 FR10, FR18 and FR35.
- *   The pinch case runs in Chromium, which pinch-zooms from injected touches.
+ *   on it still zooms the page. A finger that goes down while the task that
+ *   ends a hold runs is held, though the engine dispatches it after the end.
+ *   It is held to its end, also past the hold's wait for a late press.
+ *   It proves spec:AST-094 FR10, FR18 and FR35. The pinch case and the late
+ *   press run in Chromium, which pinch-zooms from injected touches and gives
+ *   each touch its own time.
  * @position Browser tests of packages/core/src/Layer/inputHold.ts, run
  *   by the interaction project (`pnpm test:interaction inputHold`)
  */
@@ -45,6 +49,9 @@ interface HoldApi {
   open: (id: LayerId) => void;
   hold: (id: LayerId, scope: Scope) => void;
   release: () => void;
+  releaseLate: (beforeMs: number, afterMs: number) => void;
+  releasedAt: number;
+  downs: {time: number; heardAt: number}[];
   hitAt: (x: number, y: number) => string;
   hitPast: (x: number, y: number) => string;
 }
@@ -369,6 +376,121 @@ test('a touch that lands during a hold and lifts after its release reaches nothi
     toggles: ['pop:open'],
   });
   // The next tap is the layer's: its click lands.
+  await driver.tap(action);
+  await expect
+    .poll(async () => (await readLog(page)).clicks)
+    .toEqual(['popAction']);
+});
+
+/**
+ * Longer than the hold's wait for a late press (`LATE_PRESS_MS`, 500 ms).
+ * The fixture imports nothing that main's hold lacks, so a red run at main
+ * still builds it.
+ * SYNC: Keep above LATE_PRESS_MS in ../inputHold.ts.
+ */
+const PAST_LATE_PRESS_WAIT_MS = 600;
+
+const LATE_PRESS_SKIP =
+  "WebKit's test input stamps each touch when it dispatches it, so a page cannot tell that a touch went down earlier.";
+
+test('a finger that goes down while the task that ends a hold runs is held to its end, though the engine dispatches it after the end; the next tap clicks (spec:AST-094 FR35)', async ({
+  page,
+}) => {
+  const driver = await load(page);
+  test.skip(!driver.scriptedTimestamps, LATE_PRESS_SKIP);
+  await open(page, 'pop');
+  const action = await centre(page, 'popAction');
+  await hold(page, 'pop', 'viewport');
+  // One task: 300 ms of work, the release, then 40 ms more. The finger goes
+  // down in its first part, and the engine dispatches it after the task.
+  await page.evaluate(() => {
+    (window as unknown as HoldWindow).__hold.releaseLate(300, 40);
+  });
+  await page.waitForTimeout(40);
+  await driver.tap(action);
+  await settle(page);
+  const {downs, releasedAt} = await page.evaluate(() => {
+    const api = (window as unknown as HoldWindow).__hold;
+    return {downs: api.downs.slice(), releasedAt: api.releasedAt};
+  });
+  expect(downs).toHaveLength(1);
+  expect(downs[0].time).toBeLessThan(releasedAt);
+  expect(downs[0].heardAt).toBeGreaterThan(releasedAt);
+  expect(await readLog(page)).toEqual({
+    clicks: [],
+    taps: 0,
+    toggles: ['pop:open'],
+  });
+  // A tap after the end is the layer's: its click lands.
+  await driver.tap(action);
+  await expect
+    .poll(async () => (await readLog(page)).clicks)
+    .toEqual(['popAction']);
+});
+
+test("a finger that goes down while the task that ends a hold runs and stays down past the hold's wait for a late press is held to its end: no part of the press reaches the page (spec:AST-094 FR35)", async ({
+  page,
+}) => {
+  const driver = await load(page);
+  test.skip(!driver.scriptedTimestamps, LATE_PRESS_SKIP);
+  await open(page, 'pop');
+  const action = await centre(page, 'popAction');
+  await hold(page, 'pop', 'viewport');
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as {__seen: string[]}).__seen = seen;
+    // What of the press reaches the document: a held press never does.
+    for (const type of [
+      'pointerdown',
+      'touchstart',
+      'pointerup',
+      'touchend',
+      'click',
+    ]) {
+      document.addEventListener(
+        type,
+        event => {
+          const target = event.target as Element;
+          seen.push(
+            `${type}:${target.id === '' ? target.tagName.toLowerCase() : target.id}`,
+          );
+        },
+        true,
+      );
+    }
+  });
+  // One task: 200 ms of work, the release, then 40 ms more. The finger goes
+  // down in its first part.
+  await page.evaluate(() => {
+    (window as unknown as HoldWindow).__hold.releaseLate(200, 40);
+  });
+  await page.waitForTimeout(40);
+  const finger = await driver.press(action);
+  // This read waits for the task to end.
+  const releasedAt = await page.evaluate(
+    () => (window as unknown as HoldWindow).__hold.releasedAt,
+  );
+  // The finger stays down past the wait.
+  await page.waitForTimeout(PAST_LATE_PRESS_WAIT_MS);
+  const liftAt = await page.evaluate(() => performance.now());
+  await finger.lift();
+  await settle(page);
+  const downs = await page.evaluate(() =>
+    (window as unknown as HoldWindow).__hold.downs.slice(),
+  );
+  expect(downs).toHaveLength(1);
+  expect(downs[0].time).toBeLessThan(releasedAt);
+  expect(downs[0].heardAt).toBeGreaterThan(releasedAt);
+  expect(liftAt - releasedAt).toBeGreaterThan(PAST_LATE_PRESS_WAIT_MS);
+  expect(
+    await page.evaluate(() => (window as unknown as {__seen: string[]}).__seen),
+  ).toEqual([]);
+  expect(await readLog(page)).toEqual({
+    clicks: [],
+    taps: 0,
+    toggles: ['pop:open'],
+  });
+  // A tap after the end is the layer's: its click lands.
   await driver.tap(action);
   await expect
     .poll(async () => (await readLog(page)).clicks)

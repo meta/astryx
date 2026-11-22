@@ -175,8 +175,11 @@ const styles = stylex.create({
   // No inline padding: nested rows fill the full width of the nav list, and
   // each row carries its own indent (`indentStyles` below). `minHeight: 0`
   // lets the 0fr track shrink this item to nothing; the group clips it.
+  // `minWidth: 0` keeps the track at the list's width, so a long label
+  // truncates instead of widening the open group past the nav.
   childrenInner: {
     minHeight: 0,
+    minWidth: 0,
   },
   expandChevron: {
     display: 'inline-flex',

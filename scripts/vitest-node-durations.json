@@ -608,6 +608,7 @@
     "packages/cli/api/theme-edit/theme-change-leaves-out-comes.test.mjs": 6.5,
     "packages/cli/api/theme-edit/theme-change-leaves-unchecked-unreached.test.mjs": 5.5,
     "packages/cli/api/theme-edit/theme-change-names-parts-leaves.test.mjs": 4.6,
+    "packages/cli/api/theme-edit/theme-change-removes-cut-pictures.test.mjs": 2.2,
     "packages/cli/api/theme-edit/theme-changed-tokens-built-values.test.mjs": 6.6,
     "packages/cli/api/theme-edit/theme-chaos.test.mjs": 13.7,
     "packages/cli/api/theme-edit/theme-check-seen-suggested-change.test.mjs": 4.3,
@@ -1006,9 +1007,11 @@
     "packages/cli/api/theme-edit/theme-set-says-drawn-size-and-kept-page.test.mjs": 3.3,
     "packages/cli/api/theme-edit/theme-set-takes-text-a-part-reads.test.mjs": 10.6,
     "packages/cli/api/theme-edit/theme-sheet-cells-b.test.mjs": 2,
+    "packages/cli/api/theme-edit/theme-sheet-cells-fit.test.mjs": 0.5,
     "packages/cli/api/theme-edit/theme-sheet-cells.test.mjs": 6.6,
     "packages/cli/api/theme-edit/theme-sheet-modes.test.mjs": 15.8,
     "packages/cli/api/theme-edit/theme-sheet-overlay-open-light.test.mjs": 49.8,
+    "packages/cli/api/theme-edit/theme-sheet-pages-pictures.test.mjs": 2.2,
     "packages/cli/api/theme-edit/theme-shorthand-mode-points-color.test.mjs": 6.9,
     "packages/cli/api/theme-edit/theme-show-sizes-skip-phones.test.mjs": 0.8,
     "packages/cli/api/theme-edit/theme-show-source-stylesheet.test.mjs": 2.2,
@@ -1896,6 +1899,9 @@
     "scripts/vitest-node-legs.test.mjs": 0.8,
     "scripts/vitest-setup-node.test.mjs": 0,
     "scripts/vitest-shard-sequencer.test.mjs": 4.7,
-    "scripts/vitest-shard-watchdog.test.mjs": 26.1
+    "scripts/vitest-shard-watchdog.test.mjs": 26.1,
+    "packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs": 25.6,
+    "packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.tsc.test.mjs": 3,
+    "packages/cli/assets/codemods/transforms/next/__tests__/preserve-chat-radius.test.mjs": 0.4
   }
 }

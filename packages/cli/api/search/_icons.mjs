@@ -34,8 +34,9 @@ export const ICON_SECTION_LIMIT = 3;
  * project's look (`experimental.iconVariant`), as `astryx experimental icon
  * <words>` gives them.
  * @param {string} query
- * @param {{setNames: string[], read: () => Promise<InstalledIcons>}} source
- *   the installed sets' names, and a read of the sets
+ * @param {{setNames: string[], read: () => Promise<InstalledIcons>, componentNames?: () => Iterable<string>}} source
+ *   the installed sets' names, a read of the sets, and the names of the
+ *   project's Core components, as the icon finder reads them
  * @param {{declaredNames: string[], resultDomains: string[], limit: number}} search
  *   the names of the components and hooks search reads, the domains of its
  *   results, and its limit
@@ -63,6 +64,7 @@ export async function iconSection(
   const {data} = rankIconSets(sets, withdrawn, query, {
     limit: Math.min(ICON_SECTION_LIMIT, limit),
     looks: projectLooks(choice),
+    componentNames: source.componentNames,
   });
   if (data.matchCount === 0) return null;
   return {
