@@ -120,7 +120,7 @@ describe('useTriggerMenu', () => {
     );
   }
 
-  it('gives a Latin default item label its own direction, so a cut label keeps its start, and leaves a right-to-left label in the page direction', async () => {
+  it('gives a Latin default item label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', async () => {
     const {result} = renderTriggerHook([
       createCommandTrigger({
         searchSource: createStaticSource([
@@ -136,7 +136,7 @@ describe('useTriggerMenu', () => {
     });
     render(<div dir="rtl">{result.current.renderMenu()}</div>);
     expect(screen.getByText('Summarize thread')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('סכם שיחה')).not.toHaveAttribute('dir');
+    expect(screen.getByText('סכם שיחה')).toHaveAttribute('dir', 'rtl');
   });
 
   // 1. Single-token / behavior unchanged

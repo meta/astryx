@@ -100,12 +100,15 @@ function headerCellDeclarations(container: HTMLElement): string[] {
 }
 
 /** A children-mode Table with one header cell and one body cell. */
-function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
+function renderChildrenMode(
+  textOverflow?: 'wrap' | 'truncate',
+  heading = 'Jobs',
+) {
   return render(
     <Table textOverflow={textOverflow}>
       <TableHeader>
         <TableRow>
-          <TableHeaderCell>Jobs</TableHeaderCell>
+          <TableHeaderCell>{heading}</TableHeaderCell>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -128,6 +131,13 @@ describe('TableHeaderCell', () => {
     expect(heading.tagName).toBe('SPAN');
     expect(heading).toHaveAttribute('dir', 'ltr');
     expect(screen.getByRole('columnheader', {name: 'Jobs'})).toBeTruthy();
+  });
+
+  it('gives a truncating right-to-left heading its own right-to-left direction, so it keeps its start on a left-to-right page', () => {
+    renderChildrenMode('truncate', 'משרות');
+    const heading = screen.getByText('משרות');
+    expect(heading.tagName).toBe('SPAN');
+    expect(heading).toHaveAttribute('dir', 'rtl');
   });
 
   it('keeps a wrapping heading as plain text in the cell', () => {

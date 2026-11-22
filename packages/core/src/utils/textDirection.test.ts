@@ -11,6 +11,7 @@ import {describe, it, expect} from 'vitest';
 import {createElement, isValidElement} from 'react';
 import {
   cutText,
+  cutTextDirection,
   textDirectionProps,
   truncatedTextStyles,
   withTextDirection,
@@ -104,11 +105,22 @@ describe('cutText', () => {
     expect(props(span).children).toBe('Monthly revenue');
   });
 
-  it('leaves text with a right-to-left letter and a rich node in the page direction', () => {
-    expect(props(cutText('הכנסה חודשית', cut.label)).dir).toBeUndefined();
+  it('gives text with a right-to-left letter its own right-to-left direction, and leaves a rich node alone', () => {
+    expect(props(cutText('הכנסה חודשית', cut.label)).dir).toBe('rtl');
+    expect(props(cutText('iPhone של דנה', cut.label)).dir).toBe('rtl');
     const rich = createElement('b', null, 'bold');
     const span = cutText(rich, cut.label);
     expect(props(span).dir).toBeUndefined();
     expect(props(span).className).toBe(stylex.props(cut.label).className);
+  });
+});
+
+describe('cutTextDirection', () => {
+  it('reads a cut label\'s direction from its own content, on any page', () => {
+    expect(cutTextDirection('Monthly')).toEqual({dir: 'ltr'});
+    expect(cutTextDirection(30)).toEqual({dir: 'ltr'});
+    expect(cutTextDirection('חודשי')).toEqual({dir: 'rtl'});
+    expect(cutTextDirection('iPhone של דנה')).toEqual({dir: 'rtl'});
+    expect(cutTextDirection(createElement('b', null, 'bold'))).toEqual({});
   });
 });

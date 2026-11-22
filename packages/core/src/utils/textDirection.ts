@@ -5,10 +5,11 @@
  * @input For textDirectionProps, a component's text content (a string, a
  *   number, or a rich node)
  * @output textDirectionProps (`dir="ltr"` for plain text with no
- *   right-to-left letter), withTextDirection (that text in a `dir` span),
- *   isolatedText (one item's text in its own isolated span), and
- *   localeTextStyles and truncatedTextStyles (`pageAlign` for an element
- *   with its own `dir`), and cutText (a label in a span that cuts it)
+ *   right-to-left letter), cutTextDirection (a cut label's own direction),
+ *   withTextDirection (that text in a `dir` span), isolatedText (one item's
+ *   text in its own isolated span), localeTextStyles and truncatedTextStyles
+ *   (`pageAlign` for an element with its own `dir`), and cutText (a label in
+ *   a span that cuts it)
  * @position Core-internal helper, not exported from the package: the one
  *   owner of direction decisions for caller text (a locale's own direction
  *   comes from getLocaleDirection)
@@ -34,12 +35,25 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
 }
 
 /**
- * For an element that cuts its own text with an ellipsis. The element's own
- * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
- * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
- * a right-to-left letter keeps the page's direction and is cut at its own
- * end. Put `pageAlign` beside the `dir` so the element keeps the page's
- * alignment.
+ * The direction of a label that cuts its own text with an ellipsis. The
+ * element's own direction decides which end the ellipsis cuts, so a cut label
+ * takes its content's direction on any page: `rtl` for text with a
+ * right-to-left letter, `ltr` for other plain text. A Latin label keeps its
+ * start on a right-to-left page ("Mon…"), and a Hebrew or Arabic label keeps
+ * its start on a left-to-right page. A rich node is left alone. A mostly
+ * Latin label with one right-to-left word reads right to left.
+ */
+export function cutTextDirection(content: ReactNode): {dir?: 'ltr' | 'rtl'} {
+  if (typeof content !== 'string' && typeof content !== 'number') {
+    return {};
+  }
+  return {dir: hasStrongRightToLeft(String(content)) ? 'rtl' : 'ltr'};
+}
+
+/**
+ * For an element that cuts its own text with an ellipsis and takes
+ * `cutTextDirection`. Put `pageAlign` beside the `dir` so the element keeps
+ * the page's alignment.
  */
 export const truncatedTextStyles = stylex.create({
   pageAlign: {
@@ -109,16 +123,15 @@ export function isolatedText(
 }
 
 /**
- * The text in a span that cuts it with an ellipsis (`style`). Plain text with
- * no right-to-left letter takes `dir="ltr"` with the page's alignment, so a
- * cut Latin label keeps its start on a right-to-left page. Other text keeps
- * the page's direction and is cut at its own end.
+ * The text in a span that cuts it with an ellipsis (`style`). Plain text takes
+ * its own direction (`cutTextDirection`) with the page's alignment, so a cut
+ * label keeps its start on either page.
  */
 export function cutText(
   text: ReactNode,
   style: stylex.StyleXStyles,
 ): ReactElement {
-  const {dir} = textDirectionProps(text);
+  const {dir} = cutTextDirection(text);
   return createElement(
     'span',
     {
