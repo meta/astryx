@@ -69,9 +69,9 @@ describe('icon-set guide', () => {
       'patch release',
       formatCliCommand('experimental icon new-set outline'),
       formatCliCommand(
-        'experimental icon add Bin --from @acme/glyph-library --definition delete',
+        'experimental icon add Bin --from @acme/glyph-library --meaning delete',
       ),
-      '--new-definition',
+      '--new-meaning',
       formatCliCommand('docs cli/experimental/icon-definitions'),
       'icon_builtin_definition_missing',
       'Unmapped icon meanings (optional)',

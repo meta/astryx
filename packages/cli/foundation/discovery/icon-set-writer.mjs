@@ -1288,7 +1288,7 @@ export function checkNewDefinition(set, given) {
     throw new IconSetAuthoringError(
       `Astryx already has the icon meaning "${doc.name}"; map to it instead of adding your own.`,
       'ERR_INVALID_ARGUMENT',
-      [{name: `--definition ${doc.name}`, reason: "use Astryx's meaning"}],
+      [{name: `--meaning ${doc.name}`, reason: "use Astryx's meaning"}],
     );
   }
   const description = (doc.description ?? '').trim();

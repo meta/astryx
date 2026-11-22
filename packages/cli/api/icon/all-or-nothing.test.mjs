@@ -193,7 +193,7 @@ const COMMANDS = [
     dir => iconNewSet('glyphs', {cwd: dir, from: FROM}),
   ],
   [
-    'add --new-definition',
+    'add --new-meaning',
     dir => iconNewSet('glyphs', {cwd: dir}),
     dir =>
       iconAdd('Bin', {

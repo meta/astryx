@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Add one icon you chose from a library to your icon set',
   description:
-    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without --definition or --new-definition it lists the icon meanings that fit and the command for each. With --definition it adds the icon and maps the meaning to it; --new-definition first adds your set's own icon meaning. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without --meaning or --new-meaning it lists the icon meanings that fit and the command for each. With --meaning it adds the icon and maps the meaning to it; --new-meaning first adds your set's own icon meaning. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
   fn: 'iconAdd',
   args: [{name: 'export', param: 'exportName', required: false}],
   options: [
@@ -22,12 +22,12 @@ export const doc = {
         'The module the icon is exported from: a package, a subpath, or a ./ path to a file inside this package',
     },
     {
-      flag: '--definition <name>',
+      flag: '--meaning <name>',
       param: 'options.definition',
       description: 'Map the icon to this icon meaning',
     },
     {
-      flag: '--new-definition <name>',
+      flag: '--new-meaning <name>',
       param: 'options.newDefinition',
       description:
         "Add your set's own icon meaning, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words",
@@ -35,13 +35,13 @@ export const doc = {
     {
       flag: '--description <text>',
       param: 'options.description',
-      description: 'With --new-definition: what the icon is for',
+      description: 'With --new-meaning: what the icon is for',
     },
     {
       flag: '--words <list>',
       param: 'options.words',
       description:
-        'With --new-definition: comma-separated words people search for',
+        'With --new-meaning: comma-separated words people search for',
     },
     {
       flag: '--default',
@@ -79,7 +79,7 @@ export const doc = {
     },
     {
       label: 'Add and map',
-      cli: 'astryx experimental icon add Bin --from @acme/glyph-library --definition delete',
+      cli: 'astryx experimental icon add Bin --from @acme/glyph-library --meaning delete',
     },
     {
       label: 'Add the solid variant of every icon',
@@ -87,7 +87,7 @@ export const doc = {
     },
     {
       label: 'Add your own meaning',
-      cli: "astryx experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance",
+      cli: "astryx experimental icon add Dice5 --from @acme/glyph-library --new-meaning random --description 'Pick something at random.' --words dice,shuffle,chance",
     },
     {
       label: 'Add a solid variant',

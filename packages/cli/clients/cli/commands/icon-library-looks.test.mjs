@@ -345,7 +345,7 @@ describe('add <Export> --from a library of looks', () => {
       'XOutline24WGHT500Icon',
       '--from',
       '@acme/vector-icons',
-      '--definition',
+      '--meaning',
       'close',
     ]);
     expect(added.code, JSON.stringify(added.body)).toBe(0);
@@ -405,7 +405,7 @@ describe('commands add prints run as printed', () => {
     const [first] = listed.body.data.matches;
     expect(first.name).toBe('close');
     expect(first.command).toBe(
-      `astryx experimental icon add XIcon --from ${from} --set brand --default --definition close`,
+      `astryx experimental icon add XIcon --from ${from} --set brand --default --meaning close`,
     );
     // The printed command runs.
     const args = first.command.split(' ').slice(1);
@@ -426,7 +426,7 @@ describe('a new definition named in kebab-case', () => {
       'HeartFilled24WGHT500Icon',
       '--from',
       '@acme/vector-icons',
-      '--new-definition',
+      '--new-meaning',
       'ai-helper',
       '--description',
       'The AI helper.',
@@ -464,7 +464,7 @@ describe('a new definition named in kebab-case', () => {
     ).toBe(true);
   });
 
-  it('is what an unknown --definition suggests, and the suggestion runs', async () => {
+  it('is what an unknown --meaning suggests, and the suggestion runs', async () => {
     writeVectorLibrary(GLYPHS);
     await json(['experimental', 'icon', 'new-set', 'brand']);
     const base = [
@@ -475,16 +475,16 @@ describe('a new definition named in kebab-case', () => {
       '--from',
       '@acme/vector-icons',
     ];
-    const refused = await json([...base, '--definition', 'brand-mark']);
+    const refused = await json([...base, '--meaning', 'brand-mark']);
     expect(refused.code).not.toBe(0);
     const suggestion = refused.body.suggestions.find(
       (/** @type {{name: string}} */ each) =>
-        each.name.startsWith('--new-definition'),
+        each.name.startsWith('--new-meaning'),
     );
-    expect(suggestion.name).toMatch(/^--new-definition brandMark /u);
+    expect(suggestion.name).toMatch(/^--new-meaning brandMark /u);
     const ran = await json([
       ...base,
-      '--new-definition',
+      '--new-meaning',
       'brandMark',
       '--description',
       'The brand mark.',
@@ -637,7 +637,7 @@ describe('generated files a formatter rewrote', () => {
         'HeartFilled24WGHT400Icon',
         '--from',
         '@acme/vector-icons',
-        '--definition',
+        '--meaning',
         'warning',
       ]);
       expect(added.code, JSON.stringify(added.body)).toBe(0);
@@ -998,7 +998,7 @@ describe('add <Export> for a glyph the set already wraps in another look', () =>
       (/** @type {{name: string}} */ each) => each.name === 'close',
     );
     expect(close.command).toBe(
-      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --set brand --definition close',
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --set brand --meaning close',
     );
     const text = await runCli(base, pkg);
     expect(text.stdout).toContain('Add this one as its variant');
@@ -1074,7 +1074,7 @@ describe('add <Export> for a glyph the set already wraps in another look', () =>
       '@acme/vector-icons',
       '--id',
       'x-filled',
-      '--definition',
+      '--meaning',
       'close',
     ]);
     expect(added.code, JSON.stringify(added.body)).toBe(0);

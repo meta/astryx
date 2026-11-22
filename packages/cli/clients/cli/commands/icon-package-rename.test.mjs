@@ -156,7 +156,7 @@ describe('a renamed icon-set package', () => {
       ['@acme/refreshed', ['new-set', 'outline', '--from', LIBRARY]],
       [
         '@acme/added',
-        ['add', 'Bin', '--from', LIBRARY, '--definition', 'delete'],
+        ['add', 'Bin', '--from', LIBRARY, '--meaning', 'delete'],
       ],
     ])) {
       writePackage(name);
@@ -185,7 +185,7 @@ describe('receipts after a package rename', () => {
 
   it('a repeated add says the icon is already there and reports the module rewrite', async () => {
     await wrapAndMap();
-    await textOf(['add', 'Bin', '--from', LIBRARY, '--definition', 'delete']);
+    await textOf(['add', 'Bin', '--from', LIBRARY, '--meaning', 'delete']);
     writePackage('@acme/new-icons');
     const done = await json([
       'experimental',
@@ -194,7 +194,7 @@ describe('receipts after a package rename', () => {
       'Bin',
       '--from',
       LIBRARY,
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     expect(done.code, JSON.stringify(done.body)).toBe(0);
@@ -211,7 +211,7 @@ describe('receipts after a package rename', () => {
       'Bin',
       '--from',
       LIBRARY,
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     expect(out).toContain(

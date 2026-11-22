@@ -117,10 +117,10 @@ async function writeSet() {
       'CalendarDaysWithClockOverlayOutline',
       '--from',
       COMPONENTS,
-      '--definition',
+      '--meaning',
       'calendar',
     ],
-    ['add', 'HomeModern', '--from', COMPONENTS, '--definition', 'home'],
+    ['add', 'HomeModern', '--from', COMPONENTS, '--meaning', 'home'],
     ['map', '--pairs', ICON_NAMES.map(name => `${name}=x`).join(',')],
   ]) {
     const done = await json(['experimental', 'icon', ...args]);

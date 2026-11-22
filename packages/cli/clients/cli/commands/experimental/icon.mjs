@@ -704,9 +704,9 @@ export function registerExperimentalIcon(group, program) {
             cwd: process.cwd(),
             from: /** @type {string} */ (options.from),
             set: setOf(options),
-            definition: /** @type {string | undefined} */ (options.definition),
+            definition: /** @type {string | undefined} */ (options.meaning),
             newDefinition: /** @type {string | undefined} */ (
-              options.newDefinition
+              options.newMeaning
             ),
             description: /** @type {string | undefined} */ (
               options.description

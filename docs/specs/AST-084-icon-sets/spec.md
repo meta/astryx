@@ -505,10 +505,10 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   file, two options it would not both honor: a listing (`--list`,
   `--definitions`, `--all-icons`) with a query, another listing, or an
   option it ignores; a `<set>/<id>` query with `--set` or `--limit`;
-  `add --all` with an export name, `--definition`, `--new-definition`,
-  `--description`, `--words`, `--default`, or `--id`; `add --definition`
-  with `--new-definition`; `add --description` or `--words` without
-  `--new-definition`; `map --pairs` with a definition, an icon, or
+  `add --all` with an export name, `--meaning`, `--new-meaning`,
+  `--description`, `--words`, `--default`, or `--id`; `add --meaning`
+  with `--new-meaning`; `add --description` or `--words` without
+  `--new-meaning`; `map --pairs` with a definition, an icon, or
   `--remove`, and `map --remove` with an icon; and `new-set --exclude`
   without `--from` or `--default-variant` without `--variants`. Every
   command reads modules statically, and its writes are all or nothing: when
@@ -640,8 +640,8 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     `--default-variant` that is none of the library's look words is
     refused, the look words named, and nothing is written.
   - `experimental icon add <Export> --from <module>` verifies the export,
-    lists the definitions that fit it, and with `--definition` or
-    `--new-definition` adds it and maps it; `--variant <name>` adds it as
+    lists the definitions that fit it, and with `--meaning` or
+    `--new-meaning` adds it and maps it; `--variant <name>` adds it as
     that declared variant of an existing icon, and names a variant the set
     does not declare with the command that declares it, which names the
     set's default variant. Each command it
@@ -669,7 +669,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     publishes it.
   - `experimental icon map <definition> <icon>` writes one `map` entry,
     `--remove` removes one, and `--pairs` writes many in one checked write;
-    here and in `add --definition` a definition may be named by its kebab
+    here and in `add --meaning` a definition may be named by its kebab
     id. `map` names an icon only by its `id`, its export name in any case,
     or another name its library exports it as (a word it carries that is
     not a part of its `id`); a part of an `id` alone (`glass` for

@@ -263,7 +263,7 @@ describe('library names that start with a digit once the prefix comes off', () =
       '@acme/more-digits',
       '--id',
       '7',
-      '--definition',
+      '--meaning',
       'close',
     ]);
     expect(refused.code).not.toBe(0);
@@ -298,7 +298,7 @@ describe('library names that start with a digit once the prefix comes off', () =
       '@acme/more-digits',
       '--id',
       '7',
-      '--definition',
+      '--meaning',
       'close',
     ]);
     expect(refusedFree.code).not.toBe(0);
@@ -317,7 +317,7 @@ describe('library names that start with a digit once the prefix comes off', () =
       '@acme/more-digits',
       '--id',
       'seven',
-      '--definition',
+      '--meaning',
       'close',
     ]);
     expect(added.code, JSON.stringify(added.body)).toBe(0);

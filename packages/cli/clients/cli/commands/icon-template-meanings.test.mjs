@@ -155,7 +155,7 @@ describe('authoring receipts name the template meanings a set leaves unmapped', 
       './icons/home.js',
       '--id',
       'house',
-      '--definition',
+      '--meaning',
       'document',
     ]);
     expect(code).toBe(0);

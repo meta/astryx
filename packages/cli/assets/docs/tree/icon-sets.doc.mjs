@@ -52,7 +52,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'When your library draws something no definition covers, add the meaning in the same package: `astryx experimental icon new-definition <name> --description ... --words ... --icon <id>`, or `--new-definition` on `experimental icon add`. It hooks in like an Astryx definition: `astryx experimental icon` answers to its name and words, and once the package is installed the definitions list shows it with the package that ships it. It maps only within your set; to offer it to every set, see Share a definition with every set.',
+          text: 'When your library draws something no definition covers, add the meaning in the same package: `astryx experimental icon new-definition <name> --description ... --words ... --icon <id>`, or `--new-meaning` on `experimental icon add`. It hooks in like an Astryx definition: `astryx experimental icon` answers to its name and words, and once the package is installed the definitions list shows it with the package that ships it. It maps only within your set; to offer it to every set, see Share a definition with every set.',
         },
         {
           type: 'prose',
@@ -160,7 +160,7 @@ const appTheme = defineTheme({
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx experimental icon add Bin --from @acme/glyph-library --definition delete',
+          code: 'astryx experimental icon add Bin --from @acme/glyph-library --meaning delete',
         },
         {
           type: 'prose',
@@ -173,7 +173,7 @@ const appTheme = defineTheme({
         {
           type: 'code',
           lang: 'bash',
-          code: "astryx experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance",
+          code: "astryx experimental icon add Dice5 --from @acme/glyph-library --new-meaning random --description 'Pick something at random.' --words dice,shuffle,chance",
         },
         {
           type: 'prose',
@@ -282,7 +282,7 @@ for (const [name, Icon] of Object.entries(icons)) {
           rows: [
             [
               'Components in one module',
-              '`experimental icon add Bin --from @acme/glyph-library --definition delete`',
+              '`experimental icon add Bin --from @acme/glyph-library --meaning delete`',
             ],
             [
               'A subpath per style',
@@ -294,11 +294,11 @@ for (const [name, Icon] of Object.entries(icons)) {
             ],
             [
               'One file per icon, default export',
-              '`experimental icon add Rocket --from @acme/glyph-library/rocket --default --definition rocket`',
+              '`experimental icon add Rocket --from @acme/glyph-library/rocket --default --meaning rocket`',
             ],
             [
               'Icon data objects',
-              'Declare an `adapter`, then `experimental icon add Rocket --from @acme/glyph-data --definition rocket`',
+              'Declare an `adapter`, then `experimental icon add Rocket --from @acme/glyph-data --meaning rocket`',
             ],
             [
               'SVG strings or URLs',
@@ -306,7 +306,7 @@ for (const [name, Icon] of Object.entries(icons)) {
             ],
             [
               'Your own component files',
-              "`experimental icon add Rocket --from ./src/icons/rocket.js --definition rocket`, and `--id rocket --variant solid` for its other looks. The file exports a component named as written (no library prefix is taken off), with a declaration file beside it (`rocket.d.ts`) or written in TypeScript, since the set's types re-export its own; when package.json lists `files` and none covers it, the receipt names the `files` array that publishes its folder.",
+              "`experimental icon add Rocket --from ./src/icons/rocket.js --meaning rocket`, and `--id rocket --variant solid` for its other looks. The file exports a component named as written (no library prefix is taken off), with a declaration file beside it (`rocket.d.ts`) or written in TypeScript, since the set's types re-export its own; when package.json lists `files` and none covers it, the receipt names the `files` array that publishes its folder.",
             ],
           ],
         },
@@ -408,7 +408,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
           items: [
             'Run `astryx integration verify` yourself before publishing. Do not put it in `prepublishOnly`: under `npm publish --dry-run` its own `npm pack` becomes a dry run too, and it checks nothing.',
             "Declare `@astryxdesign/cli` as an optional peer (`peerDependenciesMeta`). A required peer an app cannot satisfy makes npm remove the app's CLI without a word. Icon sets are experimental, so no version range promises them, and the format may change in a patch release. A CLI reads a set only when it knows every key the set's data file uses: a key it does not know withdraws the set, naming the key. `exclude` is read only by a CLI whose data-file reference lists it ({@link schema:icon-set-data}); a set without `exclude` is read by every CLI that has `astryx experimental icon`. A CLI without it reads `experimental` as a manifest key it does not know: `astryx doctor` there warns that your package was published against a newer Astryx CLI, other commands print a one-line nudge to run it, and your icons, icon definitions, and template icon mapping do not appear ({@link generic:versioning}).",
-            "Every built-in definition needs an icon, because Core renders it. When your library has no icon with that exact meaning, map the closest one, or add your own artwork as a component file in your package (`experimental icon add <Name> --from ./src/icons/<name>.js --definition <definition>`; a ./ path is named as written). Artwork you draw is yours: note its license beside the library's, for example in a NOTICE file in the set directory.",
+            "Every built-in definition needs an icon, because Core renders it. When your library has no icon with that exact meaning, map the closest one, or add your own artwork as a component file in your package (`experimental icon add <Name> --from ./src/icons/<name>.js --meaning <definition>`; a ./ path is named as written). Artwork you draw is yours: note its license beside the library's, for example in a NOTICE file in the set directory.",
             'The generated declaration file imports React types, so declare `@types/react` as an optional peer for TypeScript users.',
             'Keep the wrapped library in `dependencies`: your generated module re-exports its components, so apps get it with your package, and `integration check` compares its range with the version the data file records.',
             "`integration check --strict` type-checks the set's doc files; it does not type-check the generated declaration file against React's types. Run `tsc` with `@types/react` installed to check those.",
