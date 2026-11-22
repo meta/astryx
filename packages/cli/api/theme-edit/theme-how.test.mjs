@@ -5015,8 +5015,9 @@ describe('r19 (2): not dark enough / not light enough', () => {
       );
     }
   });
-  // "Header rows" is the table's header row, and "on every table" is where
-  // it already is: one write on the header cells, nothing on the body rows.
+  // "Header rows" is the table's header row, and "on every table" or "in the
+  // table" is where it already is: one write on the header cells (each sets
+  // its own weight), nothing on the body rows or the header row element.
   it.each([
     'bold header rows',
     'make the header rows bold',
@@ -5027,6 +5028,11 @@ describe('r19 (2): not dark enough / not light enough', () => {
     'bold table header cells on all tables',
     'bold header cells',
     'make header cells bold',
+    'bold the header rows in every table',
+    'bold header rows in the table',
+    'bold header rows in tables',
+    'bold the header row of the table',
+    'bold the header row in the table',
   ])('bolds the table header cells for %s', async question => {
     const {data} = await themeEditHow(question, {cwd, theme: 'q'});
     const commands = (data.results ?? [])
@@ -5037,6 +5043,7 @@ describe('r19 (2): not dark enough / not light enough', () => {
     ).toBe(true);
     expect(commands.some(x => /--on table-row\b/.test(x))).toBe(false);
     expect(commands.some(x => /--on heading\b/.test(x))).toBe(false);
+    expect(commands.some(x => /--on table-header$/.test(x))).toBe(false);
   });
   // A part word inside or right before another part's name in the place,
   // "icon buttons", "input groups", "code blocks", names that part: the

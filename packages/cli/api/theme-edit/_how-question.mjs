@@ -10609,6 +10609,12 @@ export function draftAnswer(ctx, env, question) {
           else if (rest.some(w => words(w).test(nameText)))
             found.push({k, score: 20});
         }
+        // A part of the place the element's own words name by the lexicon,
+        // "header rows in the table": that part, over a part whose name only
+        // shares a word with them (table-header for "header").
+        const lexPart = partIn(nameText);
+        if (lexPart && lexPart !== h && lexPart.startsWith(`${h}-`))
+          found.push({k: lexPart, score: 50});
         // A phrase of the lexicon said owner first.
         const reordered = partIn(`${holderWord.word} ${nameText}`);
         // (Not when the words name a part of their own: "links in the
