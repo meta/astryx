@@ -70,6 +70,7 @@ import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
+  ThemeReducesMotionContext,
 } from '../privateAttributes/reducedMotion.stylex';
 import {setRootScheme} from '../privateAttributes/scheme';
 import {createSharedContext} from '../utils/sharedContext';
@@ -428,6 +429,7 @@ export function Theme({
   const parentMode = parentModeValue?.mode;
   const parentForces = parentMode === 'light' || parentMode === 'dark';
   const aroundScheme = use(SystemSchemeContext);
+  const inheritsReducedMotion = use(ThemeReducesMotionContext);
   const systemScheme = parentForces ? 'preference' : aroundScheme;
 
   // A value that is not a defined theme applies no theme of its own. The
@@ -515,7 +517,12 @@ export function Theme({
     <SystemSchemeContext value={systemScheme}>
       <ThemeModeContext value={modeValue}>
         <ThemeContext value={ctxValue}>
-          <ThemeSourceContext value={source}>{wrapper}</ThemeSourceContext>
+          <ThemeSourceContext value={source}>
+            <ThemeReducesMotionContext
+              value={reducesMotion || inheritsReducedMotion}>
+              {wrapper}
+            </ThemeReducesMotionContext>
+          </ThemeSourceContext>
         </ThemeContext>
       </ThemeModeContext>
     </SystemSchemeContext>
