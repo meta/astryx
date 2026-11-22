@@ -4,8 +4,9 @@
 
 /**
  * @file useNumberGrouping.ts
- * @input Uses React useState and useEffect, and groupedEditing.ts through a
- *   deferred import with createModuleLoader
+ * @input Uses React useState and useEffect, groupedEditing.ts through a
+ *   deferred import with createModuleLoader, and the numberParser.ts and
+ *   unicodeDigits.ts helpers it passes to that module
  * @output Exports useNumberGrouping, which returns the grouped-editing module
  *   once it loads, and numberGroupingModule, which loads it without rendering
  * @position Internal to NumberInput: the deferred load of
@@ -22,13 +23,28 @@
 
 import {useEffect, useState} from 'react';
 import {createModuleLoader} from '../utils/moduleLoader';
-import type * as GroupedEditing from './groupedEditing';
+import {toAsciiDigits} from '../utils/unicodeDigits';
+import type {createGroupedEditing} from './groupedEditing';
+import {
+  formatEditableNumber,
+  getLocaleNumberSymbols,
+  MINUS_SIGNS,
+} from './numberParser';
 
-export type NumberGroupingModule = typeof GroupedEditing;
+// The deferred chunk gets the parser and digit helpers from here, not by
+// import. An import would move them into a new chunk on every NumberInput
+// page.
+export type NumberGroupingModule = ReturnType<typeof createGroupedEditing>;
 
 /** The grouped-editing module, loaded once on demand. */
 export const numberGroupingModule = createModuleLoader<NumberGroupingModule>(
-  async () => import('./groupedEditing'),
+  async () =>
+    (await import('./groupedEditing')).createGroupedEditing(
+      formatEditableNumber,
+      getLocaleNumberSymbols,
+      MINUS_SIGNS,
+      toAsciiDigits,
+    ),
 );
 
 /**

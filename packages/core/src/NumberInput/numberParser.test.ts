@@ -4,14 +4,22 @@ import {describe, it, expect} from 'vitest';
 import {
   formatEditableNumber,
   formatPercent,
+  getLocaleNumberSymbols,
+  MINUS_SIGNS,
   parseLocaleNumber,
 } from './numberParser';
-import {
+import {createNumberGrouping} from './numberGrouping';
+
+const {
   deleteDigitAcrossGroupSeparator,
   formatGroupedEditableNumber,
   groupEditableDraft,
   typedGroupIndexes,
-} from './numberGrouping';
+} = createNumberGrouping({
+  formatEditableNumber,
+  getLocaleNumberSymbols,
+  MINUS_SIGNS,
+});
 
 const NBSP = '\u00A0';
 const NARROW_NBSP = '\u202F';

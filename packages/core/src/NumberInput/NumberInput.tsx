@@ -902,8 +902,7 @@ export function NumberInput({
   const grouping = useNumberGrouping(isGroupedWhileEditing);
 
   // Formats the number a focused field edits.
-  const formatFocusedNumber =
-    grouping?.formatGroupedEditableNumber ?? formatEditableNumber;
+  const formatFocusedNumber = grouping?.format ?? formatEditableNumber;
 
   const formattedValue = useMemo(() => {
     if (value == null) {
@@ -1456,15 +1455,15 @@ export function NumberInput({
         onKeyDown={handleKeyDown}
         // With `isGroupedWhileEditing`, the grouped-editing module's change,
         // keydown and composition handlers wrap the field's and the caller's.
-        {...grouping?.groupedInputProps({
+        {...grouping?.inputProps(
           locale,
-          draft: holdDraft === null ? pendingInput : null,
+          holdDraft === null ? pendingInput : null,
           displayValue,
           commitDraftText,
           handleKeyDown,
           onKeyDown,
-          props: fieldProps,
-        })}
+          fieldProps,
+        )}
         placeholder={placeholder}
         // A disabled input keeps its place in the tab order (spec:AST-085):
         // aria-disabled instead of the native attribute, with readOnly + the
