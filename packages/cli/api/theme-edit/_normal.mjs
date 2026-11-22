@@ -2011,7 +2011,8 @@ const TONE_WORDS = new Set([
  * page. Never a theme of one mode, or an accent. The mode stays said
  * first, so a clause after it keeps that mode ("dark mode is plum, gold
  * buttons"). Only a color said by
- * itself, said at the start of its clause (or of a line or a list item)
+ * itself, said at the start of its clause (or of a line or a list item,
+ * or after a comma and an "and")
  * and ending it, is read so: a
  * phrase with a part, role or token word ("a red accent", "blue links", "red for errors"), one a
  * "with", "and" or "but" goes on from, and a gray, are left as said.
@@ -2036,7 +2037,7 @@ export function colorsSaidForPages(question, isHue, isShade) {
     wordsOf(words).every(w => hue(w) || isShade(w) || TONE_WORDS.has(w));
   return question
     .replace(
-      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+(?:a\s+|an\s+)?((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?=\s*[,.;!\n]|\s*$)/gi,
+      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:(?:and|but)\s+)?(?:[-*•]\s+)?)(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+(?:a\s+|an\s+)?((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?=\s*[,.;!\n]|\s*$)/gi,
       (m, lead, mode, phrase, tint) => {
         // (With a tint, the tint gives the hue; the rest is tone words.)
         const said = tint
