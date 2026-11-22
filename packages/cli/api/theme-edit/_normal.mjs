@@ -2014,6 +2014,9 @@ export const isBareGraysClause = text =>
       .trim()
       .toLowerCase()
       .replace(/\s+/g, ' ')
+      // (A clause the reader split off keeps its closing mark, "untinted
+      // grays!": the mark is no word.)
+      .replace(/[\s!.?]+$/, '')
       .replace(/^(?:i'?d like|i want|want|use|make|give|with) /, ''),
   );
 

@@ -148,6 +148,20 @@ describe('neutral grays', () => {
   );
 
   it(
+    'a closing mark after the grays in a longer ask still reads them',
+    async test => {
+      needsBases(test);
+      const q = 'red buttons, rounder cards, untinted grays!';
+      const results = await answer(q, 'warm');
+      expect(results.flatMap(r => r.lines)).toContain("neutral '#777777'");
+      expect(results.some(r => /not taken: .*untinted/.test(r.text))).toBe(
+        false,
+      );
+    },
+    T,
+  );
+
+  it(
     'a negated ask never makes the grays neutral',
     async test => {
       needsBases(test);
