@@ -77,6 +77,9 @@ export interface TabMenuProps extends Omit<
 const styles = stylex.create({
   trigger: {
     position: 'relative',
+    // The hover layer sits under the label and chevron, inside this stacking
+    // context. A strong overlay above them hides them.
+    isolation: 'isolate',
     // Keeps its label's width in a strip that scrolls, as a hugging tab does.
     flexShrink: 0,
     display: 'inline-flex',
@@ -144,6 +147,7 @@ const styles = stylex.create({
   },
   hoverBg: {
     position: 'absolute',
+    zIndex: -1,
     inset: 0,
     margin: 'auto',
     width: '100%',

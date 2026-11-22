@@ -19,7 +19,14 @@ export const docs = {
   ],
 
   playground: {
-    defaults: {body: 'Changes saved'},
+    // Keep the card's timer off: the theme editor's preview page passes no
+    // onDismiss, so a timer that fires throws. autoHideDuration is the show
+    // function's 5000.
+    defaults: {
+      body: 'Changes saved',
+      isAutoHide: false,
+      autoHideDuration: 5000,
+    },
   },
 
   props: [
@@ -36,21 +43,22 @@ export const docs = {
       name: 'type',
       type: "'info' | 'error'",
       description:
-        'Toast type controlling background color. Error toasts persist until dismissed.',
+        "Toast type controlling background color. useToast()'s show function sets it when it is not given.",
       default: "'info'",
     },
     {
       name: 'isAutoHide',
       type: 'boolean',
       description:
-        'Whether the toast auto-dismisses. Defaults to true for info, false for error.',
+        "Whether the toast auto-dismisses. useToast()'s show function sets it by type when it is not given.",
+      required: true,
     },
     {
       name: 'autoHideDuration',
       type: 'number',
       description:
-        'Duration in ms before auto-dismiss. Timed content must satisfy WCAG 2.2.1.',
-      default: '5000',
+        "Duration in ms before auto-dismiss. Timed content must satisfy WCAG 2.2.1. useToast()'s show function sets it when it is not given.",
+      required: true,
     },
     {
       name: 'isExiting',
@@ -68,23 +76,6 @@ export const docs = {
         {__element: 'Icon', props: {icon: 'chevronDown', size: 'sm'}},
         {__element: 'Badge', props: {label: '3'}},
       ],
-    },
-    {
-      name: 'uniqueID',
-      type: 'string',
-      description: 'Unique identifier for deduplication.',
-    },
-    {
-      name: 'collisionBehavior',
-      type: "'overwrite' | 'ignore'",
-      description:
-        'Behavior when a toast with matching uniqueID already exists.',
-      default: "'overwrite'",
-    },
-    {
-      name: 'onHide',
-      type: '(reason: "auto" | "manual") => void',
-      description: 'Callback fired when the toast is removed.',
     },
     {
       name: 'onDismiss',
@@ -156,7 +147,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use uniqueID to deduplicate toasts that fire from repeated actions, like clicking a save button multiple times.',
+          "Pass useToast()'s uniqueID option to deduplicate toasts that fire from repeated actions, like clicking a save button multiple times.",
       },
       {
         guidance: true,
@@ -212,14 +203,12 @@ export const docs = {
 export const docsZh = {
   propDescriptions: {
     body: '主要消息内容。',
-    type: 'Toast 类型，控制背景颜色。error toast 持续显示直到关闭。',
-    isAutoHide: '是否自动关闭。info 默认为 true，error 默认为 false。',
+    type: 'Toast 类型，控制背景颜色。未传入时，由 useToast() 的 show 函数设置。',
+    isAutoHide:
+      '是否自动关闭。未传入时，由 useToast() 的 show 函数按类型设置。',
     autoHideDuration:
-      '自动关闭前的持续时间（毫秒）。定时内容必须符合 WCAG 2.2.1。',
+      '自动关闭前的持续时间（毫秒）。定时内容必须符合 WCAG 2.2.1。未传入时，由 useToast() 的 show 函数设置。',
     endContent: '尾部渲染的内容（如撤销按钮、链接）。操作标签应保持简短。',
-    uniqueID: '用于去重的唯一标识符。',
-    collisionBehavior: '当已存在相同 uniqueID 的 toast 时的行为。',
-    onHide: '当 toast 被移除时触发的回调。',
     renderContent:
       "用你自己的布局替换该 toast 卡片内部的内容。Astryx 保留卡片本身、astryx-toast 主题目标和自动关闭行为（在 ToastViewport 中由视口播报该 toast；当模态框承载视口时由卡片自行播报），并把消息、endContent、解析后的 toast 设置和 dismiss 回调交给渲染函数。自定义渲染函数完全拥有布局中的控件：请组合所需的控件并通过它调用 dismiss。Astryx 不会向自定义内容注入后备关闭按钮。按 toast 单独设置：应用可通过封装 useToast 并在每次调用时传入来共享同一套布局；而由库代码发起、从不传入该参数的 toast 会渲染为普通的 Astryx toast。传入参数为 {body, endContent, type, isAutoHide, autoHideDuration, dismiss}，其中 type 为 'info' | 'error'。",
   },
@@ -240,7 +229,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '使用 uniqueID 去重重复操作触发的 toast，如多次点击保存按钮。',
+          '传入 useToast() 的 uniqueID 选项，去重重复操作触发的 toast，如多次点击保存按钮。',
       },
       {
         guidance: true,
@@ -303,7 +292,8 @@ export const docsDense = {
       },
       {
         guidance: true,
-        description: 'uniqueID to dedup repeated action toasts.',
+        description:
+          "useToast()'s uniqueID option to dedup repeated action toasts.",
       },
       {
         guidance: true,
@@ -329,15 +319,12 @@ export const docsDense = {
   },
   propDescriptions: {
     body: 'primary message content',
-    type: 'toast type; controls bg color; error persists until dismissed',
-    isAutoHide: 'auto-dismiss; true for info, false for error',
+    type: 'toast type; controls bg color; set by useToast() show when omitted',
+    isAutoHide: 'auto-dismiss; set by type by useToast() show when omitted',
     autoHideDuration:
-      'ms before auto-dismiss; timed content must satisfy WCAG 2.2.1',
+      'ms before auto-dismiss; timed content must satisfy WCAG 2.2.1; set by useToast() show when omitted',
     endContent:
       'trailing end content (undo btn, link); keep action labels short',
-    uniqueID: 'unique id for dedup',
-    collisionBehavior: 'behavior when matching uniqueID exists',
-    onHide: 'callback when toast removed',
     renderContent:
       'custom inner layout; receives content, resolved settings + dismiss callback; no injected fallback control',
   },

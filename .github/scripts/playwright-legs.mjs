@@ -58,6 +58,29 @@ export const DURATIONS = path.join(
 );
 
 /**
+ * The record's key for the interaction spec files git tracked when the record
+ * was last refreshed (interaction-record-refresh.mjs writes it).
+ */
+export const RECORDED_SPECS = 'interaction-specs-at-record';
+
+/**
+ * The interaction spec files the timing-coverage floor counts: those the
+ * record knew when it was refreshed. A spec added since has no time yet and
+ * is costed at the mean time a test until the next refresh times it, so a
+ * pull request that adds a spec never has to edit the record. A record
+ * without the list counts every spec.
+ * @param {string[]} specs the interaction spec files git tracks now
+ * @param {Record<string, unknown>} durations the record
+ * @returns {string[]}
+ */
+export function floorSpecs(specs, durations) {
+  const known = durations[RECORDED_SPECS];
+  if (!Array.isArray(known)) return specs;
+  const set = new Set(known);
+  return specs.filter(file => set.has(file));
+}
+
+/**
  * Splits `files` into `legs` lists of about equal estimated time, with the
  * shared duration splitter: slowest first, each onto the leg with the least
  * time so far. A file with no recorded time counts the median recorded time.
