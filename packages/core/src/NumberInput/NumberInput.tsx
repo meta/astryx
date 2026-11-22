@@ -901,7 +901,6 @@ export function NumberInput({
 
   const grouping = useNumberGrouping(isGroupedWhileEditing);
 
-  // Formats the number a focused field edits.
   const formatFocusedNumber = grouping?.format ?? formatEditableNumber;
 
   const formattedValue = useMemo(() => {
