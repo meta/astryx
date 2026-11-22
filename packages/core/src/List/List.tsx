@@ -30,7 +30,7 @@
 import {use, useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
 import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars} from '../theme/tokens.stylex';
+import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {
   ListContext,
@@ -190,6 +190,9 @@ export interface ListProps extends BaseProps<
 // Styles
 // =============================================================================
 
+// How far a row's focus ring reaches past the row: its offset plus its width.
+const FOCUS_RING_REACH = `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`;
+
 const styles = stylex.create({
   root: {
     display: 'flex',
@@ -212,6 +215,17 @@ const styles = stylex.create({
     // They stay below a page-level sticky header at the same z-index. With a
     // mouse nothing rises, so the list keeps its stacking.
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
+  },
+  // The inline clip cuts at the list's padding edge, so it would cut a focused
+  // row's ring. While a ring is drawn in the list, the clip edge moves out by
+  // the ring's reach. A clip margin changes no layout: the list, its rows and
+  // a scrolling ancestor keep their boxes. 'outset' and 'bleed' lists keep
+  // the edge, so their rows never paint past the host's padding edge.
+  ringRoom: {
+    overflowClipMargin: {
+      default: null,
+      ':has(:focus-visible)': FOCUS_RING_REACH,
+    },
   },
   // A static list has no swiped rows to cut, so it drops the inline clip.
   // StyleX compiles `overflowInline` to `overflow-x`, so this sets `overflowX`.
@@ -450,7 +464,9 @@ export function List({
           animatedLayout != null && styles.animatedIsolation,
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
-          reachesContainerPadding && styles.reachesContainerPadding,
+          reachesContainerPadding
+            ? styles.reachesContainerPadding
+            : styles.ringRoom,
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
