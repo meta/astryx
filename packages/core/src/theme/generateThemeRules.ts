@@ -868,10 +868,11 @@ function generatedMediaStatusRoleDefaults(
 }
 
 /**
- * The scope root in an adaptation's media blocks: `:scope`, with its 0,1,0
- * specificity. Chromium files a bare `:scope` under a list of theme names
- * with the rules every element tries; with the theme attribute in `:where()`,
- * it files the rule under that attribute.
+ * The scope root always has the theme attribute. The lower limit stops at the
+ * next themed element, so only the root matches. `:where()` keeps the 0,1,0
+ * specificity of `:scope`. Under a list of theme names, Chromium tries a bare
+ * `:scope` on every element. The attribute lets other elements skip this rule.
+ * Keep `:scope` first: the theme editor skips rules that start with it.
  */
 const ADAPTATION_SCOPE_ROOT = `:scope:where([data-${dataAttrNamespace}-theme])`;
 
