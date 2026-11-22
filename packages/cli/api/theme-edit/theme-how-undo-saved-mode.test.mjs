@@ -33,11 +33,13 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-undo-mode-', FIXTURE_PACKAGES);
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) return;
-  for (const t of ['ml', 'md', 'mb', 'mc'])
+  for (const t of ['ml', 'md', 'mb', 'mc', 'mx'])
     await themeEditNew(t, {cwd, like: 'neutral'});
   await themeEditSet('ml', '--color-accent', '#0f766e', {cwd, mode: 'light'});
   await themeEditSet('md', '--color-accent', '#0f766e', {cwd, mode: 'dark'});
   await themeEditSet('mb', '--color-accent', '#0f766e', {cwd});
+  await themeEditSet('mx', '--color-accent', '#0f766e', {cwd});
+  await themeEditSet('mx', '--color-accent', '#7c3aed', {cwd, mode: 'dark'});
   await themeEditSet('mc', 'background-color', '#eeeeee', {
     cwd,
     on: 'card',
@@ -78,7 +80,7 @@ const answer = async (theme, q) => {
 };
 
 /**
- * @typedef {{theme: string, q: string, lines?: string[], says?: RegExp}} Row
+ * @typedef {{theme: string, q: string, lines?: string[], never?: RegExp, says?: RegExp}} Row
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
@@ -108,6 +110,42 @@ const ROWS = [
     },
   ],
   [
+    'an undo that says no mode takes back a change said in the ask too',
+    {
+      theme: 'mb',
+      q: 'make the accent red. reset the accent',
+      lines: [],
+      says: /taken back by its undo/,
+    },
+  ],
+  [
+    'an undo of several changes takes nothing back, saved settings included',
+    {
+      theme: 'mc',
+      q: 'make the cards blue. undo the card change and the heading change',
+      never: /^undo /,
+      says: /undo them one at a time/,
+    },
+  ],
+  [
+    'an undo of one mode beside a setting for both modes and the other mode',
+    {
+      theme: 'mx',
+      q: 'undo the light mode accent change',
+      lines: [],
+      says: /for both modes, and for dark mode on its own/,
+    },
+  ],
+  [
+    'an undo of a mode with its own setting says what that mode falls back to',
+    {
+      theme: 'mx',
+      q: 'in dark mode, reset the accent',
+      lines: ['undo --color-accent --mode dark'],
+      says: /dark mode then uses what mx sets for both modes/,
+    },
+  ],
+  [
     'an undo that says a mode takes back the setting saved for that mode',
     {
       theme: 'ml',
@@ -130,7 +168,7 @@ const ROWS = [
       theme: 'mb',
       q: 'undo the light mode accent change',
       lines: [],
-      says: /the same in both modes.*an undo that names no mode/,
+      says: /sets accent for both modes, so an undo of light mode alone takes nothing back; an undo that names no mode takes it back/,
     },
   ],
   [
@@ -182,6 +220,8 @@ describe('an undo that says a mode, on a theme that saves the setting', () => {
       }
       const r = await answer(row.theme, row.q);
       if (row.lines) expect(r.lines, row.q).toEqual(row.lines);
+      if (row.never)
+        for (const line of r.lines) expect(line, row.q).not.toMatch(row.never);
       if (row.says) expect(r.text, row.q).toMatch(row.says);
     },
     300_000,

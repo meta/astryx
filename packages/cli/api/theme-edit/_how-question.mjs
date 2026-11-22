@@ -19955,12 +19955,16 @@ export function draftAnswer(ctx, env, question) {
     // ("Undo the light mode accent change" on a theme with both modes: a
     // setting saved for that mode only. A setting saved the same for both
     // modes is named, with how to take it back in both.)
+    /** What the mode said falls back to, once its own setting goes. */
+    let fallsBack = '';
     if (c.mode && env.data.mode === 'both' && matches.length) {
       const ofMode = matches.filter(st => st.mode === c.mode);
+      const both = matches.some(st => !st.mode);
+      const other = matches.some(st => st.mode && st.mode !== c.mode);
       if (!ofMode.length)
-        return matches.some(st => !st.mode)
+        return both
           ? {
-              text: `${env.slug} sets ${named} the same in both modes, so an undo of ${c.mode} mode alone takes nothing back; an undo that names no mode takes it back in both`,
+              text: `${env.slug} sets ${named} for both modes${other ? `, and for ${c.mode === 'dark' ? 'light' : 'dark'} mode on its own` : ''}, so an undo of ${c.mode} mode alone takes nothing back; an undo that names no mode takes ${other ? 'every one' : 'it'} back`,
               options: [],
               takesBack: named,
             }
@@ -19970,6 +19974,8 @@ export function draftAnswer(ctx, env, question) {
               unmet: named,
             };
       matches.splice(0, matches.length, ...ofMode);
+      if (both)
+        fallsBack = `: ${c.mode} mode then uses what ${env.slug} sets for both modes`;
     }
     if (!matches.length)
       return {
@@ -19980,7 +19986,7 @@ export function draftAnswer(ctx, env, question) {
         unmet: `${what}${on ? ` on ${on}` : ''}`,
       };
     return {
-      text: `take back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}: undo restores the base value`,
+      text: `take back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}${fallsBack ? ` in ${c.mode} mode${fallsBack}` : ': undo restores the base value'}`,
       options: [
         matches.map(
           st =>
@@ -29787,6 +29793,32 @@ export function draftAnswer(ctx, env, question) {
   // rest of the ask stands. Only a change of what the undo names: "Reset
   // the card shadows" takes back a card shadow, never "cards rounder", and
   // never a change said after it. Each undo is read in turn.)
+  /**
+   * Takes `steps` out of the whole-ask answers ("all of it, in order"),
+   * and drops a whole answer left with no line.
+   * @param {Step[]} steps
+   */
+  const takeFromWholes = steps => {
+    /** @type {Set<Draft>} */
+    const emptied = new Set();
+    for (const d of result)
+      if (!draftClause.get(d) && d.options.length) {
+        d.options = d.options
+          .map(o => {
+            const left = [...o];
+            for (const st of steps) {
+              const k = left.findIndex(
+                x => JSON.stringify(x) === JSON.stringify(st),
+              );
+              if (k >= 0) left.splice(k, 1);
+            }
+            return left;
+          })
+          .filter(o => o.length);
+        if (!d.options.length) emptied.add(d);
+      }
+    result.splice(0, result.length, ...result.filter(d => !emptied.has(d)));
+  };
   for (const unmet of result.filter(d => d.unmet || d.takesBack)) {
     const [, what, part] =
       /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(
@@ -29979,8 +30011,12 @@ export function draftAnswer(ctx, env, question) {
       (looksSaid.length > 0 &&
         looks.size > 1 &&
         undone.some(d => !looksSaid.some(a => lookOf(d).includes(a))));
-    if (unsure && unmet.takesBack) continue;
     if (unsure) {
+      // (Nor a saved setting: the undo is not read for sure.)
+      if (unmet.takesBack) {
+        takeFromWholes(unmet.options[0] ?? []);
+        unmet.options = [];
+      }
       unmet.text = several
         ? `the undo names more than one change, so none is taken back and each stays written; undo them one at a time`
         : loose
@@ -29995,31 +30031,11 @@ export function draftAnswer(ctx, env, question) {
     // keeps it.)
     // (The undo's own saved-setting lines go too: the undo meant the change
     // said in the ask.)
-    const gone = [unmet, ...undone].flatMap(d => d.options[0] ?? []);
-    /** Whole answers the take-back leaves with no line. @type {Set<Draft>} */
-    const emptied = new Set();
-    for (const d of result)
-      if (!draftClause.get(d) && d.options.length) {
-        d.options = d.options
-          .map(o => {
-            const left = [...o];
-            for (const st of gone) {
-              const k = left.findIndex(
-                x => JSON.stringify(x) === JSON.stringify(st),
-              );
-              if (k >= 0) left.splice(k, 1);
-            }
-            return left;
-          })
-          .filter(o => o.length);
-        if (!d.options.length) emptied.add(d);
-      }
+    takeFromWholes([unmet, ...undone].flatMap(d => d.options[0] ?? []));
     result.splice(
       0,
       result.length,
-      ...result.filter(
-        d => d !== unmet && !undone.includes(d) && !emptied.has(d),
-      ),
+      ...result.filter(d => d !== unmet && !undone.includes(d)),
     );
     // (A color taken back leaves no line of it anywhere: the fill, its text
     // and the readable text the fill brought.)
