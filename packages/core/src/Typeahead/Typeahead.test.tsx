@@ -3647,3 +3647,101 @@ describe('Typeahead caller aria-labelledby', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('Typeahead pending search debounce Enter handling (Issue #13523)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not select previous highlighted bootstrap result when Enter is pressed immediately during debounce, and selects correct result after debounce completes', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        hasEntriesOnFocus
+        debounceMs={150}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Apple', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    // Normal typing: type a new query "Date" and immediately press Enter
+    fireEvent.change(input, {target: {value: 'Date'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    // Verify previous highlighted result (Apple) was not selected
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Advance debounce timer so search settles
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+
+    // Verify behavior after debounce timer completes
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Date', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    // Verify Enter continues to work normally when search is settled
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({label: 'Date'}),
+    );
+  });
+
+  it('prevents stale selection on paste/fill followed immediately by Enter', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        hasEntriesOnFocus
+        debounceMs={150}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Apple', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    // Paste/fill: change target value directly to "Elderberry" and immediately press Enter
+    fireEvent.change(input, {target: {value: 'Elderberry'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Elderberry', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({label: 'Elderberry'}),
+    );
+  });
+});

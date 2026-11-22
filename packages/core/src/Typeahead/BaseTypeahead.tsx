@@ -1453,6 +1453,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Perform bootstrap
   const performBootstrap = useCallback(async () => {
     const gen = ++searchGenRef.current;
+    setLastSearchedQuery('');
     dismissedRef.current = false;
     let bootstrapResult: T[] | Promise<T[]>;
     try {
@@ -1608,6 +1609,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         (newQuery.length === 0 && !hasEntriesOnFocus) ||
         isBelowMinQueryLength(newQuery, minQueryLength)
       ) {
+        setLastSearchedQuery(newQuery);
         searchGenRef.current++;
         searchSource.cancel?.();
         // A query too short to search can still carry entries derived from
@@ -1736,6 +1738,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       const keepsMenuOpen = openRequestedRef.current;
       openRequestedRef.current = false;
       setQuery('');
+      setLastSearchedQuery('');
       queryRef.current = '';
       // The pick empties the input, which is a change to the query like any
       // typed one. A query that was already empty (a pick from the focus list)
@@ -2008,6 +2011,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           dismiss();
           return;
         }
+        if (e.key === 'Enter') {
+          const createEntry = __queryEntries?.(query, [])?.[0];
+          if (createEntry) {
+            e.preventDefault();
+            handleSelect(createEntry);
+            return;
+          }
+        }
         if (e.key === 'ArrowDown' && (hasEntriesOnFocus || query.length > 0)) {
           e.preventDefault();
           // Results held from a replaced search source are not current
@@ -2062,6 +2073,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           break;
         case 'Enter':
           e.preventDefault();
+          if (isSearchPending) {
+            const createEntry = __queryEntries?.(query, [])?.[0];
+            if (createEntry) {
+              handleSelect(createEntry);
+            } else if (query === '') {
+              popover.hide();
+            }
+            break;
+          }
           if (highlightedIndex >= 0 && highlightedIndex < results.length) {
             handleSelect(displayedResults[highlightedIndex]);
           }
@@ -2112,6 +2132,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       openWithKeptAnswer,
       dismiss,
       externalOnKeyDown,
+      isSearchPending,
+      __queryEntries,
     ],
   );
 

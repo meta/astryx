@@ -4513,3 +4513,137 @@ describe('Tokenizer locked tokens (internal removable context)', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe('Tokenizer pending search debounce Enter handling (Issue #13523)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  for (const delayMs of [0, 30, 100]) {
+    it(`creates typed value Zig when Enter is pressed at ${delayMs}ms during debounce with hasCreate and hasEntriesOnFocus`, async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[]}
+          onChange={onChange}
+          hasEntriesOnFocus
+          hasCreate
+          debounceMs={150}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
+
+      // Normal typing: type "Zig"
+      fireEvent.change(input, {target: {value: 'Zig'}});
+
+      if (delayMs > 0) {
+        await act(async () => {
+          vi.advanceTimersByTime(delayMs);
+        });
+      }
+
+      fireEvent.keyDown(input, {key: 'Enter'});
+
+      // Verify that Zig is created instead of selecting the first stale suggestion (Alice)
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({label: 'Zig', id: 'Zig'})],
+        expect.objectContaining({
+          type: 'create',
+          item: expect.objectContaining({label: 'Zig'}),
+        }),
+      );
+      expect(onChange).not.toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({label: 'Alice'})]),
+        expect.anything(),
+      );
+    });
+  }
+
+  it('selects existing suggestion when search is settled in Tokenizer with hasCreate', async () => {
+    const onChange = vi.fn();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[]}
+        onChange={onChange}
+        hasEntriesOnFocus
+        hasCreate
+        debounceMs={150}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(input, {target: {value: 'Bob'}});
+
+    // Wait for debounce and search to settle
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Bob', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    expect(onChange).toHaveBeenCalledWith(
+      [expect.objectContaining({label: 'Bob'})],
+      expect.objectContaining({
+        type: 'add',
+        item: expect.objectContaining({label: 'Bob'}),
+      }),
+    );
+  });
+
+  it('creates token on paste/fill followed immediately by Enter', async () => {
+    const onChange = vi.fn();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[]}
+        onChange={onChange}
+        hasEntriesOnFocus
+        hasCreate
+        debounceMs={150}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    // Paste/fill: directly set target value to "Zig" and press Enter at 0ms
+    fireEvent.change(input, {target: {value: 'Zig'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    expect(onChange).toHaveBeenCalledWith(
+      [expect.objectContaining({label: 'Zig'})],
+      expect.objectContaining({type: 'create'}),
+    );
+  });
+});
