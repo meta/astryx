@@ -94,7 +94,7 @@ function iconLines(icons) {
         `icons: mapped ${each.source.export} (${each.source.module}) -> ${each.target.export} (${each.target.module}) by ${each.by}` +
         (icons.order ? ` from ${each.target.package}/${each.target.set}` : '') +
         (each.variant
-          ? `; ${each.variant.asked} variant not in the set, drew ${each.variant.used ?? 'its default variant'}`
+          ? `; ${each.variant.asked} look not in the set, drew ${each.variant.used ?? 'its default look'}`
           : '') +
         (each.dropped && each.dropped.length > 0
           ? `; dropped ${each.dropped.join(', ')} (size comes from CSS)`

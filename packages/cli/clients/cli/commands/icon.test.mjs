@@ -406,7 +406,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(res.stdout).toMatch(
       /import: +import \{XIcon\} from '@acme\/glyphs';/,
     );
-    expect(res.stdout).toMatch(/look: +no solid variant; draws outline/);
+    expect(res.stdout).toMatch(/look: +no solid look; draws outline/);
     const json = JSON.parse(
       (
         await runCli(
@@ -440,5 +440,35 @@ describe('astryx experimental icon in the look the project picks', () => {
     );
     expect(json.data.matches[0]).toMatchObject({export: 'TrashIcon'});
     expect(json.data.matches[0]).not.toHaveProperty('look');
+  });
+});
+
+describe('astryx experimental icon use: its help and its receipt', () => {
+  /** @type {string} */
+  let picked;
+  beforeEach(() => {
+    picked = writeIconSetProject(path.join(tmp, 'picked'), {
+      config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+    });
+  });
+
+  it('use one word for what each set draws when no variant is picked', async () => {
+    const help = await runCli(
+      ['experimental', 'icon', 'use', '--help'],
+      picked,
+    );
+    expect(help.code).toBe(0);
+    const receipt = await runCli(
+      ['experimental', 'icon', 'use', 'glyphs'],
+      picked,
+    );
+    expect(receipt.code, receipt.stderr).toBe(0);
+    const wordIn = (/** @type {string} */ text) =>
+      /each set draws its default (\w+)/u.exec(text)?.[1];
+    expect(wordIn(help.stdout)).toBe('look');
+    expect(wordIn(receipt.stdout)).toBe(wordIn(help.stdout));
+    expect(receipt.stdout).toContain(
+      'Removed experimental.iconVariant (it was "solid"): each set draws its default look.',
+    );
   });
 });

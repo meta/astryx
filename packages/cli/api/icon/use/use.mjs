@@ -77,21 +77,21 @@ function checkVariant(main, selector, backups, variant) {
   const fallback = main.data.default?.variant;
   throw new AstryxError(
     declared.length === 0
-      ? `Icon set "${iconSetKey(main)}" declares no variants, so it takes no --variant.`
+      ? `Icon set "${iconSetKey(main)}" declares no variants: it draws one look, so it takes no --variant.`
       : `Icon set "${iconSetKey(main)}" declares no "${variant}" variant. Its variants: ${declared.join(', ')}.`,
     declared.length === 0
       ? [
           {
             name: iconUseCommand(selector, backups),
-            reason: 'use it as it is',
+            reason: 'use it in its one look',
           },
         ]
       : declared.map(each => ({
           name: iconUseCommand(selector, backups, each),
           reason:
             each === fallback
-              ? `its default variant, ${each}`
-              : `its ${each} variant`,
+              ? `its default look, ${each}`
+              : `its ${each} look`,
         })),
     ERROR_CODES.ERR_INVALID_ARGUMENT,
   );

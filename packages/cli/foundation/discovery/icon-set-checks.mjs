@@ -1062,7 +1062,7 @@ function checkExports(set, packageDir, packageName, unchecked) {
       issues.push(
         issueError(
           ICON_THEME_MAP_MISMATCH,
-          `${label}: its generated module ${generated} has no theme map "${name}", which draws the built-in icons in the ${variant} variant an icon draws. Rewrite the module: \`${lookRewriteCommand(set, variant, sources)}\`.`,
+          `${label}: its generated module ${generated} has no theme map "${name}", which draws the built-in icons in the ${variant} look an icon draws. Rewrite the module: \`${lookRewriteCommand(set, variant, sources)}\`.`,
         ),
       );
       continue;

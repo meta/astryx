@@ -54,8 +54,8 @@
  */
 
 /**
- * One ranked icon match. When the project picks a variant and the match's set
- * is in its list, `module`, `export`, and `import` draw that variant; `look`
+ * One ranked icon match. When the project picks a look and the match's set
+ * is in its list, `module`, `export`, and `import` draw that look; `look`
  * is present when the icon does not have it. `relatives` is present when the
  * groups of the meanings it draws have other members: those meanings,
  * Astryx's and its set's own. In the `icon.search` answer, `meaningImport` is
@@ -112,12 +112,12 @@
  * @property {string} license
  * @property {number} iconCount
  * @property {IconSetDefaultVariant | null} default
- * @property {string[] | null} variants - The variants the set declares, such as outline or solid; size comes from CSS.
+ * @property {string[] | null} variants - The variants the set declares: named looks such as outline or solid; size comes from CSS.
  * @property {IconSetCoverage} coverage - Which icon meanings the set's `map` covers.
  * @property {boolean} project - Whether this is the project's icon set.
  * @property {'main' | 'backup' | null} role - The set's place in the project's list: its main set, a backup, or not listed.
  * @property {number | null} rank - The set's position in the list, the main set at 1; null when it is not listed.
- * @property {string | null} [look] - Present when the project names a variant: the variant this set's icons draw, the project's variant when the set declares it, else the set's default variant; null when the list leaves the set out or it declares no variants.
+ * @property {string | null} [look] - Present when the project names a variant: the look this set's icons draw, the variant when the set declares it, else its default look; null when the list leaves the set out or it declares no variants.
  */
 
 /**
@@ -148,7 +148,7 @@
  * @property {string | null} data.projectSet - The project's set, as `<package>/<set>`, when selected.
  * @property {string} data.reason - Why the project has that set, or none.
  * @property {string[]} data.order - The project's list as `<package>/<set>`: the main set, then each backup that resolves; empty when no main set is selected.
- * @property {string | null} data.variant - The variant the project's icons draw, as `experimental.iconVariant` names it; null when it names none.
+ * @property {string | null} data.variant - The look the project's icons draw, as `experimental.iconVariant` names it; null when it names none.
  * @property {Array<{iconSet: string, status: 'selected' | 'ambiguous' | 'missing' | 'withdrawn', reason: string}>} data.backups - Each backup the list names, and whether it resolves.
  * @property {string} [data.next] - Present when two or more sets are installed and none is the main set: the command that chooses the order; or when no set is installed: how to get one.
  * @property {IconSetEntry[]} data.sets - Installed sets in list order: the main set, its backups, then the rest.
@@ -164,15 +164,15 @@
  * @property {string} data.iconSet - The main set, as written to `experimental.iconSet` (alone, or first in the list).
  * @property {string} data.set - The main set it names, as `<package>/<set>`.
  * @property {Array<{iconSet: string, set: string}>} data.backups - The backup sets, in order, as written and as `<package>/<set>`; empty when there are none.
- * @property {string | null} data.variant - The variant every icon draws, as written to `experimental.iconVariant`; null when none is named, and the key is removed, so each set draws its default variant.
+ * @property {string | null} data.variant - The look every icon draws, as written to `experimental.iconVariant`; null when none is named, and the key is removed, so each set draws its default look.
  * @property {string} data.config - The config file, relative to the project.
  * @property {boolean} data.created - Whether the config file was created.
  * @property {string | string[] | null} data.previous - The `experimental.iconSet` value it replaced.
  * @property {string | null} data.previousVariant - The `experimental.iconVariant` value it replaced.
  * @property {boolean} data.changed - Whether anything was written.
  * @property {string[]} data.unlisted - Installed sets the list leaves out, as `<package>/<set>`. Doctor fails a project that installs more than one set and leaves one out.
- * @property {Array<{set: string, variant: string | null}>} [data.looks] - Present when a variant is named: each set in the list, main set first, as `<package>/<set>`, with the variant its icons draw: the project's variant, or the set's default variant when it declares no variant of that name (null when it declares no variants).
- * @property {{module: string, export: string}} [data.themeMap] - Present when a variant is named and the main set has a theme map for that variant: the export a theme sets as `icons` to draw the built-in icons in it (`themeIconsFilled`), and the module it is imported from.
+ * @property {Array<{set: string, variant: string | null}>} [data.looks] - Present when a variant is named: each set in the list, main set first, as `<package>/<set>`, with the look its icons draw: the variant, or the set's default look when it declares no variant of that name (null when it declares no variants).
+ * @property {{module: string, export: string}} [data.themeMap] - Present when a variant is named and the main set has a theme map for that look: the export a theme sets as `icons` to draw the built-in icons in it (`themeIconsFilled`), and the module it is imported from.
  * @property {string} [data.next] - Present when `unlisted` is not empty: the command that adds them as backups.
  * @property {string} [data.warning] - Present when the project's
  *   `@astryxdesign/cli` range admits a release that refuses the config
@@ -360,7 +360,7 @@
  * @property {string[] | string} [exclude] - With `from`: export names that are not icons; a string is split on commas.
  * @property {string} [adapter] - `./<path>#<export>`: a function in the package that turns one library export that is not a component into one. It is written to the data file's `adapter`; with `from`, every data export of the library becomes an icon through it. On a set that already has icons, only with `from`.
  * @property {string[] | string} [variants] - The variants the set supplies, such as `outline,solid`; a string is split on commas.
- * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the variant the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
+ * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the look the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
  * @property {string} [displayName] - The descriptor's display name; the set name in title case when absent.
  * @property {string} [description] - The descriptor's one-line description; `<Display name> icons.` when absent.
  */
@@ -433,7 +433,7 @@
  * @property {import('../../authoring/doctypes/icon-set/type').IconSetData} data - The set's data file.
  * @property {Array<{doc: Record<string, unknown>}>} definitions - The set's own icon meanings.
  * @property {Array<{name: string, definition: string}>} [replacedDefinitions] - The old names of the set's own meanings, each with the current meaning it answers with.
- * @property {string} [look] - The variant the folder's project draws the set in (`experimental.iconVariant`), when the set is in its list.
+ * @property {string} [look] - The look the folder's project draws the set in (`experimental.iconVariant`), when the set is in its list.
  */
 
 /**

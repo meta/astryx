@@ -133,7 +133,7 @@ function buildSchemas() {
               code: 'custom',
               path: ['iconVariant'],
               message:
-                'iconVariant is the variant of the icon sets experimental.iconSet names: set experimental.iconSet too (`astryx experimental icon use <set> --variant <variant>` writes both)',
+                'iconVariant is the look of the icon sets experimental.iconSet names: set experimental.iconSet too (`astryx experimental icon use <set> --variant <variant>` writes both)',
             });
           }
         })
