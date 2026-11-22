@@ -3,8 +3,11 @@
 /**
  * @file The text a picture draws too faint to read, as the browser that
  * takes the picture measures it: faint text in a part is found with its
- * part, ratio and colors; the theme's disabled text color, text over a
- * picture or gradient beside it, and text in no part are left out. show
+ * part, ratio and colors, over a flat tint drawn as an image over the whole
+ * box too (a pressed state's); the theme's disabled text color, text over a
+ * picture, a gradient between colors or a layer over part of its box (an
+ * underline), and text in no part are left out; a layer sized 0 draws
+ * nothing. show
  * notes each part and mode no contrast check names, with its picture.
  */
 
@@ -45,6 +48,16 @@ const PAGE = `<html><body style="margin:0;background:#ffffff">
   </div>
   <div style="color:#eeeeee">No part</div>
   <div class="astryx-text" style="color:#111111">Readable</div>
+  <div class="astryx-button" style="color:#225bff;background-color:rgba(34,91,255,0.08);background-image:linear-gradient(rgba(29,28,17,0.1),rgba(29,28,17,0.1));padding:8px">Pressed</div>
+  <a class="astryx-link" style="color:#111111;background:linear-gradient(#111111,#111111) bottom / 100% 2px no-repeat;padding-bottom:2px">Underlined</a>
+  <div class="astryx-button" style="color:#5a5a5a;background-color:#ffffff;background-image:linear-gradient(#000000,#000000);background-size:0 0;padding:8px">Unsized layer</div>
+  <div class="astryx-button" style="color:#333333;background-color:#ffffff;background-image:linear-gradient(#000000,#000000);background-repeat:no-repeat;background-position:right 200px top 0;width:400px;text-align:right;padding:8px">Placed off its edge</div>
+  <div class="astryx-button" style="color:#ffffff;background-color:#ffffff;background-image:linear-gradient(#000000,#000000);background-repeat:no-repeat;background-size:calc(100% + 20px) calc(100% + 20px);padding:8px">Sized by calc</div>
+  <div style="position:relative;width:200px;height:40px">
+    <span class="astryx-button" style="position:absolute;inset:0;color:#ffffff">Under a tint</span>
+    <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(0,0,0,0.7),rgba(0,0,0,0.7))"></div>
+  </div>
+  <div class="astryx-button" style="color:#5a5a5a;background-color:#ffffff;background-image:linear-gradient(oklch(0.2 0 0),rgb(0,0,0));padding:8px">Unread stop</div>
 </div></body></html>`;
 
 describe('text a picture draws too faint to read', () => {
@@ -72,7 +85,33 @@ describe('text a picture draws too faint to read', () => {
             fg: '#5a5146',
             bg: '#bcbee4',
           },
+          // (A pressed state's flat tint, drawn as a one-color gradient
+          // over the box's color, is measured as the fill it is.)
+          {
+            part: 'button',
+            text: 'Pressed',
+            ratio: expect.any(Number),
+            fg: '#225bff',
+            bg: expect.stringMatching(/^#[0-9a-f]{6}$/),
+          },
         ]);
+        expect(r.lowContrast[1].ratio).toBeLessThan(4.5);
+        // (A flat layer over part of its box (an underline, a layer placed
+        // off its edge, a size the browser keeps as calc()) leaves no one
+        // color behind the text, nor a tint on a box beside it, nor a stop
+        // the probe cannot read; a layer sized 0 draws nothing.)
+        expect(
+          r.lowContrast.filter((/** @type {{text: string}} */ x) =>
+            [
+              'Underlined',
+              'Unsized layer',
+              'Placed off its edge',
+              'Sized by calc',
+              'Under a tint',
+              'Unread stop',
+            ].includes(x.text),
+          ),
+        ).toEqual([]);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }

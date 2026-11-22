@@ -151,23 +151,19 @@ describe('a palette made with a recipe this CLI does not know, or an older one',
       // (True whether or not a CLI that makes that recipe is released:
       // no update step.)
       expect(e.message).toBe(
-        `n's colors use the ${RECIPE} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved. Color changes come once that recipe ships; other changes save as usual. Nothing was changed.`,
+        `n's colors use the ${RECIPE} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. Changes to what the palette is made from (the accent, neutral and status colors, the vibrancy) need a CLI that makes that recipe; other changes, including exact color tokens, a part's colors, the mode and the base, save as usual. Nothing was changed.`,
       );
       expect(e.suggestions ?? []).toEqual([]);
       expect(read('tokens/n.palette.ts').equals(palette)).toBe(true);
       expect(read('palette.config.json').equals(config)).toBe(true);
-      // A whole-theme accent token makes the palette too; the mode, the
-      // base and a part's color token only map it, so they save, and the
-      // saved palette stays as it is.
-      const settings = read('n.settings.json');
-      const r = await refusal(() =>
-        themeEditSet('n', '--color-accent', '#e11d48', {cwd}),
-      );
-      expect(r.message).toContain(`colors use the ${RECIPE} recipe`);
-      expect(read('n.settings.json').equals(settings)).toBe(true);
+      // The mode, the base, a part's color token and a whole-theme accent
+      // token beside the accent color (an exact value the palette never
+      // reads) only map it, so they save, and the saved palette stays as
+      // it is.
       for (const [thing, value, options] of [
         ['mode', 'light-only', {}],
         ['base', 'none', {}],
+        ['--color-accent', '#e11d48', {}],
         // (A line show prints to fix a contrast runs as printed.)
         ['--color-text-secondary', '#5f5f5f', {on: 'card', mode: 'light'}],
       ]) {
@@ -253,21 +249,68 @@ describe('a palette made with a recipe this CLI does not know, or an older one',
       fs.writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
       const files = snapshot();
       try {
-        const words = `n's colors use the ${RECIPE} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved. themes/n/n.settings.json sets accent to #e11d48, but the saved palette was made from #2563eb. Put that setting back to open the theme. Nothing was changed.`;
+        const words = `n's colors use the ${RECIPE} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. themes/n/n.settings.json sets accent to #e11d48, but the saved palette was made from #2563eb. Put it back by hand, or with set n accent #2563eb`;
         const e = await refusal(() => themeEditShow('n', {cwd}));
-        expect(e.message).toBe(words);
+        expect(e.message).toContain(words);
+        expect(e.message).toMatch(/to open the theme\. Nothing was changed\.$/);
         expect(snapshot()).toEqual(files);
-        // Undo and a change that leaves the colors alone are refused the
-        // same way: nothing else saves in that state.
-        const u = await refusal(() => themeEditUndo('n', {cwd}));
-        expect(u.message).toBe(words);
+        // A change that leaves the colors alone is refused the same way.
         const c = await refusal(() =>
           themeEditSet('n', 'corners', 'round', {cwd}),
         );
-        expect(c.message).toBe(words);
+        expect(c.message).toBe(e.message);
         expect(snapshot()).toEqual(files);
+        // The way back is open: set the saved seed again, and the theme
+        // opens with its palette as saved.
+        const palette = read('tokens/n.palette.ts');
+        await themeEditSet('n', 'accent', '#2563eb', {cwd});
+        await themeEditShow('n', {cwd});
+        expect(read('tokens/n.palette.ts').equals(palette)).toBe(true);
       } finally {
         fs.writeFileSync(file, before);
+      }
+      // So is undo: it steps back to settings the saved palette was made
+      // from.
+      const dir = path.join(cwd, 'themes/n');
+      const copy = `${dir}.copy`;
+      fs.cpSync(dir, copy, {recursive: true});
+      try {
+        await themeEditSet('n', 'corners', 'round', {cwd});
+        const raw2 = JSON.parse(read('n.settings.json').toString());
+        for (const x of raw2.settings)
+          if (x.source === 'dial' && x.thing === 'accent') x.value = '#e11d48';
+        fs.writeFileSync(file, `${JSON.stringify(raw2, null, 2)}\n`);
+        await themeEditUndo('n', {cwd});
+        await themeEditShow('n', {cwd});
+        expect(
+          JSON.parse(read('n.settings.json').toString()).settings.find(
+            (/** @type {any} */ x) => x.thing === 'accent',
+          )?.value,
+        ).toBe('#2563eb');
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+        fs.renameSync(copy, dir);
+      }
+      // A whole-theme accent token added by hand beside the accent dial is
+      // an exact value the palette never reads: show builds it, and undo
+      // and a change that leaves the colors alone go on from it alike.
+      fs.cpSync(dir, copy, {recursive: true});
+      try {
+        const withToken = JSON.parse(read('n.settings.json').toString());
+        withToken.settings.push({
+          source: 'token',
+          thing: '--color-accent',
+          value: '#e11d48',
+        });
+        fs.writeFileSync(file, `${JSON.stringify(withToken, null, 2)}\n`);
+        const palette = read('tokens/n.palette.ts');
+        await themeEditShow('n', {cwd});
+        await themeEditSet('n', 'corners', 'round', {cwd});
+        await themeEditUndo('n', {cwd});
+        expect(read('tokens/n.palette.ts').equals(palette)).toBe(true);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+        fs.renameSync(copy, dir);
       }
       // A status color added by hand that differs from the one the saved
       // palette made its shades from, too.
@@ -280,8 +323,8 @@ describe('a palette made with a recipe this CLI does not know, or an older one',
       fs.writeFileSync(file, `${JSON.stringify(added, null, 2)}\n`);
       try {
         const e = await refusal(() => themeEditShow('n', {cwd}));
-        expect(e.message).toBe(
-          `n's colors use the ${RECIPE} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved. themes/n/n.settings.json sets danger to #dc2626, but the saved palette was made from ${savedDanger}. Put that setting back to open the theme. Nothing was changed.`,
+        expect(e.message).toContain(
+          `n's colors use the ${RECIPE} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved. themes/n/n.settings.json sets danger to #dc2626, but the saved palette was made from ${savedDanger}. Put it back by hand, or with set n danger ${savedDanger}`,
         );
       } finally {
         fs.writeFileSync(file, before);
@@ -728,6 +771,289 @@ describe('a palette made with a recipe this CLI does not know, or an older one',
         await themeEditUndo('fo', {cwd, thing, mode});
         expect(now()).toEqual(before);
       }
+    },
+    T,
+  );
+  it(
+    'a non-color setting changed in the settings file by hand keeps every color the module writes out, on a theme with no base',
+    async () => {
+      await themeEditNew('hb', {cwd});
+      await themeEditSet('hb', 'accent', '#2563eb', {cwd});
+      const hat = (/** @type {string} */ p) => path.join(cwd, 'themes/hb', p);
+      for (const p of [
+        'palette.config.json',
+        'tokens/hb.palette.receipt.json',
+      ]) {
+        const raw = JSON.parse(fs.readFileSync(hat(p), 'utf8'));
+        raw.recipe = RECIPE;
+        if (raw.request) raw.request.recipe = RECIPE;
+        fs.writeFileSync(hat(p), `${JSON.stringify(raw, null, 2)}\n`);
+      }
+      await themeEditShow('hb', {cwd});
+      // As a newer CLI writes it: a dark half written out as a color.
+      const SEAL = /^\/\/ Module ([0-9a-f]{16})\.\n/m;
+      const text = fs
+        .readFileSync(hat('hb.settings.ts'), 'utf8')
+        .replace(SEAL, '')
+        .replace(/("--color-on-info": \[\n\s*[^\n]+,\n\s*)[^\n]+/, '$1"#FFF"');
+      const hash = createHash('sha256').update(text).digest('hex').slice(0, 16);
+      fs.writeFileSync(
+        hat('hb.settings.ts'),
+        text.replace(
+          /^(\/\/ Built from settings [^\n]*\n)/m,
+          `$1// Module ${hash}.\n`,
+        ),
+      );
+      /** Each color token the module sets, as written. @param {string} t */
+      const colors = t =>
+        (t.match(/"--color-[\w-]+": \[[\s\S]*?\n {4}\]/g) ?? []).join('\n');
+      const before = fs.readFileSync(hat('hb.settings.ts'), 'utf8');
+      expect(before).toMatch(/"--color-on-info": \[[^\]]*"#FFF"/i);
+      const raw = JSON.parse(fs.readFileSync(hat('hb.settings.json'), 'utf8'));
+      raw.settings.push({thing: 'corners', value: 'round', source: 'dial'});
+      fs.writeFileSync(
+        hat('hb.settings.json'),
+        `${JSON.stringify(raw, null, 2)}\n`,
+      );
+      await themeEditShow('hb', {cwd});
+      const after = fs.readFileSync(hat('hb.settings.ts'), 'utf8');
+      expect(after).toMatch(/"--radius-element"/);
+      expect(colors(after)).toBe(colors(before));
+    },
+    T,
+  );
+
+  it(
+    'a token the newer module does not map gains no value from a set and its named undo',
+    async () => {
+      const xat = (/** @type {string} */ p) => path.join(cwd, 'themes/x', p);
+      expect(fs.readFileSync(xat('x.settings.ts'), 'utf8')).not.toContain(
+        '"--color-text-accent"',
+      );
+      await themeEditSet('x', '--color-text-accent', '#0d0e0f', {cwd});
+      await themeEditUndo('x', {cwd, thing: '--color-text-accent'});
+      expect(fs.readFileSync(xat('x.settings.ts'), 'utf8')).not.toContain(
+        '"--color-text-accent"',
+      );
+    },
+    T,
+  );
+
+  it(
+    "a named undo of a one-mode setting of a token the newer module does not map writes this CLI's shade",
+    async () => {
+      const xat = (/** @type {string} */ p) => path.join(cwd, 'themes/x', p);
+      const module = () => fs.readFileSync(xat('x.settings.ts'), 'utf8');
+      expect(module()).not.toContain('"--color-text-accent"');
+      await themeEditSet('x', '--color-text-accent', '#0d0e0f', {
+        cwd,
+        mode: 'light',
+      });
+      await themeEditUndo('x', {
+        cwd,
+        thing: '--color-text-accent',
+        mode: 'light',
+      });
+      // (A one-mode setting writes no pair, so its undo takes the token
+      // from this CLI's mapping of the saved palette, as the release note
+      // says.)
+      const after = module();
+      expect(after).not.toMatch(/#0d0e0f/i);
+      expect(after).toMatch(/"--color-text-accent": \[\s*palette\./);
+    },
+    T,
+  );
+
+  it(
+    'a whole-theme token the palette maps, set for both modes and removed by hand, shows the palette shade again',
+    async () => {
+      const bat = (/** @type {string} */ p) => path.join(cwd, 'themes/nb', p);
+      const line = () =>
+        /"--color-text-accent": \[[^\]]*\]/
+          .exec(fs.readFileSync(bat('nb.settings.ts'), 'utf8'))?.[0]
+          .replace(/\s+/g, ' ');
+      const before = line();
+      expect(before).toMatch(/palette/);
+      await themeEditSet('nb', '--color-text-accent', '#0d0e0f', {cwd});
+      const file = bat('nb.settings.json');
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      raw.settings = raw.settings.filter(
+        (/** @type {any} */ x) => x.thing !== '--color-text-accent',
+      );
+      fs.writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
+      await themeEditShow('nb', {cwd});
+      expect(line()).toBe(before);
+    },
+    T,
+  );
+
+  it(
+    "a part's color changed by hand keeps every color the module writes out, and the way back from a hand-changed accent compares nothing",
+    async () => {
+      const bat = (/** @type {string} */ p) => path.join(cwd, 'themes/nb', p);
+      const colors = () =>
+        [
+          ...fs
+            .readFileSync(bat('nb.settings.ts'), 'utf8')
+            // (The whole-theme tokens: a part's own block comes after.)
+            .split('"components"')[0]
+            .matchAll(/"--color-[\w-]+": (\[[^\]]*\]|"[^"]*")/g),
+        ]
+          .map(m => m[0].replace(/\s+/g, ' '))
+          .sort()
+          .join('\n');
+      const before = colors();
+      const file = bat('nb.settings.json');
+      const saved = fs.readFileSync(file);
+      const raw = JSON.parse(saved.toString());
+      raw.settings.push({
+        source: 'token',
+        thing: '--color-text-secondary',
+        value: '#5f5f5f',
+        on: 'card',
+      });
+      fs.writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
+      await themeEditShow('nb', {cwd});
+      expect(colors()).toBe(before);
+      fs.writeFileSync(file, saved);
+      await themeEditShow('nb', {cwd});
+      // A hand-changed accent: undo to a step that drops the accent is no
+      // way back (it would leave the accent to the base theme), and the
+      // saved seed set again is, its result comparing nothing.
+      const seed = JSON.parse(
+        fs.readFileSync(bat('palette.config.json'), 'utf8'),
+      ).families.find((/** @type {any} */ f) => f.id === 'accent')?.seed;
+      const edited = JSON.parse(saved.toString());
+      for (const x of edited.settings)
+        if (x.source === 'dial' && x.thing === 'accent') x.value = '#e11d48';
+      fs.writeFileSync(file, `${JSON.stringify(edited, null, 2)}\n`);
+      const back = /** @type {any} */ (
+        await themeEditSet('nb', 'accent', String(seed), {cwd})
+      ).data;
+      expect(back.styled ?? []).toEqual([]);
+      expect(back.newProblems ?? []).toEqual([]);
+      expect(JSON.stringify(back)).toMatch(/nothing is compared/);
+      expect(colors()).toBe(before);
+    },
+    T,
+  );
+
+  it(
+    "a whole-theme token a newer CLI set, undone with no recorded shades, takes the mapping's shade, never the base theme's",
+    async () => {
+      await themeEditNew('sv', {cwd, like: 'neutral'});
+      await themeEditSet('sv', 'accent', '#2563eb', {cwd});
+      await themeEditSet('sv', '--color-text-accent', '#0a0b0c', {cwd});
+      const sat = (/** @type {string} */ p) => path.join(cwd, 'themes/sv', p);
+      for (const f of [
+        'palette.config.json',
+        'tokens/sv.palette.receipt.json',
+      ]) {
+        const j = JSON.parse(fs.readFileSync(sat(f), 'utf8'));
+        j.recipe = RECIPE;
+        if (j.request) j.request.recipe = RECIPE;
+        fs.writeFileSync(sat(f), `${JSON.stringify(j, null, 2)}\n`);
+      }
+      // As a newer CLI that makes the recipe writes them: a module whose
+      // token is one value, and history steps with no shades.
+      const SEAL = /^\/\/ Module ([0-9a-f]{16})\.\n/m;
+      const text = fs
+        .readFileSync(sat('sv.settings.ts'), 'utf8')
+        .replace(SEAL, '');
+      const hash = createHash('sha256').update(text).digest('hex').slice(0, 16);
+      fs.writeFileSync(
+        sat('sv.settings.ts'),
+        text.replace(
+          /^(\/\/ Built from settings [^\n]*\n)/m,
+          `$1// Module ${hash}.\n`,
+        ),
+      );
+      const history = JSON.parse(
+        fs.readFileSync(sat('sv.history.json'), 'utf8'),
+      );
+      fs.writeFileSync(
+        sat('sv.history.json'),
+        JSON.stringify(
+          history.map((/** @type {string} */ t) => {
+            const step = JSON.parse(t);
+            delete step.built;
+            return `${JSON.stringify(step, null, 2)}\n`;
+          }),
+        ),
+      );
+      await themeEditUndo('sv', {cwd, thing: '--color-text-accent'});
+      const after = fs.readFileSync(sat('sv.settings.ts'), 'utf8');
+      expect(after).not.toMatch(/#0a0b0c/i);
+      expect(after).toMatch(/"--color-text-accent": \[\s*palette/);
+    },
+    T,
+  );
+
+  it(
+    'the hand-edit refusal names the way back that opens the theme: a set when one setting is off, else each to put back by hand',
+    async () => {
+      await themeEditNew('ur', {cwd, like: 'neutral'});
+      await themeEditSet('ur', 'accent', '#1d4ed8', {cwd});
+      await themeEditSet('ur', 'accent', '#2563eb', {cwd});
+      const uat = (/** @type {string} */ p) => path.join(cwd, 'themes/ur', p);
+      for (const f of [
+        'palette.config.json',
+        'tokens/ur.palette.receipt.json',
+      ]) {
+        const j = JSON.parse(fs.readFileSync(uat(f), 'utf8'));
+        j.recipe = RECIPE;
+        if (j.request) j.request.recipe = RECIPE;
+        fs.writeFileSync(uat(f), `${JSON.stringify(j, null, 2)}\n`);
+      }
+      const file = uat('ur.settings.json');
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      for (const x of raw.settings)
+        if (x.source === 'dial' && x.thing === 'accent') x.value = '#e11d48';
+      fs.writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
+      // (One setting off: setting its saved seed again is offered.)
+      const e = await refusal(() => themeEditShow('ur', {cwd}));
+      expect(e.message).toContain('or with set ur accent #2563eb, to open');
+      expect(e.message).not.toMatch(/undo/);
+      // Two colors off: no single set opens it, so each is named.
+      const saved = JSON.parse(
+        fs.readFileSync(uat('palette.config.json'), 'utf8'),
+      ).families.find((/** @type {any} */ f) => f.id === 'danger')?.seed;
+      raw.settings.push({source: 'dial', thing: 'danger', value: '#dc2626'});
+      fs.writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
+      const two = await refusal(() => themeEditShow('ur', {cwd}));
+      expect(two.message).toContain(
+        `Put every one back by hand to open the theme: accent back to #2563eb, danger back to ${saved}.`,
+      );
+    },
+    T,
+  );
+
+  it(
+    "a hand-changed color the theme's own source sets is named in that file, with no set",
+    async () => {
+      await themeEditNew('os', {cwd, like: 'neutral'});
+      await themeEditSet('os', 'accent', '#2563eb', {cwd});
+      const oat = (/** @type {string} */ p) => path.join(cwd, 'themes/os', p);
+      for (const f of [
+        'palette.config.json',
+        'tokens/os.palette.receipt.json',
+      ]) {
+        const j = JSON.parse(fs.readFileSync(oat(f), 'utf8'));
+        j.recipe = RECIPE;
+        if (j.request) j.request.recipe = RECIPE;
+        fs.writeFileSync(oat(f), `${JSON.stringify(j, null, 2)}\n`);
+      }
+      const src = fs.readFileSync(oat('os.theme.ts'), 'utf8');
+      const own = src.replace(
+        "name: 'os',",
+        "name: 'os',\n  tokens: {'--color-accent': '#e11d48'},",
+      );
+      expect(own).not.toBe(src);
+      fs.writeFileSync(oat('os.theme.ts'), own);
+      const e = await refusal(() => themeEditShow('os', {cwd}));
+      expect(e.message).toContain('themes/os/os.theme.ts sets --color-accent');
+      expect(e.message).toContain('Change it back in themes/os/os.theme.ts');
+      expect(e.message).not.toMatch(/with set os/);
     },
     T,
   );

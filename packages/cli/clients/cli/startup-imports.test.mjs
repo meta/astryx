@@ -65,7 +65,7 @@ const BASE_RESOLUTION_MODULES = [
  * every run its load time, so a module new to this path takes the place of
  * one, or raises this number on purpose.
  */
-const VERSION_RUN_MODULE_LIMIT = 73;
+const VERSION_RUN_MODULE_LIMIT = 74;
 
 /** The runs that print the version, as text or as JSON. */
 const VERSION_RUNS = ['--version', '-V', '--version --json'];
