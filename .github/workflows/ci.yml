@@ -5377,54 +5377,11 @@ jobs:
     defaults:
       run:
         shell: bash
+    # Report-only, so no per-author heavy-suite cap holds it (FR16 caps the
+    # interaction proofs and the Build contracts).
     permissions:
-      # The heavy-suite caps read the engineering-owner roster and the
-      # release-critical label.
-      actions: read
       contents: read
-      pull-requests: read
     steps:
-      # From the merge commit: the caps action may be newer than the head.
-      - name: Check out the heavy-suite caps
-        id: checkout_caps
-        uses: actions/checkout@v7
-        timeout-minutes: 5
-        continue-on-error: true
-        with:
-          path: .heavy-caps
-          # .github/scripts/lib brings the .github/scripts files beside it,
-          # the ones the release-critical label check reads.
-          sparse-checkout: |
-            .github/actions/heavy-caps
-            .github/scripts/lib
-          persist-credentials: false
-
-      - name: Check out the heavy-suite caps (second try)
-        id: checkout_caps_again
-        if: steps.checkout_caps.outcome != 'success' && steps.checkout_caps.outcome != 'skipped'
-        uses: actions/checkout@v7
-        timeout-minutes: 5
-        continue-on-error: true
-        with:
-          path: .heavy-caps
-          sparse-checkout: |
-            .github/actions/heavy-caps
-            .github/scripts/lib
-          persist-credentials: false
-
-      - name: Stop when the checkout failed twice
-        if: steps.checkout_caps.outcome != 'success' && steps.checkout_caps.outcome != 'skipped' && steps.checkout_caps_again.outcome != 'success'
-        run: |
-          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
-          exit 1
-
-      - name: Per-author heavy-suite caps
-        uses: ./.heavy-caps/.github/actions/heavy-caps
-
-      # The daily heavy-run cap counts this step (spec:AST-030 FR16).
-      - name: Heavy suite runs
-        run: 'true'
-
       - name: Checkout
         id: checkout
         uses: actions/checkout@v7
@@ -5492,12 +5449,19 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
         run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
 
+      - name: Name a head without the Firefox project
+        if: always() && steps.project.outputs.present != 'true'
+        run: echo "::notice::This head predates the Firefox hover specs; merge main to run them."
+
       - name: Name a head without the Firefox hover report
         if: (always()) && hashFiles('.github/scripts/firefox-hover-report.mjs') == ''
-        run: echo "::notice::This head predates the Firefox hover specs; merge main to run them."
+        run: echo "::notice::This head has no Firefox hover report; merge main for the report."
 
       - name: Report the Firefox hover results
         if: always() && hashFiles('.github/scripts/firefox-hover-report.mjs') != ''
+        env:
+          # The head this job checked out, not GitHub's test merge commit.
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
           cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"

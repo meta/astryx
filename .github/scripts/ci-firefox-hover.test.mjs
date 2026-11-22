@@ -87,15 +87,35 @@ describe('the pull-request Firefox hover leg', () => {
     expect(job.if).toContain("needs.build-storybook.result == 'success'");
   });
 
-  it('waits for room and counts against the heavy-suite caps like the other heavy legs', () => {
+  it('waits for room, and no per-author heavy-suite cap holds it (report-only)', () => {
     expect(job.needs).toEqual(
       expect.arrayContaining(['room', 'admission', 'heavy-ci']),
     );
     expect(job.if).toContain("needs.admission.outputs.full != 'true'");
-    expect(step('Per-author heavy-suite caps').uses).toBe(
-      './.heavy-caps/.github/actions/heavy-caps',
+    expect(
+      job.steps.some(each =>
+        String(each.uses ?? '').includes('.github/actions/heavy-caps'),
+      ),
+    ).toBe(false);
+    expect(job.steps.some(each => each.name === 'Heavy suite runs')).toBe(
+      false,
     );
-    expect(step('Heavy suite runs').run).toBe('true');
+    expect(job.permissions).toEqual({contents: 'read'});
+  });
+
+  it('labels its report with the head it checked out, and names a head that predates the project or the report', () => {
+    expect(step('Report the Firefox hover results').env.ASTRYX_HEAD_SHA).toBe(
+      '${{ github.event.pull_request.head.sha || github.sha }}',
+    );
+    expect(step('Name a head without the Firefox project').if).toBe(
+      "always() && steps.project.outputs.present != 'true'",
+    );
+    expect(step('Name a head without the Firefox project').run).toContain(
+      'merge main to run them',
+    );
+    expect(step('Name a head without the Firefox hover report').run).toContain(
+      'merge main for the report',
+    );
   });
 
   it('runs the Firefox project at the head on a standard runner', () => {
