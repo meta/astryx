@@ -5011,6 +5011,152 @@ describe('play: any closed-form curve', () => {
   });
 });
 
+describe('animate: calls in one task share a spring bake', () => {
+  /** Engines on their own elements, on the test clock. */
+  const engines = (count: number) =>
+    Array.from({length: count}, () => {
+      const element = document.createElement('div');
+      return {
+        element,
+        engine: createMotionEngine(element, {now: () => clock, requestFrame}),
+      };
+    });
+  /** The translate animation an element plays. */
+  const shown = (element: Element) =>
+    live('translate')
+      .filter(animation => animation.element === element)
+      .at(-1)!;
+
+  it('calls that spring from one value with one spring share one bake', () => {
+    stubMedia(false, false);
+    const rows = engines(3);
+    for (const {engine} of rows) {
+      engine.set({y: 40});
+    }
+    for (const {engine} of rows) {
+      engine.animate({y: 0}, {spring: springs.settle});
+    }
+    const [first, second, third] = rows.map(row => shown(row.element));
+    expect(second.keyframes).toBe(first.keyframes);
+    expect(third.keyframes).toBe(first.keyframes);
+  });
+
+  it('calls that each set their start value first share one bake too', () => {
+    stubMedia(false, false);
+    const rows = engines(3);
+    for (const {engine} of rows) {
+      engine.set({y: 40});
+      engine.animate({y: 0}, {spring: springs.settle});
+    }
+    const [first, second, third] = rows.map(row => shown(row.element));
+    expect(second.keyframes).toBe(first.keyframes);
+    expect(third.keyframes).toBe(first.keyframes);
+  });
+
+  it('thirty such calls bake once', () => {
+    stubMedia(false, false);
+    const rows = engines(30);
+    for (const {engine} of rows) {
+      engine.set({y: 40});
+    }
+    for (const {engine} of rows) {
+      engine.animate({y: 0}, {spring: springs.settle});
+    }
+    const played = rows.map(row => shown(row.element));
+    expect(played).toHaveLength(30);
+    expect(new Set(played.map(animation => animation.keyframes)).size).toBe(1);
+  });
+
+  it('a call in a later task bakes again, the same keyframes', async () => {
+    stubMedia(false, false);
+    const [alone] = engines(1);
+    alone.engine.set({y: 40});
+    alone.engine.animate({y: 0}, {spring: springs.settle});
+    const baked = shown(alone.element).keyframes;
+    await Promise.resolve();
+    const [first, second] = engines(2);
+    first.engine.set({y: 40});
+    second.engine.set({y: 40});
+    first.engine.animate({y: 0}, {spring: springs.settle});
+    second.engine.animate({y: 0}, {spring: springs.settle});
+    expect(shown(first.element).keyframes).not.toBe(baked);
+    expect(shown(second.element).keyframes).toBe(
+      shown(first.element).keyframes,
+    );
+    expect(shown(first.element).keyframes).toEqual(baked);
+  });
+
+  it('a spring from another value keeps its own keyframes', () => {
+    stubMedia(false, false);
+    const [low, high] = engines(2);
+    low.engine.set({y: 40});
+    high.engine.set({y: 60});
+    low.engine.animate({y: 0}, {spring: springs.settle});
+    high.engine.animate({y: 0}, {spring: springs.settle});
+    expect(shown(high.element).keyframes).not.toBe(
+      shown(low.element).keyframes,
+    );
+    expect(parse(shown(high.element).keyframes[0].translate)[1]).toBeCloseTo(
+      60,
+      6,
+    );
+  });
+
+  it('a spring with a handed velocity keeps its own keyframes', () => {
+    stubMedia(false, false);
+    const [still, thrown] = engines(2);
+    still.engine.set({y: 40});
+    thrown.engine.set({y: 40});
+    still.engine.animate({y: 0}, {spring: springs.settle});
+    thrown.engine.animate(
+      {y: 0},
+      {spring: springs.settle, velocity: {y: -800}},
+    );
+    expect(shown(thrown.element).keyframes).not.toBe(
+      shown(still.element).keyframes,
+    );
+  });
+
+  it('another spring keeps its own keyframes', () => {
+    stubMedia(false, false);
+    const [settle, change] = engines(2);
+    settle.engine.set({y: 40});
+    change.engine.set({y: 40});
+    settle.engine.animate({y: 0}, {spring: springs.settle});
+    change.engine.animate({y: 0}, {spring: springs.stateChange});
+    expect(shown(change.element).keyframes).not.toBe(
+      shown(settle.element).keyframes,
+    );
+  });
+
+  it('a spring over another rest value keeps its own keyframes', () => {
+    stubMedia(false, false);
+    const [plain, moved] = engines(2);
+    plain.engine.set({y: 40});
+    moved.engine.set({y: 40, x: 5});
+    plain.engine.animate({y: 0}, {spring: springs.settle});
+    moved.engine.animate({y: 0}, {spring: springs.settle});
+    const keyframes = shown(moved.element).keyframes;
+    expect(keyframes).not.toBe(shown(plain.element).keyframes);
+    expect(parse(keyframes[0].translate)[0]).toBe(5);
+  });
+
+  it('a retarget in flight keeps its own keyframes', async () => {
+    stubMedia(false, false);
+    const [moving] = engines(1);
+    moving.engine.set({y: 40});
+    moving.engine.animate({y: 0}, {spring: springs.settle});
+    await advance(50);
+    moving.engine.animate({y: 20}, {spring: springs.settle});
+    const [fromRest] = engines(1);
+    fromRest.engine.set({y: 40});
+    fromRest.engine.animate({y: 20}, {spring: springs.settle});
+    expect(shown(fromRest.element).keyframes).not.toBe(
+      shown(moving.element).keyframes,
+    );
+  });
+});
+
 describe('decay: momentum curves (a coast)', () => {
   it('plays a coast and comes to rest where it projects', async () => {
     const {animator} = setup();
