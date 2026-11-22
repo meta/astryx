@@ -5,7 +5,9 @@
  *   a sample page, and the helpers that write into it.
  * @input Nothing; a test file calls useRenderFixture() at its top level.
  * @output dir (live), put, codeOf, PNG, PAGE, CLI_DIR and useRenderFixture.
- * @position Test support for packages/cli/api/render/render.*.test.mjs.
+ * @position Test support for packages/cli/api/render/render.test.mjs and its
+ *   split files: render.imports, render.writes, render.outside-project and
+ *   render.charts.
  */
 
 import * as fs from 'node:fs';
