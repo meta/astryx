@@ -15516,8 +15516,8 @@ export function draftAnswer(ctx, env, question) {
   addRunLooks(clauses, Object.keys(HUES));
   /** Clauses a strip's answer writes, after the strip's own. @type {Set<Clause>} */
   const absorbed = new Set();
-  // (Looks other than the strip's corners and line color: said with it,
-  // each is answered on its own, on the row.)
+  // (Looks other than the strip's corners and line color: said in the strip
+  // clause, the ask is answered as before.)
   const STRIP_OTHER =
     /\b(?:shadows?|glow(?:ing)?|thick|thin|heavy|bold|hairline|double|dashed|dotted|groove|ridge|inset|outset|wide|narrow|large|big|huge|deep|strong|subtle|faint|soft|hard)\b/;
   /**
@@ -15529,9 +15529,9 @@ export function draftAnswer(ctx, env, question) {
    * of that component there that takes a control's size (a pager's
    * ellipsis). The row draws the border and corners with no gap; each cell
    * draws a separator after it, the end cells the row's corners just
-   * inside its border, and the last none. It takes only the corners and a
-   * line color said with it; any other look said with it is answered on
-   * its own, on the row.
+   * inside its border, and the last none. It takes only corners said as a
+   * length and a line color said with it; with any other look said of the
+   * component, the ask is answered as before.
    * @param {Clause} c
    * @returns {Draft | null}
    */
@@ -15576,11 +15576,11 @@ export function draftAnswer(ctx, env, question) {
         !x.lengths.length &&
         !/\b(?:corners?|radius|rounded)\b/.test(x.text) &&
         !STRIP_OTHER.test(noMode(x.text));
-      // ("… strip with 3px corners, a soft shadow and #dddddd lines"): the
-      // clauses after it, up to a sentence break, that say only its corners
-      // or its line color, naming no part outside this component, are the
-      // strip's, written in its answer. Any other look said of the same
-      // controls there is answered on its own, on the row.
+      // ("… strip with 3px corners and #dddddd lines"): the clauses after it,
+      // up to a sentence break, that say only its corners as a length or
+      // its line color are the strip's, written in its answer. Any other
+      // look said there of this component leaves the whole ask to the
+      // answer it had before: the strip is only what it draws itself.
       const after = [];
       for (let i = clauses.indexOf(c) + 1; i < clauses.length; i++) {
         const x = clauses[i];
@@ -15593,15 +15593,7 @@ export function draftAnswer(ctx, env, question) {
           after.push(x);
           continue;
         }
-        // (Said of the strip's subject or its controls, carried: the
-        // controls' look goes on the row; the subject's is routed as said.)
-        if (
-          !x.parts.length ||
-          !x.parts.every(p => p.on === item || p.on === subject.on) ||
-          /\b(?:pages?|cells?|items?|buttons?)\b/.test(x.text)
-        )
-          break;
-        x.parts = x.parts.map(p => (p.on === item ? {...p, on: row} : p));
+        return null;
       }
       const said = [c, ...after];
       const cells = contains(row).filter(

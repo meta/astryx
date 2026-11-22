@@ -76,13 +76,13 @@ describe('one joined strip', () => {
     );
   }, 300_000);
 
-  it('takes the corners and line color said after it, and leaves the shadow to its own answer on the row', async test => {
+  it('takes the corners and line color said after it', async test => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       test.skip();
     }
     const results = await answer(
-      'pagination in one bordered strip with 3px corners, a soft shadow and #dddddd lines',
+      'pagination in one bordered strip with 3px corners and #dddddd lines',
     );
     const strip = results.find(r => /as one strip/.test(r.text));
     const sets = strip?.sets ?? [];
@@ -93,23 +93,6 @@ describe('one joined strip', () => {
       STRIP('3px', '2px'),
     );
     expect(strip?.text).toContain('"#dddddd lines"');
-    expect(strip?.text).not.toContain('soft shadow');
-    const shadow = results.find(r => /^shadow on pagination/.test(r.text));
-    expect(shadow?.sets).toEqual([
-      "box-shadow 'var(--shadow-low)' --on pagination",
-    ]);
-    // The whole answer runs both, the strip first (its corners kept after
-    // its border), then the shadow.
-    expect(results[0]?.sets).toContain(
-      'border-radius 3px --on pagination-list',
-    );
-    expect(
-      results.some(
-        r =>
-          /^then, after the first/.test(r.text) &&
-          r.sets.includes("box-shadow 'var(--shadow-low)' --on pagination"),
-      ),
-    ).toBe(true);
   }, 300_000);
 
   describe('the strip takes only its corners and line color', () => {
@@ -161,7 +144,7 @@ describe('one joined strip', () => {
       expect(lined.text).toMatch(/its line color is for dark mode/);
     }, 240_000);
 
-    it('answers every other look on its own, on the row, and joins it in "all of it"', async test => {
+    it('leaves an ask with any other look said of the pager to the answer it had before', async test => {
       if (unbuilt) {
         console.warn(`skipped: ${unbuilt}`);
         test.skip();
@@ -171,36 +154,20 @@ describe('one joined strip', () => {
         'pagination pages in one bordered strip, with a soft shadow',
         'pagination pages in one bordered strip plus a soft shadow',
         'pagination pages in one bordered strip with 3px corners, and with a large shadow',
-      ]) {
-        const {results, whole} = await everything(q);
-        const strip = results.find(r => /as one strip/.test(r.text));
-        expect(strip?.sets.join('\n'), q).not.toMatch(/box-shadow/);
-        const all = results.flatMap(r => r.sets).join('\n');
-        expect(all, q).toMatch(/box-shadow \S+ --on pagination-list\b/);
-        expect(all, q).not.toMatch(/box-shadow [^\n]*--on pagination-item\b/);
-        expect(whole, q).toContain('gap 0 --on pagination-list');
-        expect(whole.join('\n'), q).toMatch(/box-shadow/);
-      }
-      // (A width said with the strip is a border of its own on the row: it
-      // clashes with the strip's, and the answer offers the choice.)
-      const wide = await everything(
         'pagination pages in one bordered strip with 2px lines',
-      );
-      expect(wide.results[0]?.text).toMatch(
-        /border 1px solid var\(--color-border\) and border \S+ solid var\(--color-border\) on pagination-list/,
-      );
-      const {results} = await everything(
         'pagination pages in one bordered strip with thick borders and 3px corners',
-      );
-      const all = results.flatMap(r => r.sets).join('\n');
-      expect(all).not.toMatch(
-        /(?:corners|border-radius) 3px --on pagination-item\b/,
-      );
-      // (The strip's border and the thick one clash on the row: the answer
-      // offers the choice.)
-      expect(results[0]?.text).toMatch(
-        /border 1px solid var\(--color-border\) and border \S+ solid var\(--color-border\) on pagination-list/,
-      );
+        'pagination pages in one bordered strip with square corners',
+        'pagination in one bordered strip with 3px corners, a soft shadow and #dddddd lines',
+      ]) {
+        const {results} = await everything(q);
+        expect(
+          results.some(r => /^Pagination as one strip:/.test(r.text)),
+          q,
+        ).toBe(false);
+        expect(results.flatMap(r => r.sets).join('\n'), q).not.toMatch(
+          /border-inline-end/,
+        );
+      }
     }, 240_000);
 
     it('takes a line color only when said of its lines', async test => {
@@ -236,18 +203,5 @@ describe('one joined strip', () => {
       const sets = (await answer(q)).flatMap(r => r.sets).join('\n');
       expect(sets, q).not.toMatch(/--on pagination-item\b/);
     }
-  }, 240_000);
-
-  it('leaves corners said without a length to their own answer', async test => {
-    if (unbuilt) {
-      console.warn(`skipped: ${unbuilt}`);
-      test.skip();
-    }
-    const results = await answer(
-      'pagination pages in one bordered strip with square corners',
-    );
-    const strip = results.find(r => /as one strip/.test(r.text));
-    expect(strip?.text).not.toContain('square corners');
-    expect(results.some(r => r !== strip && /corners/.test(r.text))).toBe(true);
   }, 240_000);
 });
