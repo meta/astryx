@@ -289,6 +289,46 @@ test('a pull up on the body of a sheet whose content fits stretches it on every 
   await expect(dialog).toBeVisible();
 });
 
+test('a finger on content that allows no one-finger pan leaves the sheet still; pan-y and pan-x content still pull it (spec:AST-094 FR18)', async ({
+  page,
+}) => {
+  const {dialog, sheet, rest} = await openStory(
+    page,
+    'showcase',
+    'Open sheet',
+    'Filters',
+  );
+  const found = await dialog
+    .getByText('In stock', {exact: true})
+    .first()
+    .boundingBox();
+  if (found == null) {
+    throw new Error('no box for In stock');
+  }
+  const point = {x: found.x + found.width / 2, y: found.y + found.height / 2};
+  // The element under the finger, as a menu whose rows fit, declares the
+  // touch-action.
+  const declare = async (touchAction: string) =>
+    page.evaluate(
+      ({x, y, value}) => {
+        const under = document.elementFromPoint(x, y);
+        if (!(under instanceof HTMLElement)) {
+          throw new Error('nothing under the finger');
+        }
+        under.style.touchAction = value;
+      },
+      {...point, value: touchAction},
+    );
+  await declare('pinch-zoom');
+  expect(await pullUp(page, sheet, rest, point, 100)).toBeLessThan(2);
+  await declare('pan-y pinch-zoom');
+  expect(await pullUp(page, sheet, rest, point, 100)).toBeGreaterThan(20);
+  // The date pickers' month scroller declares pan-x: vertical drags are the sheet's.
+  await declare('pan-x');
+  expect(await pullUp(page, sheet, rest, point, 100)).toBeGreaterThan(20);
+  await expect(dialog).toBeVisible();
+});
+
 test('a long list scrolls to its end, then the sheet stretches with the rest of the pull', async ({
   page,
 }) => {

@@ -5606,7 +5606,7 @@ function checkOne(
     );
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
   if (s.on && !isRole && !groupsOf(ctx)[s.on]) {
-    const t = TARGET.get(s.on);
+    let t = TARGET.get(s.on);
     if (!t) {
       // Another case of a part or group, its class name copied from the
       // page (`.astryx-card`), or its component (`<Card>`, `Card`): that
@@ -5793,18 +5793,39 @@ function checkOne(
           : Object.keys(record?.innerSets ?? {}).length > 0)
       ) {
         const toks = innerPropTokens(ctx.C, holder, kebab(thing));
-        refuse(
-          E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
-          {
-            didYouMean: [holder],
-            run: toks.length
-              ? toks.map(tok =>
-                  setLine(slug, tok, v, {...s, on: holder}, unset),
-                )
-              : [setLine(slug, thing, v, {...s, on: holder}, unset)],
-          },
-        );
+        // (A text size said of the main piece's name, "top-nav-heading-title"
+        // or "-heading", where the holder's main text can be told: set on, or
+        // undone from, the holder, as said of it. Another piece's name,
+        // "-subtitle", is refused: which line it is cannot be told apart.)
+        const main =
+          !s.state &&
+          kebab(thing) === 'font-size' &&
+          /^(?:title|heading)$/.test(rest)
+            ? mainTextSizeToken(ctx.C, holder, TOKENS)
+            : null;
+        if (main && (unset || !namesToken(v, main))) {
+          const said = `"${s.on}" is drawn inside ${holder}: ${unset ? 'undone from' : 'set on'} ${holder}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+          s.on = holder;
+          // (As --only reads on the holder named directly.)
+          if (s.only && !onlyFits(s)) {
+            s.only = undefined;
+            if (!unset)
+              s.note = `${s.note}; ${holder} is styled on its own already, so --only changes nothing: it is saved without it`;
+          }
+        } else
+          refuse(
+            E.ERR_THEME_UNKNOWN_PART,
+            `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
+            {
+              didYouMean: [holder],
+              run: toks.length
+                ? toks.map(tok =>
+                    setLine(slug, tok, v, {...s, on: holder}, unset),
+                  )
+                : [setLine(slug, thing, v, {...s, on: holder}, unset)],
+            },
+          );
       }
       // A plural or another case names the part it means; a typo of one
       // part leads with the same command on that part.
@@ -5813,20 +5834,24 @@ function checkOne(
         ...Object.keys(groupsOf(ctx)),
       ]);
       const typo = near.filter(n => typoOf(lower, n));
-      refuse(
-        E.ERR_THEME_UNKNOWN_PART,
-        `"${s.on}" is not a part you can style.`,
-        {
-          didYouMean: near,
-          run: [
-            ...(typo.length === 1
-              ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
-              : []),
-            `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
-            `${HOW} ${quoteCommandArgument(s.on)}`,
-          ],
-        },
-      );
+      // (A title piece moved onto its holder above is a part now.)
+      const moved = TARGET.get(s.on);
+      if (moved) t = moved;
+      else
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part you can style.`,
+          {
+            didYouMean: near,
+            run: [
+              ...(typo.length === 1
+                ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
+                : []),
+              `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
+              `${HOW} ${quoteCommandArgument(s.on)}`,
+            ],
+          },
+        );
     }
     if (s.when) {
       const variants = C.variantValues(s.on);
