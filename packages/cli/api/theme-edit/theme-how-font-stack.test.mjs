@@ -4,7 +4,9 @@
  * @file A font asked for on a part is offered as its preset's whole stack:
  * "monospace numbers in tables" is ui-monospace, then the monospace fonts
  * other systems have, then monospace, never ui-monospace alone, which only
- * Apple systems draw.
+ * Apple systems draw. A family a font is said to be like ("MS Sans
+ * Serif-like") is that family, and an older system name reaches the
+ * family that replaced it.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -55,4 +57,48 @@ describe('a font on a part', () => {
       `font-family 'Inter, sans-serif' --on button`,
     );
   }, 240_000);
+});
+
+describe('a family said as like another', () => {
+  it('is that family, as typed, and the kind said still wins', async () => {
+    expect(
+      await commandsFor(
+        'Type: MS Sans Serif-like pixel sans 11px, tight leading',
+      ),
+    ).toContain(`font 'MS Sans Serif'`);
+    expect(await commandsFor('Font: MS Sans Serif-like pixel sans')).toContain(
+      `font 'MS Sans Serif'`,
+    );
+    // (A kind said as a whole word wins; a word that only holds one,
+    // "artisans", "monoline", is no kind.)
+    expect(await commandsFor('NYT-style serif headings')).toMatch(
+      / font serif --on heading/,
+    );
+    expect(await commandsFor('NYT-style serif headings for artisans')).toMatch(
+      / font serif --on heading/,
+    );
+    expect(
+      await commandsFor('Bloomberg-like monospaced numbers in tables'),
+    ).not.toMatch(/Bloomberg/);
+    expect(await commandsFor('IBM Plex Serif-like monoline headings')).toMatch(
+      / font 'IBM Plex Serif' --on heading/,
+    );
+    // (A shipped font the name begins is that font.)
+    expect(await commandsFor('Comic Sans-like pixel sans')).toMatch(
+      / font comic(\s|$)/,
+    );
+    // (A generic word alone stays the system stack.)
+    expect(await commandsFor('a sans font')).toMatch(/ font system(\s|$)/);
+  }, 240_000);
+});
+
+describe('an older name of a system family', () => {
+  it('is written first, then the family that replaced it', async () => {
+    const {fontOf} = await import('./_settings.mjs');
+    const f = fontOf('MS Sans Serif');
+    expect(f.family.replace(/"/g, '')).toBe('MS Sans Serif');
+    expect(f.fallbacks.replace(/"/g, '')).toBe(
+      'Microsoft Sans Serif, system-ui, sans-serif',
+    );
+  });
 });
