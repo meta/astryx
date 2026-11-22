@@ -684,6 +684,36 @@ on its own (one no group spreads to) is read as absent, with one note, by the
 one rule `set --only` follows, so a theme saved with one still opens; read so,
 an entry at the same place as a later entry of the same setting gives way to
 the later one, the one the build shows.
+Exception ([DEC-16](#dec-16--controls-share-one-height-at-each-size)): a
+saved `only` on a control's height, which `set --only` writes as that
+control's own size token, reads as written. The colors the theme editor derives
+from a look (the category tints, the chart series and the status roles it
+leaves unset) are always written in the same spirit: a chart series takes
+the nearest shade that reads and stands apart, a card tint the nearest
+quieter tint that carries the text and stands apart from the other tints
+and the page (else the nearest stronger one), a status fill gives up standing out from
+the page, then standing apart from the accent, a status role whose text or
+icon reads at no shade keeps the base theme's colors with a note, and a
+limit no shade meets, such as hues a look at vibrancy 0 draws as alike grays,
+is a note the editor says, never a whole set falling back to the base theme's colors.
+
+The editor writes a state so that the build takes it. A state word with
+exactly one reading among a part's states (`pressed` where the part's press is
+`active`) is written as that state, with one note. A state a part shows only
+through the element it rides (a list item's `selected`, which its item marks)
+is written as that element's attribute inside the part's rule (plain or
+variant).
+
+A theme whose palette recipe the editor does not know (a newer CLI's) keeps
+its palette and settings module exactly as saved, and that CLI's build of the
+same settings counts as current; a change that leaves its colors alone keeps
+the shades it shows, and a change to what its palette is made from (a color
+dial, the vibrancy or the whole-theme accent token) is refused, saying what
+still works, with no update step, as a CLI that makes that recipe may not be
+released. Beside the accent dial, a whole-theme `--color-accent` saves as an
+exact value, and after a color changed by hand away from the saved palette,
+setting it back to its saved seed (or, for a color the palette has no
+shades for, taking it out) is the way back.
 
 Rejected: failing doctor on such a setting, which fails a working setup.
 
@@ -722,10 +752,127 @@ with the whole-theme corners dial, it sets the chat radius to
 `var(--radius-container)`, Core's own default, so its chat corners follow its
 container corners, including an exact container radius set after the dial. A
 corners rung set on one part that reads the chat radius gives that part the
-container step.
+container step. On a base that pins a chat radius other than its container
+radius, the chat radius the dial writes, and the radius such a rung gives its
+part, keep the base's ratio of the two, up to one and a half times the base's
+chat radius
+(`min(calc(var(--radius-container) * 28 / 12), 42px)` on a base with 12px
+containers and 28px chat corners), so rounder corners never make the chat
+corners less round.
 
 Rejected: the page radius; Core's chat default is the container radius.
 Rejected: a copied pixel value, which drifts from a container radius set later.
+
+### DEC-16 — Controls share one height at each size
+
+**Reference:** `spec:AST-050/DEC-16`
+**Decider:** maintainers under `josephfarina`'s delegation, `2026-11-19`
+
+Buttons, inputs, selectors and input groups line up in a row, so at each size
+(`sm`, `md`, `lg`) every control has the same height. The theme editor's
+`controls` group holds the parts that take their height from the control size
+tokens (`--size-element-sm`, `-md`, `-lg`), on their own box or on the boxes
+of their parts, and are a button, an input or a form control's own part. `set`
+and `undo` take `controls` as an `--on` value. A complex selector, which the
+editor's census does not measure, keeps its own height.
+
+A height set on a control, or on a group of them (a group that mixes controls
+with other parts keeps a plain height, which gives way on its controls to a
+control height and stays on its other parts), is written as that size's token
+on the `controls` group: the size its `--when` names, `md` without one. It
+replaces the other heights set on controls at that size, and the result says
+so. A replaced height stays on the parts it reached that are not controls, and
+a replaced height that was set for every size stays every control's height at
+the other sizes, as the value it showed there. A height set for every control
+also replaces, at that size, the heights kept on one control (its own size
+token or an `--only` height); one kept for every size stays that control's own
+height at the other sizes. A height set with `--only` is written as that
+control's own size token, on it alone, and replaces the plain heights saved
+for that control at that size; one saved on a group stays on the group's other
+parts. `--only` keeps a height on one control only where it becomes that
+control's own size token: in a state or under a variant that is not a size,
+the height is a plain height. A height written as a size token is a length in
+any CSS unit; a word (`auto`), a percentage, or a value that reads its own
+size token, directly or through another saved size token, is refused, and the
+refusal names the chain. A percentage is refused too when a control size token
+(`--size-element-sm`, `-md`, `-lg`) is set directly. A height for another
+variant or for a state stays a plain height. A height set on an input that is
+not a control (a text area, which sizes itself by its rows, or a complex
+selector) stays on that part and never reaches the controls.
+
+`show` lists under missed each saved length height that keeps some controls
+apart at a size, with the line that makes it every control's height there. A
+saved height that is not a size has no such line, so it is not listed or
+counted.
+
+A control that grows with its content (a selector, a typeahead, a tokenizer, a
+file input's field) keeps Core's top and bottom padding, so a theme's padding
+never makes it taller than the other controls at its size: a padding set on it
+reaches only its sides, and a new top or bottom padding alone on it is
+refused. A file input's drop zone (mode `dropzone`) pads itself, so a top or
+bottom padding set on the file input reaches the drop zone. A picture's
+control height is one size token on `controls`. On a control that grows with
+its content, the size's height is its least height (its min-height), so a
+control whose content is taller than that keeps its content's height.
+
+Rejected: a fixed height on one control, which keeps it apart from the others at every size.
+Rejected: the size tokens for the whole theme, which parts that are not controls (a dialog header) read too.
+
+### DEC-17 — A badge style sets the status and category badges together, in the theme's colors
+
+**Reference:** `spec:AST-050/DEC-17`
+**Decider:** maintainers under `josephfarina`'s delegation, `2026-11-19`
+
+A theme the editor makes styles its status and category badges with one
+whole-theme setting, `badges`, in the theme's own status and category colors,
+so they change together and their text still reads on them. `solid` fills
+each status badge with its status color, with text in the status's on-color,
+and fills each category badge with a strong color of its hue, with text in
+the page color or the primary text color. `soft` draws each status badge as a
+light tint of its color, with text in that tint's on-color; the category
+badges keep their look. `outline` draws each status and category badge as a
+thin line in its text color, with that text, on the surface it sits on. Each
+variant takes the first of its colors that reads at 4.5:1 in every mode of
+the theme's base. A variant none of whose own colors read falls back to a
+pair that reads, where one exists, and the `set` result names it: in `solid`
+it keeps its tint; in `outline` it draws the primary text inside a line of
+its color. `show` names a variant
+that still does not read, with the line that fixes it. A badge `soft` or
+`outline` draws (the status badges under `soft`, every badge under
+`outline`) takes, inside a primary or destructive button, that button's public
+color pair, inverted (the button's on-color as the fill, its color as the
+text), as Core's neutral badge does there. Inside a secondary button, such a
+badge draws on the page color, its tint over it, where its pair reads. The neutral badge keeps Core's look. A property the theme
+sets on the badge itself, for every variant or for one, stays in each mode it
+is set for: the style writes only what the theme leaves.
+
+`how` reads a badge style said alone (soft, outlined or filled badges, tags
+or chips) as this setting. A badge is a small box, so its corners follow the
+element corners at any corners but pill, as a button's do, unless the base
+theme rounds its badges itself: the corners dial gives them, and `show` lists
+a badge that keeps its pill shape when the element corners change. A badge
+the base theme rounds itself keeps that shape at every corners but square,
+which squares every pill, and a badge given corners of its own keeps them.
+
+Rejected: a color set on each badge variant by hand, which drifts from the theme's colors when they change.
+Rejected: small corners on every pill below pill corners, which switches and progress tracks keep as pills until the corners go square.
+
+### DEC-20 — A heading the theme editor gives the heading font keeps it when only the body font changes
+
+**Reference:** `spec:AST-050/DEC-20`
+**Decider:** `josephfarina`, `2026-11-20`
+
+Some parts are drawn as a heading element but take the body's font family (an
+empty state's title). In a theme the editor makes, such a part takes
+`var(--font-family-heading)`, as every other heading does, whenever the heading
+and body families differ after a heading font (`font … --on heading`), or after
+a body font set alone (the dial or an exact `--font-family-body`) on a base
+theme that draws its headings and body in one family. On a base with two
+families a body font set alone leaves the part in the body's family, as the
+base draws it; a heading font still gives it the heading font. A plain
+`font-family` set on the part, or on a part that contains it, is kept.
+
+Rejected: the heading font after a body font on every base, which moves a two-family base's title.
 
 ## Open questions
 

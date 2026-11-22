@@ -52,6 +52,8 @@ jobs:
     timeout-minutes: 8
     permissions:
       actions: write
+      # checks: read lets the review read when the head was pushed.
+      checks: read
       contents: read
       pull-requests: read
       statuses: read

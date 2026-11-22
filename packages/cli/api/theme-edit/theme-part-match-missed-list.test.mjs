@@ -94,10 +94,11 @@ describe('a part matched to the theme', () => {
     expect(again[0].text).toContain("follows mt's changes already");
   }, 240_000);
 
-  it('a full pill the corners left, as missed has it', async () => {
-    expect(writes(await how('mt', 'make the badge match the theme'))).toEqual([
-      "set mt border-radius 'var(--radius-element)' --on badge",
-    ]);
+  it('a pill square corners already squared, missed has nothing for', async () => {
+    // (Square corners square a badge, a pill as a styling choice, themselves.)
+    const rs = await how('mt', 'make the badge match the theme');
+    expect(writes(rs)).toEqual([]);
+    expect(rs[0].text).toContain("show's missed list has nothing for it");
   }, 120_000);
 
   it('a part nothing missed says so, and writes nothing', async () => {
