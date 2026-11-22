@@ -13,6 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
+import {discoverComponents} from '../../foundation/discovery/component-discovery.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -176,6 +177,22 @@ export async function discoverListsIconSet(cwd) {
   const project = Project.lastLoaded(cwd) ?? (await Project.load(cwd));
   const {listsToAdd} = await import('../discover/discover.mjs');
   return listsToAdd(project, ICON_PACK_QUERY, 'icon-set');
+}
+
+/**
+ * The names of the components of the Core the project in `cwd` reads: an
+ * icon query's words that name one say where the icon goes (spec:AST-084
+ * FR6). Empty when there is no Core.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function coreComponentNames(cwd) {
+  const project = Project.lastLoaded(cwd);
+  try {
+    return Object.values(discoverComponents(project?.coreDir() ?? null)).flat();
+  } catch {
+    return [];
+  }
 }
 
 /**
