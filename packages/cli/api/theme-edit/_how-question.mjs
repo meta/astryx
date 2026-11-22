@@ -7168,7 +7168,7 @@ export function draftAnswer(ctx, env, question) {
       (feel.dial === 'press' || feel.dial === 'hover') &&
       !FEEL_NOT.test(raw) &&
       !feelHeld(feel.dial) &&
-      !FEEL_MUSE.test(raw)
+      !FEEL_MUSE.test(question)
     )
       return true;
     // Questions in a script how cannot read word by word keep their ask.
@@ -23113,13 +23113,9 @@ export function draftAnswer(ctx, env, question) {
           /\b(?:increase\w*|decrease\w*|raise|reduce\w*|cut|grow|shrink|up|down|more|less|taller|shorter|looser|tighter|bigger|smaller|larger|higher|lower)\b/i.test(
             c.text,
           );
-        const factorSaid =
-          pxRatio != null ? null : exactFactor(c.text);
+        const factorSaid = pxRatio != null ? null : exactFactor(c.text);
         const pctAbsolute =
-          pxRatio == null &&
-          factorSaid == null &&
-          pct != null &&
-          !asChange
+          pxRatio == null && factorSaid == null && pct != null && !asChange
             ? String(Number(pct.toFixed(3)))
             : null;
         // (A change "by N%" with no way said writes nothing and asks which

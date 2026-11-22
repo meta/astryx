@@ -362,6 +362,30 @@ describe('how', () => {
           /--on button .*--state active/.test(c),
         ),
       ).toBe(true);
+      // (An ask that wonders anywhere keeps main's answer for the rest:
+      // the feel is left unread, never the whole ask.)
+      for (const [q, want] of [
+        ['Could the corners be rounder? Darker on press.', /^set fh corners /],
+        ['Rounder corners? Lighter on hover.', /^set fh corners /],
+      ]) {
+        const w = await writes('fh', q);
+        expect(
+          w.some(c => want.test(c)),
+          q,
+        ).toBe(true);
+        expect(
+          w.some(c => /^set fh (?:press|hover) /.test(c)),
+          q,
+        ).toBe(false);
+      }
+      for (const q of [
+        'Darker on press. It could feel more tactile.',
+        'Darker on press. Would that work?',
+      ])
+        expect(
+          (await writes('fh', q)).some(c => /^set fh press /.test(c)),
+          q,
+        ).toBe(false);
       // (A feel said as what is not wanted writes nothing, as before.)
       for (const q of [
         'never darker on press',
