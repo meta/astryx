@@ -3443,10 +3443,6 @@ const QUESTIONS_J = [
   ['tighten line height by 10%', {top: /^set q --text-body-leading 1\.29$/}],
   ['change the line height by 10%', {top: null}],
   ['line height 150% by default', {top: /^set q --text-body-leading 1\.5$/}],
-  [
-    'line height 150% of the font size',
-    {top: /^set q --text-body-leading 1\.5$/},
-  ],
   // superlatives
   ['the least spacing possible', {top: /^set q spacing less$/}],
   ['as little padding as possible', {top: /^set q spacing less$/}],
