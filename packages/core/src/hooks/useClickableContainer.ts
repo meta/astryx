@@ -140,8 +140,8 @@ function belongsToSomethingElse(element: Element): boolean {
 /**
  * The custom property that turns off a container's `:active` press paint. The
  * styles in this file's SYNC list paint the pressed overlay as
- * `var(--_nested-press-paint, <pressed overlay>)` and reset it to `initial` on
- * their own element, so a nested control keeps its own press. Each also
+ * `var(--_nested-press-paint, <pressed overlay>)`. Each resets it to `initial`
+ * on its own element, so a nested control keeps its own press. Each also
  * declares `--_nested-press-rest`, what it paints at rest under the pointer
  * (its hover overlay, or none). A marked container paints that instead of
  * its press, so it keeps its hover.

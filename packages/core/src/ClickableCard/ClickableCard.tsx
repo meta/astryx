@@ -101,8 +101,8 @@ const styles = stylex.create({
     // does not: a layered build emits the property's default outside the
     // priority layers its attribute arms land in, and the default wins.
     // A press that starts on a control inside the card sets
-    // `--_nested-press-paint` on the card (useClickableContainer), so the
-    // card paints its rest overlay, not a mouse press. A card inside resets it.
+    // `--_nested-press-paint` on the card (useClickableContainer). The card
+    // then paints its rest overlay, not a mouse press. A card inside resets it.
     '--_nested-press-paint': 'initial',
     '--_nested-press-rest': {
       default: 'transparent',
