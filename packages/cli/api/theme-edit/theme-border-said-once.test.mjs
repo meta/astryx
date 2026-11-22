@@ -115,6 +115,10 @@ describe('a whole-theme link color said once', () => {
     expect(Number(before)).toBeLessThan(4.5);
     expect(named).toBe(/** @type {RegExpExecArray} */ (shade)[1]);
     expect(Number(after)).toBeGreaterThanOrEqual(4.5);
+    // (A selected row still draws it on that fill: still named.)
+    expect(data.results[0].text).toMatch(
+      /elsewhere on that fill \(a selected row\) it still reads \d\.\d\d:1/,
+    );
     // (One kept to dark mode is never named for the light fill, and a
     // twinned border gets no light-only note.)
     const darkOnly = (await themeEditHow('links #93c5fd', {cwd, theme: 'lk'}))

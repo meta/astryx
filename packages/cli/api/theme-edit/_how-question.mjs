@@ -104,6 +104,7 @@ import {
   growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
+  shadeAt,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -14537,24 +14538,6 @@ export function draftAnswer(ctx, env, question) {
     return best?.c ?? null;
   };
   /**
-   * The shade of a color, of its own hue, nearest to it that reads at
-   * `min` on a fill, or null when none does.
-   * @param {string} v @param {number[]} fill @param {number} min
-   * @returns {{c: string, r: number} | null}
-   */
-  const readableShade = (v, fill, min) => {
-    const rgb = parseColor(v);
-    if (!rgb) return null;
-    for (let i = 1; i <= 95; i++)
-      for (const k of [-i * 0.01, i * 0.01]) {
-        const c = shift(hex(rgb.slice(0, 3)), k);
-        const p = c ? parseColor(c) : null;
-        if (c && p && ratio(p.slice(0, 3), fill.slice(0, 3)) >= min)
-          return {c, r: ratio(p.slice(0, 3), fill.slice(0, 3))};
-      }
-    return null;
-  };
-  /**
    * The parts that draw accent text on the muted accent fill, each with the
    * state it does so in (an applied preset, selected): Core's own pairs,
    * read from the part data.
@@ -26959,7 +26942,7 @@ export function draftAnswer(ctx, env, question) {
           const shade =
             // (Only a theme that draws light mode has the light fill.)
             mutedMiss && lightMuted && !holder && env.data.mode !== 'dark-only'
-              ? readableShade(color, lightMuted, 4.5)
+              ? shadeAt(color, hex(lightMuted.slice(0, 3)), 4.5)
               : null;
           const onFill = shade ? accentOnMuted() : [];
           const oneMode =
@@ -26970,7 +26953,7 @@ export function draftAnswer(ctx, env, question) {
             text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${twin ? `; on the dark page ${color} would read under 4.5:1, so the dark mode takes its twin as far off the dark page, ${twin}` : oneMode ? ` in ${oneMode} mode only: on the ${oneMode === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}${
               mutedMiss && oneMode !== 'dark'
                 ? shade && onFill.length
-                  ? `; ${onFill.map(x => `${x.part} ${x.state}`).join(', ')} draws it on the muted accent fill, where ${color} reads ${mutedMiss}:1 in light mode, under 4.5:1: there it takes ${shade.c}, the nearest shade of the same hue, ${shade.r.toFixed(2)}:1`
+                  ? `; ${onFill.map(x => `${x.part} ${x.state}`).join(', ')} draws it on the muted accent fill, where ${color} reads ${mutedMiss}:1 in light mode, under 4.5:1: there it takes ${shade}, the nearest shade of the same hue, ${ratio(/** @type {number[]} */ (parseColor(shade)).slice(0, 3), /** @type {number[]} */ (lightMuted).slice(0, 3)).toFixed(2)}:1; elsewhere on that fill (a selected row) it still reads ${mutedMiss}:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable`
                   : `; on the muted accent fill (an applied preset or a selected row) it reads ${mutedMiss}:1 in light mode, under 4.5:1: a lighter --color-accent-muted, or a darker link color, keeps that text readable`
                 : ''
             }`,
@@ -26983,7 +26966,7 @@ export function draftAnswer(ctx, env, question) {
                 ),
                 ...(shade && oneMode !== 'dark'
                   ? onFill.map(x =>
-                      set('--color-text-accent', shade.c, {
+                      set('--color-text-accent', shade, {
                         on: x.part,
                         state: x.state,
                         mode: 'light',
