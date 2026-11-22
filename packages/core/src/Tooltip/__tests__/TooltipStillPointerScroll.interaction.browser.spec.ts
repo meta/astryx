@@ -8,6 +8,7 @@
  *   trigger under a mouse that does not move opens no tooltip, and that the
  *   first move over it then opens the tooltip. After the scroll WebKit sends
  *   the trigger a move at the arrival's point; it opens nothing either. A
+ *   truncated Text or Heading scrolled under a still mouse opens none either. A
  *   mouse that moves onto the trigger in one step still opens it: WebKit's
  *   only move then is at the arrival's point too, but the mouse came from
  *   elsewhere.
@@ -29,6 +30,9 @@ const storybook = withStorybook(test);
 const STORY = 'core-tooltip--default';
 /** Longer than the story's 200 ms show delay, with frames to spare. */
 const WAIT_PAST_DELAY_MS = 800;
+
+/** The truncated Heading story's text. */
+const HEADING_TEXT = 'Very Long Heading That Will Be Truncated';
 
 /** Where the mouse rests: well away from the trigger as the story renders it. */
 const REST = {x: 60, y: 60};
@@ -150,3 +154,65 @@ test('a mouse that moves onto the trigger in one step opens the tooltip', async 
     await context.close();
   }
 });
+
+for (const {name, story, text: textMatch} of [
+  {
+    name: 'Text',
+    story: 'core-text--single-line-truncation',
+    text: 'This is a very long text',
+  },
+  {
+    name: 'Heading',
+    story: 'core-heading--single-line-truncation',
+    text: HEADING_TEXT,
+  },
+]) {
+  test(`a wheel scroll that brings a truncated ${name} under a still mouse opens no tooltip until the mouse moves`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      hasTouch: false,
+      isMobile: false,
+      viewport: {width: 900, height: 600},
+    });
+    const page = await context.newPage();
+    try {
+      await openStory(page, storybook(), story);
+      const text = page.getByText(textMatch).first();
+      await text.waitFor();
+      // The text loads its tooltip once it measures as truncated.
+      await page.waitForTimeout(WAIT_PAST_DELAY_MS);
+      const center = await scrollablePage(page, text);
+      await page.mouse.move(REST.x, REST.y);
+      await page.mouse.wheel(0, SCROLL_PX);
+      await expect
+        .poll(async () => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(0);
+      await page.waitForTimeout(300);
+      const step = await page.evaluate(() => window.scrollY);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect
+        .poll(async () => page.evaluate(() => window.scrollY))
+        .toBe(0);
+
+      // The mouse rests on the text's start where it will be after one step.
+      const box = await text.boundingBox();
+      if (box == null) {
+        throw new Error('the text has no layout box');
+      }
+      const at = {x: box.x + 100, y: center.y - step};
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.wheel(0, SCROLL_PX);
+      await expect
+        .poll(async () => page.evaluate(() => window.scrollY))
+        .toBe(step);
+      await page.waitForTimeout(WAIT_PAST_DELAY_MS);
+      await expect(page.getByRole('tooltip')).toBeHidden();
+
+      await page.mouse.move(at.x + 1, at.y);
+      await expect(page.getByRole('tooltip')).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+}

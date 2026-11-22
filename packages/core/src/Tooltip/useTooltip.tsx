@@ -23,12 +23,7 @@ import {
   type RefCallback,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
-import {
-  getLastMousePoint,
-  subscribeInput,
-  type MousePoint,
-} from '../utils/inputStream';
-import {sharedWeakMap} from '../utils/sharedRealm';
+import {isMouseMove, subscribeInput} from '../utils/inputStream';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -60,50 +55,6 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-
-/**
- * Per window: how many tooltip triggers are mounted, and the one subscription
- * that keeps the window's input stream hearing mouse moves for them, so a
- * trigger can tell where the mouse last moved before it arrived.
- */
-const restingMouseTracking = sharedWeakMap<
-  Window,
-  {count: number; unsubscribe: () => void}
->('tooltip/resting-mouse-subscriptions', 1);
-
-/**
- * Keeps `view`'s input stream hearing mouse moves while a trigger is
- * mounted. Returns the release; the subscription ends with the last one.
- */
-function trackRestingMouse(view: Window): () => void {
-  let entry = restingMouseTracking.get(view);
-  if (entry == null) {
-    // The stream itself stores each move's point before any subscriber runs;
-    // this subscriber only keeps it listening, and reads no layout.
-    entry = {
-      count: 0,
-      unsubscribe: subscribeInput(view, 'pointermove', () => {}),
-    };
-    restingMouseTracking.set(view, entry);
-  }
-  entry.count += 1;
-  let isReleased = false;
-  return () => {
-    if (isReleased) {
-      return;
-    }
-    isReleased = true;
-    const current = restingMouseTracking.get(view);
-    if (current == null) {
-      return;
-    }
-    current.count -= 1;
-    if (current.count === 0) {
-      current.unsubscribe();
-      restingMouseTracking.delete(view);
-    }
-  };
-}
 
 /**
  * Whether `element` is a text field in any state: a text-like `<input>`, a
@@ -598,50 +549,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // tooltip. A pointer that moves onto the trigger also moves over it in the
   // same frame, so a real hover opens after `delay`. Firefox sends that
   // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
-  // counts too. After a scroll WebKit also sends a move at the arrival's
-  // point. When the mouse last moved at that point before the arrival, it was
-  // at rest there, so that move is the arrival again, not a move.
+  // counts too. After a scroll WebKit also sends a move at the point where
+  // the mouse already was; that is not a move (isMouseMove).
   const isArrivalUnmovedRef = useRef(false);
-  const restingArrivalRef = useRef<MousePoint | null>(null);
-  // Where the trigger last heard a move before its arrival. Firefox sends
-  // the move that brings the mouse here before the `mouseenter`, at the same
-  // point: that mouse came from elsewhere, so it was not at rest.
-  const moveBeforeArrivalRef = useRef<MousePoint | null>(null);
-  const handleMouseEnter = useCallback(
-    (event: MouseEvent) => {
-      isArrivalUnmovedRef.current = !isTouchPointerRef.current;
-      const point = {x: event.clientX, y: event.clientY};
-      const movedHere = moveBeforeArrivalRef.current;
-      const rest = getLastMousePoint(event.view ?? window);
-      restingArrivalRef.current =
-        rest != null &&
-        rest.x === point.x &&
-        rest.y === point.y &&
-        !(
-          movedHere != null &&
-          movedHere.x === point.x &&
-          movedHere.y === point.y
-        )
-          ? rest
-          : null;
-    },
-    [isTouchPointerRef],
-  );
+  const handleMouseEnter = useCallback(() => {
+    isArrivalUnmovedRef.current = !isTouchPointerRef.current;
+  }, [isTouchPointerRef]);
   const handlePointerMove = useCallback(
     (event: MouseEvent) => {
-      if ((event as Partial<PointerEvent>).pointerType === 'touch') {
-        return;
-      }
-      if (!isArrivalUnmovedRef.current) {
-        moveBeforeArrivalRef.current = {x: event.clientX, y: event.clientY};
-        return;
-      }
-      const rest = restingArrivalRef.current;
       if (
-        event.isTrusted &&
-        rest != null &&
-        event.clientX === rest.x &&
-        event.clientY === rest.y
+        !isArrivalUnmovedRef.current ||
+        (event as Partial<PointerEvent>).pointerType === 'touch' ||
+        !isMouseMove(event)
       ) {
         return;
       }
@@ -657,7 +576,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
       isArrivalUnmovedRef.current = false;
-      moveBeforeArrivalRef.current = null;
       if (isTouchPointerRef.current) {
         return;
       }
@@ -890,14 +808,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       detachTriggerRef.current?.();
       const latest = () => handlersRef.current;
-      const releaseRestingMouse = trackRestingMouse(
+      // Keeps the window's input stream hearing mouse moves (isMouseMove)
+      // while the trigger is mounted; the subscriber stores nothing.
+      const releaseStillPointer = subscribeInput(
         el.ownerDocument.defaultView ?? window,
+        'pointermove',
+        () => {},
       );
       // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
       // which is what lets the hover path know it is looking at a finger.
       const onPointerEnter = (e: PointerEvent) =>
         latest().handlePointerEnter(e);
-      const onMouseEnter = (e: MouseEvent) => latest().handleMouseEnter(e);
+      const onMouseEnter = () => latest().handleMouseEnter();
       const onPointerMove = (e: MouseEvent) => latest().handlePointerMove(e);
       const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
       // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
@@ -979,7 +901,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         if (detachTriggerRef.current === detach) {
           detachTriggerRef.current = null;
         }
-        releaseRestingMouse();
+        releaseStillPointer();
         el.removeEventListener('pointerenter', onPointerEnter);
         el.removeEventListener('mouseenter', onMouseEnter);
         el.removeEventListener('pointermove', onPointerMove);

@@ -558,6 +558,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         const text = screen.getByText(LABEL);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
         fireEvent.mouseEnter(text);
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();
@@ -586,6 +587,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       const text = screen.getByText(LABEL);
       setWidths(text, 80);
       fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.pointerMove(text, {pointerType: 'mouse'});
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 300));
       });
@@ -609,6 +611,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         const text = screen.getByText(LABEL);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
         fireEvent.mouseEnter(text);
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();
@@ -641,6 +644,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         setWidths(text, 400);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
         fireEvent.mouseEnter(text);
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();
@@ -653,6 +657,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         setWidths(text, 80);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
         fireEvent.mouseEnter(text);
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(() => {
           expect(text).not.toHaveAttribute('aria-describedby');
         });
@@ -664,6 +669,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         showPopover.mockClear();
         setWidths(text, 400);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();
@@ -692,6 +698,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         setWidths(text, 400);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
         fireEvent.mouseEnter(text);
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();
@@ -710,6 +717,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         showPopover.mockClear();
         setWidths(text, 400);
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();
@@ -732,6 +740,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       const text = screen.getByText(LABEL);
       setWidths(text, 80);
       fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.pointerMove(text, {pointerType: 'mouse'});
       fireEvent.pointerLeave(text, {pointerType: 'mouse'});
       expect(text).not.toHaveAttribute('aria-describedby');
       const {showPopover, restore} = withOverflowAndPopover();
@@ -739,6 +748,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       try {
         fireEvent.pointerEnter(text, {pointerType: 'mouse'});
         fireEvent.mouseEnter(text);
+        fireEvent.pointerMove(text, {pointerType: 'mouse'});
         await waitFor(
           () => {
             expect(showPopover).toHaveBeenCalled();

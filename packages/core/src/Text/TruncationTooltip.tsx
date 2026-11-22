@@ -28,6 +28,7 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
+import {isMouseMove, subscribeInput} from '../utils/inputStream';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
@@ -150,23 +151,39 @@ export function useTruncationTooltipInterest(
   // Set by a mouse press until the pointer leaves: the press ends the hover,
   // so a later move does not start it again.
   const isHoverEndedRef = useRef(false);
+  // Set by the first move of a hover until the pointer leaves, so a hover
+  // measures the text once, not on every move.
+  const isHoverStartedRef = useRef(false);
+  // The window's input stream hears mouse moves while the text can show a
+  // tooltip, so a move at a still mouse's point is told apart.
+  useEffect(() => {
+    if (!isEnabled && measure == null) {
+      return;
+    }
+    return subscribeInput(window, 'pointermove', () => {});
+  }, [isEnabled, measure]);
   // A hover counts once a mouse or pen moves over the element. The element
   // also gets a `pointerenter` when it appears or moves under a still
-  // pointer, and the user did not point at it then.
+  // pointer, and the user did not point at it then; after a scroll WebKit
+  // also sends a move at the still mouse's point (isMouseMove).
   const onPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (
-        event.pointerType !== 'touch' &&
-        !isHoverEndedRef.current &&
-        interestRef.current.interest !== 'hover'
+        event.pointerType === 'touch' ||
+        isHoverEndedRef.current ||
+        isHoverStartedRef.current ||
+        !isMouseMove(event.nativeEvent)
       ) {
-        want('hover');
+        return;
       }
+      isHoverStartedRef.current = true;
+      want('hover');
     },
     [want],
   );
   const onPointerLeave = useCallback(() => {
     isHoverEndedRef.current = false;
+    isHoverStartedRef.current = false;
     forget('hover');
   }, [forget]);
   const onPointerDown = useCallback(

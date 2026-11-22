@@ -108,6 +108,16 @@ const touchRecords = realmValue(
   () => new WeakMap<Window, TouchRecord>(),
 );
 
+/**
+ * Each window's mouse point before its latest `pointermove` (`before`) and
+ * at it (`at`), from the moves its stream delivered. Its own key keeps the
+ * stream's first state readable by copies built before it.
+ */
+const mouseMoves = realmValue(
+  sharedKey('input-stream/mouse-moves', 1),
+  () => new WeakMap<Window, {before?: MousePoint; at: MousePoint}>(),
+);
+
 /** A point in the viewport, in CSS pixels. */
 export interface MousePoint {
   readonly x: number;
@@ -131,6 +141,20 @@ export function getLastPointerType(view: Window): string | null {
  */
 export function getLastMousePoint(view: Window): MousePoint | null {
   return lastMousePoints.get(view) ?? null;
+}
+
+/**
+ * Whether a `pointermove` or `mousemove` moved the mouse, while a subscriber
+ * listens to `pointermove`. After a scroll WebKit sends a trusted move at
+ * the point where a still mouse already was: a move at the point before the
+ * latest `pointermove` repeats it. The stream has heard this move first, and
+ * a `mousemove` follows its `pointermove`. An untrusted event counts.
+ */
+export function isMouseMove(event: MouseEvent): boolean {
+  const before = event.isTrusted
+    ? mouseMoves.get(event.view ?? window)?.before
+    : undefined;
+  return before?.x !== event.clientX || before.y !== event.clientY;
 }
 
 /**
@@ -263,7 +287,11 @@ function dispatch(view: Window, channel: Channel, event: Event): void {
     typeof clientX === 'number' &&
     typeof clientY === 'number'
   ) {
-    lastMousePoints.set(view, {x: clientX, y: clientY});
+    const point = {x: clientX, y: clientY};
+    lastMousePoints.set(view, point);
+    if (event.type === 'pointermove') {
+      mouseMoves.set(view, {before: mouseMoves.get(view)?.at, at: point});
+    }
   }
   if (pointerType === 'touch' || pointerType === 'pen') {
     recordPress(view, event);
