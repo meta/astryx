@@ -104,6 +104,9 @@ import {
   growsWithContent,
   fontsourceSuggestion,
   partComponentDocs,
+  codeBlocksOnSurface,
+  ownSourceTokenValues,
+  shadeAt,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -32787,7 +32790,44 @@ export function draftAnswer(ctx, env, question) {
   // is measured against the theme's text in that mode, as the fill of a
   // part is; a text token that would not read (under 4.5:1) there takes a
   // color that does, in its own line: primary text white or black,
-  // secondary text the farthest shade toward the page that still reads.
+  // secondary text the farthest shade toward the page that still reads;
+  // where the answer fills the page, surfaces and cards with that one
+  // color, any other color a part draws its text with on them (a code
+  // block's title) the nearest shade that reads.
+  /** @type {string[] | null} */
+  let onPageText = null;
+  const pageTextTokens = () => {
+    if (onPageText) return onPageText;
+    const GROUND = new Set([
+      '--color-background-body',
+      '--color-background-surface',
+      '--color-background-card',
+    ]);
+    /** @type {Set<string>} */
+    const fills = new Set();
+    /** @type {Set<string>} */
+    const texts = new Set();
+    for (const part of Object.keys(C.MAP)) {
+      const bg = C.partReads(part, 'background') ?? [];
+      for (const r of bg) fills.add(r.token);
+      for (const r of C.partReads(part, 'border') ?? []) fills.add(r.token);
+      // (A part with a fill of its own, in any look, draws its text on
+      // that fill.)
+      if (bg.some(r => !GROUND.has(r.token))) continue;
+      for (const r of C.partReads(part, 'text') ?? [])
+        if (/^--color-/.test(r.token)) texts.add(r.token);
+    }
+    // (Only colors no part fills or edges with: changing one moves text
+    // alone. Disabled text is meant to read faintly, and an icon needs
+    // 3:1, not the 4.5:1 text needs.)
+    onPageText = [...texts].filter(
+      t =>
+        !fills.has(t) &&
+        !/^--color-text-(?:primary|secondary)$/.test(t) &&
+        !/^--color-on-|disabled|overlay|tint|icon/.test(t),
+    );
+    return onPageText;
+  };
   for (const [di, d] of [...result.entries()].reverse()) {
     // (A page answer's own second line, the frame and the main panel, is
     // part of the same answer.)
@@ -32828,8 +32868,43 @@ export function draftAnswer(ctx, env, question) {
             ? ['light', 'dark']
             : [env.data.mode === 'dark-only' ? 'dark' : 'light']
       );
+      // (The other text colors are measured only where this answer fills
+      // the page, the surfaces and the cards with this one color: the
+      // panels a part's text sits in, a code block's own background among
+      // them, follow the surface then. A page color alone leaves them as
+      // they are.)
+      const everyGround = [
+        '--color-background-surface',
+        '--color-background-card',
+      ].every(t =>
+        d.options[0].some(
+          x =>
+            !x.on &&
+            x.thing === t &&
+            String(x.value) === String(st.value) &&
+            (x.mode ?? '') === (st.mode ?? ''),
+        ),
+      );
+      // (The panels follow the surface only where the theme sets no color
+      // of its own for them: a code background the theme sets, or one that
+      // is not the surface's now, stays, and text on it is left as it is.)
+      /** @type {Record<string, string>} */
+      let own = {};
+      try {
+        own = ctx.project?.cwd
+          ? ownSourceTokenValues(ctx.project.cwd, env.slug)
+          : {};
+      } catch {
+        own = {};
+      }
+      const panelsFollow = (/** @type {'light' | 'dark'} */ m) =>
+        codeBlocksOnSurface(env.data, own, m);
       for (const m of modes)
-        for (const tok of ['--color-text-primary', '--color-text-secondary']) {
+        for (const tok of [
+          '--color-text-primary',
+          '--color-text-secondary',
+          ...(everyGround && panelsFollow(m) ? pageTextTokens() : []),
+        ]) {
           // (A text color the ask itself writes for this mode, in any of
           // its lines, is the asker's: "page #ffffff in dark mode, text
           // #111111 in dark mode" keeps the typed text.)
@@ -32851,7 +32926,13 @@ export function draftAnswer(ctx, env, question) {
               ? [255, 255, 255]
               : [0, 0, 0];
           let to = best;
-          if (tok === '--color-text-secondary')
+          if (!/^--color-text-(?:primary|secondary)$/.test(tok)) {
+            // (The nearest shade of the color that reads, keeping its hue.)
+            const near = parseColor(
+              shadeAt(hex(ink.slice(0, 3)), hex(ground), 4.5) ?? hex(best),
+            );
+            if (near) to = near.slice(0, 3);
+          } else if (tok === '--color-text-secondary')
             for (let k = 0.6; k > 0; k -= 0.05) {
               const mix = best.map((v, i) =>
                 Math.round(v + (ground[i] - v) * k),
