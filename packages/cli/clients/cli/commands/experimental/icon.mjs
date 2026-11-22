@@ -305,7 +305,7 @@ export function registerExperimentalIcon(group, program) {
               : {}),
             ...(look
               ? {
-                  look: `no ${look.asked} look; draws ${look.used ?? 'its one look'}`,
+                  look: `no ${look.asked} variant; draws ${look.used ?? 'its own export'}`,
                 }
               : {}),
             ...(variants.length > 0
@@ -602,14 +602,14 @@ export function registerExperimentalIcon(group, program) {
               ? [
                   text(
                     variantChanged
-                      ? `[ok] experimental.iconVariant is now "${data.variant}"${data.previousVariant ? ` (it was "${data.previousVariant}")` : ''}: every icon draws its ${data.variant} look where its set has one.`
+                      ? `[ok] experimental.iconVariant is now "${data.variant}"${data.previousVariant ? ` (it was "${data.previousVariant}")` : ''}: every icon draws its ${data.variant} variant where its set has one.`
                       : `[ok] experimental.iconVariant already names "${data.variant}".`,
                   ),
                 ]
               : data.previousVariant
                 ? [
                     text(
-                      `[ok] Removed experimental.iconVariant (it was "${data.previousVariant}"): each set draws its default look.`,
+                      `[ok] Removed experimental.iconVariant (it was "${data.previousVariant}"): each set draws its default variant.`,
                     ),
                   ]
                 : []),
@@ -618,14 +618,14 @@ export function registerExperimentalIcon(group, program) {
               .map(look =>
                 text(
                   look.variant
-                    ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default look, ${look.variant}.`
-                    : `[note] ${look.set} declares no variants: its icons draw its one look.`,
+                    ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default variant, ${look.variant}.`
+                    : `[note] ${look.set} declares no variants, so its icons draw as they are.`,
                 ),
               ),
             ...(data.themeMap
               ? [
                   text(
-                    `A theme draws the built-in icons in this look with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
+                    `A theme draws the built-in icons in this variant with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
                   ),
                 ]
               : []),
@@ -774,7 +774,7 @@ export function registerExperimentalIcon(group, program) {
               ...(variant
                 ? [
                     text(
-                      `The set already has this glyph in another look. Add this one as its variant: ${formatCliCommand(variant)}`,
+                      `The set already has this glyph in another variant. Add this one as its variant: ${formatCliCommand(variant)}`,
                     ),
                   ]
                 : []),

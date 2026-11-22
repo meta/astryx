@@ -695,11 +695,17 @@ describe('one control height per size', () => {
       on: 'button',
     });
     save('carrynew', data);
-    await themeEditSet('carrynew', 'height', '25px', {
-      cwd,
-      on: 'button',
-      when: 'size:sm',
-    });
+    const r = /** @type {any} */ (
+      await themeEditSet('carrynew', 'height', '25px', {
+        cwd,
+        on: 'button',
+        when: 'size:sm',
+      })
+    );
+    // (The note names the value the theme writes there.)
+    expect(r.data.notes.join('\n')).toMatch(
+      /calc\(28px \+ 4px\) stays every control's height at md and lg/,
+    );
     const tokens = Object.fromEntries(
       saved('carrynew')
         .settings.filter((/** @type {any} */ x) => x.on === 'controls')
@@ -893,6 +899,162 @@ describe('one control height per size', () => {
     expect(partsSetting('ownnarrow', '--size-element-md', '40px')).toEqual([
       'text-input',
     ]);
+    // The other inputs still draw 31px beside the buttons: show lists them.
+    // (Only the copies on controls count: a text area keeps the height
+    // as its own.)
+    const listed = (await heightMisses('ownnarrow')).map(m => m.part);
+    const copied = settings
+      .filter(
+        (/** @type {any} */ x) =>
+          x.thing === 'height' &&
+          x.value === '31px' &&
+          x.only === true &&
+          listed.includes(String(x.on)),
+      )
+      .map((/** @type {any} */ x) => String(x.on));
+    expect(copied).toContain('selector');
+    // (Each copy is marked as the group's height.)
+    for (const on of copied)
+      expect(settings, on).toContainEqual(
+        expect.objectContaining({thing: 'height', on, narrowed: true}),
+      );
+    // A later shared height joins them, never as their own size tokens.
+    const joined = /** @type {any} */ (
+      await themeEditSet('ownnarrow', 'height', '32px', {cwd, on: 'button'})
+    );
+    // (What stays at the other sizes is the inputs' height, never the
+    // text input's own.)
+    expect(joined.data.notes.join('\n')).toMatch(
+      /31px stays every control's height at/,
+    );
+    expect(joined.data.notes.join('\n')).not.toMatch(
+      /40px[^;]*stays every control's height/,
+    );
+    const after = saved('ownnarrow').settings;
+    for (const on of copied)
+      expect(
+        after.some(
+          (/** @type {any} */ x) =>
+            x.on === on && /^--size-element-|^height$/.test(x.thing),
+        ),
+        on,
+      ).toBe(false);
+    expect(
+      (await heightMisses('ownnarrow'))
+        .map(m => m.part)
+        .filter(p => copied.includes(p)),
+    ).toEqual([]);
+  }, 240_000);
+
+  it('the narrowed copies stay the group height when one of them is undone', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('narrowundo', {cwd, like: 'neutral'});
+    const data = saved('narrowundo');
+    data.settings.push({
+      thing: 'height',
+      value: '31px',
+      source: 'property',
+      on: 'inputs',
+    });
+    save('narrowundo', data);
+    await themeEditSet('narrowundo', 'height', '40px', {
+      cwd,
+      on: 'text-input',
+      only: true,
+    });
+    const before = (await heightMisses('narrowundo')).map(m => m.part);
+    await themeEditUndo('narrowundo', {
+      cwd,
+      thing: 'height',
+      on: 'selector',
+      only: true,
+    });
+    const left = saved('narrowundo')
+      .settings.filter(
+        (/** @type {any} */ x) =>
+          x.thing === 'height' &&
+          x.value === '31px' &&
+          x.only === true &&
+          before.includes(String(x.on)),
+      )
+      .map((/** @type {any} */ x) => String(x.on));
+    expect(before).toContain('selector');
+    expect(left).not.toContain('selector');
+    expect(left.length).toBeGreaterThan(0);
+    const listed = (await heightMisses('narrowundo')).map(m => m.part);
+    for (const on of left) expect(listed, on).toContain(on);
+  }, 240_000);
+
+  it("two heights an older editor saved alike with --only stay each control's own", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('oldtwo', {cwd, like: 'neutral'});
+    const data = saved('oldtwo');
+    for (const on of ['selector', 'number-input'])
+      data.settings.push({
+        thing: 'height',
+        value: '40px',
+        source: 'property',
+        on,
+        only: true,
+      });
+    data.settings.push({
+      thing: '--size-element-md',
+      value: '44px',
+      source: 'token',
+      on: 'text-input',
+      only: true,
+    });
+    save('oldtwo', data);
+    await themeEditSet('oldtwo', 'height', '32px', {cwd, on: 'button'});
+    const settings = saved('oldtwo').settings;
+    for (const on of ['selector', 'number-input'])
+      expect(
+        Object.fromEntries(
+          settings
+            .filter(
+              (/** @type {any} */ x) =>
+                x.on === on && /^--size-element-(?:sm|lg)$/.test(x.thing),
+            )
+            .map((/** @type {any} */ x) => [x.thing, x.value]),
+        ),
+        on,
+      ).toEqual({'--size-element-sm': '40px', '--size-element-lg': '40px'});
+    expect(
+      settings.some(
+        (/** @type {any} */ x) => x.on === 'controls' && x.value === '40px',
+      ),
+    ).toBe(false);
+  }, 240_000);
+
+  it('a height an older editor saved on one input with --only stays its own at the other sizes', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('oldonly', {cwd, like: 'neutral'});
+    const data = saved('oldonly');
+    data.settings.push({
+      thing: 'height',
+      value: '40px',
+      source: 'property',
+      on: 'text-input',
+      only: true,
+    });
+    save('oldonly', data);
+    await themeEditSet('oldonly', 'height', '32px', {cwd, on: 'button'});
+    const settings = saved('oldonly').settings;
+    const own = Object.fromEntries(
+      settings
+        .filter((/** @type {any} */ x) => x.on === 'text-input')
+        .map((/** @type {any} */ x) => [x.thing, x.value]),
+    );
+    expect(own).toEqual({
+      '--size-element-sm': '40px',
+      '--size-element-lg': '40px',
+    });
+    // (Never carried to every control at the other sizes.)
+    expect(
+      settings.some(
+        (/** @type {any} */ x) => x.on === 'controls' && x.value === '40px',
+      ),
+    ).toBe(false);
   }, 240_000);
 
   it('a saved word height is not carried as a size token', async ctx => {

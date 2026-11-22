@@ -19,7 +19,8 @@
  * copy a door back into the original: an install or rebuild that rewrites the
  * store writes straight through it. These cases use a real `pnpm install` for
  * the fixture rather than a hand-drawn imitation, because the shape is the
- * thing being tested.
+ * thing being tested. The install reads two small stand-in packages from a
+ * registry that this file serves on a local port, so it needs no network.
  *
  * The cases are the guarantee, not the construction: the sandbox is unchanged
  * after a build in the copy, the copy is a working tree, and the isolation
@@ -27,8 +28,10 @@
  * deliberately not asserted.
  */
 
-import {execFileSync, spawnSync} from 'node:child_process';
+import {execFileSync, spawn, spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
@@ -45,6 +48,31 @@ const temporaryDirectories = [];
 /** One real install, reused: the shape is what matters, not the download. */
 let installedFixture = null;
 
+// A local port that refuses at once. Every pnpm call that does not install
+// the fixture points here, so no case can reach the public registry.
+const OFFLINE_REGISTRY = 'http://127.0.0.1:9/';
+/** The fixture's own pnpm store, so no install reads or writes the user's. */
+let storeDir = '';
+
+// The two packages the fixture installs. `is-odd` depends on `is-number`, so
+// the store holds a package that depends on another one.
+const STAND_IN_PACKAGES = [
+  {
+    name: 'is-number',
+    version: '6.0.0',
+    dependencies: {},
+    source:
+      "module.exports = n => typeof n === 'number' && Number.isFinite(n);\n",
+  },
+  {
+    name: 'is-odd',
+    version: '3.0.1',
+    dependencies: {'is-number': '^6.0.0'},
+    source:
+      "const isNumber = require('is-number');\nmodule.exports = n => isNumber(n) && Math.abs(n % 2) === 1;\n",
+  },
+];
+
 function temporary(prefix) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   temporaryDirectories.push(directory);
@@ -58,13 +86,175 @@ function write(root, relativePath, content, mode) {
   if (mode !== undefined) fs.chmodSync(file, mode);
 }
 
+/** A proxy list that keeps the stand-in registry on this machine direct. */
+function noProxyList() {
+  const existing = process.env.no_proxy ?? process.env.NO_PROXY ?? '';
+  return [existing, '127.0.0.1', 'localhost'].filter(Boolean).join(',');
+}
+
+function pnpmEnv(registry) {
+  const noProxy = noProxyList();
+  return {
+    ...process.env,
+    CI: 'true',
+    // A proxy in the environment must not carry the local registry's requests.
+    no_proxy: noProxy,
+    NO_PROXY: noProxy,
+    pnpm_config_noproxy: noProxy,
+    // pnpm 11 reads the pnpm_config_ names; older pnpm reads npm_config_.
+    npm_config_registry: registry,
+    pnpm_config_registry: registry,
+    ...(storeDir
+      ? {npm_config_store_dir: storeDir, pnpm_config_store_dir: storeDir}
+      : {}),
+  };
+}
+
 function pnpm(args, cwd) {
   return spawnSync('pnpm', args, {
     cwd,
     encoding: 'utf8',
-    env: {...process.env, CI: 'true'},
+    env: pnpmEnv(OFFLINE_REGISTRY),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+/**
+ * Packs each stand-in package into `dir` and serves it from a registry on a
+ * local port, with the metadata an install reads.
+ * @param {string} dir
+ * @returns {Promise<{url: string, close: () => Promise<void>}>}
+ */
+function serveStandInPackages(dir) {
+  const files = new Map();
+  const packuments = new Map();
+  for (const pkg of STAND_IN_PACKAGES) {
+    const source = path.join(dir, `${pkg.name}-src`);
+    write(
+      source,
+      'package/package.json',
+      `${JSON.stringify({name: pkg.name, version: pkg.version, main: 'index.js', dependencies: pkg.dependencies})}\n`,
+    );
+    write(source, 'package/index.js', pkg.source);
+    const file = path.join(dir, `${pkg.name}-${pkg.version}.tgz`);
+    execFileSync('tar', ['-czf', file, '-C', source, 'package']);
+    const bytes = fs.readFileSync(file);
+    files.set(`/${pkg.name}/-/${pkg.name}-${pkg.version}.tgz`, bytes);
+    packuments.set(`/${pkg.name}`, {
+      pkg,
+      integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+      shasum: createHash('sha1').update(bytes).digest('hex'),
+    });
+  }
+  const server = http.createServer((req, res) => {
+    const url = (req.url ?? '').split('?')[0];
+    const file = files.get(url);
+    if (file) {
+      res.writeHead(200, {'content-type': 'application/octet-stream'});
+      res.end(file);
+      return;
+    }
+    const entry = packuments.get(decodeURIComponent(url));
+    if (!entry) {
+      res.writeHead(404, {'content-type': 'application/json'});
+      res.end('{}');
+      return;
+    }
+    const self = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
+    const {pkg, integrity, shasum} = entry;
+    res.writeHead(200, {'content-type': 'application/json'});
+    res.end(
+      JSON.stringify({
+        name: pkg.name,
+        'dist-tags': {latest: pkg.version},
+        versions: {
+          [pkg.version]: {
+            name: pkg.name,
+            version: pkg.version,
+            dependencies: pkg.dependencies,
+            dist: {
+              tarball: `${self}/${pkg.name}/-/${pkg.name}-${pkg.version}.tgz`,
+              integrity,
+              shasum,
+            },
+          },
+        },
+      }),
+    );
+  });
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve({
+        url: `http://127.0.0.1:${/** @type {any} */ (server.address()).port}/`,
+        close: () => new Promise(done => server.close(() => done())),
+      });
+    });
+  });
+}
+
+/**
+ * Runs pnpm without blocking this process, so the registry it serves can
+ * answer the install.
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {string} registry
+ * @returns {Promise<{status: number | null, stderr: string}>}
+ */
+function pnpmAsync(args, cwd, registry) {
+  return new Promise(resolve => {
+    const child = spawn('pnpm', args, {
+      cwd,
+      env: pnpmEnv(registry),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    // pnpm prints its errors on stdout, so a failed install keeps both.
+    let output = '';
+    child.stdout.on('data', chunk => {
+      output += chunk;
+    });
+    child.stderr.on('data', chunk => {
+      output += chunk;
+    });
+    child.on('close', status => resolve({status, stderr: output}));
+  });
+}
+
+/** Installs the shared fixture once, from the stand-in registry. */
+async function installFixture() {
+  if (installedFixture) return;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-workspace-src-'));
+  temporaryDirectories.push(root);
+  storeDir = path.join(root, 'store');
+  const app = path.join(root, 'app');
+  fs.mkdirSync(app, {recursive: true});
+  write(
+    app,
+    'package.json',
+    `${JSON.stringify(
+      {
+        name: 'host',
+        private: true,
+        dependencies: {'is-odd': '3.0.1'},
+        scripts: {build: 'node build.mjs'},
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const registry = await serveStandInPackages(path.join(root, 'registry'));
+  try {
+    const install = await pnpmAsync(
+      ['install', '--ignore-scripts'],
+      app,
+      registry.url,
+    );
+    if (install.status !== 0) {
+      throw new Error(`fixture install failed: ${install.stderr}`);
+    }
+  } finally {
+    await registry.close();
+  }
+  installedFixture = {root, app};
 }
 
 /** Whether a real pnpm is reachable; without one these cases cannot run. */
@@ -84,31 +274,7 @@ const describeWithPnpm = HAS_PNPM ? describe : describe.skip;
  */
 function installedSandbox() {
   if (!installedFixture) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-workspace-src-'));
-    temporaryDirectories.push(root);
-    const app = path.join(root, 'app');
-    fs.mkdirSync(app, {recursive: true});
-    write(
-      app,
-      'package.json',
-      `${JSON.stringify(
-        {
-          name: 'host',
-          private: true,
-          // `is-odd` pulls `is-number`, so the store has a package that depends
-          // on another one and the relative link between them is exercised.
-          dependencies: {'is-odd': '3.0.1'},
-          scripts: {build: 'node build.mjs'},
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    const install = pnpm(['install', '--ignore-scripts'], app);
-    if (install.status !== 0) {
-      throw new Error(`fixture install failed: ${install.stderr}`);
-    }
-    installedFixture = {root, app};
+    throw new Error('installFixture() runs in beforeAll before any case');
   }
 
   // Each case gets its own copy of that installed tree, so one case's install
@@ -187,12 +353,13 @@ afterAll(() => {
     fs.rmSync(installedFixture.root, {recursive: true, force: true});
     installedFixture = null;
   }
+  storeDir = '';
 });
 
 describeWithPnpm('measurement build root over a pnpm virtual store', () => {
-  beforeAll(() => {
-    // Warm the shared install once so the first case is not timed with it.
-    installedSandbox();
+  beforeAll(async () => {
+    // Install the shared fixture once so the first case is not timed with it.
+    await installFixture();
   }, 300_000);
 
   it.each([
@@ -328,6 +495,11 @@ describeWithPnpm('measurement build root over a pnpm virtual store', () => {
  * one mutation for each, and no more.
  */
 describeWithPnpm('a copy that is not a copy is caught', () => {
+  beforeAll(async () => {
+    // Each block installs the shared fixture, so it runs on its own too.
+    await installFixture();
+  }, 300_000);
+
   it('mirroring the virtual store writes through, and is reported', () => {
     const {app} = installedSandbox();
     const packageFile =
@@ -344,7 +516,10 @@ describeWithPnpm('a copy that is not a copy is caught', () => {
       if (entry.name === 'node_modules') {
         fs.mkdirSync(to, {recursive: true});
         for (const inner of fs.readdirSync(from, {withFileTypes: true})) {
-          fs.symlinkSync(path.join(from, inner.name), path.join(to, inner.name));
+          fs.symlinkSync(
+            path.join(from, inner.name),
+            path.join(to, inner.name),
+          );
         }
         continue;
       }
@@ -364,9 +539,9 @@ describeWithPnpm('a copy that is not a copy is caught', () => {
       path.join(mirrored, packageFile),
       'module.exports = "written through";\n',
     );
-    expect(
-      manifestDifferences(before, manifest(app)).join('\n'),
-    ).toMatch(/changed: node_modules\/\.pnpm\//);
+    expect(manifestDifferences(before, manifest(app)).join('\n')).toMatch(
+      /changed: node_modules\/\.pnpm\//,
+    );
 
     // And the isolation check refuses that construction, so a change that
     // reintroduces mirroring cannot ship quietly.
@@ -382,9 +557,9 @@ describeWithPnpm('a copy that is not a copy is caught', () => {
     // shared, so a rewrite in the copy reaches the original.
     execFileSync('cp', ['-al', app, dir]);
 
-    expect(
-      verifyWorkspaceIsolation(dir, app, {full: true}).join('\n'),
-    ).toMatch(/shares an inode with the sandbox/);
+    expect(verifyWorkspaceIsolation(dir, app, {full: true}).join('\n')).toMatch(
+      /shares an inode with the sandbox/,
+    );
   }, 120_000);
 });
 
@@ -570,9 +745,9 @@ describe('a cp that does not support --reflink', () => {
       const copy = createMeasurementWorkspace(app);
 
       // A real copy: contents, modes and symlink text all came across.
-      expect(fs.readFileSync(path.join(copy.dir, 'src/index.css'), 'utf8')).toBe(
-        'body {}\n',
-      );
+      expect(
+        fs.readFileSync(path.join(copy.dir, 'src/index.css'), 'utf8'),
+      ).toBe('body {}\n');
       expect(
         fs.lstatSync(path.join(copy.dir, 'scripts/run.sh')).mode & 0o777,
       ).toBe(0o755);

@@ -397,7 +397,8 @@ export async function findOtherCommand(
       async () => ({
         components:
           coreDir && inCore.component
-            ? (await componentDiscovery()).discoverComponentNamesWhere(
+            ? coreComponentNames(
+                await componentDiscovery(),
                 coreDir,
                 isWanted,
                 inCore.componentTops,
@@ -703,6 +704,29 @@ function declaredNames(docsDirs, index, wanted, keep) {
  */
 function componentDiscovery() {
   return import('../discovery/component-discovery.mjs');
+}
+
+/**
+ * The Core components `keep` accepts that the component lookup opens: each
+ * one discovery lists, and each top folder of `tops` that the lookup opens
+ * by the folder's own doc, without a component file of that name (a family
+ * doc, such as a chat folder's).
+ * @param {typeof import('../discovery/component-discovery.mjs')} discovery
+ * @param {string} coreDir
+ * @param {(name: string) => boolean} keep
+ * @param {Set<string> | undefined} tops
+ * @returns {string[]}
+ */
+function coreComponentNames(discovery, coreDir, keep, tops) {
+  const names = discovery.discoverComponentNamesWhere(coreDir, keep, tops);
+  const opened = [...(tops ?? [])].filter(
+    top =>
+      keep(top) &&
+      !names.includes(top) &&
+      discovery.findComponentReadme(coreDir, top) ===
+        path.join(coreDir, 'src', top, `${top}.doc.mjs`),
+  );
+  return [...names, ...opened];
 }
 
 /**
