@@ -48,7 +48,7 @@ const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[45]);
 const SURFACE_TEXT = {
   '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
   '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
-  '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
+  '--color-text-accent': lightDark(accent.light[35], yellow.dark[90]),
 };
 
 /**
@@ -210,7 +210,7 @@ const SECONDARY_BUTTON = {
   borderWidth: '1.5px',
   borderStyle: 'solid',
   borderColor: lightDark(accent.light[40], yellow.dark[90]),
-  color: lightDark(accent.light[40], yellow.dark[90]),
+  color: lightDark(accent.light[35], yellow.dark[90]),
   ':hover': {
     backgroundColor: lightDark(
       withAlpha(accent.light[40], '14'),
@@ -345,7 +345,9 @@ export const butterTheme = defineTheme({
     '--color-text-primary': [neutral.light[15], neutral.dark[90]],
     '--color-text-secondary': [neutral.light[45], neutral.dark[70]],
     '--color-text-disabled': [neutral.light[70], neutral.dark[45]],
-    '--color-text-accent': [accent.light[40], yellow.dark[90]],
+    // Accent text reads at 4.5:1 on a pressed fill and on the accent tint
+    // (a current page), a step deeper than the accent fill.
+    '--color-text-accent': [accent.light[35], yellow.dark[90]],
     '--color-on-dark': neutral.light[100],
     '--color-on-light': neutral.light[15],
     '--color-on-accent': [neutral.light[100], neutral.light[15]],
@@ -552,9 +554,9 @@ export const butterTheme = defineTheme({
         '--color-text-secondary': LIFTED_ON_PAGE,
       },
     },
-    // TopNav uses Butter's blue accent: the heading and the selected item are
-    // the full brand blue; unselected items (default + hover) use a lighter
-    // blue. Dark mode keeps the theme's butter-yellow accent.
+    // TopNav uses Butter's blue accent in light mode. The heading is the brand
+    // blue. Every item takes the next deeper stop, so its text reads at 4.5:1
+    // when pressed. Dark mode keeps the theme's butter-yellow accent.
     'top-nav-heading': {
       // The heading text is an inner span that reads --color-text-primary, so
       // redirect that token (not just `color`) to the brand blue so the text
@@ -566,10 +568,11 @@ export const butterTheme = defineTheme({
     },
     'top-nav-item': {
       base: {
-        color: lightDark(accent.light[40], withAlpha(yellow.dark[90], 'cc')),
+        color: lightDark(accent.light[35], withAlpha(yellow.dark[90], 'cc')),
       },
-      // Selected item: a darker Blue stop in light mode and full Butter Yellow
-      // in dark mode, with no pill background. Weight + color carry emphasis.
+      // Selected item: no pill background. In light mode it keeps the items'
+      // Accent Light 35, so weight alone marks it; in dark mode full Butter
+      // Yellow marks it too.
       selected: {
         color: lightDark(accent.light[35], yellow.dark[90]),
         backgroundColor: 'transparent',
@@ -593,7 +596,7 @@ export const butterTheme = defineTheme({
       'variant:secondary': SECONDARY_BUTTON,
       // Ghost: same accent color as secondary, no background.
       'variant:ghost': {
-        color: lightDark(accent.light[40], yellow.dark[90]),
+        color: lightDark(accent.light[35], yellow.dark[90]),
       },
       'variant:destructive': {
         backgroundColor: lightDark(red.light[90], red.dark[80]),
