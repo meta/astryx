@@ -537,12 +537,12 @@ async function traitsInput(ctx, traits) {
         for (let k = 0; k <= BAR_TINT_STEPS; k++) {
           const {values, grounds} = at(under, k);
           if (low(want, grounds) >= TEXT_CONTRAST)
-            return {values, grounds, text: want};
+            return {values, grounds, text: want, k};
           const near = nearestLightness(
             want,
             c => low(c, grounds) >= TEXT_CONTRAST,
           );
-          if (near) return {values, grounds, text: near};
+          if (near) return {values, grounds, text: near, k};
         }
         return null;
       };
@@ -561,7 +561,7 @@ async function traitsInput(ctx, traits) {
         if (moved) {
           if (look === 'both' || look === m)
             notes.push(
-              `${given ? `The bar's text ${given}` : 'No text'} does not read on the bar ${fill} in ${m}: the bar is written as ${hex(moved)}, its own hue at the nearest lightness ${given ? 'that text' : hex(want)} reads on.`,
+              `The bar's text ${given ?? hex(want)} does not read on the bar ${fill} in ${m}: the bar is written as ${hex(moved)}, its own hue at the nearest lightness that text reads on.`,
             );
           under = moved;
           best = fit(under, want);
@@ -574,9 +574,13 @@ async function traitsInput(ctx, traits) {
           [255, 255, 255],
           want,
         ]).sort((a, b) => low(b, grounds) - low(a, grounds))[0];
-        best = {values, grounds, text};
+        best = {values, grounds, text, k: BAR_TINT_STEPS};
       }
-      const {values, grounds, text} = best;
+      const {values, grounds, text, k} = best;
+      if (k > 0 && (look === 'both' || look === m))
+        notes.push(
+          `The bar's hover, press and track tints are lighter than Core's in ${m} (${values.join(', ')}), so its text reads on them.`,
+        );
       const written = hex(text);
       if (given && written.toLowerCase() !== given.toLowerCase()) {
         const was = low(/** @type {Rgb} */ (parseColor(given)), grounds);
@@ -587,7 +591,11 @@ async function traitsInput(ctx, traits) {
         // (A mode a one-look theme never shows is not worth a note.)
         if (
           (look === 'both' || look === m) &&
-          !notes.some(n => n.startsWith(`The bar's text ${given} reads`))
+          !notes.some(
+            n =>
+              n.startsWith(`The bar's text ${given} reads`) &&
+              n.includes(` in ${m}:`),
+          )
         )
           notes.push(
             `The bar's text ${given} reads ${was.toFixed(2)}:1 on its fill ${hex(under)} or a tint on it in ${m}: written as ${written}, ${sameHue ? 'the same hue at the nearest lightness that reads' : 'the black or white that reads best there'}.`,

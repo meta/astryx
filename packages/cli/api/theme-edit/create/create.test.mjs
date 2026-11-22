@@ -509,6 +509,27 @@ describe('mid-light bars', () => {
   }, 240_000);
 });
 
+describe('the notes a fitted bar gives', () => {
+  it('say when the tints come down, and name a moved text in each mode', async () => {
+    const lowered = await themeEditCreate(
+      'notetints',
+      {page: '#ffffff', bar: {background: '#6366f1'}},
+      {cwd},
+    );
+    expect(lowered.data.notes.join('\n')).toMatch(
+      /tints are lighter than Core's in light/,
+    );
+    const moved = await themeEditCreate(
+      'notetext',
+      {page: '#ffffff', bar: {background: '#1e3a8a', text: '#60a5fa'}},
+      {cwd},
+    );
+    const notes = moved.data.notes.join('\n');
+    expect(notes).toMatch(/#60a5fa reads [\d.]+:1 [^\n]* in light:/);
+    expect(notes).toMatch(/#60a5fa reads [\d.]+:1 [^\n]* in dark:/);
+  }, 120_000);
+});
+
 describe('a light bar in dark mode', () => {
   it('tints white in dark, as Core does, so a menu row hover shows there', async () => {
     const r = await themeEditCreate(
