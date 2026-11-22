@@ -11,7 +11,14 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -1568,7 +1575,7 @@ describe('TextInput in a narrow row', () => {
     expect(getComputedStyle(root).minWidth).toBe('0');
   });
 
-  it('keeps the written order of a tooltip-placement status message under right-to-left', () => {
+  it('keeps the written order of a tooltip-placement status message under right-to-left', async () => {
     render(
       <div dir="rtl">
         <TextInput
@@ -1580,7 +1587,13 @@ describe('TextInput in a narrow row', () => {
         />
       </div>,
     );
-    expect(screen.getByText('Prefix https://')).toHaveAttribute('dir', 'ltr');
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(screen.getByRole('button', {name: /error details/i}));
+    const tooltip = await screen.findByRole('tooltip', {hidden: true});
+    expect(within(tooltip).getByText('Prefix https://')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
     expect(
       screen.getByRole('textbox', {name: 'Website'}),
     ).toHaveAccessibleDescription('Prefix https://');

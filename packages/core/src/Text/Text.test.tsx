@@ -565,9 +565,13 @@ describe('the truncation tooltip mounts on the first interaction', () => {
           },
           {timeout: 3000},
         );
-        expect(text.getAttribute('aria-describedby')).toBe(
-          screen.getByRole('tooltip', {hidden: true}).id,
-        );
+        // Once the layer mounts, the description is the content inside it.
+        const describedBy = text.getAttribute('aria-describedby');
+        expect(
+          describedBy == null
+            ? null
+            : document.getElementById(describedBy)?.closest('[role="tooltip"]'),
+        ).toBe(screen.getByRole('tooltip', {hidden: true}));
         expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
           LABEL,
         );
