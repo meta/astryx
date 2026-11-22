@@ -157,6 +157,59 @@ describe('DateTimeInput', () => {
     expect(screen.getByRole('combobox')).toHaveValue('25 de enero de 2026');
   });
 
+  it.each([
+    ['en-US', 'ltr'],
+    ['ar-EG', 'rtl'],
+    ['he-IL', 'rtl'],
+  ])(
+    'reads its date and time text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput
+              label="Meeting"
+              value={'2026-01-25T09:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      expect(screen.getByRole('combobox')).toHaveAttribute('dir', direction);
+      expect(screen.getByLabelText('Meeting time')).toHaveAttribute(
+        'dir',
+        direction,
+      );
+    },
+  );
+
+  it.each([
+    ['en-GB', 'ltr'],
+    ['ar-EG', 'rtl'],
+  ])(
+    'reads the native date text in the direction of %s, not the page direction',
+    (locale, direction) => {
+      const {container} = render(
+        <div dir="rtl">
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput
+              label="Meeting"
+              presentation="native"
+              value={'2026-03-15T09:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </InternationalizationProvider>
+        </div>,
+      );
+      const dateInput =
+        container.querySelector<HTMLInputElement>('input[type="date"]')!;
+      expect(dateInput).toHaveAttribute('dir', direction);
+      const overlay = dateInput.nextElementSibling;
+      expect(overlay).toHaveAttribute('aria-hidden', 'true');
+      expect(overlay).toHaveAttribute('dir', direction);
+    },
+  );
+
   it('derives the time input label from the field label (forms-15)', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
     // Not a hardcoded "Time" — tied to the field label so it is localizable

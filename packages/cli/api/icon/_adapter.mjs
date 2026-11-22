@@ -7,7 +7,8 @@
  * @position api/icon — adapter for api/icon/{search,detail,list,definitions,
  *   use,map,add,new-set,new-definition}; it also carries the icon ranking, the icon-set
  *   writer, the set and definition authoring writes, the default-look
- *   rule, and the config writer the leaves use
+ *   rule, and the config writer the leaves use; search's adapter reads the
+ *   Core component names from it
  */
 
 import * as fs from 'node:fs';
@@ -72,6 +73,7 @@ export {
   mappableDefinitions,
   resolveIconSource,
   generatedModulePath,
+  ownModuleOf,
   generatedNamesOf,
   generatedOrigins,
   iconModulePackage,
@@ -182,7 +184,7 @@ export async function discoverListsIconSet(cwd) {
 /**
  * The names of the components of the Core the project in `cwd` reads: an
  * icon query's words that name one say where the icon goes (spec:AST-084
- * FR6). Empty when there is no Core.
+ * FR6). Empty when there is no Core, or when its components cannot be read.
  * @param {string} cwd
  * @returns {string[]}
  */
@@ -191,6 +193,8 @@ export function coreComponentNames(cwd) {
   try {
     return Object.values(discoverComponents(project?.coreDir() ?? null)).flat();
   } catch {
+    // The names only break ties, so a Core that cannot be read leaves every
+    // word its full weight and the icon answer still comes.
     return [];
   }
 }

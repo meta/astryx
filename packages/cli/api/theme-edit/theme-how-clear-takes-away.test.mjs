@@ -80,6 +80,48 @@ describe('an ask that starts with "clear the ..."', () => {
     ])
       expect(await commands(ask), ask).toMatch(REMOVAL);
     // (A second clear starts an ask of its own.)
+    // (Two parts joined by "and" lose the look each.)
+    for (const ask of [
+      'clear the card and button borders',
+      'clear the card and the button borders',
+    ]) {
+      const two = await commands(ask);
+      expect(two, ask).toContain('set ne border none --on card');
+      expect(two, ask).toContain('set ne border none --on button');
+    }
+    expect(
+      await commands('clear the card, button and input borders'),
+    ).toContain('set ne border none --on inputs');
+    for (const ask of [
+      'clear the card and button backgrounds',
+      'clear the dark mode card and button backgrounds',
+    ]) {
+      const fills = await commands(ask);
+      expect(fills, ask).toMatch(/background-color transparent --on card\b/);
+      expect(fills, ask).toMatch(/background-color transparent --on button\b/);
+    }
+    // (A clear an earlier clause holds but does not lead uses up its own
+    // ask: the next clear is read with its own words.)
+    const after = await commands(
+      'can you clear the card border and clear the button shadow',
+    );
+    expect(after).toContain('set ne box-shadow none --on button');
+    expect(after).not.toContain('set ne border none --on card');
+    expect(
+      await commands(
+        'can you clear the card border and clear my card border changes',
+      ),
+    ).not.toContain('set ne border none --on card');
+    // (A later ask about the same part is an ask of its own.)
+    for (const ask of [
+      'clear the card shadow and clear my card border changes',
+      'clear my card border changes and clear the card shadow',
+      'clear borders on cards and clear the card shadow',
+    ]) {
+      const each = await commands(ask);
+      expect(each, ask).toContain('set ne box-shadow none --on card');
+      expect(each, ask).not.toContain('set ne border none --on card');
+    }
     for (const ask of [
       'clear the card shadow and clear the button border',
       'clear the card shadow; clear the button border',
@@ -115,6 +157,9 @@ describe('an ask that starts with "clear the ..."', () => {
       'clear the card background and keep the base value',
       'clear the card background and use the base value',
       'clear the card shadow and use a softer one',
+      'clear the card and button borders, back to the default',
+      'clear the card and button border colors',
+      'clear my card and button border changes',
       'clear the card shadow and use a softer shadow',
       'clear the card background and use the base background',
       'clear the card background and restore the background',

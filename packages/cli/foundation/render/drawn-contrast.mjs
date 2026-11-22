@@ -9,8 +9,8 @@
  *   two colors as drawn; `LOW_CONTRAST_PREFIX`, the line prefix a picture
  *   script prints it after.
  * @position run by picture-chrome.mjs and picture-playwright.mjs once the
- *   page is drawn as the picture shows it; read back by `screenshot` in
- *   api/theme-edit/_preview.mjs from the script's stdout
+ *   page is drawn as the picture shows it; read back by `takePictures` in
+ *   foundation/pictures/pictures.mjs from the script's stdout
  */
 
 /* global document, getComputedStyle -- lowContrastText runs in the page */

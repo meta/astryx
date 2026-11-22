@@ -50,7 +50,7 @@ describe('a picture', () => {
   it('takes the page to its own width when it is wider than the window', () => {
     expect(
       fs.readFileSync(path.join(render, 'picture-chrome.mjs'), 'utf8'),
-    ).toContain('width: Math.max(PICTURE_WINDOW.width, Math.ceil(size.width))');
+    ).toContain('width: Math.max((view ?? PICTURE_WINDOW).width, Math.ceil(size.width))');
     expect(
       fs.readFileSync(path.join(render, 'picture-playwright.mjs'), 'utf8'),
     ).toContain('fullPage: true');

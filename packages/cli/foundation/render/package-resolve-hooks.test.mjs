@@ -1,10 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for the export worker's package resolve hook: it answers only
- * a relative, fully specified ES module import between two files of one
- * installed package, as Node resolves it, and every other import resolves as
- * Node resolves it with no hook.
+ * @file Tests for the export worker's package resolve hook: it answers a
+ * relative, fully specified ES module import between two files of one
+ * installed or linked package, as Node resolves it, and a package name or a
+ * `#` import that an ES module imports again from one folder, with the
+ * answer Node gave there; every import resolves as Node resolves it with no
+ * hook.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -17,6 +19,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   installedPackageOf,
   linkedPackageOf,
+  noteLinkedFolder,
   packageLookups,
   packageModuleUrl,
   packageResolveHooks,
@@ -148,6 +151,63 @@ beforeAll(() => {
   fs.symlinkSync(
     path.join(dir, 'linked', 'abs'),
     path.join(dir, 'node_modules', 'abs-linked'),
+  );
+  // Two files of one folder that import the same package name and `#`
+  // import, and a nested folder whose own package.json and node_modules
+  // folder answer the same names otherwise.
+  put(
+    'folders/package.json',
+    JSON.stringify({
+      name: 'folders',
+      type: 'module',
+      imports: {'#dep': './dep.js'},
+    }),
+  );
+  put('folders/dep.js', "export const d = 'outer-dep';\n");
+  for (const [at, v] of [
+    ['folders', 'outer'],
+    ['folders/inner', 'inner'],
+  ]) {
+    put(
+      `${at}/node_modules/shared/package.json`,
+      JSON.stringify({name: 'shared', type: 'module', exports: './index.js'}),
+    );
+    put(`${at}/node_modules/shared/index.js`, `export const v = '${v}';\n`);
+  }
+  for (const name of ['a', 'b'])
+    put(
+      `folders/${name}.js`,
+      "export {v} from 'shared';\nexport {d} from '#dep';\n",
+    );
+  put(
+    'folders/inner/package.json',
+    JSON.stringify({
+      name: 'inner',
+      type: 'module',
+      exports: './self.js',
+      imports: {'#dep': './dep.js'},
+    }),
+  );
+  put('folders/inner/dep.js', "export const d = 'inner-dep';\n");
+  put('folders/inner/self.js', "export const s = 'self';\n");
+  put(
+    'folders/inner/c.js',
+    "export {v} from 'shared';\nexport {d} from '#dep';\nexport {s} from 'inner';\n",
+  );
+  // A CommonJS file of the same folder resolves the same name with and
+  // without `paths`, in both orders.
+  put(
+    'folders/r.cjs',
+    [
+      "const path = require('node:path');",
+      'const at = file => path.relative(__dirname, file);',
+      "const inner = [path.join(__dirname, 'inner')];",
+      "const plain = at(require.resolve('shared'));",
+      "const viaPaths = at(require.resolve('shared', {paths: inner}));",
+      "const plainAgain = at(require.resolve('shared'));",
+      'module.exports = {plain, viaPaths, plainAgain};',
+      '',
+    ].join('\n'),
   );
 });
 
@@ -304,18 +364,62 @@ describe('a linked package', () => {
   });
 });
 
+describe('a package linked into a node_modules folder', () => {
+  const lib = () => path.join(dir, 'linked', 'lib');
+  /** @param {string} file */
+  const linkedUrl = file => pathToFileURL(path.join(lib(), file)).href;
+
+  it('is noted from its link, before any import of it, by its package.json name', () => {
+    const lookups = packageLookups();
+    noteLinkedFolder(
+      '@scope/linked',
+      fs.realpathSync(path.join(dir, 'node_modules', '@scope', 'linked')),
+      lookups,
+      () => false,
+    );
+    expect(linkedPackageOf(path.join(lib(), 'dist', 'a.js'), lookups)).toBe(
+      lib(),
+    );
+    expect(
+      packageModuleUrl('./a.js', linkedUrl('dist/index.js'), lookups),
+    ).toBe(linkedUrl('dist/a.js'));
+  });
+
+  it('is not noted under another name, inside node_modules, or where the page sits', () => {
+    const lookups = packageLookups();
+    noteLinkedFolder('other-name', lib(), lookups, () => false);
+    noteLinkedFolder(
+      'other',
+      path.join(dir, 'node_modules', 'other'),
+      lookups,
+      () => false,
+    );
+    // A linked package that holds the page: its folder is the page's own.
+    const page = path.join(lib(), 'pages', 'page.js');
+    noteLinkedFolder('@scope/linked', lib(), lookups, folder =>
+      page.startsWith(folder),
+    );
+    expect(lookups.linked.size).toBe(0);
+    expect(
+      packageModuleUrl('./a.js', linkedUrl('dist/index.js'), lookups),
+    ).toBeNull();
+  });
+});
+
 /**
  * Import each specifier from the fixture in one fresh Node, with or without
  * the hook, and print every import Node resolved (its specifier, the URL and
  * format it resolved to) and what each import gave or how it failed.
  * @param {string[]} specifiers
  * @param {boolean} hook
+ * @param {Array<[string, string]>} [notes] - packages noted from their
+ *   links (name and folder) before any import
  */
-const resolutionsIn = (specifiers, hook) => {
+const resolutionsIn = (specifiers, hook, notes = []) => {
   const code = [
     "const {registerHooks} = await import('node:module');",
     hook
-      ? `const {packageLookups, packageResolveHooks} = await import(${JSON.stringify(HOOKS)}); globalThis.lookups = packageLookups(); globalThis.byPath = 0; const hooks = packageResolveHooks(globalThis.lookups); registerHooks({resolve(s, c, next) { const r = hooks.resolve(s, c, next); if (r.shortCircuit) globalThis.byPath++; return r; }});`
+      ? `const {noteLinkedFolder, packageLookups, packageResolveHooks} = await import(${JSON.stringify(HOOKS)}); globalThis.lookups = packageLookups(); for (const [n, f] of ${JSON.stringify(notes)}) noteLinkedFolder(n, f, globalThis.lookups, () => false); globalThis.byPath = 0; const hooks = packageResolveHooks(globalThis.lookups); registerHooks({resolve(s, c, next) { const r = hooks.resolve(s, c, next); if (r.shortCircuit) globalThis.byPath++; return r; }});`
       : '',
     'const seen = [];',
     'registerHooks({resolve(s, c, next) { const r = next(s, c); seen.push([s, c.parentURL ?? null, r.url, r.format ?? null]); return r; }});',
@@ -348,6 +452,72 @@ describe.skipIf(!hasHooks)('a linked package through the hook', () => {
     expect(hooked.linked).toBe(2);
     expect(hooked.byPath).toBeGreaterThanOrEqual(4);
     expect(plain.byPath).toBe(0);
+  }, 60_000);
+
+  it('resolves a linked package imported first by its path, as Node does, by path once noted from its link', () => {
+    // Its first file by its path, as jiti imports a module, then its name.
+    const specifiers = [
+      pathToFileURL(path.join(dir, 'linked', 'lib', 'dist', 'sub.js')).href,
+      '@scope/linked',
+    ];
+    const notes = /** @type {Array<[string, string]>} */ ([
+      ['@scope/linked', path.join(dir, 'linked', 'lib')],
+    ]);
+    const plain = JSON.parse(resolutionsIn(specifiers, false));
+    const unnoted = JSON.parse(resolutionsIn(specifiers, true));
+    const noted = JSON.parse(resolutionsIn(specifiers, true, notes));
+    expect(unnoted.seen).toEqual(plain.seen);
+    expect(noted.seen).toEqual(plain.seen);
+    // The import inside the file reached by its path resolves by path only
+    // when the package was noted from its link.
+    expect(noted.byPath).toBe(unnoted.byPath + 1);
+  }, 60_000);
+});
+
+describe.skipIf(!hasHooks)('a package name or a `#` import through the hook', () => {
+  it('resolves once for each folder, as Node resolves it from each file', () => {
+    const files = ['folders/a.js', 'folders/b.js', 'folders/inner/c.js'].map(
+      file => pathToFileURL(path.join(dir, file)).href,
+    );
+    const plain = JSON.parse(resolutionsIn(files, false));
+    const hooked = JSON.parse(resolutionsIn(files, true));
+    expect(hooked.seen).toEqual(plain.seen);
+    const gave = Object.fromEntries(
+      plain.seen.filter((/** @type {unknown[]} */ s) => s.length === 2),
+    );
+    expect(gave[files[1]]).toBe(gave[files[0]]);
+    expect(JSON.parse(gave[files[0]])).toEqual([
+      ['d', 'outer-dep'],
+      ['v', 'outer'],
+    ]);
+    expect(JSON.parse(gave[files[2]])).toEqual([
+      ['d', 'inner-dep'],
+      ['s', 'self'],
+      ['v', 'inner'],
+    ]);
+    // The second file of the folder took both answers the first one got;
+    // the nested folder, with its own scope, resolved its own.
+    expect(hooked.byPath).toBe(2);
+    expect(plain.byPath).toBe(0);
+  }, 60_000);
+
+  it('leaves CommonJS resolution to Node, `require.resolve` with `paths` included', () => {
+    const file = pathToFileURL(path.join(dir, 'folders', 'r.cjs')).href;
+    const plain = JSON.parse(resolutionsIn([file], false));
+    const hooked = JSON.parse(resolutionsIn([file], true));
+    expect(hooked.seen).toEqual(plain.seen);
+    const gave = plain.seen.find(
+      (/** @type {unknown[]} */ s) => s[0] === file && s.length === 2,
+    );
+    const [, exports] = JSON.parse(gave[1]).find(
+      (/** @type {[string, unknown]} */ [name]) => name === 'default',
+    );
+    expect(exports).toEqual({
+      plain: path.join('node_modules', 'shared', 'index.js'),
+      viaPaths: path.join('inner', 'node_modules', 'shared', 'index.js'),
+      plainAgain: path.join('node_modules', 'shared', 'index.js'),
+    });
+    expect(hooked.byPath).toBe(0);
   }, 60_000);
 });
 

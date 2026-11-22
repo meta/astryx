@@ -967,7 +967,10 @@ function addIndicatorRings(project, map) {
  * attribute (`themeDataAttributes({selected: 'selected'})`) and an inline
  * property from a color token (`el.style.backgroundColor = …` with
  * `colorVars['--color-accent-muted']`) paints that state with it, on each
- * of the component's targets that lists the state.
+ * of the component's targets that lists the state. The inline write can
+ * also live in a module of the same component that the stateful module
+ * imports: Table's selection plugin writes the `selected` state and hands
+ * the row's paint to Table's row-paint module.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {Record<string, PartRecord>} map
  */
@@ -994,7 +997,17 @@ function addInlineStatePaint(project, map) {
     if (!folder || folder !== name) continue;
     const withStates = info.targets.filter(t => t.states.length);
     if (!withStates.length) continue;
-    for (const file of modules(path.join(dist, folder))) {
+    const folderDir = path.join(dist, folder);
+    /** @param {string} source */
+    const inlinePaint = source => ({
+      props: [...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g)].map(
+        m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`),
+      ),
+      colorTokens: [
+        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
+      ].map(m => m[1]),
+    });
+    for (const file of modules(folderDir)) {
       const source = fs.readFileSync(file, 'utf8');
       const states = [
         ...source.matchAll(
@@ -1002,12 +1015,27 @@ function addInlineStatePaint(project, map) {
         ),
       ].map(m => m[1]);
       if (!states.length) continue;
-      const props = [
-        ...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g),
-      ].map(m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
-      const colorTokens = [
-        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
-      ].map(m => m[1]);
+      let {props, colorTokens} = inlinePaint(source);
+      if (!props.length) {
+        // The paint of a module this one imports from the same component.
+        for (const [, spec] of source.matchAll(
+          /from\s+['"](\.{1,2}\/[^'"]+\.js)['"]/g,
+        )) {
+          const target = path.resolve(path.dirname(file), spec);
+          if (!target.startsWith(folderDir + path.sep)) continue;
+          let imported;
+          try {
+            imported = fs.readFileSync(target, 'utf8');
+          } catch {
+            continue;
+          }
+          const paint = inlinePaint(imported);
+          if (paint.props.length && paint.colorTokens.length === 1) {
+            ({props, colorTokens} = paint);
+            break;
+          }
+        }
+      }
       if (!props.length || colorTokens.length !== 1) continue;
       for (const t of withStates) {
         const key = t.className.replace(/^astryx-/, '');
