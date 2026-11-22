@@ -500,7 +500,10 @@ describe('generateThemeRules', () => {
     // Every selector in a comma-separated list carries its own guard —
     // a trailing pseudo does not distribute over a selector list. (Counted,
     // not split: the guard contains a comma of its own.)
-    const selectorText = String(hoverRule).split('{')[0];
+    // (The rule sits in the hover query: read the selector inside it.)
+    const selectorText = String(hoverRule)
+      .replace(/^\s*@media[^{]*\{/, '')
+      .split('{')[0];
     const hovers = selectorText.match(/:hover/g) || [];
     const guards = selectorText.match(/:where\(:not\(:disabled/g) || [];
     expect(hovers.length).toBeGreaterThan(0);
@@ -511,6 +514,71 @@ describe('generateThemeRules', () => {
     const focusRule = hoverRules.find(rule => rule.includes(':focus-visible'));
     expect(focusRule).toContain('.astryx-button:focus-visible {');
     expect(focusRule).not.toContain('aria-disabled');
+  });
+
+  // A touch screen keeps `:hover` on the last element a finger tapped, so a
+  // themed hover look sits behind the hover query, as the components' own
+  // hover styles do.
+  it('keeps a themed :hover behind the hover query, so a tapped control drops it', () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'hover-touch',
+        components: {button: {base: {':hover': {color: 'red'}}}},
+      }),
+    ).join('\n');
+    const hover = css.match(/@media \(hover: hover\) \{\s*([^{]+)\{([^}]*)\}/);
+    expect(hover?.[1]).toContain('.astryx-button:hover');
+    expect(hover?.[2]).toContain('color: red');
+    const outside = css.replace(
+      /@media \(hover: hover\) \{[^{}]*\{[^}]*\}\s*\}/g,
+      '',
+    );
+    expect(outside).not.toContain(':hover');
+  });
+
+  // A themed press describes the enabled control too: an aria-disabled
+  // control still takes a press, so both press arms carry the disabled guard.
+  it('keeps a themed :active and its press attribute off disabled elements', () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'press-guard',
+        components: {
+          button: {
+            base: {':active': {backgroundColor: 'rebeccapurple'}},
+            'variant:primary': {
+              ':active:not(:focus-visible)': {color: 'white'},
+            },
+          },
+        },
+      }),
+    ).join('\n');
+    const guard = ':where(:not(:disabled,[aria-disabled="true"]))';
+    expect(css).toContain(`.astryx-button:active${guard}`);
+    expect(css).toContain(`.astryx-button${PRESS_BELIEVED_SELECTOR}${guard}`);
+    expect(css).toContain(`:active:not(:focus-visible)${guard}`);
+    // Every press selector carries its guard.
+    const selectors = [...css.matchAll(/([^{}]+)\{[^{}]*rebeccapurple/g)].map(
+      m => m[1],
+    );
+    expect(selectors.length).toBe(2);
+    for (const selector of selectors) {
+      expect(selector).toContain(guard);
+    }
+  });
+
+  // A hover inside a press model nests the hover query around the pointer
+  // arm, since a leading `not` negates a whole media query.
+  it('nests the hover query around a themed hover-and-press rule', () => {
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'hover-press',
+        components: {button: {base: {':hover:active': {color: 'navy'}}}},
+      }),
+    ).join('\n');
+    expect(css).toMatch(
+      /@media \(hover: hover\) \{\s*@media not all and \(pointer: coarse\) \{/,
+    );
+    expect(css).not.toContain('not all and (pointer: coarse) and');
   });
 
   // --- Prose rules ---

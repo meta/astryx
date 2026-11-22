@@ -169,16 +169,41 @@ function ruleBounds(rule) {
   return null;
 }
 /**
+ * A rule that a media block holds alone (a themed hover sits in
+ * `@media (hover: hover)`, a themed press in a pointer query), read as the
+ * rule inside it. Its selector names the queries before the selector, split
+ * by NUL, so the rule factors like any other and renders back inside them.
+ * @param {string} rule
+ * @returns {{selector: string, rule: string} | null}
+ */
+function innerRule(rule) {
+  const bounds = ruleBounds(rule);
+  if (!bounds) return null;
+  const prelude = rule.slice(0, bounds.open).trim();
+  if (!/^@media\b/i.test(prelude)) {
+    return {selector: prelude, rule};
+  }
+  const body = rule.slice(bounds.open + 1, bounds.close).trim();
+  const inner = ruleBounds(body);
+  if (!inner || body.slice(inner.close + 1).trim()) return null;
+  const nested = innerRule(body);
+  return (
+    nested && {selector: `${prelude}\0${nested.selector}`, rule: nested.rule}
+  );
+}
+/**
  * A rule's declarations, keyed for factoring, or null when the rule cannot
  * be read.
  * @param {string} rule
  */
 function declarationEntries(rule) {
-  const bounds = ruleBounds(rule);
+  const read = innerRule(rule);
+  if (!read) return null;
+  const bounds = ruleBounds(read.rule);
   if (!bounds) return null;
   const {open, close} = bounds;
-  const selector = rule.slice(0, open).trim();
-  const body = rule.slice(open + 1, close);
+  const selector = read.selector;
+  const body = read.rule.slice(open + 1, close);
   /** @type {string[]} */
   const declarations = [];
   let start = 0;
@@ -248,9 +273,9 @@ function ruleEntries(rules) {
   const counts = new Map();
   const entries = [];
   for (const rule of rules) {
-    const bounds = ruleBounds(rule);
-    if (!bounds) return null;
-    const selector = rule.slice(0, bounds.open).trim();
+    const read = innerRule(rule);
+    if (!read) return null;
+    const {selector} = read;
     const occurrence = counts.get(selector) ?? 0;
     counts.set(selector, occurrence + 1);
     entries.push({key: `${selector}\0${occurrence}`, rule, selector});
@@ -316,7 +341,12 @@ function renderDeclarations(items) {
     const declarations = block.declarations
       .map(value => `    ${value}`)
       .join('\n');
-    return `@scope (${familyScopeSelector(block.names)}) to (${THEME_SCOPE_TO}) {\n  ${block.selector} {\n${declarations}\n  }\n}`;
+    const [selector, ...queries] = block.selector.split('\0').reverse();
+    const rule = queries.reduce(
+      (inner, query) => `  ${query} {\n${inner}\n  }`,
+      `  ${selector} {\n${declarations}\n  }`,
+    );
+    return `@scope (${familyScopeSelector(block.names)}) to (${THEME_SCOPE_TO}) {\n${rule}\n}`;
   });
 }
 /** @param {any[]} members @param {string} field */

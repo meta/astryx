@@ -61,7 +61,8 @@ const cssOf = slug =>
  * @param {string} css @param {string} state @param {string[]} attrs
  */
 const scoped = (css, state, attrs) =>
-  (css.match(/[^{}]*\{[^}]*\}/g) ?? [])
+  // (Innermost blocks: a themed hover sits inside its hover query.)
+  (css.match(/[^{}]*\{[^{}]*\}/g) ?? [])
     .filter(r => {
       const sel = r.split('{')[0];
       return (

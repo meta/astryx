@@ -107,9 +107,10 @@ describe('color-mode blocks', () => {
       `${light}:hover:where(:not(:disabled,[aria-disabled="true"])) {`,
     );
     // A press keeps the press model: :active off a coarse pointer, the
-    // believed press under one, each after the mode conditions.
+    // believed press under one, each after the mode conditions and with
+    // the disabled guard.
     expect(out).toContain(
-      `@media not all and (pointer: coarse) {\n  ${light}:active {`,
+      `@media not all and (pointer: coarse) {\n  ${light}:active:where(:not(:disabled,[aria-disabled="true"])) {`,
     );
     expect(out).toMatch(
       /@media \(pointer: coarse\) \{\n {2}:is\(\.astryx-button\[data-variant="primary"\]\):where\(:scope\[data-theme="light"\] \*\)[^{]*\[data-astryx-press/,

@@ -174,19 +174,28 @@ function componentSelector(
 }
 
 /**
- * Guard appended to a themed `:hover` rule so it cannot match a disabled
- * element.
+ * Guard appended to a themed `:hover` or press rule so it cannot match a
+ * disabled element.
  *
- * A theme authoring `':hover': {backgroundColor: …}` is describing the
- * enabled control; `:hover` on its own would paint that background on a
- * disabled one too, because browsers suppress a disabled control's events,
- * not its hover styling. `:where()` contributes no specificity, so a themed
- * hover rule still weighs exactly what it weighed before.
+ * A theme that writes a hover or an active look for a part is
+ * describing the enabled control. On its own, the rule paints a disabled one
+ * too: browsers suppress a disabled control's events, not its hover or
+ * active styling, and an `aria-disabled` control still takes a press.
+ * `:where()` contributes no specificity, so a themed rule still weighs
+ * exactly what it weighed before.
  *
  * Mirrors the `@astryx/no-hover-on-disabled` lint rule, which enforces the
  * same guard on the components' own StyleX styles.
  */
-const HOVER_DISABLED_GUARD = ':where(:not(:disabled,[aria-disabled="true"]))';
+const DISABLED_STATE_GUARD = ':where(:not(:disabled,[aria-disabled="true"]))';
+
+/**
+ * The query a themed `:hover` rule sits in, as the components' own hover
+ * styles do. A touch screen keeps `:hover` on the last element a finger
+ * tapped, so without it a tapped control keeps the theme's hover look.
+ */
+const HOVER_CAPABLE_QUERY = '(hover: hover)';
+const HOVER_PSEUDO = /:hover(?![-\w])/;
 
 /**
  * Append a pseudo-class to every selector in a comma-separated selector list.
@@ -195,8 +204,9 @@ const HOVER_DISABLED_GUARD = ':where(:not(:disabled,[aria-disabled="true"]))';
  * trailing pseudo over selector lists, so `${list}:hover` would only target the
  * final selector. Rewrite each item so the pseudo applies to all of them.
  *
- * A `:hover` pseudo also picks up the disabled guard. A pseudo-ELEMENT has to
- * end the selector, so the guard is spliced in before it.
+ * A `:hover` or press pseudo also picks up the disabled guard. A
+ * pseudo-ELEMENT has to end the selector, so the guard is spliced in before
+ * it.
  */
 function appendPseudoToSelectorList(selector: string, pseudo: string): string {
   const parts: string[] = [];
@@ -216,7 +226,7 @@ function appendPseudoToSelectorList(selector: string, pseudo: string): string {
   }
   parts.push(selector.slice(start).trim());
 
-  const guarded = guardHoverPseudo(pseudo);
+  const guarded = guardStatePseudo(pseudo);
 
   return parts.map(part => `${part}${guarded}`).join(', ');
 }
@@ -240,28 +250,42 @@ function pseudoRules(
   pseudo: string,
   declarations: string,
 ): string[] {
+  // (Nested, not joined: a leading `not` negates a whole media query.)
+  const hover = HOVER_PSEUDO.test(pseudo);
+  const rule = (query: string | null, state: string): string => {
+    const body = `  ${appendPseudoToSelectorList(baseSelector, state)} {\n${declarations}\n  }`;
+    const pressed = query ? `  @media ${query} {\n${body}\n  }` : body;
+    return hover
+      ? `  @media ${HOVER_CAPABLE_QUERY} {\n${pressed}\n  }`
+      : pressed;
+  };
   if (!new RegExp(ACTIVE_PSEUDO.source).test(pseudo)) {
-    return [
-      `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
-    ];
+    return [rule(null, pseudo)];
   }
   const pressed = pseudo.replace(ACTIVE_PSEUDO, PRESS_BELIEVED_SELECTOR);
   return [
-    `  @media not all and ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }\n  }`,
-    `  @media ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pressed)} {\n${declarations}\n  }\n  }`,
+    rule(`not all and ${COARSE_POINTER_QUERY}`, pseudo),
+    rule(COARSE_POINTER_QUERY, pressed),
   ];
 }
 
-/** Insert the disabled guard into a `:hover` pseudo, keeping any pseudo-element last. */
-function guardHoverPseudo(pseudo: string): string {
-  if (!/^:hover(?![-\w])/.test(pseudo) || pseudo.includes('[aria-disabled')) {
+/**
+ * Insert the disabled guard into a `:hover` or press pseudo (`:active`, or
+ * the press attribute that takes its place under a coarse pointer), keeping
+ * any pseudo-element last.
+ */
+function guardStatePseudo(pseudo: string): string {
+  const state =
+    /^:(?:hover|active)(?![-\w])/.test(pseudo) ||
+    pseudo.startsWith(PRESS_BELIEVED_SELECTOR);
+  if (!state || pseudo.includes('[aria-disabled')) {
     return pseudo;
   }
   const pseudoElement = pseudo.indexOf('::');
   return pseudoElement === -1
-    ? pseudo + HOVER_DISABLED_GUARD
+    ? pseudo + DISABLED_STATE_GUARD
     : pseudo.slice(0, pseudoElement) +
-        HOVER_DISABLED_GUARD +
+        DISABLED_STATE_GUARD +
         pseudo.slice(pseudoElement);
 }
 
@@ -1724,7 +1748,7 @@ function generateColorOverrides(
         // a theme's own hover color for the color key wins over it.
         if (LINK_HOVER_TINTED.has(colorName)) {
           parts.push(
-            `  @media (hover: hover) {\n    ${pin}:where(:hover)${HOVER_DISABLED_GUARD} { color: color-mix(in srgb, ${colorValue}, var(--color-tint-hover) 15%); }\n  }`,
+            `  @media (hover: hover) {\n    ${pin}:where(:hover)${DISABLED_STATE_GUARD} { color: color-mix(in srgb, ${colorValue}, var(--color-tint-hover) 15%); }\n  }`,
           );
         }
       }

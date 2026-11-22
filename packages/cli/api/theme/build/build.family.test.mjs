@@ -170,6 +170,8 @@ describe('themeBuildFamily()', () => {
     expect(css).toContain('--tide: 10px;');
     expect(count(css, '--tide: 8px;')).toBe(1);
     expect(count(css, '--tide: 10px;')).toBe(1);
+    // A themed hover sits in its hover query and is shared like any rule.
+    expect(count(css, '@media (hover: hover)')).toBe(1);
     expect(css).toContain('--astryx-card-padding: 24px;');
     expect(css).toContain('--astryx-card-padding-inline: 16px;');
     expect(css).toContain('@media (width < 768px)');
