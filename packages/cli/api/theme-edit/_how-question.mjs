@@ -3286,6 +3286,19 @@ function namedLists(q, partWords, isVariant) {
 
 /** A mark the clause split reads as no word, taken out of each clause. */
 const JOINED = '\u2060';
+/**
+ * The ask with each abbreviation's periods dropped, so its period never
+ * ends a sentence: a bracketed "(e.g. snow)" or "(i.e. …)" reads as
+ * "(eg snow)", "vs." as "vs". "etc." keeps its period
+ * unless a comma, a bracket or the end follows it, since it can end a
+ * sentence ("buttons blue etc. header navy").
+ * @param {string} text
+ */
+const dropAbbreviationDots = text =>
+  text
+    .replace(/\(\s*([ei])\.([ge])\.?,?(?=\s)/gi, '($1$2')
+    .replace(/\b(vs)\.(?=\s)/gi, '$1')
+    .replace(/\betc\.(?=\s*(?:[,)]|$))/gi, 'etc');
 
 /**
  * The word every match of a made lexicon pattern holds: the first word of
@@ -3493,6 +3506,16 @@ function markFillColorWith(q) {
  */
 function clausesOf(q, partWords, words = null) {
   q = markFillColorWith(q);
+  // A bracketed example right after a part name, "the header (eg the top
+  // bar)", is an aside: it changes neither the part nor what is set.
+  q = q.replace(/\s*\(\s*(?:eg|ie)\s+[^()]*\)/gi, (m, at, whole) => {
+    const before = String(whole).slice(0, at).trim().split(/\s+/).slice(-2);
+    return partWords.some(([re]) =>
+      [before.join(' '), before.at(-1) ?? ''].some(w => re.test(` ${w} `)),
+    )
+      ? ''
+      : m;
+  });
   // "except primary and ghost buttons", "except hover or disabled": one
   // except list, never an except and a new clause (unless an ask follows:
   // "… except cards and make buttons bigger").
@@ -4751,6 +4774,16 @@ function clauseBefore(text, at) {
 }
 
 /**
+ * The slash before a gradient's length size, right after the `background`
+ * word and the gradient's position ("background linear-gradient(…) 0 0 /
+ * 24px 24px"): part of the value, never a break between asks.
+ */
+const PATTERN_SIZE_SLASH = new RegExp(
+  String.raw`(?<=\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:(?:px|r?em|vh|vw|ch)\b|%)))\s\/\s(?![^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\()`,
+  'i',
+);
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -4778,10 +4811,13 @@ export function draftAnswer(ctx, env, question) {
     urls.push(m);
     return `url(uu${urls.length - 1}uu)`;
   });
-  // (The words as asked, for the readers that hold the whole question;
-  // their case too, which carries tone: an emphatic "SO" in a lowercase
-  // line.)
+  // (The words as asked, for the readers that hold the whole question and
+  // the notes that quote it; their case too, which carries tone: an
+  // emphatic "SO" in a lowercase line.)
   const raw0 = String(question);
+  // An abbreviation's period never ends a sentence, before any reader
+  // reads the words.
+  question = dropAbbreviationDots(question);
   const asked0 = raw0.toLowerCase();
   /** Text with each file set aside put back as typed. @param {string} s */
   const withUrls = s =>
@@ -4983,6 +5019,62 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:in the day|during the day|day ?(?:mode|theme)|day ?time)\b/gi,
       'in light mode',
     );
+  // (A look said, then taken away by a pronoun: "the copy button border is
+  // ugly, hide it", "the shadow on the cards is too strong, remove it". The
+  // pronoun is that look on one part, never the part. Only a plain ask is
+  // read this way: an ask said on its own, with one part, the look, and
+  // words that only judge it; a side, a state, a variant, a mode, a list
+  // of parts or an ask joined to another keeps the reading it has without
+  // the pronoun.)
+  question = String(question).replace(
+    /(^|[,;.!?\n]\s*)([^,;.!?\n]*?\b(?:borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)[^,;.!?\n]*)[,;.]\s*(?:(?:so|and|then|please|just)\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b(?=\s*(?:[.!?\n]|$))/gi,
+    (m, lead, said) => {
+      // ("it" is the nearest look said before it.)
+      const looks = [
+        ...said.matchAll(
+          // (A look word that names another aspect, "border radius", is
+          // never the look taken away.)
+          /\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b(?![\s-]*(?:radius|radii|width|colou?r|style|image|spacing)\b)/gi,
+        ),
+      ];
+      const last = looks[looks.length - 1];
+      const look = last[1];
+      const word = look.toLowerCase().replace(/s$/, '');
+      // (Only an ask said on its own: one joined to another by "and",
+      // "but" or "then" keeps the reading it has without the pronoun.)
+      if (/\b(?:and|but|then)\b/i.test(said)) return m;
+      const own = String(said);
+      // (The one part the look's own words name, by its longest match.)
+      const found = partLexicon(ctx)
+        .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
+        .filter(x => x != null);
+      const longest = /** @type {RegExpExecArray[]} */ (found).sort(
+        (x, y) => y[0].length - x[0].length,
+      )[0];
+      if (!longest) return m;
+      const part = longest[0].trim();
+      // (Every other word only judges the look: "the copy button border is
+      // ugly", "the shadow on the cards is too strong". Any other word, a
+      // side, a state, a variant, a mode or a second part, keeps the
+      // earlier reading.)
+      const others = own
+        .toLowerCase()
+        .replace(longest[0].trim(), ' ')
+        .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
+        .split(/[^a-z]+/)
+        .filter(Boolean);
+      const JUDGING =
+        /^(?:s|the|a|an|my|our|its|their|this|that|these|those|on|of|in|around|is|are|was|were|looks?|seems?|feels?|has|have|too|so|very|really|way|kind|bit|little|much|just|quite|ugly|strong|heavy|thick|harsh|loud|busy|distracting|weird|bad|wrong|off|hard|noisy|messy|annoying|i|hate|dislike|don|t|like|it|do|not)$/;
+      if (!others.every(w => JUDGING.test(w))) return m;
+      // ("them" names more than one thing: read it only over one part said
+      // in the plural.)
+      if (/\bthem\b\s*[.!]?$/i.test(m) && !/s\b/.test(longest[0].trim()))
+        return m;
+      // (A "!" or "?" before it ends the ask before, as a full stop does.)
+      const stop = String(lead).replace(/[!?]/, '.');
+      return `${stop}no ${word} on ${part}`;
+    },
+  );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
   // color the answer writes is held to (after the answers are made), never
   // the color asked for nor a clause of its own, so it is read out of the
@@ -6705,7 +6797,7 @@ export function draftAnswer(ctx, env, question) {
   // else is a way of the color before it, one segment.)
   const segments = question
     .split(
-      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|(?:(?<!\bbackground(?:-image)?\s*:?\s+(?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)(?:\s+(?:[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?|center|top|bottom|left|right))+(?=\s\/\s*[-+]?\d*\.?\d+(?:(?:px|r?em|vh|vw|ch)\b|%)))|(?=\s[/+]\s[^;]*?,\s*(?:repeating-)?(?:linear|radial|conic)-gradient\())\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     // (A list's marker, "1." or "2)", never a decimal's whole part: "1.5
     // leading" is one value.)
@@ -6719,6 +6811,14 @@ export function draftAnswer(ctx, env, question) {
     !/;/.test(question)
   )
     segments.splice(0, segments.length, question);
+  // (A pattern said with its size keeps the slash before its size in its
+  // value; any other slash between asks becomes a comma, so each ask is a
+  // clause of its own and every value stays as typed.)
+  if (segments.length > 1 && PATTERN_SIZE_SLASH.test(question))
+    question = question
+      .replace(new RegExp(PATTERN_SIZE_SLASH.source, 'gi'), ' \u2e35 ')
+      .replace(/\s\/\s(?![^(]*\))/g, ', ')
+      .replace(/ \u2e35 /g, ' / ');
   // A clause writes only when it reads as a direct ask: an imperative, a
   // request, or a thing with a value or a direction; a condition, an
   // indirect question, a double negative or a statement of fact gets the
@@ -11030,7 +11130,9 @@ export function draftAnswer(ctx, env, question) {
       // repeats changes it. Where the ask's line breaks or marks end
       // sentences the splitter does not count, the sentence is the one
       // that holds the words a rewrite keeps.)
-      const sentences = asked0.split(/[;!?\n]|\.(?!\d)/).filter(x => x.trim());
+      const sentences = dropAbbreviationDots(asked0)
+        .split(/[;!?\n]|\.(?!\d)/)
+        .filter(x => x.trim());
       const breaksBefore = clauses
         .slice(0, clauses.indexOf(c) + 1)
         .filter(x => joinOf.get(x)?.sep === 'break').length;
@@ -33726,7 +33828,7 @@ export function draftAnswer(ctx, env, question) {
     // (A file named in url() is a value as typed, never a typed length.)
     const typedSegments = raw0
       .replace(/url\([^()]*\)/gi, ' ')
-      .split(/[,;\n]|\band\b|\bthen\b/i)
+      .split(/[,;\n]|(?<!\b(?:e\.g|i\.e|vs))\.(?=\s|$)|\band\b|\bthen\b/i)
       .map(seg => seg.trim())
       .filter(Boolean);
     for (const words of typedSegments) {
