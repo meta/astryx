@@ -21,7 +21,6 @@ import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useEffect, useRef, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {BottomSheet} from './BottomSheet';
-import {REDUCED_MOTION_COARSE_QUERY} from './BottomSheetPanel';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
 import {
   getBottomSheetStackForTests,
@@ -1049,7 +1048,7 @@ describe('BottomSheet replace: reduced motion (design:reduced-motion)', () => {
   // most 200 ms on a coarse pointer, an immediate change on a fine one) is
   // real-browser evidence; here is what ends each motion in each class.
   it('coarse pointer (DR2): an exit ends on its opacity fade, not a transform, and a handoff still closes the retained step after its fade', () => {
-    stubMedia([REDUCED_MOTION_COARSE_QUERY]);
+    stubMedia(['(prefers-reduced-motion: reduce)', '(pointer: coarse)']);
     render(<Flow />);
     openFlow();
     const one = getDialog('One');

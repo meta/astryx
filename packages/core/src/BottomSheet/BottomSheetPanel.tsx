@@ -326,8 +326,6 @@ const pastGrabBarStyles = stylex.create({
  */
 const REDUCED_MOTION_COARSE =
   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
-export const REDUCED_MOTION_COARSE_QUERY =
-  '(prefers-reduced-motion: reduce) and (pointer: coarse)';
 const CROSS_FADE_MS = 200;
 
 const styles = stylex.create({
@@ -1000,10 +998,8 @@ export function BottomSheetPanel({
   // touch drag's release started: a finger's swipe dismissal fades in place on
   // every pointer. A mouse or pen drag is not a touch drag.
   // A theme's reducedMotion: 'always' cross-fades on a coarse pointer too.
-  const settingCrossFades = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
   const isCoarsePointer = useMediaQuery('(pointer: coarse)');
-  const isCoarseCrossFade =
-    settingCrossFades || (isReducedMotion && isCoarsePointer);
+  const isCoarseCrossFade = isReducedMotion && isCoarsePointer;
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
   // Without Web Animations the animator jumps the sheet to its end, so the

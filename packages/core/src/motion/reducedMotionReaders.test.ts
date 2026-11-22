@@ -29,10 +29,6 @@ const ALLOWED: Readonly<Record<string, readonly [number, string]>> = {
     2,
     'the setting split by pointer, for the CSS transition queries it exports',
   ],
-  'BottomSheet/BottomSheetPanel.tsx': [
-    1,
-    "the setting split by pointer, ORed with useReducesMotion and a coarse pointer for 'always'",
-  ],
   'keyboard/keyboardHeight.ts': [
     1,
     'detects how Chrome reports a keyboard under the OS setting, which a theme does not change: browser behavior, not a motion choice',
@@ -47,7 +43,6 @@ const ALLOWED: Readonly<Record<string, readonly [number, string]>> = {
 const QUERY_CONSTANTS: Readonly<Record<string, string>> = {
   REDUCED_MOTION_FADE_QUERY: 'motion/reducedMotion.ts',
   REDUCED_MOTION_INSTANT_QUERY: 'motion/reducedMotion.ts',
-  REDUCED_MOTION_COARSE_QUERY: 'BottomSheet/BottomSheetPanel.tsx',
 };
 
 /**
