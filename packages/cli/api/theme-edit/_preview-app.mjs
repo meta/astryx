@@ -2345,16 +2345,42 @@ function canonicalCode(text) {
 }
 
 /**
+ * The hashes contentHash gave last, by the full text they hash: a command,
+ * and a caller that keeps running (the hosted editor), hashes the same page
+ * and route texts again and again, and each text's code is read once. Only
+ * the full text is the key; the hash, not the code's form, is kept, so an
+ * entry stays small.
+ * @type {Map<string, string>}
+ */
+export const CONTENT_HASHES = new Map();
+
+/** The texts CONTENT_HASHES keeps. */
+export const CONTENT_HASHES_KEPT = 64;
+
+/**
  * The hash recorded for a file the preview writes, of its code in a form no
  * formatter changes ({@link canonicalCode}), so prettier or eslint --fix
  * with any options does not count as a change by hand, while an edit to
  * code, a string or a comment does. A file that does not parse falls back
  * to the text form ({@link formatterNeutral}).
  * @param {string | Buffer} text
+ * @returns {string}
  */
-const contentHash = text => {
-  const code = canonicalCode(String(text));
-  return code == null ? formatterHash(text) : `v3:${digest(code)}`;
+export const contentHash = text => {
+  const key = String(text);
+  const kept = CONTENT_HASHES.get(key);
+  if (kept !== undefined) {
+    CONTENT_HASHES.delete(key);
+    CONTENT_HASHES.set(key, kept);
+    return kept;
+  }
+  const code = canonicalCode(key);
+  const hash = code == null ? formatterHash(key) : `v3:${digest(code)}`;
+  CONTENT_HASHES.set(key, hash);
+  const oldest = CONTENT_HASHES.keys().next().value;
+  if (CONTENT_HASHES.size > CONTENT_HASHES_KEPT && oldest !== undefined)
+    CONTENT_HASHES.delete(oldest);
+  return hash;
 };
 
 /**
