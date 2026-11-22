@@ -252,6 +252,48 @@ describe('a contrast problem in one variant, kept as designed', () => {
   );
 
   it(
+    'still covers its pair when other variants take the same fill',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('cg', {cwd, like: 'neutral'});
+      await themeEditSet('cg', 'background-color', '#333333', {
+        cwd,
+        on: 'card',
+        when: 'variant:blue',
+      });
+      await themeEditSet(
+        'cg',
+        'contrast-accepted',
+        'the original card heading',
+        {
+          cwd,
+          on: 'heading',
+          ground: 'card',
+          mode: 'light',
+        },
+      );
+      // Five more variants in the same fill: the heading is drawn in the same
+      // pair on each, so the record still covers it, never "a color changed".
+      for (const v of ['green', 'purple', 'orange', 'red', 'teal'])
+        await themeEditSet('cg', 'background-color', '#333333', {
+          cwd,
+          on: 'card',
+          when: `variant:${v}`,
+        });
+      const check = acceptedContrastCheck(
+        (await editorKeptContrastAt(cwd)).filter(
+          (/** @type {{slug: string}} */ a) => a.slug === 'cg',
+        ),
+      );
+      expect(check?.message).toMatch(
+        /1 contrast problem is kept as designed: cg: heading on card in light at 1\.66:1/,
+      );
+      expect(check?.message).not.toMatch(/no longer/);
+    },
+    T,
+  );
+
+  it(
     'lapses when the variant fill changes',
     async () => {
       if (unbuilt) return;

@@ -13143,6 +13143,29 @@ export async function contrastProblems(ctx, data, res) {
     }
     return out;
   };
+  const keptRecords = acceptedContrast(data);
+  /**
+   * Whether a failure is the very pair a kept record names: the same place
+   * and the same two colors.
+   * @param {{x: any, problem: ThemeProblem}} it
+   */
+  const keptAsDesigned = it => {
+    const at = contrastPlace(it.problem);
+    const pair = at ? drawnPair(it.problem, res, at.mode) : null;
+    return (
+      at != null &&
+      pair != null &&
+      keptRecords.some(
+        a =>
+          a.part === at.part &&
+          a.ground === at.ground &&
+          (a.when ?? '') === at.when &&
+          a.mode === at.mode &&
+          a.color === pair.color &&
+          a.groundColor === pair.groundColor,
+      )
+    );
+  };
   /**
    * The base theme's own failures of one cause (the same text color on the
    * same ground color, in the same variant and mode, on whichever parts) as
@@ -13166,6 +13189,9 @@ export async function contrastProblems(ctx, data, res) {
       const onVariant = String(it.x.pair?.groundWhen ?? it.x.when ?? '');
       if (
         !it.x.base &&
+        // (A pair the theme keeps as designed stays its own problem, so the
+        // record still covers it while other variants fail beside it.)
+        !keptAsDesigned(it) &&
         /^variant:/.test(onVariant) &&
         it.x.fgToken &&
         it.x.bgPart &&
