@@ -14,8 +14,8 @@
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
 import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -38,7 +38,37 @@ let unbuilt = '';
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-saved-reach-', FIXTURE_PACKAGES);
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+  if (unbuilt) return;
+  // (Two themes built once, which each case copies under its own name: a
+  // new theme, and one with a border color set on a text input, which
+  // reaches its family.)
+  await themeEditNew(BLANK, {cwd, like: 'neutral'});
+  copyTheme(BLANK, BORDERED);
+  await themeEditSet(BORDERED, 'border-color', '#ff0000', {
+    cwd,
+    on: 'text-input',
+  });
 }, 300_000);
+
+/** The built themes each case starts from. */
+const BLANK = 'zqblank';
+const BORDERED = 'zqbordered';
+
+/**
+ * A copy of a built theme under a new name, as building it again under that
+ * name would leave it: every file, with the name in each.
+ * @param {string} from @param {string} to
+ */
+const copyTheme = (from, to) => {
+  const src = path.join(cwd, 'themes', from);
+  const dst = path.join(cwd, 'themes', to);
+  fs.mkdirSync(dst, {recursive: true});
+  for (const name of fs.readdirSync(src))
+    fs.writeFileSync(
+      path.join(dst, name.replaceAll(from, to)),
+      fs.readFileSync(path.join(src, name), 'utf8').replaceAll(from, to),
+    );
+};
 
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -52,18 +82,9 @@ const needBases = ctx => {
   return true;
 };
 
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
-
 /** The text a person reads for a command, run as they run it. @param {string[]} args */
-const cliText = args =>
-  spawnSync(
-    process.execPath,
-    [BIN, 'experimental', 'theme', 'editor', ...args],
-    {cwd, encoding: 'utf8', env: {...process.env, CI: '1'}},
-  ).stdout;
+const cliText = async args =>
+  (await runCli(['experimental', 'theme', 'editor', ...args], {cwd})).stdout;
 
 /**
  * Takes the text area out of the record of each saved setting whose key
@@ -104,13 +125,9 @@ const partsWith = (slug, prop) =>
     .map(m => m[1]);
 
 describe('a saved setting and how far it reaches', () => {
-  it('a setting that now reaches more parts than recorded is named once, first in the result', async ctx => {
+  it('a setting that now reaches more parts than recorded is named once, first in the result, and its undo names it no second time', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('grow', {cwd, like: 'neutral'});
-    await themeEditSet('grow', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'grow');
     // The theme as an editor that reached only the field it named saved it.
     const data = saved('grow');
     const key = Object.keys(data.reached ?? {}).find(k =>
@@ -136,15 +153,15 @@ describe('a saved setting and how far it reaches', () => {
       await themeEditSet('grow', 'corners', '6px', {cwd})
     );
     expect(again.data.widened ?? []).toEqual([]);
+    // (Undoing the change that named the growth names it no second time.)
+    await themeEditUndo('grow', {cwd});
+    const u = /** @type {any} */ (await themeEditUndo('grow', {cwd}));
+    expect(u.data.widened ?? []).toEqual([]);
   }, 240_000);
 
   it('a setting saved with no record is recorded as it reaches, with no word', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('old', {cwd, like: 'neutral'});
-    await themeEditSet('old', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'old');
     const data = saved('old');
     delete data.reached;
     save('old', data);
@@ -159,11 +176,7 @@ describe('a saved setting and how far it reaches', () => {
 
   it('--only on the same setting replaces it, so the look leaves the group', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('narrow', {cwd, like: 'neutral'});
-    await themeEditSet('narrow', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'narrow');
     expect(partsWith('narrow', 'border-color')).toContain('text-area');
     const r = /** @type {any} */ (
       await themeEditSet('narrow', 'border-color', '#ff0000', {
@@ -190,7 +203,7 @@ describe('a saved setting and how far it reaches', () => {
 
   it('a setting named on a group says it follows the group, with no line that set refuses', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('grp', {cwd, like: 'neutral'});
+    copyTheme(BLANK, 'grp');
     await themeEditSet('grp', 'border-color', '#00ff00', {cwd, on: 'inputs'});
     const data = saved('grp');
     const key = /** @type {string} */ (
@@ -209,18 +222,14 @@ describe('a saved setting and how far it reaches', () => {
 
   it('the text names each widened setting, and two keep lines print as one sequence', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('txt', {cwd, like: 'neutral'});
-    await themeEditSet('txt', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'txt');
     await themeEditSet('txt', 'background-color', '#ffffee', {
       cwd,
       on: 'text-input',
     });
     narrowRecord('txt', 'border-color|');
     narrowRecord('txt', 'background-color|');
-    const out = cliText(['set', 'txt', 'corners', '4px']);
+    const out = await cliText(['set', 'txt', 'corners', '4px']);
     const lines = out.split('\n');
     expect(lines[0]).toMatch(
       /but it also made 2 saved settings reach more parts:$/,
@@ -239,11 +248,7 @@ describe('a saved setting and how far it reaches', () => {
 
   it('a theme saved with a group setting and its --only twin opens and builds as it did', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('twin', {cwd, like: 'neutral'});
-    await themeEditSet('twin', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'twin');
     // What an earlier editor wrote for `set … --only`: a second entry.
     const data = saved('twin');
     const group = data.settings.find(
@@ -269,11 +274,7 @@ describe('a saved setting and how far it reaches', () => {
 
   it('an undo names the growth its build finds, and undoing a narrowing names both entries', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('back', {cwd, like: 'neutral'});
-    await themeEditSet('back', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'back');
     await themeEditSet('back', 'border-color', '#ff0000', {
       cwd,
       on: 'text-input',
@@ -296,11 +297,7 @@ describe('a saved setting and how far it reaches', () => {
 
   it('an undo that puts a setting back names the parts it now reaches past its record', async ctx => {
     if (needBases(ctx)) return;
-    await themeEditNew('putb', {cwd, like: 'neutral'});
-    await themeEditSet('putb', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
+    copyTheme(BORDERED, 'putb');
     narrowRecord('putb', 'border-color|');
     await themeEditUndo('putb', {
       cwd,
@@ -311,23 +308,5 @@ describe('a saved setting and how far it reaches', () => {
     expect(u.data.widened?.[0]?.parts).toEqual(
       expect.arrayContaining(['text-area']),
     );
-  }, 240_000);
-
-  it('undoing a change that named a growth names it no second time', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('once', {cwd, like: 'neutral'});
-    await themeEditSet('once', 'border-color', '#ff0000', {
-      cwd,
-      on: 'text-input',
-    });
-    narrowRecord('once', 'border-color|');
-    const r = /** @type {any} */ (
-      await themeEditSet('once', 'corners', '4px', {cwd})
-    );
-    expect(r.data.widened?.[0]?.parts).toEqual(
-      expect.arrayContaining(['text-area']),
-    );
-    const u = /** @type {any} */ (await themeEditUndo('once', {cwd}));
-    expect(u.data.widened ?? []).toEqual([]);
   }, 240_000);
 });
