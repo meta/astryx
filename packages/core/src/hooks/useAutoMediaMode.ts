@@ -20,12 +20,12 @@
 // A dark page already resolves those tokens to the media context's values,
 // so a chromatic but legible surface loses nothing.
 
-import {useRef, useState} from 'react';
+import {use, useRef, useState} from 'react';
 import type {RefObject} from 'react';
 import type {RGBA} from '../utils/color';
 import {parseColor, formatColor} from '../utils/color';
 import {compositeOver} from '../theme/contrast';
-import {useTheme} from '../theme/useTheme';
+import {ThemeContext} from '../theme/useTheme';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {
   pickMediaMode,
@@ -140,9 +140,11 @@ function useMeasuredMediaMode(
   pick: MediaSidePicker,
 ): DetectedMediaMode | null {
   const [detected, setDetected] = useState<DetectedMediaMode | null>(null);
-  // `tokens` is a stable reference unless the theme or color mode changes.
-  const {tokens} = useTheme();
-  const lastRef = useRef<{background: string; tokens: unknown} | null>(null);
+  // The nearest Theme's value is a stable reference unless its theme or mode
+  // changes. A change of the page's scheme moves the painted backdrop, which
+  // the key below also holds.
+  const themeKey = use(ThemeContext);
+  const lastRef = useRef<{background: string; theme: unknown} | null>(null);
 
   // Syncs the media mode with the painted color behind the element.
   // No dependency array. A surface color is a painted value, and it changes
@@ -168,11 +170,11 @@ function useMeasuredMediaMode(
     if (
       last !== null &&
       last.background === backgroundKey &&
-      last.tokens === tokens
+      last.theme === themeKey
     ) {
       return;
     }
-    lastRef.current = {background: backgroundKey, tokens};
+    lastRef.current = {background: backgroundKey, theme: themeKey};
 
     const [ambient, onDark, onLight] = resolvePaintedColors(surface, [
       '--color-text-primary',
