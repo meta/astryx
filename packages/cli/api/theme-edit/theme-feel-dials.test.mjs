@@ -357,6 +357,8 @@ describe('how', () => {
         'without darker on press',
         'I do not want it darker on press',
         'never lighter on hover',
+        'what if it were darker on press',
+        'the old theme was darker on hover',
       ])
         expect(await writes('fh', q), q).toEqual([]);
     },

@@ -6893,11 +6893,16 @@ export function draftAnswer(ctx, env, question) {
     // ("darker on press", "8% tint on hover": a feel dial's rung, said
     // with its moment, asks for that look.)
     const feel = dialRung(raw);
+    // (Thinking aloud, "what if it were darker on press", "the old theme
+    // was darker on hover", is no ask, as for any look.)
     if (
       feel &&
       (feel.dial === 'press' || feel.dial === 'hover') &&
       !FEEL_NOT.test(raw) &&
-      !feelHeld(feel.dial)
+      !feelHeld(feel.dial) &&
+      !/\?|\bwhat if\b|\b(isn'?t|aren'?t|doesn'?t|did|does|was|were|could|might|should|would)\b/.test(
+        raw,
+      )
     )
       return true;
     // Questions in a script how cannot read word by word keep their ask.
