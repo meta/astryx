@@ -1180,6 +1180,27 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     }
   });
 
+  it('a mouse press before the first move ends the hover: the move that follows mounts no tooltip', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(text);
+      fireEvent.pointerDown(text, {pointerType: 'mouse'});
+      fireEvent.pointerMove(text, {pointerType: 'mouse'});
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      expect(showPopover).not.toHaveBeenCalled();
+      expect(text).not.toHaveAttribute('aria-describedby');
+    } finally {
+      restore();
+    }
+  });
+
   it('a mouse press ends the hover only until the pointer leaves', async () => {
     const {showPopover, restore} = withOverflowAndPopover();
     try {
