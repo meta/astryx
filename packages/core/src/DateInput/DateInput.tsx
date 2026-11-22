@@ -767,7 +767,8 @@ function PointerDateField({
   });
   // A date the locale formats reads in the locale's direction.
   const textDirection = getLocaleDirection(useLocale());
-  // The field's own status decides; without one, a group error marks it invalid.
+  // Pass `fieldStatus`, not `status`: it carries the rejected-entry error, which
+  // is the field's own status and so wins over the group's.
   const isMemberInvalid = useIsMemberInvalid(fieldStatus);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =

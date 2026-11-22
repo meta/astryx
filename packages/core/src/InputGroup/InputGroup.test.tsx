@@ -748,7 +748,7 @@ describe('InputGroup', () => {
             onChange={() => {}}
           />
         ),
-        '[aria-invalid]',
+        'input[aria-haspopup="dialog"]',
       ],
       [
         'Typeahead',
