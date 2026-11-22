@@ -13202,7 +13202,11 @@ export async function contrastProblems(ctx, data, res) {
       .sort((a, b) => Number(!!b.state) - Number(!!a.state))
       .find(
         x =>
-          partsOf(ctx, x).includes(/** @type {string} */ (side.target)) &&
+          // (Only a fill the build writes on the part: a part's own `--only`
+          // fill keeps it under a later group one.)
+          writtenPartsOf(ctx, data, x).includes(
+            /** @type {string} */ (side.target),
+          ) &&
           (!x.when || x.when === when) &&
           (!x.state || (state != null && x.state === state)) &&
           (!x.mode || x.mode === m) &&
@@ -13513,7 +13517,7 @@ export async function contrastProblems(ctx, data, res) {
             test(x),
         ) ?? null;
     /** @param {Setting} x @param {string | null} t */
-    const on = (x, t) => t != null && partsOf(ctx, x).includes(t);
+    const on = (x, t) => t != null && writtenPartsOf(ctx, data, x).includes(t);
     const own = p.fg.target;
     const around = p.bg.target !== own ? p.bg.target : null;
     const tokens = textTokens(p, m, value);
