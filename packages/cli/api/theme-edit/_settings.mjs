@@ -13707,7 +13707,7 @@ export async function contrastProblems(ctx, data, res) {
         ]
       : []),
   ]);
-  return withAccepted(data, said);
+  return withAccepted(data, said, res);
 }
 
 /**
@@ -13864,10 +13864,45 @@ function barFitProblems(ctx, data, res) {
 /**
  * A contrast miss the theme keeps on purpose (a color copied from an
  * original): the text part and the part it sits on, the mode, the ratio
- * accepted, the color kept and why. A later change that draws it at a
- * lower ratio makes it a problem again.
- * @typedef {{part: string, ground: string, mode: 'light' | 'dark', ratio: number, color: string, reason: string}} AcceptedContrast
+ * accepted, the exact pair (`color`, the text or value drawn, and
+ * `groundColor`, what it is drawn on) and why. It covers that pair only: a
+ * later change to either color makes it a problem again.
+ * @typedef {{part: string, ground: string, mode: 'light' | 'dark', ratio: number, color: string, groundColor: string, reason: string}} AcceptedContrast
  */
+
+/**
+ * The two colors a contrast problem names, as drawn in its mode: the text
+ * (or a track's fill) and what it is drawn on, each a token read in that
+ * mode; null when either cannot be read as one color.
+ * @param {ThemeProblem} p
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {'light' | 'dark'} mode
+ * @returns {{color: string, groundColor: string} | null}
+ */
+export function drawnPair(p, res, mode) {
+  const COLOR = String.raw`(?:(?:rgba?|hsla?|oklch|oklab|color)\([^()]*\)|[^\s();]+)`;
+  const text = new RegExp(
+    String.raw`\((${COLOR}) on [\w-]+'s (${COLOR})(?: over [^)]*)?\)`,
+  ).exec(p.text);
+  const track =
+    /^the [\w-]+ \((#[0-9a-f]{6})\) is [\d.]+:1 on the [\w-]+ \((#[0-9a-f]{6})\)/i.exec(
+      p.text,
+    );
+  const found = track ?? text;
+  if (!found) return null;
+  /** A value as one color, a token read in the mode. @param {string} v */
+  const one = v => {
+    let x = v.trim();
+    for (let i = 0; i < 4 && /^--[\w-]+$/.test(x); i++)
+      x = String(res[mode][x] ?? '');
+    const c = parseColor(x);
+    if (!c) return null;
+    return alphaOf(x) >= 1 ? hex(c) : x.replace(/\s+/g, '').toLowerCase();
+  };
+  const color = one(found[1]);
+  const groundColor = one(found[2]);
+  return color && groundColor ? {color, groundColor} : null;
+}
 
 /**
  * A contrast problem's place, read from its key: what kind of check (text
@@ -13915,6 +13950,8 @@ export function acceptedContrast(data) {
       typeof a.ground === 'string' &&
       (a.mode === 'light' || a.mode === 'dark') &&
       typeof a.ratio === 'number' &&
+      typeof a.color === 'string' &&
+      typeof a.groundColor === 'string' &&
       typeof a.reason === 'string' &&
       a.reason.trim() !== '',
   );
@@ -13947,27 +13984,50 @@ function typedColors(data) {
 
 /**
  * Contrast problems a theme accepts as designed become notes that say so,
- * with the reason; one drawn now at a lower ratio than the one accepted
- * stays a problem. Each other text or track problem whose failing color
- * the theme typed gets the line that accepts it.
+ * with the reason, while both colors are the pair accepted and the ratio is
+ * no lower (what shows under a see-through fill can change it); a change
+ * to either color, or a lower ratio, makes it a problem again. Each other text or track problem whose
+ * failing color the theme typed gets the line that accepts it.
  * @param {ThemeData} data
  * @param {ThemeProblem[]} list
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
  * @returns {ThemeProblem[]}
  */
-export function withAccepted(data, list) {
+export function withAccepted(data, list, res) {
   const kept = acceptedContrast(data);
   const typed = typedColors(data);
+  /** The pairs each place is drawn in. @type {Map<string, Set<string>>} */
+  const pairsAt = new Map();
+  /** @param {NonNullable<ReturnType<typeof contrastPlace>>} at */
+  const placeKey = at => `${at.part}|${at.ground}|${at.mode}`;
+  for (const p of list) {
+    const at = p.note ? null : contrastPlace(p);
+    if (!at) continue;
+    const q = drawnPair(p, res, at.mode);
+    const k = placeKey(at);
+    if (!pairsAt.has(k)) pairsAt.set(k, new Set());
+    /** @type {Set<string>} */ (pairsAt.get(k)).add(
+      q ? `${q.color} on ${q.groundColor}` : '',
+    );
+  }
+  /** @param {NonNullable<ReturnType<typeof contrastPlace>>} at */
+  const mixedAt = at => (pairsAt.get(placeKey(at))?.size ?? 0) > 1;
   return list.map(p => {
     if (p.note) return p;
     const at = contrastPlace(p);
     if (!at) return p;
-    const record = kept.find(
-      a =>
-        a.part === at.part &&
-        a.ground === at.ground &&
-        a.mode === at.mode &&
-        at.ratio + 0.005 >= a.ratio,
-    );
+    const pair = drawnPair(p, res, at.mode);
+    const record = pair
+      ? kept.find(
+          a =>
+            a.part === at.part &&
+            a.ground === at.ground &&
+            a.mode === at.mode &&
+            a.color === pair.color &&
+            a.groundColor === pair.groundColor &&
+            at.ratio + 0.005 >= a.ratio,
+        )
+      : undefined;
     if (record)
       return {
         ...p,
@@ -13978,7 +14038,10 @@ export function withAccepted(data, list) {
     const colors = (p.text.match(/#[0-9a-f]{6}\b/gi) ?? []).map(c =>
       c.toLowerCase(),
     );
-    if (!colors.some(c => typed.has(c))) return p;
+    // (Only a pair that can be named, both colors read as one each, can be
+    // kept: a gradient ground cannot, nor a place drawn in more than one
+    // pair.)
+    if (!pair || !colors.some(c => typed.has(c)) || mixedAt(at)) return p;
     return {
       ...p,
       accept: `${P} set ${data.name} contrast-accepted '<why the original draws it so>' --on ${at.part} --ground ${at.ground} --mode ${at.mode}`,
