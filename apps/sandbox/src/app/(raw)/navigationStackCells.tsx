@@ -53,8 +53,15 @@ export function cardOf(key: string | null): HTMLElement | null {
 }
 
 /** The x the card of `key` shows now, in px, or null with no card. */
-export function shownX(key: string): number | null {
-  const card = cardOf(key);
+/** A stack card's key, or the moving element itself. */
+export type MovingTarget = string | HTMLElement;
+
+function elementOf(target: MovingTarget): HTMLElement | null {
+  return typeof target === 'string' ? cardOf(target) : target;
+}
+
+export function shownX(target: MovingTarget): number | null {
+  const card = elementOf(target);
   if (card == null) {
     return null;
   }
@@ -79,7 +86,7 @@ export interface FirstMove {
  * held, so a film of the screen stays the measure.
  */
 export function watchFirstMove(
-  key: string,
+  target: MovingTarget,
   since: number,
   fromX: (width: number) => number,
   toX: (width: number) => number,
@@ -92,8 +99,8 @@ export function watchFirstMove(
     if (stopped) {
       return;
     }
-    const card = cardOf(key);
-    const x = shownX(key);
+    const card = elementOf(target);
+    const x = shownX(target);
     if (card != null && x != null) {
       const width = card.parentElement?.clientWidth ?? card.clientWidth;
       const from = fromX(width);
@@ -118,7 +125,25 @@ export function watchFirstMove(
   };
 }
 
+const MARKS = Array.from({length: 11}, (_, index) => index * 10);
+
 const styles = stylex.create({
+  ruler: {
+    position: 'fixed',
+    insetInline: 0,
+    top: 0,
+    height: 14,
+    zIndex: 11,
+    pointerEvents: 'none',
+  },
+  mark: (percent: number) => ({
+    position: 'absolute',
+    top: 0,
+    insetInlineStart: `${percent}%`,
+    width: 1,
+    height: percent % 50 === 0 ? 14 : 8,
+    backgroundColor: 'rgba(220, 0, 0, 0.8)',
+  }),
   readout: {
     position: 'fixed',
     insetInline: 0,
@@ -326,6 +351,17 @@ export function WindowedList({
       <div {...stylex.props(styles.spacer(range.first * rowHeight))} />
       <List>{rows}</List>
       <div {...stylex.props(styles.spacer((count - range.last) * rowHeight))} />
+    </div>
+  );
+}
+
+/** Marks every tenth of the screen's width, for reading a film. */
+export function Ruler() {
+  return (
+    <div aria-hidden {...stylex.props(styles.ruler)}>
+      {MARKS.map(percent => (
+        <span key={percent} {...stylex.props(styles.mark(percent))} />
+      ))}
     </div>
   );
 }

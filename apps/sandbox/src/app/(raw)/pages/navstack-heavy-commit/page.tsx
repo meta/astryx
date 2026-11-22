@@ -17,7 +17,6 @@
 
 import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
-import * as stylex from '@stylexjs/stylex';
 import {
   NavigationScreen,
   NavigationStack,
@@ -29,6 +28,7 @@ import {
   busyFor,
   queryNumber,
   Readout,
+  Ruler,
   Stage,
   useReadoutLines,
   watchFirstMove,
@@ -36,38 +36,6 @@ import {
 
 const PAGE = '/sandbox/pages/navstack-heavy-commit/';
 const ITEMS = Array.from({length: 16}, (_, index) => `Item ${index + 1}`);
-const MARKS = Array.from({length: 11}, (_, index) => index * 10);
-
-const styles = stylex.create({
-  ruler: {
-    position: 'fixed',
-    insetInline: 0,
-    top: 0,
-    height: 14,
-    zIndex: 11,
-    pointerEvents: 'none',
-  },
-  mark: (percent: number) => ({
-    position: 'absolute',
-    top: 0,
-    insetInlineStart: `${percent}%`,
-    width: 1,
-    height: percent % 50 === 0 ? 14 : 8,
-    backgroundColor: 'rgba(220, 0, 0, 0.8)',
-  }),
-});
-
-/** Marks every tenth of the screen's width, for reading a film. */
-function Ruler() {
-  return (
-    <div aria-hidden {...stylex.props(styles.ruler)}>
-      {MARKS.map(percent => (
-        <span key={percent} {...stylex.props(styles.mark(percent))} />
-      ))}
-    </div>
-  );
-}
-
 /** Runs the extra work in the commit that mounts the screen. */
 function WorkInCommit({ms}: {ms: number}) {
   useLayoutEffect(() => {

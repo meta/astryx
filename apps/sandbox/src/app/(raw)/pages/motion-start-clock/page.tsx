@@ -16,7 +16,7 @@
  *   must show it at its start
  */
 
-import {Suspense, useCallback, useLayoutEffect, useRef} from 'react';
+import {Suspense, useCallback, useRef} from 'react';
 import {useSearchParams} from 'react-router-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
@@ -25,13 +25,14 @@ import {
   busyFor,
   queryNumber,
   Readout,
+  Ruler,
   Stage,
   useReadoutLines,
+  watchFirstMove,
 } from '../../navigationStackCells';
 
 const PAGE = '/sandbox/pages/motion-start-clock/';
 const ITEMS = Array.from({length: 16}, (_, index) => `Item ${index + 1}`);
-const MARKS = Array.from({length: 11}, (_, index) => index * 10);
 
 // UIKit's push spring (response 0.3 s, critically damped) and the
 // programmatic push's starting velocity (8.773 travels per second), as Core
@@ -58,22 +59,6 @@ const START_MODES: ReadonlyArray<StartMode> = [
 ];
 
 const styles = stylex.create({
-  ruler: {
-    position: 'fixed',
-    insetInline: 0,
-    top: 0,
-    height: 14,
-    zIndex: 11,
-    pointerEvents: 'none',
-  },
-  mark: (percent: number) => ({
-    position: 'absolute',
-    top: 0,
-    insetInlineStart: `${percent}%`,
-    width: 1,
-    height: percent % 50 === 0 ? 14 : 8,
-    backgroundColor: 'rgba(220, 0, 0, 0.8)',
-  }),
   root: {
     position: 'absolute',
     inset: 0,
@@ -101,17 +86,6 @@ const styles = stylex.create({
   },
 });
 
-/** Marks every tenth of the screen's width, for reading a film. */
-function Ruler() {
-  return (
-    <div aria-hidden {...stylex.props(styles.ruler)}>
-      {MARKS.map(percent => (
-        <span key={percent} {...stylex.props(styles.mark(percent))} />
-      ))}
-    </div>
-  );
-}
-
 /** The share of its travel the push spring has covered `t` seconds in. */
 function springTravel(t: number): number {
   return 1 - (1 + (OMEGA - START_VELOCITY) * t) * Math.exp(-OMEGA * t);
@@ -130,40 +104,6 @@ function springKeyframes(from: number, to: number): Keyframe[] {
   return frames;
 }
 
-/** The x the element shows now, in px. */
-function shownX(element: HTMLElement): number {
-  const translate = getComputedStyle(element).translate;
-  return translate === 'none' ? 0 : Number.parseFloat(translate);
-}
-
-/**
- * Calls `onMove` at the first animation frame after `since` in which the
- * element shows away from `from`, with its travel toward `to`.
- */
-function watchFirstMove(
-  element: HTMLElement,
-  since: number,
-  from: number,
-  to: number,
-  onMove: (ms: number, travel: number) => void,
-): void {
-  const deadline = since + 3000;
-  const tick = (time: number) => {
-    const x = shownX(element);
-    if (Math.abs(x - from) > 0.5) {
-      onMove(
-        Math.round((time - since) * 10) / 10,
-        Math.round(((x - from) / (to - from)) * 1000) / 1000,
-      );
-      return;
-    }
-    if (time < deadline) {
-      requestAnimationFrame(tick);
-    }
-  };
-  requestAnimationFrame(tick);
-}
-
 function parseStart(value: string | null): StartMode {
   return START_MODES.find(mode => mode === value) ?? 'next-frame';
 }
@@ -178,9 +118,10 @@ function MotionStartClockCell() {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const shownRef = useRef<'root' | 'card'>('root');
-
-  useLayoutEffect(() => {
-    const card = cardRef.current;
+  // The card starts at the trailing edge in px, which the page's watch reads
+  // from the computed translate.
+  const attachCard = useCallback((card: HTMLDivElement | null) => {
+    cardRef.current = card;
     if (card != null) {
       card.style.translate = `${stageRef.current?.clientWidth ?? card.clientWidth}px 0`;
     }
@@ -241,11 +182,17 @@ function MotionStartClockCell() {
         // In the tap's own task, after the call, as a later listener's work.
         busyFor(work);
       }
-      watchFirstMove(card, tapped, from, to, (ms, travel) => {
-        addLine(
-          `${kind}: started ${startedMs ?? '?'} ms after the tap (document timeline); first moved frame ${ms} ms after the tap, at ${Math.round(travel * 100)}% of its travel (page clock)`,
-        );
-      });
+      watchFirstMove(
+        card,
+        tapped,
+        () => from,
+        () => to,
+        move => {
+          addLine(
+            `${kind}: started ${startedMs ?? '?'} ms after the tap (document timeline); first moved frame ${move.ms} ms after the tap, at ${Math.round(move.travel * 100)}% of its travel (page clock)`,
+          );
+        },
+      );
     },
     [start, work, addLine],
   );
@@ -266,7 +213,7 @@ function MotionStartClockCell() {
             ))}
           </List>
         </div>
-        <div ref={cardRef} {...stylex.props(styles.card)}>
+        <div ref={attachCard} {...stylex.props(styles.card)}>
           <div {...stylex.props(styles.bar)}>
             <Button
               label="Back"

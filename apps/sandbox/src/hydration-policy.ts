@@ -7,7 +7,8 @@
  * @position Prevents mismatches for iframe themes and for pages whose first
  *   render reads URL controls. Those pages are Shell Lab, Perf Scenes, Chat
  *   Layout, AlertDialog Cases, List Reorder Cases, Scroll Edge Taps, Swipe
- *   Actions Cases and the NavigationStack (navstack-*) pages.
+ *   Actions Cases, the NavigationStack (navstack-*) pages and Motion Start
+ *   Clock.
  */
 
 /** Pages whose first render reads the query string. */
