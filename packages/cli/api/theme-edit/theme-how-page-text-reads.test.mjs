@@ -175,4 +175,53 @@ describe('page text reads', () => {
     ).toBe(false);
     await follow(lines);
   }, 240_000);
+
+  it("leaves a part's own text color, a holder colored apart and a text color the ask types as they are", async () => {
+    const typed = (
+      await how('silver #c0c0c0 everywhere, error text #ff0000')
+    ).flatMap(r => r.commands);
+    expect(
+      typed.some(c =>
+        /--color-text-error '[^']*' --on dropdown-menu-item/.test(c),
+      ),
+    ).toBe(false);
+    await themeEditNew('q4', {cwd, like: 'neutral'});
+    await runCli(
+      [
+        'experimental',
+        'theme',
+        'editor',
+        'set',
+        'q4',
+        '--color-text-error',
+        '#7a0010',
+        '--on',
+        'dropdown-menu-item',
+      ],
+      cwd,
+    );
+    await runCli(
+      [
+        'experimental',
+        'theme',
+        'editor',
+        'set',
+        'q4',
+        'background-color',
+        '#1e1e1e',
+        '--on',
+        'dropdown-menu',
+      ],
+      cwd,
+    );
+    const {data} = /** @type {any} */ (
+      await themeEditHow('silver #c0c0c0 everywhere', {cwd, theme: 'q4'})
+    );
+    const own = (data.results ?? []).flatMap(
+      (/** @type {any} */ r) => r.commands,
+    );
+    expect(
+      own.some((/** @type {string} */ c) => /--on dropdown-menu-item/.test(c)),
+    ).toBe(false);
+  }, 240_000);
 });

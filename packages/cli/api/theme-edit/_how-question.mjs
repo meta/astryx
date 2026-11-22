@@ -33221,12 +33221,43 @@ export function draftAnswer(ctx, env, question) {
     };
     /** @type {Map<string, {step: Step, ratio: number, under: string, washed: boolean}>} */
     const out = new Map();
+    /** A part, or a part holding it, the theme or the ask itself colors. @param {string} part */
+    const colored = part =>
+      [...env.data.settings, ...steps].some(
+        x =>
+          x.on &&
+          (part === x.on || part.startsWith(`${x.on}-`)) &&
+          (/^(?:background|background-color|color)$/.test(x.thing) ||
+            /^--color-/.test(x.thing)),
+      );
+    /** The fill of a part holding this one, when it does not follow the page. @param {string} part */
+    const heldOff = part =>
+      Object.keys(C.MAP).some(holder => {
+        if (holder === part || !part.startsWith(`${holder}-`)) return false;
+        const fill = (C.partReads(holder, 'background') ?? []).find(b =>
+          (b.when ?? []).includes(''),
+        );
+        if (!fill || GROUND.has(fill.token)) return false;
+        const v = parseColor(after(fill.token));
+        return !v || hex(v.slice(0, 3)) !== hex(ground.slice(0, 3));
+      });
     for (const part of Object.keys(C.MAP)) {
+      // (A part whose own colors the theme or the ask sets, or that sits in
+      // a holder of another color, is measured by the theme's own check,
+      // never on the page.)
+      if (colored(part) || heldOff(part)) continue;
       const bg = (C.partReads(part, 'background') ?? []).filter(
         r => !/overlay|tint/.test(r.token),
       );
       for (const r of C.partReads(part, 'text') ?? []) {
         if (!/^--color-text-/.test(r.token) || /disabled/.test(r.token))
+          continue;
+        // (A text color the ask writes is the asker's.)
+        if (
+          result.some(o =>
+            o.options.some(opt => opt.some(x => x.thing === r.token)),
+          )
+        )
           continue;
         for (const w of r.when ?? ['']) {
           // (A state's look, hover or press, is not where text rests.)
