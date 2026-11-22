@@ -4819,6 +4819,16 @@ const chromaOf = value => {
 };
 
 /**
+ * Whether a CSS value holds a color with a tint: each hex or color-function
+ * color in it, in a shorthand too (the shared pattern), is read.
+ * @param {string} value
+ */
+export const valueHasTint = value =>
+  (String(value).match(COLOR_IN_VALUE) ?? []).some(
+    c => chromaOf(c) > UNTINTED_CHROMA,
+  );
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -5699,13 +5709,6 @@ export function draftAnswer(ctx, env, question) {
   // sets no color in a part rule, no page, surface or card color of its
   // own, and whose base keeps no tinted gray in a part rule: every other
   // ask keeps its old reading.)
-  /** @param {string} v */
-  const hasTint = v =>
-    (
-      String(v).match(
-        /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch|oklab)a?\([^)]*\)/gi,
-      ) ?? []
-    ).some(h => chromaOf(h) > UNTINTED_CHROMA);
   const setsColors =
     env.data.settings.some(
       st =>
@@ -5721,7 +5724,7 @@ export function draftAnswer(ctx, env, question) {
     ).some(rules =>
       Object.values(rules ?? {}).some(decls =>
         Object.entries(decls ?? {}).some(
-          ([k, v]) => paletteDialOf(k) === 'neutral' && hasTint(String(v)),
+          ([k, v]) => paletteDialOf(k) === 'neutral' && valueHasTint(String(v)),
         ),
       ),
     );

@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {oklabOf, parseColor} from './_color.mjs';
+import {valueHasTint} from './_how-question.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -397,4 +398,19 @@ describe('neutral grays', () => {
     },
     T,
   );
+  it('reads a tint in every color syntax a part rule may use', () => {
+    // (A value's hex and color-function colors are read, lch(), lab(),
+    // hwb() and color() included, in a shorthand too.)
+    for (const v of [
+      'lch(52 6 80)',
+      '1px solid lch(52 6 80)',
+      'color(srgb 0.6 0.55 0.5)',
+      '1px solid color(srgb 0.6 0.55 0.5)',
+      'lab(52 4 8)',
+      '#78716c',
+    ])
+      expect(valueHasTint(v), v).toBe(true);
+    for (const v of ['lch(52 0 0)', 'color(srgb 0.5 0.5 0.5)', '#777777'])
+      expect(valueHasTint(v), v).toBe(false);
+  });
 });
