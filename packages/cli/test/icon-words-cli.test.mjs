@@ -2,9 +2,8 @@
 
 /**
  * The icon commands' docs say "icon meaning" for an entry of Astryx's shared
- * list of what icons are for, "variant" for a set's looks, and never "icon
- * pack" or "icon registry". Flags, code, JSON keys, ids, file paths and
- * keywords keep their spellings.
+ * list of what icons are for, and never "icon pack" or "icon registry".
+ * Flags, code, JSON keys, ids, file paths and keywords keep their spellings.
  */
 
 import fs from 'node:fs';
@@ -22,17 +21,9 @@ const DOC_FILES = fs
 
 const RETIRED = [
   {word: 'definition', pattern: /\bdefinitions?\b/i},
-  {word: 'look (say variant)', pattern: /\blooks?\b/i},
   {word: 'register', pattern: /\bregist(?:er|ers|ered|ering|ry|ries)\b/i},
   {word: 'icon pack', pattern: /\b(?:icon[- ])?packs?\b/i},
 ];
-
-/**
- * The one sentence that says what a variant is, and "look words": the
- * style, size and weight words in a library's export names, which are not
- * a set's variants.
- */
-const ALLOWED_LOOKS = /\bA variant is a look\b|\blook words?\b/g;
 
 /** Keys whose values are code, names or search words, not prose. */
 const NOT_PROSE = new Set([
@@ -84,11 +75,10 @@ describe('icon words in the icon commands', () => {
     for (const file of DOC_FILES) {
       const {doc} = await import(pathToFileURL(file).href);
       for (const text of proseOf(doc)) {
-        const rest = text.replace(ALLOWED_LOOKS, '');
         for (const {word, pattern} of RETIRED) {
-          if (pattern.test(rest)) {
+          if (pattern.test(text)) {
             found.push(
-              `${path.basename(file)}: "${word}" in ${rest.slice(0, 100)}`,
+              `${path.basename(file)}: "${word}" in ${text.slice(0, 100)}`,
             );
           }
         }
