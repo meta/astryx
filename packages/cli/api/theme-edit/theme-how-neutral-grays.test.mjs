@@ -169,6 +169,13 @@ describe('neutral grays', () => {
         // (A prohibition anywhere keeps the base answer.)
         "buttons shouldn't be round, neutral grays",
         "don't make buttons rounder, neutral grays",
+        "neutral grays, don't make buttons rounder",
+        "Don't make buttons rounder, neutral grays",
+        'neutral grays, never hide the tab underline',
+        // (A removal before the grays turns them away even when they carry
+        // a verb of their own.)
+        'remove rounded corners and use neutral grays',
+        'I hate rounded corners and want neutral grays',
       ]) {
         const results = await answer(q, 'warm');
         expect(
@@ -180,8 +187,8 @@ describe('neutral grays', () => {
           q,
         ).toBe(false);
       }
-      // (A removal word in another clause, "drop shadows" as a thing, or
-      // grays asked with their own verb turn nothing away: they are read.)
+      // (A removal word in another clause, or "drop shadows" as a thing,
+      // turns nothing away: the grays are read.)
       for (const q of [
         'neutral grays, drop shadows on cards',
         'zero radius corners, neutral grays',
@@ -189,9 +196,6 @@ describe('neutral grays', () => {
         'cards with drop shadows and neutral grays',
         'cards with drop-shadows and neutral grays',
         'zero radius corners and neutral grays',
-        // (Grays with a lead verb of their own start a new ask.)
-        'remove rounded corners and use neutral grays',
-        'I hate rounded corners and want neutral grays',
       ]) {
         const results = await answer(q, 'warm');
         expect(

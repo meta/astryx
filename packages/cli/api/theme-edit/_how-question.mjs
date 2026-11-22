@@ -5534,12 +5534,11 @@ export function draftAnswer(ctx, env, question) {
     // (A removal, a prohibition or a dislike that leads the clause the grays
     // sit in turns them away with the rest of its list: "remove rounded
     // corners and neutral grays". The lead words are the clause readers'
-    // own; "drop shadows" is a thing, never a removal; a removal or dislike
-    // lead in another clause governs only its own; and grays with a lead
-    // verb of their own, "… and use neutral grays", start a new ask. A
-    // prohibition anywhere keeps the base answer: the clause reader takes
-    // it as an exception to what is asked, so the grays are not read
-    // beside it.)
+    // own; "drop shadows" is a thing, never a removal; and a removal or
+    // dislike lead in another clause governs only its own. A prohibition
+    // word anywhere ("don't", "never", "shouldn't", in any case or place)
+    // keeps the base answer: the clause reader takes it as an exception to
+    // what is asked, so the grays are not read beside it.)
     text => {
       const clause =
         text
@@ -5547,16 +5546,16 @@ export function draftAnswer(ctx, env, question) {
           .find(c => /\b(?:neutral|untinted) gr[ae]ys\b/i.test(c)) ?? '';
       const before = clause
         .slice(0, clause.search(/\b(?:neutral|untinted) gr[ae]ys\b/i))
-        .replace(
-          /^.*\band\s+(?:i'?d like|i want|want|use|make|give|go with|keep)\s+$/i,
-          '',
-        )
         .replace(/\bdrop[-\s]+shadows?\b/gi, '');
       return (
         new RegExp(
           `\\b(?:${REMOVAL_VERBS}|${DISLIKE_LEAD}|no|avoid|never|not|don'?t|do not|instead of|except)\\b`,
           'i',
-        ).test(before) || PROHIBITION.test(text)
+        ).test(before) ||
+        /\b(?:don'?t|do not|never|(?:should|must|shall)(?:n'?t| not))\b/i.test(
+          text,
+        ) ||
+        PROHIBITION.test(text.toLowerCase())
       );
     },
   );
