@@ -140,6 +140,11 @@ describe('TableHeaderCell', () => {
     expect(heading).toHaveAttribute('dir', 'rtl');
   });
 
+  it('keeps a truncating heading that mixes both scripts as plain text in the cell, as before', () => {
+    renderChildrenMode('truncate', 'Invoice for שירה כהן');
+    expect(screen.getByText('Invoice for שירה כהן').tagName).toBe('TH');
+  });
+
   it('keeps a wrapping heading as plain text in the cell', () => {
     renderChildrenMode('wrap');
     expect(screen.getByText('Jobs').tagName).toBe('TH');

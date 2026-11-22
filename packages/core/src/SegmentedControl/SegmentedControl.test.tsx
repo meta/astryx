@@ -72,7 +72,7 @@ describe('SegmentedControl', () => {
     );
     expect(screen.getByText('Monthly')).toHaveAttribute('dir', 'ltr');
     expect(screen.getByText('שבועי')).toHaveAttribute('dir', 'rtl');
-    expect(screen.getByText('iPhone جديد')).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText('iPhone جديد')).not.toHaveAttribute('dir');
     expect(screen.getByRole('radio', {name: 'Monthly'})).toBeTruthy();
   });
 

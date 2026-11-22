@@ -333,10 +333,11 @@ for all 30 shipped locales plus `pseudo`.
   (`textDirectionProps`, `withTextDirection`) is the shared helper that marks
   caller text with no right-to-left letter `dir="ltr"`; components use it
   rather than reading direction themselves. A label that cuts its own text
-  takes its content's direction from the same helper module
-  (`cutTextDirection`): `rtl` for text with a right-to-left letter, `ltr` for
-  other plain text, so it keeps its start on either page. A known limit: a
-  mostly Latin label with one right-to-left word reads right to left.
+  takes its direction from the same helper module (`cutTextDirection`):
+  `ltr` for text with no right-to-left letter, `rtl` for text whose letters
+  are all right-to-left, so it keeps its start on either page. Text that mixes
+  both scripts takes no direction and follows the page. A known limit: a
+  mixed label led by the other script than the page's is cut at its start.
 - **INV12 — Locale and direction are related but distinct.** The provider derives
   a default direction from locale and accepts an explicit override. It does not
   mutate DOM `dir`. Applications own the page or region `dir`, and must keep it

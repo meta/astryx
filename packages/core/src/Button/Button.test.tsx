@@ -55,6 +55,22 @@ describe('Button', () => {
     expect(screen.getByRole('button', {name: 'Monthly report'})).toBeTruthy();
   });
 
+  it.each(['ltr', 'rtl'])(
+    'leaves a label that mixes both scripts to the page on a %s page, as before',
+    dir => {
+      render(
+        <div dir={dir}>
+          <Button label="Invoice for שירה כהן" />
+          <Button label="iPhone של דנה" />
+        </div>,
+      );
+      expect(screen.getByText('Invoice for שירה כהן')).not.toHaveAttribute(
+        'dir',
+      );
+      expect(screen.getByText('iPhone של דנה')).not.toHaveAttribute('dir');
+    },
+  );
+
   // Retained, narrowed: the shared contract proves the ROLE and the accessible
   // NAME in a real engine (button.role.exposed, button.name.exposed), which is
   // strictly stronger than asserting them here. What stays is the part it does

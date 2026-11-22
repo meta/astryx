@@ -17,7 +17,10 @@
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
+import {
+  firstStrongDirection,
+  hasStrongRightToLeft,
+} from '../i18n/firstStrongDirection';
 
 /**
  * Under a right-to-left page, weak and neutral characters in left-to-right
@@ -36,18 +39,31 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
 
 /**
  * The direction of a label that cuts its own text with an ellipsis. The
- * element's own direction decides which end the ellipsis cuts, so a cut label
- * takes its content's direction on any page: `rtl` for text with a
- * right-to-left letter, `ltr` for other plain text. A Latin label keeps its
- * start on a right-to-left page ("Mon…"), and a Hebrew or Arabic label keeps
- * its start on a left-to-right page. A rich node is left alone. A mostly
- * Latin label with one right-to-left word reads right to left.
+ * element's own direction decides which end the ellipsis cuts. Text with no
+ * right-to-left letter takes `ltr`, so a Latin label keeps its start on a
+ * right-to-left page ("Mon…"). Text whose letters are all right-to-left takes
+ * `rtl`, so a Hebrew or Arabic label keeps its start on a left-to-right page.
+ * Text that mixes both scripts, and a rich node, take no direction and follow
+ * the page.
  */
 export function cutTextDirection(content: ReactNode): {dir?: 'ltr' | 'rtl'} {
   if (typeof content !== 'string' && typeof content !== 'number') {
     return {};
   }
-  return {dir: hasStrongRightToLeft(String(content)) ? 'rtl' : 'ltr'};
+  const text = String(content);
+  if (!hasStrongRightToLeft(text)) {
+    return {dir: 'ltr'};
+  }
+  return hasStrongLeftToRight(text) ? {} : {dir: 'rtl'};
+}
+
+function hasStrongLeftToRight(text: string): boolean {
+  for (const character of text) {
+    if (firstStrongDirection(character) === 'ltr') {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -123,9 +139,9 @@ export function isolatedText(
 }
 
 /**
- * The text in a span that cuts it with an ellipsis (`style`). Plain text takes
- * its own direction (`cutTextDirection`) with the page's alignment, so a cut
- * label keeps its start on either page.
+ * The text in a span that cuts it with an ellipsis (`style`). Plain text in one
+ * script takes its own direction (`cutTextDirection`) with the page's
+ * alignment, so a cut label keeps its start on either page.
  */
 export function cutText(
   text: ReactNode,

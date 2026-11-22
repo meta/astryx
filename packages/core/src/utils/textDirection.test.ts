@@ -105,9 +105,9 @@ describe('cutText', () => {
     expect(props(span).children).toBe('Monthly revenue');
   });
 
-  it('gives text with a right-to-left letter its own right-to-left direction, and leaves a rich node alone', () => {
+  it('gives right-to-left text its own direction, and leaves mixed text and a rich node alone', () => {
     expect(props(cutText('הכנסה חודשית', cut.label)).dir).toBe('rtl');
-    expect(props(cutText('iPhone של דנה', cut.label)).dir).toBe('rtl');
+    expect(props(cutText('iPhone של דנה', cut.label)).dir).toBeUndefined();
     const rich = createElement('b', null, 'bold');
     const span = cutText(rich, cut.label);
     expect(props(span).dir).toBeUndefined();
@@ -119,8 +119,15 @@ describe('cutTextDirection', () => {
   it("reads a cut label's direction from its own content, on any page", () => {
     expect(cutTextDirection('Monthly')).toEqual({dir: 'ltr'});
     expect(cutTextDirection(30)).toEqual({dir: 'ltr'});
+    expect(cutTextDirection('C++')).toEqual({dir: 'ltr'});
     expect(cutTextDirection('חודשי')).toEqual({dir: 'rtl'});
-    expect(cutTextDirection('iPhone של דנה')).toEqual({dir: 'rtl'});
+    expect(cutTextDirection('דוח 2026')).toEqual({dir: 'rtl'});
+    expect(cutTextDirection('تقرير شهري')).toEqual({dir: 'rtl'});
+  });
+
+  it('leaves a label that mixes both scripts to the page, as before', () => {
+    expect(cutTextDirection('Invoice for שירה כהן')).toEqual({});
+    expect(cutTextDirection('iPhone של דנה')).toEqual({});
     expect(cutTextDirection(createElement('b', null, 'bold'))).toEqual({});
   });
 });
