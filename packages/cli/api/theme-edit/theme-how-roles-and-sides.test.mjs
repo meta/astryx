@@ -125,6 +125,16 @@ describe('a light neutral', () => {
     expect(silverAll).toContain(
       "set q0 --color-syntax-comment '#4e4e4e' --mode light",
     );
+    // (So does a light tan.)
+    expect(
+      (await how('q0', 'neutral #d2b48c')).flatMap(r => r.commands),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^set q0 --color-syntax-comment '#[0-9a-f]{6}' --mode light$/,
+        ),
+      ]),
+    );
     // (A code background the theme sets itself stays, so its title color
     // is left as it is.)
     await themeEditNew('q2', {cwd, like: 'neutral'});
