@@ -777,7 +777,7 @@ export function Dialog({
     }
     // Under reduced motion, from the setting or a theme, the entrance does
     // not travel. When the setting ends while the dialog is open, the
-    // entrance replays and travels; a theme's mark does not end.
+    // entrance replays and travels. A theme's mark is not watched.
     if (themeReducesMotion(dialog)) {
       return;
     }
