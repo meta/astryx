@@ -9,9 +9,9 @@ export const doc = {
   displayName: 'astryx experimental icon use',
   namespace: 'cli/commands',
   stability: 'experimental',
-  summary: "Choose the project's main icon set, backups, and look",
+  summary: "Choose the project's main icon set, backups, and variant",
   description:
-    "Writes `experimental.iconSet` in astryx.config, so copied templates and blocks use that set's icons. With `--backup`, it writes a list: the main set first, then each backup in the order given. A copied template takes each icon from the first set in the list that has its meaning. With `--variant`, it also writes `experimental.iconVariant`, the look every icon draws (`outline`, `filled`): one of the main set's variants. Each set in the list draws its variant of that name, or its default look when it declares none, and the receipt names the theme map that draws the built-in icons in that look. Without `--variant`, it removes `experimental.iconVariant`, so each set draws its default look: run it with every set and the look you want. Every set must be installed. Experimental: it may change or be removed in a patch release.",
+    "Writes `experimental.iconSet` in astryx.config, so copied templates and blocks use that set's icons. With `--backup`, it writes a list: the main set first, then each backup in the order given. A copied template takes each icon from the first set in the list that has its meaning. With `--variant`, it also writes `experimental.iconVariant`, the variant every icon draws (`outline`, `filled`): one of the main set's variants. A variant is a look, such as outline or filled. Each set in the list draws its variant of that name, or its default variant when it declares none, and the receipt names the theme map that draws the built-in icons in that variant. Without `--variant`, it removes `experimental.iconVariant`, so each set draws its default variant: run it with every set and the variant you want. Every set must be installed. Experimental: it may change or be removed in a patch release.",
   fn: 'iconUse',
   args: [{name: 'set', param: 'set', required: true}],
   options: [
@@ -25,7 +25,7 @@ export const doc = {
       cli: 'astryx experimental icon use outline --backup @acme/brand-icons/brand',
     },
     {
-      label: 'Draw every icon in one look',
+      label: 'Draw every icon in one variant',
       cli: 'astryx experimental icon use brand --variant filled',
     },
     {
@@ -37,7 +37,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'experimental.iconSet (and experimental.iconVariant) is written, or already names the sets and the look, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
+      when: 'experimental.iconSet (and experimental.iconVariant) is written, or already names the sets and the variant, or, typed alone, an icon (or, with no icon set installed, an icon meaning) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,

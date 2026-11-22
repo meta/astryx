@@ -2332,3 +2332,49 @@ describe('Slider after a render React discards', () => {
     expect(onChangeEnd).toHaveBeenLastCalledWith(50);
   });
 });
+
+describe('Slider text value', () => {
+  it('reserves room for a max that lies off the step grid, which End shows', () => {
+    render(
+      <Slider
+        label="Off grid"
+        min={0}
+        max={10.25}
+        step={1}
+        value={0}
+        valueDisplay="text"
+      />,
+    );
+    const text = screen.getByText('0');
+    // "10.25" is the longest text: five characters plus one.
+    expect(text.getAttribute('style') ?? '').toContain('6ch');
+  });
+
+  it("reserves a range's room through its catalog message", () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.slider.rangeValue': 'de {start} à {end}'}}}>
+        <Slider
+          label="Prix"
+          value={[20, 80] as [number, number]}
+          valueDisplay="text"
+        />
+      </InternationalizationProvider>,
+    );
+    const text = screen.getByText('de 20 à 80');
+    // "de 100 à 100" is the longest text: twelve characters plus one.
+    expect(text.getAttribute('style') ?? '').toContain('13ch');
+  });
+
+  it('renders without a duplicate-key warning when both ends format alike', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <Slider label="Fixed" min={5} max={5} value={5} valueDisplay="text" />,
+    );
+    expect(
+      error.mock.calls.some(call => String(call[0]).includes('same key')),
+    ).toBe(false);
+    error.mockRestore();
+  });
+});

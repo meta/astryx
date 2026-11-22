@@ -996,8 +996,11 @@ this flow passes the historical review benchmark and is enforced on pull request
   Safe-space classification considers both current and previous paths: only
   changes whose every path is safe are excluded, and any rename crossing that
   boundary is an engineering reason.
-  Engineering and design reviews count only when their `commit_id` equals the
-  current pull-request head. The direct reconciler clears only a current-head
+  Engineering and design reviews count for the current pull-request head only
+  when their `commit_id` equals the head and they were submitted at or after
+  the head was pushed: the later of the head commit's committer date and the
+  creation of its first check suite. GitHub can re-bind an older review to a
+  new head. An unreadable push time counts no review. The direct reconciler clears only a current-head
   gate already owned by `review-signal`; an effective ENGOWNER
   `CHANGES_REQUESTED` or `DISMISSED` state first restores the hard status gate to
   pending, then restores its advisory label. A failed status write performs no
@@ -1007,8 +1010,8 @@ this flow passes the historical review benchmark and is enforced on pull request
   For an author whose live repository permission is write or admin, the
   review app named in the `REVIEW_APP` repository variable also satisfies the
   engineering gate under DEC-11. Only that app's latest `APPROVED`,
-  `CHANGES_REQUESTED`, or `DISMISSED` review whose `commit_id` equals the current
-  head counts. Both workflows read the author's permission at every evaluation
+  `CHANGES_REQUESTED`, or `DISMISSED` review that counts for the current head
+  under the same rule counts. Both workflows read the author's permission at every evaluation
   and publish the status with their own Actions token.
 
 ## Deciding specs

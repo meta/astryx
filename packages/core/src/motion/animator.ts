@@ -210,7 +210,7 @@ import {
   registerReducedMotionCrossFade,
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
-import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {devWarn} from '../utils/devWarning';
 
 declare const process: {readonly env: {readonly NODE_ENV?: string}};
@@ -1334,8 +1334,7 @@ export function createMotionEngine(
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4). A theme that reduces motion
   // for everyone counts as the setting.
-  const prefersReducedMotion = () =>
-    defaultPrefersReducedMotion() || themeReducesMotion(target);
+  const prefersReducedMotion = () => reducesMotion(target);
   const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,

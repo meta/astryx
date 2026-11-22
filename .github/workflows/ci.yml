@@ -252,7 +252,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 48 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -340,7 +340,7 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 48 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -754,6 +754,8 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 6
     permissions:
+      # checks: read lets the review read when the head was pushed.
+      checks: read
       contents: read
       pull-requests: read
       statuses: read
@@ -1821,12 +1823,13 @@ jobs:
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
-      # A Lab-only change may carry a Lab component's CLI discovery entry; the
-      # committed list must match its generator (spec:AST-030 FR26).
+      # A Lab-only change can change the CLI's official package list, which the
+      # CLI derives when it is packed: the list must still build from the
+      # repository (spec:AST-030 FR26).
       - name: 'Lab-only: CLI official-packages check'
         if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
         # One Node-project test file: Vitest finds its project from the path.
-        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
+        run: pnpm exec vitest run packages/cli/scripts/generate-official-packages.test.mjs --maxWorkers=1
 
   # The Node project's browser contracts run in a job of their own, beside the
   # Node legs: theme-family compilation (owned by `theme-build`, not Build,
@@ -3948,13 +3951,16 @@ jobs:
     # A status check: heavy-ci, which skips on every run but an agent push,
     # is an ancestor (spec:AST-030 FR20); its skip must not skip this job.
     if: (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check') && !cancelled() && needs.admission.result == 'success' && needs.build-storybook.result == 'success'
-    # Six legs: at three, the slowest leg took ~20 minutes, held by its longest
+    # Seven legs: at three, the slowest leg took ~20 minutes, held by its longest
     # spec file; files longer than a leg's share are now cut across legs
-    # (spec:AST-030 FR23).
+    # (spec:AST-030 FR23). One leg is the isolated Table virtualization spec;
+    # the other six plan at about 8 minutes of tests each, leaving room under
+    # the 15-minute job for setup and a slow runner.
+    # a11y-contract-shard.yml splits the same number of ways.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     # One core per worker: on two cores, four workers starved the CPU-bound
     # "every expectation" specs past their timeouts.
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -4688,6 +4694,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # A proof that keeps its failure output (BottomSheetDragRestyle: its
+      # Playwright trace and screenshot) uploads it here. Its rendering
+      # events go with the interaction evidence above.
+      - name: Upload failure traces
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-failure-traces-${{ matrix.leg }}-${{ github.run_attempt }}
+          path: |
+            interaction-proof-output/**/trace.zip
+            interaction-proof-output/**/test-failed-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The gesture, motion and harness interaction proofs in WebKit, the engine
   # of every iOS browser, for the code where WebKit and Chromium differ on
   # touch: the gesture host and recognizers, the motion runtime, the touch and
@@ -5228,6 +5248,99 @@ jobs:
           path: |
             webkit-a11y-report
             webkit-a11y-output
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # The weekly run's Firefox hover specs: playwright.config.ts's `firefox`
+  # project (FIREFOX_HOVER_SPECS). Firefox orders pointer and mouse events
+  # differently from Chromium and WebKit. Report-only, like the WebKit
+  # accessibility contracts: the specs cannot fail this job, and
+  # webkit-weekly-verdict does not read it. The report counts the failures
+  # .github/firefox-known-failures.json lists apart from new ones.
+  firefox-weekly-hover:
+    needs: [webkit-weekly-request, build-storybook]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && !cancelled() && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Playwright image the WebKit legs use: Firefox and its system
+    # libraries are already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Trust the checkout in the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright Firefox
+        run: pnpm install --frozen-lockfile && npx playwright install firefox
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      - name: Run the Firefox hover specs
+        id: specs
+        continue-on-error: true
+        env:
+          # The image runs as root, and a container job's HOME is a folder the
+          # runner's user owns: Firefox does not start as root there.
+          HOME: /root
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
+        run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
+
+      - name: Report the Firefox hover results
+        if: always()
+        run: |
+          node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
+          cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Firefox hover report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: firefox-weekly-hover-report
+          path: |
+            firefox-hover-report
+            firefox-hover-output
           if-no-files-found: ignore
           retention-days: 90
 

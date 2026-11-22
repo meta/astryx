@@ -39,6 +39,12 @@ export const doc = {
         "The page's title (default: its first top-level heading, else the file name)",
     },
     {
+      flag: '--pictures',
+      param: 'options.pictures',
+      description:
+        'Also take pictures of the written file to check how it looks, not to send: a phone in light and dark, and a desktop window, after the page\u2019s script ran, with a browser already on the machine (the project\u2019s Playwright, else Chrome or Chromium); with no browser, it says why and the file stands as written',
+    },
+    {
       flag: '--overwrite',
       param: 'options.overwrite',
       description:

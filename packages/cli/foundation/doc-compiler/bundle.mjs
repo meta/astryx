@@ -246,11 +246,11 @@ export async function compileDocs(project, {lang = null} = {}) {
         ...(input.root === 'tree' ? {loader: 'native'} : {}),
         ...(input.root === 'icon-definitions'
           ? {
-              label: `Icon definition ${path.basename(input.file)} in ${input.owner}`,
+              label: `Icon meaning ${path.basename(input.file)} in ${input.owner}`,
               readStatic: () =>
                 readStaticDescriptorValue(
                   input.file,
-                  `Icon definition ${path.basename(input.file)} in ${input.owner}`,
+                  `Icon meaning ${path.basename(input.file)} in ${input.owner}`,
                   'IconDefinitionDoc',
                   {data: true},
                 ),

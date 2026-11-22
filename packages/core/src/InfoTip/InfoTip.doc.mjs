@@ -12,7 +12,7 @@ const anatomy = [
     name: 'Info icon',
     required: true,
     description:
-      "The icon registry's `info` artwork at `size`; a theme may replace it.",
+      'The `info` icon at `size`; a theme may replace it.',
   },
   {
     name: 'Help surface',

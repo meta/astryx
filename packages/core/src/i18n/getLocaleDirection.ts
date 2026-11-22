@@ -7,9 +7,9 @@
  * @position Server-safe helper for computing text direction from a locale.
  *   Callable in React Server Components / Next.js layouts to set <html dir>.
  *
- * Uses Intl.Locale.getTextInfo() (CLDR-backed) with a try/catch fallback to
- * 'ltr'. React 19 baseline covers all target browsers + Node ≥20; the older
- * accessor form (`.textInfo`) is handled as a fallback for defensive parity.
+ * Uses Intl.Locale.getTextInfo() (CLDR-backed), or the older accessor form
+ * (`.textInfo`). An engine with neither takes the locale's likely script. A
+ * tag that does not parse gives 'ltr'.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/InternationalizationProvider.tsx (uses this to derive default)
@@ -17,12 +17,62 @@
  * - /packages/core/src/i18n/index.ts (public export)
  */
 
+// The scripts ICU writes right to left. Some engines (Firefox) have no
+// `Intl.Locale` text info. There the locale's likely script decides, so the
+// server and the browser give the same direction.
+const RIGHT_TO_LEFT_SCRIPTS = new Set([
+  'Adlm',
+  'Arab',
+  'Armi',
+  'Avst',
+  'Chrs',
+  'Cprt',
+  'Elym',
+  'Gara',
+  'Hatr',
+  'Hebr',
+  'Hung',
+  'Khar',
+  'Lydi',
+  'Mand',
+  'Mani',
+  'Mend',
+  'Merc',
+  'Mero',
+  'Narb',
+  'Nbat',
+  'Nkoo',
+  'Orkh',
+  'Ougr',
+  'Palm',
+  'Phli',
+  'Phlp',
+  'Phnx',
+  'Prti',
+  'Rohg',
+  'Samr',
+  'Sarb',
+  'Sidt',
+  'Sogd',
+  'Sogo',
+  'Syrc',
+  'Thaa',
+  'Yezi',
+]);
+
 export function getLocaleDirection(locale: string): 'ltr' | 'rtl' {
   try {
-    const loc = new Intl.Locale(locale);
-    // @ts-expect-error — older engines expose accessor form `.textInfo`
-    const info = typeof loc.getTextInfo === 'function' ? loc.getTextInfo() : loc.textInfo;
-    return info?.direction === 'rtl' ? 'rtl' : 'ltr';
+    // Older engines expose the accessor form `.textInfo`.
+    const loc = new Intl.Locale(locale) as Intl.Locale & {
+      getTextInfo?: () => {direction?: string};
+      textInfo?: {direction?: string};
+    };
+    const direction = (loc.getTextInfo?.() ?? loc.textInfo)?.direction;
+    if (direction === 'rtl' || direction === 'ltr') {
+      return direction;
+    }
+    const {script} = loc.maximize();
+    return script != null && RIGHT_TO_LEFT_SCRIPTS.has(script) ? 'rtl' : 'ltr';
   } catch {
     return 'ltr';
   }
