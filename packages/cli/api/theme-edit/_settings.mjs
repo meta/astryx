@@ -7626,6 +7626,14 @@ export function compileTheme(ctx, data, base) {
             delete mb[k];
       mb[prop] = v;
     } else b[prop] = v;
+    if (/^outline(-style|-width)?$/.test(kebab(prop)) && !s.state)
+      withFocusOutline(s, target);
+    if (
+      kebab(prop) === 'background' &&
+      !s.state &&
+      !/gradient\(|url\(|image-set\(/i.test(String(v))
+    )
+      withOverlayStates(s, target);
     if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
     // A hover or press shadow on a ringed part: Core draws its hover ring
     // only while the part is not focused, so a focused part keeps its
@@ -7685,12 +7693,301 @@ export function compileTheme(ctx, data, base) {
     }
   };
   /**
+   * A resting background shorthand on a part whose hover and press Core
+   * draws as a background image (a layer over the fill): the shorthand
+   * resets that image too, so the part would show nothing under the
+   * pointer. Each such state, in the shorthand's own scope, takes the image
+   * back from Core's layer (`revert-layer`), so Core's own conditions hold:
+   * its enabled guard, its hover-capable media and its touch press. A state
+   * background the theme sets for this scope, or for a wider one, keeps
+   * what it set; one set for a narrower scope wins by its selector.
+   * @param {Setting} s @param {string} target
+   */
+  const withOverlayStates = (s, target) => {
+    const at = ctx.C.MAP[target]?.at?.['background-image'] ?? {};
+    /** The `key:value` pieces of a scope. @param {unknown} when */
+    const piecesOf = when =>
+      when == null ? [] : String(when).split('+').filter(Boolean);
+    const scope = piecesOf(s.when);
+    /**
+     * A census element the setting's scope reaches. Core's overlay does not
+     * change with a size, a density or an elevation, and the census draws
+     * one of each only, so those pieces never rule an element out.
+     * @param {string} attrs
+     */
+    const inScope = attrs => {
+      const held = new Map(
+        attrs
+          .split(',')
+          .map(a => /** @type {[string, string]} */ (a.split('='))),
+      );
+      return scope.every(p => {
+        const [key, value] = p.split(':');
+        return (
+          /^(?:size|density|elevation)$/.test(key) ||
+          !held.has(key) ||
+          held.get(key) === value
+        );
+      });
+    };
+    // (A part whose plain resting image is Core's own, a tint, is no
+    // overlay part: the shorthand replaces that image in every state. A
+    // look under an attribute state, "aria-expanded", is no plain rest.)
+    const restingImage = Object.entries(at).some(([k, val]) => {
+      const [attrs, ...rest] = k.split(' ');
+      return (
+        !rest.join(' ').trim() &&
+        attrs
+          .split(',')
+          .every(a => /^(?:variant|size|elevation|shape|density)=/.test(a)) &&
+        !/^\s*none\s*$/i.test(String(val)) &&
+        inScope(attrs)
+      );
+    });
+    if (restingImage) return;
+    for (const state of ['hover', 'active']) {
+      const drawn = Object.entries(at).some(([k, val]) => {
+        const [attrs, ...rest] = k.split(' ');
+        return (
+          new RegExp(`^:${state}(?![\\w-])`).test(rest.join(' ')) &&
+          !/^\s*none\s*$/i.test(String(val)) &&
+          inScope(attrs)
+        );
+      });
+      if (!drawn) continue;
+      const setByTheme = data.settings.filter(
+        y =>
+          y.source === 'property' &&
+          /^background(-image)?$/.test(kebab(y.thing)) &&
+          y.state === state &&
+          piecesOf(y.when).every(p => scope.includes(p)) &&
+          partsOf(ctx, y).includes(target),
+      );
+      // (One set for this very scope is the theme's own rule here.)
+      const sameScope = (/** @type {Setting} */ y) =>
+        piecesOf(y.when).length === scope.length;
+      if (setByTheme.some(y => sameScope(y) && !y.mode)) continue;
+      // (One set for a wider scope loses here to the resting rule, which
+      // is written later at the same weight: it is written again at the
+      // resting scope, the widest first so the nearest wins.)
+      for (const y of setByTheme
+        .filter(z => !sameScope(z))
+        .sort((a, b) => piecesOf(a.when).length - piecesOf(b.when).length))
+        if (!setByTheme.some(z => sameScope(z) && z.mode === y.mode))
+          putComp(
+            {...y, when: s.when, state},
+            target,
+            y.thing,
+            String(y.value),
+          );
+      if (setByTheme.some(y => !y.mode)) continue;
+      // (A state background the theme sets for one mode keeps that mode:
+      // the other mode alone takes Core's back.)
+      const ownModes = new Set(setByTheme.map(y => y.mode));
+      if (!ownModes.size)
+        block({...s, state}, target).backgroundImage = 'revert-layer';
+      else
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          if (!ownModes.has(m))
+            modeBlock({...s, state}, target, m).backgroundImage =
+              'revert-layer';
+    }
+  };
+  /**
+   * A resting outline on a part that draws its keyboard focus as an
+   * outline would hide that focus (an outline of none, or one of the
+   * theme's that replaces Core's): the part's focus state gets Core's focus
+   * outline back, for each variant that draws its own. An outline
+   * property the theme sets for that state itself (for the whole part, or
+   * for that variant) keeps what it set; the others still come back.
+   * @param {Setting} s @param {string} target
+   */
+  const withFocusOutline = (s, target) => {
+    const at = ctx.C.MAP[target]?.at ?? {};
+    const state = focusStateOf(ctx, target) ?? 'focus-visible';
+    const ownFocus = data.settings.filter(
+      y =>
+        y.source === 'property' &&
+        /^outline/.test(kebab(y.thing)) &&
+        /^focus/.test(String(y.state ?? '')) &&
+        partsOf(ctx, y).includes(target),
+    );
+    /**
+     * Writes Core's focus value of an outline property for a scope, unless
+     * the theme sets that property for the focus state itself (for the
+     * whole part, for that variant, or for a scope the written one
+     * holds; '' for the whole). One the theme sets for one mode keeps that
+     * mode: the other mode alone takes Core's.
+     * @param {string} p @param {string} variant
+     * @param {string | undefined} when @param {string} x
+     */
+    const putFocus = (p, variant, when, x) => {
+      const held = String(when ?? '').split('+');
+      const own = ownFocus.filter(
+        y =>
+          (kebab(y.thing) === 'outline' || kebab(y.thing) === p) &&
+          (y.when == null ||
+            (variant && y.when === `variant:${variant}`) ||
+            String(y.when)
+              .split('+')
+              .every(piece => held.includes(piece))),
+      );
+      // (A wider one is written at the resting scope before this runs.)
+      if (own.some(y => !y.mode)) return;
+      const ownModes = new Set(own.map(y => y.mode));
+      if (!ownModes.size) {
+        block({...s, state, when}, target)[camel(p)] = x;
+        return;
+      }
+      for (const m of /** @type {const} */ (['light', 'dark']))
+        if (!ownModes.has(m))
+          modeBlock({...s, state, when}, target, m)[camel(p)] = x;
+    };
+    /** Core's focus values of a property, by the variant each is for ('' for all). @param {string} p */
+    const focusValues = p => {
+      /** @type {Map<string, string>} */
+      const out = new Map();
+      for (const [k, val] of Object.entries(at[p] ?? {})) {
+        const [attrs, ...rest] = k.split(' ');
+        if (!/:focus/.test(rest.join(' '))) continue;
+        const variant =
+          attrs
+            .split(',')
+            .map(a => a.split('='))
+            .find(([key]) => key === 'variant')?.[1] ?? '';
+        if (!out.has(variant)) out.set(variant, String(val));
+      }
+      return out;
+    };
+    // The variants Core draws at all, and whether each draws its focus as an
+    // outline: one that shows focus another way (an input-like selector's
+    // ring) gets no outline.
+    const variants = new Set(
+      Object.values(at)
+        .flatMap(m => Object.keys(m ?? {}))
+        .map(
+          k =>
+            k
+              .split(' ')[0]
+              .split(',')
+              .map(a => a.split('='))
+              .find(([key]) => key === 'variant')?.[1] ?? '',
+        ),
+    );
+    const drawn = ['outline-style', 'outline-width'].some(p =>
+      [...focusValues(p).values()].some(
+        x => !/^(none|0(px)?|hidden)$/i.test(x),
+      ),
+    );
+    // (A focus outline value the theme sets for a wider scope loses, at
+    // the same weight, to the resting rule written later: it is written
+    // again at the resting scope, once for every outline property, the
+    // widest first so the nearest one wins.)
+    if (s.when) {
+      /** @param {unknown} w */
+      const pieces = w =>
+        String(w ?? '')
+          .split('+')
+          .filter(Boolean);
+      const held = pieces(s.when);
+      const sameScope = (/** @type {Setting} */ y) =>
+        String(y.when ?? '') === String(s.when);
+      /**
+       * The outline longhands a value sets: a shorthand's style, width and
+       * color, or the one longhand itself.
+       * @param {Setting} y
+       * @returns {Array<[string, string]>}
+       */
+      const longhands = y => {
+        const v = String(y.value);
+        if (kebab(y.thing) !== 'outline') return [[kebab(y.thing), v]];
+        /** @type {Record<string, string>} */
+        const got = {};
+        /** @type {string[]} */
+        const open = [];
+        for (const w of splitTop(v, ' ').filter(Boolean))
+          if (
+            /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i.test(
+              w,
+            )
+          )
+            got['outline-style'] = w;
+          else if (
+            /^(?:thin|medium|thick|-?[\d.]+[a-z%]*|(?:calc|min|max|clamp)\(.*\))$/i.test(
+              w,
+            )
+          )
+            got['outline-width'] = w;
+          else if (/^(?:var|env)\(/i.test(w)) open.push(w);
+          else got['outline-color'] = w;
+        // (A variable is the one part still unsaid; with more than one
+        // unsaid part, the shorthand is copied as written, as before, so
+        // the ring still shows.)
+        const unsaid = [
+          'outline-style',
+          'outline-width',
+          'outline-color',
+        ].filter(k => !(k in got));
+        if (open.length > 1 || (open.length === 1 && unsaid.length !== 1))
+          return [['outline', v]];
+        if (open.length === 1) got[unsaid[0]] = open[0];
+        return Object.entries(got);
+      };
+      // (A longhand the resting scope sets itself, in every mode or the
+      // wider value's mode, is that scope's own: no wider value is copied
+      // over it; the others still are.)
+      for (const y of ownFocus
+        .filter(
+          z => !sameScope(z) && pieces(z.when).every(p => held.includes(p)),
+        )
+        .sort((a, b) => pieces(a.when).length - pieces(b.when).length))
+        for (const [long, v] of longhands(y))
+          if (
+            !ownFocus.some(
+              z =>
+                sameScope(z) &&
+                (z.mode == null || z.mode === y.mode) &&
+                (kebab(z.thing) === 'outline' || kebab(z.thing) === long),
+            )
+          )
+            putComp({...y, thing: long, when: s.when, state}, target, long, v);
+    }
+    if (!drawn) return;
+    for (const p of [
+      'outline-style',
+      'outline-width',
+      'outline-color',
+      'outline-offset',
+    ]) {
+      const vals = focusValues(p);
+      if (!vals.size) continue;
+      // (The variant a combined scope names, "variant:ghost+size:sm".)
+      const asked = String(s.when ?? '')
+        .split('+')
+        .map(piece => /^variant:(.+)$/.exec(piece)?.[1])
+        .find(Boolean);
+      const counts = new Map();
+      for (const x of vals.values()) counts.set(x, (counts.get(x) ?? 0) + 1);
+      const common = [...counts].sort((a, b) => b[1] - a[1])[0][0];
+      if (asked) {
+        const x = vals.get(asked) ?? vals.get('');
+        if (x != null) putFocus(p, asked, s.when, x);
+        continue;
+      }
+      const everyVariant =
+        vals.has('') || [...variants].every(x => !x || vals.has(x));
+      if (everyVariant) putFocus(p, '', undefined, common);
+      for (const [variant, x] of vals)
+        if (variant && (!everyVariant || x !== common))
+          putFocus(p, variant, `variant:${variant}`, x);
+    }
+  };
+  /**
    * A resting shadow on a part that draws rings in its box-shadow in some
    * states (an input's hover and focus rings): for each set of the part's
    * renders Core styles apart (a variant, each status), in each state Core
-   * rings any of them in, the theme's shadow with what Core draws for that
-   * set in that state after it (`<shadow>, <ring>`), so every ring still
-   * shows and a set that draws none there (a focused status input) gets the
+   * rings any of them in, what Core draws for that set in that state over
+   * the theme's shadow (`<ring>, <shadow>`), so every ring still shows and a set that draws none there (a focused status input) gets the
    * shadow alone. A shadow of none puts the rings back in their states and
    * keeps a set's own none where the ring of the set it refines would
    * reach it. A write for one set (`--when status:error`) composes that set
@@ -7814,7 +8111,10 @@ export function compileTheme(ctx, data, base) {
           {...s, state, when: set.pairs.join('+') || undefined},
           target,
         );
-        rb.boxShadow = none ? core : coreNone ? v : `${v}, ${core}`;
+        // Core's ring goes first, over the theme's shadow: a shadow with
+        // inset layers of its own (a bevel) would cover a ring drawn under
+        // it, and the state would show nothing.
+        rb.boxShadow = none ? core : coreNone ? v : `${core}, ${v}`;
       }
     }
   };
