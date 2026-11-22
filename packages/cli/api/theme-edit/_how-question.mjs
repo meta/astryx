@@ -34196,7 +34196,7 @@ function fontIn(cl, question) {
         .replace(/ (Font|Typeface)$/, '')
         .replace(/-(?:like|style|esque)$/i, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
-      if (/-(?:like|style|esque)\b/.test(m[0])) {
+      if (/-(?:like|style|esque)\b/i.test(m[0])) {
         // (A kind the rest of the clause names as a whole word, "NYT-style
         // serif headings", wins over the family's own kind: the kind said
         // is written, as before.)
