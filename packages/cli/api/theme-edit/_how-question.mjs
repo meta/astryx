@@ -2256,6 +2256,19 @@ const PLACE_ONLY =
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
+/** The verbs that take a change back. */
+const UNDO_VERB = /\b(?:undo|revert|reset|take back)\b/;
+/**
+ * A clause that takes back something it names ("undo the light mode
+ * accent change"). A mode it says is the undo's own: it scopes no other
+ * clause, and no other clause's mode limits it.
+ * @param {{text: string, parts: unknown[], aspects: unknown[]}} c
+ */
+const isNamedUndo = c =>
+  UNDO_VERB.test(c.text) &&
+  (c.parts.length > 0 ||
+    c.aspects.length > 0 ||
+    ROLE_DIALS.some(([re]) => re.test(c.text)));
 /** The things a removal can take away. */
 const REMOVABLE =
   '(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)';
@@ -12388,9 +12401,17 @@ export function draftAnswer(ctx, env, question) {
     // gives it to the clauses after it.
     // (Never to an ask that is the same in both modes, "and rounder": a
     // mode said of a color does not reach the corners.)
+    // (A named undo gives its mode to no clause after it, and takes none
+    // from a clause that asks for a change: "make the card background
+    // darker in dark mode. reset the accent" resets the accent in both.)
     if (
       !c.mode &&
       prev?.mode &&
+      !isNamedUndo(prev) &&
+      !(
+        isNamedUndo(c) &&
+        (prev.parts.length || prev.aspects.length || prev.colors.length)
+      ) &&
       (!c.parts.length || (!prev.parts.length && !prev.aspects.length)) &&
       !(
         c.aspects.length &&
@@ -12543,12 +12564,15 @@ export function draftAnswer(ctx, env, question) {
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
     // (An except's mode is its own: it scopes nothing after it.)
+    // (A named undo is no scope: "undo the light mode accent change"
+    // takes back a light mode change, and rules no mode out.)
     if (
       c.mode &&
       !c.except &&
       !c.parts.length &&
       !c.aspects.length &&
-      !c.colors.length
+      !c.colors.length &&
+      !isNamedUndo(c)
     ) {
       // "don't touch dark mode, …": the other mode.
       const scope = c.neg ? (c.mode === 'dark' ? 'light' : 'dark') : c.mode;
@@ -29746,7 +29770,7 @@ export function draftAnswer(ctx, env, question) {
     const colorSaid = /\bcolou?rs?\b/i.test(
       String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
     );
-    const undone = result.filter(d => {
+    const matched = result.filter(d => {
       const c = /** @type {any} */ (draftClause.get(d));
       if (d === unmet || d.unmet || !d.options.length || !c) return false;
       if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
@@ -29771,6 +29795,23 @@ export function draftAnswer(ctx, env, question) {
             ))
       );
     });
+    // ("Make the accent red in light mode. Make the accent blue in dark
+    // mode. Undo the light mode accent change.": an undo that says a mode
+    // takes back only a change said for that mode. A change said for the
+    // other mode, or for both, stays written, and the answer says so.)
+    const undoMode = /** @type {any} */ (draftClause.get(unmet))?.mode ?? null;
+    const ofMode = (/** @type {Draft} */ d) =>
+      !undoMode || /** @type {any} */ (draftClause.get(d))?.mode === undoMode;
+    const undone = matched.filter(ofMode);
+    if (!undone.length && matched.length) {
+      const modes = new Set(
+        matched.map(d => /** @type {any} */ (draftClause.get(d))?.mode),
+      );
+      unmet.text = `the undo names ${undoMode} mode, and the ${part ? `${part} ` : ''}change said earlier in this ask is for ${modes.has(null) || modes.has(undefined) ? 'both modes' : `${[...modes][0]} mode`}, so nothing is taken back and that change stays written`;
+      const uc0 = draftClause.get(unmet);
+      if (uc0) answeredByUndo.add(uc0);
+      continue;
+    }
     // An undo that names more than one change ("Undo the card change and
     // the heading change"), or a look that more than one earlier change
     // could be, is not read for sure: nothing is taken back, and the
@@ -29873,8 +29914,10 @@ export function draftAnswer(ctx, env, question) {
     // each line taken back once; a later clause that says the change again
     // keeps it.)
     const gone = undone.flatMap(d => d.options[0] ?? []);
+    /** Whole answers the take-back leaves with no line. @type {Set<Draft>} */
+    const emptied = new Set();
     for (const d of result)
-      if (!draftClause.get(d) && d.options.length)
+      if (!draftClause.get(d) && d.options.length) {
         d.options = d.options
           .map(o => {
             const left = [...o];
@@ -29887,10 +29930,14 @@ export function draftAnswer(ctx, env, question) {
             return left;
           })
           .filter(o => o.length);
+        if (!d.options.length) emptied.add(d);
+      }
     result.splice(
       0,
       result.length,
-      ...result.filter(d => d !== unmet && !undone.includes(d)),
+      ...result.filter(
+        d => d !== unmet && !undone.includes(d) && !emptied.has(d),
+      ),
     );
     // (A color taken back leaves no line of it anywhere: the fill, its text
     // and the readable text the fill brought.)

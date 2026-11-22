@@ -72,6 +72,62 @@ const answer = async q => {
  */
 const ROWS = [
   [
+    'an undo that says a mode takes back a change said for that mode',
+    {
+      q: 'make the accent red in light mode. undo the light mode accent change',
+      never: /--color-accent/,
+      says: /taken back by its undo/,
+    },
+  ],
+  [
+    'the same in dark mode',
+    {
+      q: 'make the accent red in dark mode. undo the dark mode accent change',
+      never: /--color-accent/,
+      says: /taken back by its undo/,
+    },
+  ],
+  [
+    "an undo that says a mode leaves the other mode's change",
+    {
+      q: 'make the accent red in light mode. make the accent blue in dark mode. undo the light mode accent change',
+      has: ["--color-accent '#2563eb' --mode dark"],
+      never: /#dc2626/,
+    },
+  ],
+  [
+    'a change said for the other mode stays written, and the answer says so',
+    {
+      q: 'make the accent red in dark mode. undo the light mode accent change',
+      has: ["--color-accent '#dc2626' --mode dark"],
+      says: /the change said earlier in this ask is for dark mode/,
+    },
+  ],
+  [
+    'a change said for both modes stays written, and the answer says so',
+    {
+      q: 'make the accent red. undo the light mode accent change',
+      has: ["--color-accent '#dc2626'"],
+      says: /the change said earlier in this ask is for both modes/,
+    },
+  ],
+  [
+    "an undo's mode is never the next clause's",
+    {
+      q: 'undo the light mode accent change. make the cards blue',
+      has: ["background-color '#2563eb' --on card --when variant:default"],
+      never: /--mode/,
+    },
+  ],
+  [
+    'nor after a take-back',
+    {
+      q: 'make the accent red in light mode. undo the light mode accent change. make the cards blue',
+      has: ["background-color '#2563eb' --on card --when variant:default"],
+      never: /--mode|--color-accent/,
+    },
+  ],
+  [
     'a list a part leads with "with" reaches each of its items',
     {
       q: 'cards with a border, a shadow, 12px corners',
