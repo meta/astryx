@@ -299,6 +299,26 @@ describe('a color said for one mode is its page', () => {
       expect(lines.some(l => /^--color-background-body '[^']+'$/.test(l))).toBe(
         false,
       );
+      // (A part said beside a separate both-modes clause is for both modes,
+      // as main writes it; the page keeps its mode.)
+      const plum = /** @type {string[]} */ (
+        (
+          await themeEditHow(
+            'dark mode is plum, blue accent, same in both modes',
+            {cwd, theme: 'c'},
+          )
+        ).data.results ?? []
+      )
+        .flatMap(r => r.commands ?? [])
+        .map(x =>
+          String(x)
+            .replace(/^.* editor /, '')
+            .replace(/^set c /, ''),
+        );
+      expect(pageIn(plum, 'dark')).not.toBeNull();
+      const accent = plum.filter(l => /^accent '#/.test(l));
+      expect(accent.length).toBeGreaterThan(0);
+      for (const l of accent) expect(l).not.toMatch(/--mode/);
     },
     T,
   );

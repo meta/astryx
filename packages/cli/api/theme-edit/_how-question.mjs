@@ -12901,7 +12901,9 @@ export function draftAnswer(ctx, env, question) {
       // before.)
       if (writtenHead(c.text) && o.mode && o.mode !== c.mode && !o.except)
         break;
-      if (writtenHead(c.text) && bothModes.test(o.text)) continue;
+      // (An ask that says both modes anywhere ends a written page's run: what
+      // it names besides the page is for both modes, as main reads it.)
+      if (writtenHead(c.text) && bothModes.test(q)) break;
       if (
         o.mode ||
         o.except ||
