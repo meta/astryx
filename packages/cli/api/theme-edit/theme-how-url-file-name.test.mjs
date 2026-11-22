@@ -56,6 +56,11 @@ it.each([
     'cards background-image: url(hero.jpg)',
     "set pu background-image 'url(hero.jpg)' --on card",
   ],
+  // (An abbreviation's period inside a file name stays as typed.)
+  [
+    'cards background-image: url(/img/etc.png)',
+    "set pu background-image 'url(/img/etc.png)' --on card",
+  ],
   [
     'cards background-image: url(Hero.JPG)',
     "set pu background-image 'url(Hero.JPG)' --on card",

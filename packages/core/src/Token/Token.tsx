@@ -345,6 +345,7 @@ export function Token({
         label: naming?.removeName ?? label,
       })}
       {...tokenRemoveProps}
+      {...pressable}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -352,7 +353,11 @@ export function Token({
       // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
       aria-disabled={isDisabled || undefined}
       {...(isDisabled ? disabledInteractionProps() : null)}
-      {...focusOutlineProps.focusVisible(styles.removeButton)}>
+      {...focusOutlineProps.focusVisible(
+        styles.removeButton,
+        // The button's own hover and press, on its round box.
+        interactionOverlayStyles.backgroundImage,
+      )}>
       <Icon icon="close" size="xsm" color="inherit" />
     </button>
   );

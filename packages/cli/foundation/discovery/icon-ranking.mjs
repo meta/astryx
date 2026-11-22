@@ -240,7 +240,7 @@ function matchReady(q, ready) {
       name: false,
       meaning: false,
       rank: 0,
-      reason: `definition "${ready.definitions[at]}"`,
+      reason: `meaning "${ready.definitions[at]}"`,
     };
   }
   // The name of a definition another one replaced answers with the icon its
@@ -252,7 +252,7 @@ function matchReady(q, ready) {
       name: false,
       meaning: false,
       rank: 0,
-      reason: `definition "${old.definition}" (replaced "${old.name}")`,
+      reason: `meaning "${old.definition}" (replaced "${old.name}")`,
     };
   }
   const tagAt = tags.indexOf(query);

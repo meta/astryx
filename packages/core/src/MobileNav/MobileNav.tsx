@@ -62,12 +62,18 @@ import {
   easeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
 import {Heading} from '../Heading/Heading';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {
+  MAX_CLOSE_DELAY_MS,
+  useAppShellMobile,
+} from '../AppShell/AppShellMobileContext';
+
+export {MAX_CLOSE_DELAY_MS};
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -286,15 +292,6 @@ const dynamicStyles = stylex.create({
 // Close timing
 // =============================================================================
 
-/**
- * Longest the drawer will wait before closing, however long the hold is.
- *
- * Exported so `AppShell` can defer hiding this drawer's `Activity` boundary
- * by at least this long too (`ACTIVITY_HIDE_BUFFER_MS` in AppShell.tsx) —
- * otherwise Activity's `display: none !important` lands before this delay's
- * own scheduled `dialog.close()` has a chance to run (#5701).
- */
-export const MAX_CLOSE_DELAY_MS = 250;
 /**
  * Longest the drawer slides in or out for, in ms. Both run for the theme's
  * `--duration-medium`: 410 ms by default, and at most 545 ms on the default

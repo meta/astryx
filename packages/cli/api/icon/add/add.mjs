@@ -38,6 +38,7 @@ import {
   mappableDefinitions,
   exportValueKind,
   generatedModulePath,
+  ownModuleOf,
   generatedNamesOf,
   generatedOrigins,
   iconModulePackage,
@@ -137,11 +138,11 @@ export async function iconAdd(exportName, options) {
   ])) {
     if (passed(value) && !passed(newDefinition)) {
       throw new AstryxError(
-        `${flag} describes a new definition, so it needs --new-definition`,
+        `${flag} describes a new meaning, so it needs --new-definition`,
         [
           {
             name: `--new-definition <name> --description '<what it is for>' --words a,b`,
-            reason: 'add your own definition',
+            reason: 'add your own meaning',
           },
         ],
         ERROR_CODES.ERR_INVALID_OPTION,
@@ -187,7 +188,9 @@ export async function iconAdd(exportName, options) {
         : definitionNameOf(givenDefinition, mappableDefinitions(set), set);
     const source = resolveIconSource(from, where);
     const sourceExport = useDefault ? 'default' : exportName;
-    assertIconExport(source.file, source.module, sourceExport);
+    assertIconExport(source.file, source.module, sourceExport, {
+      own: ownModuleOf(set, packageDir),
+    });
 
     // A component is re-exported; anything else goes through the set's
     // adapter. Either way the icon is an export of the set's own module.
@@ -212,6 +215,7 @@ export async function iconAdd(exportName, options) {
         ? {prefix: [], positions: []}
         : moduleNaming(source.file, {
             adapter: Boolean(set.data.adapter),
+            own: ownModuleOf(set, packageDir),
             module: source.module,
             progress: line => logger.warn(line),
           });
@@ -307,17 +311,17 @@ export async function iconAdd(exportName, options) {
       !mappableDefinitions(set).has(definition)
     ) {
       throw new AstryxError(
-        `"${definition}" is not an icon definition.`,
+        `"${definition}" is not an icon meaning.`,
         [
           ...closestNames(definition, [...mappableDefinitions(set)]).map(
             name => ({
               name: `--definition ${name}`,
-              reason: 'a known icon definition',
+              reason: 'a known icon meaning',
             }),
           ),
           {
             name: `--new-definition ${definitionNameFromInput(definition)} --description '<what it is for>' --words a,b`,
-            reason: 'add it as your own definition',
+            reason: 'add it as your own meaning',
           },
         ],
         ERROR_CODES.ERR_NOT_FOUND,
@@ -627,6 +631,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   let positions = [];
   const found = libraryIcons(source.file, {
     adapter: Boolean(set.data.adapter),
+    own: ownModuleOf(set, packageDir),
     prefer: [variant],
     module: source.module,
     progress: line => logger.warn(line),

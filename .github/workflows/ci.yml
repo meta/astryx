@@ -5251,6 +5251,99 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
+  # The weekly run's Firefox hover specs: playwright.config.ts's `firefox`
+  # project (FIREFOX_HOVER_SPECS). Firefox orders pointer and mouse events
+  # differently from Chromium and WebKit. Report-only, like the WebKit
+  # accessibility contracts: the specs cannot fail this job, and
+  # webkit-weekly-verdict does not read it. The report counts the failures
+  # .github/firefox-known-failures.json lists apart from new ones.
+  firefox-weekly-hover:
+    needs: [webkit-weekly-request, build-storybook]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && !cancelled() && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Playwright image the WebKit legs use: Firefox and its system
+    # libraries are already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Trust the checkout in the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright Firefox
+        run: pnpm install --frozen-lockfile && npx playwright install firefox
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      - name: Run the Firefox hover specs
+        id: specs
+        continue-on-error: true
+        env:
+          # The image runs as root, and a container job's HOME is a folder the
+          # runner's user owns: Firefox does not start as root there.
+          HOME: /root
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
+        run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
+
+      - name: Report the Firefox hover results
+        if: always()
+        run: |
+          node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
+          cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Firefox hover report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: firefox-weekly-hover-report
+          path: |
+            firefox-hover-report
+            firefox-hover-output
+          if-no-files-found: ignore
+          retention-days: 90
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that
