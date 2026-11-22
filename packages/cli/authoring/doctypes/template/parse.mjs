@@ -57,10 +57,7 @@ function buildSchemas() {
           .regex(/^[$A-Z_a-z][$\w]*$/u, 'icons keys are imported names'),
         z
           .string()
-          .regex(
-            /^[a-z][a-zA-Z0-9]*$/u,
-            'icons values are icon definition names',
-          ),
+          .regex(/^[a-z][a-zA-Z0-9]*$/u, 'icons values are icon meaning names'),
       )
       .optional(),
     scaffold: z.boolean().optional(),

@@ -1351,10 +1351,11 @@ export function styledChanges(before, after, base, drawn) {
 
 /**
  * The line that says which pictures to open after a run that took them:
- * each family of components' first ({@link familyPages}), then the sample
- * page's and the open states' (every menu, tooltip, popover and list drawn
- * open), of the mode shown first (light when the theme has both). Null when
- * this run took none of them.
+ * each family of components' first ({@link familyPages}), then the pages
+ * section's (the sample app and each page template, cut between pages),
+ * then the sample page's and the open states' (every menu, tooltip, popover
+ * and list drawn open), of the mode shown first (light when the theme has
+ * both). Null when this run took none of them.
  * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
  * @returns {string | null}
  */
@@ -1371,10 +1372,11 @@ export function lookAtPictures(files) {
     files.filter(f =>
       new RegExp(`^sheet-${g}${dark}(?:-\\d+)?\\.png$`).test(path.basename(f)),
     );
-  const families = FAMILY_SECTIONS.flatMap(g =>
-    cuts(g, '').length ? cuts(g, '') : cuts(g, '-dark'),
-  );
-  if (!preview && !open && !families.length) return null;
+  /** @param {string} g */
+  const pictured = g => (cuts(g, '').length ? cuts(g, '') : cuts(g, '-dark'));
+  const families = FAMILY_SECTIONS.flatMap(pictured);
+  const pages = pictured('pages');
+  if (!preview && !open && !families.length && !pages.length) return null;
   const dark =
     files.some(f => /-dark\.png$/.test(f)) &&
     files.some(f => /(?<!-dark)\.png$/.test(f));
@@ -1382,6 +1384,9 @@ export function lookAtPictures(files) {
     // A family's own picture reads whole; the full sheet does not.
     ...(families.length
       ? [`${families.join(', ')} (one family of components each)`]
+      : []),
+    ...(pages.length
+      ? [`${pages.join(', ')} (the sample app and each page template)`]
       : []),
     ...(preview
       ? [
@@ -1427,9 +1432,10 @@ export async function openStatesPage(ctx, slug, data) {
 }
 
 /**
- * The tallest a family's picture is: a reader fits a picture to its width,
- * and a taller one comes out too small to read, so it is cut into pictures
- * this tall (`sheet-inputs-1.png`, `-2` …).
+ * The tallest a family's or the pages section's picture is: a reader fits a
+ * picture to its width, and a taller one comes out too small to read, so it
+ * is cut into pictures this tall (`sheet-inputs-1.png`, `-2` …;
+ * `sheet-pages-1.png` …).
  */
 export const FAMILY_PICTURE_HEIGHT = 1600;
 

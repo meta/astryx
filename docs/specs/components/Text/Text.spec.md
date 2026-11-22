@@ -85,7 +85,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Measuring truncation and deciding when to compose the truncation Tooltip.
 - The internal hook that shows a component's cut text in an undescribed
   tooltip on keyboard focus (`useCutTextOnKeyboardFocus` in
-  `Text/TruncationTooltip.tsx`), which `component:Button` FR18 and
+  `Text/cutTextOnKeyboardFocus.tsx`, with its measurement in
+  `Text/cutText.tsx`, loaded after first paint), which `component:Button` FR18 and
   `component:TableHeaderCell` FR2 use. It is not part of the package's public
   exports.
 - The clamp it provides to its content. A Link inside a clamped Text lays out
@@ -153,10 +154,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **PR1 — Measured only when needed.** Truncation is measured only when
   `maxLines` is positive and the tooltip is enabled; re-measuring follows size
-  and content changes without a per-element observer; the Tooltip module loads
-  only when the text is truncated, and the Tooltip itself mounts only on the
-  first hover, completed tap or focus, so until that first interaction a page of
-  clamped text mounts no closed tooltip layers.
+  and content changes without a per-element observer, and text that measures
+  on interest (a Table's default cells, `component:Table` FR2) measures at each
+  hover, completed tap or focus; the Tooltip module loads after the page's
+  first paint as `architecture:component-import-boundaries` DEC-4 decides, and
+  the Tooltip itself mounts only on the first hover, completed tap or focus, so
+  until that first interaction a page of clamped text mounts no closed tooltip
+  layers.
 
 ## Accessibility contract
 
