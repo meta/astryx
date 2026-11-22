@@ -350,6 +350,18 @@ describe('how', () => {
       expect(
         await writes('fh', 'Feel: light gray fill on hover, darker on press.'),
       ).toContain('set fh press darker');
+      // (A "should" ask of a part's look reads as on main; only the dial's
+      // own feel reading is held back by thinking-aloud wording.)
+      expect(
+        (await writes('fh', 'the cards should be blue')).some(c =>
+          /background-color '#2563eb' --on card/.test(c),
+        ),
+      ).toBe(true);
+      expect(
+        (await writes('fh', 'buttons should be darker on press')).some(c =>
+          /--on button .*--state active/.test(c),
+        ),
+      ).toBe(true);
       // (A feel said as what is not wanted writes nothing, as before.)
       for (const q of [
         'never darker on press',
