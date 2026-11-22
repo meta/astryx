@@ -2,21 +2,23 @@
 
 /**
  * @file textDirection.ts
- * @input A component's text content (a string, a number, or a rich node)
+ * @input For textDirectionProps, a component's text content (a string, a
+ *   number, or a rich node)
  * @output textDirectionProps: `dir="ltr"` for plain text that holds no
  *   right-to-left letter, otherwise nothing, so the text keeps the page's
  *   direction. withTextDirection: the same text, inside a `dir="ltr"` span
  *   when it needs one. isolatedText: text in its own isolated span, for one
- *   item among others. localeTextStyles: `isolate` for inline text a locale
- *   formats and `pageAlign` for a field that shows it
+ *   item among others. localeTextStyles: `pageAlign` for a field that shows
+ *   text a locale formats
  * @position Core-internal helper, not exported from the package. Badge and
  *   Token put textDirectionProps on the element that holds caller text,
  *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
  *   description, FieldStatus and the status tooltip use withTextDirection.
  *   MultiSelector's labels trigger puts each label in isolatedText.
  *   TimeInput and DateTimeInput put localeTextStyles, with
- *   `getLocaleDirection` as `dir`, on the elements that show their formatted
- *   time and date text.
+ *   `getLocaleDirection` as `dir`, on the fields that show their formatted
+ *   time and date text; DateTimeInput's time options use isolatedText with
+ *   that direction.
  */
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
@@ -38,27 +40,18 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
   return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
 }
 
+// An element's own `dir` would otherwise move its text to the other side: a
+// field's text, or the span `withTextDirection` adds, which a flex parent such
+// as Field's label makes a block. `match-parent` takes the parent's alignment
+// and resolves `start` and `end` in the parent's direction, so a centred label
+// stays centred. Chromium supports only the prefixed keyword.
 export const localeTextStyles = stylex.create({
-  isolate: {
-    unicodeBidi: 'isolate',
-  },
-  // A field's own `dir` would otherwise move its text to the other side.
-  // `match-parent` takes the parent's alignment in the parent's direction.
-  // Chromium supports only the prefixed keyword.
   pageAlign: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
   },
 });
 
-// A flex parent, such as Field's label, makes the span a block. Its own `ltr`
-// direction would then align wrapped lines to the left on a right-to-left
-// page. `match-parent` takes the parent's alignment and resolves `start` and
-// `end` in the parent's direction, so a centred label stays centred. Chromium
-// supports only the prefixed keyword.
 const styles = stylex.create({
-  span: {
-    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
-  },
   isolate: {
     unicodeBidi: 'isolate',
   },
@@ -75,7 +68,11 @@ export function withTextDirection(content: ReactNode): ReactNode {
   const {dir} = textDirectionProps(content);
   return dir == null || content === ''
     ? content
-    : createElement('span', {dir, ...stylex.props(styles.span)}, content);
+    : createElement(
+        'span',
+        {dir, ...stylex.props(localeTextStyles.pageAlign)},
+        content,
+      );
 }
 
 /**

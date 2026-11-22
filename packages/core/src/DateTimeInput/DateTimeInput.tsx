@@ -115,7 +115,7 @@ import {
   resolveHourFormat,
 } from '../utils/timeFormat';
 import {getLocaleDirection} from '../i18n/getLocaleDirection';
-import {localeTextStyles} from '../utils/textDirection';
+import {isolatedText, localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -2144,11 +2144,7 @@ function PointerDateTimeField({
                         isSelected && styles.timeOptionSelected,
                       ),
                     )}>
-                    <span
-                      dir={textDirection}
-                      {...stylex.props(localeTextStyles.isolate)}>
-                      {option.label}
-                    </span>
+                    {isolatedText(option.label, undefined, textDirection)}
                   </div>
                 );
               })}
