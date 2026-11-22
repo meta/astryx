@@ -27,6 +27,8 @@ import {
   TIGHT_NODE_LEGS,
   WALL_SECONDS,
   WATCHDOG_MARGIN_SECONDS,
+  BESIDE_REAL_CHROME_SECONDS,
+  drawsInRealChrome,
   nodeFileCost,
   nodeLegFiles,
   mainNearLimitNotice,
@@ -275,6 +277,45 @@ describe('the Node leg plan', () => {
     expect(room.outputs['node-reason']).toBe(
       '${{ steps.node-legs.outputs.reason }}',
     );
+  });
+
+  it('finds the files that draw in a real Chrome from their source', () => {
+    expect(
+      drawsInRealChrome(
+        'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs',
+      ),
+    ).toBe(true);
+    expect(drawsInRealChrome('scripts/vitest-node-legs.test.mjs')).toBe(false);
+    expect(drawsInRealChrome('no/such/file.test.mjs')).toBe(false);
+  });
+
+  it('gives the real-Chrome files one leg, the last, with no packing or heavy file beside them, on pull requests and main', () => {
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    for (const [run, list, legsOf] of [
+      ['pull request', files, plan.legs],
+      ['main', main, planMainNodeLegs(main, seconds).legs],
+    ]) {
+      const chrome = list.filter(file => drawsInRealChrome(file));
+      expect(chrome.length, run).toBeGreaterThan(10);
+      const cost = nodeFileCost(list, seconds);
+      const legs = partitionByDuration(list, legsOf, seconds);
+      const last = legs[legs.length - 1];
+      expect(
+        chrome.filter(file => !last.includes(file)),
+        run,
+      ).toEqual([]);
+      for (const file of last.filter(f => !drawsInRealChrome(f))) {
+        expect(cost(file), `${run}: ${file}`).toBeLessThanOrEqual(
+          BESIDE_REAL_CHROME_SECONDS,
+        );
+        expect(file, run).not.toMatch(/(^|\/)packed-[^/]*\.test\.mjs$/);
+      }
+      // The packing and conformance suites are spread over the other legs.
+      for (const heavy of list.filter(f =>
+        /packed-gather-cache|packed-search-catalog|door-conformance/.test(f),
+      ))
+        expect(last, `${run}: ${heavy}`).not.toContain(heavy);
+    }
   });
 
   it('gives every leg files on a scoped run: the guards it always runs are nearly the whole suite', () => {
