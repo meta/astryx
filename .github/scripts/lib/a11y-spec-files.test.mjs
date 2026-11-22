@@ -10,6 +10,7 @@
  * @position Node coverage for the browser accessibility spec lists
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -25,6 +26,7 @@ const ROOT = path.resolve(
   '../../..',
 );
 const read = file => fs.readFileSync(path.join(ROOT, file), 'utf8');
+const POINTER = /\.hover\(|mouse\.move\(|pointermove|mouseenter|pointerenter/;
 
 describe('the Firefox hover specs', () => {
   it('names each spec once, in path order', () => {
@@ -50,9 +52,31 @@ describe('the Firefox hover specs', () => {
 
   it('names only specs that move the pointer onto an element', () => {
     for (const file of FIREFOX_HOVER_SPECS)
-      expect(read(file), file).toMatch(
-        /\.hover\(|mouse\.move\(|pointermove|mouseenter|pointerenter/,
+      expect(read(file), file).toMatch(POINTER);
+  });
+
+  it("names every pointer-moving accessibility spec in the hover components' folders, but MenuPress", () => {
+    // MenuPress drives input through Chromium's DevTools protocol.
+    const LEFT_OUT = [
+      'packages/core/src/DropdownMenu/__tests__/MenuPress.a11y.chromium.spec.ts',
+    ];
+    const globs = A11Y_SPEC_GLOBS.map(globToRegExp);
+    const folders =
+      /^packages\/core\/src\/(?:DropdownMenu|HoverCard|InfoTip|NavMenu|Tooltip)\//;
+    const moving = execFileSync('git', ['ls-files', 'packages/core/src'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(
+        file =>
+          folders.test(file) &&
+          globs.some(glob => glob.test(file)) &&
+          POINTER.test(read(file)),
       );
+    expect(moving.filter(file => !LEFT_OUT.includes(file))).toEqual([
+      ...FIREFOX_HOVER_SPECS,
+    ]);
   });
 
   it('is the list the Firefox project in playwright.config.ts runs', () => {
