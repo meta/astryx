@@ -14,8 +14,8 @@
 import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
- * Whether the user asked for reduced motion (`prefers-reduced-motion:
- * reduce`), read at the moment of the call. The animator uses it by default
+ * Whether motion is reduced: the person's setting or a theme's
+ * `reducedMotion: 'always'`, read at the moment of the call. The animator uses it by default
  * for its Reduce Motion substitution. A component does not read it to pick a
  * curve of its own: `animator.reducedMotion()` or `reducedMotionFade()` gives
  * the policy's answer. False without a window (server rendering).

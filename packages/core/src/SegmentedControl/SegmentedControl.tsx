@@ -47,7 +47,7 @@ import type {SegmentedSelection} from './useSegmentedSelectionMotion';
 import {isPressAwaitingClick} from '../Layer/gestureCounter';
 import {createTouchPart, useTouchPart} from '../utils/touchRuntime';
 
-// The selection motion and press tracking load only on a page that renders
+// The selection motion and press tracking load only on a page that imports
 // a SegmentedControl.
 const segmentedTouchPart = createTouchPart(
   async () => import('./segmentedTouchPart'),
@@ -348,11 +348,10 @@ export function SegmentedControl({
   // tap or a click selects, and the selection moves at once.
   const touchPart = useTouchPart(segmentedTouchPart);
   const motionSelectionRef = useRef<SegmentedSelection | null>(null);
-  // A press that has not reached its click keeps a focus move from
-  // selecting: the press selects through its click, so a caller's
-  // `preventDefault()` vetoes it, and a press the browser cancels selects
-  // nothing. The shared gesture counter sees every press, also one that began
-  // before the runtime loaded, which the motion never saw.
+  // A press selects through its click, so a caller's `preventDefault()`
+  // vetoes it. A press the browser cancels selects nothing. Until that click
+  // runs, a focus move does not select. The gesture counter also sees a press
+  // that began before the runtime loaded.
   const [selection] = useState<SegmentedSelection>(() => ({
     isPressing: () =>
       (motionSelectionRef.current?.isPressing() ?? false) ||

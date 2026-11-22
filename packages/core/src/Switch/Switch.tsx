@@ -73,7 +73,7 @@ import {createTouchPart, useTouchPart} from '../utils/touchRuntime';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 
-// The thumb drag and its springs load only on a page that renders a Switch.
+// The thumb drag and its springs load only on a page that imports a Switch.
 const switchTouchPart = createTouchPart(
   async () => import('./switchTouchPart'),
 );

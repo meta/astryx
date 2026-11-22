@@ -354,8 +354,8 @@ those contracts, and one user-facing rule that no component owns: how a
   keyboard module (`keyboard/useMobileKeyboard.ts`) is their touch part. A
   gesture in that window
   does not start the load. The bundler keeps one copy per page however many
-  components use them. If the runtime's chunk fails to load, the page stays as
-  it is before the load: components work by taps, clicks and keys, and no
+  components use them. Each chunk that fails to load leaves its components as
+  they are before the load: they work by taps, clicks and keys, and no
   gesture retries the load. The loader's `import()` targets
   `utils/touchRuntimeModules.tsx`, the shared core (the animator), and the
   touch part of a component that hands the loader its part (SegmentedControl,

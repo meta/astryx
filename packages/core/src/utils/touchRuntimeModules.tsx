@@ -8,7 +8,7 @@
  * @output `touchRuntime`, the one object the touch loader publishes
  * @position Loaded only through `import()` in utils/touchRuntime.ts. No
  *   other module imports this file. A component's own touch code is its touch
- *   part (createTouchPart), so a page that never renders that component does
+ *   part (createTouchPart), so a page that never imports that component does
  *   not load it
  */
 
