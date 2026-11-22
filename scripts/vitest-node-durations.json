@@ -680,6 +680,7 @@
     "packages/cli/api/theme-edit/theme-family-pictures.test.mjs": 65,
     "packages/cli/api/theme-edit/theme-family-role-groups.test.mjs": 12.6,
     "packages/cli/api/theme-edit/theme-feed-reaches-build-fonts.test.mjs": 3.8,
+    "packages/cli/api/theme-edit/theme-feel-dials.test.mjs": 3.5,
     "packages/cli/api/theme-edit/theme-field-edge-follows-border.test.mjs": 4.1,
     "packages/cli/api/theme-edit/theme-field-list-named-crash.test.mjs": 2.9,
     "packages/cli/api/theme-edit/theme-file-folder-named-names.test.mjs": 2.2,

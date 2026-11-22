@@ -112,6 +112,8 @@ import {
   codeBlocksOnSurface,
   ownSourceTokenValues,
   shadeAt,
+  FEEL_WASH,
+  feelWash,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -1859,6 +1861,9 @@ const DIAL_NOUN = {
   'text-size': String.raw`text[- ]size|font[- ]size|type size`,
   surfaces: String.raw`surfaces?`,
   type: String.raw`type|typography`,
+  // ("darker on press", "8% tint on hover": the feel dials.)
+  press: String.raw`(?:(?:wash|tint)\s+)?(?:on|when|while)\s+(?:a\s+)?(?:press(?:ed|ing)?|click(?:ed|ing)?|tap(?:ped)?)`,
+  hover: String.raw`(?:(?:wash|tint)\s+)?(?:on|when|while)\s+(?:a\s+)?hover(?:ed|ing)?`,
 };
 
 /**
@@ -1875,7 +1880,9 @@ function dialRung(text) {
       .filter(v => /^[a-z]+$/.test(v) && v !== 'more' && v !== 'less');
     const number = /<number>/.test(String(DIALS[dial]?.values ?? ''))
       ? String.raw`|\d+(?:\.\d+)?`
-      : '';
+      : /<percent>/.test(String(DIALS[dial]?.values ?? ''))
+        ? String.raw`|\d+(?:\.\d+)?%`
+        : '';
     const rung = `(${values.join('|')}${number})`;
     const m =
       new RegExp(
@@ -6730,6 +6737,8 @@ export function draftAnswer(ctx, env, question) {
   // the ask, as "then" is.)
   const CONDITION =
     /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they|we|i|you)|had (?:the|it|they|we|i|you)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event|(?:would|could|should) have (?:been|gone|used|had|looked|made|picked|chosen|kept))\b|^\s*(?:after|until|till|before)\s+(?!(?:hover|hovering|focus|focusing|click|clicking|press|pressing|visiting|being)\b)(?!(?:this|that)\b\s*(?:,|$|(?:make|set|change|use|give|turn|add|remove|put)\b))(?:the|a|an|my|our|their|your|this|that|[a-z]+\s+(?:approves?|reviews?|signs?\s+off|ships?|launch(?:es)?|is\s+done|finish(?:es)?))\b/i;
+  // A feel said as what is not wanted ("never darker on press").
+  const FEEL_NOT = /\b(?:never|avoid|without|not|no|don'?t|doesn'?t|won'?t)\b/i;
   const NOT_ASK =
     /\b(i wonder|wondering|curious|would like to know|let me see|help me understand|any idea|just checking|just asking|check if|check whether|can you check|look at|double check|idk|quick q|do you think)\b|\b(don'?t not|not without|not un-?(?:bold|round|rounded|flat|square|styled)\w*|never no|no lighter|no darker|not at all|isn'?t it time|weren'?t)\b|^\s*(?!(?:can|could|would|will) (?:you|i|we)\b|can (?:the|my|our|all) [\w -]+ be\b|is it possible\b|is there a way\b)(?:do|does|did|will|would|can(?!'t|not)|could|should|is|are)\b(?!n'?t)|^\s*checking\b|\bno less (?!than)|^\s*(would|could|should|does|do|is|are|will)\b[^.]*\b(work|look|be (?:a )?(?:good|better|too much|ok|okay)|good|better|accessible|clash|too much)\b[^.]*\??$|\bor\b[^.]*\?\s*$|^\s*how (?:would|round|big|dark|light|thick)\b|\b(right now|rn)\b(?!.*\b(make|set|change)\b)/i;
   const ASK_START =
@@ -6869,6 +6878,15 @@ export function draftAnswer(ctx, env, question) {
       [t0, raw].some(v => CONDITION.test(v) || NOT_ASK.test(v) || VETO.test(v))
     )
       return false;
+    // ("darker on press", "8% tint on hover": a feel dial's rung, said
+    // with its moment, asks for that look.)
+    const feel = dialRung(raw);
+    if (
+      feel &&
+      (feel.dial === 'press' || feel.dial === 'hover') &&
+      !FEEL_NOT.test(raw)
+    )
+      return true;
     // Questions in a script how cannot read word by word keep their ask.
     if (/[^ -~]/.test(t0.replace(/[\u{1F000}-\u{1FFFF}\u2000-\u2BFF]/gu, '')))
       return true;
@@ -8581,7 +8599,10 @@ export function draftAnswer(ctx, env, question) {
       ) ||
       (bare &&
         (ROLE_WORDS.test(subject?.[1] ?? '') ||
-          Object.hasOwn(DIALS, subject?.[1] ?? ''))) ||
+          // (A feel dial is named for its moment, a state: "hover #0065ff"
+          // after a part is that part's hover.)
+          (Object.hasOwn(DIALS, subject?.[1] ?? '') &&
+            stateWord(subject?.[1] ?? '') == null))) ||
       /^the\s+(?:text|shadows|corners)\b(?!-)/.test(c.text) ||
       /^text\s+colou?r\b/.test(c.text) ||
       /\b(?:main|body|all)\s+text\b/.test(c.text)
@@ -13872,6 +13893,41 @@ export function draftAnswer(ctx, env, question) {
           : {}),
         options,
       };
+    // A feel dial is one wash for both modes; one mode takes the wash
+    // itself, as a color token set for that mode.
+    const feel = d.options
+      .flat()
+      .find(
+        st =>
+          st.verb === 'set' && (st.thing === 'press' || st.thing === 'hover'),
+      );
+    if (feel) {
+      const dial = /** @type {'press' | 'hover'} */ (feel.thing);
+      const value = String(feel.value ?? '');
+      const token = FEEL_WASH[dial];
+      const m = /** @type {'light' | 'dark'} */ (c.mode);
+      return /%$/.test(value)
+        ? {
+            text: `${d.text}: the ${dial} dial sets one wash for both modes; for ${m} mode only, set ${token} --mode ${m} to the wash you want`,
+            options: [],
+          }
+        : {
+            ...d,
+            text: `${d.text}: the ${dial} dial sets one wash for both modes, so this sets the ${dial} wash for ${m} mode only`,
+            options: [
+              [
+                {
+                  verb: 'set',
+                  thing: token,
+                  value: feelWash(dial, value, {light: {}, dark: {}}, {})[
+                    m === 'light' ? 0 : 1
+                  ],
+                  mode: m,
+                },
+              ],
+            ],
+          };
+    }
     // What cannot go in one mode, and the nearest line that does.
     const sized = d.options
       .flat()
@@ -14221,7 +14277,13 @@ export function draftAnswer(ctx, env, question) {
       if (
         m &&
         !steps.some(
-          x => x.state || x.when || String(x.thing ?? '').includes(st),
+          x =>
+            x.state ||
+            x.when ||
+            String(x.thing ?? '').includes(st) ||
+            // (A feel dial is that moment's look: "darker on press".)
+            (x.thing === 'press' && /^(?:press|active)/.test(String(st))) ||
+            (x.thing === 'hover' && String(st).startsWith('hover')),
         )
       )
         unread.push(m[0].trim());
@@ -17166,8 +17228,18 @@ export function draftAnswer(ctx, env, question) {
         rung?.dial === 'corners' && c.parts[0]
           ? cornersNamed(c.text, c.parts[0].on, partNames(c.parts[0].on))
           : null;
+      // (A feel dial is a wash over the fill: "borders darker on hover"
+      // and "the text lighter on press" are the border's and the text's.)
+      // (A feel said as what is not wanted is not read, as before the
+      // dials.)
+      const feelElsewhere =
+        (rung?.dial === 'press' || rung?.dial === 'hover') &&
+        (c.neg ||
+          FEEL_NOT.test(c.text) ||
+          c.aspects.some(a => !/^(?:background|fill)$/.test(a)));
       const r =
-        someCorners && (someCorners.except || someCorners.corners.length < 4)
+        feelElsewhere ||
+        (someCorners && (someCorners.except || someCorners.corners.length < 4))
           ? null
           : rung;
       const scoped = r && (r.dial === 'corners' || r.dial === 'spacing');
@@ -29778,7 +29850,10 @@ export function draftAnswer(ctx, env, question) {
     if (groups.length > 1 && !env.check(all).ok) {
       groups = groups.filter(g => {
         const r = env.check(g);
-        if (r.ok || !/nowhere to go|already/.test(String(r.why ?? '')))
+        if (
+          r.ok ||
+          (!r.fileWash && !/nowhere to go|already/.test(String(r.why ?? '')))
+        )
           return true;
         leftOut.push(String(r.why));
         return false;

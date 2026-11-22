@@ -907,6 +907,39 @@ base draws it; a heading font still gives it the heading font. A plain
 
 Rejected: the heading font after a body font on every base, which moves a two-family base's title.
 
+### DEC-22 — The press and hover dials set the shared wash the parts paint over their own fill
+
+**Reference:** `spec:AST-050/DEC-22`
+**Decider:** maintainers under `josephfarina`'s delegation, `2026-11-21`
+
+A theme the editor makes sets how its parts look while pressed or hovered
+with one whole-theme setting each, `press` and `hover`. Each sets the wash
+Core paints over a part's own fill in that moment (`--color-overlay-pressed`,
+`--color-overlay-hover`), so each part that paints it follows its own fill in
+every variant and mode. `darker` is a black wash, `lighter` a white one,
+`stronger` a wash of the part's own text color, and a percent from 1% to 60%
+is the theme's own wash color at that strength. Neither takes `none`. A wash shows
+only where it differs from the fill under it: a white wash on a white fill,
+or a black one on a black fill, shows nothing. The looks Core paints with the same token at
+rest keep the theme's wash before the dial, an exact wash the theme saves
+included: an open menu's trigger, a toggle that is on. A highlighted option
+and a menu row's focus follow the pointer, so they follow the dial. A part whose pressed
+or hover background the theme sets keeps the theme's wash in the mode it is
+set for, and a part that saves the wash itself keeps its own. Parts that tint
+their own hover (a switch, a checkbox, a radio, a slider, a link) keep that
+tint. A wash the theme's own source sets wins over the dial, which writes
+nothing for it. Both dials take no `--on`, `--mode`, `--state` or `--when`. `set` refuses `--mode` on
+either dial; for darker, lighter or stronger it names the line that sets that
+mode's wash token, and for a percent it names the token. `how` writes that
+line for darker, lighter or stronger asked for one mode, and names the token
+for a percent. `how` reads
+a feel said with its moment ("darker on press", "darker on click", "8% tint
+on hover") as the dial; a border, text or shadow said with its moment stays
+that look's, and "hover #0065ff" said of a part stays that part's hover.
+
+Rejected: a pressed fill written on each part and variant, which drifts from the parts' own fills when they change.
+Rejected: `none`, which leaves a pointer user no feedback on parts that paint only the wash, and a keyboard user no visible option in a list whose highlight is that wash.
+
 ## Open questions
 
 None.

@@ -2803,11 +2803,13 @@ export function valueProblem(s) {
               Number(s.value) <= 32)
           : s.thing === 'vibrancy'
             ? /^\d{1,3}$/.test(s.value) && Number(s.value) <= 100
-            : PALETTE_DIALS.includes(s.thing)
-              ? isColorValue(s.value)
-              : s.thing === 'font'
-                ? s.value.trim() !== ''
-                : words.includes(s.value);
+            : s.thing === 'press' || s.thing === 'hover'
+              ? words.includes(s.value) || feelPercent(s.value)
+              : PALETTE_DIALS.includes(s.thing)
+                ? isColorValue(s.value)
+                : s.thing === 'font'
+                  ? s.value.trim() !== ''
+                  : words.includes(s.value);
     if (!ok || s.value === 'more' || s.value === 'less')
       return `${bad} is not a value ${s.thing} takes (${d.values.replace('|more|less', '')})`;
   }
@@ -6506,6 +6508,107 @@ export function roleReach(ctx, data, base) {
 }
 
 /**
+ * Whether a feel dial's value is a percent it takes (1% to 60%).
+ * @param {string} v
+ */
+export const feelPercent = v => {
+  const n = /^(\d+(?:\.\d+)?)%$/.exec(v)?.[1];
+  return n != null && Number(n) >= 1 && Number(n) <= 60;
+};
+
+/**
+ * The parts, each with the resting state it is in, that Core paints
+ * with a feel dial's wash token for a look other than that moment: an
+ * open menu's trigger, a toggle that is on. (A row's focus and a
+ * highlighted option follow the pointer too: they follow the dial.)
+ * @param {Ctx} ctx
+ * @param {string} token
+ * @returns {Array<[string, string]>}
+ */
+export function restingWashes(ctx, token) {
+  const moment =
+    token === '--color-overlay-hover'
+      ? /:hover|\bhover=/
+      : /:active|\bactive=|data-astryx-press/;
+  /** @type {Array<[RegExp, string]>} */
+  const STATES = [
+    [/\baria-expanded=true/, 'expanded'],
+    [/\b(?:isPressed|aria-pressed=true)/, 'isPressed'],
+  ];
+  /** @type {Map<string, [string, string]>} */
+  const out = new Map();
+  for (const [t, rec] of Object.entries(ctx.C.MAP ?? {})) {
+    const states = partStates(ctx, t);
+    for (const conds of Object.values(rec.at ?? {}))
+      for (const [cond, v] of Object.entries(conds ?? {})) {
+        if (
+          !String(v).includes(`var(${token}`) ||
+          moment.test(cond) ||
+          /:focus\b/.test(cond)
+        )
+          continue;
+        const hit = STATES.find(([re]) => re.test(cond));
+        if (hit && !states.includes(hit[1])) continue;
+        // (Only a look in a resting state the part names: a condition the
+        // census reads with no state, a switch's press under its own
+        // scope, is that moment's look.)
+        if (!hit) continue;
+        out.set(`${t} ${hit[1]}`, [t, hit[1]]);
+      }
+  }
+  return [...out.values()];
+}
+
+/** The wash token a feel dial sets: the one Core paints in that moment. */
+export const FEEL_WASH = /** @type {const} */ ({
+  press: '--color-overlay-pressed',
+  hover: '--color-overlay-hover',
+});
+
+/**
+ * The wash a feel dial's value paints over a part's own fill, as a
+ * [light, dark] pair: a percent is the base wash's own color, in each mode,
+ * at that strength.
+ * @param {'press' | 'hover'} dial
+ * @param {string} value
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {Record<string, string>} defaults Core's token defaults
+ * @returns {[string, string]}
+ */
+export function feelWash(dial, value, base, defaults) {
+  const press = dial === 'press';
+  const pct = /^(\d+(?:\.\d+)?)%$/.exec(value)?.[1];
+  if (pct != null) {
+    const token = FEEL_WASH[dial];
+    /** @param {'light' | 'dark'} m */
+    const half = m => {
+      const ink = parseColor(String(base[m]?.[token] ?? defaults[token] ?? ''));
+      const rgb = ink
+        ? ink.slice(0, 3).join(' ')
+        : m === 'light'
+          ? '0 0 0'
+          : '255 255 255';
+      return `rgb(${rgb} / ${pct}%)`;
+    };
+    return [half('light'), half('dark')];
+  }
+  /** @param {string} css */
+  const both = css => /** @type {[string, string]} */ ([css, css]);
+  switch (value) {
+    case 'darker':
+      return both(`rgb(0 0 0 / ${press ? 12 : 6}%)`);
+    case 'lighter':
+      return both(`rgb(255 255 255 / ${press ? 16 : 8}%)`);
+    case 'stronger':
+      return both(
+        `color-mix(in srgb, currentColor ${press ? 20 : 12}%, transparent)`,
+      );
+    default:
+      return both('transparent');
+  }
+}
+
+/**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
  * @param {ThemeData} data
@@ -8528,6 +8631,105 @@ export function compileTheme(ctx, data, base) {
                 ? 'ui-monospace, monospace'
                 : f.fallbacks,
           };
+      } else if (s.thing === 'press' || s.thing === 'hover') {
+        // A feel dial is the wash Core paints over each part's own fill in
+        // that moment: one token, so each part that paints it follows its
+        // own fill in every variant and mode. The theme's wash before the
+        // dial (its palette's, or the base theme's) stays where a look is
+        // not that moment: a background the theme sets for the moment on a
+        // part, and the looks Core paints with the same token at rest (a
+        // highlighted row, an open menu's trigger, a toggle that is on).
+        const token = FEEL_WASH[s.thing];
+        // (A wash the theme's own source sets wins over its settings, the
+        // dial included: the dial writes nothing for that token.)
+        if (ownTokenValues()[token] != null) continue;
+        // (An exact wash the theme saves wins over the dial, as every exact
+        // token does: it is the wash those looks keep.)
+        /** @param {'light' | 'dark'} m */
+        const exact = m => {
+          let v;
+          for (const x of data.settings)
+            if (
+              x.source === 'token' &&
+              x.thing === token &&
+              !x.on &&
+              !x.when &&
+              !x.state &&
+              (!x.mode || x.mode === m)
+            )
+              v = String(x.value);
+          return v;
+        };
+        /** @param {'light' | 'dark'} m */
+        const before = m =>
+          exact(m) ??
+          String(tok[token]?.[m] ?? base[m][token] ?? TOKENS[token]);
+        // (A part that saves the wash itself keeps its own, in the modes it
+        // saves it for.)
+        /** @type {Map<string, Set<string>>} */
+        const ownWash = new Map();
+        for (const x of data.settings)
+          if (
+            x.source === 'token' &&
+            x.thing === token &&
+            x.on &&
+            !x.state &&
+            !x.when
+          )
+            for (const t of partsOf(ctx, x)) {
+              const m = ownWash.get(t) ?? new Set();
+              for (const mode of x.mode ? [x.mode] : ['light', 'dark'])
+                m.add(mode);
+              ownWash.set(t, m);
+            }
+        const was = {light: before('light'), dark: before('dark')};
+        putTok(
+          token,
+          feelWash(
+            s.thing,
+            s.value,
+            {light: {[token]: was.light}, dark: {[token]: was.dark}},
+            TOKENS,
+          ),
+        );
+        /** @param {Setting} x @param {string} t */
+        const keep = (x, t) => {
+          const own = ownWash.get(t);
+          const modes = (x.mode ? [x.mode] : ['light', 'dark']).filter(
+            m => !own?.has(m),
+          );
+          if (!modes.length) return;
+          const one = /** @type {'light' | 'dark'} */ (modes[0]);
+          putComp(
+            modes.length === 1 ? {...x, mode: one} : x,
+            t,
+            token,
+            modes.length === 1
+              ? was[one]
+              : `light-dark(${was.light}, ${was.dark})`,
+          );
+        };
+        const moments = s.thing === 'press' ? ['pressed', 'active'] : ['hover'];
+        for (const x of data.settings)
+          if (
+            x.source === 'property' &&
+            String(x.state ?? '')
+              .split('+')
+              .some(st => moments.includes(st)) &&
+            /^background(-color|-image)?$/.test(kebab(x.thing))
+          )
+            for (const t of partsOf(ctx, x)) keep(x, t);
+        for (const [t, state] of restingWashes(ctx, token))
+          keep(
+            /** @type {Setting} */ ({
+              thing: token,
+              value: '',
+              source: 'property',
+              on: t,
+              state,
+            }),
+            t,
+          );
       } else if (s.thing === 'surfaces') {
         /**
          * A surface's variant axis that tells its plain fills (the card,

@@ -166,6 +166,9 @@ import {
   notGrowingWhens,
   sharedControlHeight,
   controlHeightValue,
+  feelPercent,
+  feelWash,
+  FEEL_WASH,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -6417,6 +6420,49 @@ function checkOne(
     );
   if (DIALS[thing]) {
     s.source = 'dial';
+    if (thing === 'press' || thing === 'hover') {
+      const lower = v.trim().toLowerCase();
+      const ok = DIALS[thing].values.split('|').filter(x => !x.startsWith('<'));
+      if (!ok.includes(lower) && !feelPercent(lower)) {
+        const near = closestOf(lower, ok);
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${thing} takes ${ok.join(', ')} or a percent from 1% to 60%, not "${v}".`,
+          {
+            didYouMean: near,
+            run: near.length
+              ? near.map(x => setLine(slug, thing, x, {}))
+              : [`${HOW} ${thing}`],
+          },
+        );
+      }
+      // (One wash for the whole theme, each part's own in each mode.)
+      // (One mode alone takes the wash itself, as a color token for that
+      // mode.)
+      const token = FEEL_WASH[/** @type {'press' | 'hover'} */ (thing)];
+      if (s.mode && !s.on && !s.state && !s.when && !feelPercent(lower)) {
+        const wash = feelWash(
+          /** @type {'press' | 'hover'} */ (thing),
+          lower,
+          {light: {}, dark: {}},
+          {},
+        )[s.mode === 'dark' ? 1 : 0];
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${thing} sets one wash for both modes; for ${s.mode} mode only, set the wash itself: ${setLine(slug, token, wash, {mode: s.mode})}`,
+          {run: [setLine(slug, token, wash, {mode: s.mode})]},
+        );
+      }
+      if (s.on || s.mode || s.state || s.when)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${thing} sets one wash for every part in both modes; drop the scope.${s.mode && !s.on ? ` For ${s.mode} mode only, set ${token} --mode ${s.mode} to the wash you want.` : ''} For one part, set its background with --state ${thing === 'press' ? 'active' : 'hover'} --on <part>.`,
+          // (One mode alone: the dial line would set both modes.)
+          {run: s.mode && !s.on ? [] : [setLine(slug, thing, lower, {})]},
+        );
+      s.value = lower;
+      return s;
+    }
     if (['surfaces', 'buttons', 'badges', 'type'].includes(thing)) {
       if (s.on)
         refuse(

@@ -23,6 +23,8 @@ import {readThemeListState} from '../theme/_adapter.mjs';
 import {
   compileTheme,
   editedThemes,
+  FEEL_WASH,
+  ownSourceTokenValues,
   keyOf,
   loadTheme,
   readHistory,
@@ -73,7 +75,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {import('./_settings.mjs').ThemeData} data
  * @property {{light: Record<string, string>, dark: Record<string, string>, onDark?: Record<string, string>}} base - `onDark`: the tokens the base's dark media rule replaces
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
- * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
+ * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[], fileWash?: true}} check the steps' check; fileWash marks a feel dial whose wash the theme's own file sets, a step left out of a sequence with its reason
  * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
@@ -343,6 +345,23 @@ export async function howTheme(ctx, cwd, name) {
       const checkCtx = /** @type {any} */ ({...ctx, base});
       try {
         for (const st of steps) apply(checkCtx, slug, d, st);
+        // (A feel dial leaves a wash the theme's own file sets: the answer
+        // says so, never that the theme already looks that way.)
+        const ownWash = ownSourceTokenValues(cwd, slug);
+        for (const st of steps) {
+          if (
+            st.verb !== 'set' ||
+            (st.thing !== 'press' && st.thing !== 'hover')
+          )
+            continue;
+          const token = FEEL_WASH[st.thing];
+          if (ownWash[token] != null)
+            return {
+              ok: false,
+              why: `${slug}.theme.ts sets the ${st.thing} wash itself (${token}: ${ownWash[token]}), so the dial leaves it unchanged; change that line in ${slug}.theme.ts`,
+              fileWash: true,
+            };
+        }
         if (compiled(d) === before)
           return {
             ok: false,

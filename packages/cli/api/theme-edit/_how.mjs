@@ -1088,7 +1088,7 @@ function finish(env, drafts, ctx) {
       /** @param {import('./_how-commands.mjs').Step} st */
       const noOp = st => {
         const r = env.check([st]);
-        return !r.ok && /^it changes nothing/.test(r.why);
+        return !r.ok && (r.fileWash || /^it changes nothing/.test(r.why));
       };
       const before = d.options.map(o => o.length);
       d.options = d.options

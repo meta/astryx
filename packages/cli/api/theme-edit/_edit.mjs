@@ -170,6 +170,7 @@ import {
   savedSetting,
   membersOf,
   controlHeightValue,
+  FEEL_WASH,
 } from './_settings.mjs';
 import {
   BORDER_COLOR_PROP,
@@ -7516,17 +7517,24 @@ async function changeOnce(
     ownPartHits[0].prop === s.thing &&
     ownPartHits[0].key === (s.when ?? 'base') &&
     (ownPartHits[0].state ?? null) === (s.state ? `:${s.state}` : null);
+  // (A feel dial's wash token the own source sets: the dial leaves it.)
+  const feelToken =
+    s.thing === 'press' || s.thing === 'hover' ? FEEL_WASH[s.thing] : null;
   const ownOverToken =
     sub !== 'set' || s.when || s.state || s.on
       ? null
-      : s.source === 'token'
+      : feelToken
         ? (Object.entries(ownSourceTokenValues(cwd, slug)).find(
-            ([k]) => k === s.thing,
-          ) ??
-          (ownSourceTokens(cwd, slug).includes(s.thing)
-            ? [s.thing, null]
-            : null))
-        : null;
+            ([k]) => k === feelToken,
+          ) ?? null)
+        : s.source === 'token'
+          ? (Object.entries(ownSourceTokenValues(cwd, slug)).find(
+              ([k]) => k === s.thing,
+            ) ??
+            (ownSourceTokens(cwd, slug).includes(s.thing)
+              ? [s.thing, null]
+              : null))
+          : null;
   // A color family whose fill the own source sets as a fixed color grows
   // every shade from that color, not from the setting.
   const sourceSeed =
@@ -7642,11 +7650,14 @@ async function changeOnce(
             )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show ${/^padding(-|$)/.test(s.thing) && ownPartHits.every(h => /^padding-/.test(h.prop)) ? 'on the sides that sets; its other sides take this setting' : 'there'}; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
         ]
       : []),
-    ...(ownOverToken
-      ? [
-          `${slug}.theme.ts sets ${s.thing}${s.on ? ` on ${s.on}` : ''} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show${PHONE_TYPE.test(s.thing) ? ` on wide screens (on ${PHONES} this setting shows: the editor repeats exact font settings after the base theme's type there)` : ''}; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\``,
-        ]
-      : []),
+    ...(ownOverToken && feelToken
+      ? // (The note the file's other tokens get says it: see ownWins.)
+        []
+      : ownOverToken
+        ? [
+            `${slug}.theme.ts sets ${s.thing}${s.on ? ` on ${s.on}` : ''} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show${PHONE_TYPE.test(s.thing) ? ` on wide screens (on ${PHONES} this setting shows: the editor repeats exact font settings after the base theme's type there)` : ''}; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\``,
+          ]
+        : []),
     ...(exactWins.length
       ? [
           `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change; this shows after \`${P} undo ${slug} ${exactWins.map(x => undoArgs(x)).join(`\` and \`${P} undo ${slug} `)}\``,
@@ -9642,6 +9653,13 @@ function dialTouched(ctx, data, s, base) {
   if (differs(withDial.typography?.scale, without.typography?.scale))
     for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
       if (/^--(font-size-|text-[a-z0-9-]+-size$)/.test(k)) touched.add(k);
+  // (A feel dial writes nothing for a wash the own source sets; it still
+  // reaches that token, so the notes name the file that holds it.)
+  if (s.thing === 'press' || s.thing === 'hover') {
+    const token = FEEL_WASH[s.thing];
+    if (ownSourceTokenValues(ctx.project.cwd, String(data.name))[token] != null)
+      touched.add(token);
+  }
   return touched;
 }
 
