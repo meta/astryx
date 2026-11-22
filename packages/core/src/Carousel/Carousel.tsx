@@ -593,7 +593,7 @@ export function Carousel({
     }
     const clamped = Math.max(0, Math.min(index, items.length - 1));
     const target = items[clamped] as HTMLElement;
-    const prefersReducedMotion = reducesMotion(target);
+    const isReducedMotion = reducesMotion(target);
     // Bring the item to the start edge by scrolling the container by the
     // measured gap between the item and the container edge. Using scrollBy
     // (not scrollIntoView) keeps the scroll contained to the carousel and
@@ -620,7 +620,7 @@ export function Carousel({
     }
     el.scrollBy({
       left: delta,
-      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      behavior: isReducedMotion ? 'auto' : 'smooth',
     });
   }, []);
 

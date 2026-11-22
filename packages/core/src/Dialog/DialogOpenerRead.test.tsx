@@ -173,6 +173,27 @@ describe("Dialog reads its opener's box only for an entrance that uses it (archi
     const dialog = screen.getByRole('dialog', {hidden: true});
     expect(dialog.style.getPropertyValue('--dialog-dir-x')).not.toBe('0px');
   });
+  it("does not read the opener under a theme's reduced-motion mark, with the setting off", () => {
+    stubReducedMotion(false);
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+    try {
+      expect(openAndCountOpenerReads()).toBe(0);
+    } finally {
+      document.documentElement.removeAttribute('data-astryx-reduced-motion');
+    }
+  });
+
+  it("watches no setting under a theme's reduced-motion mark, whose entrance never travels", () => {
+    stubReducedMotion(true);
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+    try {
+      expect(openAndCountOpenerReads()).toBe(0);
+      expect(reducedMotion.listeners.size).toBe(0);
+    } finally {
+      document.documentElement.removeAttribute('data-astryx-reduced-motion');
+    }
+  });
+
   it('watches the reduced-motion preference only while it is open under reduced motion', () => {
     stubReducedMotion(false);
     const {unmount} = render(<Opener />);
