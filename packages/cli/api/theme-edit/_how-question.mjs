@@ -6362,8 +6362,18 @@ export function draftAnswer(ctx, env, question) {
           ([re, p]) => re.exec(phrase)?.[0] === phrase && p.on !== 'heading',
         );
       });
+      // A part named with the word after it ("header rows", "header
+      // cells"): that part, as the part words read it.
+      const next = /^\s+([a-z]+)/i.exec(String(all).slice(at + m.length))?.[1];
+      const namesPartAfter =
+        !!next &&
+        partLexicon(ctx).parts.some(([re, p]) => {
+          const phrase = `${m} ${next}`.toLowerCase();
+          return re.exec(phrase)?.[0] === phrase && p.on !== 'heading';
+        });
       const owned =
         namesPart ||
+        namesPartAfter ||
         /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav|block|drawer|popover|panel|header)\s+$/i.test(
           before,
         ) ||
@@ -11397,9 +11407,17 @@ export function draftAnswer(ctx, env, question) {
     })();
     if (!place || c.parts.length < 2) continue;
     const at = c.text.indexOf(place[0]);
+    // (A part whose word is said in the place, wherever else it is said
+    // too: "table headers on every table" places them in tables.)
     const inPlace = c.parts.filter(x =>
       lex.parts.some(
-        ([re, y]) => y.on === x.on && (re.exec(c.text)?.index ?? -1) >= at,
+        ([re, y]) =>
+          y.on === x.on &&
+          [
+            ...c.text.matchAll(
+              new RegExp(re.source, `${re.flags.replace('g', '')}g`),
+            ),
+          ].some(w => w.index >= at),
       ),
     );
     if (!inPlace.length || inPlace.length === c.parts.length) continue;
@@ -11468,7 +11486,12 @@ export function draftAnswer(ctx, env, question) {
         .split('-')
         .some(w => placeWords.includes(w) || placeWords.includes(`${w}s`)),
     );
-    if (c.container && !c.byState && !drawn && named) {
+    // (Or a place of the part's own family, which holds it everywhere it is
+    // drawn: "table headers on every table" are every table header.)
+    const ownFamily = c.parts.every(
+      y => y.on.split('-')[0] === String(c.container).split('-')[0],
+    );
+    if (c.container && !c.byState && (!drawn || ownFamily) && named) {
       c.container = undefined;
       continue;
     }

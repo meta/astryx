@@ -5015,4 +5015,36 @@ describe('r19 (2): not dark enough / not light enough', () => {
       );
     }
   });
+  // "Header rows" is the table's header row, and "on every table" is where
+  // it already is: one write on the header cells, nothing on the body rows.
+  it.each([
+    'bold header rows',
+    'make the header rows bold',
+    'bold the header row',
+    'bold header rows on every table',
+    'bold header rows on all tables',
+    'bold table headers on every table',
+    'bold table header cells on all tables',
+  ])('bolds the table header cells for %s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .filter((/** @type {string} */ x) => / set /.test(x));
+    expect(
+      commands.some(x => /font-weight 700 --on table-header-cell$/.test(x)),
+    ).toBe(true);
+    expect(commands.some(x => /--on table-row\b/.test(x))).toBe(false);
+    expect(commands.some(x => /--on heading\b/.test(x))).toBe(false);
+  });
+  // A place outside the part's own family stays a place.
+  it('keeps buttons on every card a place', async () => {
+    const {data} = await themeEditHow('bold buttons on every card', {
+      cwd,
+      theme: 'q',
+    });
+    const text = (data.results ?? [])
+      .map((/** @type {{text: string}} */ r) => r.text)
+      .join('\n');
+    expect(text).toMatch(/cannot keep card apart/);
+  });
 });
