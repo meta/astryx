@@ -12,7 +12,7 @@ export const docs = {
       name: 'variant',
       type: "'neutral' | 'info' | 'success' | 'warning' | 'error' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'",
       description:
-        'Visual style variant. Semantic variants (neutral, info, success, warning, error) use solid backgrounds. Non-semantic color variants use tinted backgrounds with colored text for categorization and tagging.',
+        'Visual style variant; a status repeated on every item reads quieter as a StatusDot with Text (a `neutral` dot for done states such as Resolved), so keep a solid semantic Badge for the rare item that needs attention. Semantic variants (neutral, info, success, warning, error) use solid backgrounds. Non-semantic color variants use tinted backgrounds with colored text for categorization and tagging.',
       default: "'neutral'",
     },
     {
@@ -93,7 +93,7 @@ export const docsZh = {
       name: 'variant',
       type:
         "'neutral' | 'info' | 'success' | 'warning' | 'error' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'",
-      description: '视觉样式变体。语义变体使用实色背景，非语义颜色变体使用浅色背景配彩色文字。',
+      description: '视觉样式变体；每一项都显示的状态用 StatusDot 加 Text 更安静（Resolved 等已完成状态用 `neutral` 圆点），实色语义 Badge 只留给少数需要注意的项。语义变体使用实色背景，非语义颜色变体使用浅色背景配彩色文字。',
       default: "'neutral'",
     },
     {name: 'label', type: 'ReactNode', required: true, description: '徽章文本内容。'},
@@ -136,7 +136,7 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    variant: 'visual style variant',
+    variant: 'visual style variant; status repeated per item → StatusDot + Text (neutral dot for done states like Resolved); solid semantic Badge only for the rare item needing attention',
     label: 'badge text content; over-wide labels clip with an ellipsis, full text in title',
     icon: 'optional leading icon',
   },

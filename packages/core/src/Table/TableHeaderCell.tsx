@@ -40,7 +40,7 @@ import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
-import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
+import {useCutTextOnKeyboardFocus} from '../Text/cutTextOnKeyboardFocus';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -63,7 +63,7 @@ export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
 }
 
 // The end padding is also the room header content may grow into before its
-// label truncates (BaseTable, sort plugin). The last column takes the
+// label wraps or truncates (BaseTable, sort plugin). The last column takes the
 // container edge inset.
 const densityStyles = stylex.create({
   compact: {
@@ -172,14 +172,14 @@ export function TableHeaderCell({
 }: TableHeaderCellProps) {
   const ctx = useTableContext();
 
-  // A heading cut short by its column shows in full in a tooltip when keyboard
-  // focus reaches something inside the cell (a sortable header's sort
-  // control). Only a cell inside a Table truncates.
+  // Only a truncating heading can be cut. Keyboard focus inside the cell (a
+  // sortable header's sort control) then shows it in full in a tooltip.
+  const truncates = ctx?.textOverflow === 'truncate';
   const cellRef = useRef<HTMLTableCellElement | null>(null);
   const mergedRef = useMergedRefs(ref, cellRef);
   const cutHeading = useCutTextOnKeyboardFocus({
     anchorRef: cellRef,
-    isEnabled: ctx != null,
+    isEnabled: truncates,
   });
 
   // Header cells always get the bottom divider (separates header from body).
@@ -192,9 +192,7 @@ export function TableHeaderCell({
       headerStyles.cell,
       densityStyles[ctx.density],
       headerDividerStyles.cell,
-      ctx.textOverflow === 'truncate'
-        ? overflowStyles.cell
-        : headerOverflowStyles.cell,
+      truncates ? overflowStyles.cell : headerOverflowStyles.cell,
       containerEdgeStyles[ctx.density],
     );
     // Column dividers come from the shared builder (column axis only).
@@ -233,13 +231,7 @@ export function TableHeaderCell({
         cutHeading.onPointerDown,
       )}>
       {content}
-      {cutHeading.cutText != null && cutHeading.Tooltip ? (
-        <cutHeading.Tooltip
-          anchorRef={cellRef}
-          content={cutHeading.cutText}
-          onHide={cutHeading.hide}
-        />
-      ) : null}
+      {cutHeading.tooltip}
     </th>
   );
 }

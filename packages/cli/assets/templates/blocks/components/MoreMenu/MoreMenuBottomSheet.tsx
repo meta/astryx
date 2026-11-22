@@ -4,11 +4,11 @@
 
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {
-  DocumentDuplicateIcon,
-  PencilIcon,
+  CopyIcon,
+  EditIcon,
   ShareIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+  DeleteIcon,
+} from '@astryxdesign/template-icons';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 
 export default function MoreMenuBottomSheet() {
@@ -34,13 +34,13 @@ export default function MoreMenuBottomSheet() {
           {
             label: 'Rename project',
             description: 'Update the project title.',
-            icon: PencilIcon,
+            icon: EditIcon,
             onClick: () => {},
           },
           {
             label: 'Duplicate project',
             description: 'Create a copy in this workspace.',
-            icon: DocumentDuplicateIcon,
+            icon: CopyIcon,
             onClick: () => {},
           },
           {
@@ -52,7 +52,7 @@ export default function MoreMenuBottomSheet() {
           {
             label: 'Delete project',
             description: 'Move this project to the trash.',
-            icon: TrashIcon,
+            icon: DeleteIcon,
             variant: 'destructive',
             onClick: () => {},
           },

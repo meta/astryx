@@ -39,7 +39,7 @@ import {
   PROJECT_SKILL_FOLDERS,
   PROJECT_SKILL_NAME,
 } from './agent-doc-state.mjs';
-import {withHash} from './managed-skill-file.mjs';
+import {renderSkillFile} from './managed-skill-file.mjs';
 import {absoluteFolder, folderScope, inside} from './folder-scope.mjs';
 import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
 
@@ -48,7 +48,10 @@ import {PROJECT_PLACE_KEYWORDS} from '../../authoring/config/skill-places.mjs';
  * astryx.config accepts in `skills.to`, and `user`. One list, so the config
  * check and init never disagree.
  */
-export const PLACE_KEYWORDS = Object.freeze([...PROJECT_PLACE_KEYWORDS, 'user']);
+export const PLACE_KEYWORDS = Object.freeze([
+  ...PROJECT_PLACE_KEYWORDS,
+  'user',
+]);
 
 /** The project place that holds the block; the default. */
 export const AGENTS_MD_PLACE = 'agents-md';
@@ -91,8 +94,6 @@ export class SkillPlaceError extends Error {
  *   | {scope: 'project' | 'computer', kind: 'folder', dir: string, saved: string}} SkillPlace
  */
 
-
-
 /**
  * How a computer folder is saved: `~/` and its path in the home folder, else
  * its absolute path, so a later run finds it from any folder.
@@ -114,9 +115,12 @@ function homePath(dir, home) {
  * @returns {string}
  */
 export function savedComputerFolderSkillFile(saved, home = os.homedir()) {
-  return path.join(absoluteFolder(saved, home, home), COMPUTER_SKILL_NAME, 'SKILL.md');
+  return path.join(
+    absoluteFolder(saved, home, home),
+    COMPUTER_SKILL_NAME,
+    'SKILL.md',
+  );
 }
-
 
 /**
  * Split a `--to` value (a comma list, or several) into its names.
@@ -149,17 +153,23 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
     let place;
     if (name === 'user') {
       place = {scope: 'computer', kind: 'user'};
-    } else if (/** @type {readonly string[]} */ (PROJECT_PLACE_KEYWORDS).includes(name)) {
+    } else if (
+      /** @type {readonly string[]} */ (PROJECT_PLACE_KEYWORDS).includes(name)
+    ) {
       if (projectRoot == null && name === 'skills') {
         throw new SkillPlaceError(
           '`--to skills` writes the project skills folders, and this folder is not in a project.',
         );
       }
-      place = {scope: 'project', kind: /** @type {'agents-md' | 'skills'} */ (name)};
+      place = {
+        scope: 'project',
+        kind: /** @type {'agents-md' | 'skills'} */ (name),
+      };
     } else if (folderScope(name, {cwd, projectRoot, home})) {
-      const {dir, scope} = /** @type {{dir: string, scope: 'project' | 'computer'}} */ (
-        folderScope(name, {cwd, projectRoot, home})
-      );
+      const {dir, scope} =
+        /** @type {{dir: string, scope: 'project' | 'computer'}} */ (
+          folderScope(name, {cwd, projectRoot, home})
+        );
       if (scope === 'project' && projectRoot != null) {
         const rel = path.relative(projectRoot, dir).split(path.sep).join('/');
         place = {
@@ -169,7 +179,12 @@ export function parsePlaces(names, {cwd, projectRoot, home = os.homedir()}) {
           saved: rel ? `./${rel}` : '.',
         };
       } else {
-        place = {scope: 'computer', kind: 'folder', dir, saved: homePath(dir, home)};
+        place = {
+          scope: 'computer',
+          kind: 'folder',
+          dir,
+          saved: homePath(dir, home),
+        };
       }
     } else {
       throw new SkillPlaceError(`Unknown place "${name}".`);
@@ -254,8 +269,11 @@ export function projectPlacesValue(projectPlaces) {
  */
 export function placeSkillFiles(place, projectRoot, skill) {
   const name =
-    skill ?? (place.scope === 'computer' ? COMPUTER_SKILL_NAME : PROJECT_SKILL_NAME);
-  return placeFolders(place, projectRoot).map(folder => path.join(folder, name, 'SKILL.md'));
+    skill ??
+    (place.scope === 'computer' ? COMPUTER_SKILL_NAME : PROJECT_SKILL_NAME);
+  return placeFolders(place, projectRoot).map(folder =>
+    path.join(folder, name, 'SKILL.md'),
+  );
 }
 
 /**
@@ -265,22 +283,11 @@ export function placeSkillFiles(place, projectRoot, skill) {
  * @returns {string}
  */
 export function renderProjectSkill(block) {
-  if (!block.startsWith(MARKER_START)) {
-    throw new Error('The project skill needs the managed block.');
-  }
-  return withHash(
-    [
-      '---',
-      `name: ${PROJECT_SKILL_NAME}`,
-      // Quoted: the description holds `: ` and `;`, which strict YAML parsers
-      // can misread, and an agent tool that fails to parse drops the skill.
-      `description: ${JSON.stringify(PROJECT_SKILL_DESCRIPTION)}`,
-      '---',
-      '',
-      block,
-      '',
-    ].join('\n'),
-  );
+  return renderSkillFile({
+    name: PROJECT_SKILL_NAME,
+    description: PROJECT_SKILL_DESCRIPTION,
+    block,
+  });
 }
 
 /**
@@ -306,17 +313,9 @@ export function placeFolders(place, projectRoot) {
  * @returns {string}
  */
 export function renderIntegrationSkill({name, description, body}) {
-  return withHash(
-    [
-      '---',
-      `name: ${name}`,
-      `description: ${JSON.stringify(description)}`,
-      '---',
-      '',
-      MARKER_START,
-      body.trimEnd(),
-      MARKER_END,
-      '',
-    ].join('\n'),
-  );
+  return renderSkillFile({
+    name,
+    description,
+    block: [MARKER_START, body.trimEnd(), MARKER_END].join('\n'),
+  });
 }

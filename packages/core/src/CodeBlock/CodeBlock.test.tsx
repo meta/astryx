@@ -179,6 +179,18 @@ describe('CodeBlock', () => {
       expect(screen.getByText('tsx diff')).toBeInTheDocument();
     });
 
+    it('names a language diff with the provider catalog', () => {
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{fr: {'@astryx.codeBlock.diffLabel': 'diff {language}'}}}>
+          <CodeBlock code={diff} language="tsx" isDiff />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByRole('group', {name: 'diff tsx'})).toBeInTheDocument();
+      expect(screen.getByText('diff tsx')).toBeInTheDocument();
+    });
+
     it('copies the exact source, glyphs included', () => {
       render(<CodeBlock code={diff} language="typescript" isDiff />);
       fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));

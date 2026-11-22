@@ -423,41 +423,7 @@ export default defineConfig(
       ],
       // announce() live-region messages are user-facing text; the rule checks
       // them as call arguments (callees defaults to ['announce']).
-      '@astryx/no-hardcoded-i18n-string': [
-        isStrictMode ? 'error' : 'warn',
-        {
-          // Exact reported chunks exempted per file. Remove an entry when its
-          // site moves into the catalog; the list should only shrink.
-          allowedStringsByFile: {
-            // Developer diagnostics, not interface copy.
-            'BottomSheet/BottomSheetPanel.tsx': ['snapPoints ignored '],
-            'Markdown/plugins/protocol.ts': [
-              'plugin "',
-              '" failed in ',
-              '; rendered readable fallback.',
-            ],
-            // Pre-existing hardcoded text awaiting catalog keys.
-            'Chat/useChatPasteAsToken.ts': [' lines, ', ' chars'],
-            'Chat/useTriggerMenu.tsx': ['No results'],
-            'CodeBlock/CodeBlock.tsx': [' diff'],
-            'MultiSelector/MultiSelector.tsx': [' selected'],
-            'PowerSearch/PowerSearch.tsx': [
-              'date range',
-              '1 filter',
-              ' filters',
-              ' items',
-            ],
-            'PowerSearch/PowerSearchValueEditor.tsx': [' ago', ' from now'],
-            'Slider/Slider.tsx': ['Minimum value', 'Maximum value', 'Required'],
-            'Table/plugins/columnResize/useTableColumnResize.tsx': [
-              'Resize column ',
-            ],
-            'TimeInput/TimeInput.tsx': ['e.g., 2:30 PM', 'e.g., 14:30'],
-            'Timer/Timer.tsx': ['m ', 'h '],
-            'Tokenizer/Tokenizer.tsx': ['Create "', ' more'],
-          },
-        },
-      ],
+      '@astryx/no-hardcoded-i18n-string': isStrictMode ? 'error' : 'warn',
     },
   },
   // What a disabled control says to the pointer is a defect wherever it

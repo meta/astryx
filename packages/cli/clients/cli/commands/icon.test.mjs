@@ -69,6 +69,15 @@ describe('astryx experimental icon', () => {
     expect(JSON.parse(many.stdout).data.query).toBe('magni fier');
   });
 
+  it('prints the import that names the icon by its meaning when a definition names it', async () => {
+    const close = await runCli(['experimental', 'icon', 'close'], cwd);
+    expect(close.stdout).toMatch(
+      /meaningImport: +import \{XIcon as CloseIcon\} from '@acme\/glyphs';/,
+    );
+    const trash = await runCli(['experimental', 'icon', 'delete'], cwd);
+    expect(trash.stdout).not.toMatch(/meaningImport:/);
+  });
+
   it('answers icon.search, icon.detail, and icon.list as JSON', async () => {
     const search = JSON.parse(
       (await runCli(['experimental', 'icon', 'close', '--json'], cwd)).stdout,
@@ -159,6 +168,36 @@ describe('astryx experimental icon with no icon set installed', () => {
       'Icon definitions that match; an icon set draws them once one is installed:',
     );
     expect(text.stdout).not.toContain('Core draws these names');
+  });
+
+  it('lists the built-in a matching refined meaning falls back to (FR23)', async () => {
+    /** @param {string} ask */
+    const names = async ask =>
+      JSON.parse(
+        (await runCli(['experimental', 'icon', ask, '--json'], bare)).stdout,
+      ).data.definitions.map((/** @type {{name: string}} */ each) => each.name);
+    // `help` falls back to `info`, which Core draws with no set.
+    expect((await names('question')).slice(0, 2)).toEqual(['info', 'help']);
+    // A built-in the query matches too takes the refined meaning's place.
+    expect((await names('help question close')).slice(0, 3)).toEqual([
+      'info',
+      'close',
+      'help',
+    ]);
+    // One that only a fallback brings comes after the built-ins that match.
+    const review = await names('review check');
+    expect(review[0]).toBe('check');
+    expect(review.indexOf('info')).toBeGreaterThan(review.indexOf('success'));
+    expect(review.indexOf('info')).toBeLessThan(review.indexOf('review'));
+    // A match ranked above that Core cannot draw at all keeps a lower match's
+    // fallback out: `settings` has no built-in, and `columnSettings`, which
+    // falls back to `viewColumns`, ranks below it.
+    expect(await names('settings')).not.toContain('viewColumns');
+    expect((await names('column settings'))[0]).toBe('viewColumns');
+    // On equal scores the rank decides: `pen` matches `compose`, `edit` and
+    // `review` alike, `compose` ranks first and has no built-in, so the
+    // fallback of `review` (`info`) stays out.
+    expect(await names('pen')).not.toContain('info');
   });
 
   it('lists built-in names before other definitions, at most --limit', async () => {
@@ -367,7 +406,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(res.stdout).toMatch(
       /import: +import \{XIcon\} from '@acme\/glyphs';/,
     );
-    expect(res.stdout).toMatch(/look: +no solid look; draws outline/);
+    expect(res.stdout).toMatch(/look: +no solid variant; draws outline/);
     const json = JSON.parse(
       (
         await runCli(

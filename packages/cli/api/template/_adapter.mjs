@@ -4,12 +4,15 @@
  * @file The `template` subject's adapter for icon mapping (AST-084 FR9),
  * which reads the project's icon sets through the `Project` seam, for the
  * project's component list, for the not-found hint that names another
- * lookup command, and for the links and doc tokens in a template's
- * description.
+ * lookup command, for the links and doc tokens in a template's
+ * description, and for the nearest folder a refused destination's command
+ * runs from.
  *
  * @position api/template — adapter read by the template dispatcher
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
 import {linkOwnedTexts} from '../docs/_adapter.mjs';
 import {NO_ICON_SETS} from '../../foundation/discovery/template-icons.mjs';
@@ -237,5 +240,30 @@ export async function withOtherCommandHint(name, suggestions, cwd, namesOf) {
     });
   } catch {
     return suggestions;
+  }
+}
+
+/**
+ * The nearest folder that exists at or above `dir`: where a command that
+ * writes a path below it runs from. The disk's root when no other folder on
+ * the path exists.
+ * @param {string} dir absolute
+ * @returns {string}
+ */
+export function nearestFolder(dir) {
+  let at = dir;
+  while (!isFolder(at) && path.dirname(at) !== at) at = path.dirname(at);
+  return at;
+}
+
+/**
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function isFolder(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
   }
 }

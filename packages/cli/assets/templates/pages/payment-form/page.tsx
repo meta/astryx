@@ -33,10 +33,13 @@ import {Center} from '@astryxdesign/core/Center';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Icon} from '@astryxdesign/core/Icon';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
-import {ShieldCheckIcon} from '@heroicons/react/24/outline';
-import {LockClosedIcon} from '@heroicons/react/24/outline';
-import {CheckCircleIcon} from '@heroicons/react/24/outline';
-import {TruckIcon} from '@heroicons/react/24/outline';
+import {ShieldIcon} from '@astryxdesign/template-icons';
+import {LockIcon} from '@astryxdesign/template-icons';
+import {SuccessIcon} from '@astryxdesign/template-icons';
+import {ShippingIcon} from '@astryxdesign/template-icons';
+import {CreditCardIcon} from '@astryxdesign/template-icons';
+import {MobileIcon} from '@astryxdesign/template-icons';
+import {WalletIcon} from '@astryxdesign/template-icons';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -187,30 +190,6 @@ const summarySticky: CSSProperties = {
 };
 // On mobile the summary moves above the form.
 const summaryMobileOrder: CSSProperties = {order: -1};
-// Express-checkout brand buttons (fixed brand colors).
-const paypalButton: CSSProperties = {
-  backgroundColor: '#FFC439',
-  borderColor: '#FFC439',
-};
-// Official Google Pay dark button: black background with the unaltered
-// dark-variant mark (white "Google Pay" text + full-color G), per the
-// Google Pay brand guidelines.
-const gpayButton: CSSProperties = {
-  backgroundColor: '#000',
-  borderColor: '#000',
-};
-// Brand logos inside the express-checkout buttons.
-const brandLogo: CSSProperties = {height: 'var(--spacing-5)', width: 'auto'};
-// Accepted card-network marks (Visa/Mastercard/Amex), shared style.
-const cardLogo: CSSProperties = {
-  height: 'var(--spacing-7)',
-  width: 'auto',
-  borderRadius: 'var(--radius-element)',
-  borderWidth: 'var(--border-width)',
-  borderStyle: 'solid',
-  borderColor: 'var(--color-border)',
-  backgroundColor: 'var(--color-background-surface)',
-};
 
 export default function PaymentFormPage() {
   const showToast = useToast();
@@ -515,12 +494,12 @@ export default function PaymentFormPage() {
 
                         {/* Express checkout */}
                         <VStack gap={3}>
-                          <Grid columns={2} gap={3}>
-                            {/* PayPal */}
+                          <Grid columns={{minWidth: 140, max: 2}} gap={3}>
                             <Button
                               label="PayPal"
-                              variant="primary"
+                              variant="secondary"
                               size="lg"
+                              icon={<Icon icon={WalletIcon} />}
                               onClick={() =>
                                 // Demo only: replace this toast with the call that starts PayPal.
                                 showToast({
@@ -528,18 +507,12 @@ export default function PaymentFormPage() {
                                   uniqueID: 'paypal',
                                 })
                               }
-                              style={paypalButton}>
-                              <img
-                                src="https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-100px.png"
-                                alt="PayPal"
-                                style={brandLogo}
-                              />
-                            </Button>
-                            {/* Google Pay */}
+                            />
                             <Button
                               label="Google Pay"
-                              variant="primary"
+                              variant="secondary"
                               size="lg"
+                              icon={<Icon icon={MobileIcon} />}
                               onClick={() =>
                                 // Demo only: replace this toast with the call that starts Google Pay.
                                 showToast({
@@ -547,13 +520,7 @@ export default function PaymentFormPage() {
                                   uniqueID: 'google-pay',
                                 })
                               }
-                              style={gpayButton}>
-                              <img
-                                src="https://pay.google.com/about/static_kcs/images/logos/google-pay-logo.svg"
-                                alt="Google Pay"
-                                style={brandLogo}
-                              />
-                            </Button>
+                            />
                           </Grid>
                         </VStack>
 
@@ -572,23 +539,12 @@ export default function PaymentFormPage() {
 
                         {/* Credit card fields */}
                         <VStack gap={3}>
-                          {/* Card type icons */}
-                          <HStack gap={1.5} vAlign="center">
-                            <img
-                              src="https://raw.githubusercontent.com/aaronfagan/svg-credit-card-payment-icons/main/flat/visa.svg"
-                              alt="Visa"
-                              style={cardLogo}
-                            />
-                            <img
-                              src="https://raw.githubusercontent.com/aaronfagan/svg-credit-card-payment-icons/main/flat/mastercard.svg"
-                              alt="Mastercard"
-                              style={cardLogo}
-                            />
-                            <img
-                              src="https://raw.githubusercontent.com/aaronfagan/svg-credit-card-payment-icons/main/flat/amex.svg"
-                              alt="Amex"
-                              style={cardLogo}
-                            />
+                          {/* Accepted card networks */}
+                          <HStack gap={1.5} vAlign="center" wrap="wrap">
+                            <Icon icon={CreditCardIcon} color="secondary" />
+                            <Badge label="Visa" />
+                            <Badge label="Mastercard" />
+                            <Badge label="Amex" />
                           </HStack>
                           <TextInput
                             size="lg"
@@ -747,18 +703,20 @@ export default function PaymentFormPage() {
                               controlStyle={fullWidth}
                             />
                           </StackItem>
-                          <Button
-                            label="Apply"
-                            variant="secondary"
-                            size="lg"
-                            onClick={() =>
-                              // Demo only: replace this toast with the call that applies the promo code.
-                              showToast({
-                                body: 'Demo: the promo code would be applied here',
-                                uniqueID: 'apply-promo',
-                              })
-                            }
-                          />
+                          <StackItem>
+                            <Button
+                              label="Apply"
+                              variant="secondary"
+                              size="lg"
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that applies the promo code.
+                                showToast({
+                                  body: 'Demo: the promo code would be applied here',
+                                  uniqueID: 'apply-promo',
+                                })
+                              }
+                            />
+                          </StackItem>
                         </HStack>
                       </VStack>
 
@@ -808,7 +766,7 @@ export default function PaymentFormPage() {
                         <HStack gap={5} hAlign="center" wrap="wrap">
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={ShieldCheckIcon}
+                              icon={ShieldIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -817,18 +775,14 @@ export default function PaymentFormPage() {
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
-                            <Icon
-                              icon={LockClosedIcon}
-                              size="sm"
-                              color="secondary"
-                            />
+                            <Icon icon={LockIcon} size="sm" color="secondary" />
                             <Text type="supporting" color="secondary">
                               SSL Encrypted
                             </Text>
                           </HStack>
                           <HStack gap={1} vAlign="center">
                             <Icon
-                              icon={CheckCircleIcon}
+                              icon={SuccessIcon}
                               size="sm"
                               color="secondary"
                             />
@@ -1044,7 +998,7 @@ export default function PaymentFormPage() {
                               </HStack>
                               <Banner
                                 status="info"
-                                icon={<Icon icon={TruckIcon} size="sm" />}
+                                icon={<Icon icon={ShippingIcon} size="sm" />}
                                 title="Free shipping on orders over $300"
                               />
                             </VStack>
