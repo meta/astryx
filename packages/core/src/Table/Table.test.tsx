@@ -39,16 +39,15 @@ import {Text} from '../Text/Text';
  * held until `releaseFrames` runs them.
  */
 async function freshTableWithCountedTooltip() {
-  // An earlier test's page-wide preload runs from its own module graph. It
-  // waits a frame and a task before it imports, so wait the same here, then
-  // a little longer: it then imports before the counting mock below exists.
+  // An earlier test's preload waits a frame and a task before it imports.
+  // Let those imports start, then finish before the counting mock exists.
   await act(async () => {
     await new Promise(resolve => {
       requestAnimationFrame(() => {
         setTimeout(resolve, 0);
       });
     });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await vi.dynamicImportSettled();
   });
   vi.resetModules();
   const loads = {count: 0};
