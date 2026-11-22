@@ -110,6 +110,8 @@ describe('the pull-request Firefox hover leg', () => {
     expect(specs.run).toContain(
       'playwright test --config playwright.config.ts --project firefox',
     );
+    // Firefox does not start as root in a HOME the runner's user owns.
+    expect(specs.env.HOME).toBe('/root');
   });
 
   it('is report-only: a failing spec cannot fail it, and no job or join reads it', () => {

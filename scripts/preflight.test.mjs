@@ -174,9 +174,11 @@ describe('the formatting check', () => {
     );
   });
 
-  it('skips it on the spec lane, as CI does', () => {
+  it('checks a changed record on the spec lane, as CI does', () => {
     const lint = argvs(byId(plan(['docs/specs/AST-030/spec.md']), 'lint'));
-    expect(lint.join('\n')).not.toContain('prettier');
+    expect(lint).toContain(
+      'pnpm exec prettier --check --ignore-unknown docs/specs/AST-030/spec.md',
+    );
   });
 });
 

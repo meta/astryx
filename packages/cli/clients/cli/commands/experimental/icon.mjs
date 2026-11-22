@@ -94,7 +94,7 @@ const moduleUpdateLines = data =>
 const replacedKeyLines = data =>
   (data.replacedKeys ?? []).map(each =>
     text(
-      `[ok] Renamed map key "${each.key}" to "${each.definition}": "${each.definition}" replaced that definition.`,
+      `[ok] Renamed map key "${each.key}" to "${each.definition}": "${each.definition}" replaced that meaning.`,
     ),
   );
 
@@ -185,7 +185,7 @@ export function registerExperimentalIcon(group, program) {
       ).length;
       emit(
         section(
-          `Icon definitions (${definitions.length}, ${definitions.filter(each => each.builtIn).length} built-in)${set ? `, checked against ${set}` : ''}`,
+          `Icon meanings (${definitions.length}, ${definitions.filter(each => each.builtIn).length} built-in)${set ? `, checked against ${set}` : ''}`,
         ),
         list(
           definitions.map(each => {
@@ -214,12 +214,12 @@ export function registerExperimentalIcon(group, program) {
         ...(set && unmappedUsed > 0
           ? [
               text(
-                `${set} does not map ${unmappedUsed} ${unmappedUsed === 1 ? 'definition' : 'definitions'} that templates use; a copied template shows a placeholder for each.`,
+                `${set} does not map ${unmappedUsed} ${unmappedUsed === 1 ? 'meaning' : 'meanings'} that templates use; a copied template shows a placeholder for each.`,
               ),
             ]
           : []),
         text(
-          `Built-in definitions are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
+          `Built-in meanings are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
         ),
       );
       return answered;
@@ -261,7 +261,7 @@ export function registerExperimentalIcon(group, program) {
           ...(others.length > 0
             ? [
                 text(
-                  'Icon definitions that match; an icon set draws them once one is installed:',
+                  'Icon meanings that match; an icon set draws them once one is installed:',
                 ),
                 list(others.map(each => `${each.name}: ${each.description}`)),
               ]
@@ -744,7 +744,7 @@ export function registerExperimentalIcon(group, program) {
             const {matches, newDefinition, variant} = result.data;
             emit(
               section(
-                `Icon definitions for ${result.data.export} (${matches.length})`,
+                `Icon meanings for ${result.data.export} (${matches.length})`,
               ),
               ...(matches.length > 0
                 ? [
@@ -763,7 +763,7 @@ export function registerExperimentalIcon(group, program) {
                       },
                     }),
                   ]
-                : [text('No icon definition fits it.')]),
+                : [text('No icon meaning fits it.')]),
               ...(newDefinition
                 ? [
                     text(
@@ -779,7 +779,7 @@ export function registerExperimentalIcon(group, program) {
                   ]
                 : []),
               text(
-                `All icon definitions: ${cli} docs cli/experimental/icon-definitions`,
+                `All icon meanings: ${cli} docs cli/experimental/icon-definitions`,
               ),
             );
             return;
@@ -866,7 +866,7 @@ export function registerExperimentalIcon(group, program) {
         ...(data.suggestions && data.suggestions.length > 0
           ? [
               section(
-                `Suggestions (${data.suggestions.length} for ${new Set(data.suggestions.map(each => each.definition)).size} definitions, not written)`,
+                `Suggestions (${data.suggestions.length} for ${new Set(data.suggestions.map(each => each.definition)).size} meanings, not written)`,
               ),
               list(
                 data.suggestions.map(
@@ -925,7 +925,7 @@ export function registerExperimentalIcon(group, program) {
             words: options.words,
             icon: options.icon,
           }),
-        printNew('icon definition'),
+        printNew('icon meaning'),
       ),
   }).allowExcessArguments(false);
 }

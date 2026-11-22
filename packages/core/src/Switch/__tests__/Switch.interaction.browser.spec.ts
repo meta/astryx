@@ -2165,6 +2165,20 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     samples: [number, number][],
     read: [number, number][] = samples,
   ): void {
+    // The stall count is recorded before any check, so a failing run reports
+    // it too. The log line is what CI's job log shows; the annotation is for
+    // the HTML report.
+    const STALL_GAP_MS = (3 * 1000) / 60;
+    const MAX_STALLS = 2;
+    const gaps = samples.slice(1).map(([time], i) => time - samples[i][0]);
+    const stalls = gaps.filter(gap => gap > STALL_GAP_MS).length;
+    test.info().annotations.push({
+      type: 'P14 frame stalls',
+      description: `${stalls} frame gap(s) longer than three frames`,
+    });
+    console.warn(
+      `P14 frame stalls: ${stalls} frame gap(s) longer than three frames (${test.info().title})`,
+    );
     const xs = samples.map(([, x]) => x);
     const farthest = Math.max(...xs) - xs[0];
     // It turned around mid-travel, short of the on end...
@@ -2193,6 +2207,19 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       return (Math.abs(x - read[i][1]) * FRAME_MS) / Math.max(span, FRAME_MS);
     });
     expect(Math.max(...perFrame), JSON.stringify(read)).toBeLessThan(4);
+    if (stalls > MAX_STALLS) {
+      // One CI hiccup beside the scene's own frozen catch stays tolerated.
+      // More is a starved machine or a freeze in the product: either way the
+      // run proves nothing about the catch, so it fails and says which.
+      throw new FrameStarvationError({
+        by: 'the P14 stall count',
+        during: 'the thumb travelled and turned',
+        frames: samples.length,
+        min: samples.length,
+        longestGapMs: Math.max(...gaps),
+        cause: `${stalls} frame gaps longer than three frames in one run, where at most ${MAX_STALLS} pass: a loaded machine, or a freeze in the product`,
+      });
+    }
   }
 
   // The jump check on recorded samples, with no page. A frame stall that
@@ -2235,6 +2262,30 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         [51 + 1000 / 60, 91],
       ]),
     ).toThrow();
+  });
+
+  // The stall count on recorded samples, with no page. One stall that holds
+  // a moving thumb still passes; three stalls in one run fail, even when each
+  // catch-up alone reads as motion.
+  test('P14 · the jump check tolerates one frame stall and fails on three', () => {
+    const FRAME = 1000 / 60;
+    const run = (stallAt: number[]): [number, number][] => {
+      const samples: [number, number][] = [];
+      let time = 0;
+      let x = 98;
+      for (let i = 0; i < 30; i++) {
+        const stalled = stallAt.includes(i);
+        time += stalled ? 120 : FRAME;
+        // Out for 15 frames, then back: a turn short of the on end.
+        x += (i < 15 ? 1 : -1) * (stalled ? 0 : 1);
+        samples.push([time, x]);
+      }
+      return samples;
+    };
+    expectCaughtWithoutAJump(run([8]));
+    expect(() => expectCaughtWithoutAJump(run([5, 12, 20]))).toThrow(
+      FrameStarvationError,
+    );
   });
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({

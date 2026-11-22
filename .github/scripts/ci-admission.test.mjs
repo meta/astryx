@@ -1997,7 +1997,7 @@ describe('ci admission', () => {
 
   it('queues waiting main runs by when they began, so two never block each other', async () => {
     // Two main dispatches waiting at once each counted the other's whole peak
-    // (47), so neither fit beside a quiet CI and both waited their two hours.
+    // (48), so neither fit beside a quiet CI and both waited their two hours.
     const mainSince = (id, minutes) => {
       const run = waitingRun(id, {event: 'workflow_dispatch'});
       run.jobs[0].steps[0].started_at = new Date(
@@ -2020,7 +2020,7 @@ describe('ci admission', () => {
       'ci 70 workflow_dispatch: 1 waiting',
     );
     // A main run that began waiting earlier still goes first: its whole peak
-    // counts. 2 x 12 + 47 + 18 + 37 = 126 does not fit.
+    // counts. 2 x 12 + 48 + 18 + 37 = 127 does not fit.
     const younger = await admit({
       active: look =>
         look < 2
@@ -2033,7 +2033,7 @@ describe('ci admission', () => {
     });
     expect(younger.looks).toBeGreaterThan(1);
     expect(younger.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 70 workflow_dispatch: 47 waiting',
+      'ci 70 workflow_dispatch: 48 waiting',
     );
   });
 
@@ -2073,7 +2073,7 @@ describe('ci admission', () => {
       maxLooks: 30,
     });
     expect(second.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 0 workflow_dispatch: 47 waiting',
+      'ci 0 workflow_dispatch: 48 waiting',
     );
   });
 
@@ -2087,7 +2087,7 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(result.info.find(line => line.startsWith('Look 1:'))).toContain(
-      'ci 70 workflow_dispatch: 47 waiting',
+      'ci 70 workflow_dispatch: 48 waiting',
     );
   });
 

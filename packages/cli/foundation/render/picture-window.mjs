@@ -190,6 +190,37 @@ export const PLACE_LAYERS = `(() => {
 
 export const PICTURE_WINDOW = Object.freeze({width: 1280, height: 900});
 
+/**
+ * The DevTools commands that size a Chrome page for a picture: the editor's
+ * window, or a job's own window. A phone's window also gets touch, as
+ * Playwright's phone does, so a page laid out for touch (`pointer: coarse`)
+ * is pictured as a phone shows it.
+ * @param {{width: number, height: number, mobile?: boolean}} [view]
+ * @returns {Array<[string, Record<string, unknown>]>}
+ */
+export function windowCommands(view) {
+  const frame = view ?? PICTURE_WINDOW;
+  return [
+    [
+      'Emulation.setDeviceMetricsOverride',
+      {
+        width: frame.width,
+        height: frame.height,
+        deviceScaleFactor: 1,
+        mobile: Boolean(view?.mobile),
+      },
+    ],
+    ...(view?.mobile
+      ? [
+          /** @type {[string, Record<string, unknown>]} */ ([
+            'Emulation.setTouchEmulationEnabled',
+            {enabled: true, maxTouchPoints: 5},
+          ]),
+        ]
+      : []),
+  ];
+}
+
 /** The pointer of the window a picture is taken in. */
 const DESKTOP_POINTER = Object.freeze({
   pointer: 'fine',
