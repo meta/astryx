@@ -4925,6 +4925,42 @@ describe('play: any closed-form curve', () => {
     expect(xs.at(-1)).toBeCloseTo(32, 6);
   });
 
+  it('engines rebased by different amounts in one task, while they wait for a frame, each show their own shift', async () => {
+    stubMedia(false, false);
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => 300 * t,
+      velocity: () => 300,
+    };
+    const next = {
+      duration: 0.4,
+      at: (t: number) => 100 + 300 * t,
+      velocity: () => 300,
+    };
+    const elements = [0, 1].map(() => document.createElement('div'));
+    const [first, second] = elements.map(element =>
+      createMotionEngine(element, {now: () => clock, requestFrame}),
+    );
+    first.play({x: curve});
+    second.play({x: curve});
+    await advance(50);
+    // These calls continue motion, so each waits for the frame that commits
+    // it. Until then each element shows its old curve, moved by its rebase.
+    first.play({x: next});
+    second.play({x: next});
+    first.rebase({x: -16});
+    second.rebase({x: -32});
+    const [firstShown, secondShown] = elements.map(element =>
+      live('translate')
+        .filter(a => a.element === element)
+        .at(-1)!,
+    );
+    // The old curve is at 15 after 50 ms.
+    expect(parse(firstShown.keyframes[0].translate)[0]).toBeCloseTo(-1, 6);
+    expect(parse(secondShown.keyframes[0].translate)[0]).toBeCloseTo(-17, 6);
+    expect(secondShown.keyframes).not.toBe(firstShown.keyframes);
+  });
+
   it('finishes true at its end, false when interrupted', async () => {
     const {animator} = setup();
     const done = animator.play({
