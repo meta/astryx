@@ -27,6 +27,7 @@ export * from './ButtonGroup';
 export * from './IconButton';
 export * from './Card';
 export * from './ClickableCard';
+export * from './CopyToClipboard';
 export * from './Carousel';
 export * from './SnapPaging';
 export * from './Calendar';
