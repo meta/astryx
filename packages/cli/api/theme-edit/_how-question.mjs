@@ -34395,13 +34395,16 @@ function fontIn(cl, question) {
     // is that family, written as typed. (Before a font word the question
     // already drops the suffix.)
     new RegExp(`(?:^|[\\s,;:])${NAME}-(?:like|style|esque)\\b`, 'g'),
+    // ("a font like San Francisco"): the same likeness, said before the
+    // family.
+    new RegExp(`\\b(?:[Ff]ont|[Tt]ypeface)s?\\s+like\\s+["']?${NAME}`, 'g'),
   ]) {
     for (const m of question.matchAll(re)) {
       const name = m[1]
         .replace(/ (Font|Typeface)$/, '')
         .replace(/-(?:like|style|esque)$/i, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
-      if (/-(?:like|style|esque)\b/i.test(m[0])) {
+      if (/-(?:like|style|esque)\b|\slike\s/i.test(m[0])) {
         // (A kind the rest of the clause names as a whole word, "NYT-style
         // serif headings", wins over the family's own kind: the kind said
         // is written, as before.)

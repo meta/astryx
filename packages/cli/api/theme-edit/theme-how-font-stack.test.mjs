@@ -69,6 +69,13 @@ describe('a family said as like another', () => {
     expect(await commandsFor('Font: MS Sans Serif-like pixel sans')).toContain(
       `font 'MS Sans Serif'`,
     );
+    // (A likeness said before the family, and Apple's name for its face.)
+    expect(await commandsFor('a font like San Francisco')).toContain(
+      `font 'San Francisco'`,
+    );
+    expect(
+      await commandsFor('a font like Georgia for serif headings'),
+    ).not.toContain(`font Georgia --on heading`);
     // ("sans-serif" and "sans serif" name no serif.)
     expect(
       await commandsFor('Type: MS Sans Serif-like pixel sans-serif 11px'),
