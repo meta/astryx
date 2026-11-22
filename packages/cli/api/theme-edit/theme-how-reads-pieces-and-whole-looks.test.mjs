@@ -445,6 +445,16 @@ describe('a look said, then taken away by a pronoun', () => {
         expect(lines, q).toMatch(/border none --on card/);
         expect(lines, q).not.toMatch(/border '1px/);
       }
+      const two = (
+        first(
+          await answer(
+            'The card shadow is too strong, remove it. The input border is ugly, hide it.',
+          ),
+        ) ?? []
+      ).join('\n');
+      expect(two).toMatch(/box-shadow none --on card/);
+      expect(two).toMatch(/border none --on input/);
+      expect(two).not.toMatch(/border '1px/);
     },
     T,
   );
