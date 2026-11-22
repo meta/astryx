@@ -22,7 +22,12 @@ import {
   ratio,
   ratioWords,
 } from './_color.mjs';
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {
+  hexToOklch,
+  luminance,
+  oklchClampedHex,
+  toneToOklabLightness,
+} from '../theme/palette/generate/color.mjs';
 import {generateTonalPalette} from '../theme/palette/generate/generator.mjs';
 import {CATEGORY_STOPS} from '../theme/palette/generate/derive-look.mjs';
 import {OVERRIDES} from './_part-words.mjs';
@@ -124,6 +129,7 @@ import {
   settableStates,
   stateSynonym,
   pillDrawnRadios,
+  coveredPaints,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {FONTSOURCE_FAMILIES} from '../../foundation/fonts/fontsource-families.generated.mjs';
@@ -445,6 +451,24 @@ const SHADED = wordTable(
     },
   }),
 );
+
+/**
+ * A gloss of one fill: a gradient from the fill ten tones lighter at the
+ * top to ten tones darker at the bottom, through the fill, in its own hue
+ * and chroma, on the tone scale the palette's stops are on (a white fill
+ * keeps white at the top, a black fill black at the bottom).
+ * @param {string} fill an opaque hex color
+ */
+function glossOf(fill) {
+  const {L, C: chroma, H} = hexToOklch(fill);
+  // (The tone of the fill on the palette's scale, from its lightness.)
+  const tone = L > 0.2069 ? 116 * L - 16 : L ** 3 * 903.3;
+  const at = (/** @type {number} */ t) => {
+    const l = toneToOklabLightness(Math.max(0, Math.min(100, t)));
+    return oklchClampedHex(l, chroma, H);
+  };
+  return `linear-gradient(${at(tone + 10)} 0%, ${fill} 45%, ${at(tone - 10)} 100%)`;
+}
 
 /**
  * Right before a written color (a hex, a color function): a role word there
@@ -27756,13 +27780,446 @@ export function draftAnswer(ctx, env, question) {
               sequence: true,
             };
         }
-        // "glossy buttons": a gloss is a gradient of the part's own color,
-        // which differs by part and mode; the sample is help, never written.
-        if (design === 'glossy')
-          return {
-            text: `a glossy fill${where} is a gradient of the part's own color in each mode, which the editor does not work out here, so nothing is written; set one as a background, for example: background ${DESIGN.glossy} --on ${on}`,
-            options: [],
+        // "glossy buttons": a gloss of the part's own fill in each mode, a
+        // lighter top and a darker bottom around it, written as its colors:
+        // a fill said in the ask, else the fill the theme sets on the part,
+        // else each variant's own fill.
+        if (design === 'glossy') {
+          const part = String(on);
+          // (A fill said in the same ask, "Top bar: dark (#222), glossy": a
+          // color or a light or dark word that names the fill, never one
+          // said of the text, a border or another look.)
+          const fillOnly = (/** @type {Clause} */ o) =>
+            o.aspects.includes('background') &&
+            !o.aspects.some(a =>
+              /^(?:text|border|outline|shadow|icon|link)/.test(a),
+            );
+          /** @param {Clause} o */
+          const fillSaid = o =>
+            fillOnly(o)
+              ? (colorFor(o, 'fill') ??
+                toneIn(
+                  o.text.replace(
+                    /\b(?:dark|light)\s+(?:text|labels?|links?|icons?|borders?)\b/g,
+                    ' ',
+                  ),
+                ))
+              : null;
+          // (A fill said in another clause holds only in the mode that clause
+          // names: "blue buttons in dark mode" leaves light mode's fill.)
+          const sibling = fillSaid(c)
+            ? null
+            : (clauses.find(
+                o =>
+                  o !== c &&
+                  !o.state &&
+                  !o.neg &&
+                  // (Only one said of the whole part: "primary buttons
+                  // red" is the primary's fill alone.)
+                  o.parts.some(p => p.on === part && !p.when) &&
+                  fillSaid(o),
+              ) ?? null);
+          const said = fillSaid(c) ?? (sibling ? fillSaid(sibling) : null);
+          const saidIn = sibling ? modeOf(sibling).mode : null;
+          // (A fill said for one look in another clause, "primary buttons
+          // red", is that look's fill, in the mode that clause names.)
+          /** @type {Map<string, {fill: string, mode: string | null}>} */
+          const lookSaid = new Map();
+          for (const o of clauses) {
+            if (o === c || o.state || o.neg) continue;
+            const fill = fillSaid(o);
+            if (!fill) continue;
+            for (const p of o.parts)
+              if (p.on === part && p.when && !lookSaid.has(String(p.when)))
+                lookSaid.set(String(p.when), {
+                  fill,
+                  mode: modeOf(o).mode ?? null,
+                });
+          }
+          // (A see-through fill, a secondary button's tint, glosses at its
+          // own alpha; a cleared one, alpha 0, draws nothing to gloss.)
+          /** @param {string} own */
+          const glossIn = own => {
+            const rgb = parseColor(own);
+            const a = alphaOf(own);
+            if (!rgb || !(a > 0)) return null;
+            const g = glossOf(hex(rgb));
+            if (a >= 1) return g;
+            const aa = Math.round(a * 255)
+              .toString(16)
+              .padStart(2, '0');
+            return g.replace(/#([0-9a-f]{6})\b/g, '#$1' + aa);
           };
+          const saidMode = modeOf(c).mode;
+          // (The paints Core gives the part's looks and states at rest, the
+          // shared reader a plain-part fill is checked against.)
+          const paints = coveredPaints(ctx, one(part), 'background-color');
+          // (A paint's condition read piece by piece: a look prop,
+          // "variant=blue elevation=none", or a state, "selected=selected",
+          // "aria-pressed=true".)
+          /** @param {[string, string]} piece */
+          const isState = ([k, v]) =>
+            /^aria-/.test(k) ||
+            v === k ||
+            v === 'true' ||
+            statesOf(part).includes(k);
+          /** @param {string} cond */
+          const piecesOf = cond =>
+            cond
+              .split(/\s+/)
+              .filter(p => p && !p.startsWith(':'))
+              .map(p => /** @type {[string, string]} */ (p.split(/[=:]/)));
+          /** The token Core paints for one look, `k:v`, at rest. @param {string} look */
+          const lookToken = look => {
+            const [k, v] = look.split(':');
+            return (
+              paints.covered.find(x => {
+                const ps = piecesOf(x.cond);
+                return (
+                  !ps.some(isState) &&
+                  ps.some(([pk, pv]) => pk === k && pv === v)
+                );
+              })?.token ?? null
+            );
+          };
+          const modes = /** @type {Array<'light' | 'dark'>} */ (
+            saidMode
+              ? [saidMode]
+              : env.data.mode === 'dark-only'
+                ? ['dark']
+                : env.data.mode === 'light-only'
+                  ? ['light']
+                  : ['light', 'dark']
+          );
+          /**
+           * The fill the theme sets on the part for a variant (or for every
+           * variant) in a mode: its own setting for that mode first.
+           * @param {string | null} when @param {'light' | 'dark'} m
+           */
+          const themeFill = (when, m) => {
+            // (The setting that governs is picked first; one that is no
+            // plain color, a cleared or see-through fill, keeps its look.)
+            const mine = [...env.data.settings]
+              .reverse()
+              .filter(
+                st =>
+                  st.on === part &&
+                  !st.state &&
+                  /^background(?:-color)?$/.test(st.thing) &&
+                  (st.when ?? null) === when,
+              );
+            return (
+              mine.find(st => st.mode === m)?.value ??
+              mine.find(st => !st.mode)?.value ??
+              null
+            );
+          };
+          /**
+           * The fill a variant (or the part) shows in a mode: one said in
+           * the ask, else the theme's own, else the base theme's rule for
+           * the variant, else the token the part reads, as written.
+           * @param {string | null} full @param {'light' | 'dark'} m
+           */
+          const rawFill = (full, m) => {
+            const own = ownFill(full, m);
+            const ls = full ? lookSaid.get(full.split('+')[0]) : null;
+            if (ls && own != null && (!ls.mode || ls.mode === m))
+              return ls.fill;
+            // (A color said goes only on a look with a resting fill of its
+            // own: a ghost button or a plain row keeps its look.)
+            return said && own != null && (!saidIn || saidIn === m)
+              ? said
+              : own;
+          };
+          /**
+           * The resting fill a look has of its own: the theme's, else the
+           * base theme's rule for it, else the token Core paints for it.
+           * @param {string | null} full @param {'light' | 'dark'} m
+           */
+          const ownFill = (full, m) => {
+            // (A look scoped by another condition too, "variant:primary+
+            // size:sm", shows its look's own fill.)
+            const when = full ? full.split('+')[0] : null;
+            const own =
+              (full && full !== when ? themeFill(full, m) : null) ??
+              themeFill(when, m) ??
+              (when ? themeFill(null, m) : null);
+            if (own != null) return String(own);
+            const look = when
+              ? baseOwnLook(part, 'background-color', when)
+              : null;
+            if (look) return look;
+            // (A look shows a token only where Core paints one for it: a
+            // ghost button's see-through fill is none.)
+            const token = when ? lookToken(when) : paints.rest;
+            return token
+              ? (tokenSetOn(part, token, m) ?? `var(${token})`)
+              : null;
+          };
+          // (A token, a light-dark() pair or a theme word is read in the
+          // mode.)
+          /** @param {string | null} when @param {'light' | 'dark'} m */
+          const fillFor = (when, m) => {
+            const raw = rawFill(when, m);
+            return raw == null ? null : inMode(raw, m);
+          };
+          /** @param {string} t */
+          const liveGloss = t =>
+            `linear-gradient(color-mix(in oklab, var(${t}), white 20%) 0%, var(${t}) 45%, color-mix(in oklab, var(${t}), black 20%) 100%)`;
+          // (Each look from its own fill, unless the ask names one or says
+          // the fill: the axis the part's fills vary by, a button's variant,
+          // a banner's status, a toast's type; a part with none is one.)
+          /** @type {string | null} */
+          let unread = null;
+          const axis = (() => {
+            /** @type {Map<string, number>} */
+            const seen = new Map();
+            const vals = /** @type {Record<string, string[]>} */ (
+              C.variantValues(one(part))
+            );
+            // (Only a look axis counts: a state the fills vary by, a
+            // switch's checked, is glossed as that state below.)
+            for (const r of C.partReads(one(part), 'background') ?? [])
+              for (const w of r.when ?? []) {
+                const a = /^([a-z]+)=/.exec(w.trim())?.[1];
+                if (a && vals[a]?.length) seen.set(a, (seen.get(a) ?? 0) + 1);
+              }
+            const known = [...seen].sort((x, y) => y[1] - x[1])[0]?.[0];
+            if (known) return known;
+            // (A look axis whose fills the part data does not give, a
+            // banner's status: each look draws its own color, unread here.)
+            unread =
+              ['status', 'type', 'tone', 'kind', 'intent', 'color'].find(
+                k => (vals[k]?.length ?? 0) > 1,
+              ) ?? null;
+            return 'variant';
+          })();
+          if (
+            unread &&
+            !said &&
+            (!f.when || String(f.when).startsWith(`${unread}:`)) &&
+            !modes.some(m => themeFill(f.when ?? null, m) != null)
+          )
+            return {
+              text: `each ${unread} of ${part} draws a color of its own, which the editor does not read here, so nothing is written; name one and its color ("glossy blue ${part}")`,
+              options: [],
+            };
+          // (A part whose hover and press tint its own fill, a switch's
+          // track, would lose them under a gloss image, and no state line
+          // can bring them back: nothing is written.)
+          if (
+            (C.partReads(one(part), 'background') ?? []).some(r =>
+              /^--color-tint-/.test(r.token),
+            )
+          )
+            return {
+              text: `${part} shows its hover and press by tinting its own fill, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
+              options: [],
+            };
+          // (A part that draws a hover or pressed wash, a button, shows it
+          // as an image; a gloss image over the part would cover it, and a
+          // theme's own state rules cannot repeat it as Core guards it:
+          // nothing is written.)
+          if (
+            (C.partReads(one(part), 'background') ?? []).some(r =>
+              /^--color-overlay-(?:hover|pressed)$/.test(r.token),
+            )
+          )
+            return {
+              text: `${part} shows its hover and press with a wash over its fill, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
+              options: [],
+            };
+          // (A part that paints another fill for a state of a look it
+          // fills, a current pagination dot, a pressed toggle, would lose
+          // it under a gloss: nothing is written. A state that keeps the
+          // look's own fill, a disabled input, is no other fill.)
+          const stateFill =
+            paints.covered.some(x => {
+              const ps = piecesOf(x.cond);
+              if (!ps.some(isState)) return false;
+              const lv = ps.find(([k]) => k === axis)?.[1];
+              // (The fill the gloss would cover: the theme's own on the look
+              // counts, not only Core's.)
+              return modes.some(m => {
+                const o = ownFill(lv ? `${axis}:${lv}` : null, m);
+                return (
+                  o != null &&
+                  inMode(String(o), m) !== inMode(`var(${x.token})`, m)
+                );
+              });
+            }) ||
+            // (An overlay painted at rest for a state, a pressed toggle's,
+            // is that state's fill; one under :hover or :active is a wash.)
+            (C.partReads(one(part), 'background') ?? []).some(
+              r =>
+                /^--color-overlay-/.test(r.token) &&
+                (r.when ?? []).some(
+                  w => !/(^|\s):/.test(w) && piecesOf(w).some(isState),
+                ),
+            );
+          if (stateFill)
+            return {
+              text: `${part} paints another fill for some of its states, which a gloss over it would hide, so nothing is written; set a background color to change its fill`,
+              options: [],
+            };
+          // (A group, the inputs: a gloss on the group reaches every member,
+          // so a member look with no resting fill, a ghost selector, would
+          // be filled: nothing is written.)
+          const bare = (
+            part !== one(part) ? (FAMILIES[part] ?? []) : []
+          ).flatMap(m => {
+            const vv = /** @type {Record<string, string[]>} */ (
+              C.variantValues(m)
+            );
+            const cp = coveredPaints(ctx, m, 'background-color');
+            // (Only a member that paints its fill by look here: one that
+            // paints it on an inner part has no bare look to read.)
+            if (cp.rest || !cp.covered.length) return [];
+            return (vv.variant ?? [])
+              .filter(
+                v =>
+                  !cp.covered.some(x =>
+                    piecesOf(x.cond).some(
+                      ([k, pv]) => k === 'variant' && pv === v,
+                    ),
+                  ),
+              )
+              .map(v => `${v} ${m}`);
+          });
+          const filledMember = (FAMILIES[part] ?? []).find(m => {
+            const cp = coveredPaints(ctx, m, 'background-color');
+            return (
+              cp.rest != null &&
+              !cp.covered.some(
+                x =>
+                  piecesOf(x.cond).some(p => isState(p)) && x.token !== cp.rest,
+              )
+            );
+          });
+          if (bare.length && !f.when)
+            return {
+              text: `${bare.join(', ')} ${bare.length > 1 ? 'draw no fill of their own' : 'draws no fill of its own'}, and a gloss on every ${part.replace(/s$/, '')} would fill ${bare.length > 1 ? 'them' : 'it'}, so nothing is written; name the part to gloss${filledMember ? ` ("glossy ${filledMember.replace(/-/g, ' ')}s")` : ''}`,
+              options: [],
+            };
+          /** @type {Record<string, string[]>} */
+          const looks = C.variantValues(one(part));
+          // (A condition on another axis, "glossy small buttons", scopes
+          // each look: every look's own fill under both conditions.)
+          const otherAxis =
+            f.when && !String(f.when).startsWith(`${axis}:`) ? f.when : null;
+          const variants = /** @type {Array<string | null>} */ (
+            f.when && !otherAxis
+              ? [f.when]
+              : (looks[axis] ?? []).map(v =>
+                  otherAxis ? `${axis}:${v}+${otherAxis}` : `${axis}:${v}`,
+                )
+          );
+          let whens = variants.length ? variants : [null];
+          // (Every variant with the same fill in each mode, the theme's one
+          // fill on the part: one gloss for the part.)
+          if (
+            whens.length > 1 &&
+            whens.every(w =>
+              modes.every(m => fillFor(w, m) === fillFor(whens[0], m)),
+            )
+          )
+            whens = [f.when ?? null];
+          /** @type {Step[]} */
+          const steps = [];
+          /** @type {string[]} */
+          const flat = [];
+          for (const when of whens) {
+            const opaque = modes.every(m => {
+              const own = fillFor(when, m);
+              return own != null && alphaOf(own) >= 1;
+            });
+            const gs = modes.map(m => {
+              const own = fillFor(when, m);
+              const g = own == null ? null : glossIn(own);
+              // (A mode whose fill is an opaque token glosses live over the
+              // token; a see-through one keeps its own alpha.)
+              const tok = /^var\(\s*(--[a-z0-9-]+)\s*\)$/.exec(
+                String(rawFill(when, m) ?? '').trim(),
+              )?.[1];
+              return g != null && tok && own != null && alphaOf(own) >= 1
+                ? liveGloss(tok)
+                : g;
+            });
+            const name = when ? when.replace(/^[a-z]+:/, '') : part;
+            if (gs.every(g => g == null)) {
+              if (when) flat.push(name);
+              continue;
+            }
+            modes.forEach((m, i) => {
+              if (gs[i] == null) flat.push(`${name} in ${m} mode`);
+            });
+            const scoped = when && when !== f.when ? {...f, when} : f;
+            /** @param {string} g @param {Record<string, string>} at */
+            const glossSteps = (g, at) => [set('background-image', g, at)];
+            // (A see-through fill is carried by its gloss alone: the look's
+            // own fill under it is cleared, so it is not painted twice.)
+            const clear = (/** @type {'light' | 'dark'} */ m) => {
+              const own = fillFor(when, m);
+              return own != null && alphaOf(own) < 1
+                ? [set('background-color', 'transparent', {...scoped, mode: m})]
+                : [];
+            };
+            if (!saidMode && gs.every(g => g === gs[0]) && opaque)
+              steps.push(...glossSteps(String(gs[0]), scoped));
+            else
+              modes.forEach((m, i) => {
+                if (gs[i] != null)
+                  steps.push(
+                    ...glossSteps(String(gs[i]), {...scoped, mode: m}),
+                    ...clear(m),
+                  );
+              });
+          }
+          // (A part that draws no fill of its own, and is given none, shows
+          // the part it sits in: a gloss on that part shows through it.)
+          if (!steps.length) {
+            // (Only a part whose every fill read is none or transparent draws
+            // no fill; a see-through fill, a ghost or secondary button's, is
+            // one with no plain color.)
+            const none = whens.every(w =>
+              modes.every(m => {
+                const own = fillFor(w, m);
+                return (
+                  own == null ||
+                  own.trim() === '' ||
+                  /^(?:transparent|none)$/i.test(own.trim())
+                );
+              }),
+            );
+            const who = f.when
+              ? `${String(f.when).replace(/^[a-z]+:/, '')} ${part}`
+              : flat.length
+                ? flat.join(', ')
+                : part;
+            // (A gradient the theme set is a fill of its own: it stays.)
+            const gradient = whens.some(w =>
+              modes.some(m => /gradient\(/.test(String(fillFor(w, m) ?? ''))),
+            );
+            return {
+              text: gradient
+                ? `${who} has a gradient fill the theme sets, which stays; a gloss is made from a plain color ("glossy blue ${part}")`
+                : none
+                  ? `${who} draws no fill of its own here, so nothing is written on it; a gloss on the part it sits in shows through it`
+                  : `${who} has no plain fill of its own here (none, or a see-through one), so it keeps its look; name a color ("glossy blue ${part}")`,
+              options: [],
+            };
+          }
+          // (A white fill keeps white at the top, a black one black at the
+          // bottom: there is no lighter or darker shade.)
+          const shades =
+            'a lighter top and a darker bottom around it (a white top or a black bottom stays as it is)';
+          const many = whens.length > 1;
+          return {
+            text: `a glossy fill${where}: ${said ? `the fill ${said}` : many ? "each variant's own fill" : 'its own fill'}, ${shades}${saidMode ? ` in ${saidMode} mode` : ''}${flat.length ? `; with no plain fill of its own, ${flat.join(', ')} ${flat.length > 1 ? 'keep their' : 'keeps its'} look` : ''}`,
+            options: [steps],
+            sequence: steps.length > 1,
+          };
+        }
         if (design)
           return {
             text: `a ${design} fill${where}`,
@@ -32916,7 +33373,11 @@ export function draftAnswer(ctx, env, question) {
   // token is in each mode.)
   /** @param {unknown} v @param {'light' | 'dark'} m */
   const fillIn = (v, m) => {
-    const said = String(v ?? '').trim();
+    // (A gloss is measured on the color it is made from, its middle stop.)
+    const said =
+      /^linear-gradient\(\s*.+? 0%, (#[0-9a-f]{6}|var\(\s*--[a-z0-9-]+\s*\)) 45%, .+? 100%\)$/i.exec(
+        String(v ?? '').trim(),
+      )?.[1] ?? String(v ?? '').trim();
     const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(said)?.[1];
     const raw = ref ? String(current(ref, m) ?? '') : said;
     const rgb = parseColor(raw);
@@ -32931,12 +33392,20 @@ export function draftAnswer(ctx, env, question) {
       .filter(y => y.thing === 'color' && y.on)
       .map(y => `${y.on}|${y.when ?? ''}`),
   );
+  // (The same, with the mode each said text holds in: a gloss keeps a said
+  // text only in that mode.)
+  const saidTextIn = new Set(
+    result
+      .flatMap(x => x.options.flat())
+      .filter(y => y.thing === 'color' && y.on)
+      .map(y => `${y.on}|${y.when ?? ''}|${y.mode ?? ''}`),
+  );
   for (const [di, d] of [...result.entries()].reverse()) {
     // (The one fill asked, in one line or in a line for each variant it
     // goes to: each line's look is measured, never only a lone line's.)
     const isFill = (/** @type {Step} */ x) =>
       Boolean(x.on) &&
-      /^background(?:-color)?$/.test(x.thing) &&
+      /^background(?:-color|-image)?$/.test(x.thing) &&
       (fillIn(x.value, 'light') != null || fillIn(x.value, 'dark') != null);
     const first = d.options[0]?.[0];
     // (A tint is a pair of fills, one a mode: each mode is measured on its
@@ -32987,7 +33456,14 @@ export function draftAnswer(ctx, env, question) {
       (!clash && !fillSteps.length) ||
       (!choice &&
         !clash &&
-        d.options.some(o => o.some(x => !fillSteps.includes(x))))
+        d.options.some(o =>
+          o.some(
+            x =>
+              !fillSteps.includes(x) &&
+              // (A gloss's own wash lines, over it in a state.)
+              !(x.thing === 'background-image' && x.state),
+          ),
+        ))
     )
       continue;
     // (A clash: each fill is measured, and its text goes with it. Any
@@ -33033,9 +33509,27 @@ export function draftAnswer(ctx, env, question) {
       for (const look of looks) {
         const tok = restRead(textReads, look);
         if (!tok) continue;
+        // (Under a gloss, the label is read as the base theme draws it in
+        // that look, its own rule first: Neutral's light destructive label.)
+        const label =
+          (st.thing === 'background-image' && look
+            ? baseOwnLook(st.on, 'color', look)
+            : null) ?? `var(${tok})`;
         for (const m of modes) {
-          const ink = parseColor(String(current(tok, m) ?? ''));
-          if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
+          // (Under a gloss, a look whose text the ask colors in this mode
+          // keeps that text.)
+          if (
+            st.thing === 'background-image' &&
+            [look, ''].some(
+              w =>
+                saidTextIn.has(`${st.on}|${w}|`) ||
+                saidTextIn.has(`${st.on}|${w}|${m}`),
+            )
+          )
+            continue;
+          const shown = inMode(label, m);
+          const ink = parseColor(shown);
+          if (!ink || alphaOf(shown) < 1) continue;
           const under = tintPair
             ? (fillSteps.find(
                 x => x.mode === m && (x.when ?? '') === (look || ''),
@@ -33108,6 +33602,14 @@ export function draftAnswer(ctx, env, question) {
         d.options[pick] = [...d.options[pick], ...fixes];
         d.joined = true;
         d.text = `${d.text}; ${st.value}'s choice also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on}${at}, since its text would not read on that fill`;
+        continue;
+      }
+      // (A gloss is one answer run in order: its text lines run with it,
+      // so running it never leaves a label unreadable on it.)
+      if (st.thing === 'background-image' && d.options.length === 1) {
+        d.options[0] = [...d.options[0], ...fixes];
+        d.sequence = true;
+        d.text = `${d.text}; and ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on}${at}, since its text would not read on that gloss`;
         continue;
       }
       d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
