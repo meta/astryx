@@ -5291,10 +5291,10 @@ export function draftAnswer(ctx, env, question) {
         return `${r} color ${typed ?? color}`;
       },
     )
-    // ("… and the card change too", "…, the card change too", "… Also the
-    // card change too.": "too" adds nothing to a "the … change" phrase.)
+    // ("… and the card change too", "… The card change too.": "too" adds
+    // nothing to a "the … change" phrase.)
     .replace(
-      /((?:^|[,.;!?]\s*|\band\s+)(?:also\s+)?the (?:[\w-]+\s+)+?changes?)\s+too\b/gi,
+      /((?:^|[.;!?]\s*|\band\s+(?:also\s+)?)the (?:[\w-]+\s+)+?changes?)\s+too\b/gi,
       '$1',
     )
     // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with

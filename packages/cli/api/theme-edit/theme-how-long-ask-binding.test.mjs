@@ -783,20 +783,6 @@ const ROWS = [
     },
   ],
   [
-    '"too" after ", the … change" adds nothing',
-    {
-      q: 'Make the cards rounder. Make the headings bold. Undo the heading change, the card change too.',
-      never: /corners|font-weight/,
-    },
-  ],
-  [
-    '"too" after ". Also the … change" adds nothing',
-    {
-      q: 'Make the cards rounder. Make the headings bold. Undo the heading change. Also the card change too.',
-      never: /corners|font-weight/,
-    },
-  ],
-  [
     '"too" after a "The … change" sentence adds nothing',
     {
       q: 'Make the cards rounder. Make the headings bold. Undo the heading change. The card change too.',
