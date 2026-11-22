@@ -99,34 +99,58 @@ describe('a height on a text input', () => {
       );
     }, 240_000);
 
-  it('a min-height saved by an earlier editor keeps the text area it reached, unchanged at every build, and is named', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('old', {cwd, like: 'neutral'});
-    const file = path.join(cwd, 'themes', 'old', 'old.settings.json');
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    data.settings.push({
-      thing: 'min-height',
-      value: '40px',
-      source: 'property',
-      on: 'text-input',
-    });
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-    /** The built rules that set the saved min-height. */
-    const rules = () =>
-      [
-        ...fs
-          .readFileSync(path.join(cwd, 'themes', 'old', 'old.css'), 'utf8')
-          .matchAll(/[^{}]*\{[^}]*min-height: 40px[^}]*\}/g),
-      ].map(m => m[0].trim());
-    const first = /** @type {any} */ (
-      await themeEditSet('old', 'corners', '4px', {cwd})
-    );
-    expect(rules().join('\n')).toContain('astryx-text-area');
-    expect(first.data.notes.join('\n')).toMatch(
-      /min-height = 40px on text-input still reaches text-area, as it was saved; .*set old min-height 40px --on text-input --only/,
-    );
-    const before = rules();
-    await themeEditSet('old', 'corners', '6px', {cwd});
-    expect(rules()).toEqual(before);
-  }, 240_000);
+  for (const [thing, value, slug] of [
+    ['min-height', '40px', 'old'],
+    ['height', '23px', 'oldh'],
+  ])
+    it(`a ${thing} saved by an earlier editor keeps the text area it reached, unchanged at every build, and is named`, async ctx => {
+      if (needBases(ctx)) return;
+      await themeEditNew(slug, {cwd, like: 'neutral'});
+      const file = path.join(cwd, 'themes', slug, `${slug}.settings.json`);
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      data.settings.push({
+        thing,
+        value,
+        source: 'property',
+        on: 'text-input',
+      });
+      fs.writeFileSync(file, JSON.stringify(data, null, 2));
+      /** The built rules that set the saved height. */
+      const rules = () =>
+        [
+          ...fs
+            .readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8')
+            .matchAll(
+              new RegExp(
+                `[^{}]*\\{[^}]*(?<![\\w-])${thing}: ${value}[^}]*\\}`,
+                'g',
+              ),
+            ),
+        ].map(m => m[0].trim());
+      const first = /** @type {any} */ (
+        await themeEditSet(slug, 'corners', '4px', {cwd})
+      );
+      expect(rules().join('\n')).toContain('astryx-text-area');
+      expect(first.data.notes.join('\n')).toMatch(
+        new RegExp(
+          `${thing} = ${value} on text-input still reaches text-area, as it was saved; to give it Core's own ${thing} again: \`[^\`]*set ${slug} ${thing} revert-layer --on text-area --only\``,
+        ),
+      );
+      const before = rules();
+      await themeEditSet(slug, 'corners', '6px', {cwd});
+      expect(rules()).toEqual(before);
+      // The printed line takes it off, and nothing names it any longer.
+      await themeEditSet(slug, thing, 'revert-layer', {
+        cwd,
+        on: 'text-area',
+        only: true,
+      });
+      expect(rules().join('\n')).not.toContain('astryx-text-area');
+      const after = /** @type {any} */ (
+        await themeEditSet(slug, 'corners', '8px', {cwd})
+      );
+      expect(after.data.notes.join('\n')).not.toMatch(
+        /still reaches text-area/,
+      );
+    }, 240_000);
 });

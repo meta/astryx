@@ -19762,8 +19762,8 @@ export function reachOffers(ctx, slug, data) {
 /**
  * The saved height settings that still reach a multi-line field a one-line
  * height now leaves alone (a text area beside a text input): the build keeps
- * them as saved, and the result names each with the line that keeps it on
- * its own part.
+ * them as saved, and the result names each with the line that gives the
+ * field Core's own again.
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
@@ -19774,10 +19774,16 @@ export function savedOneLineReachNotes(ctx, slug, data) {
   const out = [];
   for (const s of data.settings) {
     if (!s.on) continue;
-    const parts = partsOf(ctx, s).filter(m => oneLineSizeMisses(ctx, s, m));
+    const parts = writtenPartsOf(ctx, data, s).filter(m =>
+      oneLineSizeMisses(ctx, s, m),
+    );
     if (!parts.length) continue;
+    const lines = parts.map(
+      m =>
+        `\`${P} set ${slug} ${setArgs({...s, on: m, only: true, reached: undefined, keep: undefined, hold: undefined}, 'revert-layer')}\``,
+    );
     out.push(
-      `${describe(s)} still reaches ${parts.join(', ')}, as it was saved; a ${s.thing} set now on ${s.on} leaves a multi-line field its own; to keep it on ${s.on} only: \`${P} set ${slug} ${setArgs({...s, only: true, reached: undefined, keep: undefined, hold: undefined}, String(s.value))}\``,
+      `${describe(s)} still reaches ${parts.join(', ')}, as it was saved; to give ${parts.length > 1 ? 'one' : 'it'} Core's own ${s.thing} again: ${lines.join(', ')}`,
     );
   }
   return out;
