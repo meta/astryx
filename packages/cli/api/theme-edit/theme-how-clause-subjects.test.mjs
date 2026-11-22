@@ -498,7 +498,7 @@ const ROWS = [
     'a typed value in an example is never dropped',
     {
       q: 'Make the cards white, e.g. #fafafa',
-      has: ["background-color '#fafafa' --on card --when variant:default --mode light"],
+      has: ["background-color '#fafafa' --on card --mode light"],
     },
   ],
   [
