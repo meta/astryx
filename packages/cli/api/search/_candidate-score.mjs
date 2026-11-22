@@ -15,6 +15,7 @@
  *    80  name Levenshtein distance 1 (one-word lookups, words of 5+ letters)
  *    70  keyword word prefix / distance 1 (distance: one-word lookups, 5+ letters)
  *    60  name word prefix (>=4 chars, >=50% coverage)
+ *    60  whole word of a component or hook name (>=3 chars; search's reading)
  *    60  exact weak-keyword match
  *    50  description / prose mentions the term
  *    45  usage guidance mentions the term
@@ -44,6 +45,7 @@ import {
   wordsOf,
   joined,
   typoDistance,
+  isATermWordOf,
 } from './_words.mjs';
 import {pluralOf} from './_query.mjs';
 
@@ -408,6 +410,24 @@ export function scoreCandidate(
         // in VStack, HStack): a variant named by its head, as a keyword is.
         consider(90, `name "${candidateName}" ends in "${term}"`);
       } else if (startsATermWordOf(t, candidateName)) {
+        consider(60, `name contains "${term}"`);
+      } else if (
+        ownEvidence &&
+        !synonym &&
+        (domain === 'component' || domain === 'hook') &&
+        term.length >= 3 &&
+        isATermWordOf(
+          t,
+          domain === 'hook'
+            ? candidateName.replace(/^use(?=[A-Z])/, '')
+            : candidateName,
+        )
+      ) {
+        // In search's reading, a query word of 3+ letters that is a whole
+        // word of a component's or hook's name is a name hit however short
+        // against the name: `list` in MetadataList. A hook's leading `use`,
+        // which nearly every hook name starts with, is no such word, and a
+        // synonym standing in for a query word is not the word itself.
         consider(60, `name contains "${term}"`);
       }
       if (fuzzy) {

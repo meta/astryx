@@ -28,6 +28,44 @@ export const appCopyMark = slug =>
   `Written by \`astryx experimental theme editor show ${slug}\``;
 
 /**
+ * The first line of an app copy file, inside the comment marks given.
+ * @param {string} slug
+ * @param {string} open
+ * @param {string} close
+ */
+export const appCopyHead = (slug, open, close) =>
+  `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+
+/**
+ * The app copy's files the editor marks (its descriptor, its entry and its
+ * font stylesheet): a copy is the editor's while they carry its mark. One
+ * list for the editor and for `theme add` of a shared theme.
+ * @param {string} exportName the theme's export ("<camel>Theme")
+ * @param {string} slug
+ */
+export const appCopyMarkedNames = (exportName, slug) => [
+  `${exportName}.doc.mjs`,
+  `${exportName}.ts`,
+  `${slug}.fonts.css`,
+];
+
+/**
+ * Whether a file's text carries the editor's app copy mark.
+ * @param {string} text
+ */
+export const carriesAppCopyMark = text => text.includes(APP_COPY_MARK);
+
+/**
+ * An app copy's descriptor, as the editor writes it: one text for the editor
+ * and for `theme add` of a shared theme with its editor state. A display
+ * name and description already given (a shared theme's own) are kept.
+ * @param {string} slug
+ * @param {{displayName?: string, description?: string}} [words]
+ */
+export const appCopyDescriptor = (slug, words = {}) =>
+  `${appCopyHead(slug, '//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(words.displayName ?? slug)},\n  description: ${JSON.stringify(words.description ?? `The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`;
+
+/**
  * The marks a file's leading comment can carry, and the command it names:
  * `kind` is `build` for a theme build's output, `editor` for a file the theme
  * editor writes (its settings module or app copy); `command` is the words in

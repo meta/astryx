@@ -52,7 +52,7 @@ describe('icon.search ranking', () => {
   it('scores each tier: definition, exact in the leading reading, exact in the other, prefix, partial', () => {
     expect(scoreIcon('close', byId('x'), 'meaning', ['close'])).toEqual({
       score: 100,
-      reason: 'definition "close"',
+      reason: 'meaning "close"',
     });
     expect(scoreIcon('trash', byId('trash'), 'name')).toEqual({
       score: 90,
@@ -287,7 +287,7 @@ describe('icon.search: an exact query reads as a name or a meaning', () => {
       words: ['x', 'close'],
     });
     lines.data.map = {close: 'x'};
-    expect(ranked(lines, 'close')[0]).toEqual(['x', 100, 'definition "close"']);
+    expect(ranked(lines, 'close')[0]).toEqual(['x', 100, 'meaning "close"']);
   });
 
   it('an icon matches the words of every definition it is mapped to, after its own words', () => {
@@ -1009,7 +1009,7 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     });
     expect((await search('farewell')).matches[0]).toMatchObject({
       id: 'x',
-      reason: 'definition "farewell"',
+      reason: 'meaning "farewell"',
       meaningImport: "import {XIcon as FarewellIcon} from '@acme/glyphs';",
     });
     // A word of the set's own definition names it too.
