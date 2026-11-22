@@ -5047,11 +5047,17 @@ export function draftAnswer(ctx, env, question) {
       const own = String(said);
       // (The one part the look's own words name, by its longest match.)
       const found = partLexicon(ctx)
-        .parts.map(([re]) => re.exec(` ${own.toLowerCase()} `))
-        .filter(x => x != null);
-      const longest = /** @type {RegExpExecArray[]} */ (found).sort(
-        (x, y) => y[0].length - x[0].length,
+        .parts.map(([re, p]) => ({
+          hit: re.exec(` ${own.toLowerCase()} `),
+          on: /** @type {any} */ (p).on,
+        }))
+        .filter(x => x.hit != null);
+      const best = found.sort(
+        (x, y) =>
+          /** @type {RegExpExecArray} */ (y.hit)[0].length -
+          /** @type {RegExpExecArray} */ (x.hit)[0].length,
       )[0];
+      const longest = /** @type {RegExpExecArray | undefined} */ (best?.hit);
       if (!longest) return m;
       const part = longest[0].trim();
       // (Every other word only judges the look: "the copy button border is
@@ -5093,11 +5099,45 @@ export function draftAnswer(ctx, env, question) {
         : null;
       // (A state and a mode said together keep the earlier reading.)
       if (mode && state) return m;
+      // (A variant of the part said just before its name, "the muted card
+      // border", takes it away on that variant only. A judging word that is
+      // also a value, "too strong" on a divider, names no variant.)
+      const axes = ctx.C.variantValues(best.on) ?? {};
+      const isValue = (/** @type {string} */ w) =>
+        Object.values(axes)
+          .flat()
+          .some(v => String(v).toLowerCase() === w);
+      // (Only a part whose own name is one word, "card", "badge", "button",
+      // keeps a variant said before it through the later readers; a part
+      // named in several words, "clickable card", keeps the earlier
+      // reading.)
+      if (!state && String(best.on).includes('-') && isValue(before ?? ''))
+        return m;
+      const variant = state
+        ? undefined
+        : /** @type {any} */ (axes.variant ?? [])
+            .map((/** @type {unknown} */ v) => String(v).toLowerCase())
+            .find((/** @type {string} */ v) => v === before);
+      // (A variant word that is also a part's name, "input" on a selector,
+      // or a going-back word, "standard" on a dialog, keeps the earlier
+      // reading.)
+      if (
+        variant &&
+        (partLexicon(ctx).parts.some(([re]) => re.test(` ${variant} `)) ||
+          /^(?:standard|normal|original|plain|regular|basic)$/.test(variant))
+      )
+        return m;
+      // (A value of another axis, "the high card shadow", keeps the earlier
+      // reading.)
+      if (!variant && !state && isValue(before ?? '')) return m;
+      // (A variant and a mode said together keep the earlier reading.)
+      if (variant && mode) return m;
       const besidePart = own
         .toLowerCase()
         .replace(/\b(?:in\s+)?(?:dark|light)\s+(?:mode|theme)\b/, ' ')
         .replace(longest[0].trim(), ' ')
-        .replace(state ? new RegExp(`\\b${before}\\b`) : /$^/, ' ');
+        .replace(state ? new RegExp(`\\b${before}\\b`) : /$^/, ' ')
+        .replace(variant ? new RegExp(`\\b${variant}\\b`) : /$^/, ' ');
       const others = besidePart
         .replace(new RegExp(`\\b${look}\\b`, 'i'), ' ')
         .split(/[^a-z]+/)
@@ -5113,7 +5153,11 @@ export function draftAnswer(ctx, env, question) {
       const stop = String(lead).replace(/[!?]/, '.');
       const inMode = mode ? ` in ${mode.toLowerCase()} mode` : '';
       const when = state ? ` when ${state}` : '';
-      return `${stop}no ${word} on ${part}${when}${inMode}`;
+      // ("gray cards: no border": the form every later reader keeps the
+      // variant in.)
+      return variant
+        ? `${stop}${variant} ${part}: no ${word}`
+        : `${stop}no ${word} on ${part}${when}${inMode}`;
     },
   );
   // "darker but not darker than #1e3a8a": a color bound is a limit every
