@@ -248,30 +248,21 @@ describe('the press and hover dials', () => {
   );
 
   it(
-    'say in how that a saved exact wash wins, never that the look is already there',
+    'leave a feel unread in how on a theme that saves an exact wash, as before the dials',
     async () => {
       await themeEditNew('fe', {cwd, like: 'neutral'});
       await themeEditSet('fe', '--color-overlay-pressed', '#22222233', {cwd});
-      const r = /** @type {any} */ (
-        (await themeEditHow('lighter on press', {cwd, theme: 'fe'})).data
-      );
-      const text = JSON.stringify(r.results);
-      expect(text).toContain('fe saves an exact --color-overlay-pressed');
-      expect(text).not.toContain('already lighter');
-      // (Saved for one mode, it wins only there: the answer names the line
-      // that still sets the other mode.)
+      expect(await writes('fe', 'lighter on press')).toEqual([]);
       await themeEditNew('fm', {cwd, like: 'neutral'});
       await themeEditSet('fm', '--color-overlay-pressed', '#ff000033', {
         cwd,
         mode: 'dark',
       });
-      const one = JSON.stringify(
-        /** @type {any} */ (
-          (await themeEditHow('darker on press', {cwd, theme: 'fm'})).data
-        ).results,
-      );
-      expect(one).toContain('for dark mode, which wins over the dial in dark mode');
-      expect(one).toContain('set fm press darker');
+      expect(await writes('fm', 'darker on press')).toEqual([]);
+      // (The other dial still reads.)
+      expect(await writes('fm', 'darker on hover')).toEqual([
+        'set fm hover darker',
+      ]);
     },
     T,
   );

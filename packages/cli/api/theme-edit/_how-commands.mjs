@@ -361,23 +361,6 @@ export async function howTheme(ctx, cwd, name) {
               why: `${slug}.theme.ts sets the ${st.thing} wash itself (${token}: ${ownWash[token]}), so the dial leaves it unchanged; change that line in ${slug}.theme.ts`,
               fileWash: true,
             };
-          // (An exact wash the theme saves wins over the dial too.)
-          const exact = theme.settings.find(
-            x =>
-              x.source === 'token' &&
-              x.thing === token &&
-              !x.on &&
-              !x.when &&
-              !x.state,
-          );
-          if (exact)
-            return {
-              ok: false,
-              why: exact.mode
-                ? `${slug} saves an exact ${token} (${exact.value}) for ${exact.mode} mode, which wins over the dial in ${exact.mode} mode; \`${P} set ${slug} ${st.thing} ${st.value}\` still sets the other mode, and \`${P} undo ${slug} ${token} --mode ${exact.mode}\` lets the dial reach ${exact.mode} mode too`
-                : `${slug} saves an exact ${token} (${exact.value}), which wins over the dial; take it back with \`${P} undo ${slug} ${token}\` for the dial to show`,
-              fileWash: true,
-            };
         }
         if (compiled(d) === before)
           return {

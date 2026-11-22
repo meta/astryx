@@ -6739,6 +6739,18 @@ export function draftAnswer(ctx, env, question) {
     /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they|we|i|you)|had (?:the|it|they|we|i|you)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event|(?:would|could|should) have (?:been|gone|used|had|looked|made|picked|chosen|kept))\b|^\s*(?:after|until|till|before)\s+(?!(?:hover|hovering|focus|focusing|click|clicking|press|pressing|visiting|being)\b)(?!(?:this|that)\b\s*(?:,|$|(?:make|set|change|use|give|turn|add|remove|put)\b))(?:the|a|an|my|our|their|your|this|that|[a-z]+\s+(?:approves?|reviews?|signs?\s+off|ships?|launch(?:es)?|is\s+done|finish(?:es)?))\b/i;
   // A feel said as what is not wanted ("never darker on press").
   const FEEL_NOT = /\b(?:never|avoid|without|not|no|don'?t|doesn'?t|won'?t)\b/i;
+  // A dial whose wash the theme saves as an exact token is not read; the
+  // ask reads as it did before the dials.
+  /** @param {string} dial */
+  const feelHeld = dial =>
+    (env.data?.settings ?? []).some(
+      x =>
+        x.source === 'token' &&
+        x.thing === FEEL_WASH[/** @type {'press' | 'hover'} */ (dial)] &&
+        !x.on &&
+        !x.when &&
+        !x.state,
+    );
   const NOT_ASK =
     /\b(i wonder|wondering|curious|would like to know|let me see|help me understand|any idea|just checking|just asking|check if|check whether|can you check|look at|double check|idk|quick q|do you think)\b|\b(don'?t not|not without|not un-?(?:bold|round|rounded|flat|square|styled)\w*|never no|no lighter|no darker|not at all|isn'?t it time|weren'?t)\b|^\s*(?!(?:can|could|would|will) (?:you|i|we)\b|can (?:the|my|our|all) [\w -]+ be\b|is it possible\b|is there a way\b)(?:do|does|did|will|would|can(?!'t|not)|could|should|is|are)\b(?!n'?t)|^\s*checking\b|\bno less (?!than)|^\s*(would|could|should|does|do|is|are|will)\b[^.]*\b(work|look|be (?:a )?(?:good|better|too much|ok|okay)|good|better|accessible|clash|too much)\b[^.]*\??$|\bor\b[^.]*\?\s*$|^\s*how (?:would|round|big|dark|light|thick)\b|\b(right now|rn)\b(?!.*\b(make|set|change)\b)/i;
   const ASK_START =
@@ -6884,7 +6896,8 @@ export function draftAnswer(ctx, env, question) {
     if (
       feel &&
       (feel.dial === 'press' || feel.dial === 'hover') &&
-      !FEEL_NOT.test(raw)
+      !FEEL_NOT.test(raw) &&
+      !feelHeld(feel.dial)
     )
       return true;
     // Questions in a script how cannot read word by word keep their ask.
@@ -17236,6 +17249,7 @@ export function draftAnswer(ctx, env, question) {
         (rung?.dial === 'press' || rung?.dial === 'hover') &&
         (c.neg ||
           FEEL_NOT.test(c.text) ||
+          feelHeld(rung.dial) ||
           c.aspects.some(a => !/^(?:background|fill)$/.test(a)));
       const r =
         feelElsewhere ||
