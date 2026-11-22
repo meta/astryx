@@ -14,6 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {globSync} = require('fast-glob');
+const {keyRelations} = require('./keyed-relations');
 
 // Loaded on first use: next.js reads this file's package helpers on the
 // webpack path too, which must not start requiring the compiler.
@@ -421,9 +422,12 @@ function layerBlock(css) {
   return `${LAYER_ORDER}\n\n@layer astryx-base {\n${body}\n}\n`;
 }
 
-/** StyleX's CSS for `rules`, from the copy of StyleX that compiled them. */
+/**
+ * StyleX's CSS for `rules`, from the copy of StyleX that compiled them, with
+ * each relation keyed to its rule's class (keyed-relations.js).
+ */
 function processRules(rules) {
-  return stylexBabelPlugin().processStylexRules(rules, false);
+  return stylexBabelPlugin().processStylexRules(keyRelations(rules), false);
 }
 
 /**
