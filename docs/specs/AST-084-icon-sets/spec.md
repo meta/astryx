@@ -751,8 +751,9 @@ unchecked}`): the optional Astryx definitions a set leaves unmapped, printed
   `icon_export_missing`. Each set's entry also has `templateMeanings`, the
   same list the authoring receipts answer (FR13), printed one line per set
   under "Template icon meanings not mapped"; it is never counted and never
-  fails a check, even under `--strict` or `--next`. Printed text calls a
-  definition an icon meaning.
+  fails a check, even under `--strict` or `--next`. Messages, headings and
+  receipts that the icon commands and `integration check` print call a
+  definition an icon meaning; issue codes and JSON keys keep `definition`.
 
 - **FR16 — Older CLIs.** Published CLI 0.7.3 refuses `stability` on page and
   block templates, namespace docs, and theme descriptors, and refuses a
