@@ -33207,7 +33207,13 @@ export function draftAnswer(ctx, env, question) {
         for (const m of /** @type {const} */ (['light', 'dark'])) {
           const page = parseColor(pageIn(m));
           const read = page ? ratio(rgb, page) : Infinity;
-          const note = `${step.value} reads ${read.toFixed(2)}:1 on the ${m} page (under 4.5:1); for ${m} mode, set a ${m === 'dark' ? 'lighter' : 'darker'} color with --mode ${m}`;
+          // (Which way to move follows the measured page: lighter where
+          // white reads better on it than black.)
+          const lighter =
+            page != null &&
+            ratio(/** @type {any} */ (parseColor('#ffffff')), page) >
+              ratio(/** @type {any} */ (parseColor('#000000')), page);
+          const note = `${step.value} reads ${read.toFixed(2)}:1 on the ${m} page (under 4.5:1); for ${m} mode, set a ${lighter ? 'lighter' : 'darker'} color with --mode ${m}`;
           if (read < 4.5 && !notes.includes(note)) notes.push(note);
         }
       }

@@ -257,6 +257,18 @@ describe('light and dark said as what the theme must work in', () => {
     expect(black.map(r => r.text).join('\n')).not.toMatch(
       /reads \d+\.\d\d:1 on the light page/,
     );
+    // (Which way to move follows the page: on a white page in both modes,
+    // darker in both.)
+    const white = (
+      await results(
+        'fresh',
+        'the page should be white, headings that work in light and dark mode should be white',
+      )
+    )
+      .map(r => r.text)
+      .join('\n');
+    expect(white).not.toMatch(/lighter color with --mode dark/);
+    expect(white).toMatch(/darker color with --mode dark/);
     // (A singular part after a modal keeps the base reading, "modes" too.)
     const would = (
       await results(
