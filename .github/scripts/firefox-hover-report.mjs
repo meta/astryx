@@ -70,7 +70,11 @@ export function buildReport(report, known, {sha = ''} = {}) {
       .map(test => keyOf(test)),
   );
   const fixed = known.filter(entry => passed.has(keyOf(entry)));
-  const notRun = tests.filter(test => !test.ran).length;
+  // A serial spec file skips its later tests after a failure. Playwright
+  // records them as skipped, with no skip annotation: they did not run.
+  const notRun = tests.filter(
+    test => !test.ran || (test.status === 'skipped' && !test.skippedOnPurpose),
+  ).length;
   const summary = `Firefox: ${plural(knownFailures.length, 'known failure')}, ${added.length} new${fixed.length ? `, ${plural(fixed.length, 'known failure')} now ${fixed.length === 1 ? 'passes' : 'pass'}` : ''}${notRun ? `, ${notRun} not run` : ''}`;
   const rows = list =>
     list.map(
