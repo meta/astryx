@@ -22270,7 +22270,9 @@ export function draftAnswer(ctx, env, question) {
         // 150%", nor beside a line height said another way.)
         const pxLeading =
           pxLengths.length === 1 &&
-          !/\b(?:text|font)(?:[- ]size)?\s*:?\s*\d+(?:\.\d+)?\s?px\b/i.test(c.text) &&
+          !/\b(?:text|font)(?:[- ]size)?\s*:?\s*\d+(?:\.\d+)?\s?px\b(?!\s*(?:of\s+)?(?:line[- ]?height|leading)\b)/i.test(
+            c.text,
+          ) &&
           !/\b(?:line[- ]?height|leading)\s*(?:of\s+)?:?\s*\d+(?:\.\d+)?(?!\s?px\b|[\d.])/i.test(
             c.text,
           )

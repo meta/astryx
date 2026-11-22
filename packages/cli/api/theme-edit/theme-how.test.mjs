@@ -3394,9 +3394,20 @@ const QUESTIONS_J = [
     {top: /^set q text-size 13 && set q --text-body-leading 1\.385$/},
   ],
   ['18px leading', {top: /^set q --text-body-leading 1\.286$/}],
-  ['make the text 2px bigger, 20px line height', {top: /^(?!.*--text-body-leading 10\b)/}],
-  ['font size 1rem, 24px leading', {top: /^(?!.*--text-body-leading 1\.714)/}],
-  ['font size 16px line height 150%', {top: /^(?!.*--text-body-leading 1\.143)/}],
+  // (only a pixel size the text-size answer writes as typed; a size labeled
+  // as the text's is never the leading)
+  [
+    'make the text 2px bigger, 20px line height',
+    {top: /^set q text-size 16 && set q --text-body-leading 1\.57$/},
+  ],
+  [
+    'font size 1rem, 24px leading',
+    {top: /^set q text-size 16 && set q --text-body-leading 1\.57$/},
+  ],
+  [
+    'font size 16px line height 150%',
+    {top: /^set q --text-body-leading 2\.14$/},
+  ],
   ['body text 18px leading', {top: /^set q --text-body-leading 1\.286$/}],
   [
     'heading font size 24px, body 14px text, 20px leading',
