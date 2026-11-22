@@ -6177,17 +6177,30 @@ export function partsOf(ctx, s) {
   const pin =
     /** @type {any} */ (s).reached ??
     (UNRECORDED.has(s) ? savedReach(ctx, /** @type {any} */ (s)) : null);
-  // (The box a whole outline draws on, the part's own or the row that frames
-  // its controls, is the setting's own place, not a reach to pin.)
-  const box = boxFrameOf(ctx, s);
   const all = reachedPartsOf(ctx, s).filter(
-    t => !Array.isArray(pin) || t === s.on || t === box || pin.includes(t),
+    t => !Array.isArray(pin) || ownsPlace(ctx, s, t) || pin.includes(t),
   );
   // (Members the setting keeps out, where it would make text unreadable.)
   const keep = /** @type {any} */ (s).keep;
   return Array.isArray(keep) && keep.length
     ? all.filter(t => t === s.on || !keep.includes(t))
     : all;
+}
+
+/**
+ * Whether a part is the setting's own place, never a reach to pin or offer:
+ * the part it is set on, or, for a whole outline, the row that frames that
+ * part's controls (the outline moves between the two as a fill comes and
+ * goes on the part).
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'> & {mode?: unknown, when?: unknown}} s
+ * @param {string} part
+ * @returns {boolean}
+ */
+export function ownsPlace(ctx, s, part) {
+  if (part === s.on) return true;
+  if (!s.on || !FRAME_THING.test(kebab(String(s.thing ?? '')))) return false;
+  return part === boxFrameOf(ctx, s) || part === rowFrameOf(ctx, s.on);
 }
 
 /**
@@ -19597,7 +19610,7 @@ export function reachOffers(ctx, slug, data) {
     if (!s.on || !Array.isArray(s.reached)) continue;
     const pin = s.reached.map(String);
     const gained = partsOf(ctx, {...s, reached: undefined}).filter(
-      t => !pin.includes(t),
+      t => !pin.includes(t) && !ownsPlace(ctx, s, t),
     );
     if (gained.length)
       out.push({
@@ -19644,7 +19657,10 @@ function recordReach(ctx, slug, data, before) {
     // recorded so its family's other members are offered.)
     const whole = partsOf(ctx, s);
     const full = partsOf(ctx, {...s});
-    if (whole.some(t => t !== s.on) || full.some(t => !whole.includes(t)))
+    if (
+      whole.some(t => !ownsPlace(ctx, s, t)) ||
+      full.some(t => !whole.includes(t))
+    )
       s.reached = whole;
     UNRECORDED.delete(s);
   }

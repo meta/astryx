@@ -436,4 +436,23 @@ describe('a saved setting and how far it reaches', () => {
     const u = /** @type {any} */ (await themeEditUndo('once', {cwd}));
     expect(u.data.offered ?? []).toEqual([]);
   }, 240_000);
+
+  it('a border that moves between a part and the row that frames it is no reach: a fill that moves it back offers nothing', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('row', {cwd, like: 'neutral'});
+    const border = /** @type {any} */ (
+      await themeEditSet('row', 'border', '1px solid #dddddd', {
+        cwd,
+        on: 'pagination',
+      })
+    );
+    expect(border.data.parts).toEqual(['pagination-list']);
+    const fill = /** @type {any} */ (
+      await themeEditSet('row', 'background-color', '#f8f9fa', {
+        cwd,
+        on: 'pagination',
+      })
+    );
+    expect(fill.data.offered ?? []).toEqual([]);
+  }, 240_000);
 });
