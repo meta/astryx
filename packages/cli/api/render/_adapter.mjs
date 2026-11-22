@@ -888,7 +888,11 @@ async function pagePictures(output, cwd, input) {
   // The system temp folder, as for a template's scratch copy: never a disk's
   // root or a folder that holds the home folder.
   const [temp] = tempFolders();
-  if (!temp) return {skipped: 'there is no system temp folder to write them to (a disk root or a folder holding the home folder is not one)'};
+  if (!temp)
+    return {
+      skipped:
+        'there is no system temp folder to write them to (a disk root or a folder holding the home folder is not one); set TMPDIR to a writable folder outside the home folder, then run the command again',
+    };
   /** @type {string} */
   let dir;
   try {
