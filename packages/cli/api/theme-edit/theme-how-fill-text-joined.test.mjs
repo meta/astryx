@@ -133,3 +133,56 @@ it('a text color set for the whole part is the label a later fill measures', asy
     "set fw color '#ffffff' --on button --when variant:secondary --mode dark",
   ]);
 }, 600_000);
+
+it('a color said for one mode on the whole part wins over one said for both on the look, as the build draws it', async () => {
+  await themeEditNew('fo', {cwd, like: 'neutral'});
+  await themeEditSet('fo', 'color', '#ffffff', {
+    cwd,
+    on: 'button',
+    when: 'variant:secondary',
+  });
+  await themeEditSet('fo', 'color', '#000000', {
+    cwd,
+    on: 'button',
+    mode: 'dark',
+  });
+  const {data} = /** @type {any} */ (
+    await themeEditHow('secondary buttons #1e3a8a', {cwd, theme: 'fo'})
+  );
+  const lines = /** @type {string[]} */ (data.results[0].commands).flatMap(c =>
+    c.split(' && '),
+  );
+  expect(lines.map(c => c.replace(/^.*? editor /, ''))).toContain(
+    "set fo color '#ffffff' --on button --when variant:secondary --mode dark",
+  );
+  /** @type {any} */
+  let last = null;
+  for (const line of lines) {
+    const [, thing, value, rest] = /** @type {RegExpMatchArray} */ (
+      line.match(/ set fo (\S+) '([^']+)'(.*)$/)
+    );
+    const flags = Object.fromEntries(
+      [...rest.matchAll(/--(\w+) (\S+)/g)].map(m => [m[1], m[2]]),
+    );
+    last = await themeEditSet('fo', thing, value, {cwd, ...flags});
+  }
+  expect(JSON.stringify(last?.data?.problems ?? [])).not.toMatch(
+    /button \(variant secondary\)[^:]{0,40}is [\d.]+:1 in/,
+  );
+}, 600_000);
+
+it('a state fill that names no look keeps its text lines as an answer of their own', async () => {
+  await themeEditNew('fs', {cwd, like: 'neutral'});
+  const {data} = /** @type {any} */ (
+    await themeEditHow('make the open select #1e3a8a', {cwd, theme: 'fs'})
+  );
+  const first = /** @type {string[]} */ (data.results[0].commands).flatMap(c =>
+    c.split(' && '),
+  );
+  expect(first.some(c => / color '#/.test(c))).toBe(false);
+  expect(
+    data.results.some((/** @type {{text: string}} */ r) =>
+      /^readable text on that fill/.test(r.text),
+    ),
+  ).toBe(true);
+}, 600_000);

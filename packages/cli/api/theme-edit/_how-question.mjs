@@ -33300,13 +33300,13 @@ export function draftAnswer(ctx, env, question) {
         // no variants has its own rule), else the token Core reads.)
         /** @param {'light' | 'dark'} m @returns {string} */
         const labelIn = m => {
-          // (Its own look first, then the whole part; each said for the
-          // mode, then for both.)
+          // (A color said for the mode first, its own look before the
+          // whole part, then one said for both modes: the build's order.)
           /** @param {string} state */
           const own = state =>
-            [look, ...(look ? [''] : [])]
-              .flatMap(w =>
-                [m, undefined].map(md =>
+            [m, undefined]
+              .flatMap(md =>
+                [look, ...(look ? [''] : [])].map(w =>
                   env.data.settings.find(
                     x =>
                       x.thing === 'color' &&
@@ -33404,43 +33404,61 @@ export function draftAnswer(ctx, env, question) {
         d.text = `${d.text}; ${st.value}'s choice also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on}${at}, since its text would not read on that fill`;
         continue;
       }
-      // (The fill's own answer carries its text lines: the readable text
-      // for each look and mode the fill fails in, after the fill.)
-      for (const o of d.options)
-        if (o.some(x => fillSteps.includes(x))) o.push(...fixes);
-      for (const f of fixes) readableText.add(f);
-      if (d.options.length > 1) d.joined = true;
-      d.text = `${d.text}; its text would not read on that fill${at}, so the answer also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on} (${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value})`;
+      // (A state fill that names none of the part's looks, "the open
+      // select", reaches only the looks whose state fill it covers, which
+      // is not read here: its text lines stay an answer of their own, to
+      // follow where they fit.)
+      const ownLine =
+        Boolean(st.state) &&
+        named.length !== fillSteps.length &&
+        variants.length > 0;
+      if (ownLine) {
+        d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
+        result.splice(result.indexOf(d) + 1, 0, {
+          text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
+          options: [fixes],
+          ...(fixes.length > 1 ? {sequence: true} : {}),
+        });
+      } else {
+        // (The fill's own answer carries its text lines: the readable
+        // text for each look and mode the fill fails in, after the fill.)
+        for (const o of d.options)
+          if (o.some(x => fillSteps.includes(x))) o.push(...fixes);
+        for (const f of fixes) readableText.add(f);
+        if (d.options.length > 1) d.joined = true;
+        d.text = `${d.text}; its text would not read on that fill${at}, so the answer also sets ${[...new Set(fixes.map(x => x.value))].join(' or ')} text on ${st.on} (${st.on}'s text measures under 4.5:1 on ${tintPair ? 'the tint' : st.value})`;
+      }
       // (In a whole ask, the answer that runs it in order carries those
       // text lines right after the fill too, so running it never leaves the
-      // text unreadable.)
-      for (const seq of result) {
-        if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
-        const steps = seq.options[0];
-        const at = steps.findIndex(x =>
-          fillSteps.some(
-            f =>
-              f.thing === x.thing &&
-              f.on === x.on &&
-              String(f.value) === String(x.value) &&
-              (f.when ?? '') === (x.when ?? '') &&
-              (f.state ?? '') === (x.state ?? '') &&
-              (f.mode ?? '') === (x.mode ?? ''),
-          ),
-        );
-        if (at < 0) continue;
-        const missing = fixes.filter(
-          f =>
-            !steps.some(
-              x =>
-                x.thing === f.thing &&
-                x.on === f.on &&
-                (x.state ?? '') === (f.state ?? '') &&
-                (x.when ?? '') === (f.when ?? ''),
+      // text unreadable; a state fill's own line, a theme color's only.)
+      if (!ownLine || /^var\(/.test(String(st.value ?? '').trim()))
+        for (const seq of result) {
+          if (seq === d || !seq.sequence || seq.options.length !== 1) continue;
+          const steps = seq.options[0];
+          const at = steps.findIndex(x =>
+            fillSteps.some(
+              f =>
+                f.thing === x.thing &&
+                f.on === x.on &&
+                String(f.value) === String(x.value) &&
+                (f.when ?? '') === (x.when ?? '') &&
+                (f.state ?? '') === (x.state ?? '') &&
+                (f.mode ?? '') === (x.mode ?? ''),
             ),
-        );
-        steps.splice(at + 1, 0, ...missing);
-      }
+          );
+          if (at < 0) continue;
+          const missing = fixes.filter(
+            f =>
+              !steps.some(
+                x =>
+                  x.thing === f.thing &&
+                  x.on === f.on &&
+                  (x.state ?? '') === (f.state ?? '') &&
+                  (x.when ?? '') === (f.when ?? ''),
+              ),
+          );
+          steps.splice(at + 1, 0, ...missing);
+        }
     }
   }
   // "dark mode should be chocolate brown": a page color typed for a mode

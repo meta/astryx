@@ -147,17 +147,7 @@ describe('lists and excepts', () => {
         (await answer('hovered and pressed buttons should be orange')).first,
       ).toEqual([
         "set n background-color '#f97316' --on button --state hover",
-        "set n color '#000000' --on button --when variant:primary --state hover --mode light",
-        "set n color '#000000' --on button --when variant:secondary --state hover --mode dark",
-        "set n color '#000000' --on button --when variant:ghost --state hover --mode dark",
-        "set n color '#000000' --on button --when variant:destructive --state hover --mode light",
-        "set n color '#000000' --on button --when variant:destructive --state hover --mode dark",
         "set n background-color '#f97316' --on button --state active",
-        "set n color '#000000' --on button --when variant:primary --state active --mode light",
-        "set n color '#000000' --on button --when variant:secondary --state active --mode dark",
-        "set n color '#000000' --on button --when variant:ghost --state active --mode dark",
-        "set n color '#000000' --on button --when variant:destructive --state active --mode light",
-        "set n color '#000000' --on button --when variant:destructive --state active --mode dark",
       ]);
       const comma = await answer(
         'make everything rounder except primary, secondary and ghost buttons',

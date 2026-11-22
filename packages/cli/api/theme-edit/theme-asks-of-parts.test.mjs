@@ -98,11 +98,7 @@ describe('asks of parts', () => {
       ).lines,
     ).toEqual([
       "set a background-color '#2563eb' --on dropdown-menu-item --state hover",
-      "set a color '#ffffff' --on dropdown-menu-item --when variant:default --state hover --mode light",
-      "set a color '#ffffff' --on dropdown-menu-item --when variant:destructive --state hover --mode light",
       "set a background-color '#9e9e9e' --on dropdown-menu-item --state disabled",
-      "set a color '#000000' --on dropdown-menu-item --when variant:default --state disabled --mode dark",
-      "set a color '#000000' --on dropdown-menu-item --when variant:destructive --state disabled --mode dark",
     ]);
     // A condition said with another state is both at once, with each one
     // alone as the other reading; moment states said together are each,

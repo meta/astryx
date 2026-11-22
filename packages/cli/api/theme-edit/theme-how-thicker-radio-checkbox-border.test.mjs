@@ -84,11 +84,7 @@ describe('how thicker radio checkbox border', () => {
     async test => {
       needsBases(test);
       expect((await answer("make the menu's hovered items red")).first).toEqual(
-        [
-          "background-color '#dc2626' --on dropdown-menu-item --state hover",
-          "color '#ffffff' --on dropdown-menu-item --when variant:default --state hover --mode light",
-          "color '#ffffff' --on dropdown-menu-item --when variant:destructive --state hover --mode light",
-        ],
+        ["background-color '#dc2626' --on dropdown-menu-item --state hover"],
       );
       // (A button set on every toggle button would reach those outside a
       // group too: nothing is written.)

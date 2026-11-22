@@ -216,12 +216,6 @@ describe('words', () => {
   it("an open part is its open state; a state's fill token is set in that state", async () => {
     expect(writes(await how('q0', 'make the open select red'))).toEqual([
       "set q0 background-color '#dc2626' --on selector --state expanded --only",
-      "set q0 color '#ffffff' --on selector --when variant:input --state expanded --mode light --only",
-      "set q0 color '#ffffff' --on selector --when variant:input --state expanded --mode dark --only",
-      "set q0 color '#ffffff' --on selector --when variant:secondary --state expanded --mode light --only",
-      "set q0 color '#ffffff' --on selector --when variant:secondary --state expanded --mode dark --only",
-      "set q0 color '#ffffff' --on selector --when variant:ghost --state expanded --mode light --only",
-      "set q0 color '#ffffff' --on selector --when variant:ghost --state expanded --mode dark --only",
     ]);
     const t = await fresh('w1');
     const toggle = writes(
