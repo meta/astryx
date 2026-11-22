@@ -72,6 +72,10 @@ function stubGithub({
   permission = 'write',
   events = [],
   pushReadFails = false,
+  // When each head was pushed (its first check suite); PUSHED by default.
+  pushed = {},
+  // GitHub's compare status for each `base...head`; a missing pair fails.
+  compare = {},
 }) {
   const calls = {reRunWorkflow: [], listWorkflowRuns: []};
   const github = {
@@ -100,15 +104,19 @@ function stubGithub({
         },
       },
       checks: {
-        listSuitesForRef: async () => {
+        listSuitesForRef: async ({ref}) => {
           if (pushReadFails) throw new Error('rate limited');
-          return {data: {check_suites: [{created_at: PUSHED}]}};
+          return {data: {check_suites: [{created_at: pushed[ref] ?? PUSHED}]}};
         },
       },
       repos: {
         getCommit: async () => ({
           data: {commit: {committer: {date: '2026-11-19T08:00:00Z'}}},
         }),
+        compareCommitsWithBasehead: async ({basehead}) => {
+          if (!(basehead in compare)) throw new Error('not found');
+          return {data: {status: compare[basehead]}};
+        },
         // One permission for everyone, or one per login.
         getCollaboratorPermissionLevel: async ({username}) => ({
           data: {
@@ -561,6 +569,158 @@ describe("the heavy turn's review (DEC-32)", () => {
     });
     expect(stub.calls.reRunWorkflow).toEqual([11]);
     expect(said).toContain('started run 11 again in full');
+  });
+});
+
+describe('a stack member approved through the stack top (DEC-32)', () => {
+  // #1 (member, head m1) sits below #2 (top, head t1) in one stack. The
+  // review app reviews the top only, and its body names each member.
+  const STACK = 'Stack: #1 → #2';
+  const member = (extra = {}) =>
+    pull(1, 'm1', {body: `Base: main.\n\n${STACK}\n`, ...extra});
+  const top = (extra = {}) =>
+    pull(2, 't1', {body: `Below it: #1.\n${STACK}\n`, ...extra});
+  const topReview = ({
+    sha = 't1',
+    submittedAt = AFTER,
+    state = 'APPROVED',
+    body = 'Approved pending CI.\n\n**#1**: approved pending CI.\n\n**#2**: approved pending CI.\n\n**Whole stack**: passes.',
+  } = {}) => ({...appApproval(sha, submittedAt), state, body});
+  // [heavy turn, merge gate (DEC-11, unchanged)] for the member.
+  const both = async ({
+    memberPull = member(),
+    topPull = top(),
+    topReviews = [topReview()],
+    memberReviews = [],
+    pushed = {},
+    compare = {'t1...m1': 'behind'},
+  } = {}) => {
+    const stub = stubGithub({
+      pulls: [memberPull, topPull],
+      statuses: {m1: passed, t1: passed},
+      reviews: {1: memberReviews, 2: topReviews},
+      pushed,
+      compare,
+    });
+    const input = {...REVIEW, ...stub, owner: 'o', repo: 'r', pull: memberPull};
+    return [
+      await turn.heavyReviewPasses(input),
+      await turn.reviewPasses(input),
+    ];
+  };
+
+  it("starts a member's heavy suites on the top's exact-head approval that names it, and clears no gate", async () => {
+    expect(await both()).toEqual([true, false]);
+    // The member's head is the top's head: GitHub reports `identical`.
+    expect(await both({compare: {'t1...m1': 'identical'}})).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it("does not count a top approval submitted before the member's latest push", async () => {
+    // The member was pushed after the top's review, so the review never saw
+    // that head.
+    expect(await both({pushed: {m1: '2026-11-20T12:00:00Z'}})).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it('does not count a top approval that does not name the member as approved', async () => {
+    for (const body of [
+      'Approved pending CI.\n\n**#2**: approved pending CI.',
+      '**#1**: not approved; the test fails.\n\n**#2**: approved.',
+      '**#1**: approved once its changes land.',
+      'Approved. #1: approved pending CI.',
+      '**#12**: approved pending CI.',
+    ])
+      expect((await both({topReviews: [topReview({body})]}))[0]).toBe(false);
+  });
+
+  it("does not count it when the member's head is not in the reviewed top head", async () => {
+    for (const status of ['diverged', 'ahead'])
+      expect((await both({compare: {'t1...m1': status}}))[0]).toBe(false);
+    // The compare cannot be read: nothing counts.
+    expect((await both({compare: {}}))[0]).toBe(false);
+  });
+
+  it('needs the identical Stack line in both descriptions, with the member below the top', async () => {
+    for (const [memberBody, topBody] of [
+      [STACK, 'Stack: #1 → #3 → #2'],
+      [STACK, 'No stack here.'],
+      ['Stack: #2 → #1', 'Stack: #2 → #1'],
+      ['See Stack: #1 → #2 above.', 'See Stack: #1 → #2 above.'],
+    ])
+      expect(
+        (
+          await both({
+            memberPull: member({body: memberBody}),
+            topPull: top({body: topBody}),
+          })
+        )[0],
+      ).toBe(false);
+  });
+
+  it("counts only the review app's latest verdict at the top's exact current head", async () => {
+    // An approval of an older top head.
+    expect((await both({topReviews: [topReview({sha: 't0'})]}))[0]).toBe(false);
+    // A later request for changes at the top head replaces the approval.
+    expect(
+      (
+        await both({
+          topReviews: [
+            topReview(),
+            topReview({
+              state: 'CHANGES_REQUESTED',
+              submittedAt: '2026-11-20T11:30:00Z',
+              body: '**#1**: approved.\n\n**#2**: changes requested.',
+            }),
+          ],
+        })
+      )[0],
+    ).toBe(false);
+    // A lookalike login that is not the app's Bot account.
+    expect(
+      (
+        await both({
+          topReviews: [{...topReview(), user: {login: APP, type: 'User'}}],
+        })
+      )[0],
+    ).toBe(false);
+    // A re-bound approval: submitted before the top head was pushed.
+    expect((await both({pushed: {t1: '2026-11-20T11:30:00Z'}}))[0]).toBe(false);
+  });
+
+  it("never overrides the review app's own request for changes at the member's head", async () => {
+    expect(
+      (
+        await both({
+          memberReviews: [{...appApproval('m1'), state: 'CHANGES_REQUESTED'}],
+        })
+      )[0],
+    ).toBe(false);
+  });
+
+  it("starts the member's deferred run", async () => {
+    const memberPull = member();
+    const stub = stubGithub({
+      pulls: [memberPull, top()],
+      runs: [ciRun(21, 'm1')],
+      jobs: {21: deferredJobs},
+      statuses: {m1: passed, t1: passed},
+      reviews: {1: [], 2: [topReview()]},
+      compare: {'t1...m1': 'behind'},
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: memberPull,
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([21]);
+    expect(said).toContain('started run 21 again in full');
   });
 });
 

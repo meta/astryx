@@ -12,7 +12,8 @@
  * passes the heavy turn (`heavyReviewPasses`): the spec half of the review
  * gate passes, and an engineering owner or the review app approved that exact
  * head. The app's approval counts for a write-access author and for a fork a
- * maintainer admitted with `ci:run`. The heavy turn clears no gate: merging
+ * maintainer admitted with `ci:run`. A stack member also passes on the stack
+ * top's approval that names it (stackTopPasses). The heavy turn clears no gate: merging
  * reads `review-required` (DEC-11, unchanged). Then the deferred run is run again
  * in full, and a later attempt runs every suite. merge-guard's pre-merge
  * re-run is such a later attempt too.
@@ -265,20 +266,107 @@ export async function heavyReviewPasses({
         number: pull.number,
       });
   }
-  return reviewDecision.resolveReviewApprovals({
+  const headPushedAt = await reviewDecision.readHeadPushedAt({
+    github,
+    owner,
+    repo,
+    sha,
+  });
+  const own = reviewDecision.resolveReviewApprovals({
     reviews,
     headSha: sha,
-    headPushedAt: await reviewDecision.readHeadPushedAt({
-      github,
-      owner,
-      repo,
-      sha,
-    }),
+    headPushedAt,
     engOwners,
     designOwners: [],
     reviewApp: app,
     authorHasWrite: appCounts,
-  }).codeApproved;
+  });
+  if (own.codeApproved) return true;
+  if (own.codeWithdrawn || !appCounts) return false;
+  return stackTopPasses({
+    github,
+    owner,
+    repo,
+    pull,
+    headPushedAt,
+    reviewApp: app,
+  });
+}
+
+/**
+ * Whether a stack member's heavy turn passes on its stack top's review: the
+ * review app reviews a stack at its top and names each member in its body
+ * (reviewDecision.stackTopApproves has the rule). Any read that fails counts
+ * nothing.
+ * @param {{
+ *   github: any,
+ *   owner: string,
+ *   repo: string,
+ *   pull: {number: number, body?: string | null, head: {sha: string}},
+ *   headPushedAt: string | null,
+ *   reviewApp: string,
+ * }} input
+ */
+export async function stackTopPasses({
+  github,
+  owner,
+  repo,
+  pull,
+  headPushedAt,
+  reviewApp,
+}) {
+  try {
+    const body =
+      pull.body ??
+      (await github.rest.pulls.get({owner, repo, pull_number: pull.number}))
+        .data?.body;
+    for (const {top: number, line} of reviewDecision.stackTopsOf({
+      number: pull.number,
+      body,
+    })) {
+      const {data: top} = await github.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: number,
+      });
+      if (!top?.head?.sha) continue;
+      const topReviews = await github.paginate(github.rest.pulls.listReviews, {
+        owner,
+        repo,
+        pull_number: number,
+        per_page: 100,
+      });
+      const topHeadPushedAt = await reviewDecision.readHeadPushedAt({
+        github,
+        owner,
+        repo,
+        sha: top.head.sha,
+      });
+      // `behind` or `identical`: the member's head is in the top's head.
+      const {data: compare} =
+        await github.rest.repos.compareCommitsWithBasehead({
+          owner,
+          repo,
+          basehead: `${top.head.sha}...${pull.head.sha}`,
+        });
+      if (
+        reviewDecision.stackTopApproves({
+          member: pull.number,
+          memberHeadPushedAt: headPushedAt,
+          line,
+          top,
+          topHeadPushedAt,
+          topReviews,
+          reviewApp,
+          memberInTopHead: ['behind', 'identical'].includes(compare?.status),
+        })
+      )
+        return true;
+    }
+  } catch {
+    // A read that fails counts nothing.
+  }
+  return false;
 }
 
 /**
