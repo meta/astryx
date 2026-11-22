@@ -840,7 +840,7 @@ function printThemeApp(result) {
         ? [
             text(
               copy.workingFiles.files.length
-                ? `[ok] Kept the shared theme's working files from ${copy.workingFiles.from} in ${copy.workingFiles.outputDir}.`
+                ? `[ok] Kept the shared theme's working files from ${copy.workingFiles.from} in ${copy.workingFiles.outputDir}.${copy.workingFiles.keptPalette ? ` Its palette, made with ${copy.workingFiles.keptPalette}, which this CLI does not make, is kept as made.` : ''}`
                 : `[note] The shared theme carries working files (${copy.workingFiles.from}), not copied: ${copy.workingFiles.notCopied}.`,
             ),
           ]

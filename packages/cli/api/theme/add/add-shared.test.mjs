@@ -850,10 +850,10 @@ describe('theme add with a shared theme', () => {
       /does not pass the settings checks$/,
     ],
     [
-      'made with a newer palette recipe, whose palette module is code',
+      'made with a newer palette recipe whose saved palette it does not carry',
       null,
       JSON.stringify({recipe: 'astryx-oklch-v99'}),
-      /palette recipe astryx-oklch-v99, which a newer CLI makes and keeps in its palette module; theme add copies no code/,
+      /palette recipe astryx-oklch-v99, which a newer CLI makes, is not in the form the palette generator writes; theme add copies no code/,
     ],
     [
       'made with a palette recipe no Astryx CLI makes',

@@ -171,9 +171,11 @@
  * palette data) the bundle carries for the theme: where they sat (`from`),
  * the folder they are copied to (`outputDir`), the files copied there, and
  * `notCopied`, why none were (settings this CLI does not read or larger than
- * settings hold, a palette recipe this CLI does not make, a theme source with
+ * settings hold, a palette recipe no CLI makes, a newer recipe's palette not in
+ * the generator's form, a theme source with
  * edits of its own, more than one folder of them, or a folder there that holds
- * files theme add did not write).
+ * files theme add did not write), and `keptPalette` the recipe of a palette a
+ * newer CLI made, carried exactly as saved: the editor keeps it as made.
  * `undo` is present when `theme remove` removed a theme `theme add` copied
  * from a shared theme: `removed` the files of the copy it deleted, `kept`
  * those changed since the add (left as they are, named inside the copy),
@@ -182,7 +184,7 @@
  * the add installed that no theme still in the record is owned by or
  * imports, and `uninstallError`
  * why that uninstall failed.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}, workingFiles?: {from: string, outputDir: string, files: string[], notCopied?: string}}, undo?: {removed: string[], kept: string[], keptWorkingFiles?: string[], uninstalled: string[], uninstallError?: string}}} data
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}, workingFiles?: {from: string, outputDir: string, files: string[], notCopied?: string, keptPalette?: string}}, undo?: {removed: string[], kept: string[], keptWorkingFiles?: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**

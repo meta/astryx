@@ -434,8 +434,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   so the theme editor opens it. The add reads them as data and runs and
   copies no shared code; the editor builds the theme's source,
   `<name>.theme.ts`, when it opens the theme. A settings file the editor's
-  own checks refuse, a palette made with a recipe this CLI does not make
-  (whose palette module is code), a theme source with edits of its own
+  own checks refuse, a palette made with a recipe no Astryx CLI makes, a
+  palette a newer CLI made whose saved palette module is not exactly what
+  the palette generator writes for the colors it holds (anything more is
+  code), a theme source with edits of its own
   (code too, which the editor's next build would otherwise drop), a shared copy the editor did not write (whose
   files the editor would not update), or more
   than one folder of it, is not copied and is
@@ -446,7 +448,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   the editor's descriptor, so the editor keeps updating it. With that state copied, the app
   copy's descriptor keeps the shared theme's display name and description,
   with the editor's mark and `maintained: false`, so the editor's next builds
-  keep the copy current. The JSON names these files `workingFiles`. The receipt lists the files copied, and
+  keep the copy current. A palette a newer CLI made is carried exactly as
+  saved (its module, in the generator's own form, and the receipt that names
+  its bytes), so the editor keeps it as made: changes to what the palette is
+  made from need a CLI that makes that recipe, and every other change saves.
+  The JSON names these files `workingFiles`, and `workingFiles.keptPalette`
+  names that recipe. The receipt lists the files copied, and
   `theme remove` takes back the unchanged ones; when that folder holds files
   the add did not write (what the editor built there since), or when the copy
   stays whole because a file of it changed, it keeps every copied file and
