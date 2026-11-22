@@ -177,7 +177,7 @@
  * @property {'themeEdit.showPart'} type
  * @property {object} data
  * @property {string} data.theme
- * @property {'editor' | 'local' | 'package' | 'bundled'} data.kind - Where the theme comes from: the editor's themes/ folder, a local theme of the app, an installed package's theme, or a bundled theme package. An editor theme is read from its saved settings: what a person adds by hand below them in its theme file is not shown yet.
+ * @property {'editor' | 'local' | 'package' | 'bundled'} data.kind - Where the theme comes from: the editor's themes/ folder, a local theme of the app, an installed package's theme, or a bundled theme package. An editor theme is read from its theme file as a build loads it, with what a person adds by hand below the settings; a file that does not load or no longer extends its settings, or a build that does not match the saved settings (missing, half done, damaged or older; a build another release made answers from the saved settings, as before), is refused.
  * @property {string} data.part
  * @property {ThemeEditPartValue[]} data.values - Each CSS property the part reads, at rest (`when` null) and in each variant. Which setting gives a value (a token, a dial, a rule on the part) is not shown yet; `source` says whose it is.
  */
