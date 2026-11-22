@@ -203,6 +203,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {'both' | 'light-only' | 'dark-only'} mode
  * @property {Setting[]} settings
  * @property {string[]} [lifted] - Variant keys the last build repeated a part setting on.
+ * @property {Record<string, string[]>} [reached] - The parts each setting that reaches beyond its own part reached at the last build, by the setting's identity.
  * @property {string} [palette] - The hash of the palette.config.json the editor last wrote.
  */
 
@@ -4521,7 +4522,13 @@ function scopeProblem(s) {
   return null;
 }
 
-/** The identity of a setting: a new one with the same identity replaces it. @param {Setting} s */
+/**
+ * The identity of a setting: a new one with the same identity replaces it.
+ * `only` is part of it, so a theme saved with a group setting and its
+ * `--only` twin still reads and builds as it did; `set` replaces the twin
+ * itself ({@link sameSettingKey}).
+ * @param {Setting} s
+ */
 export const keyOf = s =>
   [
     s.thing,
@@ -4535,6 +4542,14 @@ export const keyOf = s =>
     s.mode ?? '',
     s.only ? 'only' : '',
   ].join('|');
+
+/**
+ * The identity of a setting with or without `--only`: a setting set again
+ * with or without it replaces the saved one, so `--only` narrows the look
+ * and a set without it spreads it again.
+ * @param {Setting} s
+ */
+export const sameSettingKey = s => keyOf({...s, only: undefined});
 
 /** One line for a setting. @param {Setting} s */
 export function describe(s) {
@@ -15809,7 +15824,15 @@ const builtOf = (radii, stops) =>
     : null;
 
 /** The file's own top-level fields. */
-const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted', 'palette'];
+const TOP_FIELDS = [
+  'name',
+  'mode',
+  'like',
+  'settings',
+  'lifted',
+  'reached',
+  'palette',
+];
 /** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
 const TOP_FIELD_WORDS = /** @type {Record<string, string>} */ ({base: 'like'});
 
@@ -18183,6 +18206,68 @@ function partTokenChanges(before, after, modes) {
 }
 
 /**
+ * Records, for each saved setting that reaches beyond its own part, the
+ * parts it reaches (`reached`, written by the build like `lifted`), and
+ * names once each saved setting that now reaches parts its record does
+ * not hold (an editor that widens a group, a group that grows), so the
+ * change that widens it says so. A setting with no record yet is recorded
+ * as it reaches now, with no word; a setting this change writes says where
+ * it reaches in its own result.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @param {ThemeData | null} before the settings saved before this change
+ * @returns {Array<{setting: string, parts: string[], keep: string | null}>}
+ */
+function recordReach(ctx, slug, data, before) {
+  const recorded =
+    data.reached &&
+    typeof data.reached === 'object' &&
+    !Array.isArray(data.reached)
+      ? data.reached
+      : {};
+  /** @type {Record<string, string[]>} */
+  const reached = {};
+  /** @type {Array<{setting: string, parts: string[], keep: string | null}>} */
+  const out = [];
+  for (const s of data.settings) {
+    if (!s.on) continue;
+    const parts = partsOf(ctx, s);
+    if (!parts.some(t => t !== s.on)) continue;
+    const k = keyOf(s);
+    // (What the settings file recorded before this command counts as named
+    // too: an undo that restores an older record names no part again.)
+    const was = recorded[k];
+    const prior = before?.reached?.[k];
+    const known = [
+      ...(Array.isArray(was) ? was : []),
+      ...(Array.isArray(prior) ? prior : []),
+    ].map(String);
+    const added =
+      Array.isArray(was) || Array.isArray(prior)
+        ? parts.filter(t => !known.includes(t))
+        : [];
+    // (A setting with no record names nothing; one an undo puts back with
+    // its older record names what it now reaches past it.)
+    if (added.length)
+      out.push({
+        setting: describe(s),
+        parts: added,
+        // A setting named on a group reaches the group's members: no line
+        // keeps it on fewer, as `--only` is for one member. The check is
+        // the one `set --only` makes.
+        keep: onlyFits(s)
+          ? `${P} set ${slug} ${setArgs({...s, only: true}, String(s.value))}`
+          : null,
+      });
+    reached[k] = parts;
+  }
+  if (Object.keys(reached).length) data.reached = reached;
+  else delete data.reached;
+  return out;
+}
+
+/**
  * Write the settings, build, and on a failed build put back what was there.
  * Returns what changed in the resolved tokens and the lifted keys that are
  * new since the last build.
@@ -18213,6 +18298,8 @@ export async function commitTheme(
     : null;
   /** @type {string[]} */
   const notes = [];
+  /** @type {Array<{setting: string, parts: string[], keep: string | null}> | undefined} */
+  let widened;
   // The history is read and checked before anything is written.
   const read = history ? readHistory(f.history) : {steps: [], dropped: 0};
   const past = read.steps;
@@ -18228,8 +18315,12 @@ export async function commitTheme(
   // no undo step.
   const same = (/** @type {ThemeData | null} */ a) =>
     a != null &&
-    JSON.stringify({...savedForm(a), lifted: undefined}) ===
-      JSON.stringify({...savedForm(data), lifted: undefined});
+    JSON.stringify({...savedForm(a), lifted: undefined, reached: undefined}) ===
+      JSON.stringify({
+        ...savedForm(data),
+        lifted: undefined,
+        reached: undefined,
+      });
   // A no-op change still mends a build that does not match the settings
   // (an undo stopped part way): it is built again, with no new step.
   const noop = history && same(parseSettings(snapBefore));
@@ -18436,6 +18527,7 @@ export async function commitTheme(
         ERROR_CODES.ERR_THEME_BAD_VALUE,
       );
     data.lifted = built.lifted;
+    widened = recordReach(ctx, slug, data, parseSettings(snapBefore));
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
     // the two leaves the change saved with the history one step short (or,
@@ -18668,6 +18760,7 @@ export async function commitTheme(
     warnings: built.warnings,
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
     notes,
+    widened: widened ?? [],
     unchanged: false,
     // The theme and its tokens before this change, for what a caller says
     // of the change against them.
