@@ -110,10 +110,10 @@ const touchRecords = realmValue(
 );
 
 /**
- * Each held window's mouse point before its latest `pointermove` (`before`)
- * and at it (`at`), from the moves its stream delivered, with the hold count
- * (`holds`) and the hold's stop (holdMouseMoves). Its own key keeps the
- * stream's first state readable by copies built before it.
+ * Each held window's last two mouse points: `before` its latest
+ * `pointermove` and `at` it. `holds` counts the holds, and `stop` ends the
+ * subscription (holdMouseMoves). Its own key keeps the stream's first state
+ * readable by copies built before it.
  */
 const mouseMoves = realmValue(
   sharedKey('input-stream/mouse-moves', 1),
