@@ -146,6 +146,15 @@ describe('a whole-theme border said once', () => {
     const overlays = await commands('overlays: a 1px #4d4d4d border', 'br');
     expect(overlays.some(x => / --on popover$/.test(x))).toBe(true);
     expect(overlays.some(x => / --on button$/.test(x))).toBe(false);
+    // (Narrowed, it touches that role's parts only: no theme-wide border
+    // tokens.)
+    expect(
+      /** @type {string[]} */ (overlays).filter(
+        (/** @type {string} */ x) =>
+          /--(?:border-width|color-border(?:-emphasized)?) /.test(x) &&
+          !/ --on /.test(x),
+      ),
+    ).toEqual([]);
     // The ask's leading role word before "with" narrows it too, and is
     // what the border took: never "not used". One mid-ask stays unused.
     for (const q of [
@@ -163,9 +172,23 @@ describe('a whole-theme border said once', () => {
       expect(said, q).not.toMatch(/not used/);
       const on = (/** @type {string} */ part) =>
         cmds.some((/** @type {string} */ x) => x.endsWith(` --on ${part}`));
+      expect(
+        /** @type {string[]} */ (cmds).filter(
+          (/** @type {string} */ x) =>
+            /--(?:border-width|color-border(?:-emphasized)?) /.test(x) &&
+            !/ --on /.test(x),
+        ),
+        q,
+      ).toEqual([]);
       if (/controls/.test(q)) {
         expect(on('button'), q).toBe(true);
         expect(on('dialog'), q).toBe(false);
+        expect(
+          cmds.some((/** @type {string} */ x) =>
+            /--color-border-emphasized .* --on inputs\b/.test(x),
+          ),
+          q,
+        ).toBe(true);
       } else {
         expect(on('dialog'), q).toBe(true);
         expect(on('button'), q).toBe(false);
@@ -183,6 +206,14 @@ describe('a whole-theme border said once', () => {
         cmds.some((/** @type {string} */ x) => x.endsWith(` --on ${part}`));
       expect(on('button'), q).toBe(true);
       expect(on('dialog'), q).toBe(false);
+      expect(
+        /** @type {string[]} */ (cmds).filter(
+          (/** @type {string} */ x) =>
+            /--(?:border-width|color-border(?:-emphasized)?) /.test(x) &&
+            !/ --on /.test(x),
+        ),
+        q,
+      ).toEqual([]);
       expect(cmds.join('\n'), q).toMatch(/corners|radius/);
       expect(
         data.results.map((/** @type {any} */ r) => r.text).join('\n'),

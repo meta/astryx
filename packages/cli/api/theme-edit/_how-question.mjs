@@ -23917,11 +23917,35 @@ export function draftAnswer(ctx, env, question) {
                       ...modeOf(c),
                     }),
                   ];
+            // (A border narrowed to a role touches that role's parts only:
+            // the ones that draw a border take the border tokens set on
+            // them, never on the whole theme.)
+            const roleOwn = role
+              ? edgeParts.filter(f =>
+                  (FAMILIES[f] ?? [f]).some(
+                    pt =>
+                      C.MAP[pt] &&
+                      !edged.includes(pt) &&
+                      (C.partReads(pt, 'border') ?? []).length,
+                  ),
+                )
+              : [];
             /** @type {Step[]} */
             const steps = [
-              ...(wide ? [set('--border-width', wide)] : []),
-              set('--color-border', color, modeOf(c)),
-              set('--color-border-emphasized', color, modeOf(c)),
+              ...(role
+                ? roleOwn.flatMap(f => [
+                    ...(wide ? [set('--border-width', wide, {on: f})] : []),
+                    set('--color-border', color, {on: f, ...modeOf(c)}),
+                    set('--color-border-emphasized', color, {
+                      on: f,
+                      ...modeOf(c),
+                    }),
+                  ])
+                : [
+                    ...(wide ? [set('--border-width', wide)] : []),
+                    set('--color-border', color, modeOf(c)),
+                    set('--color-border-emphasized', color, modeOf(c)),
+                  ]),
               // (A neutral look with no border color of its own at rest
               // that draws its selection in its border is left: a color
               // written there would paint over the selection.)
@@ -23945,8 +23969,16 @@ export function draftAnswer(ctx, env, question) {
               ...lines.map(x =>
                 set(x.side, /** @type {string} */ (wide), {on: x.part}),
               ),
-              ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
+              ...(role
+                ? []
+                : dividers.map(pt => set('--border-width', bwNow0, {on: pt}))),
             ];
+            if (role)
+              return {
+                text: `borders${wide ? ` ${wide} wide` : ''} in ${color} on the ${role.replace(/s?$/, 's')} only: the border tokens set on ${roleOwn.join(', ') || 'none of them'}, the parts that draw a border${edged.length ? `, and a border on the ones drawn with none (${edged.join(', ')})` : ''}; the rest of the theme keeps its borders`,
+                options: [steps],
+                sequence: true,
+              };
             return {
               text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${edged.length ? `, and a border on the surfaces and controls drawn with none (${edged.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
