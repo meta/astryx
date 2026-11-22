@@ -6,14 +6,18 @@
  * @output textDirectionProps: `dir="ltr"` for plain text that holds no
  *   right-to-left letter, otherwise nothing, so the text keeps the page's
  *   direction. withTextDirection: the same text, inside a `dir="ltr"` span
- *   when it needs one
+ *   when it needs one. isolatedText: text in its own isolated span, for one
+ *   item among others
  * @position Core-internal helper, not exported from the package. Badge and
  *   Token put textDirectionProps on the element that holds caller text,
  *   beside `unicode-bidi: isolate`. InputGroupText, Field's label and
  *   description, FieldStatus and the status tooltip use withTextDirection.
+ *   MultiSelector's labels trigger puts each label in isolatedText. Button,
+ *   SegmentedControl and TableHeaderCell put textDirectionProps and
+ *   truncatedTextStyles on the element that cuts its label.
  */
 
-import {createElement, type ReactNode} from 'react';
+import {createElement, type ReactElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
@@ -41,6 +45,9 @@ const styles = stylex.create({
   span: {
     textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
   },
+  isolate: {
+    unicodeBidi: 'isolate',
+  },
 });
 
 /**
@@ -56,3 +63,44 @@ export function withTextDirection(content: ReactNode): ReactNode {
     ? content
     : createElement('span', {dir, ...stylex.props(styles.span)}, content);
 }
+
+/**
+ * The text in a span that is isolated from the text around it, so one item's
+ * neutral characters (a comma, a digit) never join a neighbour's run. Use it
+ * for each item of a list that mixes directions. Without `dir`, the span takes
+ * `textDirectionProps`: `ltr` for text with no right-to-left letter, else the
+ * surrounding direction, so a right-to-left label that starts with a Latin
+ * word still reads right to left. `dir` sets the direction instead, for
+ * example the locale's direction for a localized count. The text content, and
+ * so the accessible name, stays the same, which bidi control characters would
+ * change.
+ */
+export function isolatedText(
+  text: string,
+  key?: string | number,
+  dir?: 'ltr' | 'rtl',
+): ReactElement {
+  return createElement(
+    'span',
+    {
+      key,
+      dir: dir ?? textDirectionProps(text).dir,
+      ...stylex.props(styles.isolate),
+    },
+    text,
+  );
+}
+
+/**
+ * For an element that cuts its own text with an ellipsis. The element's own
+ * direction decides which end the ellipsis cuts. With `textDirectionProps`, a
+ * Latin label keeps its start on a right-to-left page ("Mon…"); a label with
+ * a right-to-left letter keeps the page's direction and is cut at its own
+ * end. Put `pageAlign` beside the `dir` so the element keeps the page's
+ * alignment.
+ */
+export const truncatedTextStyles = stylex.create({
+  pageAlign: {
+    textAlign: stylex.firstThatWorks('match-parent', '-webkit-match-parent'),
+  },
+});

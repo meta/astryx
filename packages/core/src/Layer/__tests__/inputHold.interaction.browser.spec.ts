@@ -50,6 +50,7 @@ interface HoldApi {
   hold: (id: LayerId, scope: Scope) => void;
   release: () => void;
   releaseLate: (beforeMs: number, afterMs: number) => void;
+  releaseAt: (at: number, beforeMs: number, afterMs: number) => void;
   releasedAt: number;
   downs: {time: number; heardAt: number}[];
   hitAt: (x: number, y: number) => string;
@@ -416,6 +417,86 @@ test('a finger that goes down while the task that ends a hold runs is held to it
   expect(downs).toHaveLength(1);
   expect(downs[0].time).toBeLessThan(releasedAt);
   expect(downs[0].heardAt).toBeGreaterThan(releasedAt);
+  expect(await readLog(page)).toEqual({
+    clicks: [],
+    taps: 0,
+    toggles: ['pop:open'],
+  });
+  // A tap after the end is the layer's: its click lands.
+  await driver.tap(action);
+  await expect
+    .poll(async () => (await readLog(page)).clicks)
+    .toEqual(['popAction']);
+});
+
+test('a finger that goes down just before a release in time, which the engine dispatches just after it, is held to its end: no part of the press reaches the page, and the next tap clicks (spec:AST-094 FR35)', async ({
+  page,
+}) => {
+  const driver = await load(page);
+  test.skip(!driver.scriptedTimestamps, LATE_PRESS_SKIP);
+  await open(page, 'pop');
+  const action = await centre(page, 'popAction');
+  await hold(page, 'pop', 'viewport');
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as {__seen: string[]}).__seen = seen;
+    // What of the press reaches the document: a held press never does.
+    for (const type of [
+      'pointerdown',
+      'touchstart',
+      'pointerup',
+      'touchend',
+      'click',
+    ]) {
+      document.addEventListener(
+        type,
+        event => {
+          const target = event.target as Element;
+          seen.push(
+            `${type}:${target.id === '' ? target.tagName.toLowerCase() : target.id}`,
+          );
+        },
+        true,
+      );
+    }
+  });
+  // A short task around a planned time: 8 ms of work, the release, then
+  // 10 ms more. No frame is missed for long, so the release is in time.
+  const releaseEpoch = await page.evaluate(() => {
+    const at = performance.now() + 200;
+    (window as unknown as HoldWindow).__hold.releaseAt(at, 8, 10);
+    return performance.timeOrigin + at;
+  });
+  // The finger went down 3 ms before the release. The engine dispatches it
+  // after the release, as a phone does some milliseconds after a finger
+  // lands.
+  const cdp = await page.context().newCDPSession(page);
+  const point = {...action, id: 1, radiusX: 1, radiusY: 1, force: 1};
+  await new Promise(resolve => {
+    setTimeout(resolve, Math.max(0, releaseEpoch + 2 - Date.now()));
+  });
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [point],
+    timestamp: (releaseEpoch - 3) / 1000,
+  });
+  await page.waitForTimeout(60);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+    timestamp: Date.now() / 1000,
+  });
+  await settle(page);
+  const {downs, releasedAt} = await page.evaluate(() => {
+    const api = (window as unknown as HoldWindow).__hold;
+    return {downs: api.downs.slice(), releasedAt: api.releasedAt};
+  });
+  expect(downs).toHaveLength(1);
+  expect(downs[0].time).toBeLessThan(releasedAt);
+  expect(downs[0].heardAt).toBeGreaterThan(releasedAt);
+  expect(
+    await page.evaluate(() => (window as unknown as {__seen: string[]}).__seen),
+  ).toEqual([]);
   expect(await readLog(page)).toEqual({
     clicks: [],
     taps: 0,
