@@ -58,7 +58,7 @@ system_specs: [spec:AST-011, spec:AST-021, spec:AST-038, spec:AST-085]
 | Behavior                | The group names and describes its options, tracks every value whose `changeAction` is pending so each saving option stays busy while the others stay interactive, and applies disabled, read-only, and status to every option.                                                                                                                                                  |
 | End-user impact         | People can identify the group, operate every option by pointer, touch, and keyboard, learn why a group is unavailable, and see which options are still saving.                                                                                                                                                                                                                  |
 | Builder impact          | Builders choose collection mode by passing `value`, and then supply stable item `value`s. The rendering of a status without a message stays an open question here (OQ3); per-option open questions are in `component:CheckboxListItem`.                                                                                                                                         |
-| Compatibility/readiness | Adds `isOptional` (FR16) and `isRequired` (FR17), each default `false`. Each checkbox gains `aria-invalid` under an error status; no other API, default, or DOM change.                                                                                                                                                                                                         |
+| Compatibility/readiness | Adds `isOptional` (FR16) and `isRequired` (FR17), each default `false`. Each checkbox gains `aria-invalid` under an error status, and each option row carries the additive `checkbox-list-item` target (`component:CheckboxListItem` FR20); no other API, default, or DOM change.                                                                                               |
 | Review checks           | Reject a pending value that loses its busy state or re-toggle guard when another option is toggled, dropped group naming or description ids, a toggle while the group is disabled or read-only, or new target or state API introduced without an owner decision. Per-option checks are in `component:CheckboxListItem`.                                                         |
 | Governing rules         | `architecture:public-component-api/INV1–INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:interaction-modality/INV1–INV5`; `architecture:component-test-sufficiency/INV1–INV7`; `architecture:knowledge-contracts/INV2`; `spec:AST-021/FR8–FR10`; `spec:AST-038/FR7`; `spec:AST-085/FR1, FR7`; `family:input-fields/FR10`; WCAG 2.2 1.3.1, 2.1.1, 4.1.2. |
 
@@ -87,7 +87,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- The labeled checkbox group, its `checkbox-list` target, the group's
+- The labeled checkbox group, its `checkbox-list` target, the option rows'
+  `checkbox-list-item` target, the group's
   description, status, and disabled-reason relationships, and where its
   base, `container*`, and `control*` props land.
 - Collection state shared with CheckboxListItem: checked membership, change
@@ -102,14 +103,16 @@ Consumer migration instructions belong in consumer docs and release notes.
   states, density sizing, and checked-row fill — owned by
   `component:CheckboxListItem`.
 - List and option-row presentation — owned by `component:List`; its
-  `list-item` target reaches only the row root.
+  `list-item` target reaches only the row root. The row's own
+  `checkbox-list-item` target sits on the same element.
 - The checkbox control, its indicator, focus ring, and pressed overlay — owned
   by `component:CheckboxInput` and CheckboxIndicator.
 - Group-label and validation-message presentation — owned by Field under `family:input-fields` (shared owner section)
   and `component:FieldStatus`.
 - Loading-indicator presentation — owned by `component:Spinner`; tooltip
   behavior — owned by `useTooltip`.
-- New targets or reflected states for the row, descriptions, or caller content.
+- New targets or reflected states for descriptions or caller content, and
+  row states beyond `selected` and `disabled`.
 
 ## Public concepts
 
@@ -228,9 +231,7 @@ durable constraints and their verification target.
   "Options list": {
     "delegatesTo": {"owner": "component:List", "target": "list"}
   },
-  "Option row": {
-    "delegatesTo": {"owner": "component:List", "target": "list-item"}
-  },
+  "Option row": {"target": "checkbox-list-item"},
   "Checkbox": {
     "delegatesTo": {
       "owner": "component:CheckboxInput",
@@ -269,9 +270,11 @@ reaches it. Item, not Text, renders option labels and descriptions in separate
 untargeted spans, so neither delegates to Text nor inherits the row-root
 `list-item` target; future exposure remains unsettled. Rich label content and end
 content are caller-provided, and end content intentionally stays outside
-CheckboxList's public theming ownership. The `Option row` delegation reaches the
+CheckboxList's public theming ownership. The `Option row` target reaches the
 row surface and, on a checked, enabled, editable row, its `selected` state
-(`component:CheckboxListItem` FR15).
+(`component:CheckboxListItem` FR15), through the row's own
+`checkbox-list-item` target, which reaches CheckboxList rows and no other
+list's rows (`component:CheckboxListItem` FR20).
 
 ## Family and system relationships
 
@@ -308,7 +311,7 @@ row surface and, on a checked, enabled, editable row, its `selected` state
 | FR16                | `CheckboxList.test.tsx` optional-indicator and FormLayout-default cases                                                                                                                   | `isOptional`; unmarked and optional groups under a required default; optional default; toggled with focus                                                                          | Dropping `isOptional` from the Field, showing it under an optional default, a group checkbox with `aria-required` under a required default, or remounting rows when `isOptional` changes, fails. | `audit:CheckboxList/accessibility` |
 | FR17                | `CheckboxList.required.test.tsx`                                                                                                                                                          | Marker; required-default form; no box checked; one checked; last box unchecked; disabled first box; disabled group; read-only group; standalone items; keyed reorder; item removed | A missing marker, a marker under a required default, a submit with no box checked, a blocked submit with one checked, or `required` on more than one box, fails.                                 | `audit:CheckboxList/accessibility` |
 | ORD1–ORD3, PR1      | ORD1 and ORD2 are covered by the FR6 and FR7 rows, ORD3 by the FR9 and FR10 rows. Evidence gap: no test asserts the absence of observers or global listeners                              | —                                                                                                                                                                                  | —                                                                                                                                                                                                | `audit:CheckboxList/behavior`      |
-| Local target source | `themingTargets.test.ts`; `CheckboxList.test.tsx` ref and container case                                                                                                                  | `checkbox-list`                                                                                                                                                                    | A rendered class absent from the documented targets, or a missing `astryx-checkbox-list` on the Field root, fails.                                                                               | `audit:CheckboxList/theming`       |
+| Local target source | `themingTargets.test.ts`; `CheckboxList.test.tsx` ref and container case; `CheckboxListItemTarget.test.tsx` for the row's `checkbox-list-item`                                            | `checkbox-list`                                                                                                                                                                    | A rendered class absent from the documented targets, or a missing `astryx-checkbox-list` on the Field root, fails.                                                                               | `audit:CheckboxList/theming`       |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                             | Canonical anatomy and current local target                                                                                                                                         | Canonical-key drift, invalid dispositions or target spelling, or an unclaimed current local target fails validation.                                                                             | `audit:CheckboxList/theming`       |
 
 Per-option verification is owned by `component:CheckboxListItem`'s

@@ -83,12 +83,13 @@ describe('a fill on the plain part', () => {
       on: 'checks',
     });
     const checkNotes = checks.data.notes.join('\n');
+    // `checks` reaches both indicators, so one note names them together.
     expect(checkNotes).toMatch(
-      /checkbox-indicator's fill now covers .*checked=checked \(--color-accent\)/,
+      /checkbox-indicator, radio-indicator's fills now cover .*checked=checked \(--color-accent\)/,
     );
     // The line that changes only the fill at rest.
     expect(checkNotes).toMatch(
-      /set f --color-background-surface '#fff' --on checkbox-indicator/,
+      /set f --color-background-surface '#fff' --on checks/,
     );
     const button = await themeEditSet('f', 'background', '#c0c0c0', {
       cwd,
