@@ -1483,7 +1483,7 @@ import '@astryxdesign/core/astryx.css';
       // The file decides once the page has loaded, and fills the notice's text a moment after it shows.
       await pageWaitFor(() => expect(dom.window.document.readyState).toBe('complete'));
       await new Promise(resolve => setTimeout(resolve, 200));
-      const notice = dom.window.document.querySelector('[role="status"]');
+      const notice = dom.window.document.querySelector('body > [role="status"]');
       return {dom, calls, notice};
     };
     const refused = await open({framed: true, prints: false});
@@ -1494,12 +1494,20 @@ import '@astryxdesign/core/astryx.css';
     // A print that starts later never prints the notice.
     refused.dom.window.dispatchEvent(new refused.dom.window.Event('beforeprint'));
     expect(refused.notice?.isConnected).toBe(false);
-    refused.dom.window.document.querySelector('button')?.click();
+    // Dismiss gives focus back to where it was when the notice showed.
+    const printButton = /** @type {HTMLButtonElement} */ (
+      refused.dom.window.document.querySelector('main button')
+    );
+    printButton.focus();
+    printButton.click();
     await new Promise(resolve => setTimeout(resolve, 200));
-    /** @type {HTMLButtonElement | null | undefined} */ (
-      refused.dom.window.document.querySelector('[role="status"] button')
-    )?.click();
-    expect(refused.dom.window.document.querySelector('[role="status"]')).toBeNull();
+    const dismiss = /** @type {HTMLButtonElement} */ (
+      refused.dom.window.document.querySelector('body > [role="status"] button')
+    );
+    dismiss.focus();
+    dismiss.click();
+    expect(refused.dom.window.document.querySelector('body > [role="status"]')).toBeNull();
+    expect(refused.dom.window.document.activeElement).toBe(printButton);
     refused.dom.window.close();
     // A frame that lets the page print, and a file in its own tab, print as
     // the browser does and show nothing more.

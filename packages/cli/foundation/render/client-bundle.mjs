@@ -429,9 +429,21 @@ const show = () => {
   close.type = 'button';
   close.textContent = 'Dismiss';
   close.style.cssText = 'font:inherit;color:inherit;background:none;border:0;padding:4px 8px;cursor:pointer;text-decoration:underline';
-  close.addEventListener('click', () => notice.remove());
+  const back = document.activeElement;
+  close.addEventListener('click', () => {
+    notice.remove();
+    if (back instanceof HTMLElement && back.isConnected) back.focus();
+  });
   notice.append(text, close);
-  document.body.append(notice);
+  // Behind an open modal dialog the rest of the page is inert, so the notice
+  // goes into that dialog.
+  let modal = null;
+  try {
+    modal = document.querySelector('dialog:modal');
+  } catch {
+    // A browser without the :modal selector has no modal dialog to look for.
+  }
+  (modal ?? document.body).append(notice);
   // A screen reader announces text that arrives in a status region already
   // in the page, not text the region holds when it is added.
   setTimeout(() => {
