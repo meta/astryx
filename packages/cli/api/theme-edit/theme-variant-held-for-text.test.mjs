@@ -207,7 +207,11 @@ describe('a top nav link colored for a dark bar', () => {
       state: 'selected',
       only: true,
     });
-    await themeEditSet('sel', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const sr = /** @type {any} */ (
+      await themeEditSet('sel', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
+    // (The copy reads on the theme's black block: no problem named for it.)
+    expect(JSON.stringify(sr.data.newProblems ?? [])).not.toMatch(/selected/);
     const rules = (cssOf('sel').match(/[^{}]+\{[^}]*\}/g) ?? []).filter(
       r => /top-nav-item/.test(r) && /drawer/.test(r),
     );
@@ -437,8 +441,15 @@ describe('a top nav link colored for a dark bar', () => {
       on: 'selected-items',
       state: 'selected',
     });
-    await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const g = /** @type {any} */ (
+      await themeEditSet('pgr', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'})
+    );
     expect(drawerSelected('pgr').some(r => /#bfbfbf/.test(r))).toBe(true);
+    // (The copy is written on the link's own block, where it reads: no
+    // problem named for it.)
+    expect(JSON.stringify(g.data.newProblems ?? [])).not.toMatch(
+      /top-nav-item \(mode drawer, selected\)/,
+    );
     // (A group color set after the link's own `--only` selected color is not
     // written on the link either: the copy keeps the link's own white.)
     await themeEditNew('pgc', {cwd, like: 'neutral'});

@@ -13597,10 +13597,15 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  * @returns {Promise<ThemeProblem[]>}
  */
 export async function contrastProblems(ctx, data, res) {
-  // (Measured as built: a held variant keeps Core's look there.)
+  // (Measured as built: a held variant keeps Core's look there. A state's
+  // copy, the setting's own color kept on a fill the theme paints, is
+  // written only where it reads on that fill, so it is not measured again.)
   data = {
     ...data,
-    settings: data.settings.flatMap(x => [x, ...holdCopies(ctx, data, x)]),
+    settings: data.settings.flatMap(x => [
+      x,
+      ...holdCopies(ctx, data, x).filter(c => c.value === 'revert-layer'),
+    ]),
   };
   const base = await baseResolved(ctx.project, data.like);
   // The parts each setting lands on, read once for this check: the lookups
