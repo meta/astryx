@@ -24,21 +24,32 @@ const ROLES = /** @type {const} */ ([
 
 /**
  * Text in each role's stack, added inside the theme's root after the
- * picture is taken, and each stack as the root resolves it.
+ * picture is taken, and each stack as the root resolves it. The spans can
+ * name a family no text on the page used yet, so the browser may start
+ * loading it only once they are in the page: the probe waits for the fonts
+ * again and lays the spans out, so the font list it reads is the one the
+ * text is drawn in, not the one before the font came in.
  */
-const SETUP = `document.fonts.ready.then(() => {
+const SETUP = `(async () => {
+  await document.fonts.ready;
   const root = document.querySelector('[data-astryx-theme]') ?? document.body;
-  const out = {};
+  const spans = [];
   for (const [role, token] of ${JSON.stringify(ROLES)}) {
     const span = document.createElement('span');
     span.id = 'astryx-font-probe-' + role;
     span.textContent = 'Hamburgefonstiv 0123';
     span.style.fontFamily = 'var(' + token + ')';
     root.appendChild(span);
+    spans.push([role, span]);
+  }
+  await document.fonts.ready;
+  const out = {};
+  for (const [role, span] of spans) {
+    span.getBoundingClientRect();
     out[role] = getComputedStyle(span).fontFamily;
   }
   return JSON.stringify(out);
-})`;
+})()`;
 
 /**
  * The font each role's text is drawn in, as the browser's own font list
