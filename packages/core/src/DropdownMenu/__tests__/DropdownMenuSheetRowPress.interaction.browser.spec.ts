@@ -9,8 +9,7 @@
  *   does, for a finger and for a mouse. A press on a section heading runs no
  *   row and leaves the sheet open.
  * @position Evidence for MenuBottomSheetActionList's whole-row press; the
- *   row lookup itself is unit-tested in useMenuPress.test.tsx and
- *   MenuBottomSheetActionList.test.tsx
+ *   row lookup itself is unit-tested in MenuBottomSheetActionList.test.tsx
  */
 
 import {

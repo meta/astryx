@@ -248,7 +248,8 @@ export interface UseMenuPressOptions {
   /**
    * Resolve the element under a viewport point. Defaults to
    * `elementFromPoint` on the menu's own document or shadow root, falling back
-   * to the event target where the document lacks it (jsdom). A test seam.
+   * to the event target where the document lacks it (jsdom). A bottom sheet
+   * passes one that also maps a row's icon, padding or end content to the row.
    */
   hitTest?: (x: number, y: number) => Element | null;
   /**
