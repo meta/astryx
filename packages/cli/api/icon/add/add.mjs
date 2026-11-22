@@ -137,11 +137,11 @@ export async function iconAdd(exportName, options) {
   ])) {
     if (passed(value) && !passed(newDefinition)) {
       throw new AstryxError(
-        `${flag} describes a new definition, so it needs --new-definition`,
+        `${flag} describes a new meaning, so it needs --new-definition`,
         [
           {
             name: `--new-definition <name> --description '<what it is for>' --words a,b`,
-            reason: 'add your own definition',
+            reason: 'add your own meaning',
           },
         ],
         ERROR_CODES.ERR_INVALID_OPTION,
@@ -307,17 +307,17 @@ export async function iconAdd(exportName, options) {
       !mappableDefinitions(set).has(definition)
     ) {
       throw new AstryxError(
-        `"${definition}" is not an icon definition.`,
+        `"${definition}" is not an icon meaning.`,
         [
           ...closestNames(definition, [...mappableDefinitions(set)]).map(
             name => ({
               name: `--definition ${name}`,
-              reason: 'a known icon definition',
+              reason: 'a known icon meaning',
             }),
           ),
           {
             name: `--new-definition ${definitionNameFromInput(definition)} --description '<what it is for>' --words a,b`,
-            reason: 'add it as your own definition',
+            reason: 'add it as your own meaning',
           },
         ],
         ERROR_CODES.ERR_NOT_FOUND,

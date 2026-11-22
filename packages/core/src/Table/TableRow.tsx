@@ -95,6 +95,13 @@ const stripedRowStyles = stylex.create({
   },
 });
 
+const openRowDividerStyles = stylex.create({
+  row: {
+    // Private plumbing for plugins/rowExpansion, read by TableCell's divider.
+    '--_table-open-row-divider-width': 'initial',
+  },
+});
+
 const hoverRowStyles = stylex.create({
   row: {
     backgroundColor: {
@@ -191,7 +198,9 @@ export function TableRow({
     );
   }
 
-  const rowStyles: StyleXStyles[] = [];
+  // A row expansion's open panel sets this row's private divider width; a
+  // table nested in the row's cells starts again from none.
+  const rowStyles: StyleXStyles[] = [openRowDividerStyles.row];
 
   // Striped + hover styling is for body rows only — the header row must not
   // pick up the hover highlight (or striping) even when hasHover/isStriped.

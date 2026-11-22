@@ -11857,6 +11857,20 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
+  // The parts each setting lands on, read once for this check: the lookups
+  // ask again for every pair, side and mode, and the check changes no
+  // setting.
+  /** @type {Map<Setting, string[]>} */
+  const partsBy = new Map();
+  /** @param {Setting} x @returns {string[]} */
+  const parts = x => {
+    let found = partsBy.get(x);
+    if (found === undefined) {
+      found = partsOf(ctx, x);
+      partsBy.set(x, found);
+    }
+    return found;
+  };
   /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string | null} [when] @param {string | null} [state] the state the pair is drawn in */
   const override = (side, _which, m, when, state = null) => {
     if (!side.target) return null;
@@ -11867,7 +11881,7 @@ export async function contrastProblems(ctx, data, res) {
       .sort((a, b) => Number(!!b.state) - Number(!!a.state))
       .find(
         x =>
-          partsOf(ctx, x).includes(/** @type {string} */ (side.target)) &&
+          parts(x).includes(/** @type {string} */ (side.target)) &&
           (!x.when || x.when === when) &&
           (!x.state || (state != null && x.state === state)) &&
           (!x.mode || x.mode === m) &&
@@ -12146,7 +12160,7 @@ export async function contrastProblems(ctx, data, res) {
             test(x),
         ) ?? null;
     /** @param {Setting} x @param {string | null} t */
-    const on = (x, t) => t != null && partsOf(ctx, x).includes(t);
+    const on = (x, t) => t != null && parts(x).includes(t);
     const own = p.fg.target;
     const around = p.bg.target !== own ? p.bg.target : null;
     const tokens = textTokens(p, m, value);
@@ -12240,12 +12254,12 @@ export async function contrastProblems(ctx, data, res) {
           !x.state &&
           (!x.mode || x.mode === m) &&
           x.on &&
-          partsOf(ctx, x).some(between),
+          parts(x).some(between),
       );
     return fill
       ? {
           value: String(fill.value),
-          part: /** @type {string} */ (partsOf(ctx, fill).find(between)),
+          part: /** @type {string} */ (parts(fill).find(between)),
         }
       : null;
   };
@@ -12498,7 +12512,7 @@ export async function contrastProblems(ctx, data, res) {
   for (const x of data.settings) {
     if (x.source !== 'property' || x.thing !== 'color' || !x.on || x.state)
       continue;
-    for (const t of partsOf(ctx, x)) {
+    for (const t of parts(x)) {
       if (drawnParts.has(t)) continue;
       // The fill the census saw the part draw (with its default props),
       // else what it reads at rest, else the fill of the part it sits in
@@ -13072,7 +13086,7 @@ export async function contrastProblems(ctx, data, res) {
                 x.bgPart &&
                 x.bgPart !== x.textPart &&
                 drawn.on &&
-                partsOf(ctx, drawn).includes(x.textPart)
+                parts(drawn).includes(x.textPart)
               ) {
                 const holds = (
                   /** @type {string} */ a,
@@ -13091,7 +13105,7 @@ export async function contrastProblems(ctx, data, res) {
                       (!y.mode || y.mode === x.mode) &&
                       y.on &&
                       y.on !== x.bgPart &&
-                      partsOf(ctx, y).some(q => holds(q, String(x.textPart))),
+                      parts(y).some(q => holds(q, String(x.textPart))),
                   );
                 const paneColor = pane ? parseColor(String(pane.value)) : null;
                 if (
@@ -13122,7 +13136,7 @@ export async function contrastProblems(ctx, data, res) {
               }
               if (drawn) {
                 const onText =
-                  drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
+                  drawn.on && parts(drawn).includes(String(x.textPart));
                 // A setting that reaches the text's part through its group (a
                 // color on date-input, which every input takes) cannot name a
                 // variant only the text's part has: that variant is scoped on
