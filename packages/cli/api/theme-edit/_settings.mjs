@@ -14679,8 +14679,9 @@ function trackContrastProblems(ctx, data, res, base) {
 
 /**
  * Floating edge problems: a panel that floats over the page (a menu, a
- * popover, a dialog) whose fill is within 1.1:1 of the page in a mode,
- * with no border and no shadow, has no edge to be seen by, whether the
+ * popover, a dialog) whose fill is within 1.1:1 of what it opens over in
+ * a mode (the page, or a surface or card a popover-filled panel opens on),
+ * with no border and no shadow it draws, has no edge to be seen by, whether the
  * surfaces dial or the theme's own settings drew it so. The fix is a
  * hairline border of the theme's border color on the panel.
  * @param {Ctx} ctx
@@ -14788,11 +14789,9 @@ function floatingEdgeProblems(ctx, data, res, base) {
     // (A shadow the built theme writes on it at rest is its edge too, from
     // any setting or dial: the surfaces dial draws a frame's on the part
     // inside it that paints the fill, a banner's.)
-    if (
-      built.boxShadow != null &&
-      !/^\s*(none|0 0 transparent)?\s*$/i.test(String(built.boxShadow))
-    )
-      continue;
+    // (Read per mode: a shadow token the theme sets to none draws nothing.)
+    const builtShadow =
+      built.boxShadow != null ? String(built.boxShadow) : null;
     const surfaces = surfacesOf(t);
     const borderSet = last(t, /^border(-style|-width)?$/);
     const border = borderSet
@@ -14815,6 +14814,11 @@ function floatingEdgeProblems(ctx, data, res, base) {
     if (border) continue;
     for (const m of modesOf(data)) {
       const mode = /** @type {'light' | 'dark'} */ (m);
+      if (
+        builtShadow != null &&
+        !/^\s*(none|0 0 transparent)?\s*$/i.test(read(builtShadow, t, mode))
+      )
+        continue;
       const shadowSet = last(t, /^box-shadow$/, mode);
       const shadowValue = shadowSet
         ? String(shadowSet.value)

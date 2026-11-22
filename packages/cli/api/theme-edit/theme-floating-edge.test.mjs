@@ -92,4 +92,22 @@ describe('a panel floating over the page', () => {
       false,
     );
   }, 120_000);
+
+  it('a shadow token the theme sets to none draws no edge', async () => {
+    await themeEditNew('sn', {cwd, like: 'neutral'});
+    await themeEditSet('sn', 'background-color', '#f1f1f1', {
+      cwd,
+      on: 'popover',
+    });
+    await themeEditSet('sn', '--shadow-med', 'none', {cwd});
+    await themeEditSet('sn', 'box-shadow', 'var(--shadow-med)', {
+      cwd,
+      on: 'popover',
+    });
+    expect(
+      (await problems('sn')).some(p =>
+        /^the popover .* no edge/.test(p.problem),
+      ),
+    ).toBe(true);
+  }, 120_000);
 });
