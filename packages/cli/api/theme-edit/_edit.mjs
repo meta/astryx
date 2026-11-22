@@ -8297,8 +8297,9 @@ async function changeOnce(
   // popup drawn on that popover: their rules meet on that element, and the
   // build's order alone decides which shows. Named, with the line that
   // gives the other part this look too.)
-  // (A part named on its own outranks its host's rule on that element, so
-  // the two meet nothing to name: a keep line names only its own part.)
+  // (A part named on its own outranks its host's plain rule on that
+  // element, so the two meet nothing to name. A keep line names only its own
+  // part. A host look set for a variant still wins there, so it is named.)
   if (sub === 'set' && s.on) {
     const MAPE = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
     const prop = kebab(String(s.thing));
@@ -8306,8 +8307,8 @@ async function changeOnce(
     const meets = new Map();
     for (const t of parts)
       for (const q of /** @type {string[]} */ (MAPE[t]?.drawnAs ?? [])) {
-        if (parts.includes(q) || (t === s.on && hostsOf(ctx, t).includes(q)))
-          continue;
+        if (parts.includes(q)) continue;
+        const hosted = t === s.on && hostsOf(ctx, t).includes(q);
         const rival = [...data.settings]
           .reverse()
           .find(
@@ -8319,7 +8320,8 @@ async function changeOnce(
               (!x.mode || !s.mode || x.mode === s.mode) &&
               partsOf(ctx, x).includes(q),
           );
-        if (rival) meets.set(rival, (meets.get(rival) ?? new Set()).add(q));
+        if (rival && !(hosted && !rival.when))
+          meets.set(rival, (meets.get(rival) ?? new Set()).add(q));
       }
     for (const [rival, qs] of meets) {
       const list = [...qs];
