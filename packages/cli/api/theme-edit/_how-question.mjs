@@ -2256,6 +2256,19 @@ const PLACE_ONLY =
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
   /\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/;
+/** The looks that are the same in both modes. */
+const MODE_FREE_LOOKS = [
+  'corners',
+  'spacing',
+  'size',
+  'fontsize',
+  'weight',
+  'family',
+  'case',
+  'italic',
+  'leading',
+  'tracking',
+];
 /** The verbs that take a change back. */
 const UNDO_VERB = /\b(?:undo|revert|reset|take back)\b/;
 /**
@@ -12402,8 +12415,9 @@ export function draftAnswer(ctx, env, question) {
     // (Never to an ask that is the same in both modes, "and rounder": a
     // mode said of a color does not reach the corners.)
     // (A named undo gives its mode to no clause after it, and takes none
-    // from a clause that asks for a change: "make the card background
-    // darker in dark mode. reset the accent" resets the accent in both.)
+    // from a clause that asks for a change: "make the accent red in light
+    // mode. make the card background darker in dark mode. undo the accent
+    // change" takes back the light accent.)
     if (
       !c.mode &&
       prev?.mode &&
@@ -12470,6 +12484,9 @@ export function draftAnswer(ctx, env, question) {
       !c.state &&
       // (An except's mode is what it keeps: "except primary in dark mode".)
       !c.except &&
+      // (A named undo's mode is its own: "make the cards blue. undo the
+      // light mode accent change".)
+      !isNamedUndo(c) &&
       // (The mode the app opens in is the theme's, scoping nothing.)
       !/\bby default\b|\bopens? in\b|\bstarts? in\b/.test(c.text) &&
       !prev.mode &&
@@ -29770,6 +29787,10 @@ export function draftAnswer(ctx, env, question) {
     const colorSaid = /\bcolou?rs?\b/i.test(
       String(/** @type {any} */ (draftClause.get(unmet))?.text ?? ''),
     );
+    // ("Undo the danger change": a theme color the undo names is its token.)
+    const roleToken = ROLE_DIALS.find(([re]) =>
+      re.test(String(/** @type {any} */ (draftClause.get(unmet))?.text ?? '')),
+    )?.[2];
     const matched = result.filter(d => {
       const c = /** @type {any} */ (draftClause.get(d));
       if (d === unmet || d.unmet || !d.options.length || !c) return false;
@@ -29791,7 +29812,9 @@ export function draftAnswer(ctx, env, question) {
             .flat()
             .some(
               (/** @type {Step} */ st) =>
-                st.thing === what || String(st.thing).includes(what),
+                st.thing === what ||
+                String(st.thing).includes(what) ||
+                st.thing === roleToken,
             ))
       );
     });
@@ -29800,8 +29823,19 @@ export function draftAnswer(ctx, env, question) {
     // takes back only a change said for that mode. A change said for the
     // other mode, or for both, stays written, and the answer says so.)
     const undoMode = /** @type {any} */ (draftClause.get(unmet))?.mode ?? null;
-    const ofMode = (/** @type {Draft} */ d) =>
-      !undoMode || /** @type {any} */ (draftClause.get(d))?.mode === undoMode;
+    // (A look the same in both modes, "the light mode corner change",
+    // has no mode to tell apart.)
+    const ofMode = (/** @type {Draft} */ d) => {
+      const c = /** @type {any} */ (draftClause.get(d));
+      return (
+        !undoMode ||
+        c?.mode === undoMode ||
+        (c?.aspects?.length > 0 &&
+          c.aspects.every((/** @type {string} */ a) =>
+            MODE_FREE_LOOKS.includes(a),
+          ))
+      );
+    };
     const undone = matched.filter(ofMode);
     if (!undone.length && matched.length) {
       const modes = new Set(
@@ -29969,8 +30003,10 @@ export function draftAnswer(ctx, env, question) {
       const c = draftClause.get(/** @type {any} */ (d));
       if (c) answeredByUndo.add(c);
     }
+    // (With a change of another mode left, the line says which went.)
+    const left = matched.filter(d => !undone.includes(d));
     result.push({
-      text: `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
+      text: `the ${part ? `${part} ` : ''}change said earlier in this ask${left.length ? ` for ${undoMode} mode` : ''} is taken back by its undo, so it is not written${left.length ? `; the change said for ${left.some(d => !(/** @type {any} */ (draftClause.get(d))?.mode)) ? 'both modes' : 'the other mode'} stays written` : ''}`,
       options: [],
     });
   }

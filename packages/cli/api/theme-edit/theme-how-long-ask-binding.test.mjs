@@ -93,6 +93,7 @@ const ROWS = [
       q: 'make the accent red in light mode. make the accent blue in dark mode. undo the light mode accent change',
       has: ["--color-accent '#2563eb' --mode dark"],
       never: /#dc2626/,
+      says: /for light mode is taken back by its undo[^\n]*the other mode stays written/,
     },
   ],
   [
@@ -109,6 +110,42 @@ const ROWS = [
       q: 'make the accent red. undo the light mode accent change',
       has: ["--color-accent '#dc2626'"],
       says: /the change said earlier in this ask is for both modes/,
+    },
+  ],
+  [
+    "a mode said for a change between is never the undo's",
+    {
+      q: 'make the accent red in light mode. make the card background darker in dark mode. undo the accent change',
+      never: /--color-accent/,
+    },
+  ],
+  [
+    "an undo's mode is never the clause before it",
+    {
+      q: 'make the cards blue. undo the light mode accent change',
+      has: ["background-color '#2563eb' --on card --when variant:default"],
+      never: /--mode/,
+    },
+  ],
+  [
+    'nor across a clause between',
+    {
+      q: 'make the accent red in light mode. make the headings bold. undo the light mode accent change',
+      never: /--color-accent/,
+    },
+  ],
+  [
+    'a theme color the undo names is its token',
+    {
+      q: 'make the danger color red in light mode. undo the light mode danger change',
+      never: /--color-error/,
+    },
+  ],
+  [
+    'a look the same in both modes is taken back whatever mode the undo says',
+    {
+      q: 'make the cards rounder. undo the light mode card corner change',
+      never: /corners/,
     },
   ],
   [
