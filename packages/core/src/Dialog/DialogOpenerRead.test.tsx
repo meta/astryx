@@ -194,6 +194,26 @@ describe("Dialog reads its opener's box only for an entrance that uses it (archi
     }
   });
 
+  it("keeps the entrance still when the setting ends after a theme's mark appeared", () => {
+    stubReducedMotion(true);
+    render(<Opener />);
+    const opener = screen.getByRole('button', {name: 'Open'});
+    const read = vi.spyOn(opener, 'getBoundingClientRect');
+    opener.focus();
+    act(() => {
+      opener.click();
+    });
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+    try {
+      act(() => {
+        changeReducedMotion(false);
+      });
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      document.documentElement.removeAttribute('data-astryx-reduced-motion');
+    }
+  });
+
   it('watches the reduced-motion preference only while it is open under reduced motion', () => {
     stubReducedMotion(false);
     const {unmount} = render(<Opener />);
