@@ -86,6 +86,9 @@ describe('page text reads', () => {
   it('a white page in dark mode takes dark text there', async () => {
     const rs = await how('page background #ffffff in dark mode');
     const readable = rs.find(r => /^readable text on that page/.test(r.text));
+    // (A page color alone leaves the code block's own background, and its
+    // title's color, as they are.)
+    expect(readable?.commands.join('\n')).not.toMatch(/--color-syntax-/);
     expect(readable?.commands).toContain(
       "set q0 --color-text-primary '#000000' --mode dark",
     );
