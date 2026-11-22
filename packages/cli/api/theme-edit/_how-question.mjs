@@ -24498,11 +24498,14 @@ export function draftAnswer(ctx, env, question) {
           const gapNow =
             nowIn(String(on), 'gap') ??
             (gapRead ? `var(${gapRead.token})` : null);
-          const gapTok = /^var\((--[\w-]+)\)$/.exec(
+          const gapTok = /^var\(\s*(--[\w-]+)\s*\)$/.exec(
             String(gapNow ?? '').trim(),
           )?.[1];
+          // (A token set on the part itself, "--spacing-0-5 10px --on list",
+          // is the part's own length for it.)
           const gapLen = gapTok
-            ? resolvedValue(gapTok) || current(gapTok)
+            ? (tokenSetOn(String(on), gapTok) ??
+              (resolvedValue(gapTok) || current(gapTok)))
             : gapNow;
           const gapSaid = gapTok ? `${gapTok}, ${gapLen}` : String(gapNow);
           // ("more crowded" is less room.)

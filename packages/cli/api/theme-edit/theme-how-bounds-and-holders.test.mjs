@@ -132,6 +132,14 @@ describe('values and holders', () => {
     expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-1-5)' --on list`]);
     expect(texts(rs)).toMatch(/\(now --spacing-1, 0\.25rem\)/);
   }, 240_000);
+  // The gap's token set on the list itself is the list's own length.
+  it('a gap token set on the list is measured there', async () => {
+    const t = await fresh('g3');
+    await follow([`set ${t} --spacing-0-5 10px --on list`]);
+    const rs = await how(t, 'more space between list items');
+    expect(writes(rs)).toEqual([`set ${t} gap 'var(--spacing-3)' --on list`]);
+    expect(texts(rs)).toMatch(/\(now --spacing-0-5, 10px\)/);
+  }, 240_000);
   // A gap in em is measured too.
   it('a gap in em takes the stop past it', async () => {
     const t = await fresh('g2');
