@@ -178,8 +178,9 @@ export function holdMouseMoves(view?: Window | null): () => void {
  * Whether a `pointermove` or `mousemove` moved the mouse, while
  * holdMouseMoves holds the event's window. After a scroll, WebKit sends a
  * trusted move at the point where a still mouse already was. A move at the
- * point before the latest `pointermove` repeats it. The stream has heard this move first, and
- * a `mousemove` follows its `pointermove`. An untrusted event counts.
+ * point before the latest `pointermove` repeats it. The stream records each
+ * `pointermove` before this check runs. A `mousemove` follows its
+ * `pointermove`. An untrusted event counts.
  */
 export function isMouseMove(event: MouseEvent): boolean {
   const before = event.isTrusted
