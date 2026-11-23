@@ -1070,9 +1070,9 @@ export function BottomSheetSwitcher({
   );
   // A press on the ::backdrop targets the <dialog> itself. Only the active
   // sheet's backdrop is the flow's scrim. A retained dialog is inert, so it
-  // cannot be clicked. A hidden dialog is closed, so it cannot be clicked. The
-  // click handler still checks for the active dialog. The press must start and
-  // end on the backdrop.
+  // cannot be clicked. A hidden dialog is closed, so it cannot be clicked. Each
+  // handler still checks for the active dialog. The press must start and end on
+  // the backdrop.
   const handleScrimPress = useCallback(() => {
     dismissOnLightInteraction();
   }, [dismissOnLightInteraction]);
