@@ -2685,6 +2685,13 @@ describe('DropdownMenuSubMenu header and footer', () => {
       expect(isShown(rootField)).toBe(true);
     });
 
+    it('the drilled-in view carries the dropdown-menu theme target while the root steps aside (FR20)', async () => {
+      const {rootMenu, dialog} = await openLabels({});
+      expect(isShown(rootMenu)).toBe(false);
+      expect(rootMenu.className).toContain('astryx-dropdown-menu');
+      expect(dialog.className).toContain('astryx-dropdown-menu');
+    });
+
     it('a shown view follows its header or footer as it comes and goes: beside the root menu with one, inside it without', async () => {
       function TogglingLabels() {
         const [hasHeader, setHasHeader] = useState(true);
