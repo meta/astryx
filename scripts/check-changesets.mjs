@@ -185,7 +185,8 @@ function validateChangelogTitle(file, name, contents) {
 
 /**
  * Validate every pending Changeset at `root`. Reads the fixed group's declaration
- * so a patch plan cannot admit [breaking] work.
+ * so a patch plan cannot admit [breaking] work. Also checks that each package's
+ * CHANGELOG.md starts with the title for its own package name.
  *
  * @param {string} root
  * @returns {{files: string[], problems: string[], pre1: boolean, declaredVersion: string|null, declaredTier: string|null}}
