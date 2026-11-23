@@ -120,6 +120,8 @@ export function splitByDuration(items, count, cost, reserved = [], apart = {}) {
  * runs in a leg of its own and does not raise the other legs' limit. When
  * those legs, and one more for the rest, would pass `maxLegs`, the items split
  * into `maxLegs` legs by time instead, so there are never more than `maxLegs`.
+ * At `maxLegs` with a leg still over the budget, an even split of every item
+ * into `maxLegs` legs is kept when its longest leg is shorter.
  * @param {string[]} items
  * @param {(item: string) => number} cost
  * @param {{budget: number, maxLegs?: number, start?: number} & KeptApart} limits
@@ -164,16 +166,23 @@ export function fitLegsToBudget(
       shared = splitByDuration(rest, count, cost, [], apart);
     }
   }
-  const shares = [
+  let shares = [
     ...alone.map(item => [item]),
     ...shared.filter(leg => leg.length > 0),
   ];
+  const longestOf = legs => Math.max(0, ...legs.map(total));
+  if (
+    maxLegs != null &&
+    shares.length >= maxLegs &&
+    longestOf(shares) > budget
+  ) {
+    const even = splitByDuration(unique, maxLegs, cost, [], apart).filter(
+      leg => leg.length > 0,
+    );
+    if (longestOf(even) < longestOf(shares)) shares = even;
+  }
   assertEachOnce(unique, shares);
-  return {
-    count: shares.length,
-    shares,
-    longest: Math.max(0, ...shares.map(total)),
-  };
+  return {count: shares.length, shares, longest: longestOf(shares)};
 }
 
 /** A swizzle-proof slice file. */

@@ -1568,6 +1568,42 @@ describe('RadioList record contract', () => {
     expect(focusedAtCall[0]).toBe(radios[0]);
   });
 
+  it('keeps the radios of a group disabled without a reason focusable and aria-disabled (FR5)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <>
+        <button type="button">Before</button>
+        <RadioList label="Plan" value="free" onChange={onChange} isDisabled>
+          <RadioListItem label="Free" value="free" />
+          <RadioListItem label="Pro" value="pro" />
+        </RadioList>
+      </>,
+    );
+    const radios = screen.getAllByRole('radio');
+    for (const radio of radios) {
+      expect(radio).not.toBeDisabled();
+      expect(radio).toHaveAttribute('aria-disabled', 'true');
+    }
+    screen.getByRole('button', {name: 'Before'}).focus();
+    await user.tab();
+    expect(radios[0]).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    fireEvent.click(radios[1]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('pins native disabled on an individually disabled radio of a disabled group (RadioListItem FR6 gap)', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}} isDisabled>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem label="Pro" value="pro" isDisabled />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radio', {name: 'Free'})).not.toBeDisabled();
+    expect(screen.getByRole('radio', {name: 'Pro'})).toBeDisabled();
+  });
+
   it('submits no value for a disabled option or a group disabled without a reason (FR5)', () => {
     const {container} = render(
       <>
