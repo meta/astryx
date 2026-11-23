@@ -947,6 +947,13 @@ function frameTime(frame: number | undefined, clock: () => number): number {
   return read.time;
 }
 
+/** One call's baked keyframes, and the effect that parsed them. */
+interface KeyframesBake {
+  readonly key: unknown[];
+  readonly keyframes: Keyframe[];
+  effect: AnimationEffect | null;
+}
+
 /**
  * What the calls of the running task have baked. A call that plays the same
  * curve objects, or the same spring move (springMoves), reuses them: a row of
@@ -956,19 +963,25 @@ function frameTime(frame: number | undefined, clock: () => number): number {
 interface TaskBakes {
   /** Sample times, from the bake's start, by curve, offset and tolerance. */
   readonly times: {readonly key: unknown[]; readonly times: number[]}[];
-  /** Keyframes, by curves, offsets and the channel's rest values. */
-  readonly keyframes: {
-    readonly key: unknown[];
-    readonly keyframes: Keyframe[];
-    effect: AnimationEffect | null;
-  }[];
+  /** Keyframes whose key holds a curve object, matched by isSameKey. */
+  readonly keyframes: KeyframesBake[];
+  /**
+   * Keyframes whose key holds only strings and numbers, by its text
+   * (keyText): a task that springs many different moves finds each in one
+   * lookup, not a scan.
+   */
+  readonly keyframesByText: Map<string, KeyframesBake>;
 }
 
 let taskBakes: TaskBakes | null = null;
 
 function bakesOfTask(): TaskBakes {
   if (taskBakes == null) {
-    const bakes: TaskBakes = {times: [], keyframes: []};
+    const bakes: TaskBakes = {
+      times: [],
+      keyframes: [],
+      keyframesByText: new Map(),
+    };
     taskBakes = bakes;
     queueMicrotask(() => {
       if (taskBakes === bakes) {
@@ -981,6 +994,25 @@ function bakesOfTask(): TaskBakes {
 
 function isSameKey(a: unknown[], b: unknown[]): boolean {
   return a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+}
+
+/**
+ * A key of only strings and numbers as text, equal exactly where isSameKey
+ * holds: -0 stays apart from 0, and a string from a number. Null for a key
+ * that holds an object, such as a curve.
+ */
+function keyText(key: unknown[]): string | null {
+  let text = '';
+  for (const value of key) {
+    if (typeof value === 'string') {
+      text += `${JSON.stringify(value)},`;
+    } else if (typeof value === 'number') {
+      text += `${Object.is(value, -0) ? '-0' : String(value)},`;
+    } else {
+      return null;
+    }
+  }
+  return text;
 }
 
 /** Whether the engine can copy an effect with its parsed keyframes. */
@@ -2084,10 +2116,13 @@ export function createMotionEngine(
       pseudoElement == null && !isCustom(channel)
         ? taskBakeKey(channel, moving, from, end, devicePixel)
         : null;
+    const bakeText = bakeKey == null ? null : keyText(bakeKey);
     const baked =
       bakeKey == null
         ? undefined
-        : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
+        : bakeText != null
+          ? bakesOfTask().keyframesByText.get(bakeText)
+          : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
@@ -2160,11 +2195,12 @@ export function createMotionEngine(
             ...(pseudoElement != null ? {pseudoElement} : {}),
           });
     if (bakeKey != null && baked == null) {
-      bakesOfTask().keyframes.push({
-        key: bakeKey,
-        keyframes,
-        effect: animation.effect,
-      });
+      const bake = {key: bakeKey, keyframes, effect: animation.effect};
+      if (bakeText != null) {
+        bakesOfTask().keyframesByText.set(bakeText, bake);
+      } else {
+        bakesOfTask().keyframes.push(bake);
+      }
     }
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
