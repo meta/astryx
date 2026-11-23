@@ -4,12 +4,9 @@
  * @file textDirection.ts
  * @input For textDirectionProps, a component's text content (a string, a
  *   number, or a rich node)
- * @output textDirectionProps (`dir="ltr"` for plain text with no
- *   right-to-left letter), cutTextDirection (a cut label's own direction),
- *   withTextDirection (that text in a `dir` span), isolatedText (one item's
- *   text in its own isolated span), localeTextStyles and truncatedTextStyles
- *   (`pageAlign` for an element with its own `dir`), and cutText (a label in
- *   a span that cuts it)
+ * @output textDirectionProps, cutTextDirection (a cut label's direction),
+ *   withTextDirection, isolatedText, cutText, and the `pageAlign` styles
+ *   (localeTextStyles, truncatedTextStyles)
  * @position Core-internal helper, not exported from the package: the one
  *   owner of direction decisions for caller text (a locale's own direction
  *   comes from getLocaleDirection)
@@ -17,10 +14,7 @@
 
 import {createElement, type ReactElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  firstStrongDirection,
-  hasStrongRightToLeft,
-} from '../i18n/firstStrongDirection';
+import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
 /**
  * Under a right-to-left page, weak and neutral characters in left-to-right
@@ -57,9 +51,15 @@ export function cutTextDirection(content: ReactNode): {dir?: 'ltr' | 'rtl'} {
   return hasStrongLeftToRight(text) ? {} : {dir: 'rtl'};
 }
 
+// Built at runtime, as the shared classifier builds its own: a source build
+// may rewrite a regular expression literal with a Unicode property escape.
+const LETTER = new RegExp(String.raw`\p{Letter}`, 'u');
+
+// A letter that is not right-to-left. Digits and punctuation do not count,
+// so "דוח 2026" is in one script.
 function hasStrongLeftToRight(text: string): boolean {
   for (const character of text) {
-    if (firstStrongDirection(character) === 'ltr') {
+    if (LETTER.test(character) && !hasStrongRightToLeft(character)) {
       return true;
     }
   }
