@@ -330,8 +330,8 @@ for (const mode of ['light', 'dark'] as const) {
           rest.handleBox?.width === 1,
           `divider ${rest.handleBox?.width}px wide`,
         );
-        // The pill sits beside the divider. Its side is recorded in both
-        // directions and is not failed on: the receipt shows where it lands.
+        // The check records the pill side in both directions. It does not fail
+        // on the side.
         const pill = rest.pillBox;
         const line = rest.handleBox;
         check(
@@ -508,7 +508,7 @@ for (const mode of ['light', 'dark'] as const) {
         `keys moved a disabled Handle from ${rest.valueNow} to ${keyed.valueNow}`,
       );
       await frame('focus', {keyed});
-      // And the pointer.
+      // A drag on the disabled Handle leaves the size as it is.
       const zone = rest.zoneBox;
       if (zone != null) {
         const x = (zone.left + zone.right) / 2;
@@ -612,8 +612,8 @@ cases.push({
   run: async (page, check, frame) => {
     const rest = await readHandle(page);
     checkHandle(check, rest, {name: 'Resize sidebar', axis: 'horizontal'});
-    // The story's own text follows the theme's tokens. The Handle is what
-    // this audit fails on; the whole-story result is recorded beside it.
+    // The story's own text follows the theme's tokens. This check fails only
+    // on the Handle. The receipt also records the whole-story result.
     const handleResult = await axe(
       page,
       '#storybook-root [role="separator"].astryx-resize-handle',

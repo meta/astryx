@@ -1380,6 +1380,34 @@ describe('ResizeHandle', () => {
     expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
   });
 
+  it('keeps its own focus tracking and collapse when a caller cancels the event (FR7)', () => {
+    const cancel = (event: React.SyntheticEvent) => event.preventDefault();
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+        handleProps={{
+          isAlwaysVisible: false,
+          onFocus: cancel,
+          onBlur: cancel,
+          onDoubleClick: cancel,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    const pill = separator.querySelector('.astryx-resize-handle-pill');
+    act(() => separator.focus());
+    expect(pill).toHaveStyle({opacity: '1'});
+    act(() => separator.blur());
+    expect(pill).toHaveStyle({opacity: '0'});
+    fireEvent.doubleClick(separator);
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+  });
+
   it('runs caller onFocus and onBlur and still reveals a hidden pill on focus (FR7)', () => {
     const onFocus = vi.fn();
     const onBlur = vi.fn();

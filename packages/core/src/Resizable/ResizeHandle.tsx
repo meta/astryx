@@ -672,13 +672,13 @@ export function ResizeHandle({
       role="separator"
       {...aria}
       aria-label={label}
-      onDoubleClick={composeEventHandlers(onDoubleClickProp, () => {
+      onDoubleClick={composeEventHandlers(() => {
         if (!isDisabled) {
           gesture?.doubleClick();
         }
-      })}
-      onFocus={composeEventHandlers(onFocusProp, () => setIsFocused(true))}
-      onBlur={composeEventHandlers(onBlurProp, () => setIsFocused(false))}
+      }, onDoubleClickProp)}
+      onFocus={composeEventHandlers(() => setIsFocused(true), onFocusProp)}
+      onBlur={composeEventHandlers(() => setIsFocused(false), onBlurProp)}
       data-resizing={isDragging || undefined}
       {...mergeProps(
         themeProps('resize-handle', {direction}),

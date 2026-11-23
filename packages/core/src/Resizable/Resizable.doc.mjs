@@ -252,7 +252,7 @@ export default function InvoicePreviewSplit() {
           type: "'start' | 'end' | 'center' | 'auto'",
           description:
             'Which side of the divider the pill sits on. ' +
-            'auto = content side (derived from isReversed), flips when collapsed. ' +
+            'auto = the panel side (derived from isReversed), and the other side while the panel is collapsed. ' +
             'start = left/top, end = right/bottom, center = centered on divider. ' +
             'It moves only the pill, which a drag can still take wherever it sits; the grab zone stays centred on the divider.',
           default: "'auto'",
@@ -335,7 +335,7 @@ export const docsDense = {
     {
       name: 'ResizeHandle',
       description:
-        'Draggable separator between panels. Pill-grip: invisible at rest, visible on hover (0.6 opacity), fully opaque during drag (1.0). Keyboard-accessible.',
+        'Draggable separator between panels. Pill grip: shown at rest by default; with isAlwaysVisible false, hidden at rest and shown on hover, keyboard focus and drag. Keyboard-accessible.',
       propDescriptions: {
         direction:
           'layout direction: determines cursor + indicator orientation',
@@ -347,7 +347,7 @@ export const docsDense = {
         isAlwaysVisible:
           'show pill grip at rest instead of only on hover. Use when discoverability important',
         pillPlacement:
-          'which side of divider pill sits on. auto = content side (derived from isReversed), flips when collapsed; start = left/top, end = right/bottom, center = centered on divider. Moves only the pill (still draggable); grab zone stays on the divider',
+          'which side of divider pill sits on. auto = panel side (derived from isReversed), other side while collapsed; start = left/top, end = right/bottom, center = centered on divider. Moves only the pill (still draggable); grab zone stays on the divider',
         label: 'accessible label for separator',
         resizable: 'useResizable output or its props: connects handle to panel',
       },
