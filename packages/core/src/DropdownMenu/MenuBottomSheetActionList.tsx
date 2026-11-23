@@ -27,6 +27,9 @@ import {visibleText} from '../utils/accessibleName';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
+// Any control a caller can put in a row's content, enabled or not.
+const CONTENT_CONTROL_SELECTOR =
+  'a[href], button, input, select, textarea, label, [tabindex]';
 
 /** Whether the document can hit-test a point (jsdom cannot). */
 function canHitTestByPoint(): boolean {
@@ -40,9 +43,9 @@ function canHitTestByPoint(): boolean {
  * The element a press at a point resolves in the sheet. ListItem renders its
  * action as a direct child of its `li`, with the icon and the end content
  * beside the action, not in it. So a point anywhere in a row (its icon, end
- * content or padding) is that row's action. A control in the row's content
- * keeps its own press. A row that holds other rows, as a section does, has no
- * action of its own.
+ * content or padding) is that row's action. Any control in the row's content,
+ * enabled or not, keeps its own press. A row that holds other rows, as a
+ * section does, has no action of its own.
  */
 function sheetElementAtPoint(
   list: HTMLElement | null,
@@ -52,6 +55,10 @@ function sheetElementAtPoint(
   const doc = list?.ownerDocument ?? document;
   const element = elementAtMenuPoint(list, doc, x, y);
   if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
+    return element;
+  }
+  const control = element.closest(CONTENT_CONTROL_SELECTOR);
+  if (control != null && control !== list && list?.contains(control) === true) {
     return element;
   }
   const row = element.closest('li');

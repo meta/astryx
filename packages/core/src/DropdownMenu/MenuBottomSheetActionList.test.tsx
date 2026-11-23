@@ -238,6 +238,39 @@ describe('MenuBottomSheetActionList', () => {
       expect(onSelect).not.toHaveBeenCalled();
     });
 
+    it.each([
+      [
+        'a switch',
+        <input key="s" type="checkbox" role="switch" aria-label="Pin" />,
+      ],
+      [
+        'a disabled button',
+        <button key="b" type="button" disabled>
+          Pin
+        </button>,
+      ],
+    ] as const)(
+      'a press on %s in a row’s end content runs no row',
+      (_kind, control) => {
+        const {onSelect} = renderRows([
+          {label: 'Notes', onClick: () => {}, endContent: control},
+        ]);
+        press(
+          screen.getByRole(_kind === 'a switch' ? 'switch' : 'button', {
+            name: 'Pin',
+          }),
+          'touch',
+        );
+        press(
+          screen.getByRole(_kind === 'a switch' ? 'switch' : 'button', {
+            name: 'Pin',
+          }),
+          'mouse',
+        );
+        expect(onSelect).not.toHaveBeenCalled();
+      },
+    );
+
     it('a press on the list outside every row, or on no element, runs no row', () => {
       const {onSelect} = renderRows(ROWS);
       press(screen.getByRole('list'), 'touch');
