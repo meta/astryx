@@ -8,8 +8,12 @@
  * @position Used by the sub-menu row's flyout chevron and its Back chevron
  *
  * The open and close keys read the menu's own direction. `:dir(rtl)`
- * follows the same `dir`. `rtlStyles.mirror` matches any RTL ancestor, so it
- * flips the icon in an LTR menu inside an RTL page.
+ * follows the nearest `dir`. `rtlStyles.mirror` matches any RTL ancestor, so
+ * it flips the icon in an LTR menu inside an RTL page.
+ *
+ * This holds for a menu that renders inside its `dir` region. A layer that
+ * portals out of an unsafe ancestor copies only the CSS direction, not `dir`.
+ * This style does not follow that copy.
  */
 
 import * as stylex from '@stylexjs/stylex';
