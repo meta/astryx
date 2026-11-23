@@ -37,12 +37,13 @@ const meta: Meta<typeof RadioList> = {
     },
     isDisabled: {
       control: 'boolean',
-      description: 'Whether all radio items are disabled',
+      description:
+        'Whether all radio items are disabled. The radios stay focusable via aria-disabled and refuse selection.',
     },
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the group is disabled (whole-group state, not per item). With isDisabled, shows a tooltip on hover/keyboard focus and keeps the radios focusable via aria-disabled (selection stays blocked). Use this instead of wrapping a disabled RadioList in Tooltip.',
+        'Explains why the group is disabled (whole-group state, not per item). With isDisabled, shows a tooltip on hover/keyboard focus. Use this instead of wrapping a disabled RadioList in Tooltip.',
     },
     isRequired: {
       control: 'boolean',
