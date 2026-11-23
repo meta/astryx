@@ -47,7 +47,7 @@ import {cancelNestedPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
-import {textDirectionProps} from '../utils/textDirection';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -337,6 +337,8 @@ export function Token({
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
   const effectiveOnClick = onClick ?? (role === 'button' ? () => {} : null);
+  // The label cuts its own text, so a label in one script takes its direction.
+  const labelDirection = cutTextDirection(label);
 
   const removeButton = onRemove != null && (
     <button
@@ -366,8 +368,12 @@ export function Token({
     <>
       {icon}
       <span
-        {...textDirectionProps(label)}
-        {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
+        {...labelDirection}
+        {...stylex.props(
+          styles.label,
+          labelDirection.dir != null && truncatedTextStyles.pageAlign,
+          isLabelHidden && styles.labelHidden,
+        )}>
         {label}
       </span>
       {endContent}
@@ -492,9 +498,10 @@ export function Token({
         {...pressable}
         labelContent={
           <span
-            {...textDirectionProps(label)}
+            {...labelDirection}
             {...stylex.props(
               styles.label,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
               isLabelHidden && styles.labelHidden,
             )}>
             {label}
@@ -592,9 +599,10 @@ export function Token({
           {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
-            {...textDirectionProps(label)}
+            {...labelDirection}
             {...stylex.props(
               styles.label,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
               isLabelHidden && styles.labelHidden,
             )}>
             {label}

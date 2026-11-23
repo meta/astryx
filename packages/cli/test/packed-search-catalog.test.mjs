@@ -365,7 +365,10 @@ describe('the stored search catalog', () => {
       // macOS keeps the user cache under HOME and ignores XDG_CACHE_HOME, so
       // the run gets a home of its own too.
       const home = fs.mkdtempSync(path.join(work, 'home-'));
-      const env = {XDG_CACHE_HOME: cache, HOME: home};
+      // CI set: the installed copy is a global copy, and outside CI its run
+      // starts a background Core step that can still write into the cache
+      // while the folders are removed.
+      const env = {XDG_CACHE_HOME: cache, HOME: home, CI: '1'};
       const ask = ['search', 'button', '--json'];
       const first = run(installed, ask, env);
       expect(first.status, first.stderr).toBe(0);
