@@ -9,7 +9,6 @@
  */
 
 import fs from 'node:fs';
-import nodeModule from 'node:module';
 import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditShow} from './theme-edit.mjs';
@@ -18,18 +17,13 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
     await importOriginal(),
   ),
 );
-
-// Node runs module hooks in the loading thread from 22.15; before that,
-// loading a theme that imports a stylesheet is refused with the version it
-// needs.
-const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 /** @type {string} */
 let cwd;
