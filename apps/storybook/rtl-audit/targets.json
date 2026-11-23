@@ -338,7 +338,7 @@
   },
   {
     "component": "DiffViewer",
-    "storyId": "lab-diffviewer--character-highlight",
+    "storyId": "core-diffviewer--character-highlight",
     "dims": ["D2"],
     "selectors": {
       "prev": ".astryx-diff-viewer-path",

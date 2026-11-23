@@ -32,6 +32,7 @@ export * from './SnapPaging';
 export * from './Calendar';
 export * from './Center';
 export * from './CodeBlock';
+export * from './DiffViewer';
 export * from './CommandPalette';
 export * from './ComplexSelector';
 export * from './Chat';

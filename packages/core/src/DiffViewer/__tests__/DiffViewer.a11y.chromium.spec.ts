@@ -3,7 +3,7 @@
 
 /**
  * @file DiffViewer.a11y.chromium.spec.ts
- * @input The built Lab/DiffViewer review-comments story in real Chromium
+ * @input The built Core/DiffViewer review-comments story in real Chromium
  * @output Evidence that each line-number button takes a press across at least
  *   24px of width, and that its press area stays in its own row, in unified
  *   and split view, LTR and RTL
@@ -18,7 +18,7 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const STORY = 'lab-diffviewer--review-comments';
+const STORY = 'core-diffviewer--review-comments';
 const MIN_TARGET_WIDTH = 24;
 // Hit testing follows the pixel grid, so a 24px area can read one probe step
 // short.
@@ -52,7 +52,7 @@ interface ButtonReading {
  * A press reaches a button when the topmost element at that point is the
  * button or a part of it.
  */
-function readButtons(page: Page): Promise<ButtonReading[]> {
+async function readButtons(page: Page): Promise<ButtonReading[]> {
   return page.evaluate(
     ({selector, minWidth, step}) => {
       const reaches = (button: Element, x: number, y: number) => {
@@ -109,7 +109,7 @@ async function openStory(page: Page, globals?: string): Promise<void> {
   );
   await page.locator(LINE_BUTTON).first().waitFor();
   // Fonts set the width of a line number, so they load before any reading.
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => document.fonts.ready);
 }
 
 function expectFullWidthTargets(

@@ -5,15 +5,15 @@
  * @input Two lines of text: a removed line and the added line that replaced it
  * @output Exports diffInlineRanges and InlineRange: the changed character
  *   ranges on each side, for word- or character-level highlighting
- * @position Lab helper used by DiffViewer's inline change highlighting
+ * @position Core helper used by DiffViewer's inline change highlighting
  *
  * Finds the longest common subsequence of the two lines' tokens (words,
  * whitespace runs and single punctuation characters, or single characters)
  * and reports what falls outside it on each side. Pure and synchronous.
  *
  * SYNC: When modified, update:
- * - /packages/lab/src/DiffViewer/inlineDiff.test.ts
- * - /packages/lab/src/DiffViewer/DiffViewer.tsx (the caller)
+ * - /packages/core/src/DiffViewer/inlineDiff.test.ts
+ * - /packages/core/src/DiffViewer/DiffViewer.tsx (the caller)
  */
 
 /** Half-open `[start, end)` character range within one line. */
@@ -79,7 +79,7 @@ function toRanges(
   changed: boolean[],
   granularity: InlineDiffGranularity,
 ): InlineRange[] {
-  const ranges: Array<[number, number]> = [];
+  const ranges: [number, number][] = [];
   let i = 0;
   while (i < pieces.length) {
     if (!changed[i]) {

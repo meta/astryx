@@ -2319,7 +2319,6 @@
     "INV2",
     "INV3"
   ],
-  "packages/lab/src/DiffViewer/DiffViewer.tsx": ["FR13", "FR3", "FR3"],
   "packages/lab/src/LogStream/LogStream.tsx": ["FR3"],
   "packages/lab/src/Sankey/SankeyLabel.tsx": ["#0", "#1"],
   "packages/lab/src/Schedule/MonthlyView.tsx": [

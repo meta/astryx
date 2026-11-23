@@ -306,6 +306,8 @@
     "/templates/DialogScrollingContent/",
     "/templates/DialogShowcase/",
     "/templates/DialogWithSubtitle/",
+    "/templates/DiffViewerShowcase/",
+    "/templates/DiffViewerViewedFiles/",
     "/templates/DividerFullBleed/",
     "/templates/DividerShowcase/",
     "/templates/DividerVariants/",

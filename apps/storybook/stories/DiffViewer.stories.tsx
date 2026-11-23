@@ -7,7 +7,7 @@ import {
   createDiffFile,
   parseUnifiedDiff,
   type DiffViewerLineRef,
-} from '@astryxdesign/lab';
+} from '@astryxdesign/core/DiffViewer';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
@@ -76,7 +76,7 @@ const FILES = parseUnifiedDiff(PATCH);
 const [TOTAL_FILE] = FILES;
 
 const meta: Meta<typeof DiffViewer> = {
-  title: 'Lab/DiffViewer',
+  title: 'Core/DiffViewer',
   component: DiffViewer,
   tags: ['autodocs'],
   parameters: {

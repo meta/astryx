@@ -342,6 +342,13 @@
       "aliases": []
     },
     {
+      "name": "component-diff-viewer",
+      "path": "components/diff-viewer",
+      "aliases": [
+        "components/lab/diff-viewer"
+      ]
+    },
+    {
       "name": "component-divider",
       "path": "components/divider",
       "aliases": []
@@ -615,11 +622,6 @@
     {
       "name": "component-lab-dialog-hero-header",
       "path": "components/lab/dialog-hero-header",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-diff-viewer",
-      "path": "components/lab/diff-viewer",
       "aliases": []
     },
     {
@@ -2184,6 +2186,11 @@
     {
       "name": "example-dialog-scrollable",
       "path": "examples/dialog/scrollable",
+      "aliases": []
+    },
+    {
+      "name": "example-diff-viewer-viewed-files",
+      "path": "examples/diff-viewer/viewed-files",
       "aliases": []
     },
     {

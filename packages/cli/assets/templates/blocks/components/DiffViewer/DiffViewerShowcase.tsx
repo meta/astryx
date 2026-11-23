@@ -5,7 +5,7 @@
 /**
  * @input A unified diff string parsed with parseUnifiedDiff
  * @output One DiffViewer with a unified/split toggle and click-to-comment line numbers
- * @position Lab DiffViewer's docsite showcase and copyable CLI block
+ * @position DiffViewer's docsite showcase and copyable CLI block
  */
 
 import {useState} from 'react';
@@ -13,7 +13,7 @@ import {
   DiffViewer,
   parseUnifiedDiff,
   type DiffViewerLineRef,
-} from '@astryxdesign/lab';
+} from '@astryxdesign/core/DiffViewer';
 import {Button} from '@astryxdesign/core/Button';
 import {HStack, StackItem, VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';

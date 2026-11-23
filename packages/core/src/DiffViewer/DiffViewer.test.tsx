@@ -5,14 +5,14 @@ import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {rtlStyles} from '@astryxdesign/core/utils';
+import {rtlStyles} from '../utils/rtlStyles';
 import {DiffViewer} from './DiffViewer';
 import {parseUnifiedDiff} from './parseUnifiedDiff';
 import type {DiffViewerFile, DiffViewerLineRef} from './diffTypes';
 import {createDiffFile} from './createDiffFile';
-import {dockerfile} from '@astryxdesign/core/CodeBlock/languages/dockerfile';
-import {graphql} from '@astryxdesign/core/CodeBlock/languages/graphql';
-import {createCodeLanguage} from '@astryxdesign/core/CodeBlock';
+import {dockerfile} from '../CodeBlock/languages/dockerfile';
+import {graphql} from '../CodeBlock/languages/graphql';
+import {createCodeLanguage} from '../CodeBlock/grammar';
 
 const PATCH = `diff --git a/src/greet.ts b/src/greet.ts
 --- a/src/greet.ts
@@ -496,11 +496,12 @@ describe('DiffViewer', () => {
     vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
       const computed = nativeGetComputedStyle(element);
       return new Proxy(computed, {
-        get(target, property) {
+        get(target, property): string | number | object | null | undefined {
           if (property === 'overflowX' || property === 'overflowY') {
             return 'auto';
           }
-          return Reflect.get(target, property, target);
+          return Reflect.get(target, property, target) as
+            string | number | object | null | undefined;
         },
       });
     });

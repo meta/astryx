@@ -6,12 +6,12 @@
  * @output Exports the structured diff model DiffViewer renders: DiffViewerFile,
  *   DiffViewerHunk, DiffViewerLine, DiffViewerLineKind, DiffViewerFileStatus,
  *   DiffViewerSide, DiffViewerLineRef
- * @position Lab data model; produced by parseUnifiedDiff / createDiffFile and
+ * @position Core data model; produced by parseUnifiedDiff / createDiffFile and
  *   consumed by DiffViewer
  *
  * SYNC: When modified, update:
- * - /packages/lab/src/DiffViewer/DiffViewer.doc.mjs (types in the props table)
- * - /packages/lab/src/DiffViewer/index.ts (type exports)
+ * - /packages/core/src/DiffViewer/DiffViewer.doc.mjs (types in the props table)
+ * - /packages/core/src/DiffViewer/index.ts (type exports)
  */
 
 /** What one line of a hunk does: adds, removes, or keeps a line. */

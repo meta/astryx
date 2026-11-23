@@ -44,7 +44,7 @@ import {
   DiffViewer,
   type DiffViewerFile,
   type DiffViewerViewMode,
-} from '@astryxdesign/lab';
+} from '@astryxdesign/core/DiffViewer';
 import {
   createMultiFileWorkload,
   createSingleFileWorkload,

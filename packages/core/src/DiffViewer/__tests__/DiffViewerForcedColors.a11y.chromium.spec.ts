@@ -3,7 +3,7 @@
 
 /**
  * @file DiffViewerForcedColors.a11y.chromium.spec.ts
- * @input The built Lab/DiffViewer display-options story in real Chromium,
+ * @input The built Core/DiffViewer display-options story in real Chromium,
  *   with forced colors on and off
  * @output Evidence that every changed line keeps a visible change marker when
  *   forced colors drop the bars' fill and the row tint: a solid border for an
@@ -20,7 +20,7 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const STORY = 'lab-diffviewer--display-options';
+const STORY = 'core-diffviewer--display-options';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
