@@ -5120,7 +5120,7 @@ Thanks to everyone who contributed to this release:
 #### Fixes
 
 - theme build: generated custom Button variants now type-check through the public `@astryxdesign/core/Button` subpath.
-- Remove the `@astryxdesign/theme-default` → `@astryxdesign/theme-neutral` collapse from the v0.1.0 upgrade codemods (module-specifiers, css-surfaces, and declare-module). `theme-default` was dropped at the v0.1.0 scope move, so no v0.1.x consumer imported it — the collapse was dead and could rewrite unrelated source (including `@astryxdesign/theme-default/theme.css` CSS imports) to a `@astryxdesign/theme-neutral` package the app never declared. The `@astryxdesign/theme-daily` → `theme-neutral` collapse (and its `defaultTheme` → `neutralTheme` export remap) is unchanged.
+- Remove the earlier scope's `theme-default` → `@astryxdesign/theme-neutral` collapse from the v0.1.0 upgrade codemods (module-specifiers, css-surfaces, and declare-module). `theme-default` was dropped at the v0.1.0 scope move, so no v0.1.x consumer imported it — the collapse was dead and could rewrite unrelated source (including the earlier scope's `theme-default/theme.css` CSS imports) to a `@astryxdesign/theme-neutral` package the app never declared. The earlier scope's `theme-daily` → `theme-neutral` collapse (and its `defaultTheme` → `neutralTheme` export remap) is unchanged.
 - cli — confine user-controlled file paths, close DoS vectors, and repair paths broken by the authoring reorg (#4637)
 - cli hardening pass — validate inputs at the API layer, close path-safety gaps, and prevent agent-docs content loss. The API is a public surface (`@astryxdesign/cli/api`), so guards that lived only in the CLI wrapper are pushed into the API.
   Path safety (the guard the write commands all depend on):
@@ -5296,7 +5296,7 @@ Thanks to everyone who contributed to this release:
 
 - Stop suggesting bare `npx astryx` before the CLI is installed — it resolves to an unrelated package on the npm registry.
   The CLI now emits an install-aware invocation everywhere it prints a command:
-- Extend the v0.1.0 upgrade codemods to cover test files that mock `@astryxdesign/core` modules, which were previously left half-migrated and broke after upgrade:
+- Extend the v0.1.0 upgrade codemods to cover test files that mock the earlier scope's `core` modules, which were previously left half-migrated and broke after upgrade:
 - `astryx upgrade` now keeps the managed agent-docs block (`<!-- ASTRYX:START --> … <!-- ASTRYX:END -->`) in sync with the installed version on **every** path — including the up-to-date and no-codemods short-circuits that previously returned before any refresh, leaving AI agents reading a stale component index and superseded rules. The block documents the installed library, so it's now refreshed up front (independent of codemods) and reported in the `--json` receipt as `agentDocs`. One detection pass covers three cases: a stale block is rewritten (`--apply`) or reported as a pending change (dry-run, which no longer writes); a project with core installed but no managed block is nudged to run `astryx init --features agents`; an already-current block stays silent. (#4168, #4169)
 
 #### Documentation
@@ -5307,8 +5307,8 @@ Thanks to everyone who contributed to this release:
 
 - Installed / global / dev runs suggest `<pm> astryx <cmd>` (e.g. `pnpm exec astryx …`), unchanged.
 - One-off runs (launched via `npx`/`pnpm dlx`/`yarn dlx`/`bunx`) suggest the scoped package `<dlx> @astryxdesign/cli <cmd>`, which always resolves to us.
-- **migrate-xds-module-specifiers**: rewrite the mocked-module path in `vi.mock`/`vi.doMock`/`jest.mock`/`jest.doMock` (and bare `mock`) calls, plus `import(...)` specifiers used in TS type positions (`typeof import('@astryxdesign/core/Text')`), so the mock still intercepts the renamed `@astryxdesign/*` import.
-- **drop-xds-prefix-imports**: un-prefix partial-mock override keys inside an `@astryxdesign/core` mock factory (e.g. `useXDSTruncation` → `useTruncation`) so the override matches the renamed export instead of silently overriding nothing. Scoped to recognized `@astryxdesign/core` mock factories only; unrelated object keys are untouched.
+- **migrate-xds-module-specifiers**: rewrite the mocked-module path in `vi.mock`/`vi.doMock`/`jest.mock`/`jest.doMock` (and bare `mock`) calls, plus `import(...)` specifiers used in TS type positions (`typeof import(…)` of the earlier scope's `core/Text`), so the mock still intercepts the renamed `@astryxdesign/*` import.
+- **drop-xds-prefix-imports**: un-prefix partial-mock override keys inside the earlier scope's `core` mock factory (e.g. `useXDSTruncation` → `useTruncation`) so the override matches the renamed export instead of silently overriding nothing. Scoped to recognized mock factories of the earlier scope's `core` only; unrelated object keys are untouched.
 
 #### Contributors
 
@@ -5414,9 +5414,9 @@ Thanks to everyone who contributed to this release:
 
 #### Other Changes
 
-- **drop-xds-prefix-imports**: when un-prefixing an `@astryxdesign/core` import (e.g. `XDSCodeBlock` → `CodeBlock`) would collide with a same-named local binding in the file (such as a local `export function CodeBlock` wrapper), alias the import to `Astryx<Name>` and rewrite its usages instead of producing a duplicate declaration that breaks the build.
-- **migrate-xds-css-surfaces**: rewrite CSS `@import` of the earlier scope's package stylesheets (both `'…'`/`"…"` and `url(…)` forms), including the `@astryxdesign/core/xds.css` → `@astryxdesign/core/astryx.css` file rename and the `theme-default`/`theme-daily` → `theme-neutral` collapse.
-- **migrate-xds-module-specifiers**: when collapsing `@astryxdesign/theme-default`/`@astryxdesign/theme-daily` to `@astryxdesign/theme-neutral`, remap the `defaultTheme` export to `neutralTheme`, aliasing back to the original local name (`neutralTheme as defaultTheme`) so downstream usages keep working.
+- **drop-xds-prefix-imports**: when un-prefixing an import from the earlier scope's `core` (e.g. `XDSCodeBlock` → `CodeBlock`) would collide with a same-named local binding in the file (such as a local `export function CodeBlock` wrapper), alias the import to `Astryx<Name>` and rewrite its usages instead of producing a duplicate declaration that breaks the build.
+- **migrate-xds-css-surfaces**: rewrite CSS `@import` of the earlier scope's package stylesheets (both `'…'`/`"…"` and `url(…)` forms), including the earlier scope's `core/xds.css` → `@astryxdesign/core/astryx.css` file rename and the `theme-default`/`theme-daily` → `theme-neutral` collapse.
+- **migrate-xds-module-specifiers**: when collapsing the earlier scope's `theme-default`/`theme-daily` to `@astryxdesign/theme-neutral`, remap the `defaultTheme` export to `neutralTheme`, aliasing back to the original local name (`neutralTheme as defaultTheme`) so downstream usages keep working.
 
 #### Contributors
 
@@ -5440,7 +5440,7 @@ Thanks to everyone who contributed to this release:
 - Add a Kanban Board page template: color-coded status columns, draggable task cards with priority tags, and board toolbar. Based on a design by @cg-hub18.
 - Add frame-first layout guidance: new `astryx docs layout` topic (shell choice, region budgets, app archetypes, cards-vs-rows policy, responsive contracts), layout rules in the generated agent cheat sheet, and layout anti-patterns in `docs principles`.
 - Add a v0.1.3 config codemod that migrates astryx.config layout.components to experimental.xle.components.
-- Add v0.1.0 codemods for migrating `declare module "@astryxdesign/core/..."` type augmentations and `.xds-*` / `[data-xds-theme]` / `@layer xds-theme` CSS surfaces to their `@astryxdesign`/`astryx-*` equivalents.
+- Add v0.1.0 codemods for migrating `declare module` type augmentations of the earlier scope's `core/...` modules and `.xds-*` / `[data-xds-theme]` / `@layer xds-theme` CSS surfaces to their `@astryxdesign`/`astryx-*` equivalents.
 - Introduce the Project configuration API as the single entry point for reading resolved project config, components, templates, codemods, and issue routing, replacing loadConfig. Misconfigured integrations are now skipped with a warning during upgrade instead of hard-failing, and a new --skip-codemod flag lets you re-run past a failed codemod.
 - Add a Shell page-template category to the CLI: Top Nav, Side Nav, and Shell Nav app-shell scaffolds (#3245, #3246, #3247)
 - Static template authoring API (createPageTemplate/createBlockTemplate) with the @astryxdesign/cli/template export and type-driven, package-scoped template discovery.
