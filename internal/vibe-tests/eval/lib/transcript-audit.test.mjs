@@ -205,6 +205,21 @@ describe('auditTranscript', () => {
     }
   });
 
+  it('keeps a backup a temp path when the same command writes a file whose content has braces', () => {
+    const command = "cp src/App.tsx /tmp/App.bak && cat > src/App.tsx <<'EOF'\nexport default function App() {\n  return null;\n}\nEOF";
+    const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+    expect(audit.warnings).toEqual([]);
+    expect(audit.tempPaths).toEqual([{tool: 'Bash', path: '/tmp/App.bak'}]);
+    const expanded = auditTranscript(
+      [toolUse('Bash', {command: 'cp src/App.tsx /tmp/${NAME}.bak'})],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
+    expect(expanded.tempPaths).toEqual([]);
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];

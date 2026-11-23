@@ -31,9 +31,10 @@ function linkTarget(file) {
  * sides. Anything else can expand into a run.
  */
 export function shellCanExpand(command, raw) {
-  if (/[$`{}]/.test(command)) return true;
+  // splitHeredocs drops file content and keeps what the shell runs, so a
+  // brace in a file the agent writes does not count as an expansion.
   const {shell, code} = splitHeredocs(command);
-  if (code.length > 0) return true;
+  if (code.length > 0 || /[$`{}]/.test(shell)) return true;
   // A single `&` starts a new command, except in a redirect such as `2>&1` or `&>`.
   for (const stage of shell.split(/&&|\|\|?|;|(?<![<>])&(?!>)|\n|[()]/)) {
     const program = stage.trim().split(/\s+/)[0];

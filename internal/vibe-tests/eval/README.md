@@ -200,7 +200,9 @@ what the eval measures, so compare results only within one arm version.
   lists the runs that used that folder; it cannot tell whether one agent read
   another's file. A second eval that runs at the same time with its own `--out`
   outside the default run root is not one of the audited roots, so give
-  concurrent evals the default run root.
+  concurrent evals the default run root. The audit resolves links in temp
+  paths when it runs, after the agent exits, so a link that a script made and
+  removed before then is not seen.
 - The audit reads `sed` and search options from per-command lists. An option
   missing from those lists can shift which word it reads as the script or
   pattern, so a quoted path there can pass, or a correct pattern can fail.
