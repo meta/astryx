@@ -3,8 +3,10 @@
 /**
  * A published CLI keeps the catalog `search` and `build` gather between runs
  * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
- * changed: a kept catalog is not used after edits, a change above the project, or another project or environment.
- * Each case's answer from a kept catalog must equal a fresh gather's.
+ * changed: a kept catalog is not used after edits, a change above the project,
+ * or another project or environment, nor when a variable the gather reads
+ * changes. Each case's answer from a kept catalog must equal a fresh gather's.
+ * packed-gather-cache.nested.test.mjs covers the entries a kept entry nests.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -22,6 +24,8 @@ import {
   makeProject,
   run,
   keptTmp,
+  allInodes,
+  expectWarmHit,
   freshTmp,
   entries,
   QUERIES,
@@ -61,16 +65,98 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
+    'drops an unready mark on the next warm run once the template is ready',
+    async () => {
+      const tmp = keptTmp('ready-flip');
+      const doc = path.join(widgets, 'templates', 'tally.doc.mjs');
+      const source = path.join(widgets, 'templates', 'tally.tsx');
+      /** @param {string} readiness */
+      const writeTally = readiness =>
+        fs.writeFileSync(
+          doc,
+          `export default {type: 'page', name: 'tally', description: 'Running totals, tallied.', ${readiness}};\n`,
+        );
+      fs.writeFileSync(
+        source,
+        'export default function Page() { return null; }\n',
+      );
+      const ask = ['search', 'running totals tallied', '--type', 'template'];
+      /**
+       * The tally template's own text record.
+       * @param {{stdout: string}} answer
+       */
+      const tallyRecord = answer =>
+        answer.stdout
+          .split('\n\n')
+          .find(r => r.includes('name:        tally\n')) ?? '';
+      /** @param {{stdout: string}} answer */
+      const tally = answer =>
+        JSON.parse(answer.stdout).data.results.find(
+          (/** @type {any} */ r) => r.name === 'tally',
+        );
+      try {
+        writeTally('isReady: false,');
+        // The first runs keep the catalog and the entries it builds on.
+        run(ask, {tmp});
+        run(ask, {tmp, json: false});
+        const [unready] = expectWarmHit(tmp, [ask]);
+        expect(tally(unready).isReady).toBe(false);
+        const [unreadyText] = expectWarmHit(tmp, [ask], {json: false});
+        expect(tallyRecord(unreadyText)).toContain(
+          'kind:        page (not ready)\n',
+        );
+        // Same size and times, other text: only a content check sees it.
+        const {atime, mtime} = fs.statSync(doc);
+        writeTally('isReady: true, ');
+        fs.utimesSync(doc, atime, mtime);
+        const kept = allInodes(tmp);
+        const cold = run(ask, {tmp});
+        expect(allInodes(tmp)).not.toEqual(kept);
+        expect(tally(cold).isReady).toBe(true);
+        expect(cold).toEqual(run(ask, {tmp: freshTmp()}));
+        run(ask, {tmp, json: false});
+        const [ready] = expectWarmHit(tmp, [ask]);
+        expect(tally(ready).isReady).toBe(true);
+        const [readyText] = expectWarmHit(tmp, [ask], {json: false});
+        expect(tallyRecord(readyText)).toContain('kind:        page\n');
+      } finally {
+        fs.rmSync(doc, {force: true});
+        fs.rmSync(source, {force: true});
+      }
+    },
+    300_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
     'is not used by another project, another CLI, or another environment',
     async () => {
       const tmp = keptTmp('other');
-      await expectSameAsFresh(tmp);
+      // The second query reads the first's catalog back: the warm path hits.
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
       const other = makeProject();
       try {
-        await expectSameAsFresh(tmp, {cwd: other.dir});
+        expect(await expectSameAsFresh(tmp, {cwd: other.dir})).toEqual([
+          'miss',
+          'hit',
+        ]);
         expect(entries(tmp).size).toBe(2);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+      // The same CLI installed in another folder, as a package manager's
+      // patch installs one, keeps its own entries.
+      const copy = path.join(path.dirname(packed), 'cli-copy');
+      fs.cpSync(packed, copy, {recursive: true});
+      try {
+        const before = entries(tmp);
+        const kept = run(QUERIES[0], {tmp, cli: copy});
+        expect(kept).toEqual(run(QUERIES[0], {tmp: freshTmp(), cli: copy}));
+        const added = [...entries(tmp).keys()].filter(
+          name => !before.has(name),
+        );
+        expect(added.length).toBeGreaterThan(0);
+      } finally {
+        fs.rmSync(copy, {recursive: true, force: true});
       }
       fs.writeFileSync(
         path.join(packed, BUILD_ID),
@@ -94,7 +180,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     /** @type {string[]} */
     const made = [];
     try {
-      await expectSameAsFresh(tmp);
+      const first = await expectSameAsFresh(tmp);
+      // Where the CLI keeps catalogs, the warm path hits.
+      if (hasModuleHooks) expect(first).toEqual(['miss', 'hit']);
       // A package.json, then a config file, in the folder above.
       for (const [name, text] of [
         ['package.json', JSON.stringify({name: 'parent'})],
@@ -211,6 +299,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       const at = (/** @type {string} */ value, /** @type {string} */ where) =>
         run(ask, {tmp: where, cwd: other.dir, env: {ASTRYX_TEST_ROOT: value}});
       expect(at('a', tmp)).toEqual(at('a', freshTmp()));
+      // The warm path hits while the variable keeps its value.
+      if (hasModuleHooks) {
+        expectWarmHit(tmp, [ask], {
+          cwd: other.dir,
+          env: {ASTRYX_TEST_ROOT: 'a'},
+        });
+      }
       const b = at('b', tmp);
       expect(b.stdout).toContain('Grand totals');
       expect(b).toEqual(at('b', freshTmp()));
@@ -260,6 +355,13 @@ process.stdout.write(answer);
       };
       fs.writeFileSync(input, '1');
       expect(at('a')).toBe('a:1');
+      // Nothing changed: both gathers are read back, nothing written again.
+      if (hasModuleHooks) {
+        const warm = allInodes(tmp);
+        expect(warm.size).toBe(2);
+        expect(at('a')).toBe('a:1');
+        expect(allInodes(tmp)).toEqual(warm);
+      }
       // Only the outer input changes: the outer gathers again while the
       // inner is read back.
       fs.writeFileSync(input, '2');

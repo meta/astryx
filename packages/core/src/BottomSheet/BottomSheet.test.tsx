@@ -39,6 +39,14 @@ import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height
 // stop, and a 92% stop the Tall budget already covers — are the geometry the
@@ -575,8 +583,44 @@ describe('BottomSheet', () => {
         Content
       </BottomSheet>,
     );
+    fireEvent.pointerDown(screen.getByRole('dialog'));
+    fireEvent.pointerUp(screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('dialog'));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('stays open on a press that starts inside and ends on the scrim (family:overlay-dismissal FR10)', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" defaultValue="Note text" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByLabelText('Search');
+
+    fireEvent.pointerDown(input);
+    fireEvent.pointerUp(dialog);
+    fireEvent.click(dialog);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('stays open on a press that starts on the scrim and ends inside the sheet (family:overlay-dismissal FR10)', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" defaultValue="Note text" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByLabelText('Search');
+
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(input);
+    fireEvent.click(dialog);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('purpose=form blocks scrim and swipe dismissal but allows Escape', () => {
@@ -592,6 +636,8 @@ describe('BottomSheet', () => {
     );
     const dialog = screen.getByRole('dialog');
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
 
@@ -619,6 +665,8 @@ describe('BottomSheet', () => {
     );
     const dialog = screen.getByRole('alertdialog');
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
@@ -643,6 +691,8 @@ describe('BottomSheet', () => {
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
     expect(onOpenChange).not.toHaveBeenCalled();
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
@@ -1102,7 +1152,7 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      fireEvent.click(screen.getByRole('dialog'));
+      pressScrim(screen.getByRole('dialog'));
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 
@@ -2118,6 +2168,62 @@ describe('BottomSheet', () => {
 
       // Half of the 800px window is 400px of visible sheet: 736 - 400 = 336px
       // of travel, taken as layout height once the snap lands.
+      dragHandleTo(336);
+
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+    });
+
+    it('rests at the committed stop when React discards a render that moves it', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      // A transition that suspends for good: React renders the new stops,
+      // then keeps the committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      function Screen({
+        snapPoints,
+        isPending,
+      }: {
+        snapPoints: ReadonlyArray<number>;
+        isPending: boolean;
+      }) {
+        return (
+          <Suspense fallback={null}>
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              label="Release notes"
+              snapPoints={snapPoints}
+              height="tall">
+              Content
+            </BottomSheet>
+            {isPending ? <Forever /> : null}
+          </Suspense>
+        );
+      }
+      const view = render(<Screen snapPoints={[0.5]} isPending={false} />);
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+      await act(async () => {
+        startTransition(() => {
+          view.rerender(<Screen snapPoints={[0.25]} isPending />);
+        });
+      });
+
+      // The committed stop is still half the window: 336px of travel.
       dragHandleTo(336);
 
       expect(sheet.style.height).toBe('448px');
@@ -4848,8 +4954,9 @@ describe('BottomSheet', () => {
           matches:
             query === '(prefers-reduced-motion: reduce)' ||
             (coarse &&
-              query ===
-                '(prefers-reduced-motion: reduce) and (pointer: coarse)'),
+              (query === '(pointer: coarse)' ||
+                query ===
+                  '(prefers-reduced-motion: reduce) and (pointer: coarse)')),
           media: query,
           onchange: null,
           addEventListener: vi.fn(),

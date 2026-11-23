@@ -222,6 +222,13 @@ interface ValueAnchor {
 // Styles
 // =============================================================================
 
+// How far below the control's middle a horizontal mark label starts: 4px
+// under the thumb's lower edge.
+const MARK_LABEL_OFFSET = THUMB_SIZE / 2 + 4;
+
+// The horizontal track's block size under a touch pointer (WCAG 2.5.8 AA).
+const TOUCH_TRACK_MIN_BLOCK = 24;
+
 const styles = stylex.create({
   sliderRow: {
     display: 'flex',
@@ -289,7 +296,7 @@ const styles = stylex.create({
     // tappable area grows. Desktop (fine pointer) is unchanged.
     minBlockSize: {
       default: null,
-      '@media (pointer: coarse)': '24px',
+      '@media (pointer: coarse)': `${TOUCH_TRACK_MIN_BLOCK}px`,
     },
     width: '100%',
     cursor: {
@@ -499,12 +506,17 @@ const styles = stylex.create({
     cursor: 'default',
   },
   textValue: {
+    display: 'inline-block',
+    textAlign: 'end',
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
+  // A floor wider than any text a step shows, so the box keeps one width.
+  textValueReserve: (minInlineSize: string) => ({minInlineSize}),
   marksContainer: {
     position: 'absolute',
   },
@@ -546,6 +558,7 @@ const styles = stylex.create({
     position: 'absolute',
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     whiteSpace: 'nowrap',
   },
@@ -554,11 +567,21 @@ const styles = stylex.create({
       default: 'translateX(-50%)',
       ':is([dir="rtl"] *)': 'translateX(50%)',
     },
-    top: THUMB_SIZE / 2 + 4,
+    top: MARK_LABEL_OFFSET,
   },
   markLabelVertical: {
     transform: 'translateY(50%)',
     insetInlineStart: THUMB_SIZE / 2 + 4,
+  },
+  // A horizontal mark label hangs below the middle of the control, whose
+  // size never depends on its content. The row keeps room for the part of
+  // the label's line below the control, so the content after the slider
+  // starts below the labels.
+  sliderRowMarkLabels: {
+    paddingBlockEnd: {
+      default: `calc(${MARK_LABEL_OFFSET - THUMB_SIZE / 2}px + ${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
+      '@media (pointer: coarse)': `calc(${MARK_LABEL_OFFSET - TOUCH_TRACK_MIN_BLOCK / 2}px + ${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
+    },
   },
 });
 
@@ -1654,15 +1677,53 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display
-  const textDisplay =
-    valueDisplay === 'text' ? (
-      <span {...stylex.props(styles.textValue)}>
+  const longestText = useMemo(() => {
+    if (valueDisplay !== 'text') {
+      return 0;
+    }
+    const format = formatValue ?? String;
+    const count = step > 0 ? Math.floor((max - min) / step) : 0;
+    const shown =
+      count <= 200
+        ? Array.from({length: count + 1}, (_, i) => min + i * step)
+        : [min, min + step, max - step];
+    // End shows `max` itself, which can lie off the step grid.
+    return Math.max(
+      format(max).length,
+      ...shown.map(
+        value => format(clamp(snapToStep(value, min, step), min, max)).length,
+      ),
+    );
+  }, [valueDisplay, formatValue, min, max, step]);
+
+  // Text value display. The box has a floor of one ch per character of the
+  // longest text a value shows, plus one ch, and the text sits at its end. The
+  // track then keeps one length while the value changes and while a thumb is
+  // dragged, so the thumb stays under the pointer. Up to 200 steps, every
+  // value is formatted to find the longest text; above that, the ends and the
+  // values one step in from them. A range counts its catalog message with
+  // both values at that longest length.
+  let textDisplay = null;
+  if (valueDisplay === 'text') {
+    const longest = '0'.repeat(longestText);
+    const reservedText = isRange
+      ? t('@astryx.slider.rangeValue', {start: longest, end: longest})
+      : longest;
+    textDisplay = (
+      <span
+        {...stylex.props(
+          styles.textValue,
+          styles.textValueReserve(`${reservedText.length + 1}ch`),
+        )}>
         {isRange
-          ? `${displayValue(values[0])} – ${displayValue(values[1])}`
+          ? t('@astryx.slider.rangeValue', {
+              start: displayValue(values[0]),
+              end: displayValue(values[1]),
+            })
           : displayValue(values[0])}
       </span>
-    ) : null;
+    );
+  }
 
   return (
     <Field
@@ -1701,7 +1762,12 @@ export function Slider({ref, ...props}: SliderProps) {
             orientation,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          stylex.props(styles.sliderRow),
+          stylex.props(
+            styles.sliderRow,
+            isHorizontal &&
+              marks?.some(mark => Boolean(mark.label)) === true &&
+              styles.sliderRowMarkLabels,
+          ),
         )}>
         {/* A disabled slider submits no value (spec:AST-085 FR3). */}
         {htmlName != null &&
@@ -1893,7 +1959,9 @@ export function Slider({ref, ...props}: SliderProps) {
         {textDisplay}
       </div>
       {conveysRequired && (
-        <VisuallyHidden id={requiredID}>Required</VisuallyHidden>
+        <VisuallyHidden id={requiredID}>
+          {t('@astryx.slider.required')}
+        </VisuallyHidden>
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

@@ -4,7 +4,8 @@
 
 /**
  * @file ProgressBar.tsx
- * @input Uses React, useId, stylex, tokens, ProgressBarTouch and resolveMotion
+ * @input Uses React, useId, stylex, tokens, ProgressBarTouch, resolveMotion
+ *   and the shared percentage formatter
  * @output Exports ProgressBar component, ProgressBarProps, ProgressBarVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -38,6 +39,8 @@ import type {ProgressBarVariantMap} from './index';
 import {useProgressBarTouch} from './ProgressBarTouch';
 import {formatMotionRoleValue} from '../motion/roles';
 import {resolveMotion} from '../motion/resolveMotion';
+import {useLocale} from '../i18n/useLocale';
+import {formatPercent} from '../NumberInput/numberParser';
 import {progressBar} from '../motion/uikit/progressBar';
 import {timing} from '../motion/uikit/timing';
 
@@ -109,7 +112,7 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
   hasValueLabel?: boolean;
   /**
    * Custom formatter for the value label.
-   * @default (value, max) => `${Math.round((value / max) * 100)}%`
+   * @default the rounded percentage in the provider locale (`45%` in English)
    */
   formatValueLabel?: (value: number, max: number) => string;
   /**
@@ -129,10 +132,11 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
    * Target marks drawn on the track at fixed points in the same `0..max`
    * scale as `value` — e.g. a goal line. Marks stay visible whether progress
    * is below or past them, and take their color from what they sit on: a mark
-   * inside the filled area uses the fill variant's on-color (on-accent,
-   * on-warning, on-error, …), while a mark still out on the bare track uses
-   * `--color-text-primary` (`--color-text-secondary` on a disabled bar, which
-   * dims everything it draws). Each mark's required `label` names it for
+   * inside the filled area uses the color that reads on the fill (on-accent
+   * on an accent fill, the surface color on the others), while a mark still
+   * out on the bare track uses
+   * `--color-text-primary` (`--color-text-secondary` on a disabled bar, whose
+   * track and fill dim). Each mark's required `label` names it for
    * assistive tech and is revealed via a `Tooltip` on hover/focus. Ignored when
    * `isIndeterminate` is true.
    */
@@ -164,7 +168,9 @@ const indeterminateSlide = stylex.keyframes({
 
 // RTL: mirror the slide so the indeterminate bar travels along the reading
 // flow (inline-start → inline-end, i.e. right → left) instead of always
-// physically left → right. The magnitudes mirror the LTR keyframe.
+// physically left → right. The magnitudes mirror the LTR keyframe. The mirror
+// follows the bar's own direction (`:dir(rtl)`), so a bar in an LTR region of
+// an RTL page slides like its label.
 const indeterminateSlideRtl = stylex.keyframes({
   '0%': {
     transform: 'translateX(100%)',
@@ -240,6 +246,19 @@ const styles = stylex.create({
   trackContainer: {
     position: 'relative',
     width: '100%',
+  },
+  // A disabled bar dims its track and fill as Slider and Switch dim a disabled
+  // track. Marks stay at full opacity because a mark can take focus, and its
+  // focus ring must keep its contrast. Forced colors replace the fill color,
+  // so a GrayText outline marks the disabled fill there.
+  trackDisabled: {
+    opacity: 0.5,
+  },
+  fillDisabled: {
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'GrayText',
+    },
   },
   // The semantic rail holds only the fill and clips it to the rounded rail:
   // the determinate fill slides in from the inline-start side and the
@@ -381,7 +400,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     animationName: {
       default: indeterminateSlide,
-      ':is([dir="rtl"] *)': {
+      ':dir(rtl)': {
         default: indeterminateSlideRtl,
         '@media (prefers-reduced-motion: reduce)': indeterminatePulse,
       },
@@ -405,7 +424,8 @@ const styles = stylex.create({
   // A mark is a vertical tick centered on the track via their shared positioning container.
   // It stays outside role="progressbar" so it remains independently focusable.
   // The centering translate keeps themed overhang symmetric;
-  // insetInlineStart and the mirrored translate preserve RTL.
+  // insetInlineStart and the mirrored translate preserve RTL. The translate
+  // follows the `dir` that the bar inherits.
   //
   // The dimensions read private vars rather than being plain declarations: a
   // theme writes `width`/`height` on the `progressbar-mark` target as usual and
@@ -426,7 +446,7 @@ const styles = stylex.create({
     height: 'var(--_progressbar-mark-height, 8px)',
     transform: {
       default: 'translate(-50%, -50%)',
-      ':is([dir="rtl"] *)': 'translate(50%, -50%)',
+      ':dir(rtl)': 'translate(50%, -50%)',
     },
   },
 });
@@ -435,53 +455,52 @@ const variantStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-accent'],
   },
+  // A status fill takes the status text role, which every theme sets to read
+  // on its surfaces. The bright status roles fall to about 1:1 on a light
+  // track in some themes; the text roles reach 3:1 on the track in every
+  // bundled theme and mode.
   success: {
-    backgroundColor: colorVars['--color-success'],
+    backgroundColor: colorVars['--color-text-success'],
   },
   warning: {
-    backgroundColor: colorVars['--color-warning'],
+    backgroundColor: colorVars['--color-text-warning'],
   },
   error: {
-    backgroundColor: colorVars['--color-error'],
+    backgroundColor: colorVars['--color-text-error'],
   },
+  // The secondary text role reaches 3:1 on the default track. A theme whose
+  // dark track sits closer to it maps a lighter stop. The disabled text role
+  // does not reach 3:1: it is the track's own color in some themes. A
+  // disabled bar takes the same fill and dims its track (`trackDisabled`).
   neutral: {
-    backgroundColor: colorVars['--color-text-disabled'],
+    backgroundColor: colorVars['--color-text-secondary'],
   },
   disabled: {
-    backgroundColor: colorVars['--color-text-disabled'],
+    backgroundColor: colorVars['--color-text-secondary'],
   },
 });
 
-// A mark sitting inside the filled area is drawn *on* the bar, so it takes the
-// on-color that pairs with the fill's own variant color — the same pairing
-// Badge uses for solid semantic backgrounds.
-//
-// `neutral` and `disabled` both fill with the muted `--color-text-disabled`
-// gray, which carries no semantic weight and has no dedicated on-token, so
-// they fall back to a plain foreground. They pick different ones: a `neutral`
-// bar is live, so its mark keeps the full-contrast `--color-text-primary` a
-// mark uses out on the track; a `disabled` bar is deliberately low-emphasis —
-// its own label and value text drop to muted colors — so its mark steps down
-// to `--color-text-secondary` rather than becoming the loudest thing on a
-// grayed-out component.
+// A mark on the accent fill takes `--color-on-accent`. Every other fill is a
+// text role, which a theme sets to read on its surface, so a mark on it takes
+// the surface color.
 const markOnFillStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-on-accent'],
   },
   success: {
-    backgroundColor: colorVars['--color-on-success'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   warning: {
-    backgroundColor: colorVars['--color-on-warning'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   error: {
-    backgroundColor: colorVars['--color-on-error'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   neutral: {
-    backgroundColor: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
   disabled: {
-    backgroundColor: colorVars['--color-text-secondary'],
+    backgroundColor: colorVars['--color-background-surface'],
   },
 });
 
@@ -502,9 +521,8 @@ const markOnTrackStyles = stylex.create({
   track: {
     backgroundColor: colorVars['--color-text-primary'],
   },
-  // A disabled bar dims everything it draws, so its track marks step down to
-  // the secondary foreground for the same reason the disabled on-fill mark
-  // does — matching the muted label and value text.
+  // A disabled bar reads quieter, so a mark on its track steps down to the
+  // secondary foreground.
   trackDisabled: {
     backgroundColor: colorVars['--color-text-secondary'],
   },
@@ -544,11 +562,6 @@ function pulseStyle(element: Element | null): PulseStyle {
     '--_progress-bar-pulse-curve': formatMotionRoleValue('curve', curve),
     '--_progress-bar-pulse-floor': String(progressBar.reducedMotionPulseFloor),
   };
-}
-
-function defaultFormatValueLabel(value: number, max: number): string {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return `${pct}%`;
 }
 
 /**
@@ -599,7 +612,7 @@ export function ProgressBar({
   label,
   isLabelHidden = false,
   hasValueLabel = false,
-  formatValueLabel = defaultFormatValueLabel,
+  formatValueLabel,
   variant = 'accent',
   isIndeterminate = false,
   isDisabled = false,
@@ -620,11 +633,20 @@ export function ProgressBar({
   const safeMax = Number.isFinite(max) ? max : 0;
   const clampedValue = Math.min(Math.max(0, safeValue), safeMax);
   const percentage = safeMax > 0 ? (clampedValue / safeMax) * 100 : 0;
-  const valueText = formatValueLabel(clampedValue, safeMax);
+  const locale = useLocale();
+  const valueText = formatValueLabel
+    ? formatValueLabel(clampedValue, safeMax)
+    : formatPercent(Math.round(percentage), locale);
 
   const showValueLabel = hasValueLabel && !isIndeterminate;
 
   const fillVariant = isDisabled ? 'disabled' : variant;
+  // A variant a theme adds through ProgressBarVariantMap has no built-in
+  // style. It paints the default accent fill until the theme styles it, so
+  // the bar never loses its fill.
+  const fillStyleKey = Object.hasOwn(variantStyles, fillVariant)
+    ? fillVariant
+    : 'accent';
   // Under a finger the fill moves as UIProgressView's does and draws at least
   // 16px; what that needs from script is the touch layer's (ProgressBarTouch).
   const touch = useProgressBarTouch(
@@ -664,6 +686,7 @@ export function ProgressBar({
 
   return (
     <div
+      {...rest}
       ref={ref}
       {...mergeProps(
         themeProps('progress-bar', {variant}),
@@ -671,8 +694,7 @@ export function ProgressBar({
         className,
         style,
       )}
-      data-testid={dataTestId}
-      {...rest}>
+      data-testid={dataTestId}>
       {/* Label row */}
       {!isLabelHidden || showValueLabel ? (
         <div {...stylex.props(styles.header)}>
@@ -710,7 +732,7 @@ export function ProgressBar({
           ref={touch.trackRef}
           {...mergeProps(
             themeProps('progress-bar-track'),
-            stylex.props(styles.track),
+            stylex.props(styles.track, isDisabled && styles.trackDisabled),
           )}>
           {isIndeterminate ? (
             <div
@@ -718,7 +740,8 @@ export function ProgressBar({
                 themeProps('progress-bar-fill', {variant: fillVariant}),
                 stylex.props(
                   styles.indeterminateFill,
-                  variantStyles[fillVariant],
+                  variantStyles[fillStyleKey],
+                  isDisabled && styles.fillDisabled,
                 ),
               )}
               style={pulseStyle(null)}
@@ -730,7 +753,8 @@ export function ProgressBar({
                 stylex.props(
                   styles.fill,
                   percentage === 0 && styles.fillEmpty,
-                  variantStyles[fillVariant],
+                  variantStyles[fillStyleKey],
+                  isDisabled && styles.fillDisabled,
                 ),
               )}
               style={fillStyle}
@@ -763,7 +787,7 @@ export function ProgressBar({
                   focusOutlineStyles.focusVisible,
                   styles.mark,
                   mark.isOnFill
-                    ? markOnFillStyles[fillVariant]
+                    ? markOnFillStyles[fillStyleKey]
                     : isDisabled
                       ? markOnTrackStyles.trackDisabled
                       : markOnTrackStyles.track,

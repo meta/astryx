@@ -20,6 +20,7 @@
  * @property {string} [issuesUrl]
  * @property {string[]} [__declaredKeys]
  * @property {string[]} [__unknownKeys]
+ * @property {Array<{field: string, why: string}>} [__ignoredFields]
  * @property {string} __spec
  * @property {string} __packageDir
  * @property {string} __manifestFile
@@ -39,14 +40,17 @@
  * "healthy" — the two are otherwise byte-identical.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
+ * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, shippedImports?: {status: 'checked', findings: [], unchecked: Array<{file: string, specifier: string, reason: string}>}, exampleCode?: {status: 'checked', findings: [], unchecked: Array<{file: string, example: string, reason: string}>}, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
  *   `iconSets` is experimental: it may change or be removed in a patch
  *   release.
  *   `notes`: information beside the issues. A note fails nothing by default;
  *   one with `next: true` counts as a warning under `integration check
  *   --next`, fails `integration check --strict --next`, and fails `--strict`
- *   from the next minor release. Notes include `invalid_cli_command`, a
- *   `cliCommand` that was ignored as malformed;
+ *   from the next minor release. Notes include `unknown_manifest_key`, a
+ *   manifest key the running CLI does not know (marked `next` only when it
+ *   is one letter from a known key); `invalid_cli_command`, a
+ *   `cliCommand` that was ignored as malformed; `invalid_install_guidance`,
+ *   an `installGuidance` that was ignored as malformed;
  *   `component_without_example`, `template_category`,
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names
@@ -57,7 +61,10 @@
  *   renderer, and an import the template does not use as an icon are listed
  *   in `templateIcons` as not checked instead);
  *   `cli_peer_version`, the running CLI outside the package's
- *   `@astryxdesign/cli` peer range; and
+ *   `@astryxdesign/cli` peer range;
+ *   `core_peer_version`, outside a project, only the `@astryxdesign/core`
+ *   peer range of a package installed for the computer excluding the running
+ *   CLI's release (the other commands skip that package); and
  *   the package layout findings added after the last minor release, each with
  *   its fix in the message: two docs for one component
  *   (`duplicate_component_doc`), a root reached through a symlink
@@ -119,19 +126,19 @@
 
 /**
  * Experimental (spec:AST-084 FR15): for a package that declares
- * `experimental.iconSets`, which icon definitions each valid set leaves
+ * `experimental.iconSets`, which icon meanings each valid set leaves
  * unmapped, and what the checks could not judge. Listed beside the issues and
- * never counted: mapping an optional definition is optional, an item not
+ * never counted: mapping an optional meaning is optional, an item not
  * checked is not a failure, and nothing here fails a check, even under
  * `--strict`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconSetCoverage
  * @property {string} set The set's name.
  * @property {Array<{name: string, description: string, words: string[]}>} unmappedDefinitions
- *   Astryx's optional (not built-in) definitions the set's `map` does not
- *   name. An unmapped built-in definition is an error issue instead.
+ *   Astryx's optional (not built-in) meanings the set's `map` does not
+ *   name. An unmapped built-in meaning is an error issue instead.
  * @property {Array<{definition: string, icon: string}>} suggestions For each
- *   unmapped definition (built-in, optional, or the set's own), the best icon
+ *   unmapped meaning (built-in, optional, or the set's own), the best icon
  *   `integration check` gives it, by the rule `experimental icon new-set`
  *   uses for its suggestions, when one is.
  * @property {Array<{icon?: string, adapter?: string, entry?: string, reason: string}>} unchecked
@@ -141,9 +148,10 @@
  *   (`adapter`); and a theme map or theme-map entry it cannot read
  *   (`entry`).
  * @property {{unmapped: Array<{definition: string, templates: number}>}} [templateMeanings]
- *   The icon definitions the bundled templates use that the set's `map`
- *   does not name, each with how many templates use it, most used first,
- *   then by name. A copied template renders a placeholder for each in a
+ *   The icon meanings the bundled templates use that the set's `map`
+ *   does not name, leaving out one whose fallback (AST-084 FR23) it maps,
+ *   each with how many templates use it, most used first, then by name. A
+ *   copied template renders a placeholder for each in a
  *   project that uses only this set. Built-in ones are also error issues.
  */
 

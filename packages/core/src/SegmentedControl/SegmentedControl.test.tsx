@@ -12,9 +12,10 @@
  * SYNC: When SegmentedControl components change, update tests to match new behavior
  */
 
-import {StrictMode} from 'react';
+import {StrictMode, useState} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -59,6 +60,22 @@ beforeEach(() => {
 });
 
 describe('SegmentedControl', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
+    render(
+      <div dir="rtl">
+        <SegmentedControl value="month" onChange={() => {}} label="Range">
+          <SegmentedControlItem value="month" label="Monthly" />
+          <SegmentedControlItem value="week" label="שבועי" />
+          <SegmentedControlItem value="new" label="iPhone جديد" />
+        </SegmentedControl>
+      </div>,
+    );
+    expect(screen.getByText('Monthly')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('שבועי')).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText('iPhone جديد')).not.toHaveAttribute('dir');
+    expect(screen.getByRole('radio', {name: 'Monthly'})).toBeTruthy();
+  });
+
   it('calls onChange when an item is clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -72,6 +89,32 @@ describe('SegmentedControl', () => {
 
     await user.click(screen.getByRole('radio', {name: 'List'}));
     expect(handleChange).toHaveBeenCalledWith('list');
+  });
+
+  it('keeps a clicked later segment selected where nothing has layout, as in a unit test', async () => {
+    const user = userEvent.setup();
+    function View() {
+      const [value, setValue] = useState('list');
+      return (
+        <SegmentedControl value={value} onChange={setValue} label="View mode">
+          <SegmentedControlItem value="grid" label="Grid" />
+          <SegmentedControlItem value="list" label="List" />
+          <SegmentedControlItem value="board" label="Board" />
+        </SegmentedControl>
+      );
+    }
+    render(<View />);
+    await user.click(screen.getByRole('radio', {name: 'Board'}));
+    expect(screen.getByRole('radio', {name: 'Board'})).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // Past the wait for the browser's own click.
+    await act(async () => new Promise(resolve => setTimeout(resolve, 400)));
+    expect(screen.getByRole('radio', {name: 'Board'})).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('does not call onChange when clicking the already-selected item', async () => {

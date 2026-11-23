@@ -18,7 +18,7 @@ const anatomy = [
     name: 'Icon-rendered start icon',
     required: false,
     description:
-      'Optional leading semantic icon or icon component rendered through Icon.',
+      'Optional leading icon, by built-in meaning or icon component, rendered through Icon.',
   },
   {
     name: 'Caller-rendered start content',
@@ -43,6 +43,18 @@ const anatomy = [
     required: false,
     description:
       'Shared clear action that removes the selected item when hasClear is enabled.',
+  },
+  {
+    name: 'Status icon',
+    required: false,
+    description:
+      'Error, warning, or success icon at the end of the input. With statusVariant tooltip it is a button that reveals the status message.',
+  },
+  {
+    name: 'Popup surface',
+    required: false,
+    description:
+      'The layer the Dropdown opens in, above the page and anchored below the input.',
   },
   {
     name: 'Dropdown',
@@ -280,8 +292,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'SVG icon component displayed at the start of the input.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the input; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'containerXstyle',
@@ -323,7 +335,13 @@ export const docs = {
     targets: [
       {className: 'astryx-typeahead', visualProps: ['status', 'size']},
       {className: 'astryx-typeahead-dropdown'},
+      {className: 'astryx-typeahead-popup'},
       {className: 'astryx-typeahead-empty-state'},
+      {
+        className: 'astryx-typeahead-option',
+        visualProps: ['size'],
+        states: ['highlighted', 'selected'],
+      },
       {className: 'astryx-typeahead-item'},
     ],
   },

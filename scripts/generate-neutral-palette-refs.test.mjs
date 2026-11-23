@@ -1,10 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Exhaustive tests for Neutral's selected palette-reference projection.
- * @input Theme source references, committed full-palette literals, and outputs.
- * @output Proof that generation is deterministic and check mode fails on drift.
- * @position Regression coverage for generate-neutral-palette-refs.mjs.
+ * @file Tests for Neutral's full palette and its selected palette-reference
+ *   projection.
+ * @input Neutral's palette config, theme source references, committed
+ *   full-palette literals, the committed receipt, and outputs.
+ * @output Proof that the config regenerates the committed palette and
+ *   receipt, that projection is deterministic, and that check mode fails on
+ *   drift.
+ * @position Regression coverage for generate-neutral-palette-refs.mjs and for
+ *   the palette generator's dark chroma taper.
  */
 
 import * as fs from 'node:fs';
@@ -12,6 +17,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
+import {themePaletteGenerate} from '../packages/cli/api/theme/palette/generate/generate.mjs';
+import {assertPaletteReceiptsMatch} from './palette-receipt-test-utils.mjs';
 import {
   countSelectedRefs,
   discoverSelectedRefs,
@@ -51,6 +58,60 @@ export const theme = {
 `;
 
 describe('Neutral selected palette ref generation', () => {
+  it('reproduces the committed full palette and receipt from its config', () => {
+    const temp = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-neutral-palette-'),
+    );
+    try {
+      fs.copyFileSync(
+        path.join(ROOT, 'packages/themes/neutral/palette.config.json'),
+        path.join(temp, 'palette.config.json'),
+      );
+      themePaletteGenerate(
+        'palette.config.json',
+        {out: 'neutralPalettes.generated.ts'},
+        {cwd: temp},
+      );
+
+      const generated = fs.readFileSync(
+        path.join(temp, 'neutralPalettes.generated.ts'),
+        'utf8',
+      );
+      const committed = fs
+        .readFileSync(
+          path.join(
+            ROOT,
+            'packages/themes/neutral/src/neutralPalettes.generated.ts',
+          ),
+          'utf8',
+        )
+        .replace(
+          '// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n',
+          '',
+        );
+      expect(generated).toBe(committed);
+      assertPaletteReceiptsMatch(
+        JSON.parse(
+          fs.readFileSync(
+            path.join(temp, 'neutralPalettes.generated.receipt.json'),
+            'utf8',
+          ),
+        ),
+        JSON.parse(
+          fs.readFileSync(
+            path.join(
+              ROOT,
+              'packages/themes/neutral/src/neutralPalettes.generated.receipt.json',
+            ),
+            'utf8',
+          ),
+        ),
+      );
+    } finally {
+      fs.rmSync(temp, {recursive: true, force: true});
+    }
+  });
+
   it('uses first-reference family and mode order with unique sorted stops', () => {
     const {content, selected} = renderSelectedRefs(THEME_SOURCE, FULL_PALETTE);
 

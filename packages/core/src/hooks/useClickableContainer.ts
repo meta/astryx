@@ -6,8 +6,8 @@
  * @file useClickableContainer.ts
  * @input Container ref, interactive element ref, click/href handlers
  * @output onClick, onMouseUp and onPointerDown handlers for the container;
- *   INTERACTIVE_SELECTORS list; hasInteractiveAncestor and the shared
- *   innermostInteractive walk; the internal useClickableContainerProxy, the
+ *   INTERACTIVE_SELECTORS list; hasInteractiveAncestor, pressBelongsToControl
+ *   and the shared innermostInteractive walk; the internal useClickableContainerProxy, the
  *   handlers without the marker
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
@@ -120,6 +120,20 @@ export function innermostInteractive(
  */
 export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
   return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
+}
+
+/**
+ * Whether a press on `target` belongs to a control, not to the row around it.
+ * Internal: Item's row click and the menu sheet's row release share it.
+ * The form-control check also looks above the row. It keeps a row inside a
+ * link or button inert, and it keeps a read-only input, which the shared walk
+ * skips.
+ */
+export function pressBelongsToControl(target: Element, row: Element): boolean {
+  return (
+    target.closest('button, a, input, select, textarea') != null ||
+    hasInteractiveAncestor(target, row)
+  );
 }
 
 // hasInteractiveAncestor documents this answer until the next minor.

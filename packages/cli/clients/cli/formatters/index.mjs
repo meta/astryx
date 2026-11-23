@@ -23,6 +23,10 @@
  */
 
 import {humanLog} from '../../../foundation/response/json.mjs';
+import {
+  getCliInvocation,
+  prefixCliCommands,
+} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Shared ASCII vocabulary — used here and by stderr diagnostics (cli-error.mjs)
@@ -86,13 +90,25 @@ function truncateToWidth(line, width) {
 export class Block {
   /** @type {string} */
   #text;
-  /** @param {string} text */
-  constructor(text) {
+  /** @type {boolean} */
+  #commands;
+  /**
+   * @param {string} text
+   * @param {{commands?: boolean}} [options] whether the text is doc Markdown,
+   *   whose bare `astryx` commands {@link emit} shows with the project's
+   *   runner; any other block keeps its bytes
+   */
+  constructor(text, {commands = false} = {}) {
     this.#text = text;
+    this.#commands = commands;
   }
   /** @returns {string} */
   toString() {
     return this.#text;
+  }
+  /** @returns {boolean} */
+  get commands() {
+    return this.#commands;
   }
 }
 
@@ -354,16 +370,24 @@ function inlineRecords(items, options) {
   return new Block(lines.join('\n'));
 }
 
+/** The `code` languages a reader reads as Markdown: doc text, not source. */
+const MARKDOWN_LANGS = new Set(['markdown', 'md']);
+
 /**
  * A verbatim block — source dumps, layout skeletons, or a markdown doc. Output
  * is byte-for-byte (NOT ASCII-normalized), so it survives piping
  * (`astryx template X > file.tsx`) and preserves doc/source content exactly.
+ * A block marked `lang: 'markdown'` is doc text: {@link emit} shows the bare
+ * `astryx` commands its doc tokens rendered with the project's runner, the
+ * way `astryx docs` shows them. JSON keeps them bare.
  * @param {string} source
- * @param {{lang?: string}} [_options] - Reserved (intent label); output verbatim.
+ * @param {{lang?: string}} [options]
  * @returns {Block}
  */
-export function code(source, _options = {}) {
-  return new Block(String(source));
+export function code(source, options = {}) {
+  return new Block(String(source), {
+    commands: MARKDOWN_LANGS.has(String(options.lang ?? '').toLowerCase()),
+  });
 }
 
 /**
@@ -386,6 +410,21 @@ export function formatDeprecation(deprecation) {
 }
 
 /**
+ * A doc text field the way a text reader sees it: each bare `astryx` command
+ * it names starts with the project's command, by the rule {@link emit} applies
+ * to doc Markdown. The API already rendered the doc's tokens; JSON keeps the
+ * bare command.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function docText(value) {
+  const text = String(value ?? '');
+  return text.includes('astryx')
+    ? prefixCliCommands(text, getCliInvocation())
+    : text;
+}
+
+/**
  * The one sanctioned way to write human output to stdout. Joins blocks with a
  * single blank line and hands the result to `humanLog`, which is a no-op in
  * `--json` mode (stdout carries only the envelope there). Accepts only Blocks
@@ -394,9 +433,16 @@ export function formatDeprecation(deprecation) {
  * @returns {void}
  */
 export function emit(...blocks) {
+  /** @type {string | undefined} */
+  let stem;
   const body = blocks
     .filter(isBlock)
-    .map(b => b.toString())
+    .map(b => {
+      const text = b.toString();
+      if (!b.commands || !text.includes('astryx')) return text;
+      stem ??= getCliInvocation();
+      return prefixCliCommands(text, stem);
+    })
     .filter(s => s.length > 0)
     .join('\n\n');
   humanLog(body);

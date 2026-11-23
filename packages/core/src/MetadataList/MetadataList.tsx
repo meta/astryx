@@ -66,7 +66,8 @@ export interface MetadataListProps extends Omit<
   columns?: MetadataListColumns;
   /**
    * Label display configuration.
-   * - position: 'start' places labels to the left, 'top' stacks labels above content
+   * - position: 'start' places each label at the inline start of its value,
+   *   'top' stacks labels above content
    * - width: Custom label width (number in px or CSS string)
    *
    * Defaults to `{ position: 'top' }` for multi-column layouts and
@@ -207,6 +208,11 @@ export function MetadataList({
   style,
   'data-testid': testId,
   ref,
+  // The accessible name belongs on the dl that owns the list's meaning.
+  // Screen readers do not reliably announce a name on the plain div wrapper.
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
   ...restProps
 }: MetadataListProps) {
   const isMultiColumn =
@@ -260,7 +266,7 @@ export function MetadataList({
         ? styles.gridStackedSingle
         : styles.gridStackedMulti;
     }
-    // Labels on the left
+    // Labels at the inline start
     if (columns === 'single' || columns === 1) {
       return styles.gridSingle;
     }
@@ -312,6 +318,9 @@ export function MetadataList({
         {titleContent}
         <dl
           id={contentId}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
           {...stylex.props(
             styles.dl,
             getGridStyle(),

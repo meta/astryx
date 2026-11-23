@@ -37,13 +37,17 @@ import {TokenLink} from './TokenLink';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {cancelNestedPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
-import {textDirectionProps} from '../utils/textDirection';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -213,6 +217,7 @@ const sizeStyles = stylex.create({
   sm: {
     height: `calc(${sizeVars['--size-element-sm']} - 8px)`,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     paddingInline: spacingVars['--spacing-2'],
   },
   md: {
@@ -316,6 +321,7 @@ export function Token({
   'aria-describedby': ariaDescribedBy,
   'aria-haspopup': ariaHasPopup,
   'aria-expanded': ariaExpanded,
+  'aria-pressed': ariaPressed,
   ref,
   ...rest
 }: TokenProps) {
@@ -331,6 +337,8 @@ export function Token({
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
   const effectiveOnClick = onClick ?? (role === 'button' ? () => {} : null);
+  // The label cuts its own text, so a label in one script takes its direction.
+  const labelDirection = cutTextDirection(label);
 
   const removeButton = onRemove != null && (
     <button
@@ -339,6 +347,7 @@ export function Token({
         label: naming?.removeName ?? label,
       })}
       {...tokenRemoveProps}
+      {...pressable}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -346,7 +355,11 @@ export function Token({
       // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
       aria-disabled={isDisabled || undefined}
       {...(isDisabled ? disabledInteractionProps() : null)}
-      {...focusOutlineProps.focusVisible(styles.removeButton)}>
+      {...focusOutlineProps.focusVisible(
+        styles.removeButton,
+        // The button's own hover and press, on its round box.
+        interactionOverlayStyles.backgroundImage,
+      )}>
       <Icon icon="close" size="xsm" color="inherit" />
     </button>
   );
@@ -355,8 +368,12 @@ export function Token({
     <>
       {icon}
       <span
-        {...textDirectionProps(label)}
-        {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
+        {...labelDirection}
+        {...stylex.props(
+          styles.label,
+          labelDirection.dir != null && truncatedTextStyles.pageAlign,
+          isLabelHidden && styles.labelHidden,
+        )}>
         {label}
       </span>
       {endContent}
@@ -364,7 +381,8 @@ export function Token({
     </>
   );
 
-  // Naming and popup inputs reach the element that owns the token's action:
+  // Naming, popup and pressed inputs reach the element that owns the token's
+  // action:
   // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
@@ -372,6 +390,7 @@ export function Token({
     'aria-describedby': ariaDescribedBy,
     'aria-haspopup': ariaHasPopup,
     'aria-expanded': ariaExpanded,
+    'aria-pressed': ariaPressed,
   };
 
   const sharedProps = {
@@ -472,13 +491,17 @@ export function Token({
         icon={icon}
         endContent={endContent}
         removeButton={removeButton}
-        linkStyleProps={stylex.props(styles.invisibleButton)}
+        linkStyleProps={{
+          ...stylex.props(styles.invisibleButton),
+          ...focusOwnerProps,
+        }}
         {...pressable}
         labelContent={
           <span
-            {...textDirectionProps(label)}
+            {...labelDirection}
             {...stylex.props(
               styles.label,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
               isLabelHidden && styles.labelHidden,
             )}>
             {label}
@@ -490,7 +513,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -542,7 +568,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -567,11 +596,13 @@ export function Token({
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
-            {...textDirectionProps(label)}
+            {...labelDirection}
             {...stylex.props(
               styles.label,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
               isLabelHidden && styles.labelHidden,
             )}>
             {label}

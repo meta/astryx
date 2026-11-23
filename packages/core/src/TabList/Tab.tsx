@@ -111,6 +111,9 @@ const pressedOverlayImage = 'var(--_press-paint-image)';
 const styles = stylex.create({
   base: {
     position: 'relative',
+    // The hover and press layer sits under the label, inside this stacking
+    // context. A strong overlay above the label hides it.
+    isolation: 'isolate',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -137,6 +140,7 @@ const styles = stylex.create({
   },
   hoverBg: {
     position: 'absolute',
+    zIndex: -1,
     inset: 0,
     margin: 'auto',
     width: '100%',
@@ -214,16 +218,22 @@ const styles = stylex.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  // The label and its semibold sizer share one cell. A wrapped label can take
+  // fewer lines than the sizer, so both center in the cell: selection then
+  // does not move the label.
   labelContainer: {
     display: 'inline-grid',
+    textAlign: 'center',
   },
   labelText: {
     gridRowStart: 1,
     gridColumnStart: 1,
+    alignSelf: 'center',
   },
   labelSizer: {
     gridRowStart: 1,
     gridColumnStart: 1,
+    alignSelf: 'center',
     visibility: 'hidden',
     pointerEvents: 'none',
     fontWeight: fontWeightVars['--font-weight-semibold'],

@@ -41,7 +41,7 @@ import {
 import {expandRadiusScale, type RadiusScaleConfig} from './expandRadiusScale';
 import {easeDefaults} from './tokens.stylex';
 import {expandColorScale, type ColorScaleConfig} from './expandColorScale';
-import {deepMergeComponents} from './mergeComponents';
+import {deepMergeComponents, withoutUnsetComponents} from './mergeComponents';
 
 // =============================================================================
 // Types
@@ -144,9 +144,15 @@ export function resolveTokenValue(
 
 /**
  * Resolve a FontWeight name to a var() reference.
- * Named weights map to var(--font-weight-*); raw values pass through.
+ * Named weights map to var(--font-weight-*); other raw values pass through.
+ * A theme written in JavaScript or read from JSON may give a number: it is
+ * written as its text (`700` as `'700'`), so every path that reads the
+ * weight gets a CSS string.
  */
-export function resolveFontWeight(weight: FontWeight): string {
+export function resolveFontWeight(weight: FontWeight | number): string {
+  if (typeof weight === 'number') {
+    return String(weight);
+  }
   const named: Record<string, string> = {
     normal: 'var(--font-weight-normal)',
     medium: 'var(--font-weight-medium)',
@@ -394,7 +400,7 @@ export function resolveThemeValues(
 
   // Components: generated type-scale rules (lowest) → this input's own →
   // all of it over the seed's.
-  let components = input.components;
+  let components = withoutUnsetComponents(input.components);
   if (typeScaleConfig) {
     components = deepMergeComponents(
       generateTypeScaleComponents(typeScaleConfig),

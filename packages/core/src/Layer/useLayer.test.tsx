@@ -38,7 +38,6 @@ import {
   useLayer,
   useLayerInternal,
   getPositionTryFallbacks,
-  getSelfAlignment,
 } from './useLayer';
 import {preserveAnimations} from './preserveAnimations';
 import {getAnchorClearFallbacks} from './layerSlideRules';
@@ -298,39 +297,15 @@ describe('useLayer identity', () => {
 });
 
 describe('getPositionTryFallbacks (issue #3671, spec:AST-059 FR4)', () => {
-  const FLIPS = 'flip-block, flip-inline, flip-block flip-inline';
-  const slides = (p: LayerPlacement, a: LayerAlignment) =>
-    `--astryx-layer-slide-${p}-${a}-same, --astryx-layer-slide-${p}-${a}-opposite`;
-
-  it('appends inline span fallbacks for centered above/below layers so inline overflow can resolve (flip-inline is a no-op on center), then the named slides', () => {
-    expect(getPositionTryFallbacks('above', 'center')).toBe(
-      `${FLIPS}, top span-left, top span-right, bottom span-left, bottom span-right, ${slides('above', 'center')}`,
-    );
-    expect(getPositionTryFallbacks('below', 'center')).toBe(
-      `${FLIPS}, bottom span-left, bottom span-right, top span-left, top span-right, ${slides('below', 'center')}`,
-    );
-  });
-
-  it('appends block span fallbacks for centered start/end layers so block overflow can resolve (flip-block is a no-op on center), then the named slides', () => {
-    expect(getPositionTryFallbacks('start', 'center')).toBe(
-      `${FLIPS}, left span-top, left span-bottom, right span-top, right span-bottom, ${slides('start', 'center')}`,
-    );
-    expect(getPositionTryFallbacks('end', 'center')).toBe(
-      `${FLIPS}, right span-top, right span-bottom, left span-top, left span-bottom, ${slides('end', 'center')}`,
-    );
-  });
-
-  it('gives aligned layers the flips, then the named slide on the same side and on the opposite side', () => {
+  it('gives every layer the flips, then the named slide on the same side and on the opposite side', () => {
     for (const placement of ['above', 'below', 'start', 'end'] as const) {
-      for (const alignment of ['start', 'end'] as const) {
-        expect(getPositionTryFallbacks(placement, alignment)).toBe(
-          `${FLIPS}, ${slides(placement, alignment)}`,
-        );
-      }
+      expect(getPositionTryFallbacks(placement)).toBe(
+        `flip-block, flip-inline, flip-block flip-inline, --astryx-layer-slide-${placement}-same, --astryx-layer-slide-${placement}-opposite`,
+      );
     }
   });
 
-  it('installs the slide rules once in the document head, with the gutter on both alignment-axis edges and the clearance facing the anchor on the landing side', async () => {
+  it('installs the slide rules once in the document head, with insets that span the alignment axis, the gutter on both of its edges, and the clearance facing the anchor on the landing side', async () => {
     const user = userEvent.setup();
     const {container} = render(
       <ContextLayerHarness placement="below" alignment="start" />,
@@ -344,71 +319,67 @@ describe('getPositionTryFallbacks (issue #3671, spec:AST-059 FR4)', () => {
     expect(container.querySelector('style')).toBeNull();
     const css =
       document.getElementById('astryx-layer-slide-rules')?.textContent ?? '';
-    expect(css).toContain(
-      '@position-try --astryx-layer-slide-below-start-same{position-area:self-block-end span-all;margin-block-start:var(--_astryx-layer-clearance, 0px);',
+    // No option uses a position area: it would grow to include an anchor
+    // that runs past the viewport.
+    expect(css).not.toContain('position-area');
+    expect(css).toMatch(
+      /@position-try --astryx-layer-slide-below-same\{inset-block-start:calc\(anchor\(outside\) - [^;]*\);[^}]*align-self:self-start;margin-block-start:var\(--_astryx-layer-clearance, 0px\);/,
     );
-    expect(css).toContain(
-      '@position-try --astryx-layer-slide-below-start-opposite{position-area:self-block-start span-all;margin-block-end:var(--_astryx-layer-clearance, 0px);',
+    expect(css).toMatch(
+      /@position-try --astryx-layer-slide-below-opposite\{inset-block-end:calc\(anchor\(outside\) \+ [^;]*\);[^}]*align-self:self-end;margin-block-end:var\(--_astryx-layer-clearance, 0px\);/,
     );
     expect(css).toMatch(
       /margin-inline-start:[^;]*;margin-inline-start:[^;]*env\(safe-area-inset-left/,
     );
-    expect(css).toContain('inset-inline-start:0;inset-inline-end:0;');
-  });
-
-  it('defaults to above/center when called without arguments (matches renderContext defaults)', () => {
-    expect(getPositionTryFallbacks()).toBe(
-      getPositionTryFallbacks('above', 'center'),
-    );
-    expect(getPositionTryFallbacks(undefined, undefined)).toBe(
-      getPositionTryFallbacks('above', 'center'),
+    expect(css).toContain(
+      'inset-inline-start:0;inset-inline-end:0;justify-self:anchor-center;',
     );
   });
 
-  it('produces well-formed, duplicate-free lists with flips first and axis-correct spans for every placement/alignment combo', () => {
-    const placements: LayerPlacement[] = ['above', 'below', 'start', 'end'];
-    const alignments: LayerAlignment[] = ['start', 'center', 'end'];
-    const spanPattern: Record<LayerPlacement, RegExp> = {
-      above: /^(top|bottom) span-(left|right)$|^--astryx-layer-slide-above-/,
-      below: /^(top|bottom) span-(left|right)$|^--astryx-layer-slide-below-/,
-      start: /^(left|right) span-(top|bottom)$|^--astryx-layer-slide-start-/,
-      end: /^(left|right) span-(top|bottom)$|^--astryx-layer-slide-end-/,
-    };
-    for (const placement of placements) {
-      for (const alignment of alignments) {
-        const items = getPositionTryFallbacks(placement, alignment).split(', ');
-        expect(items.slice(0, 3)).toEqual([
-          'flip-block',
-          'flip-inline',
-          'flip-block flip-inline',
-        ]);
-        expect(new Set(items).size).toBe(items.length);
-        for (const item of items.slice(3)) {
-          expect(item).toMatch(spanPattern[placement]);
-        }
-        expect(items.length).toBe(alignment === 'center' ? 9 : 5);
+  it('defaults to above when called without arguments (matches renderContext defaults)', () => {
+    expect(getPositionTryFallbacks()).toBe(getPositionTryFallbacks('above'));
+    expect(getPositionTryFallbacks(undefined)).toBe(
+      getPositionTryFallbacks('above'),
+    );
+  });
+
+  it('produces well-formed, duplicate-free lists of five options with flips first for every placement', () => {
+    for (const placement of ['above', 'below', 'start', 'end'] as const) {
+      const items = getPositionTryFallbacks(placement).split(', ');
+      expect(items.slice(0, 3)).toEqual([
+        'flip-block',
+        'flip-inline',
+        'flip-block flip-inline',
+      ]);
+      expect(new Set(items).size).toBe(items.length);
+      for (const item of items.slice(3)) {
+        expect(item).toMatch(new RegExp(`^--astryx-layer-slide-${placement}-`));
       }
+      // Chromium tries no more than five options.
+      expect(items).toHaveLength(5);
     }
   });
 
-  it('updates the fallback list when placement/alignment props change on re-render', async () => {
+  it('updates the fallback list and geometry when placement/alignment props change on re-render', async () => {
     const user = userEvent.setup();
     const {container, rerender} = render(
       <ContextLayerHarness placement="above" alignment="center" />,
     );
     await user.click(container.querySelector('button')!);
     const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl.style.positionTryFallbacks).toContain('top span-left');
+    expect(layerEl.style.positionTryFallbacks).toBe(
+      getPositionTryFallbacks('above'),
+    );
+    expect(layerEl.className).toContain('useLayer__styles.centerInline');
 
     rerender(<ContextLayerHarness placement="above" alignment="start" />);
-    expect(layerEl.style.positionTryFallbacks).toBe(
-      getPositionTryFallbacks('above', 'start'),
-    );
+    expect(layerEl.className).toContain('useLayer__styles.alignInlineStart');
 
     rerender(<ContextLayerHarness placement="start" alignment="center" />);
     expect(layerEl.style.positionTryFallbacks).toBe(
-      getPositionTryFallbacks('start', 'center'),
+      getPositionTryFallbacks('start'),
     );
+    expect(layerEl.className).toContain('useLayer__styles.centerBlock');
   });
 
   it('does not apply anchor fallbacks in fixed mode (manual coordinates)', () => {
@@ -423,14 +394,14 @@ describe('getPositionTryFallbacks (issue #3671, spec:AST-059 FR4)', () => {
     expect(layerEl.style.top).toBe('20px');
   });
 
-  it('applies span fallbacks to the rendered popover for the default (above/center) layer', async () => {
+  it('applies the fallbacks to the rendered popover for the default (above/center) layer', async () => {
     const user = userEvent.setup();
     const {container} = render(<ContextLayerHarness />);
     await user.click(container.querySelector('button')!);
     const layerEl = container.querySelector('[popover]') as HTMLElement;
     expect(layerEl).not.toBeNull();
     expect(layerEl.style.positionTryFallbacks).toBe(
-      getPositionTryFallbacks('above', 'center'),
+      getPositionTryFallbacks('above'),
     );
   });
 });
@@ -440,30 +411,28 @@ describe('viewport inset (spec:AST-059)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('caps every anchor-mode layer on the placement axis and keeps the far-edge gutter of its alignment axis (FR1, FR3)', async () => {
+  it('writes its own zero keyboard lift on every anchored layer, so a layer nested in a lifted layer does not inherit the lift (FR9)', async () => {
+    const user = userEvent.setup();
+    const {container} = render(<ContextLayerHarness placement="below" />);
+    await user.click(container.querySelector('button')!);
+    const layerEl = container.querySelector('[popover]') as HTMLElement;
+    expect(layerEl.style.getPropertyValue('--_astryx-layer-lift')).toBe('0px');
+  });
+
+  it('places every anchor-mode layer with anchor insets, caps it, and keeps the gutter on both axes (FR1, FR3)', async () => {
     const user = userEvent.setup();
     const cases: [LayerPlacement, LayerAlignment, string[], string[]][] = [
       [
         'below',
         'start',
-        ['farBelow', 'gutterInlineEnd'],
-        ['gutterInlineStart', 'farAbove'],
+        ['farBelow', 'sideBelow', 'alignInlineStart'],
+        ['alignInlineEnd', 'centerInline', 'farAbove'],
       ],
-      ['below', 'end', ['farBelow', 'gutterInlineStart'], ['gutterInlineEnd']],
-      [
-        'above',
-        'center',
-        ['farAbove', 'gutterInlineStart', 'gutterInlineEnd'],
-        ['farBelow'],
-      ],
-      [
-        'end',
-        'start',
-        ['farEnd', 'gutterBlockEnd'],
-        ['gutterBlockStart', 'farStart'],
-      ],
-      ['start', 'end', ['farStart', 'gutterBlockStart'], ['gutterBlockEnd']],
-      ['end', 'center', ['farEnd', 'gutterBlockStart', 'gutterBlockEnd'], []],
+      ['below', 'end', ['farBelow', 'sideBelow', 'alignInlineEnd'], []],
+      ['above', 'center', ['farAbove', 'sideAbove', 'centerInline'], []],
+      ['end', 'start', ['farEnd', 'sideEnd', 'alignBlockStart'], []],
+      ['start', 'end', ['farStart', 'sideStart', 'alignBlockEnd'], []],
+      ['end', 'center', ['farEnd', 'sideEnd', 'centerBlock'], []],
     ];
     for (const [placement, alignment, present, absent] of cases) {
       const {container, unmount} = render(
@@ -478,12 +447,26 @@ describe('viewport inset (spec:AST-059)', () => {
       for (const key of absent) {
         expect(layerEl.className).not.toContain(`useLayer__styles.${key}`);
       }
-      // The gutter never caps the layer box's inline size: an auto-width
-      // layer shrinks to the room beside its trigger on its own, and a cap on
-      // the box keeps the browser from choosing a flip.
-      expect(layerEl.className).not.toMatch(/useLayer__styles\.maxInline/);
+      // No position area: it would grow to include an anchor that runs past
+      // the viewport, and the layer would follow it off screen.
+      expect(layerEl.getAttribute('style')).not.toContain('position-area');
       unmount();
     }
+  });
+
+  it('holds an aligned edge off the viewport edge by the gutter, and the far edge by its margin (FR1)', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <ContextLayerHarness placement="below" alignment="start" />,
+    );
+    await user.click(container.querySelector('button')!);
+    const layerEl = container.querySelector('[popover]') as HTMLElement;
+    const style = getComputedStyle(layerEl);
+    expect(style.insetInlineStart).toMatch(
+      /^max\(calc\(max\(var\(--spacing-4\), .*anchor\(inside\)\)$/,
+    );
+    expect(style.marginInlineEnd).toContain('var(--spacing-4)');
+    expect(style.justifySelf).toBe('self-start');
   });
 
   it('leaves custom and fixed positioning without the viewport fit (INV3)', () => {
@@ -502,28 +485,12 @@ describe('viewport inset (spec:AST-059)', () => {
     fireEvent.click(container.querySelector('button')!);
     const layerEl = container.querySelector('[popover]') as HTMLElement;
     expect(layerEl.className).not.toContain('useLayer__styles.viewportFit');
-    expect(layerEl.className).not.toMatch(/useLayer__styles\.gutter/);
+    expect(layerEl.className).not.toMatch(
+      /useLayer__styles\.(side|align|center|held)/,
+    );
   });
 
-  it('pins an aligned layer unsafe toward its anchor only while the anchor is out of view (FR4, FR5)', () => {
-    expect(getSelfAlignment('below', 'start', true)).toEqual({});
-    expect(getSelfAlignment('below', 'start', false)).toEqual({
-      justifySelf: 'unsafe self-start',
-    });
-    expect(getSelfAlignment('above', 'end', false)).toEqual({
-      justifySelf: 'unsafe self-end',
-    });
-    expect(getSelfAlignment('end', 'start', false)).toEqual({
-      alignSelf: 'unsafe self-start',
-    });
-    expect(getSelfAlignment('start', 'end', false)).toEqual({
-      alignSelf: 'unsafe self-end',
-    });
-    // Centered layers slide through their span fallbacks and never pin.
-    expect(getSelfAlignment('below', 'center', false)).toEqual({});
-  });
-
-  it('withdraws the slide when the observed anchor leaves the viewport and restores it when it returns (FR5)', async () => {
+  it('holds an aligned layer on its anchor, unsafe, only while the anchor is out of view; the fallback list stays (FR4, FR5)', async () => {
     let notify!: IntersectionObserverCallback;
     const observed: Element[] = [];
     const disconnect = vi.fn();
@@ -550,7 +517,7 @@ describe('viewport inset (spec:AST-059)', () => {
     await user.click(trigger);
     const layerEl = container.querySelector('[popover]') as HTMLElement;
     expect(observed).toEqual([trigger]);
-    expect(layerEl.style.justifySelf).toBe('');
+    expect(layerEl.className).not.toContain('useLayer__styles.heldInlineStart');
 
     act(() => {
       notify(
@@ -558,10 +525,10 @@ describe('viewport inset (spec:AST-059)', () => {
         {} as IntersectionObserver,
       );
     });
-    expect(layerEl.style.justifySelf).toBe('unsafe self-start');
-    // The fallback list stays; only the overflow shift is withdrawn.
+    expect(layerEl.className).toContain('useLayer__styles.heldInlineStart');
+    expect(getComputedStyle(layerEl).justifySelf).toBe('unsafe self-start');
     expect(layerEl.style.positionTryFallbacks).toBe(
-      getPositionTryFallbacks('below', 'start'),
+      getPositionTryFallbacks('below'),
     );
 
     act(() => {
@@ -570,7 +537,46 @@ describe('viewport inset (spec:AST-059)', () => {
         {} as IntersectionObserver,
       );
     });
-    expect(layerEl.style.justifySelf).toBe('');
+    expect(layerEl.className).not.toContain('useLayer__styles.heldInlineStart');
+  });
+
+  it('holds every aligned side and edge, and never a centered layer (FR5)', async () => {
+    class Observer {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe() {
+        this.callback(
+          [{isIntersecting: false} as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Observer);
+    const user = userEvent.setup();
+    const cases: [LayerPlacement, LayerAlignment, string | null][] = [
+      ['below', 'start', 'heldInlineStart'],
+      ['above', 'end', 'heldInlineEnd'],
+      ['end', 'start', 'heldBlockStart'],
+      ['start', 'end', 'heldBlockEnd'],
+      ['below', 'center', null],
+    ];
+    for (const [placement, alignment, held] of cases) {
+      const {container, unmount} = render(
+        <ContextLayerHarness placement={placement} alignment={alignment} />,
+      );
+      await user.click(container.querySelector('button')!);
+      const layerEl = container.querySelector('[popover]') as HTMLElement;
+      if (held == null) {
+        expect(layerEl.className).not.toMatch(/useLayer__styles\.held/);
+      } else {
+        expect(layerEl.className).toContain(`useLayer__styles.${held}`);
+      }
+      unmount();
+    }
   });
 });
 
@@ -1849,6 +1855,178 @@ describe('useLayer', () => {
         'data-open',
       );
     });
+
+    /**
+     * One layer with two triggers, as a view with one popover for many
+     * items has: each press shows the layer from its own trigger, and a
+     * press on the open trigger hides it. `log` records what the parent
+     * sees, as a controlled `onOpenChange` would.
+     */
+    function TwoTriggerHarness({log}: {log: string[]}) {
+      const [openKey, setOpenKey] = useState<string | null>(null);
+      const layer = useLayerInternal({
+        mode: 'context',
+        onHide: () => {
+          log.push('hide');
+          setOpenKey(null);
+        },
+      });
+      const press = (key: string, button: HTMLButtonElement) => {
+        if (layer.isOpen && openKey === key) {
+          layer.hide();
+          return;
+        }
+        log.push(`show ${key}`);
+        setOpenKey(key);
+        layer.ref(button);
+        layer.show();
+      };
+      return (
+        <>
+          {['A', 'B'].map(key => (
+            <button
+              key={key}
+              type="button"
+              onClick={event => press(key, event.currentTarget)}>
+              {key}
+            </button>
+          ))}
+          <span data-testid="open-key">{openKey ?? 'none'}</span>
+          {layer.render(<span>Layer content</span>, {placement: 'below'})}
+        </>
+      );
+    }
+
+    /** A press that the browser's light dismiss answers before its click. */
+    function pressWithLightDismiss(
+      button: HTMLElement,
+      popover: HTMLElement,
+      browserHide: (popover: HTMLElement) => void,
+    ) {
+      fireEvent.pointerDown(button);
+      act(() => browserHide(popover));
+      fireEvent.click(button);
+    }
+
+    it('opens the layer at another trigger when the press on it light-dismissed the layer', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const log: string[] = [];
+      const {container, getByRole, getByTestId} = render(
+        <TwoTriggerHarness log={log} />,
+      );
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      fireEvent.click(getByRole('button', {name: 'A'}));
+      act(() => runToggleTasks());
+      expect(popover).toHaveAttribute('data-open', 'true');
+
+      pressWithLightDismiss(
+        getByRole('button', {name: 'B'}),
+        popover,
+        browserHide,
+      );
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      // The layer moved to B: it is open there, and A's close is not
+      // reported, as a controlled parent would see it.
+      expect(popover).toHaveAttribute('data-open', 'true');
+      expect(getByTestId('open-key')).toHaveTextContent('B');
+      expect(log).toEqual(['show A', 'show B']);
+    });
+
+    it('ends closed when the press on the open trigger light-dismissed the layer', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const log: string[] = [];
+      const {container, getByRole} = render(<TwoTriggerHarness log={log} />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      const a = getByRole('button', {name: 'A'});
+      fireEvent.click(a);
+      act(() => runToggleTasks());
+
+      pressWithLightDismiss(a, popover, browserHide);
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(popover).not.toHaveAttribute('data-open');
+      expect(log.filter(entry => entry === 'hide')).toHaveLength(1);
+    });
+
+    it('keeps a controlled layer and its state in step when another control toggles it during a light dismiss', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      function ControlledHarness() {
+        const [open, setOpen] = useState(false);
+        const layer = useLayerInternal({
+          mode: 'context',
+          onHide: () => setOpen(false),
+        });
+        useLayoutEffect(() => {
+          if (open && !layer.isOpen) {
+            layer.show();
+          } else if (!open && layer.isOpen) {
+            layer.hide();
+          }
+        });
+        return (
+          <>
+            <button type="button" ref={layer.ref}>
+              Anchor
+            </button>
+            <button type="button" onClick={() => setOpen(value => !value)}>
+              Toggle
+            </button>
+            <span data-testid="state">{open ? 'open' : 'closed'}</span>
+            {layer.render(<span>Layer content</span>, {placement: 'below'})}
+          </>
+        );
+      }
+      const {container, getByRole, getByTestId} = render(<ControlledHarness />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      const toggle = getByRole('button', {name: 'Toggle'});
+      fireEvent.click(toggle);
+      act(() => runToggleTasks());
+      expect(popover).toHaveAttribute('data-open', 'true');
+
+      // The press on the control light-dismisses the layer before its click.
+      pressWithLightDismiss(toggle, popover, browserHide);
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(popover).not.toHaveAttribute('data-open');
+      expect(getByTestId('state')).toHaveTextContent('closed');
+    });
+
+    it('fires onHide once for a browser close followed by hide() in the same task', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const onHide = vi.fn();
+      function Harness() {
+        const layer = useLayerInternal({mode: 'context', onHide});
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Trigger
+            </button>
+            <button type="button" onClick={layer.hide}>
+              Hide
+            </button>
+            {layer.render(<span>Layer content</span>, {placement: 'below'})}
+          </>
+        );
+      }
+      const {container, getByRole} = render(<Harness />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+
+      act(() => {
+        browserHide(popover);
+        getByRole('button', {name: 'Hide'}).click();
+      });
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(onHide).toHaveBeenCalledTimes(1);
+      expect(popover).not.toHaveAttribute('data-open');
+    });
   });
 
   describe('the trigger is an anchor only while its layer is shown', () => {
@@ -2643,40 +2821,47 @@ describe('useLayer context positioning', () => {
   // assert the emitted string — the actual RTL geometry is covered by the
   // RTL Storybook story (and was verified against the full 12-cell matrix
   // in a real browser).
-  describe('self-* position-area mapping', () => {
+  describe('logical anchor-inset mapping', () => {
     it.each([
-      // [placement, alignment, expected position-area]
-      ['above', 'start', 'self-block-start span-self-inline-end'],
-      ['above', 'center', 'self-block-start'],
-      ['above', 'end', 'self-block-start span-self-inline-start'],
-      ['below', 'start', 'self-block-end span-self-inline-end'],
-      ['below', 'center', 'self-block-end'],
-      ['below', 'end', 'self-block-end span-self-inline-start'],
-      ['start', 'start', 'self-inline-start span-self-block-end'],
-      ['start', 'center', 'self-inline-start'],
-      ['start', 'end', 'self-inline-start span-self-block-start'],
-      ['end', 'start', 'self-inline-end span-self-block-end'],
-      ['end', 'center', 'self-inline-end'],
-      ['end', 'end', 'self-inline-end span-self-block-start'],
+      // [placement, alignment, placement-axis style, alignment-axis style]
+      ['above', 'start', 'sideAbove', 'alignInlineStart'],
+      ['above', 'center', 'sideAbove', 'centerInline'],
+      ['above', 'end', 'sideAbove', 'alignInlineEnd'],
+      ['below', 'start', 'sideBelow', 'alignInlineStart'],
+      ['below', 'center', 'sideBelow', 'centerInline'],
+      ['below', 'end', 'sideBelow', 'alignInlineEnd'],
+      ['start', 'start', 'sideStart', 'alignBlockStart'],
+      ['start', 'center', 'sideStart', 'centerBlock'],
+      ['start', 'end', 'sideStart', 'alignBlockEnd'],
+      ['end', 'start', 'sideEnd', 'alignBlockStart'],
+      ['end', 'center', 'sideEnd', 'centerBlock'],
+      ['end', 'end', 'sideEnd', 'alignBlockEnd'],
     ] as const)(
-      'placement=%s alignment=%s emits position-area %s',
-      async (placement, alignment, expectedArea) => {
-        const style = await openAndGetStyle(
+      'placement=%s alignment=%s uses %s and %s',
+      async (placement, alignment, side, aligned) => {
+        const user = userEvent.setup();
+        const {container, getByRole} = render(
           <Harness placement={placement} alignment={alignment} />,
         );
-        expect(style).toMatch(
-          new RegExp(`position-area: ${expectedArea}(;|$)`),
-        );
-        expect(style).not.toContain('justify-self');
+        await user.click(getByRole('button', {name: 'trigger'}));
+        const layerEl = container.querySelector('[popover]') as HTMLElement;
+        expect(layerEl.className).toContain(`useLayer__styles.${side}`);
+        expect(layerEl.className).toContain(`useLayer__styles.${aligned}`);
+        expect(layerEl.getAttribute('style')).not.toContain('position-area');
       },
     );
 
-    it('emits the same string regardless of trigger direction', async () => {
+    it('emits the same geometry regardless of trigger direction', async () => {
       const user = userEvent.setup();
+      const geometry = (el: Element | null) =>
+        (el?.className ?? '')
+          .split(' ')
+          .filter(name => /useLayer__styles\.(side|align|center)/.test(name))
+          .sort()
+          .join(' ');
       const first = render(<Harness placement="below" alignment="start" />);
       await user.click(first.getByRole('button', {name: 'trigger'}));
-      const ltr =
-        first.container.querySelector('[popover]')?.getAttribute('style') ?? '';
+      const ltr = geometry(first.container.querySelector('[popover]'));
       first.unmount();
 
       const second = render(
@@ -2688,14 +2873,11 @@ describe('useLayer context positioning', () => {
         />,
       );
       await user.click(second.getByRole('button', {name: 'trigger'}));
-      const rtl =
-        second.container.querySelector('[popover]')?.getAttribute('style') ??
-        '';
-      // The unique position-anchor id differs per render; the placement
-      // mapping must not.
-      const positionArea = (s: string) => s.match(/position-area:[^;]*/)?.[0];
-      expect(positionArea(rtl)).toBeDefined();
-      expect(positionArea(rtl)).toBe(positionArea(ltr));
+      const rtl = geometry(second.container.querySelector('[popover]'));
+      // Logical insets resolve against the layer's own direction, so the
+      // mapping is the same in both directions.
+      expect(ltr).not.toBe('');
+      expect(rtl).toBe(ltr);
     });
 
     it('keeps position-try fallbacks intact', async () => {
@@ -3377,7 +3559,7 @@ describe('a touch that pans outside an open light-dismiss layer', () => {
     const layer = useLayerInternal({
       mode: 'context',
       lightDismiss: true,
-      watchesOutsidePans: ownsOutsidePan ? undefined : watchOutsidePans,
+      watchesOutside: ownsOutsidePan ? undefined : watchOutsidePans,
     });
     return (
       <>
@@ -3588,31 +3770,32 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // Beside: an inline side spanning the block axis, at the content's own
     // inline size so a content-sized layer cannot squeeze into a sliver.
     expect(css).toContain(
-      '@position-try --astryx-layer-beside-end{position-area:self-inline-end span-all;margin-inline-start:var(--_astryx-layer-clearance, 0px);',
+      '@position-try --astryx-layer-beside-end{inset-inline-start:anchor(outside);inset-inline-end:0;justify-self:self-start;margin-inline-start:var(--_astryx-layer-clearance, 0px);',
     );
     expect(css).toMatch(
       /@position-try --astryx-layer-beside-start\{[^}]*inline-size:max-content;/,
     );
-    // Fit: sized to the room on its side and never less than half of the
-    // room the trigger leaves on the block axis, so it fits only on the
+    // Fit: stretched to the room on its side and never less than half of
+    // the room the trigger leaves on the block axis, so it fits only on the
     // roomier side. No option is sized to whatever room is left: a browser
     // keeps an open layer on its last option while that still fits.
-    for (const [side, area] of [
-      ['above', 'self-block-start'],
-      ['below', 'self-block-end'],
+    for (const [side, edge] of [
+      ['above', 'inset-block-end'],
+      ['below', 'inset-block-start'],
     ]) {
       expect(css).toMatch(
         new RegExp(
-          `@position-try --astryx-layer-fit-${side}\\{position-area:${area} span-all;[^}]*block-size:max\\(calc\\(100% - [^}]*anchor-size\\(block\\)[^}]*100dvb`,
+          `@position-try --astryx-layer-fit-${side}\\{${edge}:calc\\(anchor\\(outside\\)[^}]*block-size:stretch;[^}]*min-block-size:calc\\(\\(100dvb - anchor-size\\(block\\)\\) / 2`,
         ),
       );
     }
+    expect(css).not.toContain('position-area');
     expect(css).not.toMatch(/--astryx-layer-fit-[a-z]+-roomier/);
     expect(css.match(/@position-try --astryx-layer-fit-/g)).toHaveLength(2);
     // Every option aligns unsafe toward the anchor on the placement axis, so
     // a box that runs out of room overflows away from the anchor.
     expect(css).toMatch(
-      /@position-try --astryx-layer-beside-end\{[^}]*align-self:normal;justify-self:unsafe self-start;\}/,
+      /@position-try --astryx-layer-beside-end\{[^}]*align-self:anchor-center;[^}]*justify-self:unsafe self-start;\}/,
     );
     expect(css).toMatch(
       /@position-try --astryx-layer-beside-start\{[^}]*justify-self:unsafe self-end;\}/,
@@ -3644,9 +3827,9 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // A side placement keeps the standard list.
     rerender(<ClearHarness placement="end" />);
     expect(layerEl.style.positionTryFallbacks).toBe(
-      getPositionTryFallbacks('end', 'center'),
+      getPositionTryFallbacks('end'),
     );
-    expect(layerEl.style.alignSelf).toBe('');
+    expect(layerEl.style.alignSelf).toBe('anchor-center');
   });
 
   it('places the shown layer afresh from its list when it covers its trigger', async () => {
@@ -4080,6 +4263,54 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     });
   });
 
+  it('moves the owner\u2019s outside watch to a layer element remounted while open', async () => {
+    const started: Element[] = [];
+    const stopped: Element[] = [];
+    const watchesOutside = (layerElement: HTMLElement) => {
+      started.push(layerElement);
+      return () => stopped.push(layerElement);
+    };
+    function MovingWatchHarness({isMoved}: {isMoved: boolean}) {
+      const layer = useLayerInternal({mode: 'context', watchesOutside});
+      const rendered = layer.render(<span>Layer content</span>);
+      return (
+        <>
+          <button type="button" ref={layer.ref} onClick={layer.show}>
+            Trigger
+          </button>
+          {isMoved ? (
+            <section data-testid="second-host">{rendered}</section>
+          ) : (
+            <div data-testid="first-host">{rendered}</div>
+          )}
+        </>
+      );
+    }
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      this.dataset.open = 'true';
+    });
+    const {container, getByRole, rerender} = render(
+      <MovingWatchHarness isMoved={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    const first = await waitFor(() => {
+      const layer = container.querySelector('[popover]');
+      expect(layer).toHaveAttribute('data-open', 'true');
+      return layer;
+    });
+    expect(started).toEqual([first]);
+
+    rerender(<MovingWatchHarness isMoved />);
+
+    await waitFor(() => {
+      const layer = container.querySelector('[popover]');
+      expect(layer).not.toBe(first);
+      expect(layer).toHaveAttribute('data-open', 'true');
+      expect(started).toEqual([first, layer]);
+    });
+    expect(stopped).toEqual([first]);
+  });
+
   it('leaves a standard layer on the standard list alone', async () => {
     const user = userEvent.setup();
     placeBoxes(TRIGGER, rect(16, 350, 688, 300));
@@ -4088,9 +4319,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const layerEl = container.querySelector('[popover]') as HTMLElement;
     expect(placedAfresh()).toBe(0);
     expect(layerEl.style.positionTryFallbacks).toBe(
-      getPositionTryFallbacks('above', 'center'),
+      getPositionTryFallbacks('above'),
     );
-    expect(layerEl.style.alignSelf).toBe('');
+    // The standard layer aligns toward its anchor, not unsafe.
+    expect(layerEl.style.alignSelf).toBe('self-end');
     expect(layerEl.className).not.toContain(
       'useLayer__styles.scrollsOnOverflow',
     );
@@ -4600,8 +4832,67 @@ describe('show() anchor readiness (#5398)', () => {
     expect(getByTestId('state')).toHaveTextContent('closed');
   });
 
-  it('waits for the dialog around the trigger to be open, even though the trigger has a box', async () => {
-    function DialogHarness() {
+  it('waits for a dialog that opens in the Effects of the commit that displayed it', async () => {
+    // As Dialog does: the element renders displayed, and an Effect that runs
+    // after the trigger's layout Effect opens it (`showModal()` sets `open`).
+    const dialogOpenAtShow: boolean[] = [];
+    const showLatest: {current: () => void} = {current: () => {}};
+    function OpeningDialogHarness({isOpen}: {isOpen: boolean}) {
+      const layer = useLayerInternal({mode: 'context'});
+      showLatest.current = layer.show;
+      useLayoutEffect(() => {
+        if (isOpen) {
+          showLatest.current();
+        }
+      }, [isOpen]);
+      useEffect(() => {
+        if (isOpen) {
+          document
+            .querySelector('[data-testid="dialog"]')
+            ?.setAttribute('open', '');
+        }
+      }, [isOpen]);
+      return (
+        <>
+          <dialog data-testid="dialog">
+            <button type="button" data-testid="a" ref={layer.ref}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId, rerender} = render(
+      <OpeningDialogHarness isOpen={false} />,
+    );
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+    const dialog = getByTestId('dialog') as HTMLDialogElement;
+    const originalShowPopover = HTMLElement.prototype.showPopover;
+    HTMLElement.prototype.showPopover = vi.fn(() => {
+      dialogOpenAtShow.push(dialog.open);
+    });
+    try {
+      rerender(<OpeningDialogHarness isOpen />);
+      // The dialog's `open` attribute is the signal; its record arrives in a
+      // microtask.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      flushFrame();
+      expect(getByTestId('state')).toHaveTextContent('open');
+      // The layer went into the top layer after the dialog, never before it.
+      expect(dialogOpenAtShow).toEqual([true]);
+    } finally {
+      HTMLElement.prototype.showPopover = originalShowPopover;
+    }
+  });
+
+  it('opens within the press on a trigger in a closed dialog that renders and stays closed through the next commit', () => {
+    // A `<dialog>` the page displays in flow while it stays closed never
+    // enters the top layer, so its trigger is a valid anchor.
+    function InFlowDialogHarness() {
       const layer = useLayerInternal({mode: 'context'});
       return (
         <>
@@ -4619,29 +4910,123 @@ describe('show() anchor readiness (#5398)', () => {
         </>
       );
     }
-    const {getByTestId} = render(<DialogHarness />);
+    const {getByTestId} = render(<InFlowDialogHarness />);
     boxes.set(getByTestId('a'), {width: 80, height: 24});
 
     fireEvent.click(getByTestId('a'));
-    signal();
-    flushFrame();
-    expect(getByTestId('state')).toHaveTextContent('closed');
+    // The commit after the press runs within the press. It finds the dialog
+    // still closed, so the layer opens there, with no frame.
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(frames).toHaveLength(0);
+    expect(getByTestId('dialog')).not.toHaveAttribute('open');
+  });
 
-    // The dialog goes modal: its `open` attribute is the signal.
+  it('keeps one wait for a controlled layer that calls show() on each render inside a closed dialog', () => {
+    // Popover's controlled sync calls show() in a layout Effect on each render
+    // while the layer is closed. The commit that the wait asks for runs that
+    // Effect again, and the layer opens in that commit.
+    let renders = 0;
+    function ControlledInFlowHarness({isOpen}: {isOpen: boolean}) {
+      renders += 1;
+      const layer = useLayerInternal({mode: 'context'});
+      useLayoutEffect(() => {
+        if (isOpen && !layer.isOpen) {
+          layer.show();
+        }
+      });
+      return (
+        <>
+          <dialog data-testid="dialog">
+            <button type="button" data-testid="a" ref={layer.ref}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId, rerender} = render(
+      <ControlledInFlowHarness isOpen={false} />,
+    );
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+    const rendersBefore = renders;
+
+    rerender(<ControlledInFlowHarness isOpen />);
+    // One render for the new prop, one for the commit the wait asked for, and
+    // one for the open that commit decided. No frame runs before it.
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(renders - rendersBefore).toBe(3);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('keeps the settle wait when a controlled layer calls show() again as its dialog opens', async () => {
+    // As Dialog does, an Effect opens the dialog after the trigger's layout
+    // Effect. The commit that the wait asks for calls show() again, as
+    // Popover's controlled sync does. A restart there would find the dialog
+    // open and skip the wait for the dialog's entry animation.
+    let finish = () => {};
+    function OpeningControlledHarness({isOpen}: {isOpen: boolean}) {
+      const layer = useLayerInternal({mode: 'context'});
+      useLayoutEffect(() => {
+        if (isOpen && !layer.isOpen) {
+          layer.show();
+        }
+      });
+      useEffect(() => {
+        if (isOpen) {
+          document
+            .querySelector('[data-testid="dialog"]')
+            ?.setAttribute('open', '');
+        }
+      }, [isOpen]);
+      return (
+        <>
+          <dialog data-testid="dialog">
+            <button type="button" data-testid="a" ref={layer.ref}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId, rerender} = render(
+      <OpeningControlledHarness isOpen={false} />,
+    );
+    const trigger = getByTestId('a');
+    boxes.set(trigger, {width: 80, height: 24});
+    animations.push({
+      effect: new FakeKeyframeEffect(getByTestId('dialog')),
+      timeline: document.timeline,
+      playState: 'running',
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    });
+
+    rerender(<OpeningControlledHarness isOpen />);
     await act(async () => {
-      getByTestId('dialog').setAttribute('open', '');
       await Promise.resolve();
     });
     flushFrame();
+    // The dialog is open, and its entry animation still runs.
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
     expect(getByTestId('state')).toHaveTextContent('open');
   });
 
-  it('opens once a non-modal dialog shown as a popover (a Drawer) is showing', () => {
-    function DrawerHarness() {
+  it('waits while a closed dialog around the trigger is not displayed, and opens once it is', () => {
+    function HiddenDialogHarness() {
       const layer = useLayerInternal({mode: 'context'});
       return (
         <>
-          <dialog data-testid="drawer">
+          <dialog data-testid="dialog">
             <button
               type="button"
               data-testid="a"
@@ -4655,9 +5040,61 @@ describe('show() anchor readiness (#5398)', () => {
         </>
       );
     }
-    const {getByTestId} = render(<DrawerHarness />);
-    const drawer = getByTestId('drawer');
+    const {getByTestId} = render(<HiddenDialogHarness />);
+
+    // No box: the dialog is `display: none`, and nothing asks for a commit.
+    fireEvent.click(getByTestId('a'));
+    signal();
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    // The page displays it, closed: the next signal sees the box, and the
+    // commit after it decides. The box came after show(), so the settle frame
+    // comes next, and the layer opens after it.
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+    signal();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('opens once a non-modal dialog shown as a popover (a Drawer) is showing', () => {
+    // As Drawer does: the element renders displayed. An Effect that runs after
+    // the trigger's layout Effect shows it with `showPopover()`. That never
+    // sets `open`, so the `toggle` event is the signal.
     let isShowing = false;
+    const showingAtShow: boolean[] = [];
+    const showLatest: {current: () => void} = {current: () => {}};
+    function DrawerHarness({isOpen}: {isOpen: boolean}) {
+      const layer = useLayerInternal({mode: 'context'});
+      showLatest.current = layer.show;
+      useLayoutEffect(() => {
+        if (isOpen) {
+          showLatest.current();
+        }
+      }, [isOpen]);
+      useEffect(() => {
+        if (isOpen) {
+          isShowing = true;
+          document
+            .querySelector('[data-testid="drawer"]')
+            ?.dispatchEvent(new Event('toggle'));
+        }
+      }, [isOpen]);
+      return (
+        <>
+          <dialog data-testid="drawer">
+            <button type="button" data-testid="a" ref={layer.ref}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId, rerender} = render(<DrawerHarness isOpen={false} />);
+    const drawer = getByTestId('drawer');
     const originalMatches = drawer.matches.bind(drawer);
     Object.defineProperty(drawer, 'matches', {
       configurable: true,
@@ -4665,19 +5102,18 @@ describe('show() anchor readiness (#5398)', () => {
         selector === ':popover-open' ? isShowing : originalMatches(selector),
     });
     boxes.set(getByTestId('a'), {width: 80, height: 24});
-
-    fireEvent.click(getByTestId('a'));
-    signal();
-    flushFrame();
-    expect(getByTestId('state')).toHaveTextContent('closed');
-
-    // `showPopover()` never sets `open`; the `toggle` event is the signal.
-    isShowing = true;
-    act(() => {
-      drawer.dispatchEvent(new Event('toggle'));
+    const originalShowPopover = HTMLElement.prototype.showPopover;
+    HTMLElement.prototype.showPopover = vi.fn(() => {
+      showingAtShow.push(isShowing);
     });
-    flushFrame();
-    expect(getByTestId('state')).toHaveTextContent('open');
+    try {
+      rerender(<DrawerHarness isOpen />);
+      flushFrame();
+      expect(getByTestId('state')).toHaveTextContent('open');
+      expect(showingAtShow).toEqual([true]);
+    } finally {
+      HTMLElement.prototype.showPopover = originalShowPopover;
+    }
   });
 
   it('hide() cancels a settle wait that is already pending', async () => {

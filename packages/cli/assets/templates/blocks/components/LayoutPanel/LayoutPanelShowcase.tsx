@@ -15,7 +15,7 @@ import {List, ListItem} from '@astryxdesign/core/List';
 
 export default function LayoutPanelShowcase() {
   return (
-    <Center width={400}>
+    <Center width={400} maxWidth="100%">
       <Layout
         style={{width: '100%'}}
         height="fill"

@@ -2,12 +2,60 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  matchWholeName,
   nameWords,
   orderByAffinity,
+  orderDocSuggestions,
   orderRouteSuggestions,
   rankComponentSuggestions,
   synonymMatches,
 } from './suggest-order.mjs';
+
+describe('matchWholeName', () => {
+  const names = ['kanban-board', 'dashboard', 'detail-page', 'ide', 'editor'];
+
+  it('reads a name in any case or separator as that name', () => {
+    expect(matchWholeName('KanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanban_board', names)).toBe('kanban-board');
+    expect(matchWholeName('Kanban Boards', names)).toBe('kanban-board');
+  });
+
+  it('reads one slip in a long name as that name', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('kanban bord', names)).toBe('kanban-board');
+  });
+
+  it('allows no slip in a short name', () => {
+    expect(matchWholeName('ida', names)).toBeNull();
+    expect(matchWholeName('edito', names)).toBeNull();
+  });
+
+  it('reads a separator, a plural or a singular as the same words', () => {
+    expect(matchWholeName('kanban-board', names)).toBe('kanban-board');
+    expect(matchWholeName('detail pages', names)).toBe('detail-page');
+    expect(matchWholeName('setting', ['settings'])).toBe('settings');
+  });
+
+  it('counts a swap, a missing letter and a wrong letter as one slip', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('dashoard', names)).toBe('dashboard');
+    expect(matchWholeName('dashbeard', names)).toBe('dashboard');
+    expect(matchWholeName('dshbaord', names)).toBeNull();
+  });
+
+  it('answers null when two names share the exact words', () => {
+    expect(
+      matchWholeName('data table', ['data-table', 'DataTable']),
+    ).toBeNull();
+  });
+
+  it('answers null when more than one name is that close', () => {
+    expect(
+      matchWholeName('detail pane', ['detail-page', 'detail-pine']),
+    ).toBeNull();
+  });
+});
 
 describe('nameWords', () => {
   it('reads every spelling of a name as the same words', () => {
@@ -140,6 +188,85 @@ describe('rankComponentSuggestions', () => {
     'SideRailItem',
     'Sheet',
   ];
+
+  it('ranks a name that is a typed word above a keyword-only match of it', () => {
+    // `Widgetry` is the first typed word; `RoundPanel` matched it only through
+    // a keyword, and carries the other typed word in its name.
+    // `Widgetry` covers more of the typed letters than `Panel`.
+    const names = ['Widgetry', 'RoundPanel', 'Panel'];
+    const results = [
+      {
+        name: 'RoundPanel',
+        score: 70,
+        reason: 'keyword "widgetry"',
+        keywordAt: 2,
+      },
+      {name: 'Widgetry', score: 60, reason: 'name contains "widgetry"'},
+    ];
+    expect(
+      rankComponentSuggestions('WidgetryPanel', results, names).map(
+        r => r.name,
+      ),
+    ).toEqual(['Widgetry', 'Panel', 'RoundPanel']);
+  });
+
+  it('adds a name that is a typed word even when nothing scored it', () => {
+    const names = ['Fizz', 'LiveCanvasHolder'];
+    const results = [
+      {
+        name: 'LiveCanvasHolder',
+        score: 70,
+        reason: 'keyword "holder"',
+        keywordAt: 0,
+      },
+    ];
+    expect(
+      rankComponentSuggestions('FizzHolder', results, names).map(r => r.name),
+    ).toEqual(['Fizz', 'LiveCanvasHolder']);
+  });
+
+  it('adds no name part when no keyword matched', () => {
+    const names = ['Fizz', 'FizzHold'];
+    const results = [
+      {name: 'FizzHold', score: 80, reason: 'similar name (distance 1)'},
+    ];
+    expect(
+      rankComponentSuggestions('FizzHolder', results, names).map(r => r.name),
+    ).toEqual(['FizzHold']);
+  });
+
+  it('keeps a one-letter typo of a name above a name that is a typed word', () => {
+    const names = ['Gizmo', 'GizmoPanel'];
+    const results = [
+      {name: 'GizmoPanel', score: 80, reason: 'similar name (distance 1)'},
+      {name: 'Thing', score: 70, reason: 'keyword "panel"', keywordAt: 0},
+    ];
+    expect(
+      rankComponentSuggestions('Gizmo Panl', results, names).map(r => r.name),
+    ).toEqual(['GizmoPanel', 'Gizmo', 'Thing']);
+  });
+
+  it('breaks a tie by the name with the fewest words beyond the typed ones', () => {
+    const names = ['XyBeaconBadge', 'BeaconDot'];
+    const results = [
+      {name: 'XyBeaconBadge', score: 90, reason: 'keyword', keywordAt: 0},
+      {name: 'BeaconDot', score: 90, reason: 'keyword', keywordAt: 3},
+    ];
+    expect(
+      rankComponentSuggestions('Beacon', results, names).map(r => r.name),
+    ).toEqual(['BeaconDot', 'XyBeaconBadge']);
+  });
+
+  it('leaves the order of a typo alone when no name carries the typed word', () => {
+    const names = ['VPile', 'Pile'];
+    const results = [
+      {name: 'Pile', score: 80, reason: 'similar name (distance 1)'},
+      {name: 'VPile', score: 80, reason: 'similar name (distance 1)'},
+    ];
+    expect(
+      rankComponentSuggestions('Vile', results, names).map(r => r.name),
+    ).toEqual(['VPile', 'Pile']);
+  });
 
   it('breaks a tie by where the typed name sits in the keywords', () => {
     const results = [
@@ -348,5 +475,79 @@ describe('orderByAffinity with typos', () => {
         order(typed, false).length,
       );
     }
+  });
+});
+
+describe('orderRouteSuggestions with slipFrom', () => {
+  const routes = ['alpha', 'card', 'motion', 'cart'].map(name => ({name}));
+  /** @param {string} typed @param {{name: string}[]} [list] */
+  const order = (typed, list = routes) =>
+    orderRouteSuggestions(typed, list, {
+      closest: true,
+      typos: true,
+      slipFrom: 4,
+    }).map(s => s.name);
+
+  it('puts a four-letter name one slip away first', () => {
+    expect(order('crad')).toEqual(['card', 'alpha', 'motion', 'cart']);
+    expect(
+      orderRouteSuggestions('crad', routes, {closest: true, typos: true}).map(
+        s => s.name,
+      ),
+    ).toEqual(['alpha', 'card', 'motion', 'cart']);
+  });
+
+  it('keeps the given order between equally near names', () => {
+    expect(order('carx')).toEqual(['card', 'cart', 'alpha', 'motion']);
+    expect(order('carx', [...routes].reverse())).toEqual([
+      'cart',
+      'card',
+      'motion',
+      'alpha',
+    ]);
+  });
+});
+
+describe('orderDocSuggestions', () => {
+  const pages = {
+    garden: {title: 'Garden', keywords: ['plants']},
+    'garden/compost': {title: 'Compost', keywords: ['soil']},
+    'garden/watering': {title: 'Water the beds', keywords: ['irrigation']},
+    'kitchen/pickling': {title: 'Pickle vegetables', keywords: ['brine']},
+    'kitchen/storage': {title: 'Store produce', keywords: ['garden produce']},
+  };
+  const items = Object.keys(pages).map(name => ({name}));
+  /** @param {string} typed @param {boolean} [closest] */
+  const order = (typed, closest = true) =>
+    orderDocSuggestions(typed, items, {
+      closest,
+      titleOf: i => pages[/** @type {keyof typeof pages} */ (i.name)].title,
+      keywordsOf: i =>
+        pages[/** @type {keyof typeof pages} */ (i.name)].keywords,
+    }).map(i => i.name);
+
+  it('finds a page by its title words', () => {
+    expect(order('pickled vegetable')[0]).toBe('kitchen/pickling');
+    expect(order('watering beds')[0]).toBe('garden/watering');
+  });
+
+  it('finds a page by a keyword it declares', () => {
+    expect(order('irrigation')).toEqual(['garden/watering']);
+    expect(order('brine')).toEqual(['kitchen/pickling']);
+  });
+
+  it('puts route or title evidence before a keyword of the same strength', () => {
+    expect(order('compost soil', false)[0]).toBe('garden/compost');
+  });
+
+  it('puts the broader page first and leaves out a child its parent matches as well', () => {
+    expect(order('garden tools')).toEqual(['garden', 'kitchen/storage']);
+  });
+
+  it('only reorders without closest', () => {
+    expect([...order('zzz', false)].sort()).toEqual(
+      items.map(i => i.name).sort(),
+    );
+    expect(order('zzz')).toHaveLength(items.length);
   });
 });

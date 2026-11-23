@@ -43,7 +43,7 @@ const BLOCKS = 'p, div, li, br, h1, h2, h3, h4, h5, h6';
  * placed directly in the element, beside its child elements, counts as a block
  * too (a status bar is an icon followed by its bare message).
  */
-function blockText(element: HTMLElement): string {
+function blockText(element: HTMLElement, exclude?: string): string {
   return Array.from(element.childNodes)
     .map(child => {
       if (child.nodeType === Node.TEXT_NODE) {
@@ -54,7 +54,10 @@ function blockText(element: HTMLElement): string {
       // constructor checks.
       if (child.nodeType === Node.ELEMENT_NODE) {
         const part = child as HTMLElement;
-        return part.matches(HIDDEN) ? '' : renderedText(part);
+        return part.matches(HIDDEN) ||
+          (exclude != null && part.matches(exclude))
+          ? ''
+          : renderedText(part, exclude);
       }
       return '';
     })
@@ -84,6 +87,16 @@ export interface AnnounceRenderedTextOptions {
    * while not yet exposed. Defaults to this hook's own instance.
    */
   announce?: AnnounceFn;
+  /**
+   * A selector for subtrees to leave out of the text, such as the controls in
+   * a custom layout. Applied to the element's descendants.
+   */
+  exclude?: string;
+  /**
+   * Speak once per occasion. Text that changes later under the same occasion
+   * stays silent, as a notification is announced once when it is shown.
+   */
+  isOncePerOccasion?: boolean;
 }
 
 /**
@@ -91,9 +104,10 @@ export interface AnnounceRenderedTextOptions {
  * boxes read apart: a block tag, an element whose computed display is not
  * inline, and any child of a flex or grid container (which the layout
  * blockifies), so two stacked `Text` spans never run together. Hidden parts
- * are skipped; nothing on screen changes.
+ * are skipped, and so are descendants that match `exclude`; nothing on screen
+ * changes. Reads the live element, so computed display resolves.
  */
-export function renderedText(element: HTMLElement): string {
+export function renderedText(element: HTMLElement, exclude?: string): string {
   const view = element.ownerDocument.defaultView;
   const displayOf = (node: Element) =>
     view?.getComputedStyle(node).display ?? '';
@@ -107,7 +121,7 @@ export function renderedText(element: HTMLElement): string {
       return;
     }
     const part = node as Element;
-    if (part.matches(HIDDEN)) {
+    if (part.matches(HIDDEN) || (exclude != null && part.matches(exclude))) {
       return;
     }
     const display = displayOf(part);
@@ -134,9 +148,11 @@ export function renderedText(element: HTMLElement): string {
  * Announce the text of a rendered element through the shared polite live
  * region, once per occasion.
  *
- * Announces when the element appears and whenever its rendered text changes.
+ * Announces when the element appears and whenever its rendered text changes,
+ * or only when it appears for an occasion with `isOncePerOccasion`.
  * Pass `isShown: false` for every state where the element is not on screen —
- * including while loading — and the hook stays silent and re-arms.
+ * including while loading — and the hook stays silent and re-arms. With
+ * `isOncePerOccasion`, only a new occasion re-arms it.
  *
  * @param ref - The element whose rendered text to speak
  * @param isShown - Whether that element is currently on screen
@@ -159,11 +175,14 @@ export function useAnnounceRenderedText(
     politeness = 'polite',
     fallbackText,
     announce: ownerAnnounce,
+    exclude,
+    isOncePerOccasion = false,
   }: AnnounceRenderedTextOptions = {},
 ): void {
   const ownAnnounce = useAnnounce();
   const announce = ownerAnnounce ?? ownAnnounce;
   const spokenRef = useRef<string | null>(null);
+  const announcedOccasionRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or
   // hydrated from server HTML, is part of the page the person arrived at.
@@ -194,7 +213,9 @@ export function useAnnounceRenderedText(
     if (skipFirstRender && element.parentElement?.closest(LIVE_CONTAINER)) {
       return;
     }
-    let text = skipFirstRender ? blockText(element) : renderedText(element);
+    let text = skipFirstRender
+      ? blockText(element, exclude)
+      : renderedText(element, exclude);
     if (text === '' && fallbackText !== undefined) {
       text =
         (element.getAttribute('aria-labelledby') ?? '')
@@ -219,6 +240,10 @@ export function useAnnounceRenderedText(
       return;
     }
     spokenRef.current = spoken;
+    if (isOncePerOccasion && announcedOccasionRef.current === occasion) {
+      return;
+    }
+    announcedOccasionRef.current = occasion;
     const isPageLoad =
       (isFirstRun && renderedWithPage) || document.readyState !== 'complete';
     if (skipFirstRender && isPageLoad) {

@@ -3,6 +3,9 @@
 import type * as React from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Grid} from '@astryxdesign/core/Grid';
+import {HStack, VStack} from '@astryxdesign/core/Stack';
+import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof Badge> = {
   title: 'Core/Badge',
@@ -250,6 +253,33 @@ export const LargerText: Story = {
           style={{width: 52, outline: '1px dashed var(--color-border)'}}>
           <Badge variant="info" label={3} />
         </div>
+      </div>
+    </div>
+  ),
+};
+
+// A badge is as wide as its label wherever it sits. A grid cell and the cross
+// axis of a vertical stack stretch a child by default; a badge keeps its own
+// width in both. In a row with too little room, it still shrinks and ends its
+// label with an ellipsis, inside the row (component:Badge FR3).
+export const InLayouts: Story = {
+  name: 'In layouts',
+  render: () => (
+    <div
+      style={{display: 'flex', flexDirection: 'column', gap: 24, width: 320}}>
+      <Grid data-testid="badge-in-grid" columns={2} gap={2}>
+        <Badge variant="success" label="Shipped" />
+        <Badge label="Ready" />
+      </Grid>
+      <VStack data-testid="badge-in-vstack" gap={2}>
+        <Badge variant="warning" label="Review" />
+        <Text type="body">The release waits for one more review.</Text>
+      </VStack>
+      <div style={{width: 220}}>
+        <HStack data-testid="badge-in-hstack" gap={2} vAlign="center">
+          <span style={{flex: 'none', width: 160}}>Messages waiting</span>
+          <Badge variant="info" label="Waiting for review" />
+        </HStack>
       </div>
     </div>
   ),

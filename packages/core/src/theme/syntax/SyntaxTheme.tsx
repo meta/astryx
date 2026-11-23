@@ -19,10 +19,14 @@ import {
   type SyntaxThemeDefinition,
   type SyntaxThemeTokenKey,
 } from './defineSyntaxTheme';
-import {useMediaQuery} from '../../hooks/useMediaQuery';
 import {useTheme} from '../useTheme';
 import {formatColor, parseColor} from '../../utils/color';
 import {createSharedContext} from '../../utils/sharedContext';
+import {devPropError} from '../../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 // =============================================================================
 // Context
@@ -98,8 +102,8 @@ function mixWithTransparent(
 export function useSyntaxTheme(): UseSyntaxThemeReturn | null {
   const ctx = use(SyntaxThemeContext);
   const page = useTheme();
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const effectiveMode: 'light' | 'dark' = prefersDark ? 'dark' : 'light';
+  // The nearest Theme's effective mode, the side the code blocks paint.
+  const effectiveMode = page.mode;
 
   const tokens = useMemo(() => {
     if (!ctx) {
@@ -166,6 +170,13 @@ export function SyntaxTheme({
   theme,
   children,
 }: SyntaxThemeProps): React.ReactElement {
+  if (process.env.NODE_ENV !== 'production' && theme == null) {
+    throw devPropError(
+      'SyntaxTheme',
+      'theme',
+      'is required: a theme from defineSyntaxTheme(), for example <SyntaxTheme theme={myTheme}>.',
+    );
+  }
   const style = useMemo(() => syntaxThemeStyle(theme), [theme]);
   const value = useMemo(() => ({theme}), [theme]);
 

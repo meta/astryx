@@ -6,8 +6,9 @@
  * @file inputHold.ts
  * @input A layer root, what ends its hold (a promise or an animator handle),
  *   and the hold's scope
- * @output holdInput, holdsTouch, isInHeldLayer and isInputShield: input held
- *   away from a layer while it presents or dismisses
+ * @output holdInput, holdsTouch, isInHeldLayer, isInputShield, LATE_PRESS_MS
+ *   and LATE_RELEASE_FRAMES: input held away from a layer while it presents
+ *   or dismisses, or while it dismisses with focus kept inside
  * @position The Layer module's one input hold, for components whose layer
  *   presents under a finger
  *
@@ -27,14 +28,24 @@ import {
   subscribeInput,
   type MousePoint,
 } from '../utils/inputStream';
+import {timeOn} from '../utils/inputAge';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {
+  hasLayerRootWithin,
+  isLayerRoot,
+} from '../privateAttributes/layerRoot.stylex';
+import {notifyTopLayerEntry} from './modalOutlet';
 
 /**
  * What a hold does. `'viewport'` and `'layer'` add one shield over the whole
  * viewport. `'layer'` also makes the layer's content inert and moves focus
- * out of it. `'surface'` shields only the layer's own box, and the page
- * around it stays live.
+ * out of it. Another layer inside it, such as the toast viewport that an open
+ * modal hosts, stays live under `'layer'`: it takes input, and it goes back
+ * above the shield. `'surface'` shields only the layer's own box, and the
+ * page around it stays live.
  */
 export type InputHoldScope = 'viewport' | 'layer' | 'surface';
 
@@ -50,6 +61,16 @@ export interface InputHoldOptions {
    * while a non-modal layer presents.
    */
   scope: InputHoldScope;
+  /**
+   * What a `'layer'` hold does with focus inside the layer. `'blur'` (the
+   * default) makes the content inert at once and moves focus out.
+   * `'kept-inside'` keeps the page live: no shield and no press hold, and
+   * the layer lets every pointer through. While focus stays inside, the
+   * content stays exposed, and no click and no key but Tab reaches it. When
+   * focus leaves, or when it was not inside, the layer itself becomes
+   * `inert` and `aria-hidden` until the hold ends.
+   */
+  focus?: 'blur' | 'kept-inside';
 }
 
 interface HeldLayer {
@@ -83,6 +104,27 @@ interface PressHold {
   release: () => void;
   /** Whether the press with this pointer id is held to its end. */
   holds: (pointerId: number) => boolean;
+  /** Notes a hold that has ended, for a press that went down during it. */
+  ended: (hold: EndedHold) => void;
+}
+
+/** A hold that has ended: what it held, and when it began and ended. */
+interface EndedHold {
+  readonly layer: Element;
+  readonly scope: InputHoldScope;
+  readonly from: number;
+  readonly to: number;
+}
+
+/** An ended hold, and until when a press that went down during it can come. */
+interface LateWindow extends EndedHold {
+  readonly until: number;
+}
+
+/** A held finger's or pen's start: the time it gives, and its target. */
+interface HeldStart {
+  readonly time: number;
+  readonly target: EventTarget | null;
 }
 
 // Registered, so the gesture host sees the layer holds of a swizzled copy as
@@ -130,12 +172,30 @@ export function isInHeldLayer(target: Node | null): boolean {
 }
 
 /**
+ * Whether `target` is inside another layer that sits inside `layer`, such as
+ * the toast viewport an open modal hosts. A dismissal holds only its own
+ * layer's content.
+ */
+function isInNestedLayer(target: Node, layer: Node): boolean {
+  for (
+    let node: Node | null = target;
+    node != null && node !== layer;
+    node = parentAcrossShadow(node)
+  ) {
+    if (isElement(node) && isLayerRoot(node)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether the gesture host holds `target` away for the current pointer. A
- * dismissing layer holds every pointer. A presenting layer holds every
- * pointer but a mouse, which keeps today's behavior. The host asks this for
- * every touch. So this module imports nothing from gestures/, and a
- * root-entry component can hold its layer without gesture code. With nothing
- * held, this answers false.
+ * dismissing layer holds every pointer, except in another layer inside it. A
+ * presenting layer holds every pointer but a mouse, which keeps today's
+ * behavior. The host asks this for every touch. So this module imports
+ * nothing from gestures/, and a root-entry component can hold its layer
+ * without gesture code. With nothing held, this answers false.
  */
 export function holdsTouch(target: Node): boolean {
   const doc = isDocument(target) ? target : target.ownerDocument;
@@ -155,10 +215,13 @@ export function holdsTouch(target: Node): boolean {
   ) {
     const state = isElement(node) ? held.get(node) : undefined;
     if (state != null) {
-      if (state.layer > 0) {
+      const isNested = state.layer > 0 && isInNestedLayer(target, node);
+      if (state.layer > 0 && !isNested) {
         return true;
       }
-      isHeld = true;
+      if (!isNested || state.viewport > 0 || state.surface > 0) {
+        isHeld = true;
+      }
     }
   }
   return isHeld && !isMouseLast(doc);
@@ -418,8 +481,11 @@ function openToEarlierPresses(state: HeldLayer, doc: Document): void {
  */
 export function holdInput(
   layer: Element,
-  {until, scope}: InputHoldOptions,
+  {until, scope, focus = 'blur'}: InputHoldOptions,
 ): () => void {
+  if (scope === 'layer' && focus === 'kept-inside') {
+    return holdKeptInside(layer, until);
+  }
   let state = held.get(layer);
   if (state == null) {
     state = {
@@ -462,12 +528,17 @@ export function holdInput(
     state.shield.style.pointerEvents = 'auto';
     if (state.layer === 1) {
       state.inertContent = makeContentInert(layer, state.shield);
+      // A layer inside this one goes back into the top layer, above the
+      // shield.
+      notifyTopLayerEntry();
     }
   }
   if (raisesFullShield) {
     openToEarlierPresses(state, layer.ownerDocument);
   }
   openToMouse(state, layer.ownerDocument);
+  const clock = layer.ownerDocument.defaultView?.performance;
+  const from = clock?.now() ?? 0;
   let isReleased = false;
   const release = () => {
     if (isReleased) {
@@ -478,6 +549,9 @@ export function holdInput(
     if (current == null) {
       return;
     }
+    pressHolds
+      .get(layer.ownerDocument)
+      ?.ended({layer, scope, from, to: clock?.now() ?? from});
     if (scope === 'viewport') {
       current.viewport -= 1;
     } else if (scope === 'surface') {
@@ -507,6 +581,128 @@ export function holdInput(
   return release;
 }
 
+/** The keys a dismissing layer that keeps focus lets through. */
+const KEPT_INSIDE_KEYS: ReadonlySet<string> = new Set(['Tab']);
+
+/** The `'kept-inside'` dismissal hold (see `InputHoldOptions.focus`). */
+function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
+  const doc = layer.ownerDocument;
+  const style = isHTMLElement(layer) ? layer.style : null;
+  const previousPointerEvents = style?.pointerEvents ?? '';
+  if (style != null) {
+    style.pointerEvents = 'none';
+  }
+  const wasInert = layer.hasAttribute('inert');
+  const previousAriaHidden = layer.getAttribute('aria-hidden');
+  let isInert = false;
+  // A focus check queued before the release can run after it. A released hold
+  // changes the layer no more.
+  let isReleased = false;
+  const stops: (() => void)[] = [];
+
+  const hasFocusInside = () => {
+    const focused = deepActiveElement(doc);
+    return focused != null && containsAlongFlatTree(layer, focused);
+  };
+  const stopWatching = () => {
+    for (const stop of stops.splice(0)) {
+      stop();
+    }
+  };
+  const makeInert = () => {
+    if (isInert || isReleased) {
+      return;
+    }
+    isInert = true;
+    stopWatching();
+    layer.setAttribute('inert', '');
+    layer.setAttribute('aria-hidden', 'true');
+  };
+
+  if (!hasFocusInside()) {
+    makeInert();
+  } else {
+    // Stopped on the document's capture phase. The interaction-modality
+    // tracker listens there from the first consumer's mount, before any hold,
+    // so it still hears the key. React's root and everything inside the layer
+    // do not, capture handlers included.
+    const isInLayer = (event: Event) => {
+      const target =
+        typeof event.composedPath === 'function'
+          ? event.composedPath()[0]
+          : event.target;
+      return isNode(target) && containsAlongFlatTree(layer, target);
+    };
+    const stopActivation = (event: Event) => {
+      if (isInLayer(event)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+    const stopKey = (event: Event) => {
+      if (!KEPT_INSIDE_KEYS.has((event as KeyboardEvent).key)) {
+        stopActivation(event);
+      }
+    };
+    const captures: [string, (event: Event) => void][] = [
+      ['click', stopActivation],
+      ['keydown', stopKey],
+      ['keyup', stopKey],
+    ];
+    for (const [type, listener] of captures) {
+      doc.addEventListener(type, listener, {capture: true});
+      stops.push(() =>
+        doc.removeEventListener(type, listener, {capture: true}),
+      );
+    }
+    const makeInertIfFocusLeft = () => {
+      if (!hasFocusInside()) {
+        makeInert();
+      }
+    };
+    // Read after the event, when focus has landed. Firefox and WebKit send no
+    // `focusout` for a removed element, so a subtree change is read too.
+    const onFocusOut = () => queueMicrotask(makeInertIfFocusLeft);
+    layer.addEventListener('focusout', onFocusOut);
+    stops.push(() => layer.removeEventListener('focusout', onFocusOut));
+    stops.push(
+      observeMutations(
+        layer,
+        {
+          childList: true,
+          subtree: true,
+          attributeFilter: ['disabled', 'hidden', 'inert'],
+        },
+        makeInertIfFocusLeft,
+      ),
+    );
+  }
+
+  const release = () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    stopWatching();
+    if (style != null) {
+      style.pointerEvents = previousPointerEvents;
+    }
+    if (isInert) {
+      if (!wasInert) {
+        layer.removeAttribute('inert');
+      }
+      if (previousAriaHidden == null) {
+        layer.removeAttribute('aria-hidden');
+      } else {
+        layer.setAttribute('aria-hidden', previousAriaHidden);
+      }
+    }
+  };
+  const end = 'finished' in until ? until.finished : until;
+  void Promise.resolve(end).then(release, release);
+  return release;
+}
+
 const HELD_POINTERS: ReadonlySet<string> = new Set(['touch', 'pen']);
 
 /**
@@ -517,6 +713,25 @@ const CLICK_WINDOW_MS = 800;
 
 /** How long a held press is followed past the hold's end, at most. */
 const STRAY_PRESS_MS = 10_000;
+
+/**
+ * How long after a release in a long task a press that went down during the
+ * hold can still arrive, at most. A busy main thread dispatches a press late,
+ * after the task that ended the hold.
+ */
+export const LATE_PRESS_MS = 500;
+
+/**
+ * How many of the hold's frame intervals a release waits for a press that
+ * went down during the hold. The engine dispatches a press some milliseconds
+ * after its finger lands, so the press can arrive after a release in time.
+ * A release after no frame for longer than this is in a long task, and waits
+ * LATE_PRESS_MS.
+ */
+export const LATE_RELEASE_FRAMES = 2;
+
+/** The frame interval of a hold that sees fewer than two frames. */
+const DEFAULT_FRAME_MS = 1000 / 60;
 
 const POINTER_EVENTS = [
   'pointerdown',
@@ -552,14 +767,43 @@ function pressHoldFor(doc: Document): PressHold | null {
 }
 
 /**
+ * Whether a hold of `scope` on `layer` holds a new press on `target`. Over
+ * the viewport, a press anywhere is held, and so is one during a dismissal,
+ * except one in another layer inside the dismissing layer. A `'surface'`
+ * hold holds only a press on the layer.
+ */
+function isPressHeldBy(
+  scope: InputHoldScope,
+  layer: Element,
+  target: EventTarget | null,
+): boolean {
+  if (scope === 'viewport') {
+    return true;
+  }
+  if (scope === 'layer') {
+    return !(isNode(target) && isInNestedLayer(target, layer));
+  }
+  return isNode(target) && containsAlongFlatTree(layer, target);
+}
+
+/**
  * Holds each finger or pen press that lands in `doc`'s window while any of
  * its layers is held. Each press is held to its own end, even past the
- * hold's end. A moving mouse passes through a presentation's shield. The
- * hold hears input through the shared input stream, before its other
- * subscribers, and stops each held event there. So no document or element
- * listener hears it, and neither does press feedback or the gesture host.
- * There is one per document. Its subscriptions end once nothing is held and
- * the held presses and their clicks have ended.
+ * hold's end. A press is judged by the time its event gives, when the finger
+ * went down. So a press that went down during a hold is held, though the
+ * engine dispatches it after the hold's end. After a release in time, it
+ * waits LATE_RELEASE_FRAMES of the hold's frame intervals. After a release in
+ * a long task, which the hold reads from the frames that the page draws while
+ * it holds, it waits LATE_PRESS_MS. A finger's or a pen's press is judged
+ * once: its pointerdown and its touchstart give the same time and target,
+ * and the second follows the first, even after the wait. A moving mouse
+ * passes through a presentation's shield. The hold hears input through the
+ * shared input stream, before its other subscribers, and stops each held
+ * event there. So no document or element listener hears it, and neither does
+ * press feedback or the gesture host.
+ * There is one per document. Its subscriptions end once nothing is held, the
+ * held presses and their clicks have ended, and no late press can still
+ * arrive.
  */
 function createPressHold(doc: Document): PressHold | null {
   const view = doc.defaultView;
@@ -572,14 +816,109 @@ function createPressHold(doc: Document): PressHold | null {
   /** The held presses still down, by pointer id and by touch identifier. */
   const pointers = new Set<number>();
   const touches = new Set<number>();
+  /**
+   * The held finger and pen starts whose other start has not come yet. Such
+   * a press starts twice, with a pointerdown and a touchstart that give the
+   * same time and target. The engine can dispatch the second start after
+   * the wait for a late press ends. The second start gets the first's
+   * verdict. Two fingers that land together give the same time, so the
+   * target tells them apart.
+   */
+  const heldPointerStarts: HeldStart[] = [];
+  const heldTouchStarts: HeldStart[] = [];
   /** Whose press the next click is: a held one's, or any other's. */
   let lastPress: 'held' | 'free' | null = null;
   /** Until when a click with no pointer type is a held press's. */
   let clickUntil = -Infinity;
+  /** Ended holds whose late presses can still arrive. */
+  const endedHolds: LateWindow[] = [];
+  /** Ends the watch for those holds' layers leaving the document. */
+  let stopWatchingLayers: (() => void) | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** When the last frame began while a layer was held, or the hold began. */
+  let lastFrameAt = view.performance.now();
+  /** When the frame before the last one began. */
+  let frameBeforeAt: number | null = null;
+  /** The gaps between the latest frames, eight at most. */
+  const frameGaps: number[] = [];
+  let frameRequest: number | null = null;
 
   const now = () => view.performance.now();
   const isPressDown = () => pointers.size > 0 || touches.size > 0;
+
+  /** Takes the held start at `time` on `target`, if one is waiting. */
+  const takeHeldStart = (
+    starts: HeldStart[],
+    time: number,
+    target: EventTarget | null,
+  ): boolean => {
+    const index = starts.findIndex(
+      start => start.time === time && start.target === target,
+    );
+    if (index === -1) {
+      return false;
+    }
+    starts.splice(index, 1);
+    return true;
+  };
+
+  /** Notes each frame the page draws while a layer is held. */
+  const watchFrames = () => {
+    if (
+      frameRequest != null ||
+      typeof view.requestAnimationFrame !== 'function'
+    ) {
+      return;
+    }
+    frameRequest = view.requestAnimationFrame(frameTime => {
+      frameRequest = null;
+      // A layer that left the document ends its hold here.
+      if (!isListening || !holdsNewPress()) {
+        return;
+      }
+      const at = Math.min(frameTime, now());
+      if (frameBeforeAt != null) {
+        frameGaps.push(at - lastFrameAt);
+        if (frameGaps.length > 8) {
+          frameGaps.shift();
+        }
+      }
+      frameBeforeAt = lastFrameAt;
+      lastFrameAt = at;
+      watchFrames();
+    });
+  };
+
+  const stopWatchingFrames = () => {
+    if (frameRequest != null) {
+      view.cancelAnimationFrame?.(frameRequest);
+      frameRequest = null;
+    }
+  };
+
+  /** The median gap between the hold's latest frames. */
+  const frameInterval = () => {
+    const gaps = [...frameGaps].sort((a, b) => a - b);
+    return gaps.length > 0
+      ? gaps[Math.floor(gaps.length / 2)]
+      : DEFAULT_FRAME_MS;
+  };
+
+  /**
+   * Whether a long task runs now, or ended with the frame that runs now. In
+   * it, the page draws no frame for more than LATE_RELEASE_FRAMES of the
+   * hold's frame intervals.
+   */
+  const isAfterLongTask = () => {
+    const interval = frameInterval();
+    const longest = LATE_RELEASE_FRAMES * interval;
+    const sinceFrame = now() - lastFrameAt;
+    const endsLongGap =
+      frameBeforeAt != null &&
+      sinceFrame <= interval &&
+      lastFrameAt - frameBeforeAt > longest;
+    return sinceFrame > longest || endsLongGap;
+  };
 
   const swallow = (event: Event) => {
     if (event.cancelable) {
@@ -600,13 +939,84 @@ function createPressHold(doc: Document): PressHold | null {
       timer = setTimeout(stop, STRAY_PRESS_MS);
       return;
     }
-    const wait = clickUntil - now();
+    const lateUntil = Math.max(
+      -Infinity,
+      ...endedHolds.map(hold => hold.until),
+    );
+    const wait = Math.max(clickUntil, lateUntil) - now();
     if (wait > 0) {
       timer = setTimeout(stop, wait);
     } else {
       stop();
     }
   };
+
+  /**
+   * When an input happened, on the page's clock. A wall-clock stamp keeps its
+   * age (`timeOn`). An input with no time, or a time ahead of now, counts as
+   * now.
+   */
+  const timeOfInput = (event: Event) =>
+    Math.min(timeOn(view.performance, event.timeStamp) ?? now(), now());
+
+  /**
+   * Input from at or after a hold's end comes after every press that went
+   * down during that hold. So no late press of that hold is left.
+   */
+  const noteInputAt = (time: number) => {
+    if (forgetEndedHolds(hold => time >= hold.to)) {
+      settle();
+    }
+  };
+
+  /**
+   * Forgets each ended hold that `isDone` names, and each one past its late
+   * window. Returns whether it forgot one.
+   */
+  const forgetEndedHolds = (isDone: (hold: EndedHold) => boolean) => {
+    const count = endedHolds.length;
+    for (let index = count - 1; index >= 0; index--) {
+      const hold = endedHolds[index];
+      if (isDone(hold) || now() > hold.until || !hold.layer.isConnected) {
+        endedHolds.splice(index, 1);
+      }
+    }
+    if (endedHolds.length === 0) {
+      stopWatchingLayers?.();
+      stopWatchingLayers = null;
+    }
+    return endedHolds.length < count;
+  };
+
+  /**
+   * A late press belongs to a layer still on the page. Once the layers of the
+   * ended holds have all left it, nothing waits for one.
+   */
+  const watchLayers = () => {
+    stopWatchingLayers ??= observeMutations(
+      doc,
+      {childList: true, subtree: true},
+      () => {
+        if (forgetEndedHolds(() => false)) {
+          settle();
+        }
+      },
+    );
+  };
+
+  /**
+   * Whether a press that went down at `time` landed during a hold that has
+   * since ended, where that hold held a press on `target`. The press arrives
+   * within that hold's late window.
+   */
+  const wasHeldAt = (target: EventTarget | null, time: number) =>
+    endedHolds.some(
+      hold =>
+        hold.from <= time &&
+        time < hold.to &&
+        now() <= hold.until &&
+        isPressHeldBy(hold.scope, hold.layer, target),
+    );
 
   /** Whether a layer is still held (one that left the document is not). */
   const holdsNewPress = () => {
@@ -618,9 +1028,10 @@ function createPressHold(doc: Document): PressHold | null {
 
   /**
    * Whether a new press that lands on `target` is held. While a layer is held
-   * over the viewport, a press anywhere is held. While a layer is held only
-   * to its box (a `'surface'` hold), only a press on the layer is held. The
-   * page around it stays live.
+   * over the viewport, a press anywhere is held, except one in another layer
+   * inside a dismissing layer. While a layer is held only to its box (a
+   * `'surface'` hold), only a press on the layer is held. The page around it
+   * stays live.
    */
   const holdsPressAt = (target: EventTarget | null) => {
     if (!holdsNewPress()) {
@@ -631,13 +1042,10 @@ function createPressHold(doc: Document): PressHold | null {
       if (state == null) {
         continue;
       }
-      if (state.viewport > 0 || state.layer > 0) {
-        return true;
-      }
       if (
-        state.surface > 0 &&
-        isNode(target) &&
-        containsAlongFlatTree(layer, target)
+        (state.viewport > 0 && isPressHeldBy('viewport', layer, target)) ||
+        (state.layer > 0 && isPressHeldBy('layer', layer, target)) ||
+        (state.surface > 0 && isPressHeldBy('surface', layer, target))
       ) {
         return true;
       }
@@ -705,6 +1113,8 @@ function createPressHold(doc: Document): PressHold | null {
 
   const onPointer = (event: Event): boolean => {
     const {pointerId, pointerType, type} = event as PointerEvent;
+    const time = timeOfInput(event);
+    noteInputAt(time);
     if (
       HELD_POINTERS.has(pointerType) &&
       type !== 'pointerdown' &&
@@ -725,7 +1135,14 @@ function createPressHold(doc: Document): PressHold | null {
       followPointer(pointerType);
     }
     if (type === 'pointerdown') {
-      if (!HELD_POINTERS.has(pointerType) || !holdsPressAt(event.target)) {
+      const followsHeldTouch =
+        HELD_POINTERS.has(pointerType) &&
+        takeHeldStart(heldTouchStarts, time, event.target);
+      const isHeld =
+        followsHeldTouch ||
+        (HELD_POINTERS.has(pointerType) &&
+          (holdsPressAt(event.target) || wasHeldAt(event.target, time)));
+      if (!isHeld) {
         // A mouse's press, or one after the hold: its click is its own, and a
         // held press with its id ended unheard.
         pointers.delete(pointerId);
@@ -735,7 +1152,12 @@ function createPressHold(doc: Document): PressHold | null {
         return false;
       }
       pointers.add(pointerId);
+      if (!followsHeldTouch) {
+        heldPointerStarts.push({time, target: event.target});
+      }
       lastPress = 'held';
+      // A late press is held to its end: no stop runs while it is down.
+      settle();
       captureToShield(event as PointerEvent);
     } else if (!pointers.has(pointerId)) {
       return false;
@@ -752,6 +1174,8 @@ function createPressHold(doc: Document): PressHold | null {
 
   const onTouch = (event: Event): boolean => {
     const {changedTouches, touches: down, type} = event as TouchEvent;
+    const time = timeOfInput(event);
+    noteInputAt(time);
     const changed = Array.from(changedTouches);
     if (type === 'touchstart') {
       // A held touch that the screen no longer has ended unheard. Its target,
@@ -763,7 +1187,15 @@ function createPressHold(doc: Document): PressHold | null {
           touches.delete(identifier);
         }
       }
-      const heldTouches = changed.filter(touch => holdsPressAt(touch.target));
+      const followers = changed.filter(touch =>
+        takeHeldStart(heldPointerStarts, time, touch.target),
+      );
+      const heldTouches = changed.filter(
+        touch =>
+          followers.includes(touch) ||
+          holdsPressAt(touch.target) ||
+          wasHeldAt(touch.target, time),
+      );
       if (heldTouches.length === 0) {
         // A touch after the hold, or one beside a layer held only to its
         // box, is a new one, whatever its identifier.
@@ -777,8 +1209,12 @@ function createPressHold(doc: Document): PressHold | null {
       }
       for (const touch of heldTouches) {
         touches.add(touch.identifier);
+        if (!followers.includes(touch)) {
+          heldTouchStarts.push({time, target: touch.target});
+        }
       }
       lastPress = 'held';
+      settle();
       // Never canceled: canceling a touch's start would cancel the page's
       // pinch-zoom with it.
       event.stopImmediatePropagation();
@@ -805,6 +1241,7 @@ function createPressHold(doc: Document): PressHold | null {
   };
 
   const onPress = (event: Event): boolean => {
+    noteInputAt(timeOfInput(event));
     // A click a key or assistive technology sends counts no press.
     if ((event as MouseEvent).detail === 0) {
       return false;
@@ -836,6 +1273,12 @@ function createPressHold(doc: Document): PressHold | null {
     if (timer !== undefined) {
       clearTimeout(timer);
     }
+    stopWatchingFrames();
+    stopWatchingLayers?.();
+    stopWatchingLayers = null;
+    endedHolds.length = 0;
+    heldPointerStarts.length = 0;
+    heldTouchStarts.length = 0;
     for (const unsubscribe of unsubscribers.splice(0)) {
       unsubscribe();
     }
@@ -862,43 +1305,94 @@ function createPressHold(doc: Document): PressHold | null {
 
   const pressHold: PressHold = {
     hold() {
+      if (!isHolding) {
+        lastFrameAt = now();
+        frameBeforeAt = null;
+      }
       isHolding = true;
       if (timer !== undefined) {
         clearTimeout(timer);
         timer = undefined;
       }
+      watchFrames();
     },
     release() {
       if (!isHolding) {
         return;
       }
       isHolding = false;
+      stopWatchingFrames();
       settle();
     },
     holds: pointerId => pointers.has(pointerId),
+    ended(hold) {
+      forgetEndedHolds(() => false);
+      if (!hold.layer.isConnected) {
+        return;
+      }
+      const wait = isAfterLongTask()
+        ? LATE_PRESS_MS
+        : LATE_RELEASE_FRAMES * frameInterval();
+      endedHolds.push({...hold, until: hold.to + wait});
+      watchLayers();
+    },
   };
+  watchFrames();
   return pressHold;
 }
 
 /**
- * Makes the layer's content inert, except the shield, and moves focus out of
- * it. An element that turns inert while focused keeps its focus and its key
- * activation. Enter and Space still click such a button until the engine's
- * focus fixup runs, if it runs. Blurring it leaves focus on the document, as
- * that fixup does. The layer element itself stays live. An inert subtree is
- * no hit target, so the shield inside the layer still catches every hit.
+ * Whether `element` is a live region with nothing focusable in it. It takes
+ * no input, and inert would drop the words written to it, so a hold leaves it
+ * live.
+ */
+function isTextLiveRegion(element: Element): boolean {
+  const live = element.getAttribute('aria-live');
+  const isLive =
+    live != null
+      ? live !== 'off'
+      : ['status', 'alert', 'log'].includes(element.getAttribute('role') ?? '');
+  return (
+    isLive &&
+    !element.matches(FOCUSABLE_SELECTOR) &&
+    element.querySelector(FOCUSABLE_SELECTOR) == null
+  );
+}
+
+/**
+ * Makes the layer's content inert and moves focus out of it. The shield, a
+ * child live region with nothing focusable, and another layer inside this one
+ * stay live. An element that holds another layer stays live, and its other
+ * children go inert, because inert content has no live descendant. An element
+ * that turns inert while focused keeps its focus and its key activation.
+ * Enter and Space still click such a button until the engine's focus fixup
+ * runs, if it runs. Blurring it leaves focus on the document, as that fixup
+ * does. The layer element itself stays live. An inert subtree is no hit
+ * target, so the shield inside the layer still catches every hit.
  */
 function makeContentInert(
   layer: Element,
   shield: Element,
 ): Map<Element, boolean> {
   const content = new Map<Element, boolean>();
-  for (const child of layer.children) {
-    if (child !== shield) {
+  const makeInertAround = (parent: Element, isLayer: boolean) => {
+    for (const child of parent.children) {
+      if (
+        child === shield ||
+        isLayerRoot(child) ||
+        (isLayer && isTextLiveRegion(child))
+      ) {
+        continue;
+      }
+      if (hasLayerRootWithin(child)) {
+        makeInertAround(child, false);
+        continue;
+      }
       content.set(child, child.hasAttribute('inert'));
       child.setAttribute('inert', '');
     }
-  }
+  };
+  makeInertAround(layer, true);
   const focused = deepActiveElement(layer.ownerDocument);
   if (
     isHTMLElement(focused) &&

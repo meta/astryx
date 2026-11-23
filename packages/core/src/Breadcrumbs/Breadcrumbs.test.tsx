@@ -17,6 +17,7 @@ import {
 } from './index';
 import type {BreadcrumbMenuDividerProps, BreadcrumbMenuOption} from './index';
 import {LinkProvider} from '../Link/LinkProvider';
+import {LAYER_CLEARANCE_PROPERTY} from '../Layer/layerSlideRules';
 import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
 import {
   SideNavRenderContext,
@@ -432,6 +433,34 @@ describe('BreadcrumbItem in the AppShell mobile drawer', () => {
     expect(calls).toEqual(['onClick', 'close']);
   });
 
+  it('a modified click on a crumb link leaves the drawer open', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}), {
+      ctrlKey: true,
+    });
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
+  it('a modified click that the crumb onClick cancels still closes the drawer', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}), {
+      ctrlKey: true,
+    });
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
   it('a crumb button calls onClick and then closes the drawer', () => {
     const {calls} = renderInDrawer(
       <>
@@ -689,6 +718,24 @@ describe('BreadcrumbItem menu', () => {
     );
     expect(onDesign).toHaveBeenCalledTimes(1);
     expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+  });
+
+  it('gives its menu layer a clearance from the crumb, so the entrance has room to slide', async () => {
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem menu={[{label: 'Design'}]}>Teams</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const layer = screen
+      .getByRole('menu', {hidden: true})
+      .closest<HTMLElement>('[popover]');
+    expect(layer).not.toBeNull();
+    expect(layer?.style.getPropertyValue(LAYER_CLEARANCE_PROPERTY)).not.toBe(
+      '',
+    );
   });
 
   it('supports the composed children form', async () => {

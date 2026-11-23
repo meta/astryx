@@ -1,5 +1,41 @@
 # @xds/theme-matcha
 
+# 0.7.17
+
+#### New Features
+
+- Chat surfaces now default to the container radius: `--radius-chat` defaults to `var(--radius-container)` instead of `28px`, a theme that sets `--radius-container` but not `--radius-chat` declares the alias at its root, and a radius scale no longer sets `--radius-chat` (it set the page step), so chat follows the theme's container, also where the theme sets its container over the scale. This changes the corners of ChatComposer, its drawer and status bar, and ChatMessageBubble, and the buttons inside the composer take their normal corners. The send button stays circular inside a composer, as it is outside one: a theme whose composer corner made the send button a rounded square (controls taller than 32px, or a chat corner under 28px) now draws a circle, unless it sets the `chat-send-button` radius. Butter, Chocolate, Gothic, Matcha, Neutral and Stone set `--radius-chat: 28px`, and Butter keeps its 16px send-button corner, so they look the same; Y2K sets `--radius-chat: 0px` and stays square. A theme that extends one of them keeps that chat radius. To keep the 28px chat corners in another theme, add `--radius-chat: 28px` to its tokens. Set the token in the theme rather than on an ancestor such as `:root`: a theme scope that declares it now replaces an inherited value.
+- The matcha theme exports `colorModes`: `['light', 'dark']`.
+
+#### Fixes
+
+- Each built-in theme ships its open-licensed fonts. `fonts.css` loads every face from a woff2 file in the package (licenses in `fonts/`), with `font-display: fallback` (served from the same machine or a fast connection, a face arrives before the text first draws, so there is no fallback flash; a face that takes more than about 3 s leaves that page in the fallback font), instead of a Google Fonts `@import` that held the page until the request answered (chocolate's Fraunces as its variable face, keeping its optical size), so an app or screenshot offline (a sandbox, CI) draws at once and shows the theme's real fonts.
+- Text meets WCAG AA (4.5:1) where it fell short: secondary text on coloured and muted cards, including on the accent tint of a selected row or a numbered citation inside them, primary text on that tint inside a dark muted card, and in dark mode on popovers, menus and the muted fill; category text on tokens and badges, status text on its pale status fill, and comments, operators and properties in code. Each moves to the nearest stop of its own colour; no fill changes.
+- In dark mode, menus, popovers and muted fills take matcha's near-black neutral like its cards, instead of a saturated olive green.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+- @kentonquatman
+
+---
+
+# 0.7.16
+
+#### Documentation
+
+- Fix the theme README usage examples to import `Theme` from `@astryxdesign/core/theme` instead of the removed `XDSTheme` alias, and refresh the bundled theme lists in the package index and contributor guide. ([#11016](https://github.com/meta/astryx/pull/11016))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @karlmoriaty
+
+---
+
 # 0.7.15
 
 ---

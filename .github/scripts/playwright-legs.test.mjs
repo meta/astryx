@@ -16,12 +16,14 @@ import {
   costsFor,
   countTests,
   estimateSeconds,
+  floorSpecs,
   folderSpecs,
   isInteractionSpec,
   legCount,
   legsFitMessage,
   nearCeilingMessage,
   planLegs,
+  RECORDED_SPECS,
   recordLog,
   selectProofs,
   testsReader,
@@ -557,6 +559,79 @@ describe('estimateSeconds and legCount', () => {
   });
 });
 
+describe('the recorded Chromium interaction times', () => {
+  // Every interaction spec file in the tree, as the interaction config runs
+  // them (isInteractionSpec).
+  const specs = execFileSync(
+    'git',
+    ['ls-files', '--', 'internal/interaction-harness/src', 'packages'],
+    {cwd: root, encoding: 'utf8'},
+  )
+    .split('\n')
+    .filter(isInteractionSpec);
+  const recorded = durations['interaction-chromium'];
+
+  it('time at least nine in ten of the spec files the suite runs', () => {
+    // A spec with no recorded time is costed at the mean time a test, which
+    // undercounts a slow spec; the legs then run past the time they planned.
+    expect(specs.length).toBeGreaterThan(100);
+    const counted = floorSpecs(specs, durations);
+    expect(counted.length).toBeGreaterThan(100);
+    const timed = counted.filter(file => recorded[file] != null);
+    expect(timed.length / counted.length).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('count toward that share only the specs the record knew, so a new spec needs no entry', () => {
+    const record = {
+      [RECORDED_SPECS]: [
+        'a.interaction.browser.spec.ts',
+        'b.interaction.browser.spec.ts',
+      ],
+    };
+    // A spec added after the record (c) is not counted; a spec the record knew
+    // and git no longer tracks (b) is not either.
+    expect(
+      floorSpecs(
+        ['a.interaction.browser.spec.ts', 'c.interaction.browser.spec.ts'],
+        record,
+      ),
+    ).toEqual(['a.interaction.browser.spec.ts']);
+    // A record without the list counts every spec, as before.
+    expect(floorSpecs(['a', 'c'], {})).toEqual(['a', 'c']);
+  });
+
+  it('still fails when entries for specs the record knew go missing', () => {
+    const known = specs.filter(file =>
+      durations[RECORDED_SPECS].includes(file),
+    );
+    const thinned = Object.fromEntries(
+      Object.entries(recorded).slice(0, Math.floor(known.length * 0.8)),
+    );
+    const counted = floorSpecs(specs, durations);
+    const timed = counted.filter(file => thinned[file] != null);
+    expect(timed.length / counted.length).toBeLessThan(0.9);
+  });
+
+  it('plan the whole suite into legs that each end within 12 minutes', () => {
+    // The leg count job's own limits: 90 s of setup, 600 s a leg, 10 legs.
+    const seconds = specs.reduce(
+      (sum, file) =>
+        sum +
+        (recorded[file] ??
+          durations['seconds-per-test'][`interaction-chromium`]),
+      0,
+    );
+    const legs = legCount({
+      seconds,
+      setupSeconds: 90,
+      maxSeconds: 600,
+      maxLegs: 10,
+    });
+    for (const leg of planLegs(specs, recorded, legs))
+      expect(90 + leg.seconds).toBeLessThanOrEqual(12 * 60);
+  });
+});
+
 describe('the list reader and recordLog', () => {
   it("reads the list report and the component folder with the accessibility contracts' own helpers", () => {
     const source = fs.readFileSync(
@@ -640,6 +715,7 @@ describe('the interaction leg count job in ci.yml', () => {
     );
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
     expect(counter.outputs).toEqual({
+      firefox: '${{ steps.scope-firefox.outputs.applies }}',
       chromium: '${{ steps.matrix.outputs.chromium }}',
       webkit: '${{ steps.matrix.outputs.webkit }}',
       chromium_specs: '${{ steps.select-chromium.outputs.specs }}',
@@ -651,7 +727,12 @@ describe('the interaction leg count job in ci.yml', () => {
     // its count and send every run back to the ten-leg fallback.
     for (const lane of lanes) {
       const job = ci.jobs[lane.id];
-      expect(counter.steps[0]).toEqual(job.steps[0]);
+      // The same checkout, each with the bound its own job's time allows
+      // (ci-checkout-timeout.test.mjs owns the bounds).
+      // A lane's checkout is also tried twice; the counter's short job has no
+      // room for that, so only what each checks out is compared.
+      expect(counter.steps[0].uses).toBe(job.steps[0].uses);
+      expect(counter.steps[0].with).toEqual(job.steps[0].with);
       const keep = "Keep the leg planner from the workflow's commit";
       expect(step(counter, keep).run).toBe(step(job, keep).run);
     }
@@ -1216,9 +1297,21 @@ describe('the interaction proof legs in ci.yml', () => {
     const scopes = Object.keys(join.env).filter(name =>
       /^\$\{\{ steps\.scope\.outputs\.\w+_only \}\}$/.test(join.env[name]),
     );
+    // A lane that starts only when its scope job proves work (the swizzle
+    // proof) passes with that scope set to prove work.
+    const workScopes = Object.keys(join.env).filter(name =>
+      /^\$\{\{ needs\.[\w-]+\.outputs\.mode \}\}$/.test(join.env[name]),
+    );
+    // A lane that starts only when its plan counts a leg (the dependent
+    // audits) passes with that count set to one leg.
+    const workCounts = Object.keys(join.env).filter(name =>
+      /^\$\{\{ needs\.[\w-]+\.outputs\.count \}\}$/.test(join.env[name]),
+    );
     const passing = {
       ...Object.fromEntries(laneResults.map(([name]) => [name, 'success'])),
       ...Object.fromEntries(scopes.map(name => [name, 'false'])),
+      ...Object.fromEntries(workScopes.map(name => [name, 'all'])),
+      ...Object.fromEntries(workCounts.map(name => [name, '1'])),
       RELEASE_BUMP: 'false',
       RELEASE_BUMP_RESULT: 'skipped',
     };

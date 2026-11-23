@@ -475,6 +475,14 @@ beforeAll(async () => {
     const a = declarations(cssBefore);
     const b = declarations(css);
     for (const line of data.changedTokens ?? []) {
+      // The category and chart colors that move with the look are counted
+      // in one line each, not listed.
+      if (
+        /^(?:category colors \(badges, tokens and card tints\)|chart colors|code colors and the overlay|status colors \([a-z, ]+\)): \d+ values moved with the look$/.test(
+          line,
+        )
+      )
+        continue;
       const m = /^(--[\w-]+)(?: \((?:light|dark)\))?: (.*) -> (.*)$/s.exec(
         line,
       );
@@ -655,10 +663,12 @@ describe('known chaos findings', () => {
     expect(x.r.body?.code).toBe('ERR_MISSING_ARGUMENT');
   }, 120_000);
 
-  it('F6: mode dark-only changes the built theme', async () => {
+  it('F6 (now one-mode by <Theme mode>): mode dark-only says where the mode goes and keeps the colors', async () => {
+    // Core has no mode inside a theme: the theme keeps both halves of its
+    // colors and the app's <Theme> is given mode="dark".
     await run(['editor', 'new', 'km', '--accent', '#e11d48']);
     const x = await step(['editor', 'set', 'km', 'mode', 'dark-only']);
-    expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
+    expect(JSON.stringify(x.r.body)).toContain('mode=\\"dark\\"');
   }, 120_000);
 
   it('F9: undo after a color restores the palette files exactly', async () => {

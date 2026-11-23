@@ -2,10 +2,11 @@
 
 /**
  * @file Item.source-build.test.mjs
- * @input Uses Babel, the core build config, and the Item and ItemSwipeLayer
+ * @input Uses Babel, the core build config, and the Item and Swipe
  *   sources
- * @output Verifies the shipped Item module reaches the swipe gesture only
- *   through a dynamic import, so a row without swipe actions bundles none of it
+ * @output Verifies the shipped Item module imports no swipe code except the
+ *   deprecated path: the released row style, and the loader for the deprecated
+ *   props. createSwipe brings the layer statically
  * @position Regression test for the import graph of the shipped Item module
  */
 
@@ -24,7 +25,7 @@ const CORE_ROOT = path.resolve(__dirname, '../..');
  * imports are gone by now: this is the graph a consumer's bundler sees.
  */
 async function compiledImportsOf(fileName) {
-  const file = path.join(__dirname, fileName);
+  const file = path.resolve(__dirname, fileName);
   const source = await fs.readFile(file, 'utf8');
   const result = await transformAsync(source, {
     babelrc: false,
@@ -71,18 +72,38 @@ async function compiledImportsOf(fileName) {
   return {statics, dynamics};
 }
 
+/** The swipe's runtime: a static import of any of it is swipe code. */
+const SWIPE_CODE =
+  /SwipeActionsLayer|useSwipeAction|createSwipe|\/gestures\/|\/motion\/|dragToSnapPoints/;
+
 describe('the shipped Item module and the swipe gesture', () => {
-  it('reaches the swipe layer only through a dynamic import, and the gesture not at all', async () => {
-    const {statics, dynamics} = await compiledImportsOf('Item.tsx');
-    // The gesture and its panels are the layer's: a row without swipe actions
-    // never loads them, so this module must not import them statically.
-    expect(statics).not.toContainEqual(expect.stringMatching(/useSwipeAction/));
-    expect(statics).not.toContainEqual(expect.stringMatching(/ItemSwipeLayer/));
-    expect(dynamics).toEqual(['./ItemSwipeLayer.js']);
+  it('imports no swipe code: the reader of a swipe value, and DEP-0017\u2019s released row style', async () => {
+    const {statics} = await compiledImportsOf('Item.tsx');
+    expect(statics).not.toContainEqual(expect.stringMatching(SWIPE_CODE));
+    expect(
+      statics.filter(specifier => specifier.startsWith('../Swipe/')),
+    ).toEqual(['../Swipe/swipeHost.js', '../Swipe/swipeHost.stylex.js']);
   });
 
-  it('keeps the gesture inside the swipe layer', async () => {
-    const {statics} = await compiledImportsOf('ItemSwipeLayer.tsx');
-    expect(statics).toContain('./useSwipeAction.js');
+  it('reaches swipe code only through DEP-0017\u2019s loader for the deprecated props', async () => {
+    const {dynamics} = await compiledImportsOf('Item.tsx');
+    expect(dynamics).toEqual(['../Swipe/SwipeActionsLayer.js']);
+  });
+
+  it('keeps the reader of a swipe value free of swipe code: it imports nothing at run time', async () => {
+    const {statics, dynamics} = await compiledImportsOf(
+      '../Swipe/swipeHost.ts',
+    );
+    expect(statics).toEqual([]);
+    expect(dynamics).toEqual([]);
+  });
+
+  it('has createSwipe bring the layer, and the layer the gesture, statically', async () => {
+    const factory = await compiledImportsOf('../Swipe/createSwipe.ts');
+    expect(factory.statics).toContain('./SwipeActionsLayer.js');
+    expect(factory.dynamics).toEqual([]);
+    const layer = await compiledImportsOf('../Swipe/SwipeActionsLayer.tsx');
+    expect(layer.statics).toContain('./useSwipeAction.js');
+    expect(layer.dynamics).toEqual([]);
   });
 });

@@ -25,6 +25,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {ReactNode} from 'react';
@@ -43,6 +44,7 @@ import {
   announceInModal,
   enclosingModalDialog,
   useAnnounce,
+  type AnnounceFn,
   type AnnouncePoliteness,
 } from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -65,6 +67,8 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/ToastViewport.generated';
+import {Theme} from '../theme/Theme';
+import type {ThemeSource} from '../theme/useTheme';
 
 registerEnglishFallback(english);
 
@@ -123,6 +127,9 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: 'none',
     backgroundColor: 'transparent',
+    // The popover default is CanvasText, which follows the color scheme and
+    // not the theme. A card that keeps the page's text must get the page's.
+    color: 'inherit',
     overflow: 'visible',
   },
   // iOS Safari colors its toolbar from a fixed element at the bottom edge. A
@@ -260,8 +267,36 @@ interface ToastRowProps {
   isReversed: boolean;
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
-  /** Whether the card carries its own live region (see ToastViewport). */
-  isLiveRegion: boolean;
+  announce: AnnounceFn;
+}
+
+const noCallerTheme = () => () => {};
+
+/**
+ * Draws a toast shown into the fallback viewport under the caller's current
+ * Theme, so the caller's theme CSS reaches it and the page's `<html>` does
+ * not.
+ */
+function CallerTheme({
+  source,
+  children,
+}: {
+  source: ThemeSource | undefined;
+  children: ReactNode;
+}): ReactNode {
+  const caller = useSyncExternalStore(
+    source?.subscribe ?? noCallerTheme,
+    () => source?.get() ?? null,
+    () => source?.get() ?? null,
+  );
+  if (caller == null) {
+    return children;
+  }
+  return (
+    <Theme theme={caller.theme} mode={caller.mode}>
+      {children}
+    </Theme>
+  );
 }
 
 /**
@@ -284,7 +319,7 @@ function ToastRow({
   isReversed,
   onExited,
   onDismiss,
-  isLiveRegion,
+  announce,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
@@ -354,25 +389,43 @@ function ToastRow({
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
         )}>
-        <ToastSurface
-          type={type}
-          body={o.body}
-          endContent={o.endContent}
-          isAutoHide={isAutoHide}
-          autoHideDuration={dur}
-          isExiting={isExiting}
-          gestureDirection={isReversed ? -1 : 1}
-          onDismiss={reason => onDismiss(entry.id, reason)}
-          renderContent={o.renderContent}
-          timerKey={entry.id}
-          isLiveRegion={isLiveRegion}
-          hasEntryStarted={hasEntryStarted}
-        />
+        <CallerTheme source={entry.callerTheme}>
+          <ToastSurface
+            type={type}
+            body={o.body}
+            endContent={o.endContent}
+            isAutoHide={isAutoHide}
+            autoHideDuration={dur}
+            isExiting={isExiting}
+            gestureDirection={isReversed ? -1 : 1}
+            onDismiss={reason => onDismiss(entry.id, reason)}
+            renderContent={o.renderContent}
+            timerKey={entry.id}
+            announce={announce}
+            isRenderedBodyAnnouncement={
+              o.renderContent == null && !isPlainTextBody(o.body)
+            }
+            hasEntryStarted={hasEntryStarted}
+          />
+        </CallerTheme>
       </div>
     </div>
   );
 }
 ToastRow.displayName = 'ToastRow';
+
+/**
+ * Whether the viewport can take a body's words when it dispatches the toast:
+ * a string, a number, or a list of them. Any element, a fragment included,
+ * can render other words than its children, so the toast reads it after
+ * commit.
+ */
+function isPlainTextBody(body: ReactNode): boolean {
+  if (typeof body === 'string' || typeof body === 'number') {
+    return true;
+  }
+  return Array.isArray(body) && body.every(isPlainTextBody);
+}
 
 /**
  * ToastViewport renders ToastRefSync, which writes through useCommittedRefInto,
@@ -494,13 +547,10 @@ export function ToastViewport({
 
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
-  // (see useAnnounce.ts). The announcement happens in addToast — the imperative
-  // dispatch path invoked once per useToast() call from an event handler,
-  // never from render — so each toast is announced exactly once by
-  // construction, independent of the React render lifecycle (StrictMode
-  // double-render/double-effect, viewport remounts, and unrelated list
-  // re-renders never re-announce). It is client-only (addToast never runs
-  // during SSR), so it is SSR-safe.
+  // (see useAnnounce.ts). A plain-text body is announced in addToast — the
+  // event-driven dispatch path. ToastSurface reads any other body, and a
+  // custom layout, after commit, because an element can render words that
+  // getNodeText cannot see. Both paths use this modal-aware writer.
   // The viewport is each toast's only announcement owner; the card carries no
   // live role. A top-layer viewport's host moves into the latest open native
   // modal, where the page's shared channel is not exposed, so it writes
@@ -511,7 +561,7 @@ export function ToastViewport({
   // The top-layer host (below), read at write time for the modal it sits in.
   const hostRef = useRef<HTMLDivElement | null>(null);
   const announce = useCallback(
-    (text: string, politeness: AnnouncePoliteness) => {
+    (text: string, politeness: AnnouncePoliteness = 'polite') => {
       const modal = isTopLayer ? enclosingModalDialog(hostRef.current) : null;
       if (modal != null) {
         announceInModal(modal, text, politeness);
@@ -540,7 +590,9 @@ export function ToastViewport({
         return;
       }
       // Only text is announced; interactive endContent is reachable via F6.
-      const text = getNodeText(entry.options.body);
+      const {body, renderContent} = entry.options;
+      const text =
+        renderContent == null && isPlainTextBody(body) ? getNodeText(body) : '';
       if (text) {
         // Error toasts map to the assertive region (role="alert"); everything
         // else to the polite region (role="status") — mirrors Toast.tsx.
@@ -560,7 +612,17 @@ export function ToastViewport({
       const keepsRow =
         overwritten != null && !exitingIdsRef.current.has(overwritten.id);
       const placed: ToastEntry = keepsRow
-        ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
+        ? {
+            ...entry,
+            rowKey: overwritten.rowKey ?? overwritten.id,
+            // Adding or removing a Theme changes the row's tree, which
+            // remounts the card and loses focus. So between a toast with a
+            // Theme and one without, the card keeps its first Theme, or none.
+            callerTheme:
+              entry.callerTheme != null && overwritten.callerTheme != null
+                ? entry.callerTheme
+                : overwritten.callerTheme,
+          }
         : entry;
       if (keepsRow) {
         // If the update removes the focused control, the commit hands focus
@@ -809,16 +871,21 @@ export function ToastViewport({
   const insetStyle: React.CSSProperties = {
     ...layerInsetProperties(layerInset),
   };
-  if (inset?.top) {
-    insetStyle.top = inset.top;
+  // A zero on the stack's own block edge replaces the provider's value. On
+  // the opposite edge a zero writes nothing, so it cannot move the stack.
+  const isTopStack = position === 'topEnd' || position === 'topStart';
+  const insetTop = inset?.top;
+  if (insetTop != null && (isTopStack || insetTop !== 0)) {
+    insetStyle.top = insetTop;
   }
-  if (inset?.bottom) {
-    insetStyle.bottom = inset.bottom;
+  const insetBottom = inset?.bottom;
+  if (insetBottom != null && (!isTopStack || insetBottom !== 0)) {
+    insetStyle.bottom = insetBottom;
   }
-  if (inset?.start) {
+  if (inset?.start != null) {
     insetStyle.insetInlineStart = inset.start;
   }
-  if (inset?.end) {
+  if (inset?.end != null) {
     insetStyle.insetInlineEnd = inset.end;
   }
 
@@ -1012,7 +1079,7 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
-            isLiveRegion={false}
+            announce={announce}
           />
         ))}
       </LayerContentBoundary>

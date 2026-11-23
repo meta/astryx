@@ -9,6 +9,8 @@ import {
   costOf,
   fitLegsToBudget,
   medianOf,
+  mergeRecord,
+  percentileOf,
   slowestFirst,
   splitByDuration,
 } from './duration-split.mjs';
@@ -30,6 +32,19 @@ describe('splitting test files by recorded time', () => {
     expect(costOf(['x'], {})('x')).toBe(1);
   });
 
+  it('books an item with no recorded time by the estimate its caller picks', () => {
+    const seconds = {a: 10, b: 4, c: 1, zero: 0};
+    const items = ['a', 'b', 'c', 'zero', 'new'];
+    const p90 = costOf(items, seconds, {
+      estimate: values => percentileOf(values, 0.9),
+    });
+    expect([p90('a'), p90('new')]).toEqual([10, 10]);
+    expect(percentileOf([5, 1, 3, 2, 4, 6, 7, 8, 9, 10], 0.9)).toBe(9);
+    expect(percentileOf([], 0.9)).toBe(1);
+    // With nothing recorded, an item counts 1 whatever the estimate.
+    expect(costOf(['x'], {}, {estimate: () => 50})('x')).toBe(1);
+  });
+
   it('orders slowest first, ties by path, whatever order items came in', () => {
     const cost = costOf(['b', 'a', 'c'], {a: 2, b: 2, c: 5});
     expect(slowestFirst(['b', 'a', 'c'], cost)).toEqual(['c', 'a', 'b']);
@@ -47,6 +62,47 @@ describe('splitting test files by recorded time', () => {
     expect(legs.findIndex(leg => leg.includes('a'))).not.toBe(
       legs.findIndex(leg => leg.includes('b')),
     );
+  });
+
+  it('keeps `together` items in the last leg, with only the items `besideTogether` accepts beside them', () => {
+    // c1 and c2 share a leg; h (heavy) never joins it, small l1/l2 may.
+    const seconds = {c1: 6, c2: 5, h: 20, m: 4, l1: 1, l2: 1};
+    const cost = costOf(Object.keys(seconds), seconds);
+    const apart = {
+      together: item => item.startsWith('c'),
+      besideTogether: item => cost(item) <= 1,
+    };
+    const legs = splitByDuration(Object.keys(seconds), 3, cost, [], apart);
+    expect(legs[2].filter(item => item.startsWith('c')).sort()).toEqual([
+      'c1',
+      'c2',
+    ]);
+    expect(legs.slice(0, 2).flat()).not.toContain('c1');
+    for (const item of legs[2])
+      expect(['c1', 'c2', 'l1', 'l2']).toContain(item);
+    expect(legs.flat().sort()).toEqual(Object.keys(seconds).sort());
+    // One leg, or no `together` item among the items: as without it.
+    expect(splitByDuration(['c1', 'h'], 1, cost, [], apart)).toEqual([
+      ['c1', 'h'],
+    ]);
+    expect(splitByDuration(['h', 'm', 'l1'], 2, cost, [], apart)).toEqual(
+      splitByDuration(['h', 'm', 'l1'], 2, cost),
+    );
+  });
+
+  it('keeps `together` items apart in each split while fitting legs to a budget', () => {
+    // Without the rule, c1 and c2 (the two slowest) take a leg each.
+    const seconds = {c1: 6, c2: 6, h1: 5, h2: 5, l1: 1};
+    const cost = costOf(Object.keys(seconds), seconds);
+    const plan = fitLegsToBudget(Object.keys(seconds), cost, {
+      budget: 12,
+      together: item => item.startsWith('c'),
+      besideTogether: item => cost(item) <= 1,
+    });
+    const leg = plan.shares.find(share => share.includes('c1'));
+    expect(leg).toContain('c2');
+    expect(leg).not.toContain('h1');
+    expect(leg).not.toContain('h2');
   });
 
   it('refuses a split that lost, repeated or added an item', () => {
@@ -74,7 +130,7 @@ describe('splitting test files by recorded time', () => {
       /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     expect(read('.github/scripts/a11y-pr-contracts.mjs')).toMatch(
-      /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
+      /import \{[^}]*costOf[^}]*fitLegsToBudget[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     for (const file of [
       'scripts/vitest-shard-sequencer.mjs',
@@ -152,5 +208,23 @@ describe('fitting legs to a budget', () => {
       expect(plan.count, names.join('')).toBe(3);
       expect(plan.shares.flat().sort()).toEqual(names);
     }
+  });
+});
+
+describe('mergeRecord', () => {
+  it('sorts with localeCompare unless given another order', () => {
+    const record = {b: 1, B: 2};
+    expect(Object.keys(mergeRecord(record, {a: 3}, () => true))).toEqual([
+      'a',
+      'b',
+      'B',
+    ]);
+    expect(
+      Object.keys(
+        mergeRecord(record, {a: 3}, () => true, {
+          compare: (x, y) => (x < y ? -1 : x > y ? 1 : 0),
+        }),
+      ),
+    ).toEqual(['B', 'a', 'b']);
   });
 });

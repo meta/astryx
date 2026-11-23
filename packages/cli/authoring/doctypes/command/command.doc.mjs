@@ -104,6 +104,12 @@ export const doc = {
           description:
             'Whether the argument collects a variable number of values.',
         },
+        {
+          name: 'args[].names',
+          type: "'component' | 'hook' | 'topic' | 'template' | 'theme'",
+          description:
+            "The kind of item a value of the argument names, such as `component` for `astryx component <names...>`. On a base other than Core, help hides an example that gives the argument a value, since the item it names is Core's; a `<placeholder>` value names no item, so its example stays.",
+        },
       ],
     },
     {
@@ -146,6 +152,18 @@ export const doc = {
           type: 'boolean',
           description:
             'True for CLI-only flags with no function param (e.g. --verbose). Nothing reads it.',
+        },
+        {
+          name: 'options[].names',
+          type: "'component' | 'hook' | 'topic' | 'template' | 'theme'",
+          description:
+            'The kind of item the option\'s value names, such as `theme` for `--like <theme>`. A run whose `--base` names no installed package suggests the same run with that value given to this option instead.',
+        },
+        {
+          name: 'options[].pointers',
+          type: '(string | {commands: string[], text: string})[]',
+          description:
+            "Parts that continue the option's description, in order: text, or a pointer that names other commands or options by their command paths, such as `{commands: ['theme build'], text: ', and for theme build reports'}`. Help leaves a pointer out when the run's base does not serve every path it names; `astryx manifest`, `astryx docs`, and search read every part.",
         },
       ],
     },
@@ -205,6 +223,18 @@ export const doc = {
         'What the command does outside a project. `same`: the answer it gives in a new project. `refuse`: it writes nothing and fails, naming the app project or integration package it needs. `own`: something else. Every `refuse` and `own` command also carries an `In global mode:` note in its `notes` that tells readers exactly what it does. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. The CLI tests run every command in an empty folder and check what it does against this value; `astryx doctor` does not check it.',
     },
     {
+      name: 'pointers',
+      type: '{commands: string[], text: string}[]',
+      description:
+        "Short clauses that send a reader of the summary to other commands, each with the command paths it names, such as `{commands: ['theme build'], text: 'to compile one, use theme build'}`. Help, `astryx manifest`, `astryx docs`, and search show each after the summary, in parentheses; help leaves one out when the run's base does not serve every command it names. Keep the summary itself free of other command names.",
+    },
+    {
+      name: 'requires',
+      type: 'BaseStep[]',
+      description:
+        'Platform steps the command cannot run without, such as `themes.compile`. Declare only a step the command cannot do without; a command that declares none works on every base. An option takes the same field, and an argument takes `{<value>: BaseStep[]}` for a value that needs a step. Help hides what the run\'s base does not serve, a run refuses with `ERR_BASE_CAPABILITY`, and `astryx manifest` publishes `requires` and `available`. A command that only groups subcommands declares none.',
+    },
+    {
       name: 'deprecated',
       type: 'string',
       description: 'Deprecation notice — a DEP-* id and the replacement.',
@@ -241,7 +271,7 @@ export const doc = {
   args: [{name: 'query', param: 'query', required: true}],
   options: [
     {flag: '--type <domain>', param: 'options.type', choices: ['component', 'hook', 'doc', 'template', 'theme']},
-    {flag: '--verbose', cliOnly: true, description: "Also print each result's score and match reason."},
+    {flag: '--verbose', cliOnly: true, description: "Also print each result's score and match reason, and its whole description."},
   ],
   examples: [{label: 'Terminal', cli: 'astryx search button --json'}],
   exitCodes: [{code: 1, when: 'The --type value is not a known domain.'}],

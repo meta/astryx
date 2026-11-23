@@ -4,14 +4,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {render} from '@astryxdesign/cli/api/experimental';
 import {
   PREVIEW_IMAGE_WIDTH,
+  PREVIEW_MARKUP_RENDER,
+  previewDocument,
   previewMarkup,
   previewPageSource,
   stagePreviewPage,
   stageThemesStorePage,
   themesStorePageSource,
 } from '../../scripts/generate-landing-template-previews.mjs';
+import {previewColorModeFragment} from '../app/(site)/_landing/templatePreviewColorMode';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
 
 const docsiteDir = path.resolve(__dirname, '../..');
@@ -43,10 +47,75 @@ describe('previewPageSource', () => {
     expect(source).toContain('<Theme theme={neutralTheme} mode="system">');
   });
 
-  it('keeps the preview-viewport wrapper of the live template previews', () => {
+  it('renders the template directly inside the theme, as the frame shows it', () => {
     expect(previewPageSource('./template/page')).toContain(
-      '<div className="preview-viewport">\n        <Page />\n      </div>',
+      '<Theme theme={neutralTheme} mode="system">\n      <Page />\n    </Theme>',
     );
+  });
+});
+
+describe('previewDocument', () => {
+  const html = previewDocument(RENDERED, {
+    fontStylesheet: 'https://fonts.example/css2?family=Figtree',
+  });
+
+  it('drops the embedded source, so the file carries no script', () => {
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('x-astryx-source');
+  });
+
+  it('keeps the image URLs of the rendered page', () => {
+    expect(html).toContain(
+      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+    );
+  });
+
+  it('loads the theme fonts and stays out of search results', () => {
+    expect(html).toContain(
+      '<meta name="robots" content="noindex"><link rel="stylesheet" href="https://fonts.example/css2?family=Figtree"><style>',
+    );
+  });
+
+  it('adds no font stylesheet when the theme names none', () => {
+    expect(previewDocument(RENDERED, {fontStylesheet: null})).toContain(
+      '<meta name="robots" content="noindex"><style>',
+    );
+  });
+
+  it('fills the frame and never scrolls', () => {
+    expect(html).toContain('html,body{height:100%;overflow:hidden}');
+    expect(html).toContain(
+      'body>[data-astryx-theme]>:first-child{height:100%!important;min-height:100%!important}',
+    );
+  });
+
+  it('takes its color mode from the URL fragment', () => {
+    expect(html).toContain(
+      '<body><a id="light" hidden></a><a id="dark" hidden></a><div data-astryx-theme="neutral"><img',
+    );
+    expect(html).toContain(
+      ':root:has(#dark:target),:root:has(#dark:target) [data-astryx-theme]{color-scheme:dark!important}',
+    );
+    expect(html).toContain(
+      ':root:has(#light:target),:root:has(#light:target) [data-astryx-theme]{color-scheme:light!important}',
+    );
+  });
+});
+
+describe('previewColorModeFragment', () => {
+  it('adds nothing while the site follows the OS', () => {
+    expect(previewColorModeFragment('light', 'light')).toBe('');
+    expect(previewColorModeFragment('dark', 'dark')).toBe('');
+  });
+
+  it('adds nothing on the server and through hydration, whatever the OS scheme reads as', () => {
+    expect(previewColorModeFragment('system', 'light')).toBe('');
+    expect(previewColorModeFragment('system', 'dark')).toBe('');
+  });
+
+  it('names the mode that a visitor set against the OS', () => {
+    expect(previewColorModeFragment('dark', 'light')).toBe('#dark');
+    expect(previewColorModeFragment('light', 'dark')).toBe('#light');
   });
 });
 
@@ -74,6 +143,50 @@ describe('previewMarkup', () => {
     expect(markup).not.toContain('<style');
     expect(markup).not.toContain('<script');
     expect(markup).not.toContain('x-astryx-source');
+  });
+
+  it("carries StyleX's own class names, which the site's styles match, for a page that repeats an element", async () => {
+    const dir = fs.mkdtempSync(path.join(docsiteDir, '.preview-classes-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'page.tsx'),
+        `import {Button} from '@astryxdesign/core/Button';
+export default function Page() {
+  return <main>{Array.from({length: 400}, (_, i) => <Button key={i} label={\`Row \${i}\`} />)}</main>;
+}
+`,
+      );
+      await render('page.tsx', {
+        cwd: dir,
+        out: 'page.html',
+        ...PREVIEW_MARKUP_RENDER,
+      });
+      const out = previewMarkup(
+        fs.readFileSync(path.join(dir, 'page.html'), 'utf8'),
+      );
+      const lists = [...out.matchAll(/<button[^>]*\sclass="([^"]*)"/g)].map(
+        m => m[1],
+      );
+      expect(lists).toHaveLength(400);
+      for (const list of lists) {
+        expect(list).toMatch(/\sx[0-9a-z]{5,}/);
+        expect(list).not.toMatch(/(^|\s)_a[0-9a-z]+(\s|$)/);
+      }
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it("leaves out the page's script, a module script or a classic one", () => {
+    for (const tag of ['<script type="module">', '<script>']) {
+      const html = RENDERED.replace(
+        '</body>',
+        `${tag}document.title="drawn"</script></body>`,
+      );
+      const out = previewMarkup(html);
+      expect(out, tag).not.toContain('<script');
+      expect(out, tag).not.toContain('drawn');
+    }
   });
 
   it('keeps the image URLs of the rendered page and loads them at low priority', () => {

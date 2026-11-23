@@ -25,12 +25,43 @@ import {
   entries,
   QUERIES,
   expectSameAsFresh,
+  expectWarmHit,
   hasModuleHooks,
+  readKept,
+  writeKept,
+  docsTreeEntries,
+  themeFactsEntries,
+  BUILD_ID,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
+import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
+import {CACHE_LIMIT_BYTES} from '../foundation/fs/cache-eviction.mjs';
 
 usePackedCli();
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
+  it.skipIf(!hasModuleHooks)(
+    'leaves its folder within the limit when the command that kept it fails',
+    () => {
+      const tmp = keptTmp('failed-command-trim');
+      const dir = path.join(tmp, CACHE_NAME);
+      // An entry made long ago that alone holds more than the limit (a
+      // sparse file, so it takes no space).
+      const left = path.join(dir, 'gather-left-over-limit.json');
+      fs.writeFileSync(left, '');
+      fs.truncateSync(left, CACHE_LIMIT_BYTES + 1024 * 1024);
+      const old = new Date(Date.now() - 3600_000);
+      fs.utimesSync(left, old, old);
+      // A lookup that finds nothing keeps its name index, then fails
+      // through process.exit.
+      const failed = run(['component', 'NoSuchWidgetAnywhere'], {tmp});
+      expect(failed.status).toBe(1);
+      expect(fs.readdirSync(dir).length).toBeGreaterThan(1);
+      expect(fs.existsSync(left)).toBe(false);
+    },
+    120_000,
+  );
+
   it.skipIf(!hasModuleHooks)(
     'is not used after an integration is installed or removed',
     async () => {
@@ -111,9 +142,11 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       run(QUERIES[0], {tmp: kept});
       const [name] = [...entries(kept).keys()];
       const file = path.join(kept, CACHE_NAME, name);
-      const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const entry = readKept(file);
+      // An altered but well-formed catalog, which a run that reads it shows.
       entry.value.all = [];
-      fs.writeFileSync(file, JSON.stringify(entry));
+      entry.value.components = [];
+      writeKept(file, entry);
       expect(run(QUERIES[0], {tmp: kept}).stdout).not.toBe(fresh.stdout);
       expect(run(QUERIES[0], {tmp: kept, env: asPnp})).toEqual(fresh);
     },
@@ -136,6 +169,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           `export default function Page() { return null; }\n`,
         );
         run(QUERIES[0], {tmp, cwd: project});
+        // The warm path hits before anything is copied.
+        expectWarmHit(tmp, [QUERIES[0]], {cwd: project});
         const [mine] = [...entries(tmp).keys()];
         run(QUERIES[0], {tmp, cwd: other.dir});
         const [theirs] = [...entries(tmp).keys()].filter(name => name !== mine);
@@ -155,6 +190,233 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     120_000,
   );
 
+  it.skipIf(!hasModuleHooks)(
+    "keeps what theme build checks a theme against in Core's docs, and is not used after an edit to a visual-prop value in one of them",
+    () => {
+      const tmp = keptTmp('theme-facts');
+      // A project with an integration, so theme build keeps its gathers, and
+      // its own copies of the CLI and Core: theme build reads the Core
+      // installed beside the CLI that runs.
+      const {dir} = makeProject();
+      const scope = path.join(dir, 'node_modules', '@astryxdesign');
+      const cli = path.join(scope, 'cli');
+      fs.cpSync(packed, cli, {recursive: true, verbatimSymlinks: true});
+      const core = path.join(scope, 'core');
+      fs.unlinkSync(core);
+      copyPublishedCore(core);
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core', 'node_modules'),
+        path.join(core, 'node_modules'),
+        'dir',
+      );
+      fs.mkdirSync(path.join(dir, 'theme'));
+      // A theme with no component overrides.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'plain.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const plainTheme = defineTheme({name: 'plain', tokens: {'--color-accent': '#0b5fcc'}});\n`,
+      );
+      // `quiet` is not a built-in Button variant: the build adds it.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'probe.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const probeTheme = defineTheme({name: 'probe', components: {button: {'variant:quiet': {color: 'red'}}}});\n`,
+      );
+      const ask = ['theme', 'build', 'theme/probe.ts'];
+      try {
+        const plain = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(plain.status, plain.stderr).toBe(0);
+        const kept = themeFactsEntries(tmp);
+        expect(kept.size).toBe(1);
+        // A build after an edit to that theme reads the facts back: they do
+        // not depend on the theme.
+        fs.appendFileSync(path.join(dir, 'theme', 'plain.ts'), '// edited\n');
+        const edited = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(edited.status, edited.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        // A theme whose overrides name a prop value reads back the same
+        // entry: it holds every fact a build checks a theme against.
+        const first = run(ask, {tmp, cwd: dir, cli});
+        expect(first.status, first.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        // A warm run reads the facts back: the entry is not written again.
+        const warm = run(ask, {tmp, cwd: dir, cli});
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        expect(warm).toEqual(first);
+        // An in-place edit makes `quiet` a built-in value.
+        const doc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
+        const text = fs.readFileSync(doc, 'utf8');
+        const builtIn = "'primary' | 'secondary' | 'ghost' | 'destructive'";
+        expect(text).toContain(builtIn);
+        fs.writeFileSync(doc, text.replaceAll(builtIn, `${builtIn} | 'quiet'`));
+        const after = run(ask, {tmp, cwd: dir, cli});
+        expect(after).toEqual(run(ask, {tmp: freshTmp(), cwd: dir, cli}));
+        expect(after).not.toEqual(first);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    'lets a warm theme build of an unchanged theme load no css-tree',
+    () => {
+      const tmp = keptTmp('theme-no-css-tree');
+      // A project with an integration, so theme build keeps its gathers, and
+      // its own copy of the CLI, which reads the Core installed beside it.
+      const {dir} = makeProject();
+      const cli = path.join(dir, 'node_modules', '@astryxdesign', 'cli');
+      fs.cpSync(packed, cli, {recursive: true, verbatimSymlinks: true});
+      fs.mkdirSync(path.join(dir, 'theme'));
+      // A longhand its own shorthand resets: the settings check reports it.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'probe.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const probeTheme = defineTheme({name: 'probe', components: {button: {base: {paddingTop: '4px', padding: '8px'}}}});\n`,
+      );
+      // Each run's CommonJS modules, css-tree's among them, as it exits.
+      const log = path.join(dir, 'loaded.jsonl');
+      const preload = path.join(dir, 'record-loaded.cjs');
+      fs.writeFileSync(
+        preload,
+        `process.on('exit', () => require('node:fs').appendFileSync(process.env.LOADED_LOG, JSON.stringify({argv: process.argv.slice(2), files: Object.keys(require.cache)}) + '\\n'));\n`,
+      );
+      const env = {NODE_OPTIONS: `--require ${preload}`, LOADED_LOG: log};
+      const ask = ['theme', 'build', 'theme/probe.ts'];
+      /** The css-tree files the last theme build loaded. */
+      const cssTreeLoaded = () =>
+        fs
+          .readFileSync(log, 'utf8')
+          .trim()
+          .split('\n')
+          .map(line => JSON.parse(line))
+          .filter(entry => entry.argv.includes('build'))
+          .at(-1)
+          .files.filter((/** @type {string} */ file) =>
+            file.includes(`${path.sep}css-tree${path.sep}`),
+          );
+      try {
+        const first = run(ask, {tmp, cwd: dir, cli, env});
+        expect(first.status, first.stderr).toBe(0);
+        expect(JSON.parse(first.stdout).data.settingIssues).toHaveLength(1);
+        expect(cssTreeLoaded().length).toBeGreaterThan(0);
+        const warm = run(ask, {tmp, cwd: dir, cli, env});
+        expect(warm).toEqual(first);
+        expect(cssTreeLoaded()).toEqual([]);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "reads back what a template's source names components from, and loads no parser",
+    () => {
+      const tmp = keptTmp('template-syntax');
+      // Each run's CommonJS modules, @babel/parser's among them, as it exits.
+      const log = path.join(work, 'template-syntax-loaded.jsonl');
+      fs.rmSync(log, {force: true});
+      const preload = path.join(work, 'template-syntax-loaded.cjs');
+      fs.writeFileSync(
+        preload,
+        `process.on('exit', () => require('node:fs').appendFileSync(process.env.LOADED_LOG, JSON.stringify(Object.keys(require.cache)) + '\\n'));\n`,
+      );
+      const env = {NODE_OPTIONS: `--require ${preload}`, LOADED_LOG: log};
+      const ask = ['template', 'dashboard'];
+      /** The @babel/parser code the last run loaded; its package.json names its release. */
+      const parserLoaded = () =>
+        JSON.parse(
+          fs.readFileSync(log, 'utf8').trim().split('\n').at(-1),
+        ).filter(
+          (/** @type {string} */ file) =>
+            file.includes(path.join('@babel', 'parser') + path.sep) &&
+            /\.c?js$/.test(file),
+        );
+      const first = run(ask, {tmp, env});
+      expect(first.status, first.stderr).toBe(0);
+      expect(
+        JSON.parse(first.stdout).data.componentsToRead.length,
+      ).toBeGreaterThan(0);
+      expect(parserLoaded().length).toBeGreaterThan(0);
+      const warm = run(ask, {tmp, env});
+      expect(warm).toEqual(first);
+      expect(parserLoaded()).toEqual([]);
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps the CLI's own docs tree, which a reinstall or a copy in another folder gathers again",
+    async () => {
+      const tmp = keptTmp('docs-tree');
+      const ask = ['docs', 'authoring/building-blocks/components'];
+      const first = run(ask, {tmp});
+      expect(first.status, first.stderr).toBe(0);
+      expect(docsTreeEntries(tmp).size).toBe(1);
+      expectWarmHit(tmp, [ask]);
+      const tree = path.join('assets', 'docs', 'tree', 'components.doc.mjs');
+      /** @param {string} cli */
+      const edit = cli => {
+        const file = path.join(cli, tree);
+        const source = fs.readFileSync(file, 'utf8');
+        const edited = source.replace(
+          'Add components to an integration,',
+          'Add components to an integration package,',
+        );
+        expect(edited).not.toBe(source);
+        fs.writeFileSync(file, edited);
+        return () => fs.writeFileSync(file, source);
+      };
+      // A patched copy, installed beside the CLI as a package manager's patch
+      // installs one in another folder, while the CLI it came from stays as it
+      // was: it keeps its own entries.
+      const copy = path.join(path.dirname(packed), 'cli-copy');
+      fs.cpSync(packed, copy, {recursive: true});
+      try {
+        edit(copy);
+        const patched = run(ask, {tmp: freshTmp(), cli: copy});
+        expect(patched.stdout).not.toBe(first.stdout);
+        expect(run(ask, {tmp, cli: copy})).toEqual(patched);
+      } finally {
+        fs.rmSync(copy, {recursive: true, force: true});
+      }
+      // As patch-package or a hand edit leaves the installed CLI: same build
+      // id, same folder, other text. The build id and the folder stand for
+      // the CLI's own files, so the edit is not seen (the record says
+      // in-place edits to an installed CLI aren't supported).
+      const restore = edit(packed);
+      const buildIdFile = path.join(packed, BUILD_ID);
+      const buildId = fs.readFileSync(buildIdFile, 'utf8');
+      try {
+        const fresh = run(ask, {tmp: freshTmp()});
+        expect(fresh.stdout).not.toBe(first.stdout);
+        expect(run(ask, {tmp})).toEqual(first);
+        // A reinstall gives another build id: the next run gathers again.
+        fs.writeFileSync(
+          buildIdFile,
+          JSON.stringify({id: 'reinstalled'}) + '\n',
+        );
+        const [kept, again] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept).toEqual(again);
+        expect(kept.stdout).toBe(fresh.stdout);
+      } finally {
+        restore();
+        fs.writeFileSync(buildIdFile, buildId);
+      }
+    },
+    180_000,
+  );
+
   it("is not used after an edit to the installed CLI's table-building code or cards", async () => {
     // As patch-package or a hand edit leaves it: same build id, other code.
     const tmp = keptTmp('code-edit');
@@ -163,6 +425,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     );
     for (const ask of asks) run(ask, {tmp});
     const before = asks.map(ask => run(ask, {tmp}).stdout);
+    if (hasModuleHooks) expectWarmHit(tmp, asks);
     const file = path.join(packed, 'api', 'search', '_entries.mjs');
     const source = fs.readFileSync(file, 'utf8');
     const edited = source.replace(
@@ -190,6 +453,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     const ask = ['search', 'color picker'];
     run(ask, {tmp});
     const was = run(ask, {tmp}).stdout;
+    if (hasModuleHooks) expectWarmHit(tmp, [ask]);
     const cardsFile = path.join(packed, 'api', 'search', '_cards.json');
     const cardsText = fs.readFileSync(cardsFile, 'utf8');
     const cards = Object.fromEntries(
@@ -220,6 +484,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     ];
     for (const ask of asks) run(ask, {tmp});
     const before = asks.map(ask => run(ask, {tmp}).stdout);
+    if (hasModuleHooks) expectWarmHit(tmp, asks);
     const file = path.join(
       packed,
       'api',
@@ -251,6 +516,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     // on the restored weights, so only the stopword edit can miss.
     for (const ask of asks) run(ask, {tmp});
     const seeded = asks.map(ask => run(ask, {tmp}).stdout);
+    if (hasModuleHooks) expectWarmHit(tmp, asks);
     const query = path.join(packed, 'api', 'search', '_query.mjs');
     const querySource = fs.readFileSync(query, 'utf8');
     const editedQuery = querySource.replace(

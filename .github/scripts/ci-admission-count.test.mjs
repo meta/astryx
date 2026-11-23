@@ -37,8 +37,12 @@ afterAll(() => {
 describe("a pull request's peak", () => {
   it("is ci.yml's pull-request peak plus the jobs its labels add", () => {
     const base = pullRequestPeak(workflow, []);
-    expect(workflow).toContain(
-      `peak: \${{ github.event_name == 'workflow_dispatch' && 39 || ${base} }}`,
+    // The release-check's own peak (the number before `||`) is checked in
+    // ci-admission.test.mjs against the jobs a release-check holds at once.
+    expect(workflow).toMatch(
+      new RegExp(
+        `peak: \\$\\{\\{ github\\.event_name == 'workflow_dispatch' && \\d+ \\|\\| ${base} \\}\\}`,
+      ),
     );
     const legs = JSON.parse(/label-legs: '([^']*)'/.exec(workflow)[1]);
     expect(pullRequestPeak(workflow, ['ci:run-visual'])).toBe(

@@ -17,6 +17,15 @@ export const docs = {
     targets: [
       {className: 'astryx-link', visualProps: ['color']},
     ],
+    vars: [
+      {
+        name: '--link-hover-color',
+        description:
+          'Hover color of an accent link. Set it on a container or the link; unset, the hover mixes the accent text color with the hover tint.',
+        default:
+          'color-mix(in srgb, var(--color-text-accent), var(--color-tint-hover) 15%)',
+      },
+    ],
   },
   components: [
     {
@@ -215,6 +224,15 @@ export const docsZh = {
   theming: {
     targets: [
       {className: 'astryx-link', visualProps: ['color']},
+    ],
+    vars: [
+      {
+        name: '--link-hover-color',
+        description:
+          'Hover color of an accent link. Set it on a container or the link; unset, the hover mixes the accent text color with the hover tint.',
+        default:
+          'color-mix(in srgb, var(--color-text-accent), var(--color-tint-hover) 15%)',
+      },
     ],
   },
   components: [

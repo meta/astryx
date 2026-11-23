@@ -14,7 +14,27 @@ import {
   findHookDoc,
 } from '../../../foundation/discovery/hook-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
-import {formatAccessibility, mdCell} from './component-format.mjs';
+import {
+  formatAccessibility,
+  formatBestPractices,
+  formatBrief,
+  formatCompact,
+  formatFull,
+  mdCell,
+} from './component-format.mjs';
+
+/**
+ * Whether a hook doc documents its options as `props`, as a component doc
+ * does, with no `params` or `returns`. A read of such a doc prints it the
+ * way a component read does, so its description, props and examples show.
+ * @param {any} docs
+ * @returns {boolean}
+ */
+function isPropsShaped(docs) {
+  return (
+    Array.isArray(docs.props) && !('params' in docs) && !('returns' in docs)
+  );
+}
 
 /**
  * Build a signature string from hook docs.
@@ -22,7 +42,7 @@ import {formatAccessibility, mdCell} from './component-format.mjs';
  * @param {any} docs
  * @returns {string}
  */
-function buildSignature(docs) {
+export function buildSignature(docs) {
   const name = docs.name;
 
   // Build params string — only top-level params (skip options.foo nested params)
@@ -60,7 +80,7 @@ function formatParamsTable(params) {
   /** @type {string[]} */
   const lines = [];
   lines.push('| Param | Type | Default | Description |');
-  lines.push('|-------|------|---------|-------------|');
+  lines.push('|---|---|---|---|');
   for (const p of params) {
     const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
     const req = p.required ? ' **(required)**' : '';
@@ -81,13 +101,35 @@ function formatReturnsTable(returns) {
   /** @type {string[]} */
   const lines = [];
   lines.push('| Field | Type | Description |');
-  lines.push('|-------|------|-------------|');
+  lines.push('|---|---|---|');
   for (const r of returns) {
     lines.push(
       `| \`${mdCell(r.name)}\` | \`${mdCell(r.type)}\` | ${mdCell(r.description)} |`,
     );
   }
   return lines.join('\n');
+}
+
+/**
+ * The `## Parameters` section: what the hook takes, one row per parameter. A
+ * hook read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookParameters(docs) {
+  if (!docs.params?.length) return [];
+  return ['## Parameters\n', formatParamsTable(docs.params) + '\n'];
+}
+
+/**
+ * The `## Returns` section: what the hook returns, one row per field. A hook
+ * read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookReturns(docs) {
+  if (!docs.returns?.length) return [];
+  return ['## Returns\n', formatReturnsTable(docs.returns) + '\n'];
 }
 
 /**
@@ -98,6 +140,22 @@ function formatReturnsTable(returns) {
  * @returns {string}
  */
 export function formatHookFull(docs) {
+  if (isPropsShaped(docs)) {
+    // The component read prints the usage text in place of the description;
+    // the whole hook read prints both, description first.
+    const usage = docs.usage?.description;
+    const both =
+      usage && docs.description && usage !== docs.description
+        ? {
+            ...docs,
+            usage: {
+              ...docs.usage,
+              description: `${docs.description}\n\n${usage}`,
+            },
+          }
+        : docs;
+    return formatFull(both);
+  }
   /** @type {string[]} */
   const sections = [];
 
@@ -107,28 +165,13 @@ export function formatHookFull(docs) {
   if (desc) sections.push(desc + '\n');
 
   // Best Practices (same position as component format)
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (analogous to ## Props)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
-  // Returns (hook-specific, no component equivalent)
-  if (docs.returns?.length) {
-    sections.push('## Returns\n');
-    sections.push(formatReturnsTable(docs.returns) + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   return sections.join('\n');
 }
@@ -139,9 +182,16 @@ export function formatHookFull(docs) {
  *   # Name, description, ## Import, ## Best Practices, ## Parameters, ## Returns
  * @param {any} docs
  * @param {string} [importPath]
+ * @param {{propsCommand?: string | null, fullCommand?: string | null}} [options]
+ *   - for a hook documented with props: the commands its short answer names,
+ *   as a component read's does
  * @returns {string}
  */
-export function formatHookCompact(docs, importPath) {
+export function formatHookCompact(docs, importPath, options = {}) {
+  // The caller's fallback import names the hooks entry point, which a hook
+  // documented with a component (useTableSelection) is not exported from.
+  if (isPropsShaped(docs))
+    return formatCompact(docs, docs.name, docs.importPath, options);
   /** @type {string[]} */
   const sections = [];
 
@@ -161,28 +211,13 @@ export function formatHookCompact(docs, importPath) {
   }
 
   // Best Practices (matches component compact)
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
-  // Parameters (matches ## Props in component compact)
-  if (docs.params?.length) {
-    sections.push('## Parameters\n');
-    sections.push(formatParamsTable(docs.params) + '\n');
-  }
+  sections.push(...formatHookParameters(docs));
 
-  // Returns
-  if (docs.returns?.length) {
-    sections.push('## Returns\n');
-    sections.push(formatReturnsTable(docs.returns) + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   // Related components (compact footer)
   /** @type {string[]} */
@@ -212,6 +247,7 @@ export function formatHookCompact(docs, importPath) {
  * @returns {string}
  */
 export function formatHookBrief(docs) {
+  if (isPropsShaped(docs)) return formatBrief(docs, docs.name, docs.importPath);
   /** @type {string[]} */
   const output = [];
 
@@ -282,8 +318,6 @@ export async function formatHookBriefAll(coreDir) {
  * @returns {string}
  */
 export function formatHookParams(docs) {
-  if (docs.params?.length) {
-    return `## Parameters\n\n${formatParamsTable(docs.params)}\n`;
-  }
+  if (docs.params?.length) return formatHookParameters(docs).join('\n');
   return `No parameters documentation found for ${docs.name}.\n`;
 }

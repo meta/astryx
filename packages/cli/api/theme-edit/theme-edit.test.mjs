@@ -119,6 +119,34 @@ describe('new', () => {
 });
 
 describe('refusals', () => {
+  it('refuses a background on a selected table row, which Core paints inline, and points to the token it reads', async () => {
+    const before = settingsOf('t');
+    const r = await refusal(() =>
+      themeEditSet('t', 'background', '#dbeafe', {
+        cwd,
+        on: 'table-row',
+        state: 'selected',
+      }),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.message).toContain(
+      "By default Core paints table-row's background-color when selected as an inline style from --color-accent-muted",
+    );
+    expect(r.message).toContain(
+      'only where the component is set not to paint it (such as a table with its row highlight off) does a selected background-color apply',
+    );
+    expect(r.run).toContain(
+      "astryx experimental theme editor set t --color-accent-muted '#dbeafe' --on table-row --state selected",
+    );
+    expect(settingsOf('t')).toBe(before);
+    await themeEditSet('t', '--color-accent-muted', '#dbeafe', {
+      cwd,
+      on: 'table-row',
+      state: 'selected',
+    });
+    await themeEditUndo('t', {cwd});
+  });
+
   it('refuses a token the part never reads and names the property that works; nothing is written', async () => {
     const before = settingsOf('t');
     const r = await refusal(() =>
@@ -158,7 +186,9 @@ describe('refusals', () => {
       themeEditSet('t', 'background', '#fff', {
         cwd,
         on: 'button',
-        state: 'pressed',
+        // (A word for one of its states is written as that state: a state
+        // with no such word is refused.)
+        state: 'indeterminate',
       }),
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_STATE');
@@ -206,9 +236,8 @@ describe('refusals', () => {
       themeEditSet('t', 'box-shadow', 'none', {cwd}),
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
-    expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on card',
-    );
+    // No part was named and box-shadow has no theme-wide dial: how.
+    expect(r.run[0]).toBe('astryx experimental theme editor how box-shadow');
   });
 });
 
@@ -385,16 +414,16 @@ describe('typed modes', () => {
     });
   });
 
-  it('refuses --mode on a one-mode theme', async () => {
+  it("reads a one-mode theme's own --mode as no --mode, and says so", async () => {
     await themeEditNew('night', {cwd});
     await themeEditSet('night', 'mode', 'dark-only', {cwd});
-    const r = await refusal(() =>
-      themeEditSet('night', '--color-accent', '#ff0000', {cwd, mode: 'dark'}),
+    const r = await themeEditSet('night', '--color-accent', '#ff0000', {
+      cwd,
+      mode: 'dark',
+    });
+    expect(r.data.notes.join(' ')).toMatch(
+      /night is dark-only: --mode dark is its own mode, the same as no --mode/,
     );
-    expect(r.code).toBe('ERR_THEME_NO_MODE');
-    expect(r.run).toEqual([
-      "astryx experimental theme editor set night --color-accent '#ff0000'",
-    ]);
   });
 });
 
@@ -441,14 +470,17 @@ describe('groups', () => {
     await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'containers'});
   });
 
-  it('--only is refused for a group that does not spread', async () => {
-    const r = await refusal(() =>
-      themeEditSet('t', 'box-shadow', 'none', {cwd, on: 'card', only: true}),
+  it('--only on a part of a group that does not spread is taken, and said', async () => {
+    const r = await themeEditSet('t', 'box-shadow', 'none', {
+      cwd,
+      on: 'card',
+      only: true,
+    });
+    expect(r.data.notes.join(' ')).toMatch(
+      /card is styled on its own already .* so --only changes nothing/,
     );
-    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
-    expect(r.run).toEqual([
-      'astryx experimental theme editor set t box-shadow none --on card',
-    ]);
+    // Taken back, so the settings stay as the other cases expect them.
+    await themeEditUndo('t', {cwd});
   });
 });
 
@@ -549,6 +581,7 @@ describe('how on real parts, questions and settings', () => {
     expect(r.data.kind).toBe('question');
     expect(r.data.understood.parts).toContain('banner');
     const commands = r.data.results.flatMap(x => x.commands);
+    // (Written in every mode, as main writes it.)
     expect(
       commands.some(c =>
         c.endsWith("editor set t color '#ffffff' --on banner"),

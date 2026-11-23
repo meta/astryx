@@ -64,18 +64,21 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {TAP_WOBBLE} from '../gestures/tapWobble';
 import {VelocityTracker} from '../gestures/VelocityTracker';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
 import {sheet} from '../motion/uikit/sheet';
+import {touchActionAllowsPan} from '../utils/scrollView';
 import {
   computeDetentOffsets,
   peekOffsetFor,
   resolveSettleOffset,
   scrimOpacityForOffset,
 } from './snapOffsets';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * The stops a sheet of a given height rests at: offsets from fully-open in px,
@@ -143,14 +146,14 @@ const DRAG_PROMOTION_SLOP = 8;
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
 // expose navigator.vibrate, so this is a no-op there; skipped under
 // reduced-motion.
-function hapticTick(): void {
+function hapticTick(sheet: Element | null): void {
   if (
     typeof navigator === 'undefined' ||
     typeof navigator.vibrate !== 'function'
   ) {
     return;
   }
-  if (prefersReducedMotion()) {
+  if (reducesMotion(sheet)) {
     return;
   }
   navigator.vibrate(8);
@@ -263,6 +266,26 @@ export function isInsideNestedLayer(
     }
   }
   return false;
+}
+
+/**
+ * Whether the content between `target` and the body leaves no one-finger pan
+ * to the browser, as a menu whose rows fit does with `pinch-zoom`. A pan
+ * recognizer leaves such a touch to that content. Content that allows a pan
+ * on either axis (`pan-x` on the date pickers' month scroller) does not
+ * count, nor do the body and the sheet's own surfaces above it.
+ */
+export function leavesNoPan(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  if (!(target instanceof Element) || target === body) {
+    return false;
+  }
+  return (
+    !touchActionAllowsPan(target, 'x', body) &&
+    !touchActionAllowsPan(target, 'y', body)
+  );
 }
 
 /**
@@ -528,13 +551,6 @@ export interface UseSheetGesturesResult {
   settledLayoutOffset: number;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /**
  * Drag + snap machinery for the bottom sheet. Returns props to spread on the
  * grab handle and the sliding surface, plus live drag state. A slow drag
@@ -676,7 +692,7 @@ export function useSheetGestures({
       if (
         shouldAnimate &&
         Math.abs(renderedOffset - targetOffset) > 0.5 &&
-        !prefersReducedMotion()
+        !reducesMotion(sheetElRef.current)
       ) {
         pendingScrollPreservationInsetRef.current = targetInset;
         settlingLayoutOffsetRef.current = layoutOffset;
@@ -710,12 +726,8 @@ export function useSheetGestures({
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
 
-  // The resolver is refreshed during render, not with the callbacks below: the
-  // layout effect that re-anchors on a change to it runs BEFORE passive
-  // effects, so a resolver parked in one would still be the previous set of
-  // stops by the time the re-anchor read it.
-  const snapHeightsRef = useRef(snapHeights);
-  snapHeightsRef.current = snapHeights;
+  // It is current before any layout effect, so the re-anchor reads the new stops.
+  const snapHeightsRef = useCommittedRef(snapHeights);
   const onTravelStartRef = useRef(onTravelStart);
   onTravelStartRef.current = onTravelStart;
 
@@ -884,18 +896,21 @@ export function useSheetGestures({
   // viewport before comparing the candidate visible heights; otherwise every
   // snap point lands that many px too low. Snap heights are resolved lazily so
   // they track the viewport.
-  const resolveDetents = useCallback((height: number): SheetDetents => {
-    const visibleSheetHeight = visibleHeightForOffset(
-      height,
-      0,
-      offscreenBlockEndInsetRef.current,
-    );
-    const offsets = computeDetentOffsets(
-      visibleSheetHeight,
-      snapHeightsRef.current?.() ?? [],
-    );
-    return {offsets, peekOffset: peekOffsetFor(offsets, visibleSheetHeight)};
-  }, []);
+  const resolveDetents = useCallback(
+    (height: number): SheetDetents => {
+      const visibleSheetHeight = visibleHeightForOffset(
+        height,
+        0,
+        offscreenBlockEndInsetRef.current,
+      );
+      const offsets = computeDetentOffsets(
+        visibleSheetHeight,
+        snapHeightsRef.current?.() ?? [],
+      );
+      return {offsets, peekOffset: peekOffsetFor(offsets, visibleSheetHeight)};
+    },
+    [snapHeightsRef],
+  );
 
   // The fully open height right now. At a resizing detent the element has a
   // stale pixel height. So drop the inline height, measure, and put it back in
@@ -1187,7 +1202,7 @@ export function useSheetGestures({
           scrimOpacityForOffset(target, offsets, dismissOffset, peekOffset),
         );
         if (target !== baseOffset) {
-          hapticTick();
+          hapticTick(sheetElRef.current);
         }
       };
 
@@ -1687,7 +1702,11 @@ export function useSheetGestures({
       // content while the finger is still down (see onTouchMove). A touch
       // inside a layer this sheet hosts is that layer's, never tracked here.
       releaseContentHold(touchDragRef.current);
-      if (!touch || isInsideNestedLayer(event.target, body)) {
+      if (
+        !touch ||
+        isInsideNestedLayer(event.target, body) ||
+        leavesNoPan(event.target, body)
+      ) {
         touchDragRef.current = null;
         return;
       }
