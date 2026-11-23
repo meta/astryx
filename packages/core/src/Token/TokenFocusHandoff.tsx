@@ -10,13 +10,9 @@
  *   that report focus to it
  * @position Internal to Token; keeps Token.tsx presentational
  *
- * Token is a presentational component (see
- * /internal/eslint-plugin-astryx/presentational-component.js) and must not use
- * refs or effects. A link Token replaces its structure when `isDisabled`
- * changes: the link becomes a plain anchor, or a button when the Token has
- * `onClick` or sits in a trigger, and the Remove button is replaced with it.
- * TokenFocusHandoff stays in place above that structure and holds the refs
- * that hand focus from the old label and Remove button to the new ones.
+ * Token is presentational, so it holds no refs or effects. Disabling a link
+ * Token replaces its control and its Remove button. This provider stays
+ * mounted above them, and its refs hand focus to the new ones.
  */
 
 import {
