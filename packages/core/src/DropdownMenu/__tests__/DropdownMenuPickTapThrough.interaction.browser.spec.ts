@@ -10,8 +10,8 @@
  *   cancelled, and no mouse event or click reaches the control beneath the
  *   finger. That holds also when a busy main thread delays the touchend past
  *   the click guard's window.
- * @position Real-engine proof for module:DropdownMenu/useMenuPress and the
- *   click guard (overlay-dismissal FR11); the jsdom half is
+ * @position Real-engine proof for module:DropdownMenu/useMenuPress FR5 and
+ *   the click guard (spec:AST-094 FR21, FR26); the jsdom half is
  *   ../DropdownMenuPickTouchEnd.test.tsx
  */
 
@@ -123,7 +123,7 @@ async function pickLog(page: Page): Promise<string[]> {
   );
 }
 
-test.describe("a finger's pick in a submenu (overlay-dismissal FR11)", () => {
+test.describe("a finger's pick in a submenu (spec:AST-094 FR21, FR26)", () => {
   test('cancels its touchend, and no click reaches the control beneath', async ({
     page,
   }) => {
