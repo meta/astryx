@@ -958,9 +958,10 @@ export function NumberInput({
     pendingInput,
   ]);
 
-  // The form value is the committed number as the field shows it with no
-  // draft: raw with `formatValue`, otherwise the plain number at rest and the
-  // locale-formatted number while focused.
+  // The form value is the effective number (optimistic value while pending,
+  // committed value at rest) as the field shows it with no draft: raw with
+  // `formatValue`, otherwise the plain number at rest and the locale-formatted
+  // number while focused.
   const hiddenFormValue =
     effectiveValue == null
       ? ''
@@ -1499,7 +1500,8 @@ export function NumberInput({
         data-autofocus={hasAutoFocus || undefined}
         aria-valuemin={min ?? undefined}
         aria-valuemax={max ?? undefined}
-        // The ARIA value and hidden form input expose the committed value;
+        // The ARIA value and hidden form input expose the effective value
+        // (optimistic value while pending, committed value at rest);
         // pendingInput is still an uncommitted edit and may be invalid.
         aria-valuenow={effectiveValue ?? undefined}
         aria-valuetext={
