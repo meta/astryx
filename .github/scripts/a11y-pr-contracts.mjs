@@ -838,14 +838,19 @@ export function planOverLimit(legs, isPullRequest) {
   const limit = isPullRequest ? LEG_LIMIT_MS : RELEASE_LEG_LIMIT_MS;
   if (legs.longestMs <= limit) return '';
   const minutes = (legs.longestMs / 60000).toFixed(1);
-  const job = isPullRequest ? "a leg's 15-minute job" : "the release check's 360-minute job";
+  const job = isPullRequest
+    ? "a leg's 15-minute job"
+    : "the release check's 360-minute job";
   return `::error title=Accessibility specs over their leg's time::${legs.count} legs still leave ${minutes} min of recorded time in one leg, more than the ${limit / 60000} minutes ${job} leaves for its specs. Split the change, or its longest spec files.`;
 }
 
 /**
  * The legs an opt-in run needs: enough that each leg's recorded time fits
  * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
- * least time (`splitByDuration`, as the other leg planners). The recorded
+ * least time (`splitByDuration`, as the other leg planners). It starts at the
+ * total over the budget and adds a leg while the longest is still over it,
+ * because a split by whole files can leave one leg a little over. A file
+ * longer than the budget alone sets the budget: no leg count splits it. The recorded
  * times come from release legs that run four files at once on four cores; one
  * file alone on a pull-request runner runs faster, so a leg sums them without
  * the default check's margin.
@@ -856,16 +861,23 @@ export function planOverLimit(legs, isPullRequest) {
 export function planLegs(files, seconds, maxLegs) {
   const cost = costOf(files, seconds);
   const sum = list => list.reduce((total, file) => total + cost(file), 0);
-  const count = Math.min(
-    Math.max(1, maxLegs),
+  const most = Math.max(1, maxLegs);
+  const longestMs = shares =>
+    Math.max(...shares.map(share => sum(share) * 1000));
+  let count = Math.min(
+    most,
     Math.max(1, Math.ceil((sum(files) * 1000) / LEG_BUDGET_MS)),
   );
-  const shares = splitByDuration(files, count, cost);
-  return {
-    count,
-    shares,
-    longestMs: Math.max(...shares.map(share => sum(share) * 1000)),
-  };
+  const budgetMs = Math.max(
+    LEG_BUDGET_MS,
+    ...files.map(file => cost(file) * 1000),
+  );
+  let shares = splitByDuration(files, count, cost);
+  while (count < most && count < files.length && longestMs(shares) > budgetMs) {
+    count += 1;
+    shares = splitByDuration(files, count, cost);
+  }
+  return {count, shares, longestMs: longestMs(shares)};
 }
 
 /**
