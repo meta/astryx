@@ -1592,6 +1592,23 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('drills in from a menu that mounts open, as from one opened by its trigger (FR11)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}} isMenuOpen>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(shownRow('Move to'));
+    await waitFor(() =>
+      expect(visibleRows()).toEqual(['Back to Actions', 'Folder A']),
+    );
+  });
+
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
@@ -2666,6 +2683,13 @@ describe('DropdownMenuSubMenu header and footer', () => {
       await waitFor(() => expect(row).toHaveFocus());
       expect(isShown(rootMenu)).toBe(true);
       expect(isShown(rootField)).toBe(true);
+    });
+
+    it('the drilled-in view carries the dropdown-menu theme target while the root steps aside (FR20)', async () => {
+      const {rootMenu, dialog} = await openLabels({});
+      expect(isShown(rootMenu)).toBe(false);
+      expect(rootMenu.className).toContain('astryx-dropdown-menu');
+      expect(dialog.className).toContain('astryx-dropdown-menu');
     });
 
     it('a shown view follows its header or footer as it comes and goes: beside the root menu with one, inside it without', async () => {
