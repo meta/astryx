@@ -980,7 +980,7 @@ function DropdownMenuPopover({
   const acceptedOpenRef = useRef(false);
   const notifyClickOnShowRef = useRef(false);
   const pendingControlledOpenRef = useRef(false);
-  const suppressControlledRollbackHideRef = useRef(false);
+  const suppressControlledHideRef = useRef(false);
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const modality = useInteractionModalityTracking();
@@ -1077,12 +1077,12 @@ function DropdownMenuPopover({
     // Whatever closed the menu — light dismiss, the dismissal stack, Escape
     // or a controlled close — its flyouts close with it.
     hideOpenFlyouts();
-    if (suppressControlledRollbackHideRef.current) {
-      suppressControlledRollbackHideRef.current = false;
-      return;
-    }
     cancelMenuPressRef.current();
     pendingControlledOpenRef.current = false;
+    if (suppressControlledHideRef.current) {
+      suppressControlledHideRef.current = false;
+      return;
+    }
     onOpenChange?.(false);
     if (!isControlled) {
       setInternalIsOpen(false);
@@ -1290,8 +1290,7 @@ function DropdownMenuPopover({
     } else {
       isMountedOpenRef.current = false;
       if (popover.isOpen) {
-        suppressControlledRollbackHideRef.current =
-          pendingControlledOpenRef.current;
+        suppressControlledHideRef.current = true;
         pendingControlledOpenRef.current = false;
         popover.hide();
       } else if (openPendingRef.current && !pendingControlledOpenRef.current) {

@@ -1612,6 +1612,23 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     await waitFor(() => expect(shownMenu('Actions')).toBeDefined());
   });
 
+  it('drills in from a menu that mounts open, as from one opened by its trigger (FR11)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}} isMenuOpen>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(shownRow('Move to'));
+    await waitFor(() =>
+      expect(visibleRows()).toEqual(['Back to Actions', 'Folder A']),
+    );
+  });
+
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
