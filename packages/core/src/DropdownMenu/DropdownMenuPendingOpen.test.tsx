@@ -243,4 +243,47 @@ describe('DropdownMenu open that the layer holds until its trigger is an anchor'
       screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
     ).toHaveFocus();
   });
+
+  it('delivers close notification when a menu opened after a canceled pending open closes', async () => {
+    const onOpenChange = vi.fn();
+    function ControlledMenu({isOpen}: {isOpen: boolean}) {
+      return (
+        <div data-testid="card">
+          <DropdownMenu
+            button={{label: 'Actions'}}
+            isMenuOpen={isOpen}
+            onOpenChange={onOpenChange}>
+            <DropdownMenuItem label="Rename" onClick={() => {}} />
+          </DropdownMenu>
+        </div>
+      );
+    }
+    const {rerender} = render(<ControlledMenu isOpen={false} />);
+    const finishEntrance = startEntrance(screen.getByTestId('card'));
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+
+    // Open while the trigger has no box, then close before it shows.
+    rerender(<ControlledMenu isOpen={true} />);
+    rerender(<ControlledMenu isOpen={false} />);
+
+    // Settle the entrance and give the trigger its box.
+    boxes.set(trigger, {width: 80, height: 24});
+    signal();
+    flushFrame();
+    await finishEntrance();
+    flushFrame();
+
+    // Open again now that the trigger is ready.
+    rerender(<ControlledMenu isOpen={true} />);
+    flushFrame();
+    flushFrame();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    // Dismiss with Escape.
+    const menu = screen.getByRole('menu', {name: 'Actions', hidden: true});
+    fireEvent.keyDown(menu, {key: 'Escape'});
+    flushFrame();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });
