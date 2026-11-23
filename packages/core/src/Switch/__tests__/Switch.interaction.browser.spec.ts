@@ -24,6 +24,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  FRAME_STARVATION_MS,
   BUSY_PROOF_LOOKAROUND_MS,
   castStoryboard,
   animationStoryboard,
@@ -2164,15 +2165,16 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   }
 
   /** A gap between two frames longer than three frames: a frame stall. */
-  const STALL_GAP_MS = (3 * 1000) / 60;
+  const STALL_GAP_MS = FRAME_STARVATION_MS;
   /** The time around a scripted block whose frame gaps that block explains. */
   const BLOCK_MARGIN_MS = 50;
 
   /**
    * The run's Switch frame-stall tally: one line per checked screencast, its
-   * engine and test, and its stalls. Every worker of the run appends to the
-   * same file in the project's output folder, which Playwright empties when a
-   * run starts.
+   * engine and test, and its stalls, in the project's output folder, which
+   * Playwright empties when a run starts. One worker runs this file top to
+   * bottom (`fullyParallel: false`), so a check reads only the proofs above
+   * it, and the run's whole reading is the last `Switch frame stalls:` line.
    */
   function runStallTally(): string {
     return path.join(test.info().project.outputDir, 'switch-frame-stalls.tsv');
@@ -2203,9 +2205,11 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
 
   /**
    * Adds this check's stalls to the run's tally and names them beside the
-   * neighbours': the other Switch tests' stalls so far in this run, and how
-   * many of those tests saw one. Stalls in many neighbours read as a starved
-   * runner; stalls in one test with quiet neighbours, as a freeze. A check on
+   * neighbours': the Switch proofs above it in this run that screencast, their
+   * stalls and how many of them saw one. Stalls in many neighbours read as a
+   * starved runner; stalls in one test with quiet neighbours, as a freeze.
+   * P14's two page cases run first, so their own lines name no other scene:
+   * the run's reading is the last `Switch frame stalls:` line. A check on
    * recorded samples passes its own `tally`, and prints nothing. `toTally`
    * is what the neighbours read: the stalls no scripted step explains.
    */
@@ -2819,6 +2823,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     // page busy, and the second lift waits, until 100 ms after the first frame
     // the page draws unfrozen. Meanwhile the compositor moves the travel on.
     // Only the lift's one event races the hold.
+    // The scripted freeze lies between these two readings: its gap is not a
+    // stall the neighbours read.
+    const freezeFrom = Date.now();
     await freezePageOn(page, 'pointerup');
     await driver.play([
       {t: 0, fingers: [{id: 0, ...center}]},
@@ -2842,8 +2849,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await expect(input).not.toBeChecked();
     await waitForSwitchRest(page, thumb);
     const castFrames = await cast.stop();
-    // This proof scripts no `blockMainThread` block: every gap counts.
-    reportStalls(unscriptedStalls(castFrames.map(f => f.t)));
+    reportStalls(
+      unscriptedStalls(
+        castFrames.map(f => f.t),
+        [{from: freezeFrom, to: afterResume}],
+      ),
+    );
     // The hold's marks are on the page's clock, which stands still while the
     // page is frozen: the real time less the frozen span. The cast stamps the
     // real time.
