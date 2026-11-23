@@ -85,8 +85,10 @@ describe('useLongPressHookUsage example', () => {
     expect(menu).not.toBeNull();
     expect(menu?.getAttribute('aria-label')).toBe('Document actions');
     expect(menu?.textContent).toContain('Opened by long press at (120, 64)');
-    expect(menu?.style.left).toBe('120px');
-    expect(menu?.style.top).toBe('64px');
+    // The panel's corner is the touch point, clamped to the surface.
+    const position = menu?.getAttribute('style') ?? '';
+    expect(position).toContain('clamp(0px, 120px, calc(100% - 180px))');
+    expect(position).toContain('clamp(0px, 64px, calc(100% - 200px))');
 
     // Chromium fires a synthetic contextmenu with pointerType 'touch' after long press.
     const syntheticTouchContext = new MouseEvent('contextmenu', {
@@ -107,22 +109,25 @@ describe('useLongPressHookUsage example', () => {
     ).toContain('Opened by long press at (120, 64)');
   });
 
-  it('opens under the finger on a card shorter than the panel', () => {
+  it('keeps the panel inside the surface when the press is near its end', () => {
     renderExample();
     const surface = getSurface();
-    // The coarse-pointer card is 144px tall, less than the panel.
+    // A narrow surface, as in a phone-width docs preview.
     vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 0, y: 0, width: 360, height: 144}),
+      DOMRect.fromRect({x: 0, y: 0, width: 300, height: 200}),
     );
 
-    dispatchTouch(surface, 'touchstart', [{clientX: 120, clientY: 100}]);
+    dispatchTouch(surface, 'touchstart', [{clientX: 290, clientY: 190}]);
     act(() => {
       vi.advanceTimersByTime(500);
     });
 
     const menu = container.querySelector<HTMLElement>('[role="group"]');
-    expect(menu?.style.left).toBe('120px');
-    expect(menu?.style.top).toBe('100px');
+    expect(menu?.textContent).toContain('Opened by long press at (290, 190)');
+    // CSS clamps the corner so the whole panel stays inside the surface.
+    const position = menu?.getAttribute('style') ?? '';
+    expect(position).toContain('clamp(0px, 290px, calc(100% - 180px))');
+    expect(position).toContain('clamp(0px, 190px, calc(100% - 200px))');
   });
 
   it('cancels the pending long press on early lift or movement beyond 10px', () => {

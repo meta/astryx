@@ -3,6 +3,7 @@
 'use client';
 
 import {useRef, useState, type KeyboardEvent, type MouseEvent} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -20,9 +21,35 @@ interface MenuPosition {
 
 const MENU_OFFSET_Y = 8;
 const MENU_WIDTH = 180;
+// Room for the panel's note and its three actions in every theme. The surface
+// is at least this tall, so a panel clamped to the surface always fits.
+const MENU_MAX_HEIGHT = 200;
+
+const styles = stylex.create({
+  surface: {
+    position: 'relative',
+    width: '100%',
+    maxWidth: 360,
+    minHeight: MENU_MAX_HEIGHT,
+    // Safari, the browser that starts a text selection on a long press, reads
+    // only the prefixed property; Chrome and Firefox read it too.
+    WebkitUserSelect: 'none',
+  },
+  // The card fills the surface, so the area that listens for the press is
+  // the area a person sees.
+  card: {flexGrow: 1},
+  panel: (x: number, y: number) => ({
+    position: 'absolute',
+    // The point sets the panel's corner; the clamp keeps the whole panel
+    // inside the surface, whatever the surface's width.
+    left: `clamp(0px, ${x}px, calc(100% - ${MENU_WIDTH}px))`,
+    top: `clamp(0px, ${y}px, calc(100% - ${MENU_MAX_HEIGHT}px))`,
+    zIndex: 1,
+  }),
+});
 
 export default function UseLongPressHookUsage() {
-  const surfaceRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLElement>(null);
   const actionsButtonRef = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<MenuPosition | null>(null);
   const [isPinned, setIsPinned] = useState(false);
@@ -34,11 +61,7 @@ export default function UseLongPressHookUsage() {
     const rect = surfaceRef.current?.getBoundingClientRect();
     const rawX = rect ? point.x - rect.left : point.x;
     const rawY = rect ? point.y - rect.top : point.y;
-    // The panel opens at the reported point; only its width is kept inside
-    // the card, so it never opens past the card's end.
-    const maxX =
-      rect && rect.width > MENU_WIDTH ? rect.width - MENU_WIDTH : Infinity;
-    const x = Math.min(Math.max(0, Math.round(rawX)), maxX);
+    const x = Math.max(0, Math.round(rawX));
     const y = Math.max(0, Math.round(rawY));
     setMenu({x, y, source});
   };
@@ -56,7 +79,7 @@ export default function UseLongPressHookUsage() {
     actionsButtonRef.current?.focus();
   };
 
-  const handleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+  const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
     e.preventDefault();
     // Chromium emits a synthetic contextmenu event with pointerType 'touch'
     // after a long press; keep the original 'long press' trigger source.
@@ -74,7 +97,7 @@ export default function UseLongPressHookUsage() {
     openMenuAt({x: fallbackX, y: fallbackY}, 'button');
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === 'Escape' && menu) {
       closeMenu();
     }
@@ -98,19 +121,17 @@ export default function UseLongPressHookUsage() {
 
   return (
     <VStack gap={3}>
-      <div
+      <VStack
         ref={surfaceRef}
         data-testid="long-press-surface"
-        // Safari, the browser that starts a text selection on a long press,
-        // reads only the prefixed property; Chrome and Firefox read it too.
-        style={{position: 'relative', WebkitUserSelect: 'none', width: 360}}
+        xstyle={styles.surface}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchCancel}
         onContextMenu={handleContextMenu}
         onKeyDown={handleKeyDown}>
-        <Card width={360} padding={4}>
+        <Card padding={4} xstyle={styles.card}>
           <VStack gap={2}>
             <HStack gap={2} justify="between" vAlign="center">
               <HStack gap={2} vAlign="center">
@@ -138,12 +159,7 @@ export default function UseLongPressHookUsage() {
             aria-label="Document actions"
             padding={2}
             width={MENU_WIDTH}
-            style={{
-              position: 'absolute',
-              left: menu.x,
-              top: menu.y,
-              zIndex: 1,
-            }}>
+            xstyle={styles.panel(menu.x, menu.y)}>
             <VStack gap={1}>
               <Text type="supporting" color="secondary">
                 Opened by {menu.source} at ({menu.x}, {menu.y})
@@ -162,7 +178,7 @@ export default function UseLongPressHookUsage() {
             </VStack>
           </Card>
         )}
-      </div>
+      </VStack>
       <Text type="supporting" color="secondary">
         {lastAction}
       </Text>
