@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Dialog/ (showcase blocks)
  */
 
-import {useEffect, useRef, type ReactNode} from 'react';
+import {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars, sizeVars, typeScaleVars} from '../theme/tokens.stylex';
 import {LayoutHeader} from '../Layout/LayoutHeader';
@@ -29,6 +29,7 @@ import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useDialogContext} from './DialogContext';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -189,6 +190,21 @@ export function DialogHeader({
   const dialogContext = useDialogContext();
   const shouldAutoFocus = dialogContext?.isInline !== true;
   const titleId = dialogContext?.titleId;
+  const syncDefaultName = dialogContext?.syncDefaultName;
+  // The title names its dialog while it is mounted, also when the header
+  // mounts after the dialog. On the dialog's first commit the dialog finds
+  // the title itself.
+  const nameDialog = useCallback(
+    (node: HTMLHeadingElement | null) => {
+      if (node == null) {
+        return;
+      }
+      syncDefaultName?.(true);
+      return () => syncDefaultName?.(false);
+    },
+    [syncDefaultName],
+  );
+  const titleRefs = useMergedRefs(titleRef, nameDialog);
   const hasSubtitle = isRenderable(subtitle);
   const hasStartContent = isRenderable(startContent);
   const hasEndContent = isRenderable(endContent);
@@ -206,8 +222,6 @@ export function DialogHeader({
   // Auto-focus the title when mounted for screen reader accessibility.
   // Inline dialogs are documentation/showcase previews, so suppress focus to
   // avoid stealing scroll position from the surrounding page.
-  // The parent Dialog detects this title (by `titleId`) via a callback ref to
-  // set its default aria-labelledby — no registration handshake needed here.
   // The native dialog is not modal yet when the header mounts in its opening
   // render. Dialog focuses the title after showModal().
   useEffect(() => {
@@ -254,7 +268,7 @@ export function DialogHeader({
             stylex.props(styles.titleWrapper),
           )}>
           <Heading
-            ref={titleRef}
+            ref={titleRefs}
             id={titleId}
             level={2}
             tabIndex={-1}

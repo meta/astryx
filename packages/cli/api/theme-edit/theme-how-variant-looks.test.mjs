@@ -10,7 +10,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -34,15 +34,22 @@ beforeAll(async () => {
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) return;
   await themeEditNew('n', {cwd, like: 'neutral'});
+  // (A theme that already fills one badge variant itself.)
+  await themeEditNew('bf', {cwd, like: 'neutral'});
+  await themeEditSet('bf', 'background-color', '#dcfce7', {
+    cwd,
+    on: 'badge',
+    when: 'variant:success',
+  });
 }, 600_000);
 
 afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
-/** @param {string} q */
-const answer = async q => {
-  const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+/** @param {string} q @param {string} [theme] */
+const answer = async (q, theme = 'n') => {
+  const {data} = await themeEditHow(q, {cwd, theme});
   const results = data.results ?? [];
   const sets = (/** @type {string[]} */ cs) =>
     cs
@@ -84,25 +91,55 @@ describe('a color asked of every variant', () => {
     T,
   );
   it(
-    'a text color skips the variants it would vanish on',
+    'a bare text color skips only the variants it barely shows on, as main reads it',
     async test => {
       needsBases(test);
-      const r = await answer('buttons with white text');
-      expect(r.first).toContain(
+      // (With no fill in the answer, the variants the color barely shows
+      // on keep their own text, and the answer says so.)
+      for (const q of [
+        'buttons with red text',
+        'make the button text color red',
+      ]) {
+        const r = await answer(q);
+        expect(r.first, q).toEqual([
+          "color '#dc2626' --on button --when variant:primary",
+          "color '#dc2626' --on button --when variant:secondary",
+          "color '#dc2626' --on button --when variant:ghost",
+        ]);
+        expect(r.texts[0], q).toMatch(/destructive keeps its own text/);
+      }
+      // (A text color said of the variants the ask names stays on them.)
+      const named = await answer(
+        'make primary and ghost buttons blue and their text white',
+      );
+      expect(named.first).toContain(
         "color '#ffffff' --on button --when variant:primary",
       );
-      for (const c of r.first) expect(c).not.toMatch(/variant:ghost/);
-      expect(r.texts[0]).toMatch(/ghost keeps its own text/);
+      expect(named.first).toContain(
+        "color '#ffffff' --on button --when variant:ghost",
+      );
+      expect(named.first.join('\n')).not.toMatch(
+        /color '#ffffff' --on button --when variant:(?:secondary|destructive)/,
+      );
+      // (Its own fill given beside it, the text is measured on that fill;
+      // a variant kept out of the fill keeps its own.)
+      const gold = await answer('gold buttons with black text');
+      expect(gold.first).toContain(
+        "color '#000000' --on button --when variant:primary",
+      );
+      expect(gold.first).not.toContain("color '#000000' --on button");
+      expect(gold.first.join('\n')).not.toMatch(
+        /color '#000000' --on button --when variant:destructive --mode light/,
+      );
     },
     T,
   );
   it(
-    'a bare color every variant reads on stays every variant',
+    'a bare color every variant reads on goes to the whole part',
     async test => {
       needsBases(test);
-      expect((await answer('make buttons blue')).first[0]).toBe(
-        "background-color '#2563eb' --on button",
-      );
+      const blue = await answer('make buttons blue');
+      expect(blue.first[0]).toBe("background-color '#2563eb' --on button");
     },
     T,
   );
@@ -130,6 +167,28 @@ describe('a plain fill on a part with colored variants', () => {
       expect((await answer('make the blue cards rounder')).first).toEqual([
         'corners more --on card --when variant:blue',
       ]);
+    },
+    T,
+  );
+});
+
+describe('no fill', () => {
+  it(
+    'is see-through on the part and on each variant the theme fills itself, never a fill taken back',
+    async test => {
+      needsBases(test);
+      for (const q of [
+        'badges outlined, no fill',
+        'badges: no fill',
+        'badges with no background',
+      ]) {
+        const r = await answer(q, 'bf');
+        expect(r.all, q).toContain('background-color transparent --on badge');
+        expect(r.all, q).toContain(
+          'background-color transparent --on badge --when variant:success',
+        );
+        expect(r.all.join('\n'), q).not.toMatch(/^undo /m);
+      }
     },
     T,
   );

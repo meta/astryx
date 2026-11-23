@@ -16,6 +16,8 @@ applies_to:
     packages/core/src/BaseProps.ts,
     packages/lab/src/,
     packages/richtext/src/,
+    packages/charts/src/,
+    packages/vega/src/,
     packages/cli/authoring/doctypes/component/,
     internal/eslint-plugin-astryx/,
   ]
@@ -25,6 +27,7 @@ verified_by:
     internal/eslint-plugin-astryx/require-baseprops-passthrough.js,
     packages/core/src/docPropLiterals.test.ts,
     packages/core/src/docPropReferences.test.ts,
+    packages/charts/src/marks/marks.test.tsx,
   ]
 deciding_specs:
   [
@@ -68,6 +71,7 @@ deciding_specs:
 ```
 
 This record defines the shared public API contract for stable Astryx components.
+Its handle-ref rule (INV8, DEC-10) applies in every package.
 
 ## Purpose
 
@@ -148,7 +152,7 @@ guidance owns the process used to propose and test APIs.
   secondary text, and the caller's `aria-label`, `aria-labelledby`, and
   `aria-describedby` reach it. Other DOM, data, style, class, and event inputs
   stay on the root unless the component's record names another element
-  (DEC-3).
+  (DEC-11).
 - **INV6 — Styling inputs combine.** `xstyle`, `className`, and `style` compose in
   their documented order instead of replacing one another. A family record may
   declare an exception to root styling inputs for its members, stating the
@@ -159,8 +163,15 @@ guidance owns the process used to propose and test APIs.
   behavior only where that public API promises cancellation. A component that
   moves a handler to another element keeps the order and cancellation it
   released for that handler and documents it (`family:input-fields` DEC-8).
-- **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a prop
-  and connects it to the element promised by its contract.
+- **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a
+  prop and connects it to the element promised by its contract. In every
+  package, a public ref through which a component or a definition exposes an
+  imperative handle takes `Ref<Handle>`, so it accepts an object ref or a
+  callback ref (DEC-10). React calls a callback ref with the handle when the
+  handle attaches, so the caller learns when the handle is ready. When the
+  handle detaches, a cleanup the callback ref returned runs; a callback ref
+  without a cleanup is called with `null`. A chart series definition's
+  `handleRef`, such as streamGL's, is one application.
 - **INV9 — Released APIs change deliberately.** A released prop, type, export,
   default, or observable behavior is not removed, renamed, retyped, deprecated, or
   corrected incompatibly without the lifecycle, evidence, and migration required by
@@ -177,8 +188,9 @@ guidance owns the process used to propose and test APIs.
   package path is public even when its source comment, filename, or current use
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
-  exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and imported
+  exception: reachable, but reserved for the packages `spec:AST-017` FR21
+  names, undocumented, versioned in lockstep with Core, limited by lint to
+  those packages, and imported
   by a swizzled copy only for an exported StyleX module whose identity is its
   path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
@@ -343,7 +355,9 @@ guidance owns the process used to propose and test APIs.
   change coupling step 6 describes. A removed or renamed row follows INV9.
 
 This record applies to stable public packages, and INV23 also applies to Lab
-source. Lab components are not stable public promises until promotion.
+source. INV8's handle-ref rule (DEC-10) applies in every package, Lab, Charts
+and Vega included. Lab components are not stable public promises until
+promotion.
 
 ## Change coupling
 
@@ -459,7 +473,26 @@ types of dynamic styles."
 Rejected: adding a data attribute for an internal concern without a record
 that names it.
 
-### DEC-3 — The interactive element owns its name
+### DEC-6 — Pull requests carry an API delta, not a committed report
+
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact; for any other pull request it reads none. The review bot's delta at the start of its summary notes is the human view (INV24).
+
+Rejected: keeping a committed generated API report per package.
+
+### DEC-10 — Every package's handle refs accept callback refs
+
+**Reference:** `architecture:public-component-api/DEC-10`
+**Decider:** `cixzhang`, `2026-11-19 17:20 PT`
+
+Callback refs are an API convention of the whole system, not of one package. A
+public ref that exposes an imperative handle, in any package, takes
+`Ref<Handle>` and accepts an object ref or a callback ref (INV8).
+
+Rejected: accepting callback refs only in the packages that ask for them.
+
+### DEC-11 — The interactive element owns its name
 
 **Decider:** pending
 
@@ -475,19 +508,11 @@ Rejected: moving every caller input to the interactive element, which breaks
 root styling and layout calls. Rejected: leaving each component to decide,
 which keeps the same prop landing on different elements across components.
 
-### DEC-6 — Pull requests carry an API delta, not a committed report
-
-**Decider:** `cixzhang`, `2026-11-09`
-
-The owner said: "okay let's get rid of this massive file. We don't need it, we shoudl be generating API deltas agentically for every PR with codebunny". A committed report per package is large, repeats the surface in each package, and goes stale; a delta generated for each pull request flags the change where review happens. CI's surface compare of the merge base and the exact head is the machine source the merge gate reads; it fails closed when a pull request that changes a published package lacks the artifact; for any other pull request it reads none. The review bot's delta at the start of its summary notes is the human view (INV24).
-
-Rejected: keeping a committed generated API report per package.
-
 ## Verification
 
 | Invariant               | Evidence                                                                                                                                                                    | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                                                                                | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                                                                                | A promised component/type cannot be imported or its ref cannot reach the contract element; a `handleRef` that exposes a handle rejects a callback ref                                                                                                                                                                                                                                                                                                                                   |
 | INV2                    | Naming and logical-direction lint/tests                                                                                                                                     | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
 | INV2, DEC-1             | Public-API review against the system vocabulary                                                                                                                             | A public prop names a concept the system already names, such as a distance, depth, or press motion, with a new term, or uses `lift` for a layout distance                                                                                                                                                                                                                                                                                                                               |
 | INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                                                                                 | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
@@ -509,7 +534,7 @@ Rejected: keeping a committed generated API report per package.
 | INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                                                                             | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes a pull request that changes a published package when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance              |
 | INV25                   | Public-API review routing against the pull request's API delta                                                                                                              | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                                                                   | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| INV5 (naming), DEC-3    | Accessibility-tree tests on an interactive ListItem with a description, a Selector trigger, and an interactive Avatar, each with caller `aria-label` and `aria-describedby` | A caller naming attribute on the root, a row button whose name includes its description, or a description not linked to the focused element                                                                                                                                                                                                                                                                                                                                             |
+| INV5 (naming), DEC-11   | Accessibility-tree tests on an interactive ListItem with a description, a Selector trigger, and an interactive Avatar, each with caller `aria-label` and `aria-describedby` | A caller naming attribute on the root, a row button whose name includes its description, or a description not linked to the focused element                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
 

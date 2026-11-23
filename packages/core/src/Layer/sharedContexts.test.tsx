@@ -54,7 +54,7 @@ describe('contexts shared by a swizzled copy and the package', () => {
 
   it("the package's English context resolves a copy's English", async () => {
     const pkg = await freshInstance(
-      async () => import('../i18n/InternationalizationContext'),
+      async () => import('../i18n/translatingContext'),
     );
     const copy = await freshInstance(
       async () => import('../i18n/englishFallback'),

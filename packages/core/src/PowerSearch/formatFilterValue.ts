@@ -21,6 +21,8 @@ import {truncateCharacters} from '../utils/characters';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
 import {resolveDateZone} from './powerSearchDateZone';
+import {relativeDateLabel} from './relativeDateOptions';
+import {createListFormatter} from '../i18n/listFormat';
 
 registerEnglishFallback(english);
 
@@ -91,11 +93,6 @@ export function formatDateAbsolute(
   );
 }
 
-function formatRelativeDate(value: string): string {
-  // value is stored as a descriptive string like "7d" or "1w"
-  return value;
-}
-
 function formatDateRange(
   _value: {start: unknown; end: unknown},
   t: TranslatorFn,
@@ -156,7 +153,7 @@ export function formatFilterValue(
       if (items.length === 1) {
         return truncate(items[0], maxLength);
       }
-      const joined = items.join(', ');
+      const joined = createListFormatter(locale)(items);
       if (joined.length <= maxLength) {
         return joined;
       }
@@ -175,7 +172,7 @@ export function formatFilterValue(
         if (labels.length === 1) {
           return truncate(labels[0], maxLength);
         }
-        const joined = labels.join(', ');
+        const joined = createListFormatter(locale)(labels);
         if (joined.length <= maxLength) {
           return joined;
         }
@@ -199,7 +196,7 @@ export function formatFilterValue(
       if (entities.length === 1) {
         return truncate(entities[0].label, maxLength);
       }
-      const joined = entities.map(e => e.label).join(', ');
+      const joined = createListFormatter(locale)(entities.map(e => e.label));
       if (joined.length <= maxLength) {
         return joined;
       }
@@ -225,7 +222,9 @@ export function formatFilterValue(
       );
 
     case 'date_relative':
-      return formatRelativeDate(filterValue.value);
+      return operatorValue.type === 'date_relative'
+        ? relativeDateLabel(operatorValue, filterValue.value, t)
+        : filterValue.value;
 
     case 'date_range':
       return formatDateRange(filterValue.value, t);

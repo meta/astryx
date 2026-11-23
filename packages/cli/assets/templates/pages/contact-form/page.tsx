@@ -21,10 +21,10 @@ import {TextArea} from '@astryxdesign/core/TextArea';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Banner} from '@astryxdesign/core/Banner';
 import {
-  RocketLaunchIcon,
-  AdjustmentsHorizontalIcon,
-  HandRaisedIcon,
-} from '@heroicons/react/24/outline';
+  RocketIcon,
+  AdjustmentsIcon,
+  RaiseHandIcon,
+} from '@astryxdesign/template-icons';
 
 const CAMPAIGN_GOALS = [
   'Brand Awareness',
@@ -57,17 +57,17 @@ const BUDGET_OPTIONS = [
 
 const WHY_US = [
   {
-    icon: RocketLaunchIcon,
+    icon: RocketIcon,
     title: 'We move fast for you',
     description: 'We cut through the noise and get straight to the work.',
   },
   {
-    icon: AdjustmentsHorizontalIcon,
+    icon: AdjustmentsIcon,
     title: 'We build around you',
     description: "We tailor everything to what you're trying to achieve.",
   },
   {
-    icon: HandRaisedIcon,
+    icon: RaiseHandIcon,
     title: 'We show up for you',
     description: 'A dedicated team that knows your brand and wants to win.',
   },

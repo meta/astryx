@@ -3,8 +3,8 @@
 /**
  * @file Regression coverage for the canvas-editor page's corner radius icons.
  * @input The shipped canvas-editor page template source and its descriptor.
- * @output Assertions that each radius control draws the picture its meaning
- *   shows and declares that meaning.
+ * @output Assertions that each radius control imports the placeholder for its
+ *   meaning and that the placeholder draws the picture that meaning shows.
  * @position Template contract test for the inspector's Radius row.
  */
 
@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
-import {doc} from '../../assets/templates/pages/canvas-editor/template.doc.mjs';
+import {placeholderSource} from '../../foundation/discovery/template-placeholders.mjs';
 
 const source = fs.readFileSync(
   path.resolve(
@@ -37,15 +37,15 @@ describe('canvas-editor radius icons', () => {
     expect(perCorner).toBeDefined();
   });
 
-  it('draws one rounded corner on the field and declares it cornerRadius', () => {
-    expect(field).toBe('SquareRoundCorner');
-    expect(doc.icons?.[/** @type {string} */ (field)]).toBe('cornerRadius');
+  it('draws one rounded corner on the field, as the cornerRadius placeholder', () => {
+    expect(field).toBe('CornerRadiusIcon');
+    expect(placeholderSource('cornerRadius', 'lucide')?.export).toBe(
+      'SquareRoundCorner',
+    );
   });
 
-  it('draws the four-corner frame on the per-corner button and declares it radiusPerCorner', () => {
-    expect(perCorner).toBe('Scan');
-    expect(doc.icons?.[/** @type {string} */ (perCorner)]).toBe(
-      'radiusPerCorner',
-    );
+  it('draws the four-corner frame on the per-corner button, as the radiusPerCorner placeholder', () => {
+    expect(perCorner).toBe('RadiusPerCornerIcon');
+    expect(placeholderSource('radiusPerCorner', 'lucide')?.export).toBe('Scan');
   });
 });

@@ -15,7 +15,10 @@
  *   time against about 320 s for two other legs. This assigns every file to
  *   exactly one leg, slowest first, each to the leg with the least recorded
  *   time so far, so the slowest files each take a leg of their own and the
- *   slowest single file sets the floor (spec:AST-030 FR22). Within a leg it
+ *   slowest single file sets the floor (spec:AST-030 FR22). The files that
+ *   draw pages in a real Chrome share the last leg, with only light files
+ *   beside them, so their pictures never run beside the packing and
+ *   conformance suites (`nodeLegsApart`). Within a leg it
  *   starts the slowest recorded file first, so that file never waits behind
  *   others. Each file costs what the Node leg planner
  *   (scripts/vitest-node-legs.mjs) books for it, so the legs it planned are
@@ -38,6 +41,7 @@ import {
 import {
   DURATIONS,
   nodeFileCost,
+  nodeLegsApart,
   readDurations as readRecord,
 } from './vitest-node-legs.mjs';
 
@@ -76,8 +80,10 @@ export function partitionByDuration(
   {idle = new Set()} = {},
 ) {
   // A file that runs no test in this run (the swizzle-proof slices when the
-  // change reaches no component) costs only its import.
-  return splitByDuration(files, count, nodeFileCost(files, seconds, {idle}));
+  // change reaches no component) costs only its import. The real-Chrome
+  // files share a leg, as the leg planner books them.
+  const cost = nodeFileCost(files, seconds, {idle});
+  return splitByDuration(files, count, cost, [], nodeLegsApart(cost));
 }
 
 /**

@@ -7,6 +7,22 @@ import {Badge} from './Badge';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Badge', () => {
+  it.each(['ltr', 'rtl'])(
+    'gives a label in one script its own direction on a %s page, and leaves a mixed label to the page',
+    dir => {
+      render(
+        <div dir={dir}>
+          <Badge label="Beta" />
+          <Badge label="חדש" />
+          <Badge label="iPhone חדש" />
+        </div>,
+      );
+      expect(screen.getByText('Beta')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('חדש')).toHaveAttribute('dir', 'rtl');
+      expect(screen.getByText('iPhone חדש')).not.toHaveAttribute('dir');
+    },
+  );
+
   it('renders with default variant', () => {
     render(<Badge label="Default" />);
     expect(screen.getByText('Default')).toBeInTheDocument();

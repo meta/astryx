@@ -17,7 +17,7 @@ export const doc = {
   summary:
     'The icon sets icon() searches in a folder, as plain JSON to store and rank later with rankIconIndex().',
   description:
-    "Reads the icon sets `icon()` would search in `cwd` and returns them as `{version, sets, withdrawn}`. Reading them loads each installed package's integration manifest, which runs that package's code, so a catalog that lists packages it must not load makes the index where loading is safe (a folder with those packages installed), stores it, and ranks it with {@link function:rankIconIndex}. With `package`, the index keeps only the sets that package ships, for a catalog that stores one index per package. Paths into the folder are left out, so an index reads the same wherever it was made. A set in the list of the folder's project carries the look that project picks (`look`), so its matches draw that look as `icon()` draws it there. The sets are the ranker's input, not a stable shape: an index is ranked only by the CLI version that made it. Experimental: it may change or be removed in a patch release.",
+    "Reads the icon sets `icon()` would search in `cwd` and returns them as `{version, sets, withdrawn, components}`. Reading them loads each installed package's integration manifest, which runs that package's code, so a catalog that lists packages it must not load makes the index where loading is safe (a folder with those packages installed), stores it, and ranks it with {@link function:rankIconIndex}. With `package`, the index keeps only the sets that package ships, for a catalog that stores one index per package. Paths into the folder are left out, so an index reads the same wherever it was made. A set in the list of the folder's project carries the variant that project picks (`look`), so its matches draw that variant as `icon()` draws it there. The sets are the ranker's input, not a stable shape: an index is ranked only by the CLI version that made it. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'exportIconIndex(options?: {cwd?: string, package?: string}): Promise<IconIndex>',
@@ -40,7 +40,7 @@ export const doc = {
     {
       type: 'IconIndex',
       description:
-        '`version`, the CLI version that made it; `sets`, the valid sets in tie order as plain JSON; and `withdrawn`, the sets read but withdrawn, and why.',
+        "`version`, the CLI version that made it; `sets`, the valid sets in tie order as plain JSON; `withdrawn`, the sets read but withdrawn, and why; and `components`, the names of the folder's Core components, so a query's words that name one rank as `icon()` ranks them there.",
     },
   ],
   throws: [

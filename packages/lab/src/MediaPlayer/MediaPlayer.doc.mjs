@@ -150,13 +150,13 @@ export const docs = {
         name: 'Control bar',
         required: false,
         description:
-          'In VideoPlayer, a frosted bar 8px from the edges of the video that holds play, the timeline, time, volume, captions, and fullscreen. It shows on hover, pointer movement, and keyboard focus, and hides after two idle seconds while the video plays. On touch, a tap shows it and the next tap hides it. The volume slider opens beside Mute while Mute is hovered or focused, and always on touch.',
+          'In VideoPlayer, a frosted bar 8px from the edges of the video that holds play, the timeline, time, volume, captions, and fullscreen. In a player 480px wide or narrower, volume leaves the bar. In a player 360px wide or narrower, the time leaves it too, and the bar sits 4px from the edges with small buttons, so it covers less of the picture; tooltips and popovers that open from it keep their normal size. It shows on hover, pointer movement, and keyboard focus, and hides after two idle seconds while the video plays. On touch, a tap shows it and the next tap hides it. The volume slider opens beside Mute while Mute is hovered or focused, and always on touch.',
       },
       {
         name: 'Timeline',
         required: false,
         description:
-          'A slider for the playback position. It runs left to right in every direction, because it shows the direction of the media.',
+          'A slider for the playback position. It runs left to right in every direction, because it shows the direction of the media. On the VideoPlayer bar, the part of the track that is neither played nor loaded is a tint of the bar’s accent color, so it shows on the frosted bar with any theme; elsewhere it takes the theme’s track color.',
       },
       {
         name: 'Status layer',

@@ -105,7 +105,8 @@ export function listAuditSpecs(root) {
 
 /**
  * Legs for the files, each ten minutes or less when `maxLegs` allows, from
- * `planLegs`'s count; an audit longer than that runs in a leg of its own.
+ * `planLegs`'s count; an audit longer than that runs in a leg of its own,
+ * unless, at `maxLegs`, an even split is shorter (`fitLegsToBudget`).
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs

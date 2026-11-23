@@ -91,6 +91,13 @@ export const JOB_WORDS = [
     reason: 'upgrade runs the codemods for a new version',
   },
   {
+    word: 'update',
+    usedBy: 'npm (`npm update`)',
+    run: ['upgrade', '--from', '<old-version>'],
+    notNeededWith: ['--list', '--registry'],
+    reason: 'upgrade runs the codemods for a new version',
+  },
+  {
     word: 'browse',
     usedBy: 'GitHub CLI (`gh extension browse`)',
     run: ['discover'],

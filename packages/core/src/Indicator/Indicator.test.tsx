@@ -2,7 +2,9 @@
 
 import {describe, expect, it} from 'vitest';
 import {render, renderHook, screen} from '@testing-library/react';
-import type {PropsWithChildren, ReactNode} from 'react';
+import {createRef, type PropsWithChildren, type ReactNode} from 'react';
+import * as stylex from '@stylexjs/stylex';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {Theme} from '../theme/Theme';
 import {defineTheme} from '../theme/defineTheme';
 import {CheckboxIndicator} from './CheckboxIndicator';
@@ -318,6 +320,156 @@ describe('the decorative contract (#4918)', () => {
       expect(el).toHaveAttribute('dir', 'rtl');
     });
   }
+});
+
+const radioTestStyles = stylex.create({
+  offset: {marginInlineStart: '4px'},
+});
+
+/** The circle and its dot. */
+function radioParts(container: HTMLElement) {
+  const circle = container.querySelector(
+    '.astryx-radio-indicator',
+  ) as HTMLElement;
+  const dot = container.querySelector('.astryx-radio-indicator-dot');
+  return {circle, dot};
+}
+
+/** Injected rules, whole, that name one of the element's classes. */
+function rulesFor(el: Element): string[] {
+  const rules: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      const text = rule.cssText;
+      const names = Array.from(el.classList);
+      if (
+        names.some(name =>
+          new RegExp(`\\.${CSS.escape(name)}(?![\\w-])`).test(text),
+        )
+      ) {
+        rules.push(text);
+      }
+    }
+  }
+  return rules;
+}
+
+describe('RadioIndicator presentation', () => {
+  it.each([
+    ['sm', '20px'],
+    ['md', '24px'],
+  ] as const)(
+    'draws a %s circle %s square and reflects the size on the circle and the dot',
+    (size, px) => {
+      const {container} = render(
+        <RadioIndicator state="checked" size={size} />,
+      );
+      const {circle, dot} = radioParts(container);
+      expect(declaredValue(circle, 'width')).toBe(px);
+      expect(declaredValue(circle, 'height')).toBe(px);
+      expect(declaredValue(circle, 'border-radius')).toBe('50%');
+      expect(circle).toHaveAttribute('data-size', size);
+      expect(dot).toHaveAttribute('data-size', size);
+    },
+  );
+
+  it('draws an emphasized border on the surface when unchecked', () => {
+    const {container} = render(<RadioIndicator state="unchecked" />);
+    const {circle} = radioParts(container);
+    expect(declaredValue(circle, 'border-color')).toContain(
+      '--color-border-emphasized',
+    );
+    expect(declaredValue(circle, 'background-color')).toContain(
+      '--color-background-surface',
+    );
+  });
+
+  it('fills the circle with the accent and draws an on-accent dot when checked', () => {
+    const {container} = render(<RadioIndicator state="checked" />);
+    const {circle, dot} = radioParts(container);
+    expect(declaredValue(circle, 'border-color')).toContain('--color-accent');
+    expect(declaredValue(circle, 'background-color')).toContain(
+      '--color-accent',
+    );
+    expect(declaredValue(dot as Element, 'background-color')).toContain(
+      '--color-on-accent',
+    );
+  });
+
+  it('halves the opacity and mutes the border when disabled, and the fill only when unchecked', () => {
+    const {container: off} = render(
+      <RadioIndicator state="unchecked" isDisabled />,
+    );
+    const {container: on} = render(
+      <RadioIndicator state="checked" isDisabled />,
+    );
+    const unchecked = radioParts(off).circle;
+    const checked = radioParts(on).circle;
+    for (const circle of [unchecked, checked]) {
+      expect(declaredValue(circle, 'opacity')).toBe('0.5');
+      expect(declaredValue(circle, 'border-color')).toContain(
+        '--color-border)',
+      );
+    }
+    expect(declaredValue(unchecked, 'background-color')).toContain(
+      '--color-background-muted',
+    );
+    expect(declaredValue(checked, 'background-color')).toContain(
+      '--color-accent',
+    );
+  });
+
+  it('changes its colors at once under reduced motion', () => {
+    const {container} = render(<RadioIndicator state="checked" />);
+    const {circle} = radioParts(container);
+    expect(declaredValue(circle, 'transition-duration')).toContain(
+      '--duration-fast',
+    );
+    const reduced = rulesFor(circle).filter(rule =>
+      rule.includes('prefers-reduced-motion: reduce'),
+    );
+    expect(reduced.some(rule => /transition-duration:\s*0s/.test(rule))).toBe(
+      true,
+    );
+  });
+
+  it('keeps the dot visible under forced colors', () => {
+    const {container} = render(<RadioIndicator state="checked" />);
+    const {dot} = radioParts(container);
+    const forced = rulesFor(dot as Element).filter(rule =>
+      rule.includes('forced-colors: active'),
+    );
+    expect(
+      forced.some(rule => /background-color:\s*canvastext/i.test(rule)),
+    ).toBe(true);
+  });
+
+  it('treats a 0 child as content that replaces the dot', () => {
+    const {container} = render(
+      <RadioIndicator state="checked">{0}</RadioIndicator>,
+    );
+    const {circle, dot} = radioParts(container);
+    expect(circle).toHaveTextContent('0');
+    expect(dot).toBeNull();
+  });
+
+  it('puts ref, className, style, and xstyle on the circle', () => {
+    const ref = createRef<HTMLSpanElement>();
+    const {container} = render(
+      <RadioIndicator
+        state="checked"
+        ref={ref}
+        className="caller-class"
+        style={{marginBlockStart: '2px'}}
+        xstyle={radioTestStyles.offset}
+      />,
+    );
+    const {circle} = radioParts(container);
+    expect(ref.current).toBe(circle);
+    expect(circle).toHaveClass('astryx-radio-indicator', 'caller-class');
+    expect(circle.style.marginBlockStart).toBe('2px');
+    expect(declaredValue(circle, 'margin-inline-start')).toBe('4px');
+  });
 });
 
 describe('useIndicator', () => {

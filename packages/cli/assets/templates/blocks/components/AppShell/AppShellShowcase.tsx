@@ -12,13 +12,9 @@ import {
   SideNavItem,
   SideNavSection,
 } from '@astryxdesign/core/SideNav';
-import {
-  ChartBarIcon,
-  DocumentTextIcon,
-  UsersIcon,
-} from '@heroicons/react/24/outline';
-import {HomeIcon} from '@heroicons/react/24/solid';
-import {CubeIcon} from '@heroicons/react/24/outline';
+import {ChartIcon, DocumentIcon, UsersIcon} from '@astryxdesign/template-icons';
+import {HomeIcon} from '@astryxdesign/template-icons/24/solid';
+import {PackageIcon} from '@astryxdesign/template-icons';
 
 export default function AppShellShowcase() {
   return (
@@ -30,7 +26,9 @@ export default function AppShellShowcase() {
           header={
             <SideNavHeading
               icon={
-                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />
+                <NavIcon
+                  icon={<PackageIcon style={{width: 16, height: 16}} />}
+                />
               }
               heading="App Shell"
               headingHref="#"
@@ -38,8 +36,8 @@ export default function AppShellShowcase() {
           }>
           <SideNavSection title="Main" isHeaderHidden>
             <SideNavItem label="Home" icon={HomeIcon} isSelected href="#" />
-            <SideNavItem label="Reports" icon={ChartBarIcon} href="#" />
-            <SideNavItem label="Documents" icon={DocumentTextIcon} href="#" />
+            <SideNavItem label="Reports" icon={ChartIcon} href="#" />
+            <SideNavItem label="Documents" icon={DocumentIcon} href="#" />
             <SideNavItem label="Team" icon={UsersIcon} href="#" />
           </SideNavSection>
         </SideNav>

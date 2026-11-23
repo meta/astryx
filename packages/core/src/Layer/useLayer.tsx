@@ -598,18 +598,30 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   onCloseStart?: () => void;
   /**
-   * Watches the open layer for touches outside it that pan; returns the
-   * function that stops watching. A light-dismiss layer is given one by its
-   * owner (usePopover's `watchOutsidePans`). An anchored menu, which closes
-   * as such a pan begins, is given none.
+   * Watches the open layer for pointers outside it; returns the function
+   * that stops watching. The layer starts it as it opens and stops it as it
+   * closes. A light-dismiss layer is given a pan watch by its owner
+   * (usePopover's `watchOutsidePans`), and a `'pageOrder'` popover its
+   * outside-press watch. An anchored menu, which closes as a pan begins, is
+   * given none. `dismiss` closes the layer for a press outside it and
+   * absorbs a `show()` from that same press, as the browser's light dismiss
+   * does.
    */
-  watchesOutsidePans?: (layer: HTMLElement) => () => void;
+  watchesOutside?: (layer: HTMLElement, dismiss: () => void) => () => void;
   /**
    * Called with true when a `show()` that the layer accepted starts to wait
    * for a valid anchor, and with false when that wait ends. The owner reads
    * it right after `show()`, to tell an open that waits from a refused one.
    */
   onOpenPendingChange?: (isPending: boolean) => void;
+  /**
+   * The owner names an anchor that may not exist yet (usePopover's
+   * `anchorRef`). A `show()` with no anchor element then waits until one
+   * attaches, instead of opening at the page origin. A show() on a trigger
+   * with no box waits for its box in the same way. The trigger ref drops
+   * such an anchor at once when it is called with `null`.
+   */
+  waitsForAnchor?: boolean;
   /**
    * The component writes the entrance's side itself, after the commit that
    * moves the layer (a Selector's list over its selected option). The runtime
@@ -625,7 +637,20 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * again here.
    */
   onPlacedAfresh?: () => void;
+  /**
+   * The element whose place in the sequential focus order the open layer
+   * takes, passed to `showPopover({source})`. Defaults to the trigger. Return
+   * null for a layer that takes its own DOM place.
+   */
+  getInvoker?: () => HTMLElement | null;
 }
+
+/**
+ * `getInvoker` for a layer that holds nothing to focus, such as a tooltip or
+ * a hint. When a popover that names an invoker hides, the browser also drops
+ * the focus-order place of another open popover that names the same invoker.
+ */
+export const noInvoker = (): null => null;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -1364,8 +1389,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
-  const watchesOutsidePans =
-    mode === 'context' ? options.watchesOutsidePans : undefined;
+  const watchesOutside =
+    mode === 'context' ? options.watchesOutside : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onPlacedAfreshRef = useCommittedRef(
@@ -1374,7 +1399,13 @@ function useLayerImplementation(
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
   const onOpenPendingChange =
     mode === 'context' ? options.onOpenPendingChange : undefined;
+  const waitsForAnchorRef = useCommittedRef(
+    mode === 'context' && options.waitsForAnchor === true,
+  );
   const onCloseStartRef = useCommittedRef(onCloseStart);
+  const getInvokerRef = useCommittedRef(
+    mode === 'context' ? options.getInvoker : undefined,
+  );
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1491,12 +1522,20 @@ function useLayerImplementation(
   } | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
-  // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
-  const stopOutsidePanWatchRef = useRef<(() => void) | null>(null);
-  const stopOutsidePanWatch = useCallback(() => {
-    stopOutsidePanWatchRef.current?.();
-    stopOutsidePanWatchRef.current = null;
+  // Stops the owner's watch for pointers outside the open layer
+  // (`watchesOutside`).
+  const stopOutsideWatchRef = useRef<(() => void) | null>(null);
+  const stopOutsideWatch = useCallback(() => {
+    stopOutsideWatchRef.current?.();
+    stopOutsideWatchRef.current = null;
   }, []);
+  // The owner's watch closes the layer through this. It is filled in once
+  // `hide` and the dismissal memory exist.
+  const dismissFromOutsideRef = useRef<() => void>(() => {});
+  const dismissFromOutside = useCallback(
+    () => dismissFromOutsideRef.current(),
+    [],
+  );
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1511,54 +1550,59 @@ function useLayerImplementation(
    * refusal outside such a hide, reaches the caller: a replay runs outside
    * the hide, so one that fails is not caught here.
    */
-  const showPopoverElement = useCallback((popover: HTMLElement): boolean => {
-    // Finding infra-4: the Popover API is unsupported on Safari <17 and
-    // Firefox <125. On those browsers `showPopover` does not exist, so fall
-    // back to plain visibility instead of throwing.
-    if (typeof popover.showPopover === 'function') {
-      const doc = popover.ownerDocument;
-      const duringBrowserHide = isBrowserHideInFlight(doc);
-      try {
-        runPopoverOperation(doc, () => {
-          // The trigger is passed as the popover's invoker `source`: a layer
-          // hosted away from its trigger then still takes its sequential
-          // focus order (and its popover nesting) from the trigger rather
-          // than from its own DOM position. Browsers without the option
-          // ignore it. `source` is declared as an `HTMLElement`. A
-          // caller-rendered icon trigger is an `SVGElement`, whose dictionary
-          // conversion throws before the popover opens. Omitting the option
-          // for it still anchors the layer, because positioning reads the
-          // anchor-name pair, and only gives up the invoker's focus order.
-          // The check asks the trigger's own window: an HTML trigger rendered
-          // into another document (an iframe, a Picture-in-Picture window) is
-          // not an instance of this window's `HTMLElement`, and keeps its
-          // source.
-          const trigger = triggerRef.current;
-          const triggerView = trigger?.ownerDocument.defaultView;
-          popover.showPopover({
-            source:
-              triggerView != null && trigger instanceof triggerView.HTMLElement
-                ? trigger
-                : undefined,
+  const showPopoverElement = useCallback(
+    (popover: HTMLElement): boolean => {
+      // Finding infra-4: the Popover API is unsupported on Safari <17 and
+      // Firefox <125. On those browsers `showPopover` does not exist, so fall
+      // back to plain visibility instead of throwing.
+      if (typeof popover.showPopover === 'function') {
+        const doc = popover.ownerDocument;
+        const duringBrowserHide = isBrowserHideInFlight(doc);
+        try {
+          runPopoverOperation(doc, () => {
+            // The invoker is passed as `source`. A layer hosted away from it
+            // still takes its focus order and popover nesting from it.
+            // Browsers without the option ignore it. `source` is declared as
+            // an `HTMLElement`. A caller-rendered icon trigger is an
+            // `SVGElement`, whose dictionary conversion throws before the
+            // popover opens. Omitting the option for it still anchors the
+            // layer, because positioning reads the anchor-name pair, and only
+            // gives up the invoker's focus order. The check asks the
+            // invoker's own window: an HTML element rendered into another
+            // document (an iframe, a Picture-in-Picture window) is not an
+            // instance of this window's `HTMLElement`, and keeps its source.
+            const invoker =
+              getInvokerRef.current != null
+                ? getInvokerRef.current()
+                : triggerRef.current;
+            const invokerView = invoker?.ownerDocument.defaultView;
+            popover.showPopover({
+              source:
+                invokerView != null &&
+                invoker instanceof invokerView.HTMLElement
+                  ? invoker
+                  : undefined,
+            });
           });
-        });
-      } catch (error) {
-        // The name, not the constructor: a popover in another document throws
-        // that document's `DOMException`.
-        if (
-          duringBrowserHide &&
-          (error as {name?: unknown} | null)?.name === 'InvalidStateError'
-        ) {
-          return false;
+        } catch (error) {
+          // The name, not the constructor: a popover in another document throws
+          // that document's `DOMException`.
+          if (
+            duringBrowserHide &&
+            (error as {name?: unknown} | null)?.name === 'InvalidStateError'
+          ) {
+            return false;
+          }
+          throw error;
         }
-        throw error;
+      } else {
+        popover.style.display = 'block';
       }
-    } else {
-      popover.style.display = 'block';
-    }
-    openedPopoverRef.current = popover;
-    return true;
-  }, []);
+      openedPopoverRef.current = popover;
+      return true;
+    },
+    [getInvokerRef],
+  );
 
   const isCurrentContextPopover = useCallback(
     (popover: HTMLElement): boolean => {
@@ -1696,7 +1740,7 @@ function useLayerImplementation(
       browserHide.moved = true;
       openedPopoverRef.current = null;
       isOpenRef.current = false;
-      stopOutsidePanWatch();
+      stopOutsideWatch();
     }
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
@@ -1760,10 +1804,13 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
-        if (watchesOutsidePans != null) {
-          stopOutsidePanWatch();
-          stopOutsidePanWatchRef.current = watchesOutsidePans(popover);
-        }
+      }
+      if (watchesOutside != null) {
+        stopOutsideWatch();
+        stopOutsideWatchRef.current = watchesOutside(
+          popover,
+          dismissFromOutside,
+        );
       }
       const anchorBoxes = keepsAnchorClear
         ? keepAnchorClear(popover, triggerRef.current)
@@ -1781,8 +1828,9 @@ function useLayerImplementation(
     keepsAnchorClear,
     writesEntranceSide,
     lightDismiss,
-    watchesOutsidePans,
-    stopOutsidePanWatch,
+    watchesOutside,
+    stopOutsideWatch,
+    dismissFromOutside,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -1871,6 +1919,15 @@ function useLayerImplementation(
     cancelPendingAnchorWait();
 
     if (!anchor) {
+      if (waitsForAnchorRef.current) {
+        // No anchor element yet: the trigger ref below restarts this show()
+        // when one attaches.
+        pendingAnchorWaitRef.current = () => {};
+        if (!isOpenRef.current) {
+          onOpenPendingChange?.(true);
+        }
+        return;
+      }
       openNow();
       return;
     }
@@ -2011,6 +2068,7 @@ function useLayerImplementation(
     cancelPendingAnchorWait,
     finishAnchorWait,
     onOpenPendingChange,
+    waitsForAnchorRef,
   ]);
 
   const hide = useCallback(() => {
@@ -2029,7 +2087,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
-      stopOutsidePanWatch();
+      stopOutsideWatch();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -2055,7 +2113,7 @@ function useLayerImplementation(
     clearContextMount,
     releaseAnchor,
     cancelPendingAnchorWait,
-    stopOutsidePanWatch,
+    stopOutsideWatch,
     onCloseStartRef,
   ]);
 
@@ -2087,7 +2145,7 @@ function useLayerImplementation(
         }
         const pending = {element: stale, cancelled: false};
         pendingTriggerDetachRef.current = pending;
-        queueMicrotask(() => {
+        const detach = () => {
           if (pending.cancelled || triggerRef.current !== stale) {
             return;
           }
@@ -2102,7 +2160,14 @@ function useLayerImplementation(
             clearObserversRef.current?.();
             clearObserversRef.current = null;
           }
-        });
+        };
+        // The owner of a named anchor passes `null` only to drop it, so the
+        // name comes off now.
+        if (waitsForAnchorRef.current) {
+          detach();
+        } else {
+          queueMicrotask(detach);
+        }
         return;
       }
       // Reattaching the exact element a pending detach targeted: cancel it,
@@ -2151,11 +2216,11 @@ function useLayerImplementation(
         }
       }
 
-      // A show() is still waiting for a box on a different trigger: that wait
-      // observes the element it started with, so it would never end for this
-      // one. Restart it on the new trigger, after the commit that attached it.
+      // A show() still waits for a box on another trigger, or for any anchor.
+      // That wait never ends for this one. Restart it on the new trigger,
+      // after the commit that attached it.
       const waitingOn = pendingAnchorElementRef.current;
-      if (waitingOn && waitingOn !== el) {
+      if (pendingAnchorWaitRef.current != null && waitingOn !== el) {
         cancelPendingAnchorWait();
         const restart = {cancelled: false};
         pendingRestartRef.current = restart;
@@ -2170,7 +2235,13 @@ function useLayerImplementation(
         });
       }
     },
-    [anchorId, cancelPendingAnchorWait, keepsAnchorClear, onPlacedAfreshRef],
+    [
+      anchorId,
+      cancelPendingAnchorWait,
+      keepsAnchorClear,
+      onPlacedAfreshRef,
+      waitsForAnchorRef,
+    ],
   );
 
   // Arm only when the dismissing gesture's click is still ahead of us. Some
@@ -2213,10 +2284,16 @@ function useLayerImplementation(
     doc.addEventListener('click', scheduleForget, true);
     forgetDismissalRef.current = forget;
   }, []);
+  // A press outside is absorbed as the browser's own light dismiss is: the
+  // click of that press must not reopen the layer it closed.
+  useCommittedRefInto(dismissFromOutsideRef, () => {
+    rememberDismissal(popoverRef.current?.ownerDocument ?? document);
+    hide();
+  });
 
   // Syncs the document's capture-phase gesture tracking with this mount.
   // Unmount forgets the layer's dismissal, releases a pending anchor wait and
-  // a show waiting for a release, and stops the outside-pan watch.
+  // a show waiting for a release, and stops the owner's outside watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
@@ -2225,9 +2302,9 @@ function useLayerImplementation(
       pendingAnchorWaitRef.current?.();
       cancelAfterReleaseRef.current?.();
       cancelAfterReleaseRef.current = null;
-      stopOutsidePanWatch();
+      stopOutsideWatch();
     };
-  }, [stopOutsidePanWatch]);
+  }, [stopOutsideWatch]);
 
   // Reconcile browser-initiated closes (light-dismiss, popover="auto" stack
   // eviction). These are the only cases where the DOM mutates without going
@@ -2297,7 +2374,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
-        stopOutsidePanWatch();
+        stopOutsideWatch();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -2312,7 +2389,7 @@ function useLayerImplementation(
       clearContextMount,
       rememberDismissal,
       releaseAnchor,
-      stopOutsidePanWatch,
+      stopOutsideWatch,
     ],
   );
 
@@ -2380,11 +2457,20 @@ function useLayerImplementation(
         // that hide has ended, for the element still mounted then. The
         // keyboard cap follows the replacement element too.
         followLayerElement();
-        if (showPopoverElement(el)) {
+        const followShownReplacement = () => {
           const anchorBoxes = keepsAnchorClear
             ? keepAnchorClear(el, triggerRef.current)
             : null;
           writeEntranceSide(el, triggerRef.current, anchorBoxes);
+          // The owner's watch judges presses against the layer element.
+          if (stopOutsideWatchRef.current != null) {
+            stopOutsideWatch();
+            stopOutsideWatchRef.current =
+              watchesOutside?.(el, dismissFromOutside) ?? null;
+          }
+        };
+        if (showPopoverElement(el)) {
+          followShownReplacement();
         } else {
           afterPopoverOperations(el.ownerDocument, () => {
             const current = popoverRef.current;
@@ -2394,10 +2480,7 @@ function useLayerImplementation(
               openedPopoverRef.current !== el &&
               showPopoverElement(el)
             ) {
-              const anchorBoxes = keepsAnchorClear
-                ? keepAnchorClear(el, triggerRef.current)
-                : null;
-              writeEntranceSide(el, triggerRef.current, anchorBoxes);
+              followShownReplacement();
             }
           });
         }
@@ -2411,6 +2494,9 @@ function useLayerImplementation(
       isCurrentContextPopover,
       keepsAnchorClear,
       followLayerElement,
+      stopOutsideWatch,
+      watchesOutside,
+      dismissFromOutside,
     ],
   );
 

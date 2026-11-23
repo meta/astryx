@@ -16,7 +16,8 @@ import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {pressBelongsToControl} from '../hooks/useClickableContainer';
+import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -27,6 +28,47 @@ import {visibleText} from '../utils/accessibleName';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
+
+/** Whether the document can hit-test a point (jsdom cannot). */
+function canHitTestByPoint(): boolean {
+  return (
+    typeof document !== 'undefined' &&
+    typeof document.elementFromPoint === 'function'
+  );
+}
+
+/**
+ * The element a press at a point resolves in the sheet. ListItem renders its
+ * action as a direct child of its `li`, with the icon and the end content
+ * beside the action, not in it. So a point anywhere in a row (its icon, end
+ * content or padding) is that row's action. Any control in the row's content,
+ * enabled or not, keeps its own press. A row that holds other rows, as a
+ * section does, has no action of its own.
+ */
+function sheetElementAtPoint(
+  list: HTMLElement | null,
+  x: number,
+  y: number,
+): Element | null {
+  const doc = list?.ownerDocument ?? document;
+  const element = elementAtMenuPoint(list, doc, x, y);
+  if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
+    return element;
+  }
+  const row = element.closest('li');
+  // A control in the row's content keeps its own press, as in Item's click.
+  if (row != null && pressBelongsToControl(element, row)) {
+    return element;
+  }
+  if (row != null) {
+    for (const child of row.children) {
+      if (child.matches(SHEET_ROW_SELECTOR)) {
+        return child;
+      }
+    }
+  }
+  return element;
+}
 
 const styles = stylex.create({
   // The row under a held finger is the highlight; the browser's held-press
@@ -80,6 +122,11 @@ export function MenuBottomSheetActionList({
   const menuPress = useMenuPress({
     menuRef: listRef,
     itemSelector: SHEET_ROW_SELECTOR,
+    // A document without elementFromPoint (jsdom) keeps the hook's own
+    // lookup, which reads the event's target.
+    hitTest: canHitTestByPoint()
+      ? (x, y) => sheetElementAtPoint(listRef.current, x, y)
+      : undefined,
   });
 
   // `rowPath` names the row within the whole list: an index alone restarts in

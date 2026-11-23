@@ -36,6 +36,7 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
@@ -47,6 +48,7 @@ import {
   type ISODateString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {localeTextStyles} from '../utils/textDirection';
 import type {InputStatusType} from '../Field';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
 import {
@@ -119,6 +121,7 @@ export function NativeDateSegment({
   } = controlProps ?? {};
   const t = useComponentTranslator();
   const locale = useLocale();
+  const textDirection = getLocaleDirection(locale);
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(inputRef, internalInputRef);
@@ -345,8 +348,10 @@ export function NativeDateSegment({
             statusType === 'error' || !isInputValid ? 'true' : undefined
           }
           aria-busy={isBusy || undefined}
+          dir={inputProps.dir ?? textDirection}
           {...stylex.props(
             styles.input,
+            localeTextStyles.pageAlign,
             showsOverlay && styles.inputTextHidden,
             isEffectivelyDisabled && styles.inputDisabled,
             !isInputValid && styles.inputInvalid,
@@ -355,8 +360,10 @@ export function NativeDateSegment({
         {showsOverlay && (
           <span
             aria-hidden="true"
+            dir={textDirection}
             {...stylex.props(
               styles.overlay,
+              localeTextStyles.pageAlign,
               nativeValue ? styles.overlayValue : styles.overlayPlaceholder,
               isEffectivelyDisabled && styles.inputDisabled,
               !isInputValid && !!nativeValue && styles.inputInvalid,

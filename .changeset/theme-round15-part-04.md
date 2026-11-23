@@ -1,0 +1,40 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor show` names the base theme's own text contrast failures as notes, one for each text color on each ground, with the line that fixes it in your theme where one does; they are never listed as your theme's problems, and a change says them only when it brings them. Text on a part that writes its own text colors (butter's colored cards) is measured in those colors.
+
+- `astryx experimental theme editor`: whole-theme dials reach every part they name. The headings dial and a heading font reach a part drawn as a heading element that reads none of the headings' tokens (an empty state's title), and the file input is one of the inputs.
+
+- `astryx experimental theme editor set` says when a fill token set on main content does not paint it inside an app shell (where it is drawn with no fill of its own and the shell's fill shows), with the `background-color` line that paints it everywhere.
+
+- `astryx experimental theme editor how`:
+
+- "make the cards brighter" gives lighter card fills, not darker ones.
+- A focus ring color given for each mode now also sets the outline color in each mode.
+- "buttons 5px 16px padding" is padding only, not also a shadow.
+- A part with no shared shadow of its own says so, instead of listing its ring colors as what its shadow reads.
+- "rounded photos" says photos are the app's own images, which the theme does not style, and names the parts that show one. It no longer rounds every corner in the theme.
+
+- `astryx experimental theme editor how`: "navigation bar" is the app's top bar, as "nav bar" is, and a word of how see-through a thing is ("nav bar translucent white") is a known word, never one half of a compound subject.
+
+- Fixes in `astryx experimental theme editor`:
+
+- `how` keeps a look said in a list led by its part on that part: "badges 4px corners, 12px text and no border" and "tooltips #0f0f0f with white text, 4px corners and 12px text" give the 12px text to the badge and the tooltip, not the whole theme's text size.
+- `how` no longer reads a size word that describes a look ("large bold text") as a part's own size, so a part said before it doesn't spread to it.
+- `how` reads "<name> tool:", "product:", "platform:" and "portal:" labels as the product the look is for, like "app:" and "site:".
+- `how` now reads "the others" after a comma ("selected tab text white, the others gray") the same way as after "and".
+- `how` reads a bare length said of a part that sets its own width and height ("checkboxes 16px") as that part's size.
+- `how` reads a complaint like "why is everything so round" as an ask for one step the other way, instead of answering it as a question.
+- `how` reads the German comparative "eckiger" (more angular) as one step sharper, not square.
+- `set` on one member of a group under a variant of that member (`--on selector --when variant:secondary`) now reaches only the members that have that variant, not the whole group.
+
+- `astryx experimental theme editor set` and `undo`: a part typed in the setting's place (`set my button background-color '#2563eb'`, `set my card padding 20px`, `undo my card`) offers the line for that part (`set my background-color '#2563eb' --on button`, the undo of each setting the theme holds on the card), never suggestions it does not take.
+
+- `astryx experimental theme editor`: a theme saved by an earlier editor version opens unless a saved setting names a state, variant, part or token this Core does not have, or a value the theme grammar refuses (those still stop `show` with ERR_THEME_INVALID). A saved setting today's editor refuses (such as a color on a part whose inner element paints over it, so it never showed) no longer stops `show`, `set` and `compile`. The setting is kept and built as before, so nothing you see changes. A note names it, with the lines that clear it.
+
+- `astryx experimental theme editor` gives a progress bar fill that does not read on its track a line for the variant it measured (`--when variant:accent`), so the success, warning and error bars keep their own colors, and the problem clears once that line is followed.
+
+- `astryx experimental theme editor`: a theme's category colors (Badge, Token and Card tints) and chart colors now follow its look. Whenever the look changes (accent, neutral, vibrancy), the editor grows them from Core's hues at the accent's strength and the palette's vibrancy. Card tints stay pale enough for the theme's text, secondary text and links; badge text reads at 4.5:1, icons and chart series at 3:1, and the hues stay apart, each where a shade allows. Every set is always written: a chart series the look would draw like an earlier one takes the nearest shade that stands apart and still reads, a card tint drawn like another tint or the page takes the nearest quieter tint that stands apart (else the nearest stronger one), and the result names what no shade could meet first, then what moved, with a count of the rest. Card tints under ΔE 1.5 apart now count as alike too, so a look whose category tints sat that close (a magenta accent at vibrancy 50, say) gets those tints moved apart. An exact --color-<role>-<hue> or --color-data-* setting wins. A change's result counts these in one line each.
+
+@josephfarina

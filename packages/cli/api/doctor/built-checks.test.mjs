@@ -406,6 +406,38 @@ describe('what a --built path counts', () => {
     );
   });
 
+  it("reads the setup stylesheet that only loads Astryx's CSS as wiring, and still flags one with rules of its own", () => {
+    write({
+      'src/index.css': [
+        '/* Astryx setup */',
+        '@layer reset, astryx-base, astryx-theme;',
+        "@import '@astryxdesign/core/reset.css';",
+        '@import url("@astryxdesign/core/astryx.css");',
+        "@import '@astryxdesign/theme-neutral/theme.css';",
+        "@import '@astryxdesign/theme-neutral/fonts.css';",
+        '',
+      ].join('\n'),
+      'src/main.tsx':
+        "import './index.css';\nimport './app.css';\nimport './other.css';\nimport './layered.css';\nimport 'kit/index.css';\nexport const x = 1;\n",
+      'src/kit/index.css': "@import '@astryxdesign/core/reset.css';\n",
+      'src/app.css':
+        "@import '@astryxdesign/core/astryx.css';\nbody { margin: 0; }\n",
+      'src/other.css':
+        "@import '@astryxdesign/core/reset.css';\n@import 'some-kit/base.css';\n",
+      'src/layered.css':
+        "@import '@astryxdesign/core/reset.css';\n@layer app { .x { color: red; } }\n",
+    });
+    const styling = scanBuilt(dir, [])
+      .findings.filter(f => f.category === 'Styling')
+      .map(f => `${f.file}:${f.line} ${f.message}`);
+    expect(styling).toEqual([
+      'src/main.tsx:2 imports the stylesheet `./app.css`: use component props and tokens',
+      'src/main.tsx:3 imports the stylesheet `./other.css`: use component props and tokens',
+      'src/main.tsx:4 imports the stylesheet `./layered.css`: use component props and tokens',
+      'src/main.tsx:5 imports the stylesheet `kit/index.css`: use component props and tokens',
+    ]);
+  });
+
   it('names the integrations by the declared dependencies that ship a manifest, running nothing', () => {
     write({
       'package.json': JSON.stringify({
