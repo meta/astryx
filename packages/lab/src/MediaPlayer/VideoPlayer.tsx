@@ -42,8 +42,14 @@ import {
 } from './MediaPlayerControls';
 import {MediaPlayerElement} from './MediaPlayerElement';
 
-const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surface']} 80%, transparent)`;
-const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
+/**
+ * The frost is the on-media backing that the Lightbox draws under its
+ * controls. The on-light color is dark in both color schemes, so the
+ * on-media controls read on it in every host. A host surface color becomes
+ * dark only when the host declares it as a light-dark pair.
+ */
+const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`;
+const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-on-light']} 90%, transparent)`;
 const BAR_RADIUS = radiusVars['--radius-container'];
 const PLAYER_RADIUS = radiusVars['--radius-element'];
 /** A player this narrow, such as a small attachment tile, gets a compact bar. */
@@ -89,7 +95,7 @@ const styles = stylex.create({
       default: FROSTED_SURFACE,
       '@media (prefers-contrast: more)': FROSTED_SURFACE_HIGH_CONTRAST,
       '@media (prefers-reduced-transparency: reduce)':
-        colorVars['--color-background-surface'],
+        colorVars['--color-on-light'],
     },
     backdropFilter: {
       default: 'blur(12px)',

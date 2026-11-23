@@ -7,8 +7,9 @@
  * @output Measured proof of the video control bar's inset, height, button
  *   size, and hide distance in a compact and a wide player, of the size a
  *   tooltip from the compact bar keeps, of the timeline's track color on the
- *   bar and in the audio player, and that the bar stays drawn before
- *   playback while a marker popover opened from the keyboard is open
+ *   bar and in the audio player, that the bar stays dark under its icons on
+ *   a palette of plain values, and that the bar stays drawn before playback
+ *   while a marker popover opened from the keyboard is open
  * @position Run with `pnpm test:a11y-contract`. jsdom lays out nothing and
  *   matches no container query, so only a browser can measure the bar.
  */
@@ -260,3 +261,87 @@ test("before playback, the bar stays drawn when a click on a second marker opens
   await page.waitForTimeout(400);
   await expect(page.locator(BAR)).toHaveCSS('opacity', '1');
 });
+
+/**
+ * A host can write its palette as plain values, not as light-dark pairs.
+ * The dark color scheme of the media context then changes none of them.
+ */
+const PLAIN_LIGHT_PALETTE: Record<string, string> = {
+  '--color-background-surface': '#ffffff',
+  '--color-background-popover': '#ffffff',
+  '--color-text-primary': '#1c1e21',
+  '--color-icon-primary': '#1c1e21',
+};
+
+type Rgba = [number, number, number, number];
+
+function parseColor(css: string): Rgba {
+  const srgb = /color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/.exec(
+    css,
+  );
+  if (srgb != null) {
+    return [
+      Number(srgb[1]) * 255,
+      Number(srgb[2]) * 255,
+      Number(srgb[3]) * 255,
+      srgb[4] == null ? 1 : Number(srgb[4]),
+    ];
+  }
+  const rgb =
+    /rgba?\(([\d.]+),? ([\d.]+),? ([\d.]+)(?:,? \/? ?([\d.]+))?\)/.exec(css);
+  if (rgb == null) {
+    throw new Error(`unreadable color ${css}`);
+  }
+  return [
+    Number(rgb[1]),
+    Number(rgb[2]),
+    Number(rgb[3]),
+    rgb[4] == null ? 1 : Number(rgb[4]),
+  ];
+}
+
+/** The color over a white picture, which is the worst case for light icons. */
+function overWhite([r, g, b, a]: Rgba): Rgba {
+  return [
+    r * a + 255 * (1 - a),
+    g * a + 255 * (1 - a),
+    b * a + 255 * (1 - a),
+    1,
+  ];
+}
+
+function luminance([r, g, b]: Rgba): number {
+  const channel = (value: number) => {
+    const s = value / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrast(a: Rgba, b: Rgba): number {
+  const first = luminance(a);
+  const second = luminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+for (const story of ['small-player', 'video']) {
+  test(`on a palette of plain light values, the bar stays dark under its on-media icons (${story})`, async ({
+    page,
+  }) => {
+    await open(page, story);
+    const paint = await page.locator(PLAYER).evaluate((player, palette) => {
+      for (const [name, value] of Object.entries(palette)) {
+        (player as HTMLElement).style.setProperty(name, value);
+      }
+      const bar = player.querySelector('[data-visible]') as HTMLElement;
+      const button = bar.querySelector('.astryx-button') as HTMLElement;
+      return {
+        bar: getComputedStyle(bar).backgroundColor,
+        icon: getComputedStyle(button).color,
+      };
+    }, PLAIN_LIGHT_PALETTE);
+    expect(
+      contrast(parseColor(paint.icon), overWhite(parseColor(paint.bar))),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+}
