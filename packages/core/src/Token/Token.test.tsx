@@ -15,6 +15,7 @@ import userEvent from '@testing-library/user-event';
 import {createRef, type ComponentPropsWithRef} from 'react';
 import {Token} from './Token';
 import {LinkProvider} from '../Link/LinkProvider';
+import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
 import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import type {TokenColor} from './Token';
 
@@ -1014,6 +1015,47 @@ describe('Token: a focused link that becomes disabled keeps focus', () => {
       });
     }
   }
+
+  it('keeps focus when a link with onClick becomes a disabled button and back', () => {
+    const fixture = (isDisabled: boolean) => (
+      <Token
+        label="Tag"
+        href="#destination"
+        onClick={() => {}}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(fixture(false));
+    const before = screen.getByText('Tag').closest('a, button') as HTMLElement;
+    before.focus();
+    expect(before).toHaveFocus();
+    rerender(fixture(true));
+    const disabled = screen
+      .getByText('Tag')
+      .closest('a, button') as HTMLElement;
+    expect(disabled).toHaveFocus();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    rerender(fixture(false));
+    expect(screen.getByText('Tag').closest('a, button')).toHaveFocus();
+  });
+
+  it('keeps focus when a link inside a trigger becomes disabled and back', () => {
+    const fixture = (isDisabled: boolean) => (
+      <InteractiveRoleContext value="button">
+        <Token label="Tag" href="#destination" isDisabled={isDisabled} />
+      </InteractiveRoleContext>
+    );
+    const {rerender} = render(fixture(false));
+    (screen.getByText('Tag').closest('a, button') as HTMLElement).focus();
+    rerender(fixture(true));
+    const disabled = screen
+      .getByText('Tag')
+      .closest('a, button') as HTMLElement;
+    expect(disabled).toHaveFocus();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    rerender(fixture(false));
+    expect(screen.getByText('Tag').closest('a, button')).toHaveFocus();
+  });
 
   it('leaves focus that moved elsewhere where it is', () => {
     const fixture = (isDisabled: boolean) => (

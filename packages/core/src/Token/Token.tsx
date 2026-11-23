@@ -130,18 +130,20 @@ export interface TokenProps extends BaseProps<HTMLElement> {
 // =============================================================================
 
 /**
- * The link a Token's label sits in, when that link belongs to the same Token.
- * A link Token swaps its anchor when it becomes disabled or enabled again, and
- * a router link may hold no ref; the label is the Token's own, so focus is
- * found from it.
+ * The control a Token's label sits in, when that control belongs to the same
+ * Token. A link Token replaces its control when `isDisabled` changes. A router
+ * link can keep no ref. The label stays in the Token, so the hook finds the
+ * control from it.
  */
-function tokenLinkOfLabel(label: HTMLElement): HTMLElement | null {
-  const link = label.closest<HTMLElement>('a, [role="link"]');
+function tokenControlOfLabel(label: HTMLElement): HTMLElement | null {
+  const control = label.closest<HTMLElement>(
+    'a, button, [role="link"], [role="button"]',
+  );
   const token = label.closest('.astryx-token');
-  return link != null &&
+  return control != null &&
     token != null &&
-    link.closest('.astryx-token') === token
-    ? link
+    control.closest('.astryx-token') === token
+    ? control
     : null;
 }
 
@@ -351,9 +353,10 @@ export function Token({
   const role = useInteractiveRole({href, onClick, isDisabled});
   const naming = use(TokenNamingContext);
   // A focused link that becomes disabled, or enabled again, keeps focus
-  // across the anchor swap.
+  // when its control is replaced: a link becomes a plain anchor, or a link
+  // with onClick or inside a trigger becomes a button.
   const labelRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
-    getFocusTarget: tokenLinkOfLabel,
+    getFocusTarget: tokenControlOfLabel,
   });
 
   // When role is 'button' via context (no explicit onClick), treat as
@@ -502,8 +505,8 @@ export function Token({
     // non-presentational wrapper that renders a <span> container with the link
     // and the remove button as siblings and wires up useClickableContainer so
     // the whole token surface activates the link (including middle-click and
-    // cmd/ctrl-click to open in a new tab). Token itself stays presentational
-    // (no refs/effects) per the @astryx/presentational-component rule.
+    // cmd/ctrl-click to open in a new tab). The container delegation needs
+    // refs of its own, so it lives in TokenLink.
     return (
       <TokenLink
         ref={ref}
@@ -623,6 +626,7 @@ export function Token({
           {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
+            ref={labelRef}
             {...labelDirection}
             {...stylex.props(
               styles.label,

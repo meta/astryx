@@ -7,14 +7,13 @@
  * @input Rendered token pieces (icon, label, endContent, remove button) plus
  *   container/link styling props and the resolved LinkComponent
  * @output Exports TokenLink, the interactive container for the href+onRemove Token variant
- * @position Internal to Token; keeps Token.tsx presentational
+ * @position Internal to Token; holds the link-and-remove container delegation
  *
- * Token is a presentational component (see
- * /internal/eslint-plugin-astryx/presentational-component.js) and must not use
- * refs or effects. When a Token has both `href` and `onRemove`, the remove
+ * When a Token has both `href` and `onRemove`, the remove
  * <button> must be a sibling of the link (nesting a button inside an anchor is
  * invalid HTML — WCAG 4.1.2), so the surface becomes a clickable container that
- * delegates to an inner link. That delegation needs refs, so it lives here.
+ * delegates to an inner link. That delegation needs refs of its own, so it
+ * lives here.
  *
  * useClickableContainer gives the container middle-click and cmd/ctrl-click
  * open-in-new-tab behavior for the link, ignores clicks on nested interactive
