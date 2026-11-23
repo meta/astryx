@@ -261,6 +261,27 @@ test('every binding fact matches the rendered semantic state', async ({
   expect(wrong).toEqual([]);
 });
 
+test('an individually disabled radio stays arrow-reachable without selecting', async ({
+  page,
+}) => {
+  const state = RADIO_GROUP_BINDING_STATES.find(
+    candidate => candidate.id === 'radio-list-option-disabled',
+  );
+  if (!state) {
+    throw new Error('Missing radio-list-option-disabled state');
+  }
+
+  await page.goto(storyUrl(state.storyId), {waitUntil: 'load'});
+  const root = page.locator('#storybook-root');
+  const standard = root.getByRole('radio', {name: 'Standard'});
+  const express = root.getByRole('radio', {name: 'Express'});
+  await standard.focus();
+  await page.keyboard.press('ArrowDown');
+
+  await expect(express).toBeFocused();
+  await expect(express).not.toBeChecked();
+});
+
 test('every expectation is exercised by at least one bound state', async ({
   page,
 }) => {

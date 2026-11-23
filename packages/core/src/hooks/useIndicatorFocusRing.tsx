@@ -44,7 +44,7 @@ export interface UseIndicatorFocusRingReturn {
  *
  * @param containerRef - Wraps ONLY the indicator, so its single element child
  *   is unambiguously the thing to ring, whatever a theme renders there.
- * @param isDisabled - Skip the ring; a disabled control is not focusable.
+ * @param isDisabled - Skip the ring for controls that are not focusable while disabled.
  *
  * @example
  * ```
