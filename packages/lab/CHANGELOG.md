@@ -1,4 +1,4 @@
-# @xds/lab
+# @astryxdesign/lab
 
 # 0.1.9
 
@@ -44,11 +44,11 @@
 
 #### Breaking Changes
 
-- **Fully unprefixed** — `@xds/lab` drops the `XDS*` prefix entirely (no compat aliases): import `Stepper`, `Step`, `ChartV2`, `Schedule`, etc. directly. (#2954)
+- **Fully unprefixed** — `@astryxdesign/lab` drops the `XDS*` prefix entirely (no compat aliases): import `Stepper`, `Step`, `ChartV2`, `Schedule`, etc. directly. (#2954)
 
 #### New Components
 
-- **Stepper / Step** — Moved here from `@xds/core` for an API rework; visual overhaul with a segmented bar, indicator modes, and density. (#2335, #2308)
+- **Stepper / Step** — Moved here from `@astryxdesign/core` for an API rework; visual overhaul with a segmented bar, indicator modes, and density. (#2335, #2308)
 - **Schedule** — New scheduling component. (#2366)
 
 #### New Features
@@ -83,7 +83,7 @@
 #### Patch Changes
 
 - Updated dependencies
-  - @xds/core@0.0.13
+  - the earlier scope's `core@0.0.13`
 
 ---
 
@@ -92,4 +92,4 @@
 #### Patch Changes
 
 - Updated dependencies
-  - @xds/core@0.0.5
+  - the earlier scope's `core@0.0.5`
