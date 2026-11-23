@@ -292,7 +292,7 @@ an allowlist row does.
 - INV1 gap: Link's import reaches the Tooltip component and the layer
   runtime, 22.4 KB gzip, with or without a `tooltip` prop.
 - INV7 gap: Table's import reaches the window controller and the shared
-  windowing module, 3.5 KB gzip, for a Table that never windows.
+  windowing module, 3.6 KB gzip, for a Table that never windows.
 - INV3 gap: no record says how a tooltip's description reaches assistive
   technology before its surface loads, for the triggers whose tooltip is
   their description.
