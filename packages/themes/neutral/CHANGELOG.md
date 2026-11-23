@@ -520,7 +520,7 @@ Thanks to everyone who contributed to this release:
 #### Patch Changes
 
 - Updated dependencies
-  - @astryxdesign/core@0.0.13
+  - the earlier scope's `core@0.0.13`
 
 ---
 
@@ -535,7 +535,7 @@ Thanks to everyone who contributed to this release:
 #### Patch Changes
 
 - Updated dependencies
-  - @astryxdesign/core@0.0.5
+  - the earlier scope's `core@0.0.5`
 
 ---
 
@@ -543,7 +543,7 @@ Thanks to everyone who contributed to this release:
 
 #### Patch Changes
 
-- Updated dependencies — aligned with @astryxdesign/core@0.0.4
+- Updated dependencies — aligned with the earlier scope's `core@0.0.4`
 
 ---
 

@@ -83,7 +83,7 @@
 #### Patch Changes
 
 - Updated dependencies
-  - @astryxdesign/core@0.0.13
+  - the earlier scope's `core@0.0.13`
 
 ---
 
@@ -92,4 +92,4 @@
 #### Patch Changes
 
 - Updated dependencies
-  - @astryxdesign/core@0.0.5
+  - the earlier scope's `core@0.0.5`

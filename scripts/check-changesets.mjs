@@ -167,13 +167,6 @@ function validateChangeset(file, contents, ctx) {
 }
 
 /**
- * Validate every pending Changeset at `root`. Reads the fixed group's declaration
- * so a patch plan cannot admit [breaking] work.
- *
- * @param {string} root
- * @returns {{files: string[], problems: string[], pre1: boolean, declaredVersion: string|null, declaredTier: string|null}}
- */
-/**
  * Check that a package's CHANGELOG starts with its own name as the title.
  * Pure, so it can be unit-tested without the filesystem.
  *
@@ -190,6 +183,13 @@ function validateChangelogTitle(file, name, contents) {
     : [`${file}: the first line must be "${expected}"; found "${title}".`];
 }
 
+/**
+ * Validate every pending Changeset at `root`. Reads the fixed group's declaration
+ * so a patch plan cannot admit [breaking] work.
+ *
+ * @param {string} root
+ * @returns {{files: string[], problems: string[], pre1: boolean, declaredVersion: string|null, declaredTier: string|null}}
+ */
 function checkRepository(root) {
   const config = readConfig(root);
   const pkgs = discoverPackages(root);
