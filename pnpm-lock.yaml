@@ -1259,7 +1259,7 @@ importers:
         specifier: 0.1.9
         version: link:../charts
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.18
         version: link:../core
       react:
         specifier: '>=19.2.0'

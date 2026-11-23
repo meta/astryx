@@ -52,7 +52,7 @@
   },
   "peerDependencies": {
     "@astryxdesign/charts": "0.1.9",
-    "@astryxdesign/core": "0.7.16",
+    "@astryxdesign/core": "0.7.18",
     "react": ">=19.2.0",
     "react-dom": ">=19.2.0",
     "vega": ">=6.0.0",
