@@ -98,7 +98,7 @@ describe('useTableSortable', () => {
         />,
       );
       expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
-      expect(screen.getByText('אימייל')).not.toHaveAttribute('dir');
+      expect(screen.getByText('אימייל')).toHaveAttribute('dir', 'rtl');
       expect(screen.getByRole('button', {name: 'Name'})).toBeInTheDocument();
     });
 

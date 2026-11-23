@@ -94,7 +94,7 @@ describe('TopNav', () => {
     expect(text.className).toContain('mobileBarHeadingText');
   });
 
-  it('gives a Latin plain-text mobile-bar heading its own direction, and leaves a right-to-left heading in the page direction', () => {
+  it('gives a Latin plain-text mobile-bar heading its own direction, and gives a right-to-left heading its own right-to-left direction', () => {
     render(
       <div dir="rtl">
         <TopNavRenderContext value="mobile-bar">
@@ -109,7 +109,7 @@ describe('TopNav', () => {
       'dir',
       'ltr',
     );
-    expect(screen.getByText('ניתוח נתונים')).not.toHaveAttribute('dir');
+    expect(screen.getByText('ניתוח נתונים')).toHaveAttribute('dir', 'rtl');
   });
 
   it('passes an element heading through unwrapped in mobile-bar mode', () => {
