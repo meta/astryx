@@ -2230,23 +2230,23 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   ): string {
     const file = tally ?? runStallTally();
     // The project name keeps a local run of both engines apart. A test that
-    // casts more than once names each cast, so each later cast reads the
-    // earlier ones as neighbours.
-    const me = [test.info().project.name, ...test.info().titlePath, cast ?? []]
-      .flat()
+    // casts more than once names each cast in a column of its own, so each
+    // later cast reads the earlier ones as neighbours, and a test counts once.
+    const me = [test.info().project.name, ...test.info().titlePath]
       .join(' › ')
       .replaceAll('\t', ' ');
+    const myCast = cast ?? '';
     fs.mkdirSync(path.dirname(file), {recursive: true});
-    fs.appendFileSync(file, `${me}\t${toTally}\n`);
+    fs.appendFileSync(file, `${me}\t${myCast}\t${toTally}\n`);
     const neighbours = fs
       .readFileSync(file, 'utf8')
       .split('\n')
       .filter(Boolean)
       .map(line => {
-        const tab = line.lastIndexOf('\t');
-        return {test: line.slice(0, tab), stalls: Number(line.slice(tab + 1))};
+        const [name = '', castName = '', count = '0'] = line.split('\t');
+        return {test: name, cast: castName, stalls: Number(count)};
       })
-      .filter(row => row.test !== me);
+      .filter(row => row.test !== me || row.cast !== myCast);
     const total = neighbours.reduce((sum, row) => sum + row.stalls, 0);
     const tests = new Set(
       neighbours.filter(row => row.stalls > 0).map(row => row.test),
@@ -2441,20 +2441,28 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     };
     // Starvation: two other tests already stalled in this run.
     const starved = scratchTally('starved.tsv');
-    fs.writeFileSync(starved, 'Switch › P14 · one\t2\nSwitch › P14 · two\t3\n');
+    fs.writeFileSync(
+      starved,
+      'Switch › P14 · one\t\t2\nSwitch › P14 · two\t\t3\n',
+    );
     expect(() =>
       expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: starved}),
     ).toThrow(/stalls: this test 3, neighbours 5 across 2 tests so far/);
     // A freeze: the neighbours ran without a stall.
     const quiet = scratchTally('quiet.tsv');
-    fs.writeFileSync(quiet, 'Switch › P14 · one\t0\nSwitch › P14 · two\t0\n');
+    fs.writeFileSync(
+      quiet,
+      'Switch › P14 · one\t\t0\nSwitch › P14 · two\t\t0\n',
+    );
     expect(() =>
       expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: quiet}),
     ).toThrow(/stalls: this test 3, neighbours 0 across 0 tests so far/);
-    // A test that casts twice names each cast: the second reads the first.
+    // A test that casts more than once names each cast: a later cast reads
+    // the earlier ones, and their test counts once.
     const twice = scratchTally('twice.tsv');
-    reportStalls(3, {tally: twice, cast: 'cast 1'});
-    expect(reportStalls(0, {tally: twice, cast: 'cast 2'})).toBe(
+    reportStalls(1, {tally: twice, cast: 'cast 1'});
+    reportStalls(2, {tally: twice, cast: 'cast 2'});
+    expect(reportStalls(0, {tally: twice, cast: 'cast 3'})).toBe(
       'this test 0, neighbours 3 across 1 test so far',
     );
     // A passing run is counted as well, and still passes. Its own earlier
