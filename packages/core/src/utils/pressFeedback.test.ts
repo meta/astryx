@@ -956,6 +956,26 @@ describe('the release', () => {
     }
   });
 
+  it("under a theme's reducedMotion: 'always' mark, with the setting off, a finger's release keeps DR2's bound", () => {
+    // The root theme's mark on <html>; Theme writes it for 'always'.
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+    const remove = addRules('.slow-row { --duration-exit: 333ms; }');
+    try {
+      rows[0].classList.add('slow-row');
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      press(rows[0], 'pointerup', 10, 10);
+      vi.advanceTimersByTime(REDUCED_FADE_MS - 1);
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      rows[0].classList.remove('slow-row');
+      remove();
+      document.documentElement.removeAttribute('data-astryx-reduced-motion');
+    }
+  });
+
   it("the stylesheet's release plays the exit tokens, with DR2's bound under Reduce Motion", () => {
     const source = readFileSync(
       join(

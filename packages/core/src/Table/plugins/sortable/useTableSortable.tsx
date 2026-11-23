@@ -30,6 +30,10 @@ import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
 import {createDevWarnings} from '../../../utils/devWarning';
 import {INTERACTIVE_SELECTORS} from '../../../hooks/useClickableContainer';
+import {
+  textDirectionProps,
+  truncatedTextStyles,
+} from '../../../utils/textDirection';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
@@ -241,6 +245,31 @@ declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 const HEADER_CONTROL_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex]:not([tabindex="-1"])`;
 
+/**
+ * The label cuts its own text, so a plain-text label takes its text's
+ * direction: a Latin label keeps its start on a right-to-left page.
+ */
+function SortLabel({
+  labelRef,
+  children,
+}: {
+  labelRef: (label: HTMLSpanElement | null) => void;
+  children: ReactNode;
+}) {
+  const {dir} = textDirectionProps(children);
+  return (
+    <span
+      ref={labelRef}
+      dir={dir}
+      {...stylex.props(
+        sortStyles.label,
+        dir != null && truncatedTextStyles.pageAlign,
+      )}>
+      {children}
+    </span>
+  );
+}
+
 function SortHeaderButton<T extends Record<string, unknown>>({
   column,
   children,
@@ -353,9 +382,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         )}
         aria-describedby={rank != null ? priorityId : undefined}
         onClick={handleClick}>
-        <span ref={labelRef} {...stylex.props(sortStyles.label)}>
-          {children}
-        </span>
+        <SortLabel labelRef={labelRef}>{children}</SortLabel>
         <span
           {...stylex.props(
             sortStyles.iconWrapper,
