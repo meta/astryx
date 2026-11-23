@@ -16,6 +16,7 @@ import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
@@ -27,9 +28,6 @@ import {visibleText} from '../utils/accessibleName';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
-// Any control a caller can put in a row's content, enabled or not.
-const CONTENT_CONTROL_SELECTOR =
-  'a[href], button, input, select, textarea, label, [tabindex]';
 
 /** Whether the document can hit-test a point (jsdom cannot). */
 function canHitTestByPoint(): boolean {
@@ -57,11 +55,12 @@ function sheetElementAtPoint(
   if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
     return element;
   }
-  const control = element.closest(CONTENT_CONTROL_SELECTOR);
-  if (control != null && control !== list && list?.contains(control) === true) {
+  const row = element.closest('li');
+  // A control in the row's content keeps its own press, as Item's own click
+  // rule decides.
+  if (row != null && hasInteractiveAncestor(element, row)) {
     return element;
   }
-  const row = element.closest('li');
   if (row != null) {
     for (const child of row.children) {
       if (child.matches(SHEET_ROW_SELECTOR)) {
