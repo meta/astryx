@@ -244,7 +244,7 @@ export default function InvoicePreviewSplit() {
           name: 'isAlwaysVisible',
           type: 'boolean',
           description:
-            'Show the pill grip at rest instead of only on hover. Use when discoverability is important.',
+            'Show the pill grip at rest. When false, the pill shows only on hover, keyboard focus and drag. Use true when discoverability is important.',
           default: 'true',
         },
         {
@@ -345,7 +345,7 @@ export const docsDense = {
         hasDivider:
           'show full-length 1px divider line through handle. Use when adjacent panels share same background',
         isAlwaysVisible:
-          'show pill grip at rest instead of only on hover. Use when discoverability important',
+          'show pill grip at rest; false shows it only on hover, keyboard focus and drag. Use when discoverability important',
         pillPlacement:
           'which side of divider pill sits on. auto = panel side (derived from isReversed), other side while collapsed; start = left/top, end = right/bottom, center = centered on divider. Moves only the pill (still draggable); grab zone stays on the divider',
         label: 'accessible label for separator',

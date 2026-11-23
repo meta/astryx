@@ -249,7 +249,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   applies it and records its gaps.
 - `spec:AST-085` owns disabled-control behavior.
 - `architecture:component-theming-surface` owns target mapping and state
-  reflection; FR4 records the `direction` gap.
+  reflection; FR4 applies it.
 - `architecture:interaction-modality` owns shared modality and focus
   indication; `architecture:public-component-api` owns caller-input routing.
 - `family:layout-regions` lists useResizable and ResizeHandle as collaborators
