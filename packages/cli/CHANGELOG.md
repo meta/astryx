@@ -1,4 +1,4 @@
-# @xds/cli
+# @astryxdesign/cli
 
 # 0.7.17
 
@@ -4278,7 +4278,7 @@ Thanks to everyone who contributed to this release:
 - The CLI README now shows `apiVersion` in every hand-written envelope shape and example, and lists `astryx search --verbose` in place of `--detail`, which needs a level and does not add a result's score or reason. (#6587)
 - The response-type docs, and the CLI README table generated from them, now name the fields of the `component.detail`, `docs.index`, `search`, `build.kit`, `gap-report.file`, `theme.build`, `theme.targets`, and `integration.pack-check` responses by their JSON keys, including `parentDoc`, `hint`, `notices`, `deprecatedFor`, each gap-report delivery's fields, and the pack-check contribution identities and issue fields. The `component.detail` response type declares `parentDoc`. (#6588)
 - `astryx template --help` and the manifest now say which flags win when they are combined: `--cdn` overrides everything else and writes to its value, else to `<path>`, else `cdn.template.html`; `--list` ignores a name, a path, `--skeleton` and `--overwrite`; and `--skeleton` needs a name and writes nothing. (#6591)
-- `astryx upgrade --help` and the manifest now state how its flags combine: `--list` ignores every other flag, `--registry` refuses `--list` and the migration flags, and `--codemod` is the only way to run an optional codemod and also skips the ShadCN composition check. The `--from` help names the legacy `@xds/core` fallback, and the documented exit codes now include a missing core, a missing jscodeshift, an invalid `astryx.config`, a post-codemod hook failure and the refused flag combinations. (#6590)
+- `astryx upgrade --help` and the manifest now state how its flags combine: `--list` ignores every other flag, `--registry` refuses `--list` and the migration flags, and `--codemod` is the only way to run an optional codemod and also skips the ShadCN composition check. The `--from` help names the legacy core-package fallback, and the documented exit codes now include a missing core, a missing jscodeshift, an invalid `astryx.config`, a post-codemod hook failure and the refused flag combinations. (#6590)
 - `astryx docs authoring` now says where loading a doc is looser than its published type (stamped component and function docs, older generic docs, and templates), and which doc kinds accept fields they do not know. Nothing about how docs load has changed. (#6492)
 
 #### Other Changes
@@ -5120,7 +5120,7 @@ Thanks to everyone who contributed to this release:
 #### Fixes
 
 - theme build: generated custom Button variants now type-check through the public `@astryxdesign/core/Button` subpath.
-- Remove the `@xds/theme-default` → `@astryxdesign/theme-neutral` collapse from the v0.1.0 upgrade codemods (module-specifiers, css-surfaces, and declare-module). `theme-default` was dropped at the v0.1.0 scope move, so no v0.1.x consumer imported it — the collapse was dead and could rewrite unrelated source (including `@xds/theme-default/theme.css` CSS imports) to a `@astryxdesign/theme-neutral` package the app never declared. The `@xds/theme-daily` → `theme-neutral` collapse (and its `defaultTheme` → `neutralTheme` export remap) is unchanged.
+- Remove the `@astryxdesign/theme-default` → `@astryxdesign/theme-neutral` collapse from the v0.1.0 upgrade codemods (module-specifiers, css-surfaces, and declare-module). `theme-default` was dropped at the v0.1.0 scope move, so no v0.1.x consumer imported it — the collapse was dead and could rewrite unrelated source (including `@astryxdesign/theme-default/theme.css` CSS imports) to a `@astryxdesign/theme-neutral` package the app never declared. The `@astryxdesign/theme-daily` → `theme-neutral` collapse (and its `defaultTheme` → `neutralTheme` export remap) is unchanged.
 - cli — confine user-controlled file paths, close DoS vectors, and repair paths broken by the authoring reorg (#4637)
 - cli hardening pass — validate inputs at the API layer, close path-safety gaps, and prevent agent-docs content loss. The API is a public surface (`@astryxdesign/cli/api`), so guards that lived only in the CLI wrapper are pushed into the API.
   Path safety (the guard the write commands all depend on):
@@ -5296,7 +5296,7 @@ Thanks to everyone who contributed to this release:
 
 - Stop suggesting bare `npx astryx` before the CLI is installed — it resolves to an unrelated package on the npm registry.
   The CLI now emits an install-aware invocation everywhere it prints a command:
-- Extend the v0.1.0 upgrade codemods to cover test files that mock `@xds/core` modules, which were previously left half-migrated and broke after upgrade:
+- Extend the v0.1.0 upgrade codemods to cover test files that mock `@astryxdesign/core` modules, which were previously left half-migrated and broke after upgrade:
 - `astryx upgrade` now keeps the managed agent-docs block (`<!-- ASTRYX:START --> … <!-- ASTRYX:END -->`) in sync with the installed version on **every** path — including the up-to-date and no-codemods short-circuits that previously returned before any refresh, leaving AI agents reading a stale component index and superseded rules. The block documents the installed library, so it's now refreshed up front (independent of codemods) and reported in the `--json` receipt as `agentDocs`. One detection pass covers three cases: a stale block is rewritten (`--apply`) or reported as a pending change (dry-run, which no longer writes); a project with core installed but no managed block is nudged to run `astryx init --features agents`; an already-current block stays silent. (#4168, #4169)
 
 #### Documentation
@@ -5307,8 +5307,8 @@ Thanks to everyone who contributed to this release:
 
 - Installed / global / dev runs suggest `<pm> astryx <cmd>` (e.g. `pnpm exec astryx …`), unchanged.
 - One-off runs (launched via `npx`/`pnpm dlx`/`yarn dlx`/`bunx`) suggest the scoped package `<dlx> @astryxdesign/cli <cmd>`, which always resolves to us.
-- **migrate-xds-module-specifiers**: rewrite the mocked-module path in `vi.mock`/`vi.doMock`/`jest.mock`/`jest.doMock` (and bare `mock`) calls, plus `import(...)` specifiers used in TS type positions (`typeof import('@xds/core/Text')`), so the mock still intercepts the renamed `@astryxdesign/*` import.
-- **drop-xds-prefix-imports**: un-prefix partial-mock override keys inside an `@xds/core` mock factory (e.g. `useXDSTruncation` → `useTruncation`) so the override matches the renamed export instead of silently overriding nothing. Scoped to recognized `@xds/core` mock factories only; unrelated object keys are untouched.
+- **migrate-xds-module-specifiers**: rewrite the mocked-module path in `vi.mock`/`vi.doMock`/`jest.mock`/`jest.doMock` (and bare `mock`) calls, plus `import(...)` specifiers used in TS type positions (`typeof import('@astryxdesign/core/Text')`), so the mock still intercepts the renamed `@astryxdesign/*` import.
+- **drop-xds-prefix-imports**: un-prefix partial-mock override keys inside an `@astryxdesign/core` mock factory (e.g. `useXDSTruncation` → `useTruncation`) so the override matches the renamed export instead of silently overriding nothing. Scoped to recognized `@astryxdesign/core` mock factories only; unrelated object keys are untouched.
 
 #### Contributors
 
@@ -5414,9 +5414,9 @@ Thanks to everyone who contributed to this release:
 
 #### Other Changes
 
-- **drop-xds-prefix-imports**: when un-prefixing an `@xds/core` import (e.g. `XDSCodeBlock` → `CodeBlock`) would collide with a same-named local binding in the file (such as a local `export function CodeBlock` wrapper), alias the import to `Astryx<Name>` and rewrite its usages instead of producing a duplicate declaration that breaks the build.
-- **migrate-xds-css-surfaces**: rewrite CSS `@import` of `@xds/*` package stylesheets (both `'…'`/`"…"` and `url(…)` forms), including the `@xds/core/xds.css` → `@astryxdesign/core/astryx.css` file rename and the `theme-default`/`theme-daily` → `theme-neutral` collapse.
-- **migrate-xds-module-specifiers**: when collapsing `@xds/theme-default`/`@xds/theme-daily` to `@astryxdesign/theme-neutral`, remap the `defaultTheme` export to `neutralTheme`, aliasing back to the original local name (`neutralTheme as defaultTheme`) so downstream usages keep working.
+- **drop-xds-prefix-imports**: when un-prefixing an `@astryxdesign/core` import (e.g. `XDSCodeBlock` → `CodeBlock`) would collide with a same-named local binding in the file (such as a local `export function CodeBlock` wrapper), alias the import to `Astryx<Name>` and rewrite its usages instead of producing a duplicate declaration that breaks the build.
+- **migrate-xds-css-surfaces**: rewrite CSS `@import` of the earlier scope's package stylesheets (both `'…'`/`"…"` and `url(…)` forms), including the `@astryxdesign/core/xds.css` → `@astryxdesign/core/astryx.css` file rename and the `theme-default`/`theme-daily` → `theme-neutral` collapse.
+- **migrate-xds-module-specifiers**: when collapsing `@astryxdesign/theme-default`/`@astryxdesign/theme-daily` to `@astryxdesign/theme-neutral`, remap the `defaultTheme` export to `neutralTheme`, aliasing back to the original local name (`neutralTheme as defaultTheme`) so downstream usages keep working.
 
 #### Contributors
 
@@ -5440,7 +5440,7 @@ Thanks to everyone who contributed to this release:
 - Add a Kanban Board page template: color-coded status columns, draggable task cards with priority tags, and board toolbar. Based on a design by @cg-hub18.
 - Add frame-first layout guidance: new `astryx docs layout` topic (shell choice, region budgets, app archetypes, cards-vs-rows policy, responsive contracts), layout rules in the generated agent cheat sheet, and layout anti-patterns in `docs principles`.
 - Add a v0.1.3 config codemod that migrates astryx.config layout.components to experimental.xle.components.
-- Add v0.1.0 codemods for migrating `declare module "@xds/core/..."` type augmentations and `.xds-*` / `[data-xds-theme]` / `@layer xds-theme` CSS surfaces to their `@astryxdesign`/`astryx-*` equivalents.
+- Add v0.1.0 codemods for migrating `declare module "@astryxdesign/core/..."` type augmentations and `.xds-*` / `[data-xds-theme]` / `@layer xds-theme` CSS surfaces to their `@astryxdesign`/`astryx-*` equivalents.
 - Introduce the Project configuration API as the single entry point for reading resolved project config, components, templates, codemods, and issue routing, replacing loadConfig. Misconfigured integrations are now skipped with a warning during upgrade instead of hard-failing, and a new --skip-codemod flag lets you re-run past a failed codemod.
 - Add a Shell page-template category to the CLI: Top Nav, Side Nav, and Shell Nav app-shell scaffolds (#3245, #3246, #3247)
 - Static template authoring API (createPageTemplate/createBlockTemplate) with the @astryxdesign/cli/template export and type-driven, package-scoped template discovery.
@@ -5454,7 +5454,7 @@ Thanks to everyone who contributed to this release:
 - Align the CLI error-code type declarations with the runtime error codes (add the missing ERR_AMBIGUOUS_TEMPLATE declaration).
 - Correct the `doctor` theme-wiring hint to reference the real `astryx.theme` config field (was `xds.theme`) and update the agent-docs check wording to say "Astryx".
 - Update the API/CLI parity harness for the package-qualified `component --list` shape, and make the component API reject a non-string name with a clean error instead of throwing.
-- The XDS-prefix drop codemod now runs as a mandatory v0.1.0 upgrade step, so upgrading from 0.0.x rewrites prefixed imports (useXDSTheme, XDSButton, XDSIconRegistry, ...) to their bare names alongside the @xds/_ → @astryxdesign/_ scope rename.
+- The XDS-prefix drop codemod now runs as a mandatory v0.1.0 upgrade step, so upgrading from 0.0.x rewrites prefixed imports (useXDSTheme, XDSButton, XDSIconRegistry, ...) to their bare names alongside the scope rename to `@astryxdesign/*`.
 - upgrade now runs core codemods before loading config, so a config codemod can repair an otherwise-invalid config; dry-run reports a fixable config and suggests the command to apply it.
 
 #### Documentation
@@ -5583,7 +5583,7 @@ Thanks to everyone who contributed to this release:
   (realpath of `import.meta.url`), working whether invoked via symlink, copy, or
   Windows shim. Also fixes the non-interactive `init`/`theme` error to say
   `astryx <command>` instead of the stale `xds <command>`.
-- Add a v0.1.0 upgrade codemod that migrates legacy `@xds/*` module specifiers and config surfaces to the Astryx v0.1.0 names.
+- Add a v0.1.0 upgrade codemod that migrates legacy module specifiers and config surfaces to the Astryx v0.1.0 names.
   [breaking] Remove legacy `astryx.versionFile` update-hint support from package.json.
 
 #### Documentation
@@ -5627,7 +5627,7 @@ Thanks to everyone who contributed to this release:
   name should switch to `astryx`. Part of removing `xds` naming from the public API.
 - Rename the exported `XDSError` class to `AstryxError`
   The CLI's programmatic API error class is renamed `XDSError` -> `AstryxError`
-  (exported from `@xds/cli` + declared in its types). Consumers that catch or
+  (exported from `@astryxdesign/cli` + declared in its types). Consumers that catch or
   reference `XDSError` from the CLI's API should switch to `AstryxError`. Part of
   removing `xds` naming from the public API.
 - Remove the XDS-prefix compatibility layer — astryx is now the only public surface
@@ -5640,9 +5640,9 @@ Thanks to everyone who contributed to this release:
 
 - `theme build` generates valid bare type imports (IconRegistry/DefinedTheme)
   `astryx theme build` emitted `.d.ts` files importing `XDSIconRegistry` /
-  `XDSDefinedTheme` from `@xds/core`, but those aliases were removed — the
+  `XDSDefinedTheme` from `@astryxdesign/core`, but those aliases were removed — the
   generated types failed to resolve. Generate `IconRegistry` / `DefinedTheme`
-  (the bare names `@xds/core` now exports) instead.
+  (the bare names `@astryxdesign/core` now exports) instead.
 
 #### Documentation
 
@@ -5686,8 +5686,8 @@ Thanks to everyone who contributed to this release:
 
 - Remove an internal-only codemod from the public repository (#2970)
   It was an optional, version-independent transform and not part of any standard upgrade path, so removing it does not affect the public `0.0.13 → 0.0.15` migration.
-- Rename the npm package scope from `@xds/*` to `@astryxdesign/*`
-  All published packages move to the new `@astryxdesign` scope (e.g. `@xds/core` → `@astryxdesign/core`), along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The internal ESLint plugin namespace (`@xds/*` rules) is intentionally untouched and tracked separately. Existing `@xds/*` codemods continue to target the old scope so projects still on `@xds/*` can migrate.
+- Move every package to the npm package scope `@astryxdesign/*`
+  All published packages move to the new `@astryxdesign` scope, along with the workspace lockfile, build/runtime scope-directory scans, and docsite slug derivation. Consumers must update their imports and dependency names. The ESLint plugin namespace is unchanged. The existing upgrade codemods still migrate projects from the earlier scope.
 
 #### Contributors
 
@@ -5716,7 +5716,7 @@ npx astryx upgrade --apply
 - **`astryx doctor`** — New health-check command for diagnosing project/setup issues. (#2565)
 - **Unified search** — `astryx search` searches across components, hooks, docs, and templates in one query. (#2564)
 - **Capability manifest** — Full machine-readable capability manifest for agent discovery, plus stable machine-readable error codes on every error. (#2562, #2563)
-- **`@xds/cli/api` hook export** — The `hook` is exposed via `@xds/cli/api` with types and parity coverage. (#2558)
+- **`@astryxdesign/cli/api` hook export** — The `hook` is exposed via `@astryxdesign/cli/api` with types and parity coverage. (#2558)
 - **CLI exit-code policy** — Every user-visible error now exits with code 1 in both human and `--json` modes (previously several command-layer errors printed a message but exited 0, invisible to CI scripts and AI agents). `xds bogus-cmd`, `astryx theme bogus-subcommand`, the bare `theme` group with an unknown subcommand, and "command not found"/"did you mean…" paths all exit 1. Help, version, and bare-list invocations still exit 0. Introduces `lib/cli-error.mjs` as the canonical exit-code helper.
 - **Migration guide** — Added an explicit guide for moving existing Tailwind, shadcn, and Radix applications to XDS incrementally.
 - **Data-attribute selector docs** — Documented the data-attribute selector surface in CLI docs alongside the core dual-emit change.
@@ -5732,7 +5732,7 @@ npx astryx upgrade --apply
 - **`astryx discover --json`** — Includes `meta: { configured: false }` when no packages are configured, distinguishing "configured but empty" from "not configured".
 - **`xds gap-report --json`** — Returns a structured error instead of starting an interactive prompt when required flags are missing; the "gh CLI missing" path also emits a JSON error.
 - **`astryx theme --json`** — The `theme` parent command (without a subcommand) rejects `--json` cleanly; `theme build --json` continues to work.
-- **Theme CSS prose regression** — `astryx theme build` now uses a single CSS generation path (`@xds/core`'s generator) and treats a failed `@xds/core/theme` import as a hard build error instead of a silent fallback, fixing the docsite Markdown typography regression after the XDS-prefix migration. (#2964)
+- **Theme CSS prose regression** — `astryx theme build` now uses a single CSS generation path (`@astryxdesign/core`'s generator) and treats a failed `@astryxdesign/core/theme` import as a hard build error instead of a silent fallback, fixing the docsite Markdown typography regression after the XDS-prefix migration. (#2964)
 
 #### Contributors
 
