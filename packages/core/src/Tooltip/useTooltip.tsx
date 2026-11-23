@@ -65,6 +65,7 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {tooltipDescriptionProps} from '../privateAttributes/tooltipDescription.stylex';
 
 /**
  * Whether `element` is a text field in any state: a text-like `<input>`, a
@@ -319,7 +320,7 @@ function TooltipDescription({
   }
   if (!hasComponent(children)) {
     return (
-      <span id={id} hidden>
+      <span id={id} hidden {...tooltipDescriptionProps}>
         {getNodeText(children)}
       </span>
     );
@@ -329,7 +330,7 @@ function TooltipDescription({
   // enclosing paragraph. So the copy starts empty, server markup included,
   // and the client renders the content into it through a portal.
   return (
-    <span ref={hostStore.set} id={id} hidden>
+    <span ref={hostStore.set} id={id} hidden {...tooltipDescriptionProps}>
       {host != null ? createPortal(children, host) : null}
     </span>
   );

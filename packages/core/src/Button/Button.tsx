@@ -82,6 +82,7 @@ import {
   controlPressLayerStyles,
   rowPressLayerStyles,
 } from '../privateAttributes/press.stylex';
+import {groupEndStyles} from '../privateAttributes/tooltipDescription.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ButtonVariantMap} from './index';
 import {
@@ -552,47 +553,9 @@ const loadingStyles = stylex.create({
   },
 });
 
-/**
- * "I am the last member of the group" — the trailing end cap.
- *
- * NOT `:last-child`: several members render an invisible layer element AFTER
- * their button (a tooltip'd Button returns button + layer; DropdownMenu returns
- * trigger + popover). `useLayer` renders those inline rather than portaling
- * them, so the layer — not the button — took the `:last-child` slot and the real
- * trailing button silently kept square corners (#2508).
- *
- * Layers always carry the native `popover` attribute (useLayer.tsx), and a
- * popover is never an in-flow member — it is `display: none` until shown, then
- * promoted to the top layer. Context layers also retain an inert `<template>`
- * marker so they can re-resolve their JSX position. A tooltip's description is
- * a `hidden` span after the trigger whose id ends in `-description`. None of
- * these is a group member, so "last member" is: no following element sibling
- * besides those pieces of layer infrastructure — the last sibling that is not
- * one of them.
- *
- * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
- * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
- * earlier sibling on each insertion, so filling any container on the page
- * became quadratic (ButtonGroup FR3). A member is never layer infrastructure,
- * so being the last such sibling is the same as having none after it.
- *
- * Reading it the other way round — marking the *buttons* and testing for a
- * marked sibling — is the trap: it silently reclassifies anything it doesn't
- * recognise as "not a member", so a member wrapped in a `display: contents`
- * wrapper (Tooltip, HoverCard) or a raw child would make the button BEFORE it
- * round mid-group. Ignoring known layers keeps the predicate conservative: an
- * unrecognised sibling still counts, exactly as `:last-child` did, so the worst
- * case degrades to the old behaviour instead of a wrong corner.
- *
- * Kept as a same-file const: StyleX only statically evaluates a selector key
- * from a const in the same file.
- *
- * The leading edge still uses `:first-child` — a member's button always precedes
- * its own layer, so the first button is genuinely `:first-child`.
- */
-const IS_LAST_ITEM =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not(span[hidden][id$=-description]))';
-
+// A grouped button's leading edge uses `:first-child`: a member's button always
+// precedes its own layer. The trailing edge comes from groupEndStyles, which
+// finds the last member past layer pieces and tooltip descriptions.
 const groupStyles = stylex.create({
   horizontal: {
     borderStartStartRadius: {
@@ -602,14 +565,6 @@ const groupStyles = stylex.create({
     borderEndStartRadius: {
       default: 0,
       ':first-child': radiusVars['--radius-element'],
-    },
-    borderStartEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
-    },
-    borderEndEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
     },
     borderInlineStartWidth: {
       default: borderVars['--border-width'],
@@ -629,14 +584,6 @@ const groupStyles = stylex.create({
     borderStartEndRadius: {
       default: 0,
       ':first-child': radiusVars['--radius-element'],
-    },
-    borderEndStartRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
-    },
-    borderEndEndRadius: {
-      default: 0,
-      [IS_LAST_ITEM]: radiusVars['--radius-element'],
     },
     borderBlockStartWidth: {
       default: borderVars['--border-width'],
@@ -692,14 +639,6 @@ const forcedColorsEdge = stylex.create({
       default: 'solid',
       ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
     },
-    borderInlineEndWidth: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
-    },
-    borderInlineEndStyle: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
-    },
   },
   groupVertical: {
     borderInlineStartWidth: {default: null, [FORCED_COLORS]: '1px'},
@@ -715,14 +654,6 @@ const forcedColorsEdge = stylex.create({
       default: 'solid',
       ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
     },
-    borderBlockEndWidth: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
-    },
-    borderBlockEndStyle: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
-    },
   },
 });
 
@@ -734,34 +665,18 @@ const forcedColorsEdgeColor = stylex.create({
   horizontal: {
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    borderInlineEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    },
   },
   horizontalOnError: {
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderBlockEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    borderInlineEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    },
   },
   vertical: {
     borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    borderBlockEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    },
   },
   verticalOnError: {
     borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderInlineEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    borderBlockEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
-    },
   },
 });
 
@@ -1004,6 +919,10 @@ export function Button({
       (buttonGroup.orientation === 'horizontal'
         ? groupStyles.horizontal
         : groupStyles.vertical),
+    buttonGroup &&
+      (buttonGroup.orientation === 'horizontal'
+        ? groupEndStyles.buttonGroupHorizontal
+        : groupEndStyles.buttonGroupVertical),
     inputGroup != null && buttonGroup == null && inputGroupStyles.buttonAddon,
     buttonGroup &&
       (variant === 'primary' || variant === 'destructive') &&
@@ -1022,12 +941,26 @@ export function Button({
     isSolidVariant &&
       buttonGroup != null &&
       (buttonGroup.orientation === 'horizontal'
+        ? groupEndStyles.forcedColorsEdgeHorizontal
+        : groupEndStyles.forcedColorsEdgeVertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
         ? variant === 'destructive'
           ? forcedColorsEdgeColor.horizontalOnError
           : forcedColorsEdgeColor.horizontal
         : variant === 'destructive'
           ? forcedColorsEdgeColor.verticalOnError
           : forcedColorsEdgeColor.vertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
+        ? variant === 'destructive'
+          ? groupEndStyles.forcedColorsEdgeColorHorizontalOnError
+          : groupEndStyles.forcedColorsEdgeColorHorizontal
+        : variant === 'destructive'
+          ? groupEndStyles.forcedColorsEdgeColorVerticalOnError
+          : groupEndStyles.forcedColorsEdgeColorVertical),
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.

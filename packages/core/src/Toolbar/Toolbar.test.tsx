@@ -83,7 +83,7 @@ describe('Toolbar', () => {
     const toolbar = screen.getByRole('toolbar');
     expect(
       toolbar.querySelectorAll(
-        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+        ':scope > :not([popover]):not(template):not([data-astryx-tooltip-description])',
       ),
     ).toHaveLength(3);
   });
@@ -104,7 +104,7 @@ describe('Toolbar', () => {
     const toolbar = screen.getByRole('toolbar');
     expect(
       toolbar.querySelectorAll(
-        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+        ':scope > :not([popover]):not(template):not([data-astryx-tooltip-description])',
       ),
     ).toHaveLength(2);
   });
@@ -120,7 +120,7 @@ describe('Toolbar', () => {
     const toolbar = screen.getByRole('toolbar');
     expect(
       toolbar.querySelectorAll(
-        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+        ':scope > :not([popover]):not(template):not([data-astryx-tooltip-description])',
       ),
     ).toHaveLength(1);
   });
@@ -136,7 +136,7 @@ describe('Toolbar', () => {
     const toolbar = screen.getByRole('toolbar');
     expect(
       toolbar.querySelectorAll(
-        ':scope > :not([popover]):not(template):not(span[hidden][id$="-description"])',
+        ':scope > :not([popover]):not(template):not([data-astryx-tooltip-description])',
       ),
     ).toHaveLength(1);
   });

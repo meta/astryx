@@ -232,7 +232,7 @@ describe('ButtonGroup', () => {
     const items = (group: HTMLElement): Element[] =>
       Array.from(
         group.querySelectorAll(
-          ':scope > *:not([popover]):not(template):not(dialog):not(span[hidden][id$="-description"])',
+          ':scope > *:not([popover]):not(template):not(dialog):not([data-astryx-tooltip-description])',
         ),
       );
 
@@ -403,8 +403,10 @@ describe('ButtonGroup', () => {
           expect(selector).toContain('[popover]');
           expect(selector).toContain('template');
           expect(selector).toContain('dialog');
-          // A tooltip's hidden description follows its trigger and is skipped.
-          expect(selector).toContain('span[hidden][id$=-description]');
+          // A tooltip's hidden description follows its trigger and is skipped
+          // by its own marker; a caller's element with a similar id counts.
+          expect(selector).toContain('[data-astryx-tooltip-description]');
+          expect(selector).not.toContain('-description]');
         }
       },
     );
