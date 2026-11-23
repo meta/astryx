@@ -11,6 +11,7 @@
  */
 
 import {expect, test} from '@playwright/test';
+import {expectTooltipsLive, tooltipTrigger} from './liveTooltips';
 
 // The home page's own script. On a slow connection it arrives after the
 // scripts of the site shell.
@@ -39,9 +40,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(hero).toBeVisible();
       const serverHero = await hero.elementHandle();
 
-      // The shell is live when its header controls have their tooltips.
+      // The shell is live when its header controls answer with their tooltips.
       const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
-      await expect(nav.locator('[role="tooltip"]').first()).toBeAttached();
+      await expectTooltipsLive(page, tooltipTrigger(nav));
       // The shell names the OS color mode without the page.
       await expect(
         nav.getByRole('button', {
@@ -95,7 +96,7 @@ test('the home page keeps its server HTML at a phone width when its script arriv
 
     // Below its mobile breakpoint the shell changes layout when it goes live.
     const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
-    await expect(nav.locator('[role="tooltip"]').first()).toBeAttached();
+    await expectTooltipsLive(page, tooltipTrigger(nav));
 
     releasePageScript();
     // The reel does not advance on its own at this width. It answers a press
@@ -134,7 +135,7 @@ test('the color mode toggle leaves the OS mode when a visitor uses it before the
   try {
     await page.goto('/', {waitUntil: 'domcontentloaded'});
     const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
-    await expect(nav.locator('[role="tooltip"]').first()).toBeAttached();
+    await expectTooltipsLive(page, tooltipTrigger(nav));
     await nav.getByRole('button', {name: 'Switch to light mode'}).click();
 
     releasePageScript();

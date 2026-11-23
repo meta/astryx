@@ -12,6 +12,7 @@
  */
 
 import {expect, test, type Page} from '@playwright/test';
+import {expectTooltipsLive, tooltipTrigger} from './liveTooltips';
 
 const RELEASES_PER_PAGE = 5;
 
@@ -45,10 +46,9 @@ test('/changelog holds the newest releases and keeps its server HTML when it hyd
     const serverRelease = await releaseHeadings(page).first().elementHandle();
 
     resumeHydration();
-    // The release notes are live when their page navigation has its tooltips.
-    await expect(
-      pageNavigation(page).locator('[role="tooltip"]').first(),
-    ).toBeAttached();
+    // The release notes are live when their page navigation answers with its
+    // tooltips.
+    await expectTooltipsLive(page, tooltipTrigger(pageNavigation(page)));
 
     // A page that React renders again gets new elements: the browser then
     // builds the whole page of release notes twice.

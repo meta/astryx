@@ -79,7 +79,8 @@ describe('Button', () => {
     );
 
     const addon = screen.getByRole('button', {name: 'Save'});
-    expect(addon.className).toContain('groupStyles.buttonAddon');
+    expect(addon.className).toContain('baseGroupStyles.buttonAddon');
+    expect(addon.className).toContain('groupEndStyles.inputGroupAddon');
 
     // jsdom cannot resolve this compound StyleX focus selector. Keep the
     // direct-child keyboard stacking rule explicit at its definition instead.
