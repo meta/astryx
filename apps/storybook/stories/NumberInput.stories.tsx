@@ -686,8 +686,9 @@ export const WithEventHandlers: Story = {
 
 export const Clearable: Story = {
   render: args => {
+    const {changeAction: _ca, ...rest} = args;
     const [value, setValue] = useState<number | null>(args.value ?? 42);
-    return <NumberInput {...args} value={value} onChange={setValue} hasClear />;
+    return <NumberInput {...rest} value={value} onChange={setValue} hasClear />;
   },
   args: {
     label: 'Quantity',
@@ -697,8 +698,9 @@ export const Clearable: Story = {
 
 export const ClearableWithUnits: Story = {
   render: args => {
+    const {changeAction: _ca, ...rest} = args;
     const [value, setValue] = useState<number | null>(args.value ?? 75);
-    return <NumberInput {...args} value={value} onChange={setValue} hasClear />;
+    return <NumberInput {...rest} value={value} onChange={setValue} hasClear />;
   },
   args: {
     label: 'Progress',
