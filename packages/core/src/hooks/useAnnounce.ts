@@ -17,6 +17,7 @@
 
 import {use, useCallback, useRef, type RefObject} from 'react';
 import {createSharedContext} from '../utils/sharedContext';
+import {isModalDialog} from '../utils/nodeType';
 import {sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 /**
@@ -412,7 +413,7 @@ export function installModalRoute(route: ModalRoute): void {
 export function isOpenModal(
   dialog: HTMLDialogElement | null | undefined,
 ): boolean {
-  return dialog != null && dialog.open && dialog.matches(':modal');
+  return dialog != null && dialog.open && isModalDialog(dialog);
 }
 
 /**

@@ -175,7 +175,7 @@ describe('the theme map for each look', () => {
     expect(themeIssues(dir).issues).toEqual([
       [
         'icon_theme_map_mismatch',
-        `Icon set "glyphs": its generated module ./${GENERATED} has no theme map "themeIconsSolid", which draws the built-in icons in the solid look an icon draws. Rewrite the module: \`astryx experimental icon add --variant solid --from ${FROM}/solid --all --set glyphs\`.`,
+        `Icon set "glyphs": its generated module ./${GENERATED} has no theme map "themeIconsSolid", which draws the built-in icons in the solid variant an icon draws. Rewrite the module: \`astryx experimental icon add --variant solid --from ${FROM}/solid --all --set glyphs\`.`,
       ],
     ]);
     await iconAdd(undefined, {

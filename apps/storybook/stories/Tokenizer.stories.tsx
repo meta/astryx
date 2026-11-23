@@ -330,6 +330,42 @@ export const OverflowLayer: Story = {
   name: 'Overflow Layer',
 };
 
+export const OverflowLayerStates: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem[]>([]);
+    const tokens = [users[0], users[1], users[2], users[3]];
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+        <Tokenizer
+          label="Reviewers"
+          searchSource={userSource}
+          value={value}
+          onChange={items => setValue(items)}
+          tokenOverflowBehavior="unfocusedLayer"
+        />
+        <Tokenizer
+          label="Owners"
+          searchSource={userSource}
+          value={tokens}
+          onChange={() => {}}
+          tokenOverflowBehavior="unfocusedLayer"
+          isDisabled
+        />
+        <Tokenizer
+          label="Approvers"
+          searchSource={userSource}
+          value={tokens}
+          onChange={() => {}}
+          tokenOverflowBehavior="unfocusedLayer"
+          isDisabled
+          disabledMessage="You need edit access to change approvers"
+        />
+      </div>
+    );
+  },
+  name: 'Overflow Layer States',
+};
+
 export const WithEndContent: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);

@@ -105,6 +105,14 @@ const MAX_PROJECT_AGENT_DOC_LINES = 32;
 export const REMOVE_LINE =
   'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
 
+/**
+ * How to share a page as one file, for a share ask only. Agents asked to share
+ * a page otherwise hand-build their own single HTML file, whose controls do
+ * not work.
+ */
+const SHARE_LINE =
+  'When asked to share a page as one file, run `astryx experimental export <page.tsx>`: the file opens anywhere and its controls work; `--reverse` gets the source back.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -555,16 +563,17 @@ export function detectStylingSystem(targetDir) {
 const BUILT_CHECK_SINCE = '0.7.4';
 
 /**
- * Whether a project on this Core release can run `astryx doctor --built`. A
- * prerelease of the first release is below it: its canaries predate the
- * option.
+ * Whether `version` is release `since` or later. A prerelease of `since`
+ * itself is below it: its canaries predate the feature.
  * @param {string | null | undefined} version
+ * @param {string} since
+ * @returns {boolean}
  */
-function hasBuiltCheck(version) {
+function isReleaseSince(version, since) {
   if (typeof version !== 'string' || !isValidSemver(version)) return false;
   const [release, prerelease] = version.split('-', 2);
-  if (prerelease !== undefined && release === BUILT_CHECK_SINCE) return false;
-  return semverGte(release, BUILT_CHECK_SINCE);
+  if (prerelease !== undefined && release === since) return false;
+  return semverGte(release, since);
 }
 
 /**
@@ -578,13 +587,39 @@ function hasBuiltCheck(version) {
  * @returns {boolean}
  */
 export function projectHasBuiltCheck(dir) {
+  return installedCliHas(dir, BUILT_CHECK_SINCE);
+}
+
+/** The first release whose CLI has `experimental export`. */
+const EXPORT_SINCE = '0.7.17';
+
+/**
+ * Whether the project at `dir` can run `astryx experimental export`, read from
+ * the CLI it installs, as {@link projectHasBuiltCheck} reads `doctor --built`.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+export function projectHasExport(dir) {
+  return installedCliHas(dir, EXPORT_SINCE);
+}
+
+/**
+ * Whether the CLI the project at `dir` installs is release `since` or later.
+ * A canary of `since` itself is not: it may predate the feature.
+ *
+ * @param {string} dir
+ * @param {string} since
+ * @returns {boolean}
+ */
+function installedCliHas(dir, since) {
   const installed = findInstalledPackage(dir, '@astryxdesign/cli');
   if (!installed) return false;
   try {
     const {version} = JSON.parse(
       fs.readFileSync(path.join(installed, 'package.json'), 'utf8'),
     );
-    return hasBuiltCheck(version);
+    return isReleaseSince(version, since);
   } catch {
     return false;
   }
@@ -625,7 +660,7 @@ export const ICON_FINDER_LINE =
  * one; where it is off, the block has no icon line.
  *
  * @param {string | null} version the Core version
- * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, skills?: ReadonlyArray<{package: string, name: string, description: string}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
+ * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, skills?: ReadonlyArray<{package: string, name: string, description: string}>, builtCheck?: boolean, iconFeatures?: boolean, exportCheck?: boolean}} [options]
  * @returns {string}
  */
 export function generateCompressedIndex(
@@ -639,6 +674,7 @@ export function generateCompressedIndex(
     skills = [],
     builtCheck = false,
     iconFeatures = false,
+    exportCheck = false,
   } = {},
 ) {
   const run = invocation;
@@ -696,6 +732,9 @@ export function generateCompressedIndex(
   if (builtCheck) {
     lines.push("Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.");
   }
+  // Only for a project whose installed CLI has the command, as for the
+  // doctor line above.
+  if (exportCheck) lines.push(SHARE_LINE);
   lines.push('');
 
   // Rules — the top error-preventers.
@@ -713,7 +752,7 @@ export function generateCompressedIndex(
   } else {
     lines.push("- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.");
   }
-  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props on one page: `editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
+  lines.push('- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props on one page: `editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; in a theme made with the editor, make every change with `editor set` and hand-edit `<slug>.theme.ts` only for what `editor how` says it can\'t set; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.');
   // Self-check — post-generation pass. Validated via vibe tests (internal/vibe-tests/
   // prompt-purity-test): on complex multi-step UIs the rules above alone still leave raw
   // CSS in ~11-13% of runs; a re-read-and-fix pass cuts that ~4x at negligible token cost.
@@ -870,6 +909,7 @@ export async function renderAgentDocsBlock(
       description,
     })),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     invocation: getCliInvocation(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
     topics,
@@ -970,6 +1010,7 @@ export function injectAgentsMd(targetDir, version) {
   const compressedIndex = generateCompressedIndex(version, {
     coreDir: findCoreDir(targetDir),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
   });
   injectXdsBlock(agentsPath, compressedIndex, {
@@ -991,6 +1032,7 @@ export function injectClaudeMd(targetDir, version) {
   const compressedIndex = generateCompressedIndex(version, {
     coreDir: findCoreDir(targetDir),
     builtCheck: projectHasBuiltCheck(targetDir),
+    exportCheck: projectHasExport(targetDir),
     stylingSystem: detectStylingSystem(targetDir),
   });
   return injectXdsBlock(claudePath, compressedIndex);
@@ -1778,6 +1820,7 @@ export function installAgentDocs(
     generateCompressedIndex(version, {
       coreDir,
       builtCheck: projectHasBuiltCheck(targetDir),
+      exportCheck: projectHasExport(targetDir),
       zh,
       lang,
       invocation,

@@ -102,7 +102,7 @@ describe('a shadow on a part that rings itself in its shadow', () => {
       only: true,
     });
     expect(cssOf('r')).toMatch(
-      /\.astryx-text-input:focus-within\s*\{\s*box-shadow: 0 2px 6px #00000066, inset 0 0 0 2px var\(--color-accent-muted\);/,
+      /\.astryx-text-input:focus-within\s*\{\s*box-shadow: inset 0 0 0 2px var\(--color-accent-muted\), 0 2px 6px #00000066;/,
     );
     // A part without rings takes it.
     await themeEditSet('r', 'box-shadow', '0 2px 6px #00000066', {

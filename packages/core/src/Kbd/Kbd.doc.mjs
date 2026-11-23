@@ -21,7 +21,7 @@ const bestPractices = [
   {
     guidance: true,
     description:
-      'Place shortcuts near the action they trigger: in a tooltip, menu item, or inline instruction.',
+      'Place shortcuts near the action they trigger: in a menu item or an inline instruction. In a Tooltip, write the shortcut in the tooltip\'s own text (for example "Search (/)"): Kbd keeps its own surface colors on the tooltip\'s inverted surface, where its keys almost disappear.',
   },
   {
     guidance: true,
@@ -104,7 +104,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in menus and help text to show key combinations; in a Tooltip, write the shortcut as text.',
     bestPractices,
   },
 };
@@ -151,7 +151,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in menus and help text to show key combinations; in a Tooltip, write the shortcut as text.',
     bestPractices,
   },
 };
@@ -159,11 +159,11 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Renders keyboard shortcut as styled key badges. Use in tooltips, menus + help text to show key combinations.',
+    'Renders keyboard shortcut as styled key badges. Use in menus + help text; in a Tooltip, write the shortcut as text.',
   usage: {
     anatomy,
     description:
-      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in menus and help text to show key combinations; in a Tooltip, write the shortcut as text.',
     bestPractices,
   },
   propDescriptions: {
