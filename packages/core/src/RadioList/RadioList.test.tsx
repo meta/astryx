@@ -1724,7 +1724,7 @@ describe('RadioListItem record contract', () => {
           label="Option A"
           value="a"
           className="caller-row"
-          style={{visibility: 'visible'}}
+          style={{scrollMarginTop: '7px'}}
           xstyle={itemTestStyles.custom}
         />
       </RadioList>,
@@ -1735,7 +1735,7 @@ describe('RadioListItem record contract', () => {
     expect(row).not.toBeNull();
     expect(ref.current).toBe(row);
     expect(row).toHaveClass('caller-row');
-    expect(row).toHaveStyle({visibility: 'visible'});
+    expect((row as HTMLElement).style.scrollMarginTop).toBe('7px');
     expect(row!.className).toContain(
       stylex.props(itemTestStyles.custom).className!.split(' ')[0],
     );

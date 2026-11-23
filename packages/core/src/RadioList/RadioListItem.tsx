@@ -249,7 +249,7 @@ export function RadioListItem({
   const context = use(RadioListContext);
   const disabledReasonID = use(RadioListReasonContext);
   if (!context) {
-    throw new Error('RadioListItem must be used within an RadioList');
+    throw new Error('RadioListItem must be used within a RadioList');
   }
 
   const id = useId();

@@ -250,6 +250,7 @@ async function readRows(page: Page) {
         ends: endTexts.map(end => ({
           text: end.textContent?.trim() ?? '',
           contrast: textRatio(end),
+          box: box(end),
         })),
       };
     });
@@ -391,8 +392,8 @@ for (const mode of ['light', 'dark'] as const) {
         await frame('hover', {rest: rest[1], hovered});
         await page.mouse.move(0, 0);
 
-        // Keyboard focus rings the indicator. The row outline is recorded:
-        // which element owns the ring is the record's open question.
+        // Keyboard focus rings the indicator. The row also paints an outline.
+        // The receipt records it and does not fail on it.
         await focusPageStart(page);
         await page.keyboard.press('Tab');
         await settle(page);
@@ -459,8 +460,8 @@ for (const mode of ['light', 'dark'] as const) {
         sms.dataDisabled === 'disabled',
         `SMS data-disabled ${sms.dataDisabled}`,
       );
-      // The record's FR6 gap: an item-disabled radio is natively disabled.
-      // The receipt records the state and does not fail on it.
+      // An item-disabled radio is natively disabled, so it leaves the Tab
+      // order. The receipt records that state and does not fail on it.
       const result = await axe(page);
       checkAxe(check, result);
       await frame('rest', {
@@ -531,10 +532,11 @@ for (const mode of ['light', 'dark'] as const) {
             `${row.label}: end content "${end.text}" contrast ${end.contrast}`,
           );
         }
-        const end = row.ends[0];
+        // End content follows the label in the inline direction.
+        const end = row.ends[0]?.box;
         check(
-          end != null && row.labelBox != null,
-          `${row.label}: no end content`,
+          end != null && row.labelBox != null && row.labelBox.right <= end.left,
+          `${row.label}: label ${JSON.stringify(row.labelBox)}, end ${JSON.stringify(end)}`,
         );
       }
       const result = await axe(page);
@@ -560,6 +562,11 @@ for (const mode of ['light', 'dark'] as const) {
         `Starter description "${rest[0]?.description}"`,
       );
       check(rest[1]?.checked === true, 'Pro is not selected at rest');
+      const proEnd = rest[1]?.ends[0];
+      check(
+        proEnd?.text === '$12/mo' && proEnd.contrast >= MIN_TEXT_CONTRAST,
+        `Pro end content "${proEnd?.text}" contrast ${proEnd?.contrast}`,
+      );
       const result = await axe(page);
       checkAxe(check, result);
       await frame('rest', {rest, axe: result});
@@ -680,7 +687,7 @@ cases.push({
 
 cases.push({
   key: 'forced-colors-light-ltr',
-  group: 'sizes',
+  group: 'forced-colors',
   story: 'core-radiolist--default',
   args: 'value:sms',
   mode: 'light',
@@ -727,7 +734,7 @@ cases.push({
 
 cases.push({
   key: 'narrow-light-ltr',
-  group: 'themes',
+  group: 'narrow',
   story: 'core-radiolist--with-description',
   mode: 'light',
   direction: 'ltr',

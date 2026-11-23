@@ -153,6 +153,11 @@ export const docsZh = {
       type: 'ReactNode',
       description: '在标签后渲染的内容。',
     },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: '转发至选项行元素的 ref。',
+    },
   ],
 };
 
