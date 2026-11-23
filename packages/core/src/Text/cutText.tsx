@@ -15,7 +15,7 @@
 
 import type {RefObject} from 'react';
 import {UndescribedTooltip} from '../Tooltip/Tooltip';
-import {isTooltipDescription} from '../Tooltip/tooltipPresentInterest';
+import {isTooltipDescription} from '../privateAttributes/tooltipDescription.stylex';
 
 /** Whether a box clips its content. */
 function overflows(element: Element): boolean {

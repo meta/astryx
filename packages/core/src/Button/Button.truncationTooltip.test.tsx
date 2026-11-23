@@ -174,6 +174,23 @@ describe('Button label truncation tooltip', () => {
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 
+  it("shows on keyboard focus when the caller's own hidden description ends in -description", async () => {
+    restore = withOverflow(true);
+    render(
+      <>
+        <Button label={LABEL} aria-describedby="step-description" />
+        <span hidden id="step-description">
+          Saves your draft first
+        </span>
+      </>,
+    );
+    const button = screen.getByRole('button', {name: LABEL});
+    await showByFocus(button);
+    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+      LABEL,
+    );
+  });
+
   it("keeps a caller's own tooltip", async () => {
     restore = withOverflow(true);
     render(<Button label={LABEL} tooltip="Saves your draft" />);

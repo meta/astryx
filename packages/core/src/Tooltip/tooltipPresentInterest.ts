@@ -9,7 +9,7 @@
  *   interaction on a tooltip's anchor that mounted the tooltip; and
  *   `TooltipDescribesContext`: whether the tooltip describes its anchor; and
  *   `TooltipDescriptionIdContext`: the id that description takes; and
- *   `tooltipIdOf` and `isTooltipDescription`, which read those ids
+ *   `tooltipIdOf`, which reads those ids
  * @position Internal to Core, not exported from the Tooltip entry. A
  *   truncated Text or Heading mounts its tooltip on the first hover, tap or
  *   focus, and provides that interaction here, so the tooltip answers it when
@@ -87,15 +87,4 @@ export function tooltipIdOf(describedBy: string): string {
   return describedBy.endsWith(DESCRIPTION_SUFFIX)
     ? describedBy.slice(0, -DESCRIPTION_SUFFIX.length)
     : describedBy;
-}
-
-/**
- * Whether `element` is a tooltip's description copy, the hidden element a
- * trigger's `aria-describedby` names before the tooltip first shows. For
- * Core components only.
- */
-export function isTooltipDescription(element: Element): boolean {
-  return (
-    element.hasAttribute('hidden') && element.id.endsWith(DESCRIPTION_SUFFIX)
-  );
 }

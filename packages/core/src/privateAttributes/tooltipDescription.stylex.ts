@@ -4,7 +4,7 @@
  * @file privateAttributes/tooltipDescription.stylex.ts
  * @input radius and border tokens
  * @output tooltipDescriptionProps, which mark a tooltip's hidden description,
- *   and groupEndStyles, the trailing-edge styles of ButtonGroup and InputGroup
+ *   isTooltipDescription, which reads the mark, and groupEndStyles, the trailing-edge styles of ButtonGroup and InputGroup
  *   members, which skip that description when they find the last member
  * @position Owner module of the private tooltip-description attribute: the
  *   only file that writes its name or its selector. useTooltip marks the
@@ -19,6 +19,15 @@ import {radiusVars} from '../theme/tokens.stylex';
 export const tooltipDescriptionProps = {
   'data-astryx-tooltip-description': '',
 } as const;
+
+/**
+ * Whether `element` is a tooltip's description copy, the hidden element a
+ * trigger's `aria-describedby` names before the tooltip first shows. A
+ * caller's own element is never one, whatever its id.
+ */
+export function isTooltipDescription(element: Element): boolean {
+  return element.hasAttribute('data-astryx-tooltip-description');
+}
 
 // The group's last member: the last sibling that is not layer infrastructure
 // (a popover, a layer's inert template, a native dialog) or a tooltip's hidden

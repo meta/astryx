@@ -10,13 +10,24 @@
  * @position Docsite browser tests; jsdom does not hydrate a streamed page
  */
 
-import {expect, test} from '@playwright/test';
-import {expectTooltipsLive, tooltipTrigger} from './liveTooltips';
+import {expect, test, type Locator} from '@playwright/test';
+import {expectTooltipsLive} from './liveTooltips';
 
 // The home page's own script. On a slow connection it arrives after the
 // scripts of the site shell.
 const HOME_PAGE_SCRIPT =
   /\/_next\/static\/chunks\/app\/(?:\(|%28)site(?:\)|%29)\/page-[^/?]+\.js/;
+
+/**
+ * A header control with a tooltip that shows at the page's width: Search on
+ * a wide page, the menu button on a phone.
+ */
+function headerControl(nav: Locator): Locator {
+  return nav
+    .getByRole('button', {name: /^(Search|Open menu|Open navigation)$/})
+    .filter({visible: true})
+    .first();
+}
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`the home page keeps its server HTML when its script arrives after the shell is live (${colorScheme} OS)`, async ({
@@ -42,7 +53,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
       // The shell is live when its header controls answer with their tooltips.
       const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
-      await expectTooltipsLive(page, tooltipTrigger(nav));
+      await expectTooltipsLive(page, headerControl(nav));
       // The shell names the OS color mode without the page.
       await expect(
         nav.getByRole('button', {
@@ -96,7 +107,7 @@ test('the home page keeps its server HTML at a phone width when its script arriv
 
     // Below its mobile breakpoint the shell changes layout when it goes live.
     const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
-    await expectTooltipsLive(page, tooltipTrigger(nav));
+    await expectTooltipsLive(page, headerControl(nav));
 
     releasePageScript();
     // The reel does not advance on its own at this width. It answers a press
@@ -135,7 +146,7 @@ test('the color mode toggle leaves the OS mode when a visitor uses it before the
   try {
     await page.goto('/', {waitUntil: 'domcontentloaded'});
     const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
-    await expectTooltipsLive(page, tooltipTrigger(nav));
+    await expectTooltipsLive(page, headerControl(nav));
     await nav.getByRole('button', {name: 'Switch to light mode'}).click();
 
     releasePageScript();
