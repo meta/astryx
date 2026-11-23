@@ -97,7 +97,9 @@ describe('duration-balanced Node legs', () => {
       expect(new Set(top).size).toBe(count - 1);
       expect(top).not.toContain(count - 1);
       // Greedy slowest-first: legs differ by at most the slowest file's time.
-      const totals = legs.map(total);
+      // The real-Chrome leg runs fewer workers and books less time, so it is
+      // left out here (vitest-node-legs.test.mjs checks it).
+      const totals = legs.slice(0, -1).map(total);
       expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(
         recorded[slowest[0]],
       );

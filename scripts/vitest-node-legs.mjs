@@ -154,6 +154,12 @@ export const BESIDE_REAL_CHROME_SECONDS = 10;
 // when its recorded time is short: a cold pack cache packs again.
 const PACKING_TEST = /(^|\/)packed-[^/]*\.test\.mjs$/;
 
+// The real-Chrome leg runs two Vitest workers (ci.yml, deploy.yml); the
+// other legs run Vitest's default, one fewer than a 4-vCPU runner's CPUs.
+// So it books two thirds of another leg's file time.
+export const REAL_CHROME_LEG_WORKERS = 2;
+export const DEFAULT_LEG_WORKERS = 3;
+
 /** @type {Map<string, boolean>} */
 const drawsInChrome = new Map();
 
@@ -179,8 +185,9 @@ export function drawsInRealChrome(file, root = ROOT) {
 
 /**
  * How a Node split keeps the real-Chrome files apart: they share the last
- * leg, and only files that plan at most `BESIDE_REAL_CHROME_SECONDS` and
- * pack nothing join them there. The planners and the sequencer use the same rule.
+ * leg, which runs `REAL_CHROME_LEG_WORKERS` workers and so books that share
+ * of another leg's time, and only files that plan at most
+ * `BESIDE_REAL_CHROME_SECONDS` and pack nothing join them there. The planners and the sequencer use the same rule.
  * @param {(file: string) => number} cost
  * @param {{root?: string, realChrome?: (file: string) => boolean}} [options]
  * @returns {import('./lib/duration-split.mjs').KeptApart}
@@ -191,6 +198,7 @@ export function nodeLegsApart(
 ) {
   return {
     together: realChrome,
+    keptShare: REAL_CHROME_LEG_WORKERS / DEFAULT_LEG_WORKERS,
     besideTogether: file =>
       !realChrome(file) &&
       !PACKING_TEST.test(file) &&

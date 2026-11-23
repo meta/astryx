@@ -1796,6 +1796,11 @@ jobs:
           VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
           export VITEST_SHARD_WATCHDOG_SECONDS
           WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
+          # The last leg holds the real-Chrome test files and runs two
+          # workers, as the leg planner books it (REAL_CHROME_LEG_WORKERS).
+          if [ "${{ matrix.shard }}" = "${{ strategy.job-total }}" ] && [ "${{ strategy.job-total }}" -gt 1 ]; then
+            WATCHDOG+=(--maxWorkers=2)
+          fi
           if [ "$SCOPED" = true ]; then
             # One run covers the tests the change reaches and the tests no
             # module graph relates to it: guards that read sources, and tests

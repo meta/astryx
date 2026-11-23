@@ -546,8 +546,9 @@ they are separately named.
   the slowest files spread over the legs and the slowest single file sets the
   floor. The test files that draw pages in a real Chrome share one Node leg,
   the last, beside only light files that pack nothing, so their pictures never
-  run beside the packing and conformance suites; the other legs take every
-  heavier file. In the Node legs, a file with no recorded time counts as the ninetieth
+  run beside the packing and conformance suites; that leg runs two test
+  workers and books two thirds of another leg's test time; the other legs take
+  every heavier file. In the Node legs, a file with no recorded time counts as the ninetieth
   percentile of the recorded times, and which files run never depends on the
   times. No pull-request check fails on the record's coverage or on a
   recorded time's drift. After each successful full unit run of `main`, and

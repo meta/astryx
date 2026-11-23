@@ -28,6 +28,8 @@ import {
   WALL_SECONDS,
   WATCHDOG_MARGIN_SECONDS,
   BESIDE_REAL_CHROME_SECONDS,
+  DEFAULT_LEG_WORKERS,
+  REAL_CHROME_LEG_WORKERS,
   drawsInRealChrome,
   nodeFileCost,
   nodeLegsApart,
@@ -316,6 +318,41 @@ describe('the Node leg plan', () => {
         /packed-gather-cache|packed-search-catalog|door-conformance/.test(f),
       ))
         expect(last, `${run}: ${heavy}`).not.toContain(heavy);
+    }
+  });
+
+  it('runs the real-Chrome leg, the last, with two workers, and books it two thirds of another leg', () => {
+    expect(REAL_CHROME_LEG_WORKERS).toBe(2);
+    const cost = nodeFileCost(files, seconds);
+    const legs = partitionByDuration(files, plan.legs, seconds);
+    const totals = legs.map(leg => leg.reduce((sum, f) => sum + cost(f), 0));
+    const others = totals.slice(0, -1);
+    const mean = others.reduce((a, b) => a + b, 0) / others.length;
+    const chrome = legs.at(-1).filter(f => drawsInRealChrome(f));
+    const chromeTime = chrome.reduce((sum, f) => sum + cost(f), 0);
+    // Topped up to about two thirds of another leg, never below its own files.
+    expect(totals.at(-1)).toBeLessThanOrEqual(
+      Math.max(
+        chromeTime + BESIDE_REAL_CHROME_SECONDS,
+        (mean * REAL_CHROME_LEG_WORKERS) / DEFAULT_LEG_WORKERS +
+          BESIDE_REAL_CHROME_SECONDS,
+      ),
+    );
+    // The workflows pass --maxWorkers=2 to the last leg only.
+    const deploy = yaml.parse(
+      fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8'),
+    );
+    const last =
+      '[ "${{ matrix.shard }}" = "${{ strategy.job-total }}" ] && [ "${{ strategy.job-total }}" -gt 1 ]';
+    for (const [name, job] of [
+      ['ci.yml', ci.jobs['test-node']],
+      ['deploy.yml', deploy.jobs['test-node'] ?? deploy.jobs['unit-node']],
+    ]) {
+      const run = (job?.steps ?? [])
+        .map(step => String(step.run ?? ''))
+        .find(text => text.includes('--maxWorkers=2'));
+      expect(run, name).toBeDefined();
+      expect(run, name).toContain(last);
     }
   });
 
