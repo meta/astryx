@@ -280,6 +280,24 @@ export const docs = {
       },
       {className: 'astryx-number-input-stepper', states: ['direction']},
     ],
+    componentIcons: [
+      {
+        slot: 'number-input-stepper',
+        description: 'The glyph inside a stepper button.',
+        fallback:
+          '`numberInput:stepperDown` when the theme maps no slot; `chevronDown` when a mapping omits the icon. The increment button mirrors the glyph',
+        state: [
+          {
+            name: 'direction',
+            type: "'increment' | 'decrement'",
+            description:
+              'Which button draws the glyph. The increment button turns the one downward chevron to point up, so it mirrors whatever artwork the slot resolves.',
+          },
+        ],
+        whenNull:
+          'Hides the glyph. Each button keeps its width, name, and stepping action.',
+      },
+    ],
     derived: [
       // `padding` in any spelling — the shorthand, `paddingBlock`, or a lone
       // `paddingBlockStart` — is parsed by the shared container expansion and
@@ -604,6 +622,23 @@ export const docsZh = {
         states: ['disabled', 'readonly'],
       },
       {className: 'astryx-number-input-stepper', states: ['direction']},
+    ],
+    componentIcons: [
+      {
+        slot: 'number-input-stepper',
+        description: '步进按钮内的图标。',
+        fallback:
+          '主题未映射该插槽时为 `numberInput:stepperDown`；映射省略图标时为 `chevronDown`。递增按钮镜像该图标',
+        state: [
+          {
+            name: 'direction',
+            type: "'increment' | 'decrement'",
+            description:
+              '由哪个按钮绘制该图标。递增按钮把同一个向下箭头转向上方，因此它镜像插槽解析出的任何图像。',
+          },
+        ],
+        whenNull: '隐藏该图标。每个按钮保留自身宽度、名称和步进行为。',
+      },
     ],
     derived: [
       // 任何写法的 `padding`（简写、`paddingBlock`，或单独的

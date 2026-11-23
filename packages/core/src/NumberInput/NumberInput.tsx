@@ -52,7 +52,8 @@ import {
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
 } from '../Field';
-import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {renderIconSlot, type IconType} from '../Icon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
@@ -206,7 +207,12 @@ const styles = stylex.create({
     borderBlockStartStyle: 'solid',
     borderBlockStartColor: colorVars['--color-border-emphasized'],
   },
-  incrementIcon: {
+  /*
+   * Both steppers draw one downward glyph. The increment button turns it to
+   * point up, and it turns a theme's slot glyph too.
+   */
+  incrementGlyph: {
+    display: 'inline-flex',
     transform: 'rotate(180deg)',
   },
 });
@@ -1521,11 +1527,13 @@ export function NumberInput({
                   styles.numberStepperButtonDisabled,
               ),
             )}>
-            <Icon
-              icon="numberInput:stepperDown"
-              size="xsm"
+            <ComponentIcon
+              slot="number-input-stepper"
+              state={{direction: 'increment'}}
+              fallback={{icon: 'chevronDown', size: 'xsm'}}
+              extensionKey="numberInput:stepperDown"
               color="inherit"
-              xstyle={styles.incrementIcon}
+              xstyle={styles.incrementGlyph}
             />
           </button>
           <button
@@ -1573,7 +1581,13 @@ export function NumberInput({
                   styles.numberStepperButtonDisabled,
               ),
             )}>
-            <Icon icon="numberInput:stepperDown" size="xsm" color="inherit" />
+            <ComponentIcon
+              slot="number-input-stepper"
+              state={{direction: 'decrement'}}
+              fallback={{icon: 'chevronDown', size: 'xsm'}}
+              extensionKey="numberInput:stepperDown"
+              color="inherit"
+            />
           </button>
         </div>
       )}

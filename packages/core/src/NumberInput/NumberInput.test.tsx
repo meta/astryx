@@ -21,6 +21,8 @@ import {registerIcons, resetIcons} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+import {resetThemes} from '../theme/themeRegistry';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -2498,6 +2500,114 @@ describe('NumberInput stepping', () => {
         screen.queryByTestId('generic-chevron-down'),
       ).not.toBeInTheDocument();
       warnSpy.mockRestore();
+    });
+
+    describe('number-input-stepper slot', () => {
+      const stepperIcons = {
+        chevronDown: <span data-icon="chevronDown" />,
+        arrowUp: <span data-icon="arrowUp" />,
+        arrowDown: <span data-icon="arrowDown" />,
+        'numberInput:stepperDown': <span data-icon="numberInput:stepperDown" />,
+      };
+
+      beforeEach(() => {
+        resetThemes();
+      });
+
+      function renderSteppers(theme: Parameters<typeof Theme>[0]['theme']) {
+        render(
+          <Theme theme={theme}>
+            <NumberInput
+              label="Quantity"
+              value={5}
+              onChange={() => {}}
+              hasNumberSteppers
+            />
+          </Theme>,
+        );
+      }
+
+      function glyph(name: string) {
+        return screen
+          .getByRole('button', {name})
+          .querySelector('[data-icon]')
+          ?.getAttribute('data-icon');
+      }
+
+      it('draws the extension key when the theme maps no slot', () => {
+        renderSteppers(
+          defineTheme({
+            name: 'number-stepper-key',
+            icons: stepperIcons,
+          }),
+        );
+
+        expect(glyph('Increment Quantity')).toBe('numberInput:stepperDown');
+        expect(glyph('Decrement Quantity')).toBe('numberInput:stepperDown');
+      });
+
+      it('draws the mapped slot and ignores the extension key', () => {
+        renderSteppers(
+          defineTheme({
+            name: 'number-stepper-slot',
+            icons: stepperIcons,
+            componentIcons: {'number-input-stepper': 'arrowUp'},
+          }),
+        );
+
+        expect(glyph('Increment Quantity')).toBe('arrowUp');
+        expect(glyph('Decrement Quantity')).toBe('arrowUp');
+      });
+
+      it('draws the name each direction returns', () => {
+        renderSteppers(
+          defineTheme({
+            name: 'number-stepper-direction',
+            icons: stepperIcons,
+            componentIcons: {
+              'number-input-stepper': ({direction}) => ({
+                icon: direction === 'increment' ? 'arrowUp' : 'arrowDown',
+              }),
+            },
+          }),
+        );
+
+        expect(glyph('Increment Quantity')).toBe('arrowUp');
+        expect(glyph('Decrement Quantity')).toBe('arrowDown');
+      });
+
+      it('hides the glyph when the slot is null and keeps the buttons', () => {
+        renderSteppers(
+          defineTheme({
+            name: 'number-stepper-null',
+            icons: stepperIcons,
+            componentIcons: {'number-input-stepper': null},
+          }),
+        );
+
+        for (const name of ['Increment Quantity', 'Decrement Quantity']) {
+          const button = screen.getByRole('button', {name});
+          expect(button.querySelector('.astryx-icon')).toBeNull();
+        }
+      });
+
+      it('uses chevronDown when a mapping omits the icon', () => {
+        renderSteppers(
+          defineTheme({
+            name: 'number-stepper-size',
+            icons: stepperIcons,
+            componentIcons: {'number-input-stepper': {size: 'lg'}},
+          }),
+        );
+
+        expect(glyph('Increment Quantity')).toBe('chevronDown');
+        expect(glyph('Decrement Quantity')).toBe('chevronDown');
+        for (const name of ['Increment Quantity', 'Decrement Quantity']) {
+          expect(
+            screen.getByRole('button', {name}).querySelector('.astryx-icon'),
+          ).toHaveAttribute('data-size', 'lg');
+        }
+      });
     });
 
     it('steps the value and returns focus to the input', () => {

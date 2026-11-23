@@ -242,6 +242,32 @@ export const brandTheme = defineTheme({
           type: 'prose',
           text: "An unknown icon name, a variant the theme does not list, or a size other than `xsm`, `sm`, `md`, or `lg` is ignored for that field, with one development warning. A theme that extends another merges `componentIcons` by slot ({@link generic:author-a-theme}). `theme.componentIcons` reads back names, `null` values, and static requests, and leaves out the slots a function resolves.",
         },
+        {
+          type: 'prose',
+          text: "NumberInput's steppers draw the `number-input-stepper` slot. Map the slot to one shared icon name that points down. The increment button turns that glyph to point up, including a glyph the slot resolves. A mapping that omits the icon uses `chevronDown`. With no mapping, both steppers still draw the `numberInput:stepperDown` key, including a theme or `registerIcons` override of that key. Mapping the slot replaces the key for NumberInput only. Replacing a shared name in `icons` changes every component that draws that name.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Before: the stepper key',
+          code: `export const brandTheme = defineTheme({
+  name: 'brand',
+  icons: {
+    'numberInput:stepperDown': <CaretDownFilledIcon />,
+  },
+});`,
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'After: the stepper slot',
+          code: `export const brandTheme = defineTheme({
+  name: 'brand',
+  componentIcons: {
+    'number-input-stepper': 'chevronDown',
+  },
+});`,
+        },
       ],
     },
   ],

@@ -240,13 +240,38 @@ theme-authoring architecture owns `DefineThemeInput`, normalization, and
 
 ## Known deviations
 
-- **NumberInput stepper icon.** Current `NumberInput` resolves its stepper through
-  a general extension key instead of `componentIcons`. This shipped behavior
-  remains supported and is not precedent for new component slots.
-- **Owner:** `component:NumberInput` once that component contract exists.
-- **Exit condition:** a separately reviewed migration uses the component-slot
-  model while preserving released callers and theme overrides, or follows an
-  explicitly approved breaking-change path.
+- **NumberInput stepper icon.** `NumberInput` draws each stepper through the
+  `number-input-stepper` slot (`direction`: `increment` | `decrement`). A theme
+  mapping for that slot wins. A mapping that omits the icon uses the shared
+  name `chevronDown`. With no mapping, both steppers resolve the
+  `numberInput:stepperDown` extension key, including a theme or registry
+  override of that key, and the increment control mirrors the glyph. That key
+  path remains supported and is not precedent for new component slots.
+  - **Owner:** `component:NumberInput`.
+  - **Exit condition:** a separately reviewed migration resolves the steppers
+    without `numberInput:stepperDown` while preserving released callers and
+    theme overrides, or follows an explicitly approved breaking-change path.
+
+- **RichTextEditorToolbar icons.** Current `RichTextEditorToolbar` in
+  `@astryxdesign/richtext` resolves fifteen toolbar glyphs through `richtext:*`
+  keys, exported as `RICHTEXT_ICON_KEYS`.
+  - **Owner:** `component:RichTextEditorToolbar`.
+  - **Exit condition:** the same as the NumberInput stepper icon.
+
+- **Comments icons.** Current `Comments` in `@astryxdesign/lab` resolves nine
+  glyphs through `comment:*` keys, exported as `COMMENT_ICON_KEYS`.
+  - **Owner:** `@astryxdesign/lab`.
+  - **Exit condition:** the same as the NumberInput stepper icon.
+
+- **MediaPlayer icons.** Current `VideoPlayer` and `AudioPlayer` in
+  `@astryxdesign/lab` resolve their control glyphs through `media:*` keys,
+  exported as `MEDIA_ICON_KEYS`.
+  - **Owner:** `component:MediaPlayer` (lab package).
+  - **Exit condition:** the same as the NumberInput stepper icon.
+
+These three package-owned families draw bundled React nodes as their default
+artwork, where a slot fallback is an `IconName`. Reaching the slot model from
+one of them therefore needs a shared name for the glyph as well as the slot.
 
 This record does not choose the migration design or timeline.
 

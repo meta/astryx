@@ -42,14 +42,16 @@ export function useIcon(name: IconName | NamespacedIconName): ReactNode {
 
 /**
  * Resolve a component icon slot from the nearest Theme: the theme's
- * `componentIcons[slot]` applied to the component's own fallback.
+ * `componentIcons[slot]` applied to the component's own fallback. An
+ * extension key is returned when the theme sets no value for the slot.
  * @internal
  */
 export function useComponentIcon<Slot extends ComponentIconSlotName>(
   slot: Slot,
   state: ComponentIconSlotState<Slot>,
   fallback: ComponentIconFallback,
+  extensionKey?: NamespacedIconName,
 ): ResolvedComponentIcon {
   const theme = useThemeDefinition();
-  return resolveComponentIcon(slot, state, fallback, theme);
+  return resolveComponentIcon(slot, state, fallback, theme, extensionKey);
 }
