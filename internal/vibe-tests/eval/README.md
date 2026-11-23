@@ -73,8 +73,9 @@ outside path, including a root named by another command, is a warning, and
 system temp folder outside every run, such as a backup an agent copies to
 `/tmp`, is not a warning: `report.md` lists those runs apart, because the agents
 that run at the same time share that folder. A path there that the shell can
-change (a pattern, a variable, an escape or a backtick) stays a warning, because
-it can expand into a run. Each agent gets its own TMPDIR in
+change stays a warning, because it can expand into a run: a path that is not a
+whole plain word, and any temp path in a command that can build a path at run
+time (an expansion, a link, a finder or an interpreter). Each agent gets its own TMPDIR in
 its run folder, removed after the run, so tools that honor TMPDIR keep their
 files apart. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.

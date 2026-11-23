@@ -125,6 +125,22 @@ describe('auditTranscript', () => {
     }
   });
 
+  it('keeps a temp path on the warning list when the command can rewrite it into a run', () => {
+    const app = 'astryx-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx';
+    const commands = [
+      `D=/tmp/q; cat \${D%q}${app}`,
+      `for D in /tmp/q; do cat \${D%q}${app}; done`,
+      'ln -s astryx-vibe-eval /tmp/q',
+      `find /tmp/q -maxdepth 0 -exec cat {}/../${app} \\;`,
+      `node -e "require('fs').readFileSync(require('path').join(require('path').dirname('/tmp/q'), '${app}'))"`,
+      `node <<'EOF'\nrequire('fs').readFileSync('/tmp/astryx-vibe-' + 'eval/s1/runs/form__arm__r1/workspace/src/App.tsx');\nEOF`,
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.tempPaths).toEqual([]);
+    }
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];
@@ -150,6 +166,7 @@ describe('shellCanExpand', () => {
     expect(shellCanExpand('cat "/tmp/a.bak"', '/tmp/a.bak')).toBe(false);
     expect(shellCanExpand('cat "/tmp/a"b.bak', '/tmp/a')).toBe(true);
     expect(shellCanExpand('cat /tmp/x/../y', '/tmp/x/../y')).toBe(true);
+    expect(shellCanExpand('cat x/tmp/a.bak', '/tmp/a.bak')).toBe(true);
     expect(shellCanExpand('cat /tmp/a.bak>out.txt', '/tmp/a.bak')).toBe(false);
   });
 

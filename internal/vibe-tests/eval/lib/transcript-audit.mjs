@@ -11,21 +11,29 @@ import os from 'node:os';
 import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
+/** Command text that can build or redirect a path at run time: expansions, links, finders and interpreters. */
+const REWRITES = /[$`{}]|(?:^|[\s|;&(])(?:ln|find|xargs|eval|env|python3?|node|deno|bun|tsx|bash|sh|zsh|ruby|perl)(?=\s|$)/;
+
 /**
  * Whether the shell or an interpreter can change a path the audit read from a
- * command. A path is plain only when it holds path characters and no `..`, and
- * each time it occurs it is a whole word: bare, or in quotes that close right
- * after it, with a word end after that. Anything else can expand into a run.
+ * command. A path is plain only when the command builds no path at run time,
+ * the path holds path characters and no `..`, and each time it occurs it is a
+ * whole word: bare, or in quotes that close right after it, with a word break
+ * on both sides. Anything else can expand into a run.
  */
 export function shellCanExpand(command, raw) {
+  if (REWRITES.test(command)) return true;
   if (!/^[\w./+-]+$/.test(raw) || raw.split('/').includes('..')) return true;
   for (let at = command.indexOf(raw); at !== -1; at = command.indexOf(raw, at + 1)) {
     const opener = command[at - 1];
+    let start = at;
     let end = at + raw.length;
     if (opener === "'" || opener === '"') {
       if (command[end] !== opener) return true;
+      start -= 1;
       end += 1;
     }
+    if (start > 0 && !/[\s;|&()<>]/.test(command[start - 1])) return true;
     if (end < command.length && !/[\s;|&()<>]/.test(command[end])) return true;
   }
   return false;
@@ -361,9 +369,7 @@ export function auditTranscript(
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
     // A path the shell can expand can reach another run, so only a literal path counts as a temp path.
-    // A path that begins the name of a run root can be joined into that root.
-    const startsRoot = sensitiveRoots.some(root => root.startsWith(resolved));
-    const literal = !expands && !startsRoot && !/[*?[{]/.test(raw);
+    const literal = !expands && !/[*?[{]/.test(raw);
     if (literal && tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
       tempPaths.push({tool, path: raw});
       return;
