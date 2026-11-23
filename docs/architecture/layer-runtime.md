@@ -28,6 +28,7 @@ verified_by:
   [
     packages/core/src/Layer/useLayer.test.tsx,
     packages/core/src/Layer/layerViewportInset.test.ts,
+    packages/core/src/Layer/layerViewportInset.consumer-build.test.mjs,
     packages/core/src/Layer/useLayerKeyboardClearance.test.tsx,
     packages/core/src/Layer/LayerProvider.test.tsx,
     packages/core/src/Layer/toastHost.test.tsx,
@@ -411,6 +412,10 @@ close their own layers independently:
   watch,
   which closes on a press that starts and ends outside the field and the list
   and forgets a cancelled press (a scroll);
+- a `usePopover` popover with `tabBehavior: 'pageOrder'`, a manual popover,
+  uses the same watch: its trigger counts as inside, and a touch pan is not a
+  press (`spec:AST-116` FR15). A press in a modal dialog that does not hold
+  the popover is left to that dialog, and the popover stays open;
 - native dialogs handle backdrop clicks locally;
 - ContextMenu uses a local outside `mousedown` listener, which skips the
   compatibility mouse events of the finger press that opened the menu;
@@ -780,6 +785,14 @@ be updated only as that work ships.
 `spec:AST-003` does not cover INV21 or INV22; `spec:AST-059` DEC-9 and DEC-10
 govern them. It does not cover the INV7 gaps either.
 
+INV11 gap: a StyleX build outside Core that resolves
+`Layer/layerViewportInset.stylex`, as a swizzled layer component imports it, to
+its built `dist` file gets an undefined variable: that file holds the
+constants' values, and the build reads each constant as a variable that
+nothing defines. A build that compiles the published source entry defines
+them. No record decides the fix, and `spec:AST-003` does not cover it.
+`layerViewportInset.consumer-build.test.mjs` shows the gap.
+
 INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
 runtime owns the shared exit copy (INV13, `placeLayerExitCopy`) and the shared
 presentation hold (`Layer/presentationHold.ts`), which Popover uses for its
@@ -883,7 +896,8 @@ it on the surface inside the layer and run no layout while it plays.
   its one touch module. `Layer/layerKeyboardClearance.ts` holds the clearance
   and the cap's arithmetic. `Layer/settledBox.ts` reads a layer's box without
   its entrance transform, for the fallback order, the keyboard's cap and the
-  exit copy.
+  exit copy. The touch grow reads its source the same way, without the press
+  transform (INV22).
 - `Layer/preserveAnimations.ts` owns carrying the CSS animations and
   transitions of a layer and its content across the re-placement's display
   reset.
@@ -922,10 +936,11 @@ it on the surface inside the layer and run no layout while it plays.
   menu focus, and exposure-induced re-hover suppression.
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
-- `Layer/outsidePress.ts` owns the outside-press watch for a text field's
-  manual layer, used by BaseTypeahead, DateInput, DateTimeInput and
-  ChatComposerInput's trigger menu, and the per-document count of outside
-  closes that a modal backdrop press reads (`family:overlay-dismissal` FR11).
+- `Layer/outsidePress.ts` owns the outside-press watch for a manual layer,
+  used by BaseTypeahead, DateInput, DateTimeInput, ChatComposerInput's
+  trigger menu and a `usePopover` popover with `tabBehavior: 'pageOrder'`,
+  and the per-document count of outside closes that a modal backdrop press
+  reads (`family:overlay-dismissal` FR11).
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
@@ -973,6 +988,7 @@ this current architecture record.
 | INV19        | `layerPortalBoundary.test.ts`, `RichTextEditor.portalHost.test.tsx`, and `LayerBoundary.a11y.browser.spec.ts`, `TooltipDecorator.a11y.browser.spec.ts` and `DecoratorPortal.a11y.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A corrected layer whose host is inside an editor-managed root, and that has no nearer layer root, rendered inside that root; a nested layer moved out of its parent layer's root; a layer that is safe inline moved; a moved wrapper whose `dir` differs from its host's                                                                                                                                                     |
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
+| INV11 gap    | `layerViewportInset.consumer-build.test.mjs`, which asserts the gap while it stands                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | A StyleX build outside Core that resolves `Layer/layerViewportInset.stylex` to its built file defines every variable it references, or the test cannot build the app: the test fails                                                                                                                                                                                                                                         |
 | INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read; for the check after a scroll stops, `useLayer.test.tsx`'s `scrollend` and 150 ms fallback cases (one re-pick, in the first painted frame after the stop, with no read in the scroll handler), the `Core/Layer` story "anchor stays in view while the page scrolls" and the Tooltip suites' scroll-edge cases; a Chromium trace at 4× CPU of a wheel scroll that carries a Tooltip's trigger to the scroll edge counts the forced layouts per scroll before and after DEC-8: page scroll 27–42 → 5, a scrolling panel 7 → 5, the Slider value bubble 12–22 → 5                                                                                                                                                                                                         | A layer whose first painted rectangle differs from its settled one; a box check, a re-pick or a forced layout for a layer in a scroll frame or a scroll handler; a re-pick before the first painted frame after a scroll stops, or more than one per stop; a painted frame that shows a layer that keeps its anchor clear over its anchor                                                                                    |
 | INV11, INV12 | The software keyboard's cap: `useLayerKeyboardClearance.test.tsx` for its rule, its timing, its read before first paint, and the inset's hold; the `PopoverKeyboard`, `keyboardCappedLists` and `SelectorKeyboardInset` browser specs for its rendered geometry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | A layer that runs under the keyboard, or is capped though the keyboard does not reach it; a cap that changes more than once per keyboard movement or under a press; a layer opened with the keyboard up whose first frame is uncapped or paints its content past its box; a layer that reads the inset and moves down when the keyboard report ends                                                                          |
 | INV13        | `layerExitCopy.test.ts` and `layerExitCopy.interaction.browser.spec.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A copy with an id, a form name, a form owner, or pointer reach; a copy off the layer's drawn box; a copy outside the top layer; a second copy for one layer                                                                                                                                                                                                                                                                  |

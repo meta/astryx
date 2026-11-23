@@ -139,6 +139,12 @@ export async function reviewPasses({
   return reviewDecision.resolveReviewApprovals({
     reviews,
     headSha: sha,
+    headPushedAt: await reviewDecision.readHeadPushedAt({
+      github,
+      owner,
+      repo,
+      sha,
+    }),
     engOwners,
     designOwners: [],
     reviewApp: app,
@@ -262,6 +268,12 @@ export async function heavyReviewPasses({
   return reviewDecision.resolveReviewApprovals({
     reviews,
     headSha: sha,
+    headPushedAt: await reviewDecision.readHeadPushedAt({
+      github,
+      owner,
+      repo,
+      sha,
+    }),
     engOwners,
     designOwners: [],
     reviewApp: app,

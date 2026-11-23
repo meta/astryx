@@ -4,19 +4,25 @@
  * @file The lookup commands' shared hint: when `astryx component`, `hook`,
  * `template` or `docs` finds no entry for a name, and the name matches an
  * entry another of those commands reads, the not-found error suggests that
- * command (`astryx hook useHotkeys`). A name matches at one of six tiers,
+ * command (`astryx hook useHotkeys`). A name matches at one of seven tiers,
  * best first: exact (the whole name, any case), folded (without spaces and
  * hyphens, a hook with or without `use`), last segment (of a path name, exact
- * or folded), near hook (a `use…` name a slip or two from a hook's name, or
- * one whose every word the hook's name carries), hook keyword (two or more words that are a keyword
- * one hook's doc declares), and word cover (every word of the name); word
- * cover gives no hint. The near hook tier gives one when a component or
+ * or folded; for a docs miss, also a Core component or hook that the typed
+ * name's last path segment names, as typed or with its words singular), near
+ * hook (a `use…` name a slip or two from a hook's name, or one whose every
+ * word the hook's name carries), hook keyword (two or more words that are a
+ * keyword one hook's doc declares), hook stem (a run of the typed words that
+ * is a hook's name without its first word, the verb: `TopLayer` names
+ * `useLayer`), and word cover (every word of the name); word cover gives no
+ * hint. The near hook tier gives one when a component or
  * template lookup misses and no better tier matches; the hook keyword tier
  * only for a component lookup, the one lookup that knows its suggestions'
- * declared keywords. A better tier wins; inside a tier, commands win in
- * {@link LOOKUP_COMMANDS} order, and docs routes with the fewest segments
- * first, then in tree order. The hint goes right after the command's own
- * suggestions that match at its tier or a better one (an own suggestion that
+ * declared keywords; and the hook stem tier only for a component lookup too,
+ * since a template's or doc's name is a page or topic, not a thing a hook
+ * acts on. A better tier wins; inside a tier,
+ * commands win in {@link LOOKUP_COMMANDS} order, and docs routes with the
+ * fewest segments first, then in tree order. The hint goes right after the
+ * command's own suggestions that match at its tier or a better one (an own suggestion that
  * declares the name as a keyword or synonym matches at the folded tier), and the list never
  * grows: the last suggestion drops, and a hint that would come last is left
  * out.
@@ -48,6 +54,7 @@ import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
   closeNameScore,
+  containsRun,
   nameWords,
   synonymMatches,
 } from '../text/suggest-order.mjs';
@@ -72,8 +79,9 @@ const NAMES_CODE = [
  * @typedef {{components?: string[], hooks?: string[], templates?: string[], docs?: string[]}} LookupNames
  * @typedef {import('../response/base').Suggestion} Suggestion
  * @typedef {{name: string, reason: string}} Hint
- * @typedef {{hint: Hint, tier: number}} Found a hint and the tier its entry
- *   matches the typed name at
+ * @typedef {{hint: Hint, tier: number, stem?: string}} Found a hint and the
+ *   tier its entry matches the typed name at; for the hook stem tier, also
+ *   the folded stem the typed words carry
  */
 
 /** The lookup commands, in the order the hint prefers them. */
@@ -109,7 +117,11 @@ export const MATCH_TIER = /** @type {const} */ ({
   exact: 0,
   /** The whole name without spaces and hyphens, and a hook without `use`. */
   folded: 1,
-  /** Only the last segment of a path name, as exact or folded. */
+  /**
+   * Only the last segment of a path name, as exact or folded; or, for a docs
+   * miss, a name the typed last path segment folds to, as typed or with its
+   * words singular ({@link tailForms}).
+   */
   segment: 2,
   /**
    * A hook a `use…` name nearly spells: one or two slips, or every typed
@@ -121,10 +133,15 @@ export const MATCH_TIER = /** @type {const} */ ({
    * more.
    */
   keyword: 4,
+  /**
+   * A hook whose name without its first word (the verb) is a run of the
+   * typed words, and the longest such run.
+   */
+  stem: 5,
   /** A name that carries every typed word. */
-  words: 5,
+  words: 6,
   /** None of the above. */
-  none: 6,
+  none: 7,
 });
 
 /** The lookups whose misses can get a near hook hint. */
@@ -139,9 +156,10 @@ const HOOK_SHAPED = /^use[A-Z0-9]/;
  * @param {LookupCommand} command
  * @param {string} name
  * @param {string} typed
+ * @param {string[]} [tail] the folded names the typed last segment may mean
  * @returns {number}
  */
-function nameTier(command, name, typed) {
+function nameTier(command, name, typed, tail = []) {
   const lower = typed.toLowerCase();
   const wanted = foldEntryName(typed);
   /** @param {string} spelling */
@@ -157,6 +175,12 @@ function nameTier(command, name, typed) {
   if (at !== -1) {
     const last = name.slice(at + 1);
     if (last.toLowerCase() === lower || folds(last)) return MATCH_TIER.segment;
+  }
+  if (
+    (command === 'component' || command === 'hook') &&
+    tail.includes(foldEntryName(name))
+  ) {
+    return MATCH_TIER.segment;
   }
   return MATCH_TIER.none;
 }
@@ -186,17 +210,36 @@ function beats(command, match, best) {
  * @param {LookupCommand} command
  * @param {string[] | undefined} names
  * @param {string} typed
+ * @param {string[]} [tail]
  * @returns {{name: string, tier: number} | null}
  */
-function bestMatch(command, names, typed) {
+function bestMatch(command, names, typed, tail = []) {
   /** @type {{name: string, tier: number} | null} */
   let best = null;
   for (const name of names ?? []) {
-    const match = {name, tier: nameTier(command, name, typed)};
+    const match = {name, tier: nameTier(command, name, typed, tail)};
     if (beats(command, match, best)) best = match;
     if (match.tier === MATCH_TIER.exact) break;
   }
   return best;
+}
+
+/**
+ * The folded names a typed name's last path segment may mean: as typed, with
+ * its words singular, and with a final `s` or `es` dropped
+ * (`components/Tabs` may mean Tab, `widgets/Switches` Switch).
+ * @param {string} typed
+ * @returns {string[]}
+ */
+export function tailForms(typed) {
+  const last = typed.slice(typed.lastIndexOf('/') + 1);
+  const folded = foldEntryName(last);
+  const forms = [folded, nameWords(folded).join(''), nameWords(last).join('')];
+  if (folded.endsWith('s') && !folded.endsWith('ss')) {
+    forms.push(folded.slice(0, -1));
+  }
+  if (folded.endsWith('es')) forms.push(folded.slice(0, -2));
+  return [...new Set(forms)].filter(Boolean);
 }
 
 /**
@@ -260,7 +303,9 @@ export function otherCommand(typed, entries, from) {
  * near hook or hook keyword hint, a suggestion also matches as well when one
  * of its names is a near name or carries every typed word, and, for a hook
  * keyword hint, when one of its `keywordsOf` has exactly the typed words.
- * The first `pinned` suggestions always stay ahead of the hint.
+ * For a hook stem hint, a suggestion matches as well when its folded name
+ * carries the folded stem. The first `pinned` suggestions always stay ahead
+ * of the hint.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
  * @param {Found | null} found
@@ -290,7 +335,9 @@ export function withOtherCommand(
 ) {
   if (!found) return suggestions;
   if (alone || !suggestions || suggestions.length === 0) return [found.hint];
-  const byHook = found.tier >= MATCH_TIER.near;
+  const byHook =
+    found.tier >= MATCH_TIER.near && found.tier <= MATCH_TIER.keyword;
+  const stem = found.tier === MATCH_TIER.stem ? (found.stem ?? '') : null;
   const wanted = foldEntryName(typed);
   /** @param {T} suggestion */
   const declares = suggestion =>
@@ -299,6 +346,10 @@ export function withOtherCommand(
   /** @param {T} suggestion */
   const matchesAsWell = suggestion =>
     declares(suggestion) ||
+    (stem !== null &&
+      namesOf(suggestion).some(
+        name => name && foldEntryName(name).includes(stem),
+      )) ||
     namesOf(suggestion).some(
       name =>
         name &&
@@ -325,8 +376,8 @@ export function withOtherCommand(
  * text, says first which catalogs can hold the name; a catalog is asked only
  * then, only for the names that fold to it, and only until a catalog before
  * it has an exact match. So a name no file carries reads no doc and loads no
- * discovery, except the hook discovery that the near hook and hook keyword
- * tiers read when a component or template lookup misses. The docs catalog is every route of the docs tree, from
+ * discovery, except the hook discovery that the near hook, hook keyword and
+ * hook stem tiers read when a component or template lookup misses. The docs catalog is every route of the docs tree, from
  * `docsRoutes`, which the docs lookup owns; the index keeps them where it is
  * kept, and they are worked out only when the name's last segment can end a
  * route. A check that fails gives no hint.
@@ -337,11 +388,13 @@ export function withOtherCommand(
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
  *   docsRoutes?: import('./name-index.mjs').DocsRoutes,
+ *   tail?: string[],
  * }} context `from` is the lookup command that did not find the name; without
  *   it, every lookup command is asked. `coreDir` and `integrations` are the
  *   ones the lookup found, if any. `docsRoutes` works out every route
  *   `astryx docs` reads in the project with these integrations; without it,
- *   no docs route is a hint
+ *   no docs route is a hint. `tail` holds the folded names a component or
+ *   hook may have for the typed last path segment to name it ({@link tailForms})
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -352,23 +405,27 @@ export async function findOtherCommand(
     coreDir: knownCoreDir,
     integrations: known,
     docsRoutes,
+    tail = [],
   },
 ) {
   if (typeof typed !== 'string') return null;
   const wanted = foldEntryName(typed);
   if (wanted === '') return null;
   // A name with a `/` can be only an integration template's full id or a
-  // docs route.
+  // docs route, or, through `tail`, name a component or hook by its last part.
   const isPath = typed.includes('/');
   /** @type {import('../integrations/integrations.mjs').LoadedIntegration[] | undefined} */
   let loaded = known;
   const integrationsOnce = async () =>
     (loaded ??= await projectIntegrations(cwd));
   /** @param {string} name */
-  const isWanted = name => foldEntryName(name) === wanted;
+  const isWantedWhole = name => foldEntryName(name) === wanted;
+  /** @param {string} name */
+  const isWanted = name =>
+    isWantedWhole(name) || tail.includes(foldEntryName(name));
   /** @param {string} name */
   const isWantedHook = name =>
-    foldEntryName(name) === wanted || foldEntryName(name) === `use${wanted}`;
+    isWanted(name) || foldEntryName(name) === `use${wanted}`;
 
   /** @type {string | null} */
   let coreDir = null;
@@ -380,11 +437,15 @@ export async function findOtherCommand(
   let inCore = {component: false, hook: false};
   try {
     coreDir = knownCoreDir ?? findCoreDir(cwd);
-    if (coreDir && !isPath) {
-      inCore = coreFilesNaming(
-        /** @type {string | string[]} */ ((await indexOnce()).core),
-        wanted,
-      );
+    if (coreDir && (!isPath || tail.length > 0)) {
+      const core = /** @type {string | string[]} */ ((await indexOnce()).core);
+      const named = [wanted, ...tail].map(name => coreFilesNaming(core, name));
+      inCore = {
+        component: named.some(one => one.component),
+        hook: named.some(one => one.hook),
+        componentTops: new Set(named.flatMap(one => [...one.componentTops])),
+        hookTops: new Set(named.flatMap(one => [...one.hookTops])),
+      };
     }
   } catch {
     inCore = {component: true, hook: true};
@@ -397,7 +458,8 @@ export async function findOtherCommand(
       async () => ({
         components:
           coreDir && inCore.component
-            ? (await componentDiscovery()).discoverComponentNamesWhere(
+            ? coreComponentNames(
+                await componentDiscovery(),
                 coreDir,
                 isWanted,
                 inCore.componentTops,
@@ -408,12 +470,15 @@ export async function findOtherCommand(
     [
       'component',
       async () => ({
-        components: await integrationComponentNames(
-          await integrationsOnce(),
-          (await indexOnce()).components,
-          wanted,
-          isWanted,
-        ),
+        // `tail` reaches Core components only.
+        components: isPath
+          ? []
+          : await integrationComponentNames(
+              await integrationsOnce(),
+              (await indexOnce()).components,
+              wanted,
+              isWantedWhole,
+            ),
       }),
     ],
     [
@@ -478,7 +543,10 @@ export async function findOtherCommand(
   for (const [command, load] of catalogs) {
     if (
       command === from ||
-      (isPath && command !== 'template' && command !== 'docs')
+      (isPath &&
+        tail.length === 0 &&
+        command !== 'template' &&
+        command !== 'docs')
     ) {
       continue;
     }
@@ -488,7 +556,7 @@ export async function findOtherCommand(
     } catch {
       continue;
     }
-    const match = bestMatch(command, entries[LISTED[command]], typed);
+    const match = bestMatch(command, entries[LISTED[command]], typed, tail);
     if (match && match.tier < (best?.tier ?? MATCH_TIER.words)) {
       best = hintFor(command, match.name, from, match.tier);
       if (match.tier === MATCH_TIER.exact) break;
@@ -498,8 +566,12 @@ export async function findOtherCommand(
     try {
       const found = hookByMeaning(typed, await coreHookKeywords(coreDir), {
         keywords: from === 'component',
+        stems: from === 'component',
       });
-      if (found) best = hintFor('hook', found.name, from, found.tier);
+      if (found) {
+        best = hintFor('hook', found.name, from, found.tier);
+        if (found.stem) best.stem = found.stem;
+      }
     } catch {
       // A check that fails gives no hint.
     }
@@ -557,13 +629,32 @@ export async function coreHookKeywords(coreDir) {
  * means the one hook whose doc declares a keyword with exactly those words
  * (suggest-order.mjs synonymMatches); one word names a topic many hooks
  * share, not a hook. A tie, or a keyword more than one hook declares, means
- * no hook.
+ * no hook. With `stems`, a name that means no hook so far means the hook
+ * whose name without its first word, the verb, is the longest run of the
+ * typed words ({@link hookByStem}).
  * @param {string} typed
  * @param {Array<{name: string, keywords: string[]}>} hooks
- * @param {{keywords?: boolean}} [options]
+ * @param {{keywords?: boolean, stems?: boolean}} [options]
+ * @returns {{name: string, tier: number, stem?: string} | null}
+ */
+export function hookByMeaning(
+  typed,
+  hooks,
+  {keywords = true, stems = false} = {},
+) {
+  const found = hookBySpelling(typed, hooks, keywords);
+  return found ?? (stems ? hookByStem(typed, hooks) : null);
+}
+
+/**
+ * The hook a `use…` name nearly spells, or the one whose keyword has the
+ * typed words ({@link hookByMeaning}), or null.
+ * @param {string} typed
+ * @param {Array<{name: string, keywords: string[]}>} hooks
+ * @param {boolean} keywords
  * @returns {{name: string, tier: number} | null}
  */
-export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
+function hookBySpelling(typed, hooks, keywords) {
   if (HOOK_SHAPED.test(typed)) {
     let best = 0;
     /** @type {string | null} */
@@ -592,6 +683,39 @@ export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
 }
 
 /**
+ * The hook whose stem is the longest run of the typed words, with its tier
+ * and folded stem, or null. A hook's name is a verb and what it acts on
+ * (`useLayer`, `createReorderable`), so its stem is its words without the
+ * first. A tie in length means no hook.
+ * @param {string} typed
+ * @param {Array<{name: string}>} hooks
+ * @returns {{name: string, tier: number, stem: string} | null}
+ */
+export function hookByStem(typed, hooks) {
+  const words = nameWords(typed);
+  let best = 0;
+  /** @type {{name: string, tier: number, stem: string} | null} */
+  let found = null;
+  for (const hook of hooks) {
+    const stem = nameWords(hook.name).slice(1);
+    if (stem.length === 0 || stem.length < best || !containsRun(words, stem)) {
+      continue;
+    }
+    if (stem.length === best) {
+      found = null;
+      continue;
+    }
+    best = stem.length;
+    found = {
+      name: hook.name,
+      tier: MATCH_TIER.stem,
+      stem: foldEntryName(hook.name).slice(nameWords(hook.name)[0].length),
+    };
+  }
+  return found;
+}
+
+/**
  * The root routes of the docs tree whose names `isWanted` accepts, from file
  * names and doc text: the CLI's flat topics and root namespaces, the levels
  * that hold the flat topics, and each integration's topics and root
@@ -612,9 +736,9 @@ async function rootDocNames(docsDirs, index, wanted, isWanted) {
   // A level exists while a topic sits in it; an integration's topic keeps
   // its level on any base.
   const filled = new Set(
-    index.docs.flat().flatMap(({declared}) =>
-      declared?.level ? [declared.level] : [],
-    ),
+    index.docs
+      .flat()
+      .flatMap(({declared}) => (declared?.level ? [declared.level] : [])),
   );
   const builtin = [
     ...index.topics.filter(served),
@@ -703,6 +827,29 @@ function declaredNames(docsDirs, index, wanted, keep) {
  */
 function componentDiscovery() {
   return import('../discovery/component-discovery.mjs');
+}
+
+/**
+ * The Core components `keep` accepts that the component lookup opens: each
+ * one discovery lists, and each top folder of `tops` that the lookup opens
+ * by the folder's own doc, without a component file of that name (a family
+ * doc, such as a chat folder's).
+ * @param {typeof import('../discovery/component-discovery.mjs')} discovery
+ * @param {string} coreDir
+ * @param {(name: string) => boolean} keep
+ * @param {Set<string> | undefined} tops
+ * @returns {string[]}
+ */
+function coreComponentNames(discovery, coreDir, keep, tops) {
+  const names = discovery.discoverComponentNamesWhere(coreDir, keep, tops);
+  const opened = [...(tops ?? [])].filter(
+    top =>
+      keep(top) &&
+      !names.includes(top) &&
+      discovery.findComponentReadme(coreDir, top) ===
+        path.join(coreDir, 'src', top, `${top}.doc.mjs`),
+  );
+  return [...names, ...opened];
 }
 
 /**

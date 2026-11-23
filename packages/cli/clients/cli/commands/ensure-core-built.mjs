@@ -3,7 +3,7 @@
 /**
  * @file Shared test helper: builds @astryxdesign/core once per run, race-free.
  * @input Core's sources, translations and build scripts; this checkout's lock
- *   and run leases in the system temp directory.
+ *   and run leases in its node_modules/.cache folder.
  * @output A packages/core/dist whose last output is newer than every source.
  * @position Called by the node global setup and the build-theme suites.
  *
@@ -12,9 +12,7 @@
  */
 
 import {execFileSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -61,17 +59,25 @@ export const CORE_GENERATED = [
   path.join(REPO_ROOT, 'packages/core/locales/pseudo.json'),
 ];
 /**
- * The lock directory (mkdir is atomic across processes) that guards the Core
- * build of the checkout at `repoRoot`: one per checkout.
+ * A lock directory (mkdir is atomic across processes) named `name`, kept in
+ * the checkout at `repoRoot`: the node global setup and every worker read
+ * the same path, whatever temp folder each process has.
+ * @param {string} repoRoot
+ * @param {string} name
+ * @returns {string}
+ */
+export function checkoutLockDir(repoRoot, name) {
+  return path.join(path.resolve(repoRoot), 'node_modules', '.cache', name);
+}
+
+/**
+ * The lock directory that guards the Core build of the checkout at
+ * `repoRoot`: one per checkout, inside it.
  * @param {string} repoRoot
  * @returns {string}
  */
 export function coreBuildLockDir(repoRoot) {
-  const key = createHash('sha256')
-    .update(path.resolve(repoRoot))
-    .digest('hex')
-    .slice(0, 16);
-  return path.join(os.tmpdir(), `astryx-core-build-${key}.lock`);
+  return checkoutLockDir(repoRoot, 'astryx-core-build.lock');
 }
 const LOCK_DIR = coreBuildLockDir(REPO_ROOT);
 
@@ -274,6 +280,7 @@ function lockIsHeld(lockDir, staleLockMs) {
  * @param {number} staleLockMs
  */
 function tryAcquire(lockDir, staleLockMs) {
+  fs.mkdirSync(path.dirname(lockDir), {recursive: true});
   try {
     fs.mkdirSync(lockDir);
     return true;

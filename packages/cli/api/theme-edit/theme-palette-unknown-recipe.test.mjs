@@ -121,7 +121,7 @@ describe('a palette recipe this CLI does not know', () => {
         themeEditSet('n', 'accent', '#e11d48', {cwd}),
       );
       expect(e.message).toContain(
-        `colors use the ${newer} recipe, which this Astryx CLI (${cliVersion()}) does not make yet; its palette is kept as saved`,
+        `colors use the ${newer} recipe, which this Astryx CLI (${cliVersion()}) does not make; its palette is kept as saved`,
       );
       expect(e.code).toBe(
         newerRecipeRefusal({recipe: newer, file: 'x', cwd}).code,

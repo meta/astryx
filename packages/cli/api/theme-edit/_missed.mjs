@@ -19,14 +19,15 @@ import {
   roleReach,
   cornersPlain,
   pillShapes,
+  controlHeightSplits,
 } from './_settings.mjs';
 import {borderlessSurfaces} from './_check.mjs';
 import {hex, parseColor, ratio, splitTop} from './_color.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
-import {blurScaled} from './_how-question.mjs';
+import {blurScaled} from './_how-steps.mjs';
 
 /**
- * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
+ * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string, only?: boolean}} MissedStep
  * @typedef {{kind: number, part: string, state?: string, when?: string, why: string, steps: MissedStep[], aspect: string}} Missed
  */
 
@@ -789,10 +790,12 @@ export function missedSteps(ctx, data, res, base) {
         });
     }
   }
-  // A pill part (a switch, an avatar, a badge) stays round under rounded
-  // corners by design, as nearly every look wants: it is missed only when
-  // the theme's corners go square (its element corners at 0), where a
-  // round pill keeps the base's look beside the theme's square one.
+  // A pill part (a switch, an avatar) stays round under rounded corners by
+  // design, as nearly every look wants: it is missed only when the theme's
+  // corners go square (its element corners at 0), where a round pill keeps
+  // the base's look beside the theme's square one. A badge is a small box:
+  // it is missed when the element corners change, as a button's corners
+  // follow them.
   const squareCorners = modes.every(
     m => Number.parseFloat(String(res[m]?.['--radius-element'] ?? '')) === 0,
   );
@@ -805,12 +808,39 @@ export function missedSteps(ctx, data, res, base) {
       /^(?:square|0px)$/.test(cornersPlain(String(x.value)) ?? ''),
   );
   // (Only a pill that is a styling choice: a circle keeps its shape.)
-  if (corners && squareCorners)
+  // (The corners dial gives a badge the element corners itself below pill,
+  // and leaves it a pill at pill; square element corners under it are the
+  // square case above. A badge the base theme rounds itself keeps its
+  // shape.)
+  // (A pill badge is listed only when the element corners are less than a
+  // pill in some mode: at pill corners it matches the buttons.)
+  const elementCorners =
+    changed('--radius-element') &&
+    modes.some(m => {
+      const v = Number.parseFloat(String(res[m]?.['--radius-element'] ?? ''));
+      return Number.isFinite(v) && v < 1000;
+    });
+  const cornersBelowPill = data.settings.some(
+    x =>
+      x.source === 'dial' &&
+      x.thing === 'corners' &&
+      !x.on &&
+      cornersPlain(String(x.value)) !== 'pill',
+  );
+  const baseRoundsBadge = Object.values(
+    /** @type {any} */ (base)?.components?.badge ?? {},
+  ).some(r => r && typeof r === 'object' && 'borderRadius' in r);
+  if (corners)
     for (const p of pillShapes(C).pills.filter(
       x =>
         has(x) &&
         !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/) &&
-        !squaresPills,
+        (x === 'badge'
+          ? // (A corners dial below pill already gives it the element
+            // corners, square ones included.)
+            (squareCorners && !squaresPills && !cornersBelowPill) ||
+            (elementCorners && !cornersBelowPill && !baseRoundsBadge)
+          : squareCorners && !squaresPills),
     ))
       found.push({
         kind: 4,
@@ -944,6 +974,27 @@ export function missedSteps(ctx, data, res, base) {
     ))
       found.push({...x, kind: 5, aspect: 'border'});
 
+  // A control that keeps a height of its own at a size while the other
+  // controls take another: controls share one height at each size, and
+  // the line that set it, set again, makes it every control's height.
+  for (const split of controlHeightSplits(ctx, data, res[modes[0]] ?? {}))
+    found.push({
+      kind: 9,
+      part: split.part,
+      why: `${split.reaches.includes(split.part) ? `${split.part} is` : `${split.setting.thing} ${split.setting.value} on ${split.part} reaches ${split.reaches.join(', ')}, so ${split.reaches.length > 1 ? 'they are' : 'it is'}`} ${sizesText(split.at.map(a => [a.size, a.value]))}, while the other controls are ${sizesText(split.at.map(a => [a.size, a.others.join(' or ')]))}: buttons, inputs, selectors and input groups share one height at each size`,
+      aspect: 'size',
+      steps: [
+        {
+          thing: split.line.thing,
+          value: String(split.line.value),
+          on: String(split.line.on),
+          ...(split.line.when ? {when: split.line.when} : {}),
+          ...(split.line.only ? {only: true} : {}),
+          ...(split.line.mode ? {mode: split.line.mode} : {}),
+        },
+      ],
+    });
+
   // What the theme's role colors reach on their own (the compiler writes
   // them onto the parts where the base theme draws the role itself) is
   // not missed.
@@ -980,6 +1031,18 @@ export function missedSteps(ctx, data, res, base) {
       if (x) ordered.push(x);
     }
   return ordered;
+}
+
+/**
+ * Heights by size in words: one value at every size once, else each with
+ * its size (`31px at every size`, `28px at sm, 32px at md`).
+ * @param {Array<[string, string]>} bySize
+ */
+function sizesText(bySize) {
+  const values = [...new Set(bySize.map(([, v]) => v))];
+  return values.length === 1 && bySize.length === 3
+    ? `${values[0]} at every size`
+    : bySize.map(([size, v]) => `${v} at ${size}`).join(', ');
 }
 
 /**

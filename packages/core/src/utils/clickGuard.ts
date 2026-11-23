@@ -34,6 +34,9 @@
 // when a drill-in has put another row under the finger. When the menu names
 // the touch by its identifier, another finger's `touchend` passes; a touch it
 // could not name keeps the old rule, and the next `touchend` is cancelled.
+// It also listens on the node the touch began on. A pick that closes the menu
+// takes that node out of the document. Its `touchend` then never reaches the
+// window.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -81,6 +84,12 @@ export interface ClickGuardOptions {
    * the next `touchend` counts as this touch's own.
    */
   readonly touchIdentifier?: number;
+  /**
+   * With `cancelsTouchEnd`: the node the touch began on (the touchstart's
+   * target). The guard also cancels the touch's `touchend` there, so it
+   * still cancels it after a pick takes that node out of the document.
+   */
+  readonly touchTarget?: EventTarget;
 }
 
 interface Guard {
@@ -126,6 +135,7 @@ export function armClickGuard(
     takesLateMouse = false,
     cancelsTouchEnd = false,
     touchIdentifier,
+    touchTarget,
   }: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
@@ -159,25 +169,38 @@ export function armClickGuard(
     // A touch sends its pointerup before its touchend, so without an
     // identifier the next touchend counts as that touch's own. The next
     // pointerdown disarms the guard first.
-    const stopTouchEnd = subscribeInput(
-      view,
-      'touchend',
-      event => {
-        if (touchIdentifier != null && !endsTouch(event, touchIdentifier)) {
-          // Another finger lifted: leave its touchend.
-          return;
-        }
-        stopTouchEnd();
-        // A touchend that the browser took for a scroll is not cancelable.
-        // The guard stays armed for a click that may follow it.
-        if (event.cancelable) {
-          event.preventDefault();
-          // No click follows a cancelled touchend.
-          disarmClickGuard(doc);
-        }
-      },
-      {cancels: true},
+    const listeners: (() => void)[] = [];
+    const stopTouchEnd = () => {
+      for (const stop of listeners.splice(0)) {
+        stop();
+      }
+    };
+    const onTouchEnd = (event: Event) => {
+      if (touchIdentifier != null && !endsTouch(event, touchIdentifier)) {
+        // Another finger lifted: leave its touchend.
+        return;
+      }
+      stopTouchEnd();
+      // A touchend that the browser took for a scroll is not cancelable.
+      // The guard stays armed for a click that may follow it.
+      if (event.cancelable) {
+        event.preventDefault();
+        // No click follows a cancelled touchend.
+        disarmClickGuard(doc);
+      }
+    };
+    listeners.push(
+      subscribeInput(view, 'touchend', onTouchEnd, {cancels: true}),
     );
+    if (touchTarget != null) {
+      // The browser sends the touchend to the node the touch began on, also
+      // after a pick took that node out of the document. The window does not
+      // receive it then.
+      touchTarget.addEventListener('touchend', onTouchEnd, {passive: false});
+      listeners.push(() =>
+        touchTarget.removeEventListener('touchend', onTouchEnd),
+      );
+    }
     guard.unsubscribers.push(stopTouchEnd);
   }
   guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);

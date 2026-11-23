@@ -74,7 +74,84 @@ const ROWS = [
       ],
     },
   ],
+  // (A run of colors is one list.)
+  [
+    'a run of colors is one list, never a lone color piece',
+    {
+      q: "Use Slack's brand colors for accents: green, blue, red, yellow on badges and status.",
+      never: /accent '#2563eb'/,
+    },
+  ],
+  // (Chat words and a question back are no asks; a clause is named once.)
+  [
+    'a polite word beside an ask is not named',
+    {q: 'make the buttons bigger, please', saysNot: /not used/},
+  ],
+  [
+    'thanks and a question back are not named',
+    {q: 'rounder cards, thanks! what do you think?', saysNot: /not used/},
+  ],
+  [
+    'thanks phrases and fillers are not named',
+    {
+      q: 'bigger buttons, thank you so much, no rush',
+      saysNot: /not used/,
+    },
+  ],
+  [
+    'more thanks phrases are not named',
+    {
+      q: 'bigger buttons, many thanks, i love it, thx so much',
+      saysNot: /not used/,
+    },
+  ],
+  [
+    'a leading typed in pixels beside a text size is used',
+    {q: '13px text, 18px leading', saysNot: /not used/},
+  ],
+  [
+    'a leading typed in pixels alone is used',
+    {q: '18px leading', saysNot: /not used/},
+  ],
+  [
+    'a typed value no line writes is still named',
+    {q: 'bigger buttons, #123456', says: /not used: "#123456"/},
+  ],
+  [
+    'a mood said as a question is still named',
+    {q: 'bigger buttons, spooky vibes?', says: /not used: "spooky vibes\?"/},
+  ],
+  [
+    'a held clause after a period is named once',
+    {
+      q: 'bigger buttons. i wonder about 13px',
+      saysNot: /("[^"]*i wonder about 13px").*"[^"]*i wonder about 13px"/,
+    },
+  ],
+  [
+    'a held clause with a value is named once',
+    {
+      q: 'bigger buttons, i wonder about 13px',
+      saysNot: /("i wonder about 13px").*\1/,
+    },
+  ],
   // Named, never silent.
+  [
+    'a mood-only clause after a real ask is named, never dropped',
+    {q: 'bigger buttons, spooky vibes', says: /not used: "spooky vibes"/},
+  ],
+  [
+    'a mood clause after a part ask is named beside its write',
+    {
+      q: 'rounder cards, whimsical energy',
+      has: ['corners more --on card'],
+      says: /not used: "whimsical energy"/,
+    },
+  ],
+  [
+    'a one-word mood after a semicolon is named',
+    {q: 'bigger buttons; dreamy', says: /not used: "dreamy"/},
+  ],
   [
     'a mood clause is named',
     {
@@ -317,9 +394,9 @@ const ROWS = [
     'a strip said as a noun takes nothing away',
     {
       q: 'pagination pages in one bordered strip',
-      // (The pagination's own pages: its border, as "pagination in a
-      // bordered strip" is.)
-      has: ["border '1px solid var(--color-border)' --on pagination"],
+      // (The pagination's own pages: its border, on the row that frames
+      // them, as "pagination in a bordered strip" is.)
+      has: ["border '1px solid var(--color-border)' --on pagination-list"],
       never: /border-width 0/,
     },
   ],
@@ -428,6 +505,14 @@ const ROWS = [
     {
       q: 'primary button border color rgba(0,0,0,0.1) on top and sides and rgba(0,0,0,0.25) on the bottom',
       never: /^background-color/,
+    },
+  ],
+  [
+    'a lone color after a part item fills that part, never the whole accent',
+    {
+      q: 'big buttons, a sky blue, high contrast',
+      saysNot: /not used/,
+      never: /^accent /,
     },
   ],
 ];
