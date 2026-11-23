@@ -89,14 +89,29 @@ export function useMenuOverflow(
       subtree: true,
     });
     menu.addEventListener('load', measureOverflow, true);
-    window.addEventListener('resize', measureOverflow);
-    window.visualViewport?.addEventListener('resize', measureOverflow);
+    // A viewport change fires `resize` on the window and on the visual
+    // viewport in the same frame. One frame request merges them into one
+    // measurement. The resize steps run before the frame callbacks, so the
+    // measurement waits no frame.
+    let resizeFrame = 0;
+    const measureOnResize = () => {
+      if (resizeFrame !== 0) {
+        return;
+      }
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = 0;
+        measureOverflow();
+      });
+    };
+    window.addEventListener('resize', measureOnResize);
+    window.visualViewport?.addEventListener('resize', measureOnResize);
     return () => {
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       menu.removeEventListener('load', measureOverflow, true);
-      window.removeEventListener('resize', measureOverflow);
-      window.visualViewport?.removeEventListener('resize', measureOverflow);
+      window.removeEventListener('resize', measureOnResize);
+      window.visualViewport?.removeEventListener('resize', measureOnResize);
+      window.cancelAnimationFrame(resizeFrame);
     };
   }, [isOpen, measureOverflow, menuRef]);
 
