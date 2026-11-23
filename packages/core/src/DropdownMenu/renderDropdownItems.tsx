@@ -17,7 +17,8 @@ import {
   typeScaleVars,
   colorVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import type {
   DropdownMenuItemData,
   DropdownMenuOption,

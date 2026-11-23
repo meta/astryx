@@ -61,13 +61,15 @@ test('a keyboard focus that arrives as the page loads shows the tooltip once its
   page,
 }) => {
   // Holds the request for the tooltip's module, so focus arrives while it is
-  // still loading.
+  // still loading. The pattern matches only the cutText chunk itself: a build
+  // can also emit a shared cutTextOnKeyboardFocus chunk, which the Button needs
+  // to render.
   let release = () => {};
   const held = new Promise<void>(resolve => {
     release = resolve;
   });
   let isRequested = false;
-  await page.route(/cutText[^/]*\.js(\?.*)?$/, async route => {
+  await page.route(/\/cutText-[^/]*\.js(\?.*)?$/, async route => {
     isRequested = true;
     await held;
     await route.continue();
@@ -92,7 +94,7 @@ test('a press during the load drops a keyboard focus held for it', async ({
     release = resolve;
   });
   let isRequested = false;
-  await page.route(/cutText[^/]*\.js(\?.*)?$/, async route => {
+  await page.route(/\/cutText-[^/]*\.js(\?.*)?$/, async route => {
     isRequested = true;
     await held;
     await route.continue();

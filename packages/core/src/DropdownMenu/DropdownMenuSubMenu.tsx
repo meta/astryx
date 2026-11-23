@@ -61,11 +61,11 @@ import React, {
 } from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
-import {Icon, renderIconSlot, type IconType} from '../Icon';
-import {Spinner} from '../Spinner';
+import {Icon, renderIconSlot, type IconType} from '../Icon/Icon';
+import {Spinner} from '../Spinner/Spinner';
 import {moveRegionsTab} from './menuRegionStops';
 import {menuRowCornerStyles} from './menuRowCorners.stylex';
-import {Item} from '../Item';
+import {Item} from '../Item/Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {useInternalListFocus} from '../hooks/useListFocus';
@@ -91,13 +91,11 @@ import {
   typeScaleVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {
-  composeEventHandlers,
-  isImeKeyEvent,
-  isRenderable,
-  mergeProps,
-  rtlStyles,
-} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {isImeKeyEvent} from '../utils/ime';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import {visibleText} from '../utils/accessibleName';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';

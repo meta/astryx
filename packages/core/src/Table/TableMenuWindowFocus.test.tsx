@@ -9,8 +9,11 @@ import {
 } from '@testing-library/react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
+import {warmTableContextMenu} from './__tests__/warmTableContextMenu';
 import {beforeAll} from 'vitest';
 beforeAll(warmMenuBottomSheet, 20000);
+// A cell's menu loads on its first use; load it once, before the tests.
+beforeAll(warmTableContextMenu, 20000);
 import {Table} from './Table';
 import type {BodyCellRenderProps, BodyRowRenderProps} from './types';
 import {useTableRowsVirtualization} from './plugins/virtualization/useTableRowsVirtualization';

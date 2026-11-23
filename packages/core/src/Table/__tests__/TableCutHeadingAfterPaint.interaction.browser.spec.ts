@@ -63,9 +63,11 @@ test('a truncating table loads its cut-heading module after the frame that first
     await page.waitForFunction(() => {
       const paintFrame = (window as unknown as {__paintFrame?: number})
         .__paintFrame;
+      // Only the cutText chunk itself: a build can also emit a shared
+      // cutTextOnKeyboardFocus chunk that loads with the table.
       const request = performance
         .getEntriesByType('resource')
-        .find(entry => /\/cutText[^/]*\.js(\?.*)?$/.test(entry.name));
+        .find(entry => /\/cutText-[^/]*\.js(\?.*)?$/.test(entry.name));
       return paintFrame == null || request == null
         ? null
         : {paintFrame, fetchStart: request.startTime};

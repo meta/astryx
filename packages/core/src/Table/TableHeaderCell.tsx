@@ -33,10 +33,8 @@ import {
   cutHeadingStyles,
 } from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
-import {
-  hasTableContextActions,
-  wrapInTableContextMenu,
-} from './tableContextMenu';
+import {TableCellContextMenu} from './TableCellContextMenu';
+import {hasContextActions} from './tableContextActions';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -187,7 +185,7 @@ export function TableHeaderCell({
   // Header cells always get the bottom divider (separates header from body).
   // When used standalone (no table context) the cell renders plain, with no
   // density/divider styles.
-  const hasContextMenu = hasTableContextActions(contextMenuActions);
+  const hasContextMenu = hasContextActions(contextMenuActions);
   const cellStyles: StyleXStyles[] = [];
   if (ctx) {
     cellStyles.push(
@@ -224,10 +222,14 @@ export function TableHeaderCell({
         {children}
       </span>
     );
-  const content = wrapInTableContextMenu(
-    heading,
-    contextMenuActions,
-    ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined,
+  const content = (
+    <TableCellContextMenu
+      actions={contextMenuActions}
+      triggerXstyle={
+        ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined
+      }>
+      {heading}
+    </TableCellContextMenu>
   );
 
   return (
