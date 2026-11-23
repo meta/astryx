@@ -351,9 +351,17 @@ those contracts, and one user-facing rule that no component owns: how a
   once, with no cross-fade; a bottom sheet still drags, and a drag that closes
   it takes the stylesheet exit instead of the spring; and a focused TextInput,
   TextArea or NumberInput keeps the browser's own reveal, because their
-  keyboard module (`keyboard/useMobileKeyboard.ts`) is their touch part. A
-  gesture in that window
-  does not start the load. The bundler keeps one copy per page however many
+  keyboard module (`keyboard/useMobileKeyboard.ts`) is their touch part.
+  ChatLayout loads the touch runtime after first paint under a coarse pointer,
+  for the keyboard ride; it adds no gesture, and under a fine pointer it never
+  loads it. The runtime exposes Safari on iOS's keyboard schedule
+  (`keyboard/uikitKeyboardSchedule.ts`): the show's spring, UIKit's keyboard
+  spring for the hide, and the layout guide's focus rules there. The keyboard
+  riders build it with the duration and focus checks they hold, and register
+  it with the layout guide.
+  No first-load module imports it. The layout guide cannot hold it, since
+  nearly every page loads the guide first. A gesture in that
+  window does not start the load. The bundler keeps one copy per page however many
   components use them. Each chunk that fails to load leaves its components as
   they are before the load: they work by taps, clicks and keys, and no
   gesture retries the load. The loader's `import()` targets

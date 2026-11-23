@@ -4,11 +4,12 @@
  * @file keyboardTarget.guide.test.ts
  * @input keyboardTarget.ts with a stand-in layout guide and a stand-in
  *   animator, a stand-in visual viewport and stubbed boxes
- * @output Proves a docked ride on the guide's slides. A show sets the field
- *   just above the keyboard at once and rides the rest. A pan the browser
- *   makes is put back, also one made at the last height. A field that loses
- *   focus while the keyboard shows rides its bar down on the hide's slide. No
- *   set cuts the slide at its start
+ * @output Proves a docked ride on the guide's slides. In Chrome a show sets
+ *   the field just above the keyboard at once and rides the rest; in Safari
+ *   on iOS the whole show rides. A pan the browser makes is put back, also
+ *   one made at the last height. A field that loses focus while the keyboard
+ *   shows rides its bar down on the hide's slide. No set cuts the slide at
+ *   its start
  * @position Keyboard module tests
  */
 
@@ -39,8 +40,9 @@ beforeAll(async () => {
 });
 
 const guideListeners = new Set<(transition: KeyboardTransition) => void>();
-// The inset the stand-in guide reports: the last published slide's end.
-const guideState = {inset: 0};
+// The inset the stand-in guide reports: the last published slide's end. The
+// profile is Chrome's unless a case sets Safari on iOS's.
+const guideState = {inset: 0, profile: 'chromium' as 'chromium' | 'uikit'};
 // A stand-in animator that keeps the y it was last sent, and draws it on the
 // bar as the real one does.
 const animator = vi.hoisted(() => {
@@ -71,10 +73,13 @@ vi.mock('./keyboardLayoutGuide', async importOriginal => {
   const actual = await importOriginal<typeof LayoutGuideModule>();
   return {
     ...actual,
-    keyboardProfileOf: () => 'chromium',
+    keyboardProfileOf: () => guideState.profile,
     getKeyboardLayoutGuide: () => ({
       get inset() {
         return guideState.inset;
+      },
+      get profile() {
+        return guideState.profile;
       },
       subscribe: (listener: (transition: KeyboardTransition) => void) => {
         guideListeners.add(listener);
@@ -127,6 +132,7 @@ afterEach(() => {
   keyboard.restore();
   guideListeners.clear();
   guideState.inset = 0;
+  guideState.profile = 'chromium';
   animator.state.y = 0;
   animator.state.element = null;
   document.body.innerHTML = '';
@@ -212,6 +218,22 @@ it("sets a docked bar's field just above the keyboard at the show's first report
   );
   expect(animator.state.y).toBe(-300);
   stop();
+});
+
+it("rides a docked bar's field the whole show in Safari on iOS, with no set at the report", () => {
+  guideState.profile = 'uikit';
+  const {input} = dockedBar();
+  onTestFinished(keepFieldAboveKeyboard(input));
+  act(() => input.focus());
+  keyboard.frame();
+  animator.set.mockClear();
+  animator.play.mockClear();
+  publish(slide('show', 300));
+  // Safari leaves a claimed field in place, so nothing is set at its report.
+  // The whole move rides, to the bar's bottom on the keyboard's top.
+  expect(animator.set).not.toHaveBeenCalled();
+  expect(animator.play).toHaveBeenCalledTimes(1);
+  expect(animator.state.y).toBe(-300);
 });
 
 it('puts back a pan the browser makes on its own while a docked bar rides its field', () => {
@@ -314,6 +336,15 @@ it("leaves an app's own scroll to another element that pans while a docked bar's
   expect(scrollTo).not.toHaveBeenCalled();
   expect(page.scrollY).toBe(300);
   expect(viewport.offsetTop).toBe(48);
+});
+
+it("leaves the document's scroll to the app in Safari on iOS, where no scroll is the reveal of a docked bar's field", () => {
+  guideState.profile = 'uikit';
+  const {page, scrollTo, centring, land} = interimKeyboard();
+  // The scroll and the pan of Chrome's reveal: in Safari they are the app's.
+  land(154.3 + centring, 48);
+  expect(scrollTo).not.toHaveBeenCalled();
+  expect(page.scrollY).toBe(154.3 + centring);
 });
 
 it("leaves a scroll that centres the field when the pan stops short of Chrome's reveal", () => {
