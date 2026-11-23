@@ -357,8 +357,8 @@ export function Token({
   const labelRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
     getFocusTarget: tokenControlOfLabel,
   });
-  // The Remove button is replaced with the rest of the Token's structure, so
-  // it hands focus to its replacement too.
+  // A structure swap also replaces the Remove button. Its ref hands focus to
+  // the new button.
   const removeButtonRef = useFocusAcrossSwap<HTMLButtonElement>();
 
   // When role is 'button' via context (no explicit onClick), treat as
