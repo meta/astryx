@@ -319,6 +319,11 @@ export interface LayerFocusRecord {
   hadFocusInside: boolean;
   /** Its opening is still to move focus in. */
   awaitsFocus: boolean;
+  /**
+   * The element outside the layer that focus is moving to, while the move
+   * is in progress: from the layer's `blur` to the next `focusin`.
+   */
+  focusMovingTo: Element | null;
   isClosing: boolean;
   isDone: boolean;
   stopListening: () => void;
@@ -445,15 +450,41 @@ export function trackLayerFocus(
     awaitsFocus:
       options.isFocusMovedInOnOpen === true &&
       !(layer != null && layer.contains(active)),
+    focusMovingTo: null,
     isClosing: false,
     isDone: false,
     stopListening: () => {},
   };
   const markFocusInside = (event: FocusEvent) => {
+    record.focusMovingTo = null;
     const target = event.target;
     if (isElement(target) && record.getLayer()?.contains(target)) {
       record.hadFocusInside = true;
       record.awaitsFocus = false;
+    }
+  };
+  // A close during a focus move sees nothing focused. The control outside the
+  // layer takes focus when the move ends, so focus is not stranded. The
+  // capture-phase `blur` reaches the document before the element's own `blur`
+  // and `focusout` listeners, so a close from either sees the note.
+  const markFocusMoving = (event: FocusEvent) => {
+    const next = event.relatedTarget;
+    const layer = record.getLayer();
+    if (
+      isElement(next) &&
+      isElement(event.target) &&
+      layer != null &&
+      layer.contains(event.target) &&
+      !layer.contains(next)
+    ) {
+      record.focusMovingTo = next;
+      // A target that cannot take focus when the move ends gets no focusin.
+      // Clear the note after one task.
+      setTimeout(() => {
+        if (record.focusMovingTo === next) {
+          record.focusMovingTo = null;
+        }
+      }, 0);
     }
   };
   // The layer may render in another document than its opener (a same-origin
@@ -464,10 +495,12 @@ export function trackLayerFocus(
   }
   for (const each of docs) {
     each.addEventListener('focusin', markFocusInside, true);
+    each.addEventListener('blur', markFocusMoving, true);
   }
   record.stopListening = () => {
     for (const each of docs) {
       each.removeEventListener('focusin', markFocusInside, true);
+      each.removeEventListener('blur', markFocusMoving, true);
     }
   };
   openLayerRecords.add(record);
@@ -682,6 +715,14 @@ export function isLayerFocusStranded(record: LayerFocusRecord): boolean {
   const isInside =
     layer != null && layerActive != null && layer.contains(layerActive);
   if (!(record.hadFocusInside || isInside)) {
+    return false;
+  }
+  const movingTo = record.focusMovingTo;
+  if (
+    movingTo != null &&
+    movingTo.isConnected &&
+    canTakeReturnedFocus(movingTo)
+  ) {
     return false;
   }
   // A layer in a frame holds the page's focus as the frame element's.
