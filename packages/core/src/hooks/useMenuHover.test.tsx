@@ -202,6 +202,62 @@ describe('useMenuHover — hover/click guard', () => {
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
+
+  it('stays closed when layout moves the trigger under a stationary pointer', () => {
+    vi.useFakeTimers();
+    const trigger = renderMenu();
+
+    // The user parked the pointer before the layout move.
+    fireEvent.pointerMove(window, {clientX: 154, clientY: 134});
+
+    // The layout change places the trigger under the stationary pointer.
+    fireEvent.mouseEnter(trigger, {clientX: 154, clientY: 134});
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    // Deliberate movement onto the trigger opens the menu.
+    fireEvent.pointerMove(trigger, {clientX: 155, clientY: 134});
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('opens on pen pressure or tilt changes while over the trigger under a stationary pointer', () => {
+    vi.useFakeTimers();
+    const trigger = renderMenu();
+
+    fireEvent.pointerMove(window, {
+      clientX: 154,
+      clientY: 134,
+      pointerType: 'pen',
+      pressure: 0.2,
+    });
+    fireEvent.mouseEnter(trigger, {
+      clientX: 154,
+      clientY: 134,
+      pointerType: 'pen',
+      pressure: 0.2,
+    });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    // Pen pressure increases without coordinates moving.
+    fireEvent.pointerMove(trigger, {
+      clientX: 154,
+      clientY: 134,
+      pointerType: 'pen',
+      pressure: 0.6,
+    });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
 });
 
 describe('useMenuHover — focus management', () => {
