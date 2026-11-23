@@ -17,6 +17,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 /**
@@ -93,34 +94,16 @@ export function useMenuOverflow(
     );
   }, [menuRef]);
 
-  // Syncs the overflow measurement with the open menu element. It measures,
-  // then observes resize, DOM changes and window resize. The owner can remount
-  // the element without a change this hook sees (a header or footer wraps it in
-  // a new frame), so every commit compares the element and moves the
-  // observers to a new one.
-  const observedRef = useRef<HTMLElement | null>(null);
-  const stopObservingRef = useRef<(() => void) | null>(null);
-  useIsomorphicLayoutEffect(() => {
-    const menu = isOpen ? menuRef.current : null;
-    if (menu === observedRef.current) {
-      return;
-    }
-    stopObservingRef.current?.();
-    stopObservingRef.current = null;
-    observedRef.current = menu;
-    if (!menu) {
-      return;
-    }
-    measureOverflow();
-    stopObservingRef.current = observeMenu(menu, measureOverflow);
-  });
-  useIsomorphicLayoutEffect(
-    () => () => {
-      stopObservingRef.current?.();
-      stopObservingRef.current = null;
-      observedRef.current = null;
+  // Syncs the overflow measurement with the open menu element. The owner can
+  // remount the element without a change this hook sees (a header or footer
+  // wraps it in a new frame), so the observers follow the element.
+  useAttachment(
+    () => (isOpen ? menuRef.current : null),
+    menu => {
+      measureOverflow();
+      return observeMenu(menu, measureOverflow);
     },
-    [],
+    measureOverflow,
   );
 
   // Measures overflow again after the content changes while the menu is open.
