@@ -6,8 +6,9 @@ import {useRef, useState} from 'react';
 import {Card} from '@astryxdesign/core/Card';
 import {useIndicatorFocusRing} from '@astryxdesign/core/hooks';
 import {CheckboxIndicator} from '@astryxdesign/core/Indicator';
-import {VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 export default function UseIndicatorFocusRingHookUsage() {
   // Wraps only CheckboxIndicator so the outline follows the box, not the label.
@@ -21,39 +22,24 @@ export default function UseIndicatorFocusRingHookUsage() {
       <VStack gap={3}>
         <Heading level={3}>Workspace sync</Heading>
 
-        <label
-          {...focusProps}
-          style={{
-            position: 'relative',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            cursor: 'pointer',
-          }}>
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={event => setIsChecked(event.target.checked)}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              margin: 0,
-              opacity: 0,
-              cursor: 'inherit',
-            }}
-          />
-          <span
+        <HStack as="label" gap={2} align="center" {...focusProps}>
+          <VisuallyHidden>
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={event => setIsChecked(event.target.checked)}
+            />
+          </VisuallyHidden>
+          <HStack
+            as="span"
             ref={indicatorRef}
-            data-testid="indicator-ring-wrapper"
-            style={{display: 'inline-flex'}}>
+            data-testid="indicator-ring-wrapper">
             <CheckboxIndicator state={isChecked ? 'checked' : 'unchecked'} />
-          </span>
+          </HStack>
           <Text type="body" color="primary">
             Auto-save drafts
           </Text>
-        </label>
+        </HStack>
 
         <Text type="supporting" color="secondary">
           {isChecked
