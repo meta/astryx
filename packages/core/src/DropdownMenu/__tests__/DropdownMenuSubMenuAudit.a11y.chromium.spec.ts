@@ -459,10 +459,25 @@ for (const item of cases) {
               };
             });
         };
-        const menus = Array.from(
-          document.querySelectorAll<HTMLElement>('[role="menu"]'),
-        ).filter(node => node.getClientRects().length > 0);
-        const rootMenu = menus[0] ?? null;
+        // The root's box is the element the trigger controls. While a view
+        // shows in place of its rows, that box is no menu (role="none").
+        const trigger = document.querySelector<HTMLElement>(
+          '[data-testid="dropdown-menu-submenu-audit"] [aria-haspopup][aria-controls]',
+        );
+        const controlled = document.getElementById(
+          trigger?.getAttribute('aria-controls') ?? '',
+        );
+        const rootBox =
+          controlled === null ||
+          controlled.matches('[role="menu"], [role="none"]')
+            ? controlled
+            : controlled.querySelector<HTMLElement>(
+                '[role="menu"], [role="none"]',
+              );
+        const rootMenu =
+          rootBox !== null && rootBox.getClientRects().length > 0
+            ? rootBox
+            : null;
         const subject =
           rootMenu === null
             ? null
@@ -505,6 +520,7 @@ for (const item of cases) {
             rootMenu === null
               ? null
               : {
+                  role: rootMenu.getAttribute('role'),
                   box: boxOf(rootMenu),
                   backdrop: hex(backdrop(rootMenu)),
                   rows: describeRows(rootMenu),
@@ -599,7 +615,8 @@ for (const item of cases) {
         item.interaction !== 'drill-in' ||
         (observed.flyout?.rows[0]?.name.startsWith('Back to Actions') ===
           true &&
-          rows.length === 0),
+          rows.length === 0 &&
+          observed.rootMenu?.role === 'none'),
       flyoutSide:
         !opensSideways ||
         (subjectBox !== undefined &&
