@@ -105,6 +105,7 @@ describe('the weekly full WebKit run', () => {
       [
         'admission',
         'build-storybook',
+        'firefox-weekly-hover',
         'interaction-legs',
         'pr-interaction-webkit',
         'room',
@@ -340,5 +341,56 @@ describe("the weekly run's WebKit accessibility contracts (report-only)", () => 
     const upload = step(job, 'Upload the WebKit accessibility report');
     expect(upload.if).toBe('always()');
     expect(upload.with.name).toBe('webkit-weekly-a11y-report');
+  });
+});
+
+describe("the weekly run's Firefox hover specs (report-only)", () => {
+  const job = ci.jobs['firefox-weekly-hover'];
+
+  it('runs only on the weekly run, never on a pull request or a release-check', () => {
+    expect(starts('firefox-weekly-hover', weeklyDispatch)).toBe(true);
+    expect(
+      starts('firefox-weekly-hover', {
+        github: {...weeklyDispatch.github},
+        inputs: {operation: 'release-check', recheck: false},
+      }),
+    ).toBe(false);
+    expect(
+      starts('firefox-weekly-hover', {
+        github: {event_name: 'pull_request', event: {pull_request: {}}},
+        inputs: {},
+      }),
+    ).toBe(false);
+  });
+
+  it('runs the Firefox project on a standard runner, and a failing spec cannot fail the job', () => {
+    const specs = job.steps.find(each => each.id === 'specs');
+    expect(specs['continue-on-error']).toBe(true);
+    expect(specs.run).toContain(
+      'playwright test --config playwright.config.ts --project firefox',
+    );
+    expect(job['runs-on']).toBe('ubuntu-latest');
+    expect(job.container.image).toBe(
+      ci.jobs['pr-interaction-webkit'].container.image,
+    );
+    // Firefox does not start as root in a HOME the runner's user owns.
+    expect(specs.env.HOME).toBe('/root');
+  });
+
+  it('stays out of the weekly verdict, so a red holds no release', () => {
+    const verdict = ci.jobs['webkit-weekly-verdict'];
+    expect(verdict.needs).not.toContain('firefox-weekly-hover');
+    expect(JSON.stringify(verdict)).not.toContain('firefox-weekly-hover');
+  });
+
+  it('always reports known and new failures and uploads the report', () => {
+    const report = step(job, 'Report the Firefox hover results');
+    expect(report.if).toBe('always()');
+    expect(report.run).toContain('.github/scripts/firefox-hover-report.mjs');
+    const specs = job.steps.find(each => each.id === 'specs');
+    expect(report.run).toContain(specs.env.PLAYWRIGHT_JSON_OUTPUT_NAME);
+    const upload = step(job, 'Upload the Firefox hover report');
+    expect(upload.if).toBe('always()');
+    expect(upload.with.name).toBe('firefox-weekly-hover-report');
   });
 });

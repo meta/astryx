@@ -9,8 +9,9 @@
  * @output For each component TypeScript can read, whether its props type
  *   takes each prop; the prop names React's types give HTML and SVG elements
  *   and every component; or why the types could not be read.
- * @position Read by `astryx doctor` (api/doctor/_adapter.mjs) for the props a
- *   page gives Core components that Core's docs do not list.
+ * @position Read by the Core prop check that `astryx doctor` and
+ *   `astryx experimental export` share (unknown-core-props.mjs), for the
+ *   props a page gives Core components that Core's docs do not list.
  */
 
 import * as path from 'node:path';
@@ -98,6 +99,7 @@ function isGeneric(ts, checker, type) {
  *   and SVG elements, DOM events and ARIA attributes included, and the props
  *   JSX gives every component
  * @property {string | null} unread why the types could not be read, or null
+ * @property {string} [unreadFix] what to install so they can be read
  */
 
 /**
@@ -199,7 +201,12 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
   // A string index on what JSX gives every component takes every name.
   const takesEveryName = everywhere != null && checker.getIndexInfoOfType(everywhere, ts.IndexKind.String) != null;
   if (attributes.size === 0) {
-    return {takes, attributes, unread: "TypeScript could not read React's types from this project"};
+    return {
+      takes,
+      attributes,
+      unread: "TypeScript could not read React's types from this project",
+      unreadFix: "Install React's types (`npm install -D @types/react`).",
+    };
   }
   // Core's types are unread only when its main module does not load; a
   // component whose own type TypeScript cannot read is not judged.

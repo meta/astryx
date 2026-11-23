@@ -3,7 +3,8 @@
 /**
  * @file playwright.config.ts
  * @input Uses @playwright/test
- * @output Chromium accessibility contracts and Chromium/WebKit keyboard proofs.
+ * @output Chromium accessibility contracts, Chromium/WebKit keyboard proofs and
+ *   Firefox hover proofs.
  * @position Run with `pnpm test:a11y-contract`. Deliberately separate from
  *   `pnpm test`: the Vitest projects must stay runnable from a cold clone with
  *   no browser installed, and the accessibility-tree and real-browser evidence
@@ -18,12 +19,14 @@
  * artifact every other Chromium check in this repository uses. Build it first:
  *
  *   pnpm storybook:build
- *   pnpm exec playwright install chromium webkit
+ *   pnpm exec playwright install chromium webkit firefox
  *   pnpm test:a11y-contract
  *   pnpm exec playwright test BottomSheetKeyboard.a11y.browser.spec.ts
  *
  * Cross-browser specs use `.a11y.browser.spec.ts`; Chromium-only contracts keep
- * `.a11y.chromium.spec.ts`. The WebKit project runs only the former.
+ * `.a11y.chromium.spec.ts`. The WebKit project runs only the former. The
+ * Firefox project runs a named list of hover specs (FIREFOX_HOVER_SPECS), of
+ * either kind: Firefox orders pointer and mouse events differently.
  *
  * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
  * this config and playwright.interaction.config.ts share. Its browser contexts
@@ -42,6 +45,7 @@
 import {defineConfig, devices} from '@playwright/test';
 import {
   A11Y_SPEC_GLOBS,
+  FIREFOX_HOVER_SPECS,
   WEBKIT_A11Y_SPEC_GLOBS,
 } from './.github/scripts/lib/a11y-spec-files.mjs';
 
@@ -96,6 +100,11 @@ export default defineConfig({
       name: 'webkit',
       testMatch: [...WEBKIT_A11Y_SPEC_GLOBS],
       use: {...devices['Desktop Safari']},
+    },
+    {
+      name: 'firefox',
+      testMatch: [...FIREFOX_HOVER_SPECS],
+      use: {...devices['Desktop Firefox']},
     },
   ],
 });

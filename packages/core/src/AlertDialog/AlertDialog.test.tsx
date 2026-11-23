@@ -529,23 +529,22 @@ describe('AlertDialog', () => {
  * cover AlertDialog's wiring of it.
  */
 describe('AlertDialog action tracking', () => {
-  let touchClock = 10_000;
   let touchId = 500;
 
+  // Keep each event's own timestamp. A fixed clock can date a new press
+  // inside the entrance hold that just ended.
   function touch(
     type: 'touchstart' | 'touchmove' | 'touchend',
     target: Element,
     point: {x: number; y: number},
     id: number,
   ): void {
-    touchClock += 16;
     const event = new Event(type, {bubbles: true, cancelable: true});
     const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
     Object.defineProperty(event, 'changedTouches', {value: [entry]});
     Object.defineProperty(event, 'touches', {
       value: type === 'touchend' ? [] : [entry],
     });
-    Object.defineProperty(event, 'timeStamp', {value: touchClock});
     target.dispatchEvent(event);
   }
 
@@ -560,7 +559,6 @@ describe('AlertDialog action tracking', () => {
     point: {x: number; y: number},
     pointerType: 'mouse' | 'pen' = 'mouse',
   ): void {
-    touchClock += 16;
     const event = new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
@@ -572,7 +570,6 @@ describe('AlertDialog action tracking', () => {
       clientX: point.x,
       clientY: point.y,
     });
-    Object.defineProperty(event, 'timeStamp', {value: touchClock});
     target.dispatchEvent(event);
   }
 
@@ -755,7 +752,6 @@ describe('AlertDialog action tracking', () => {
 });
 
 describe('AlertDialog touch motion', () => {
-  let touchClock = 20_000;
   let touchId = 900;
 
   function touch(
@@ -764,14 +760,12 @@ describe('AlertDialog touch motion', () => {
     point: {x: number; y: number},
     id: number,
   ): void {
-    touchClock += 16;
     const event = new Event(type, {bubbles: true, cancelable: true});
     const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
     Object.defineProperty(event, 'changedTouches', {value: [entry]});
     Object.defineProperty(event, 'touches', {
       value: type === 'touchend' ? [] : [entry],
     });
-    Object.defineProperty(event, 'timeStamp', {value: touchClock});
     target.dispatchEvent(event);
   }
 

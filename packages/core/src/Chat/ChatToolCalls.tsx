@@ -21,6 +21,7 @@
 import React, {useState, useCallback, useId, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {
   colorVars,
   spacingVars,
@@ -476,14 +477,11 @@ function CallRow({
         )}
         <VisuallyHidden>{statusAnnouncement}</VisuallyHidden>
       </span>
-      <span {...stylex.props(styles.callName)}>{call.name}</span>
+      {cutText(call.name, styles.callName)}
       {call.node != null && (
         <Badge label={call.node} variant="neutral" xstyle={styles.nodePill} />
       )}
-      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
-      {call.target != null && (
-        <span {...stylex.props(styles.callLabel)}>{call.target}</span>
-      )}
+      {call.target != null && cutText(call.target, styles.callLabel)}
       {(call.additions != null ||
         call.deletions != null ||
         call.stats != null) && (
@@ -682,13 +680,9 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
               )}
               <VisuallyHidden>{latestStatusAnnouncement}</VisuallyHidden>
             </span>
-            <span {...stylex.props(styles.callName)}>{latestCall.name}</span>
-            {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
-            {latestCall.target != null && (
-              <span {...stylex.props(styles.callLabel)}>
-                {latestCall.target}
-              </span>
-            )}
+            {cutText(latestCall.name, styles.callName)}
+            {latestCall.target != null &&
+              cutText(latestCall.target, styles.callLabel)}
           </>
         )}
         <span {...stylex.props(styles.callCount)}>

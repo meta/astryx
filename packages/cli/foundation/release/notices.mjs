@@ -75,6 +75,7 @@ import {
   readReleaseFacts,
 } from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
+import {readOfficialList} from '../discovery/official-list.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 import {binStartedRun} from './run-context.mjs';
 import {installGuidanceFor} from '../env/cli-command.mjs';
@@ -259,13 +260,61 @@ function isBehind(version, newest) {
  * @returns {string}
  */
 export function globalUpgradeCommand(cliRoot, where = {}) {
-  let at = cliRoot;
+  return globalInstallCommand(cliRoot, LATEST, where);
+}
+
+/**
+ * The command that updates the package `name` installed beside the CLI
+ * installed for the computer at `cliRoot`, such as an integration installed
+ * for the computer (spec AST-081 FR12), by the package manager of the folder
+ * that holds them. Null for one of Astryx's own packages, which follows the
+ * CLI's releases (npm's `latest` tag of a canary-only one is a placeholder),
+ * and under Volta, which installs each package in a folder of its own.
+ * @param {string} cliRoot the CLI package's folder
+ * @param {string} name
+ * @param {{execPath?: string, home?: string, platform?: NodeJS.Platform, env?: NodeJS.ProcessEnv}} [where]
+ * @returns {string | null}
+ */
+export function globalUpdateBesideCli(cliRoot, name, where = {}) {
+  if (officialPackages().some(pkg => pkg.name === name)) return null;
+  if (isVoltaPath(realOrGiven(cliRoot))) return null;
+  return globalInstallCommand(cliRoot, `${name}@latest`, where);
+}
+
+/**
+ * `p` with its links resolved, or as given when it cannot be read.
+ * @param {string} p
+ * @returns {string}
+ */
+function realOrGiven(p) {
   try {
-    at = fs.realpathSync(cliRoot);
+    return fs.realpathSync(p);
   } catch {
-    // Read the path as given.
+    return p;
   }
-  if (/[\\/]\.volta[\\/]/iu.test(at)) return `volta install ${LATEST}`;
+}
+
+/**
+ * Whether the real path `at` is in a folder Volta installed.
+ * @param {string} at
+ * @returns {boolean}
+ */
+function isVoltaPath(at) {
+  return /[\\/]\.volta[\\/]/iu.test(at);
+}
+
+/**
+ * The command that installs `spec` into the folder that holds the CLI
+ * installed for the computer at `cliRoot`, by that folder's package manager,
+ * as {@link globalUpgradeCommand} names the CLI.
+ * @param {string} cliRoot the CLI package's folder
+ * @param {string} spec the package and version, as `@acme/widgets@latest`
+ * @param {{execPath?: string, home?: string, platform?: NodeJS.Platform, env?: NodeJS.ProcessEnv}} [where]
+ * @returns {string}
+ */
+function globalInstallCommand(cliRoot, spec, where = {}) {
+  const at = realOrGiven(cliRoot);
+  if (isVoltaPath(at)) return `volta install ${spec}`;
   const {
     home = os.homedir(),
     platform = process.platform,
@@ -274,18 +323,16 @@ export function globalUpgradeCommand(cliRoot, where = {}) {
   const global = globalFolderOf(at, {home, platform, env});
   // Each reads the same settings that named its global folder, so its plain
   // command reinstalls into that folder.
-  if (global?.manager === 'bun') return `bun add -g ${LATEST}`;
-  if (global?.manager === 'yarn') return `yarn global add ${LATEST}`;
+  if (global?.manager === 'bun') return `bun add -g ${spec}`;
+  if (global?.manager === 'yarn') return `yarn global add ${spec}`;
   if (
     global?.manager === 'pnpm' ||
     /[\\/]pnpm[\\/]|[\\/]global[\\/]v?\d+[\\/]/iu.test(at)
   ) {
-    return `pnpm add -g ${LATEST}`;
+    return `pnpm add -g ${spec}`;
   }
   const prefix = npmOwnPrefix(at, where);
-  return prefix
-    ? `npm i -g --prefix ${prefix} ${LATEST}`
-    : `npm i -g ${LATEST}`;
+  return prefix ? `npm i -g --prefix ${prefix} ${spec}` : `npm i -g ${spec}`;
 }
 
 /**
@@ -481,14 +528,7 @@ function officialPackages() {
   /** @type {any} */
   let list;
   try {
-    // Built here, not at load: paths.mjs and this module load each other.
-    const file = path.join(
-      CLI_ROOT,
-      'assets',
-      'discover',
-      'official-packages.json',
-    );
-    list = JSON.parse(fs.readFileSync(file, 'utf8'));
+    list = readOfficialList();
   } catch {
     return [];
   }
