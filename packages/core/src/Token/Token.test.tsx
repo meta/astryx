@@ -17,6 +17,26 @@ import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import type {TokenColor} from './Token';
 
 describe('Token', () => {
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: () => {}}],
+    ['link', {href: '#tag'}],
+  ])(
+    'gives a %s token label in one script its own direction, and leaves a mixed label to the page',
+    (_, props) => {
+      render(
+        <div dir="ltr">
+          <Token label="Design" {...props} />
+          <Token label="עיצוב" {...props} />
+          <Token label="iPhone של דנה" {...props} />
+        </div>,
+      );
+      expect(screen.getByText('Design')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('עיצוב')).toHaveAttribute('dir', 'rtl');
+      expect(screen.getByText('iPhone של דנה')).not.toHaveAttribute('dir');
+    },
+  );
+
   it('renders with label', () => {
     render(<Token label="Tag" />);
     expect(screen.getByText('Tag')).toBeInTheDocument();
