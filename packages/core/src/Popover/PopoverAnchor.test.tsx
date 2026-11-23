@@ -783,6 +783,128 @@ describe('usePopover anchor', () => {
     expect(getComputedStyle(layer).visibility).not.toBe('hidden');
   });
 
+  describe('the invoker a popover takes its place in the Tab order from', () => {
+    function Coachmark({
+      isAnchorFocusable,
+      hasTrigger,
+      tabBehavior = 'pageOrder',
+    }: {
+      isAnchorFocusable: boolean;
+      hasTrigger: boolean;
+      tabBehavior?: 'contain' | 'pageOrder';
+    }) {
+      const anchorRef = useRef<HTMLDivElement>(null);
+      const popover = usePopover({
+        anchorRef,
+        dialogLabel: 'Tip',
+        tabBehavior,
+        hasLightDismiss: false,
+        hasAutoFocus: false,
+      });
+      return (
+        <>
+          <div
+            ref={anchorRef}
+            data-anchor=""
+            tabIndex={isAnchorFocusable ? 0 : undefined}>
+            Chart
+          </div>
+          {hasTrigger ? (
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}>
+              Help
+            </button>
+          ) : null}
+          <button type="button" onClick={() => popover.show()}>
+            Start
+          </button>
+          {popover.render(<span>Tip content</span>)}
+        </>
+      );
+    }
+
+    function openAndReadSource(element: React.ReactElement) {
+      const original = HTMLElement.prototype.showPopover;
+      const show = vi.fn(function (
+        this: HTMLElement,
+        options?: ShowPopoverOptions,
+      ) {
+        original.call(this, options);
+      });
+      HTMLElement.prototype.showPopover = show;
+      try {
+        render(element);
+        fireEvent.click(screen.getByRole('button', {name: 'Start'}));
+        expect(show).toHaveBeenCalledOnce();
+        return show.mock.calls[0][0]?.source;
+      } finally {
+        HTMLElement.prototype.showPopover = original;
+      }
+    }
+
+    it('is the trigger when the popover has one', () => {
+      const source = openAndReadSource(
+        <Coachmark isAnchorFocusable hasTrigger />,
+      );
+      expect(source).toBe(screen.getByRole('button', {name: 'Help'}));
+    });
+
+    it('is the anchor when there is no trigger and the anchor takes focus', () => {
+      const source = openAndReadSource(
+        <Coachmark isAnchorFocusable hasTrigger={false} />,
+      );
+      expect(source).toBe(query('[data-anchor]'));
+    });
+
+    it('is nothing when there is no trigger and the anchor takes no focus', () => {
+      const source = openAndReadSource(
+        <Coachmark isAnchorFocusable={false} hasTrigger={false} />,
+      );
+      expect(source).toBeUndefined();
+    });
+
+    function Wrapped({tabBehavior}: {tabBehavior: 'contain' | 'pageOrder'}) {
+      const popover = usePopover({
+        dialogLabel: 'Tip',
+        tabBehavior,
+        hasLightDismiss: false,
+        hasAutoFocus: false,
+      });
+      return (
+        <>
+          <span ref={popover.triggerRef} data-wrapper="">
+            <button type="button" {...popover.triggerProps}>
+              Help
+            </button>
+          </span>
+          <button type="button" onClick={() => popover.show()}>
+            Start
+          </button>
+          {popover.render(<span>Tip content</span>)}
+        </>
+      );
+    }
+
+    it('is the control inside a wrapper trigger for a pageOrder popover', () => {
+      const source = openAndReadSource(<Wrapped tabBehavior="pageOrder" />);
+      expect(source).toBe(screen.getByRole('button', {name: 'Help'}));
+    });
+
+    it('stays the wrapper trigger itself for a contain popover', () => {
+      const source = openAndReadSource(<Wrapped tabBehavior="contain" />);
+      expect(source).toBe(query('[data-wrapper]'));
+    });
+
+    it('stays the anchor for a contain popover that also has a trigger', () => {
+      const source = openAndReadSource(
+        <Coachmark isAnchorFocusable hasTrigger tabBehavior="contain" />,
+      );
+      expect(source).toBe(query('[data-anchor]'));
+    });
+  });
+
   it('waits to open when the ref was emptied since the last render', () => {
     const host = document.createElement('div');
     document.body.append(host);

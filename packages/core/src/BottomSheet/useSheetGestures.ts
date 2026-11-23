@@ -71,12 +71,14 @@ import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
 import {sheet} from '../motion/uikit/sheet';
+import {touchActionAllowsPan} from '../utils/scrollView';
 import {
   computeDetentOffsets,
   peekOffsetFor,
   resolveSettleOffset,
   scrimOpacityForOffset,
 } from './snapOffsets';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * The stops a sheet of a given height rests at: offsets from fully-open in px,
@@ -144,14 +146,14 @@ const DRAG_PROMOTION_SLOP = 8;
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
 // expose navigator.vibrate, so this is a no-op there; skipped under
 // reduced-motion.
-function hapticTick(): void {
+function hapticTick(sheet: Element | null): void {
   if (
     typeof navigator === 'undefined' ||
     typeof navigator.vibrate !== 'function'
   ) {
     return;
   }
-  if (prefersReducedMotion()) {
+  if (reducesMotion(sheet)) {
     return;
   }
   navigator.vibrate(8);
@@ -264,6 +266,26 @@ export function isInsideNestedLayer(
     }
   }
   return false;
+}
+
+/**
+ * Whether the content between `target` and the body leaves no one-finger pan
+ * to the browser, as a menu whose rows fit does with `pinch-zoom`. A pan
+ * recognizer leaves such a touch to that content. Content that allows a pan
+ * on either axis (`pan-x` on the date pickers' month scroller) does not
+ * count, nor do the body and the sheet's own surfaces above it.
+ */
+export function leavesNoPan(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  if (!(target instanceof Element) || target === body) {
+    return false;
+  }
+  return (
+    !touchActionAllowsPan(target, 'x', body) &&
+    !touchActionAllowsPan(target, 'y', body)
+  );
 }
 
 /**
@@ -529,13 +551,6 @@ export interface UseSheetGesturesResult {
   settledLayoutOffset: number;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /**
  * Drag + snap machinery for the bottom sheet. Returns props to spread on the
  * grab handle and the sliding surface, plus live drag state. A slow drag
@@ -677,7 +692,7 @@ export function useSheetGestures({
       if (
         shouldAnimate &&
         Math.abs(renderedOffset - targetOffset) > 0.5 &&
-        !prefersReducedMotion()
+        !reducesMotion(sheetElRef.current)
       ) {
         pendingScrollPreservationInsetRef.current = targetInset;
         settlingLayoutOffsetRef.current = layoutOffset;
@@ -1187,7 +1202,7 @@ export function useSheetGestures({
           scrimOpacityForOffset(target, offsets, dismissOffset, peekOffset),
         );
         if (target !== baseOffset) {
-          hapticTick();
+          hapticTick(sheetElRef.current);
         }
       };
 
@@ -1687,7 +1702,11 @@ export function useSheetGestures({
       // content while the finger is still down (see onTouchMove). A touch
       // inside a layer this sheet hosts is that layer's, never tracked here.
       releaseContentHold(touchDragRef.current);
-      if (!touch || isInsideNestedLayer(event.target, body)) {
+      if (
+        !touch ||
+        isInsideNestedLayer(event.target, body) ||
+        leavesNoPan(event.target, body)
+      ) {
         touchDragRef.current = null;
         return;
       }

@@ -103,13 +103,11 @@ export const doc = {
 
     {
       value: 'docs.skills',
-      description:
-        'Each skill here: {name, description, package}[].',
+      description: 'Each skill here: {name, description, package}[].',
     },
     {
       value: 'docs.skill',
-      description:
-        'One skill: {name, description, text}.',
+      description: 'One skill: {name, description, text}.',
     },
 
     // blog (read from the published RSS feed)
@@ -134,13 +132,19 @@ export const doc = {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
-        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), how many misses the changes to the theme leave (`missed`), on how many parts (`missedParts`; a part can miss two ways, its border and its shadow) and which (`missedOn`), all left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), the problems it moved but left failing (`leftProblems`, each with what it was and its fix, left out when none), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), the open fonts it names that do not load until installed (`fontNotLoaded`, each `family` with the line that installs it, left out when none), how many misses the changes to the theme leave (`missed`), on how many parts (`missedParts`; a part can miss two ways, its border and its shadow) and which (`missedOn`), and how many of them this change brought (`missedNew`; the text says the missed line only then), all left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
         'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `openProblems` (every contrast problem the theme has now, each with the command that fixes it; the text shows the first eight and counts the rest), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), `missed` (the parts the changes the theme makes did not reach, most flagged first, each with why and the line that reaches it), `unreached` (the parts with a fill of their own the theme leaves on the base look, most visible first: no setting on them and their fill or text color as the base gives it), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures` with the two to open (`look`, left out when none was taken), and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.showPart',
+      stability: 'experimental',
+      description:
+        'What one part of a theme shows (`show <theme> --on <part>`, which writes nothing): the `theme`, its `kind` (editor, local, package or bundled), the `part`, and `values`: each CSS `property` at rest and per variant (`when`, `state`, as `set` takes them; `notSettable`, with why, for a condition no flag reaches), its final `value` (per mode when the modes differ), the `expression` that gives it (per mode when a rule sets one mode), the `tokens` it reads, and who decides it (`source`: core, base or theme; which setting gives it is not shown yet). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
@@ -183,7 +187,7 @@ export const doc = {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `markupBytes` (the page\u2019s inlined images included), `sourceBytes` (the embedded source), `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), the https images the page names (`remoteImages`: each address `fetched` into the file, and each one `failed`, with its `reason`; present when the page names one), `warnings` (`{code, message}`; empty when nothing looked wrong), and `checks` run on the written file (`outside`: every reference its markup and stylesheets load from outside the file, a remote address or a file beside it, empty when the file stands alone; `roundTrip`: `{exact, files, differs}`, whether the embedded source gives back every carried file byte for byte, and the carried paths that differ or are missing on either side). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `markupBytes` (the page\u2019s inlined images included), `sourceBytes` (the embedded source), `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), the https images the page names (`remoteImages`: each address `fetched` into the file, and each one `failed`, with its `reason`; present when the page names one), `warnings` (`{code, message}`; empty when nothing looked wrong), and `checks` run on the written file (`outside`: every reference its markup and stylesheets load from outside the file, a remote address or a file beside it, empty when the file stands alone; `roundTrip`: `{exact, files, differs}`, whether the embedded source gives back every carried file byte for byte, and the carried paths that differ or are missing on either side), and with `--pictures` the `pictures` taken of it (`phone`, `phoneDark`, `desktop` PNG paths in a temp folder, or `skipped` with why). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',
@@ -198,7 +202,7 @@ export const doc = {
       value: 'icon.search',
       stability: 'experimental',
       description:
-        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when a definition names the icon: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
+        "The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}, plus `meaningImport` when the set's `map` names the icon for a meaning: its import under the meaning name (`import {TrashIcon as DeleteIcon} from '…'`).",
     },
     {
       value: 'icon.detail',
@@ -210,7 +214,7 @@ export const doc = {
       value: 'icon.list',
       stability: 'experimental',
       description:
-        "The project's icon-set state (status, projectSet, reason), each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers (built-in, all of Astryx's, and its own), and each withdrawn set with its reason.",
+        "The project's icon-set state (status, projectSet, reason), each installed set with its package, license, icon count, default variant, declared variants, and the icon meanings its `map` covers (built-in, all of Astryx's, and its own), and each withdrawn set with its reason.",
     },
     {
       value: 'icon.use',
@@ -228,19 +232,19 @@ export const doc = {
       value: 'icon.map',
       stability: 'experimental',
       description:
-        'One `map` entry of the icon set being authored: the set, its package, the data file, the definition, the icon id now mapped (null after --remove), the id it replaced, and whether the file changed.',
+        'One `map` entry of the icon set being authored: the set, its package, the data file, the meaning, the icon id now mapped (null after --remove), the id it replaced, and whether the file changed.',
     },
     {
       value: 'icon.add',
       stability: 'experimental',
       description:
-        "One icon registered in the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the definition mapped to it, the definition file written when it added the set's own, the files written, and whether anything changed.",
+        "One icon added to the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the meaning mapped to it, the definition file written when it added the set's own meaning, the files written, and whether anything changed.",
     },
     {
       value: 'icon.definitions',
       stability: 'experimental',
       description:
-        'Every Astryx icon definition (--definitions): each {name, builtIn, description, words}.',
+        'Every Astryx icon meaning (--definitions): each {name, builtIn, description, words}.',
     },
     {
       value: 'icon.setIcons',
@@ -258,7 +262,7 @@ export const doc = {
       value: 'icon.definitionMatches',
       stability: 'experimental',
       description:
-        "The icon definitions that fit an export, before it is added: the export, its source module, the id it would get, at most 10 matches {name, description, source (astryx or set), score, reason, command}, and the command that adds the set's own definition when none fits.",
+        "The icon meanings that fit an export, before it is added: the export, its source module, the id it would get, at most 10 matches {name, description, source (astryx or set), score, reason, command}, and the command that adds the set's own meaning when none fits.",
     },
     {
       value: 'icon.newSet',
@@ -270,7 +274,7 @@ export const doc = {
       value: 'icon.newDefinition',
       stability: 'experimental',
       description:
-        "An icon set's own icon definition: its name, the manifest file, the files written (the definition and, with --icon, the data file), and whether they were written or only planned.",
+        "An icon set's own icon meaning: its name, the manifest file, the files written (the meaning and, with --icon, the data file), and whether they were written or only planned.",
     },
 
     // discover (external / integration packages)

@@ -78,7 +78,7 @@ describe('a subject how does not know', () => {
       ]) {
         const r = await answer(q);
         expect(r.all, q).toEqual([]);
-        expect(r.text, q).toMatch(/no part is called "flurbles"/);
+        expect(r.text, q).toMatch(/no part is called "flurble"/);
       }
       // (A brand as the label is the theme's look after it.)
       expect((await answer('Airbnb: accent #ff385c')).first).toContain(
@@ -198,12 +198,34 @@ describe('corners on some sides', () => {
   );
 });
 
+describe('a rule and a tint', () => {
+  it(
+    'a rule with its own verb after a part clause is the theme’s; a tint word fills with a light tint of the color it names',
+    async test => {
+      needsBases(test);
+      const r = await answer(
+        '3px corners on cards, never use pure black for text',
+      );
+      expect(r.first).toContain("--color-text-primary '#1f2937' --mode light");
+      expect(r.text).not.toMatch(/nothing changes/);
+      const tinted = (await answer('selected nav items tinted forest green'))
+        .first;
+      expect(tinted).toContain(
+        "background-color '#b7e2b3' --on top-nav-item --state selected --mode light",
+      );
+      expect(tinted.join('\n')).not.toMatch(/color-mix|'#228b22'/);
+    },
+    T,
+  );
+});
+
 describe('other readings', () => {
   it(
     'a color with a shape is its fill; "divided by" is no amount; shadow-sm is small; "stable" is no table',
     async test => {
       needsBases(test);
       const pill = await answer('the active nav item should be a #e8def8 pill');
+      expect(pill.all.join('\n')).toMatch(/corners pill --on top-nav-item/);
       expect(pill.text).not.toMatch(/but not "#e8def8"/);
       expect(
         (await answer('table rows divided by 1px lines')).text,

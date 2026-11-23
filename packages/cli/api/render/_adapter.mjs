@@ -18,7 +18,9 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   MODULE_EXTENSIONS,
   PAGE_EXTENSIONS,
+  REACT_UNKNOWN_PROP,
   RenderError,
+  pageOutputWarnings,
   renderPage,
 } from '../../foundation/render/render-page.mjs';
 import {
@@ -35,6 +37,7 @@ import {clip, locate, textEdits, textRuns} from '../../foundation/render/markup-
 import {isPackageName} from '../../foundation/identity/provider-identity.mjs';
 import {cliCommand} from '../../foundation/render/file-header.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
@@ -46,10 +49,9 @@ import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
-import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
+import {assertWithin, PathSafetyError, tempFolders} from '../../foundation/fs/path-safety.mjs';
 import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
-import {resolveProjectTypeScript} from '../../foundation/discovery/project-typescript.mjs';
-import {judgeCoreProps, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
+import {judgeCoreProps, projectTypeScript, propNamesOf, readCoreDocs} from '../../foundation/discovery/unknown-core-props.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
@@ -664,12 +666,6 @@ function coreDocsReader(dir) {
   return {load, of};
 }
 
-/**
- * The console line React prints for a prop that reaches a DOM element it
- * does not know, with the prop's name.
- */
-const REACT_UNKNOWN_PROP = /React does not recognize the `([^`]+)` prop|Unknown event handler property `([^`]+)`/;
-
 /** How many of a component's props a warning names before it counts the rest. */
 const PROPS_LISTED = 12;
 
@@ -695,7 +691,7 @@ async function propNameWarnings(names, page, docsOf) {
   const dir = path.dirname(page);
   const projectDir = runChoice(dir).inProject ? (findPackageRoot(dir) ?? dir) : dir;
   const shown = (/** @type {string} */ file) => path.relative(dir, file).split(path.sep).join('/');
-  const {found} = await judgeCoreProps({
+  const {found, skipped, reason} = await judgeCoreProps({
     projectDir,
     uses: names.map(use => ({...use, file: shown(use.file), path: use.file})),
     pages: [...new Set(names.map(use => use.file))],
@@ -708,10 +704,7 @@ async function propNameWarnings(names, page, docsOf) {
       }
       return documented;
     },
-    typescript: () => {
-      const compiler = resolveProjectTypeScript([projectDir]);
-      return compiler?.ts ? {ts: compiler.ts} : {skipped: 'the project has no TypeScript to read the types with'};
-    },
+    typescript: () => projectTypeScript([projectDir]),
   });
   /** @type {Map<string, {line: number, column: number}>} */
   const elementOf = new Map(names.map(use => [`${shown(use.file)}\0${use.line}\0${use.column}`, use.element]));
@@ -733,21 +726,27 @@ async function propNameWarnings(names, page, docsOf) {
     if ([...props.values()].some(suggestion => suggestion === null)) {
       const takes = propNamesOf((await docsOf(name)) ?? []);
       const rest = takes.length - PROPS_LISTED;
-      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more` : ''}`;
+      message += `; it takes ${takes.slice(0, PROPS_LISTED).join(', ')}${rest > 0 ? `, and ${rest} more (\`${getCliInvocation(dir)} component ${name} --package @astryxdesign/core\` lists them)` : ''}`;
     }
     warnings.push({code: 'unknown-prop', message: `${message}.`});
   }
+  // A check that could not run says so once, with doctor's reason and what
+  // to install: silence would read as every prop being right.
+  // Outside a project a step that installs into a project does not apply.
+  const why = runChoice(dir).inProject ? skipped : (reason ?? skipped);
+  if (why) warnings.push({code: 'props-not-checked', message: `Core prop names: ${why}`});
   return {warnings, props: new Set(found.map(use => use.prop))};
 }
 
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string, keepClassNames?: boolean, absolute?: boolean}} args absolute paths;
+ * @param {{cwd: string, input: string, output: string, title?: string, keepClassNames?: boolean, absolute?: boolean, pictures?: boolean}} args absolute paths;
  *   `absolute`: the caller named the output by an absolute path;
- *   `keepClassNames`: keep every class of the first paint as written
+ *   `keepClassNames`: keep every class of the first paint as written;
+ *   `pictures`: also take pictures of the written file ({@link pagePictures})
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title, keepClassNames = false, absolute = false}) {
+export async function renderToFile({cwd, input, output, title, keepClassNames = false, absolute = false, pictures = false}) {
   readInput(input, cwd);
   // An absolute --out is the caller's choice of place, also outside the
   // current folder (cli-surface DEC-16). The file there is still never one a
@@ -785,11 +784,15 @@ export async function renderToFile({cwd, input, output, title, keepClassNames = 
     // The check only warns: a project whose types cannot be read still exports.
   }
   // React's own console line for a prop the warning names says less, cut
-  // short, so it goes.
-  page.warnings = page.warnings.filter(warning => {
-    const prop = warning.code === 'page-output' ? REACT_UNKNOWN_PROP.exec(warning.message) : null;
+  // short, so it goes, before the page output is capped: it never hides a
+  // line the page printed itself.
+  const kept = (page.logs ?? []).filter(log => {
+    const prop = REACT_UNKNOWN_PROP.exec(log.text);
     return !prop || !named.props.has(prop[1] ?? prop[2]);
   });
+  const at = page.warnings.findIndex(warning => warning.code === 'page-output');
+  page.warnings = page.warnings.filter(warning => warning.code !== 'page-output');
+  page.warnings.splice(at === -1 ? page.warnings.length : at, 0, ...pageOutputWarnings(kept));
   page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input, docsOf)), ...named.warnings);
   for (const {name, dir} of page.fromSet) {
     let version = null;
@@ -857,7 +860,66 @@ export async function renderToFile({cwd, input, output, title, keepClassNames = 
     scriptModules: page.scriptModules ?? 0,
     checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
     ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
+    ...(pictures ? {pictures: await pagePictures(output, cwd, input)} : {}),
   };
+}
+
+/** The phone the pictures are taken on: its window in CSS pixels. */
+const PHONE = Object.freeze({width: 375, height: 812, mobile: true});
+
+/**
+ * Pictures of the written file, to check how it looks, not to send: a
+ * phone in light and dark, and a desktop window, taken after the page's
+ * script ran, with a browser already on the machine (the project's
+ * Playwright, else a Chrome or Chromium). They go into a new folder in the
+ * system temp folder, never beside the file. No browser, or one that
+ * fails: no pictures, the reason, and the file stands as written. The
+ * picture runner loads only here, so an export without pictures loads
+ * none of it.
+ * @param {string} output the written file, absolute
+ * @param {string} cwd
+ * @param {string} input the page module, absolute: its folder finds the
+ *   project's Playwright
+ * @returns {Promise<import('./render.type.mjs').RenderPictures>}
+ */
+async function pagePictures(output, cwd, input) {
+  const {takePictures} = await import('../../foundation/pictures/pictures.mjs');
+  const stem = path.basename(output).replace(/\.html?$/i, '');
+  // The system temp folder, as for a template's scratch copy: never a disk's
+  // root or a folder that holds the home folder.
+  const [temp] = tempFolders();
+  if (!temp) {
+    // Node reads the temp folder from TEMP on Windows and from TMPDIR elsewhere.
+    const tempVariable = process.platform === 'win32' ? 'TEMP' : 'TMPDIR';
+    return {
+      skipped: `there is no system temp folder to write them to (a disk root or a folder holding the home folder is not one); set ${tempVariable} to a writable folder outside the home folder, then run the command again`,
+    };
+  }
+  /** @type {string} */
+  let dir;
+  try {
+    dir = fs.mkdtempSync(path.join(temp, `astryx-pictures-${stem}-`));
+  } catch (e) {
+    return {skipped: `the system temp folder cannot be written (${/** @type {any} */ (e)?.code ?? e})`};
+  }
+  const jobs = [
+    {html: output, png: path.join(dir, `${stem}-phone.png`), mode: /** @type {const} */ ('light'), window: PHONE},
+    {html: output, png: path.join(dir, `${stem}-phone-dark.png`), mode: /** @type {const} */ ('dark'), window: PHONE},
+    {html: output, png: path.join(dir, `${stem}-desktop.png`), mode: /** @type {const} */ ('light')},
+  ];
+  const taken = await takePictures({cwd, from: input}, jobs);
+  const missed = taken.find(r => !r.ok);
+  if (missed || taken.length < jobs.length) {
+    fs.rmSync(dir, {recursive: true, force: true});
+    if (missed && 'reason' in missed) return {skipped: missed.reason};
+    const failed = missed && 'failed' in missed ? missed.failed : [];
+    return {
+      skipped: failed.length
+        ? `${failed.join('; ')}; install Playwright with its browser, or Google Chrome or Chromium`
+        : 'no browser was found; install Playwright with its browser, or Google Chrome or Chromium',
+    };
+  }
+  return {phone: jobs[0].png, phoneDark: jobs[1].png, desktop: jobs[2].png};
 }
 
 /**

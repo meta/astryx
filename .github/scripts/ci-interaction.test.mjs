@@ -85,8 +85,9 @@ describe('interaction proof routing', () => {
         index <= counted
           ? applies
           : `${applies} && steps.legs.outputs.runs == 'true'`;
-      // Only the hint and the evidence upload run after a failed step, and
-      // only the proofs and the hint wait for a plan with a spec file in it.
+      // Only the hint, the evidence upload and the failure-trace upload run
+      // after a failed step, and only the proofs and the hint wait for a plan
+      // with a spec file in it.
       const planned = "steps.plan.outputs.files != '0'";
       let expected = gate;
       if (candidate.name === 'Run interaction proofs')
@@ -95,6 +96,8 @@ describe('interaction proof routing', () => {
         expected = `failure() && ${gate} && steps.plan.outcome == 'success' && ${planned}`;
       if (candidate.name === 'Upload interaction evidence')
         expected = `always() && ${gate}`;
+      if (candidate.name === 'Upload failure traces')
+        expected = `failure() && ${gate}`;
       expect(candidate.if, candidate.name ?? candidate.uses).toBe(expected);
     }
     expect(step(proofs, 'Leave the proofs to the other legs').if).toBe(

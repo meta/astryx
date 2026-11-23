@@ -701,6 +701,25 @@ describe('Carousel', () => {
       expect(scrollBy.mock.calls[1][0].left).toBeLessThan(0);
     });
 
+    it("scrolls without animation under a theme's reducedMotion: 'always' mark, with the setting off", () => {
+      const handle = createRef<CarouselHandle>();
+      render(
+        <div data-astryx-reduced-motion="">
+          <Carousel handleRef={handle} aria-label="Handle">
+            <div>Item 1</div>
+            <div>Item 2</div>
+          </Carousel>
+        </div>,
+      );
+      const scroller = getScroller();
+      makeOverflowing(scroller, 100);
+      const scrollBy = vi.fn();
+      scroller.scrollBy = scrollBy;
+
+      handle.current?.scrollNext();
+      expect(scrollBy.mock.calls[0][0].behavior).toBe('auto');
+    });
+
     it('reports canScrollNext/canScrollPrev from live overflow state', () => {
       const handle = createRef<CarouselHandle>();
       render(

@@ -7,7 +7,7 @@
  *   import
  * @output Token resolution, and so a first load that renders an Icon or a
  *   Button, imports no theme-rule generator, also when every export of a
- *   component entry is kept
+ *   component entry is kept; token resolution also imports no theme builder
  * @position Source boundary test of packages/core/src/theme/tokens.ts
  *
  * The walk follows static imports only: a type-only import is erased, and a
@@ -28,6 +28,16 @@ const PACKAGE_EXPORTS: Record<string, {source: string}> = JSON.parse(
 ).exports;
 
 type Names = ReadonlySet<string> | 'all';
+
+// The theme builder and the modules that only it loads. Token resolution
+// reads the token defaults from their own module, so it loads none of these.
+const THEME_BUILDER = [
+  'theme/defineTheme.ts',
+  'theme/resolveThemeValues.ts',
+  'theme/themeAdaptations.ts',
+  'theme/localTokens.ts',
+  'theme/themeRegistry.ts',
+];
 
 interface ModuleLinks {
   /** Modules this module's own code imports, with the names it uses. */
@@ -192,5 +202,15 @@ describe('the theme tokens first load', () => {
     expect(firstLoadModules('theme/index.ts')).toContain(
       'theme/generateThemeRules.ts',
     );
+  });
+
+  it('theme/tokens.ts imports no theme builder', () => {
+    const loaded = firstLoadModules('theme/tokens.ts');
+    expect(THEME_BUILDER.filter(file => loaded.has(file))).toEqual([]);
+  });
+
+  it('finds every theme builder module from defineTheme', () => {
+    const loaded = firstLoadModules('theme/defineTheme.ts');
+    expect(THEME_BUILDER.filter(file => !loaded.has(file))).toEqual([]);
   });
 });

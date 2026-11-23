@@ -189,7 +189,7 @@ describe('iconNewSet (experimental icon new-set)', () => {
           `Declare the peers your set needs; add to package.json "peerDependencies": \`{"react": ">=18", "@types/react": ">=18", "@astryxdesign/cli": ">=${cliVersion()}"}\` and to "peerDependenciesMeta": \`{"@types/react": {"optional": true}, "@astryxdesign/cli": {"optional": true}}\`.`,
           'Run `integration check --strict` in your build; add to package.json "scripts": `"typecheck": "astryx integration check --strict"`.',
           'The set\'s description is a placeholder ("Outline icons."): apps and discover show it. Pass --description when you create a set, or edit icon-sets/outline/outline.doc.mjs.',
-          'Run `astryx integration check` to see the icon definitions still to map.',
+          'Run `astryx integration check` to see the icon meanings still to map.',
         ],
         // A new set maps nothing yet, so every template meaning is listed.
         templateMeanings: {unmapped: expect.any(Array)},

@@ -168,7 +168,7 @@ describe('the sheet', () => {
       '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell)>.cs-row>.cs-item{flex-basis:100%}',
     );
     expect(SHEET_CSS).toContain(
-      '.cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
+      '.cs-sheet .cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
     );
   });
 

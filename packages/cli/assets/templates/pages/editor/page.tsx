@@ -3,6 +3,7 @@
 'use client';
 
 import {useState, useCallback, type CSSProperties} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
 import {useToast} from '@astryxdesign/core/Toast';
@@ -304,13 +305,21 @@ function defaultProps(type: BlockType): Record<string, unknown> {
 // The layout (sidebar + scrollable canvas, full height) is all Layout +
 // LayoutPanel now. The few remaining styles are things Astryx has no prop for:
 // the responsive canvas max-width, a selection ring on the active block card,
-// and the circular icon chip's surface.
+// the circular icon chip's surface, and the side panel's phone fold.
 
 // Fill the window. Layout height="fill" is height:100%, which only resolves
 // against a definite height — and the host's <html>/<body> don't set one, so
 // the layout anchors a definite viewport height itself. No background; the
 // host owns the page surface.
 const pageStyle: CSSProperties = {height: '100dvh'};
+// The width at which the panel moves into the header slot.
+const PHONE_QUERY = '(max-width: 768px)';
+const styles = stylex.create({
+  // Before script runs, `isMobile` is false and the panel docks at the side,
+  // where its 320px pushes a phone page wider than the screen. On a phone the
+  // side panel takes no room in CSS too; with script it moves into the header.
+  sidePanel: {display: {default: null, [`@media ${PHONE_QUERY}`]: 'none'}},
+});
 // Canvas reflows to the chosen viewport width; VStack has no maxWidth prop.
 const canvasStyle = (maxWidth: number): CSSProperties => ({
   maxWidth,
@@ -647,7 +656,7 @@ export default function EditorPage() {
   // On phones the editor stacks: the panel sits in the header slot (full width,
   // above the canvas) showing just its toolbar, so the canvas isn't crushed
   // beside a 320px sidebar. On desktop the full panel (tabs + lists) shows.
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery(PHONE_QUERY);
 
   const selectedBlock = blocks.find(b => b.id === selectedId) ?? null;
 
@@ -830,7 +839,8 @@ export default function EditorPage() {
     <LayoutPanel
       hasDivider={!isMobile}
       padding={0}
-      width={isMobile ? '100%' : 320}>
+      width={isMobile ? '100%' : 320}
+      xstyle={isMobile ? undefined : styles.sidePanel}>
       <VStack gap={4}>
         {/* Panel Header */}
         <Section variant="transparent" padding={4}>

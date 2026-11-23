@@ -32,8 +32,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Holds a finger on `element` past the press onset; returns whether anything painted a press. */
-function fingerPaints(element: Element): boolean {
+/** Holds a finger on `element` past the press onset; returns the element that painted a press. */
+function fingerPainter(element: Element): Element | null {
   fireEvent.pointerDown(element, {
     pointerType: 'touch',
     pointerId: 1,
@@ -42,12 +42,16 @@ function fingerPaints(element: Element): boolean {
   act(() => {
     vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
   });
-  const painted = document.querySelector(`[${PRESSED_ATTRIBUTE}="on"]`) != null;
+  const painted = document.querySelector(`[${PRESSED_ATTRIBUTE}="on"]`);
   fireEvent.pointerUp(element, {pointerType: 'touch', pointerId: 1, button: 0});
   act(() => {
     vi.advanceTimersByTime(1000);
   });
   return painted;
+}
+
+function fingerPaints(element: Element): boolean {
+  return fingerPainter(element) != null;
 }
 
 const Inner = () => <button type="button">Inner</button>;
@@ -155,15 +159,31 @@ describe('a finger press inside a container that paints a press', () => {
     describe(name, () => {
       it('paints no press on the container for a finger on a control inside it', () => {
         render(ui());
-        expect(fingerPaints(child())).toBe(false);
+        // The control may paint its own press; the container never does.
+        const painter = fingerPainter(child());
+        expect(painter == null || painter === child()).toBe(true);
       });
 
       it('paints the press for a finger on the container itself', () => {
         render(ui());
-        expect(fingerPaints(surface())).toBe(true);
+        expect(fingerPainter(surface())).not.toBeNull();
       });
     });
   }
+});
+
+describe('the remove button of a Token', () => {
+  it.each([
+    ['static', <Token key="s" label="Tag" onRemove={() => {}} />],
+    [
+      'clickable',
+      <Token key="c" label="Tag" onClick={() => {}} onRemove={() => {}} />,
+    ],
+    ['link', <Token key="l" label="Tag" href="#tag" onRemove={() => {}} />],
+  ])('paints its own press for a finger on a %s token', (_, token) => {
+    render(token);
+    expect(fingerPainter(removeButton())).toBe(removeButton());
+  });
 });
 
 describe('the Chevron of a TreeList row', () => {
