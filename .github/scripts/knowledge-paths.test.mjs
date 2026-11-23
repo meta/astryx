@@ -103,8 +103,19 @@ describe('component knowledge paths', () => {
       language: 'swift',
       publicName: 'AvatarStatusDot',
     });
+    expect(
+      classifyPlatformComponentSpecPath(
+        'docs/specs/components/NavigationStack/NavigationStack.react-native.spec.md',
+      ),
+    ).toEqual({
+      componentRoot: 'NavigationStack',
+      fileName: 'NavigationStack.react-native.spec.md',
+      language: 'react-native',
+      publicName: 'NavigationStack',
+    });
     for (const filePath of [
       'docs/specs/components/Avatar/Avatar.klingon.spec.md',
+      'docs/specs/components/Avatar/Avatar.react.spec.md',
       'docs/specs/components/Avatar/modules/Avatar.swift.spec.md',
       'docs/specs/components/Avatar.swift.spec.md',
     ]) {
@@ -128,6 +139,8 @@ describe('component knowledge paths', () => {
       'packages/native/apple/Sources/Astryx/Avatar/tests/Avatar.swift',
       'packages/native/apple/Tests/AstryxTests/AvatarTests.swift',
       'packages/core/src/Avatar/Avatar.tsx',
+      // React Native records have no component code root here.
+      'packages/react-native/src/NavigationStack/NavigationStack.tsx',
     ]) {
       expect(locatePlatformComponentSource(filePath)).toBeNull();
     }
