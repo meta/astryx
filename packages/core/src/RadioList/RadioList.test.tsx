@@ -15,6 +15,7 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
 import {
   hasReleaseFade,
   readsPressStrength,
@@ -26,6 +27,10 @@ import {RadioListItem} from './RadioListItem';
 import {FormLayout} from '../FormLayout/FormLayout';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+
+const itemTestStyles = stylex.create({
+  custom: {marginBlockStart: 4},
+});
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -1653,5 +1658,87 @@ describe('RadioList record contract', () => {
       </RadioList>,
     );
     expect(screen.getByTestId('group')).toBe(screen.getByRole('radiogroup'));
+  });
+});
+
+describe('RadioListItem record contract', () => {
+  it('throws when rendered outside a RadioList (FR1)', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    try {
+      expect(() =>
+        render(<RadioListItem label="Option A" value="a" />),
+      ).toThrow(/must be used within/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('renders startContent after the radio, ahead of the label (FR2)', () => {
+    render(
+      <RadioList label="Preference" value="" onChange={() => {}}>
+        <RadioListItem
+          label="Option A"
+          value="a"
+          startContent={<span data-testid="start">*</span>}
+        />
+      </RadioList>,
+    );
+    const radio = screen.getByRole('radio', {name: 'Option A'});
+    const start = screen.getByTestId('start');
+    const label = screen.getByText('Option A');
+    expect(
+      radio.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      start.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('runs a caller onClick on the radio once for a direct click and once for a row-surface click (FR4)', async () => {
+    const user = userEvent.setup();
+    const targets: EventTarget[] = [];
+    render(
+      <RadioList label="Plan" value="" onChange={() => {}}>
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          description="Billed monthly"
+          onClick={event => targets.push(event.currentTarget)}
+        />
+      </RadioList>,
+    );
+    const radio = screen.getByRole('radio', {name: 'Pro'});
+    await user.click(radio);
+    expect(targets).toEqual([radio]);
+    await user.click(screen.getByText('Billed monthly'));
+    expect(targets).toEqual([radio, radio]);
+  });
+
+  it('puts ref, className, style and xstyle on the row (FR12)', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <RadioList label="Preference" value="" onChange={() => {}}>
+        <RadioListItem
+          ref={ref}
+          label="Option A"
+          value="a"
+          className="caller-row"
+          style={{scrollMarginTop: '7px'}}
+          xstyle={itemTestStyles.custom}
+        />
+      </RadioList>,
+    );
+    const row = screen
+      .getByRole('radio', {name: 'Option A'})
+      .closest('.astryx-radio-list-item');
+    expect(row).not.toBeNull();
+    expect(ref.current).toBe(row);
+    expect(row).toHaveClass('caller-row');
+    expect((row as HTMLElement).style.scrollMarginTop).toBe('7px');
+    expect(row!.className).toContain(
+      stylex.props(itemTestStyles.custom).className!.split(' ')[0],
+    );
   });
 });
