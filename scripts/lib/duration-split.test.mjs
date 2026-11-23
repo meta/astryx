@@ -130,7 +130,7 @@ describe('splitting test files by recorded time', () => {
       /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     expect(read('.github/scripts/a11y-pr-contracts.mjs')).toMatch(
-      /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
+      /import \{[^}]*costOf[^}]*fitLegsToBudget[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     for (const file of [
       'scripts/vitest-shard-sequencer.mjs',

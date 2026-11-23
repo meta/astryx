@@ -28,6 +28,7 @@ import {
   MENU_PRESS_LONG_PRESS_MS,
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
+  elementAtMenuPoint,
   useMenuPress,
   useMenuPressInternal,
 } from './useMenuPress';
@@ -357,6 +358,139 @@ describe('useMenuPress — an input hold over the menu', () => {
     } finally {
       overlay.remove();
     }
+  });
+});
+
+describe('useMenuPress — a hitTest that maps the rest of a row to its item', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  });
+
+  const ACTION = 'button:not(:disabled)';
+
+  /**
+   * The point lookup a Core sheet builds: the menu's own lookup, then a point
+   * in a row's content resolves to the row's own item, its direct child.
+   */
+  function rowItemAt(menu: HTMLElement | null, x: number, y: number) {
+    const element = elementAtMenuPoint(menu, document, x, y);
+    if (element == null || element.closest(ACTION) != null) {
+      return element;
+    }
+    const row = element.closest('li');
+    for (const child of row?.children ?? []) {
+      if (child.matches(ACTION)) {
+        return child;
+      }
+    }
+    return element;
+  }
+
+  /**
+   * Rows whose action is a part of the row, beside an icon, as a list row
+   * renders them. A section row holds rows of its own.
+   */
+  function RowList({
+    onSelect,
+    hasRowLookup = true,
+  }: {
+    onSelect: (label: string) => void;
+    hasRowLookup?: boolean;
+  }) {
+    const menuRef = useRef<HTMLUListElement>(null);
+    const press = useMenuPress({
+      menuRef,
+      itemSelector: ACTION,
+      hitTest: hasRowLookup
+        ? (x, y) => rowItemAt(menuRef.current, x, y)
+        : undefined,
+    });
+    const actionRow = (label: string, isDisabled = false) => (
+      <li key={label} data-testid={`row-${label}`}>
+        <span data-testid={`icon-${label}`}>*</span>
+        <button
+          type="button"
+          disabled={isDisabled}
+          onClick={() => onSelect(label)}>
+          {label}
+        </button>
+        {isDisabled && (
+          <span>
+            <button type="button" onClick={() => onSelect(`${label} pin`)}>
+              Pin
+            </button>
+          </span>
+        )}
+      </li>
+    );
+    return (
+      <ul ref={menuRef} tabIndex={-1} {...press.menuProps}>
+        {actionRow('A')}
+        {actionRow('B')}
+        {actionRow('Off', true)}
+        <li data-testid="section">
+          <h4>Section</h4>
+          <ul>{actionRow('C')}</ul>
+        </li>
+        <p data-testid="note">Not a row</p>
+      </ul>
+    );
+  }
+
+  function pointAt(element: Element) {
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => element,
+    });
+  }
+
+  function press(element: Element) {
+    pointAt(element);
+    fireEvent.pointerDown(element, touch());
+    fireEvent.pointerUp(element, touch());
+  }
+
+  it('a press on the rest of a row picks that row’s own item', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
+    onSelect.mockClear();
+    press(screen.getByTestId('row-A'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('A');
+    onSelect.mockClear();
+    press(screen.getByTestId('icon-C'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('C');
+  });
+
+  it('a finger that moves onto the rest of a row highlights the row’s item', () => {
+    render(<RowList onSelect={() => {}} />);
+    const a = screen.getByRole('button', {name: 'A'});
+    pointAt(a);
+    fireEvent.pointerDown(a, touch());
+    const icon = screen.getByTestId('icon-B');
+    pointAt(icon);
+    fireEvent.pointerMove(icon, touch());
+    expect(screen.getByRole('button', {name: 'B'})).toHaveFocus();
+  });
+
+  it('picks nothing for a row with no enabled item, even with a control in its content, a row around other rows, or content outside every row', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} />);
+    press(screen.getByTestId('icon-Off'));
+    press(screen.getByTestId('row-Off'));
+    press(screen.getByRole('heading', {name: 'Section'}));
+    press(screen.getByTestId('note'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('without the row lookup, a press beside a row’s item picks nothing, as before', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} hasRowLookup={false} />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).not.toHaveBeenCalled();
+    press(screen.getByRole('button', {name: 'B'}));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
   });
 });
 
