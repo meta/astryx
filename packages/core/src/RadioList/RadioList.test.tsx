@@ -1588,7 +1588,7 @@ describe('RadioList record contract', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('keeps a native disabled attribute on an individually disabled radio of a disabled group (FR5)', () => {
+  it('pins native disabled on an individually disabled radio of a disabled group (RadioListItem FR6 gap)', () => {
     render(
       <RadioList label="Plan" value="free" onChange={() => {}} isDisabled>
         <RadioListItem label="Free" value="free" />

@@ -51,9 +51,9 @@ system_specs: [spec:AST-085]
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public contract         | None changes. RadioList takes `label`, `value`, `onChange`, `orientation`, `size`, `isDisabled`, `disabledMessage`, `isRequired`, `isOptional`, `status`, `htmlName`, Field props, part props, and RadioListItem children. |
 | Behavior                | A Field-labelled `role="radiogroup"` of native radios sharing one name. Selecting an option calls `onChange(value)`. The group sets the item size, the disabled state, and required semantics.                             |
-| End-user impact         | People choose one option by pointer, touch, or the browser's arrow keys, with a predictable first Tab stop. A group disabled without a reason leaves the tab order, so keyboard users cannot find it.                      |
+| End-user impact         | People choose one option by pointer, touch, or the browser's arrow keys, with a predictable first Tab stop. A disabled group stays reachable by Tab, and each radio announces as unavailable.                              |
 | Builder impact          | None.                                                                                                                                                                                                                      |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Native `disabled` on disabled radios conflicts with `spec:AST-085` FR1 and FR7; listed under Current-state impact.                                               |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Native `disabled` on an individually disabled radio conflicts with `spec:AST-085` FR1 and FR7; listed under Current-state impact.                                |
 | Review checks           | Reject a group without a name, radios that lose their shared name, a selection while disabled, a first Tab stop that lands mid-group with an empty value, or root styling props.                                           |
 | Governing rules         | `family:input-fields` FR10, DEC-7; `spec:AST-085` FR1–FR7; `design:user-states` DR1, DR2 (through RadioListItem); WAI-ARIA radio group pattern.                                                                            |
 
@@ -143,8 +143,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Transformation and precedence order
 
-- **ORD1 — Item availability.** Group disabled or item disabled; the group
-  reason keeps only group-disabled radios focusable.
+- **ORD1 — Item availability.** Group disabled or item disabled; the group's
+  `isDisabled` keeps its radios focusable, and an item's own `isDisabled`
+  does not.
 - **ORD2 — Required.** Effective required on the radiogroup; explicit required
   on each radio.
 
@@ -197,15 +198,12 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Group reason (FR5).** A group `disabledMessage` describes only the
-  radiogroup, so a focused disabled radio is not described by it, against
-  `spec:AST-085` FR5 and FR7.
 - **Caller onClick while disabled (FR5).** A radio kept focusable by a group
   reason still runs a caller's `onClick` on a click or an arrow key onto it,
   against `spec:AST-085` FR2.
-- **Disabled focusability (FR5).** A group disabled without a reason gives its
-  radios native `disabled`, so they leave the tab order, against `spec:AST-085`
-  FR1 and FR7.
+- **Disabled focusability (`component:RadioListItem` FR6).** An individually
+  disabled radio uses native `disabled`, so it leaves the tab order, against
+  `spec:AST-085` FR1 and FR7.
 - **Consumer docs.** `RadioList.doc.mjs` anatomy lists Header, Children, and
   Label/Value parts; RadioList renders a group label, options, and a status
   message, and has no header.
