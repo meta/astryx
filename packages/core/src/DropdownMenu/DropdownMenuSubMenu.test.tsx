@@ -1616,6 +1616,33 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     expect(isolated).toHaveAttribute('dir', 'rtl');
   });
 
+  it('keeps "Back to" before a Latin parent title on a right-to-left page, on one span in the template direction', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    const title = 'Monthly report';
+    render(
+      <div dir="rtl">
+        <DropdownMenu button={{label: title}}>
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Folder A" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+      </div>,
+    );
+    const trigger = screen.getByRole('button', {name: new RegExp(title)});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const back = await waitFor(() => shownRow(`Back to ${title}`));
+    const label = Array.from(back.querySelectorAll('span[dir]')).find(span =>
+      span.textContent?.startsWith('Back to'),
+    );
+    expect(label).toHaveAttribute('dir', 'ltr');
+    expect(label?.textContent).toBe(`Back to ${title}`);
+  });
+
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();

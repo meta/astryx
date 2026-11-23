@@ -99,7 +99,11 @@ import {
   rtlStyles,
 } from '../utils';
 import {visibleText} from '../utils/accessibleName';
-import {cutTextDirection, isolatedText} from '../utils/textDirection';
+import {
+  cutTextDirection,
+  isolatedText,
+  truncatedTextStyles,
+} from '../utils/textDirection';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -512,6 +516,47 @@ function hideRegionedFlyoutsIn(menu: HTMLElement | null): void {
   }
 }
 
+// The parent title goes into the translated "Back to …" text through this
+// slot, so the title can keep its own direction there.
+const PARENT_SLOT = '\u0000';
+
+/**
+ * "Back to <parent>" on one cut line in the template's own direction, with the
+ * parent title in its own isolated span: a title in the other script than the
+ * template keeps its own direction and punctuation order, and the words stay
+ * in the template's order on either page.
+ */
+function backToLabel(template: string, parent: string): ReactNode {
+  if (!template.includes(PARENT_SLOT)) {
+    return template;
+  }
+  const [before, after = ''] = template.split(PARENT_SLOT);
+  const {dir} = cutTextDirection(before + after);
+  return (
+    <span
+      dir={dir}
+      {...stylex.props(
+        backLabelStyles.label,
+        dir != null && truncatedTextStyles.pageAlign,
+      )}>
+      {before}
+      {isolatedText(parent, undefined, cutTextDirection(parent).dir)}
+      {after}
+    </span>
+  );
+}
+
+const backLabelStyles = stylex.create({
+  // One line with an ellipsis, as a string row label is.
+  label: {
+    display: 'block',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+});
+
 /**
  * A single menu row that reveals a nested flyout of its own items. The row
  * adopts DropdownMenuItem semantics (label / icon / description / isDisabled);
@@ -532,29 +577,6 @@ function hideRegionedFlyoutsIn(menu: HTMLElement | null): void {
  * </DropdownMenu>
  * ```
  */
-// The parent title goes into the translated "Back to …" text through this
-// slot, so the title can keep its own direction there.
-const PARENT_SLOT = '\u0000';
-
-/**
- * "Back to <parent>" with the parent title in its own isolated span: a title
- * in the other script than the menu keeps its own direction and punctuation
- * order inside the row's text.
- */
-function backToLabel(template: string, parent: string): ReactNode {
-  if (!template.includes(PARENT_SLOT)) {
-    return template;
-  }
-  const [before, after = ''] = template.split(PARENT_SLOT);
-  return (
-    <>
-      {before}
-      {isolatedText(parent, undefined, cutTextDirection(parent).dir)}
-      {after}
-    </>
-  );
-}
-
 export function DropdownMenuSubMenu(
   props: DropdownMenuSubMenuProps,
 ): ReactNode {
