@@ -1298,7 +1298,6 @@ function DropdownMenuPopover({
         // trigger open waits for the controller to hear of it, and a render
         // before then is no close.
         disarmOpen();
-        suppressControlledHideRef.current = true;
         popover.hide();
       }
     }

@@ -2,6 +2,5 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A `DropdownMenu` closing on a trigger click now emits `onOpenChange(false)` only once (`spec:AST-009` FR23). Synchronizing controlled open state rollback or close to the popover DOM layer no longer emits a duplicate `onOpenChange(false)` notification.
-
+[fix] A trigger click that closes a DropdownMenu now calls onOpenChange(false) once (architecture:react-component-runtime INV2, INV3). Synchronizing a controlled close when isMenuOpen turns false suppresses redundant notifications, so a parent closing the menu no longer receives onOpenChange(false).
 @rheatkhs
