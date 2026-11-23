@@ -22,8 +22,8 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 /**
  * Calls `onChange` when the menu resizes, its DOM changes, an image in it
- * loads, or the window or the visual viewport resizes. Returns the function
- * that stops it.
+ * loads, or the viewport resizes (once per frame for the window and the
+ * visual viewport together). Returns the function that stops it.
  */
 function observeMenu(menu: HTMLElement, onChange: () => void): () => void {
   const resizeObserver =
@@ -39,14 +39,29 @@ function observeMenu(menu: HTMLElement, onChange: () => void): () => void {
     subtree: true,
   });
   menu.addEventListener('load', onChange, true);
-  window.addEventListener('resize', onChange);
-  window.visualViewport?.addEventListener('resize', onChange);
+  // A viewport change fires `resize` on the window and on the visual
+  // viewport in the same frame. One frame request merges them into one
+  // measurement. The resize steps run before the frame callbacks, so the
+  // measurement waits no frame.
+  let resizeFrame = 0;
+  const onResize = () => {
+    if (resizeFrame !== 0) {
+      return;
+    }
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = 0;
+      onChange();
+    });
+  };
+  window.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
   return () => {
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
     menu.removeEventListener('load', onChange, true);
-    window.removeEventListener('resize', onChange);
-    window.visualViewport?.removeEventListener('resize', onChange);
+    window.removeEventListener('resize', onResize);
+    window.visualViewport?.removeEventListener('resize', onResize);
+    window.cancelAnimationFrame(resizeFrame);
   };
 }
 
