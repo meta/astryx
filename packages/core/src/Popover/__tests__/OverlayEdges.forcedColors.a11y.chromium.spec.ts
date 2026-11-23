@@ -5,8 +5,9 @@
  * @input Uses @playwright/test, the static Storybook server, and the
  *   checked-in DropdownMenu, ContextMenu, Dialog, AlertDialog and Popover
  *   stories, in real Chromium with `forcedColors` emulated
- * @output Computed-border evidence that each floating surface keeps a visible
- *   edge when the platform drops its box-shadow
+ * @output Computed-edge evidence (a border, or an inset outline) that each
+ *   floating surface keeps a visible edge when the platform drops its
+ *   box-shadow, and that a capped menu's edge stays inside its viewport gutter
  * @position The half of the forced-colors contract jsdom cannot honestly reach:
  *   jsdom has no `forced-colors` media feature, so only a browser can say what
  *   border a surface computes there. WCAG 1.4.11 (non-text contrast).
@@ -60,32 +61,41 @@ function trigger(page: Page): Locator {
   return page.locator('#storybook-root').getByRole('button').first();
 }
 
-/** The computed border width and style of every side of `target`. */
+/**
+ * The computed border of every side of `target`, and its outline. A surface
+ * draws its forced-colors edge as either one.
+ */
 async function edgesOf(target: Locator) {
   return target.evaluate(element => {
     const computed = getComputedStyle(element);
-    return (['Top', 'Right', 'Bottom', 'Left'] as const).map(side => ({
-      side,
-      width: parseFloat(computed.getPropertyValue(`border-${side}-width`)),
-      style: computed.getPropertyValue(`border-${side}-style`),
-    }));
+    const outlineStyle = computed.getPropertyValue('outline-style');
+    const outlineWidth =
+      outlineStyle === 'none'
+        ? 0
+        : parseFloat(computed.getPropertyValue('outline-width'));
+    return (['Top', 'Right', 'Bottom', 'Left'] as const).map(side => {
+      const style = computed.getPropertyValue(`border-${side}-style`);
+      const borderWidth =
+        style === 'none' || style === 'hidden'
+          ? 0
+          : parseFloat(computed.getPropertyValue(`border-${side}-width`));
+      return {side, width: Math.max(borderWidth, outlineWidth)};
+    });
   });
 }
 
 async function expectEdge(target: Locator, name: string): Promise<void> {
   for (const edge of await edgesOf(target)) {
-    expect(edge.style, `${name} ${edge.side} border style`).not.toBe('none');
-    expect(edge.style, `${name} ${edge.side} border style`).not.toBe('hidden');
     expect(
       edge.width,
-      `${name} ${edge.side} border width`,
+      `${name} ${edge.side} edge width`,
     ).toBeGreaterThanOrEqual(1);
   }
 }
 
 async function expectNoEdge(target: Locator, name: string): Promise<void> {
   for (const edge of await edgesOf(target)) {
-    expect(edge.width, `${name} ${edge.side} border width`).toBe(0);
+    expect(edge.width, `${name} ${edge.side} edge width`).toBe(0);
   }
 }
 
@@ -174,6 +184,30 @@ test.describe('floating surfaces in forced colors', () => {
       await expectEdge(surface, entry.name);
     });
   }
+});
+
+test('a capped DropdownMenu keeps its edge inside the 16 px bottom gutter', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 800, height: 285});
+  await open(page, 'core-dropdownmenu--with-sections', 'active');
+  await trigger(page).click();
+  const surface = page
+    .locator('.astryx-dropdown-menu')
+    .first()
+    .locator('xpath=ancestor-or-self::*[contains(@class,"astryx-popover")][1]');
+  await surface.waitFor({state: 'visible'});
+  const {bottom, viewport, scrolls} = await surface.evaluate(el => {
+    const menu = el.querySelector<HTMLElement>('[role="menu"]');
+    return {
+      bottom: el.getBoundingClientRect().bottom,
+      viewport: window.innerHeight,
+      scrolls: menu != null && menu.scrollHeight > menu.clientHeight + 1,
+    };
+  });
+  // The menu is capped by the gutter, so this checks the cap, not its rows.
+  expect(scrolls).toBe(true);
+  expect(viewport - bottom).toBeGreaterThanOrEqual(16 - 0.5);
 });
 
 test('a fullscreen Dialog has no edge to draw and fits the viewport', async ({

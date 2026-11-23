@@ -118,17 +118,23 @@ const styles = stylex.create({
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
     // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
+    // An inset outline draws that edge inside the box, so the layer keeps the
+    // size its viewport gutters allow.
+    outlineWidth: {
       default: null,
       '@media (forced-colors: active)': '1px',
     },
-    borderStyle: {
+    outlineStyle: {
       default: null,
       '@media (forced-colors: active)': 'solid',
     },
-    borderColor: {
+    outlineColor: {
       default: null,
       '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {
+      default: null,
+      '@media (forced-colors: active)': '-1px',
     },
   },
   // An open popover whose separate anchor resolves to nothing shows no

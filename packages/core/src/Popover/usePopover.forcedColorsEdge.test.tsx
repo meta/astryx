@@ -3,8 +3,8 @@
 /**
  * @file usePopover.forcedColorsEdge.test.tsx
  * @input usePopover's painted surface and the CSS rules StyleX injects
- * @output Proof that the surface's forced-colors border sets no border width
- *   or style outside forced colors, so a caller's own border keeps showing
+ * @output Proof that the surface's forced-colors edge sets no outline or
+ *   border outside forced colors, so a caller's own border keeps showing
  * @position Unit evidence for the Popover forced-colors edge
  */
 
@@ -46,7 +46,10 @@ function collectCssText(): string {
   );
 }
 
-/** The border width and style declarations of `el` outside any @media rule. */
+/**
+ * The border and outline width, style and offset declarations of `el` outside
+ * any @media rule.
+ */
 function borderDeclarationsOutsideMedia(el: Element): string[] {
   const css = collectCssText().replace(
     /@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g,
@@ -62,7 +65,9 @@ function borderDeclarationsOutsideMedia(el: Element): string[] {
       .join(';')
       .split(';')
       .map(d => d.replace(/\s+/g, ''))
-      .filter(d => /^border-(width|style):/.test(d)),
+      .filter(d =>
+        /^(border-(width|style)|outline-(width|style|offset)):/.test(d),
+      ),
   );
 }
 
@@ -82,7 +87,7 @@ function HeadlessPopover() {
   );
 }
 
-it('sets no border width or style on the surface outside forced colors', () => {
+it('sets no outline or border on the surface outside forced colors', () => {
   render(<HeadlessPopover />);
   fireEvent.click(screen.getByRole('button', {name: 'Open'}));
   const surface = screen.getByRole('dialog', {name: 'Filters', hidden: true});

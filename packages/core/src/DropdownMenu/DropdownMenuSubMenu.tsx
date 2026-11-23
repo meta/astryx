@@ -223,17 +223,23 @@ const flyoutStyles = stylex.create({
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
     // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
+    // An inset outline draws that edge inside the box, so the layer keeps the
+    // size its viewport gutters allow.
+    outlineWidth: {
       default: null,
       '@media (forced-colors: active)': '1px',
     },
-    borderStyle: {
+    outlineStyle: {
       default: null,
       '@media (forced-colors: active)': 'solid',
     },
-    borderColor: {
+    outlineColor: {
       default: null,
       '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {
+      default: null,
+      '@media (forced-colors: active)': '-1px',
     },
     opacity: 1,
     transitionProperty: 'opacity',
