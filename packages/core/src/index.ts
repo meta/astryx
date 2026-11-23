@@ -160,6 +160,9 @@ export * from './StatusDot';
 // Spinner loading indicator
 export * from './Spinner';
 
+// Sticky positioning component
+export * from './Sticky';
+
 // Timestamp display
 export * from './Timestamp';
 

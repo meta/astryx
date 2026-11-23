@@ -604,6 +604,11 @@
       "types": "./dist/Stepper/index.d.ts",
       "default": "./dist/Stepper/index.js"
     },
+    "./Sticky": {
+      "source": "./src/Sticky/index.ts",
+      "types": "./dist/Sticky/index.d.ts",
+      "default": "./dist/Sticky/index.js"
+    },
     "./Swipe": {
       "source": "./src/Swipe/index.ts",
       "types": "./dist/Swipe/index.d.ts",
