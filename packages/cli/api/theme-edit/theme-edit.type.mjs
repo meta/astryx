@@ -132,6 +132,7 @@
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [section] - Only one section of the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
  * @property {boolean} [png] - Also take PNG pictures of the previews.
+ * @property {string} [on] - Only what one part shows, as a lookup that writes nothing (`themeEdit.showPart`); the theme may then be any theme the project builds.
  */
 
 /**
@@ -161,11 +162,38 @@
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
- * @property {string} [data.look] - With `png`, when the run took them: the pictures to open: with show's full sheet, the picture of each family of components the theme sets a part of (of the buttons when it sets none) first (sheet-<family>.png, or, for a family taller than 1600px, the pictures cut from it in order: sheet-<family>-1.png, -2 …), then the sample page's and the open states' (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open). The text output says it first and last.
+ * @property {string} [data.look] - With `png`, when the run took them: the pictures to open: with show's full sheet, the picture of each family of components the theme sets a part of (of the buttons when it sets none) first (sheet-<family>.png, or, for a family taller than 1600px, the pictures cut from it in order: sheet-<family>-1.png, -2 …); with --section pages, the pages pictures (sheet-pages-1.png, -2 … for a tall one); then the sample page's and the open states' (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open). The text output says it first and last.
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
  * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
  * @property {string} [data.appCopyStale] - Set when the app copy was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full).
  * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add <theme>`, for the app copy the editor writes in src/themes/<theme>/; the imports by hand when a folder of yours is there).
+ */
+
+/**
+ * `astryx --json experimental theme editor show <theme> --on <part>`: what one
+ * part of a theme shows. Nothing is written.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditShowPartResponse
+ * @property {'themeEdit.showPart'} type
+ * @property {object} data
+ * @property {string} data.theme
+ * @property {'editor' | 'local' | 'package' | 'bundled'} data.kind - Where the theme comes from: the editor's themes/ folder, a local theme of the app, an installed package's theme, or a bundled theme package. An editor theme is read from its saved settings: what a person adds by hand below them in its theme file is not shown yet.
+ * @property {string} data.part
+ * @property {ThemeEditPartValue[]} data.values - Each CSS property the part reads, at rest (`when` null) and in each variant. Which setting gives a value (a token, a dial, a rule on the part) is not shown yet; `source` says whose it is.
+ */
+
+/**
+ * One property of a part, as `show --on` gives it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPartValue
+ * @property {string} property - The CSS property.
+ * @property {string | null} when - The variant, as `set` takes `--when` (`variant:outlined`); null at rest. For a condition no flag of `set` reaches, the condition as Core writes it, with `notSettable`.
+ * @property {string | null} state - The state, as `set` takes `--state`; null for none (and for a condition no flag reaches).
+ * @property {string} [notSettable] - Only for a condition no flag of `set` reaches (a CSS selector such as `:first-child`): why, as `how <part>` says it.
+ * @property {string | {light?: string | null, dark?: string | null} | null} value - The final value, every token written out; per mode when the modes differ; null when a token it reads has no value. A mode is left out where it is not shown yet (the other mode of a property or token a one-mode block sets on the part, with nothing else under that condition).
+ * @property {string | {light?: string, dark?: string}} expression - The declaration that gives it, as written: Core's, or the rule on the part; per mode when a rule sets one mode (a one-mode theme, or a `--mode` setting).
+ * @property {string[] | {light?: string[], dark?: string[]}} tokens - The tokens it reads, and the tokens those read in turn, in order; per mode when the modes read different ones.
+ * @property {'core' | 'base' | 'theme'} source - Who decides the value (not a setting's source, as in `show`'s settings): Core's default, the base theme the theme extends, or the theme's own file, a setting on the part included.
  */
 
 /**

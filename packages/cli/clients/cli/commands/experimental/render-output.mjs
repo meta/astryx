@@ -130,6 +130,15 @@ export function printRendered(d, run) {
         ? `Share this one file: ${shownAt(d.output, d.bytes)}. Nothing else needs to go with it.`
         : `${shownAt(d.output, d.bytes)} loads ${d.checks.outside.length} reference${d.checks.outside.length === 1 ? '' : 's'} from outside the file when it opens (outside, above), so it does not stand alone.`,
     ),
+    ...(d.pictures
+      ? [
+          section('Pictures'),
+          'skipped' in d.pictures
+            ? record({skipped: d.pictures.skipped})
+            : record({phone: d.pictures.phone, phoneDark: d.pictures.phoneDark, desktop: d.pictures.desktop}),
+          ...('skipped' in d.pictures ? [] : [text('These pictures are to check how the file looks, not to send.')]),
+        ]
+      : []),
     text(
       `Give it back: ${run} experimental import ${shellArg(d.output)}${restoreHere(d)}`,
     ),

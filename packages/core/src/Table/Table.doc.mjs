@@ -155,6 +155,13 @@ export const docs = {
         default: 'unset (a pinned cell shows its base)',
         private: true,
       },
+      {
+        name: '--_table-open-row-divider-width',
+        description:
+          "The divider width of an open expandable row's cells: 0, because the expansion panel below the row draws the divider, so the row and its panel read as one unit.",
+        default: "unset (a cell draws the theme's border width)",
+        private: true,
+      },
     ],
     derived: [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
     componentIcons: [
@@ -329,6 +336,11 @@ export const docs = {
         guidance: true,
         description:
           'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs attention.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not put a control (a button, link, or input) in the header of a sortable column. The Sort control wraps the whole header, so the control nests inside it and assistive technology cannot operate it. Keep header controls on columns that are not sortable.',
       },
       {
         guidance: true,
@@ -550,6 +562,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Phone-first page: below a breakpoint show the data as a List instead of the Table. Render both; switch w/ a StyleX `display` rule under `@media (not (min-width: 768px))` (theme `md` breakpoint; CSS: right layout at first paint, no script). Not `useMediaQuery` (only after script).',
+      },
+      {
+        guidance: false,
+        description:
+          'Put a control (button, link, input) in a sortable column header: the Sort control wraps the header, so the nested control is inoperable for assistive technology. Keep header controls on unsortable columns.',
       },
       {
         guidance: false,

@@ -64,6 +64,7 @@ import {resolveMotion} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import type {ResizableSize} from './utils';
 import {sharedWeakMap} from '../utils/sharedRealm';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 // The English for the two messages it names, and nothing more of the catalog.
 registerEnglishFallback(english);
@@ -506,6 +507,10 @@ export function createResizableAs(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
+  // Storage keeps only a size that a person chose. The default's first
+  // resolution, a restored size and a press that moves nothing do not count.
+  let hasBeenResized = false;
+  let stateAtGestureStart: {size: number; isCollapsed: boolean} | null = null;
   let snapshot: ResizableSnapshot | null = null;
   const snapshotListeners = new Set<() => void>();
 
@@ -840,10 +845,19 @@ export function createResizableAs(
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
   }
 
-  /** Nothing is written while the basis stands in, nor while a gesture runs. */
+  /**
+   * Nothing is written while the basis stands in, nor while a gesture runs.
+   * Before the first resize, only a restored size that the bounds or snaps
+   * changed is written. Storage then keeps the size the region shows.
+   */
   function persist(): void {
     const key = opts.autoSaveId;
     if (key == null || key === '' || !derived.isBasisMeasured) {
+      return;
+    }
+    const isRestoredSizeChanged =
+      persisted?.size != null && persisted.size !== derived.size;
+    if (!hasBeenResized && !isRestoredSizeChanged) {
       return;
     }
     if (isGestureActive) {
@@ -926,6 +940,7 @@ export function createResizableAs(
     if (isDestroyed || !collapsible() || derived.isCollapsed) {
       return;
     }
+    hasBeenResized = true;
     setCollapsed(true);
     commit();
     opts.onCollapseChange?.(true);
@@ -937,6 +952,9 @@ export function createResizableAs(
       return;
     }
     const wasCollapsed = derived.isCollapsed;
+    if (wasCollapsed) {
+      hasBeenResized = true;
+    }
     setCollapsed(false);
     commit();
     if (wasCollapsed) {
@@ -962,6 +980,9 @@ export function createResizableAs(
     }
     const clamped = clampSize(next, derived.min, derived.max, snaps());
     const wasCollapsed = derived.isCollapsed;
+    if (wasCollapsed || clamped !== derived.size) {
+      hasBeenResized = true;
+    }
     chosenSize = clamped;
     setCollapsed(false);
     commit();
@@ -989,6 +1010,10 @@ export function createResizableAs(
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
+      stateAtGestureStart = {
+        size: derived.size,
+        isCollapsed: derived.isCollapsed,
+      };
       isCarryingToSnap = false;
       // Only a pointer catches a slide or a spring-back; a key steps.
       const isPointer = regionSlot?.isPointerDragging() === true;
@@ -1286,10 +1311,7 @@ export function createResizableAs(
     }
     const element = pane.element;
     const view = element.ownerDocument.defaultView;
-    if (
-      view == null ||
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-    ) {
+    if (view == null || reducesMotion(element)) {
       drawing.clear();
       return;
     }
@@ -1385,9 +1407,7 @@ export function createResizableAs(
     const view = pane?.element.ownerDocument.defaultView;
     // Under Reduce Motion the pane shuts at once: nothing is left to catch.
     closingSlide =
-      remaining == null ||
-      view == null ||
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+      remaining == null || view == null || reducesMotion(pane?.element)
         ? null
         : {
             fromSize: shown,
@@ -1433,6 +1453,14 @@ export function createResizableAs(
     if (!isGestureActive) {
       return;
     }
+    if (
+      stateAtGestureStart != null &&
+      (stateAtGestureStart.size !== derived.size ||
+        stateAtGestureStart.isCollapsed !== derived.isCollapsed)
+    ) {
+      hasBeenResized = true;
+    }
+    stateAtGestureStart = null;
     gestureBasis = null;
     isGestureActive = false;
     mustWrite = true;

@@ -27,7 +27,17 @@ import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {createModuleLoader} from '../utils/moduleLoader';
 import {isElement} from '../utils/nodeType';
 
-const cutTextModule = createModuleLoader(async () => import('./cutText'));
+// A parent's commit can run this hook's effect before the browser paints, as
+// a Table's commit does. A task queued in the next animation frame runs after
+// that frame paints.
+const cutTextModule = createModuleLoader(async () => {
+  await new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
+  return import('./cutText');
+});
 
 export interface CutTextOnKeyboardFocus {
   /** The tooltip to render beside the anchor; `null` while none can show. */
@@ -138,6 +148,7 @@ export function useCutTextOnKeyboardFocus({
         <loaded.UndescribedTooltip
           anchorRef={anchorRef}
           content={cutText}
+          isOpen
           onHide={hide}
         />
       ) : null,

@@ -125,6 +125,10 @@ import {
   radiusTokenOf,
   borderParts,
   cornerParts,
+  boxFrameOf,
+  givesEdge,
+  isRowFrame,
+  rowFrameOf,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -4343,10 +4347,16 @@ export function checkSetting(
   unset = false,
   scope = {},
 ) {
+  // (The settings a part's reach reads are this theme's, for this check
+  // only.)
+  const before = ctx.themeSettings;
+  ctx.themeSettings = data.settings;
   try {
     return checkTyped(ctx, slug, data, thing, value, flags, unset, scope);
   } catch (e) {
     throw keepTypedScope(e, ctx, slug, data, flags);
+  } finally {
+    ctx.themeSettings = before;
   }
 }
 
@@ -5606,7 +5616,7 @@ function checkOne(
     );
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
   if (s.on && !isRole && !groupsOf(ctx)[s.on]) {
-    const t = TARGET.get(s.on);
+    let t = TARGET.get(s.on);
     if (!t) {
       // Another case of a part or group, its class name copied from the
       // page (`.astryx-card`), or its component (`<Card>`, `Card`): that
@@ -5793,18 +5803,39 @@ function checkOne(
           : Object.keys(record?.innerSets ?? {}).length > 0)
       ) {
         const toks = innerPropTokens(ctx.C, holder, kebab(thing));
-        refuse(
-          E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
-          {
-            didYouMean: [holder],
-            run: toks.length
-              ? toks.map(tok =>
-                  setLine(slug, tok, v, {...s, on: holder}, unset),
-                )
-              : [setLine(slug, thing, v, {...s, on: holder}, unset)],
-          },
-        );
+        // (A text size said of the main piece's name, "top-nav-heading-title"
+        // or "-heading", where the holder's main text can be told: set on, or
+        // undone from, the holder, as said of it. Another piece's name,
+        // "-subtitle", is refused: which line it is cannot be told apart.)
+        const main =
+          !s.state &&
+          kebab(thing) === 'font-size' &&
+          /^(?:title|heading)$/.test(rest)
+            ? mainTextSizeToken(ctx.C, holder, TOKENS)
+            : null;
+        if (main && (unset || !namesToken(v, main))) {
+          const said = `"${s.on}" is drawn inside ${holder}: ${unset ? 'undone from' : 'set on'} ${holder}`;
+          s.note = s.note ? `${s.note}; ${said}` : said;
+          s.on = holder;
+          // (As --only reads on the holder named directly.)
+          if (s.only && !onlyFits(s)) {
+            s.only = undefined;
+            if (!unset)
+              s.note = `${s.note}; ${holder} is styled on its own already, so --only changes nothing: it is saved without it`;
+          }
+        } else
+          refuse(
+            E.ERR_THEME_UNKNOWN_PART,
+            `"${s.on}" is not a part name; what it names is drawn inside ${holder}, the part to set it on${toks.length ? `, where its ${kebab(thing)} comes from ${toks.join(', ')}` : ''}.`,
+            {
+              didYouMean: [holder],
+              run: toks.length
+                ? toks.map(tok =>
+                    setLine(slug, tok, v, {...s, on: holder}, unset),
+                  )
+                : [setLine(slug, thing, v, {...s, on: holder}, unset)],
+            },
+          );
       }
       // A plural or another case names the part it means; a typo of one
       // part leads with the same command on that part.
@@ -5813,20 +5844,24 @@ function checkOne(
         ...Object.keys(groupsOf(ctx)),
       ]);
       const typo = near.filter(n => typoOf(lower, n));
-      refuse(
-        E.ERR_THEME_UNKNOWN_PART,
-        `"${s.on}" is not a part you can style.`,
-        {
-          didYouMean: near,
-          run: [
-            ...(typo.length === 1
-              ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
-              : []),
-            `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
-            `${HOW} ${quoteCommandArgument(s.on)}`,
-          ],
-        },
-      );
+      // (A title piece moved onto its holder above is a part now.)
+      const moved = TARGET.get(s.on);
+      if (moved) t = moved;
+      else
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part you can style.`,
+          {
+            didYouMean: near,
+            run: [
+              ...(typo.length === 1
+                ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
+                : []),
+              `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
+              `${HOW} ${quoteCommandArgument(s.on)}`,
+            ],
+          },
+        );
     }
     if (s.when) {
       const variants = C.variantValues(s.on);
@@ -9028,17 +9063,54 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     parts.some(t => cornerParts(ctx, t).some(x => x !== t))
   )
     return;
-  // An edge the theme gives the part itself shows its corners too.
+  // An edge the theme gives the part itself shows its corners too. (On a
+  // pager's row, only an edge that paints: "border none" there is none.)
+  const onRow = isRowFrame(ctx, parts[0]);
   const edged = data.settings.some(
     x =>
       x.source === 'property' &&
       /^(background|border|box-shadow|outline)/.test(x.thing) &&
+      (!onRow || givesEdge(x, true)) &&
       partsOf(ctx, x).some(t => parts.includes(t)),
   );
   if (edged) return;
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
     .filter(k => ctx.C.showsCorners(k) && ctx.C.MAP[k])
     .slice(0, 3);
+  // (A border radius set on a pager goes on the row that frames its pages;
+  // asked of that row, the same. With no edge there yet it shows nothing:
+  // refused, with the row's lookup and the line that rounds each page.)
+  const frame = boxFrameOf(ctx, s) ?? (onRow ? parts[0] : null);
+  if (frame) {
+    const pager =
+      frame === s.on
+        ? [...ctx.project.target.keys()].find(
+            k => k !== frame && rowFrameOf(ctx, k) === frame,
+          )
+        : s.on;
+    // (A corner named alone rounds that corner of each control; a whole
+    // radius, the corners dial on the pager.)
+    const whole = s.thing === 'border-radius' || s.thing === 'corners';
+    const cells = pager
+      ? cornerParts(ctx, pager).filter(k => k !== pager && k !== frame)
+      : [];
+    const perPage = !pager
+      ? null
+      : whole
+        ? setLine(slug, 'corners', String(s.value), {...s, on: pager})
+        : cells.length
+          ? cells
+              .map(k => setLine(slug, s.thing, String(s.value), {...s, on: k}))
+              .join(' && ')
+          : null;
+    refuse(
+      E.ERR_THEME_NO_EFFECT,
+      `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s border radius goes on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners.${perPage ? ` To round each page on its own instead: ${perPage}.` : ''}`,
+      {
+        run: [`${HOW} ${frame}`, ...(perPage ? [perPage] : [])],
+      },
+    );
+  }
   refuse(
     E.ERR_THEME_NO_EFFECT,
     `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. To round ${s.on} itself, give it a background or a border first, then set its corners.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,

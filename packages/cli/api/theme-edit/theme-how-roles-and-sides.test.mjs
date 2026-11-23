@@ -7,8 +7,8 @@
  * chart colors name the data tokens; "no border except the bottom one"
  * keeps that side; a named color before a typed one is that value; a
  * blue-gray is the tinted gray; "clear" before errors is plain; less
- * contrast, a gentle dark mode, big type; deep and soft shades. Every line
- * offered is run.
+ * contrast, a gentle dark mode, big type; deep and soft shades; a light
+ * neutral fills the surfaces in light mode. Every line offered is run.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -107,6 +107,71 @@ describe('roles', () => {
   }, 240_000);
 });
 
+describe('a light neutral', () => {
+  it('fills the page, surfaces and cards in light mode; a darker one only grows the grays', async () => {
+    const silver = (await how('q0', 'silver #c0c0c0 everywhere'))[0];
+    expect(silver.commands).toEqual([
+      "set q0 neutral '#c0c0c0'",
+      "set q0 --color-background-body '#c0c0c0' --mode light",
+      "set q0 --color-background-surface '#c0c0c0' --mode light",
+      "set q0 --color-background-card '#c0c0c0' --mode light",
+    ]);
+    expect(silver.text).toMatch(/dark mode keeps the dark shades/);
+    // (Text a part draws straight on the silver surfaces, a code block's
+    // title, takes the nearest shade that reads there.)
+    const silverAll = (await how('q0', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(silverAll).toContain(
+      "set q0 --color-syntax-comment '#4f4f4f' --mode light",
+    );
+    // (So does a light tan.)
+    expect(
+      (await how('q0', 'neutral #d2b48c')).flatMap(r => r.commands),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^set q0 --color-syntax-comment '#[0-9a-f]{6}' --mode light$/,
+        ),
+      ]),
+    );
+    // (A code background the theme sets itself stays, so its title color
+    // is left as it is.)
+    await themeEditNew('q2', {cwd, like: 'neutral'});
+    await themeEditSet('q2', '--color-syntax-background', '#1e1e1e', {cwd});
+    const own = (await how('q2', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(own.join('\n')).not.toMatch(/--color-syntax-comment/);
+    // (So does a code block filled as a part.)
+    await themeEditNew('q3', {cwd, like: 'neutral'});
+    await themeEditSet('q3', 'background-color', '#1e1e1e', {
+      cwd,
+      on: 'code-block',
+    });
+    const part = (await how('q3', 'silver #c0c0c0 everywhere')).flatMap(
+      r => r.commands,
+    );
+    expect(part.join('\n')).not.toMatch(/--color-syntax-comment/);
+    const slate = (await how('q0', 'slate grays')).flatMap(r => r.commands);
+    expect(slate).toContain("set q0 neutral '#64748b'");
+    expect(slate.join('\n')).not.toMatch(/--color-background-/);
+    // (A lighter neutral worked out from the saved one names no color:
+    // the surfaces stay as they are.)
+    await themeEditNew('q1', {cwd, like: 'neutral'});
+    await themeEditSet('q1', 'neutral', '#64748b', {cwd});
+    const lighter = (await how('q1', 'lighter neutral')).flatMap(
+      r => r.commands,
+    );
+    expect(lighter.join('\n')).toMatch(/ neutral '#/);
+    expect(lighter.join('\n')).not.toMatch(/--color-background-/);
+    // (A stated color with a comparative word still fills the surfaces.)
+    expect(
+      (await how('q1', 'a warmer neutral #f5f5dc')).flatMap(r => r.commands),
+    ).toContain("set q1 --color-background-body '#f5f5dc' --mode light");
+  }, 240_000);
+});
+
 describe('sides', () => {
   it('no border except the bottom one keeps that side', async () => {
     const lines = top(
@@ -158,22 +223,30 @@ describe('plain looks', () => {
   });
   it("a status's text on a banner reaches its title and description, never its buttons or icon", async () => {
     for (const [ask, re] of [
-      ['success text bold', /--font-weight-normal 700 --on banner --when status:success/],
-      ['warning text 10px', /--text-supporting-size 0\.625rem --on banner --when status:warning/],
+      [
+        'success text bold',
+        /--font-weight-normal 700 --on banner --when status:success/,
+      ],
+      [
+        'warning text 10px',
+        /--text-supporting-size 0\.625rem --on banner --when status:warning/,
+      ],
     ]) {
       const w = writes(await how('q0', String(ask))).join('\n');
       expect(w, String(ask)).toMatch(re);
       // (A banner's close and action buttons read the medium weight and
       // the label size of a button; its icon reads the large size.)
-      expect(w, String(ask)).not.toMatch(/--font-weight-medium [^\n]*--on banner/);
+      expect(w, String(ask)).not.toMatch(
+        /--font-weight-medium [^\n]*--on banner/,
+      );
       expect(w, String(ask)).not.toMatch(/--text-large-size [^\n]*--on banner/);
       // (Nor a token its buttons read too: the title's label size is the
       // buttons' label size, so it is left, and said.)
       expect(w, String(ask)).not.toMatch(/--text-label-size [^\n]*--on banner/);
     }
-    expect(
-      JSON.stringify(await how('q0', 'warning text 10px')),
-    ).toMatch(/left as it is: banner's --text-label-size, which its buttons read too/);
+    expect(JSON.stringify(await how('q0', 'warning text 10px'))).toMatch(
+      /left as it is: banner's --text-label-size, which its buttons read too/,
+    );
   });
   it("a status's alerts keep their status for size and weight", async () => {
     for (const [ask, status] of [

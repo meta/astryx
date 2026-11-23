@@ -43,6 +43,7 @@ import {isRenderable} from '../utils/isRenderable';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {textDirectionProps, truncatedTextStyles} from '../utils/textDirection';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
@@ -287,7 +288,10 @@ export function SegmentedControlItem({
       )}>
       {iconElement}
       {!isLabelHidden && (
-        <span {...segmentTitleProps} {...stylex.props(styles.labelText)}>
+        <span
+          {...segmentTitleProps}
+          {...textDirectionProps(label)}
+          {...stylex.props(styles.labelText, truncatedTextStyles.pageAlign)}>
           {label}
         </span>
       )}

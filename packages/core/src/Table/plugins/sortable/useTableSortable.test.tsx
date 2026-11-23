@@ -10,7 +10,7 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {useState, type ReactNode} from 'react';
 import {Table} from '../../Table';
 import {InternationalizationProvider} from '../../../i18n';
 import type {TableColumn} from '../../types';
@@ -83,6 +83,20 @@ function SortableTable({
 
 describe('useTableSortable', () => {
   describe('rendering', () => {
+    it('gives a plain-text label its own direction, so a cut Latin label keeps its start', () => {
+      render(
+        <SortableTable
+          columns={[
+            {key: 'name', header: 'Name', sortable: true},
+            {key: 'email', header: 'אימייל', sortable: true},
+          ]}
+        />,
+      );
+      expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('אימייל')).not.toHaveAttribute('dir');
+      expect(screen.getByRole('button', {name: 'Name'})).toBeInTheDocument();
+    });
+
     it('renders sort icon for sortable columns', () => {
       render(<SortableTable />);
 
@@ -887,5 +901,47 @@ describe('sort indicator icon slot', () => {
       .querySelector('.astryx-icon');
     expect(icon).toHaveAttribute('data-size', 'sm');
     expect(glyph('Name')).toBe('arrowUp');
+  });
+});
+
+describe('useTableSortable — a header that holds its own control', () => {
+  type Row = {id: string; name: string};
+  const rows: Row[] = [{id: '1', name: 'Ada'}];
+
+  function SortableTable({header}: {header: ReactNode}) {
+    const [sort, setSort] = useState<TableSortState>([]);
+    const sortable = useTableSortable<Row>({sort, onSortChange: setSort});
+    const columns: TableColumn<Row>[] = [{key: 'name', header, sortable: true}];
+    return <Table data={rows} columns={columns} plugins={{sortable}} />;
+  }
+
+  it('warns in development that the control nests in the Sort button', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <SortableTable
+        header={
+          <span>
+            Recent runs <button type="button">Legend</button>
+          </span>
+        }
+      />,
+    );
+    expect(
+      warn.mock.calls.some(call =>
+        String(call[0]).includes('holds its own control'),
+      ),
+    ).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('stays silent for a header of plain text', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<SortableTable header="Recent runs" />);
+    expect(
+      warn.mock.calls.some(call =>
+        String(call[0]).includes('holds its own control'),
+      ),
+    ).toBe(false);
+    warn.mockRestore();
   });
 });
