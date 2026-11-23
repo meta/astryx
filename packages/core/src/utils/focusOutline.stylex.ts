@@ -107,47 +107,6 @@ export const focusOutlineStyles = stylex.create({
     },
     outlineOffset: {default: '0', ':focus-visible': FOCUS_OUTLINE_OFFSET},
   },
-  /**
-   * The focus ring, plus a 1 px `CanvasText` edge inside the box under forced
-   * colors, for a floating surface that takes focus. Forced colors drop the
-   * surface's shadow, its only edge. The inset edge adds no size, so a layer
-   * keeps the size its viewport gutters allow. Keyboard focus draws the ring
-   * in its place.
-   */
-  focusVisibleOrForcedColorsEdge: {
-    outlineWidth: {
-      default: '0',
-      ':focus-visible': focusOutlineLonghands.outlineWidth,
-      '@media (forced-colors: active)': {
-        default: '1px',
-        ':focus-visible': focusOutlineLonghands.outlineWidth,
-      },
-    },
-    outlineStyle: {
-      default: 'none',
-      ':focus-visible': focusOutlineLonghands.outlineStyle,
-      '@media (forced-colors: active)': {
-        default: 'solid',
-        ':focus-visible': focusOutlineLonghands.outlineStyle,
-      },
-    },
-    outlineColor: {
-      default: null,
-      ':focus-visible': focusOutlineLonghands.outlineColor,
-      '@media (forced-colors: active)': {
-        default: 'CanvasText',
-        ':focus-visible': focusOutlineLonghands.outlineColor,
-      },
-    },
-    outlineOffset: {
-      default: '0',
-      ':focus-visible': FOCUS_OUTLINE_OFFSET,
-      '@media (forced-colors: active)': {
-        default: '-1px',
-        ':focus-visible': FOCUS_OUTLINE_OFFSET,
-      },
-    },
-  },
   focusWithin: {
     outlineWidth: {
       default: '0',
@@ -279,9 +238,6 @@ function makeFocusOutlineProps(style: StyleXPropsArg) {
 
 export const focusOutlineProps = {
   focusVisible: makeFocusOutlineProps(focusOutlineStyles.focusVisible),
-  focusVisibleOrForcedColorsEdge: makeFocusOutlineProps(
-    focusOutlineStyles.focusVisibleOrForcedColorsEdge,
-  ),
   focusWithin: makeFocusOutlineProps(focusOutlineStyles.focusWithin),
   focusWithinFirstChild: makeFocusOutlineProps(
     focusOutlineStyles.focusWithinFirstChild,
@@ -294,3 +250,56 @@ export const focusOutlineProps = {
     focusOutlineStyles.focusWithinOrPublished,
   ),
 } as const;
+
+/**
+ * Internal: not re-exported from `utils/index.ts`. Core's floating surfaces
+ * use it; it is not part of the package's public API.
+ */
+export const surfaceFocusOutlineStyles = stylex.create({
+  /**
+   * The focus ring, plus a 1 px `CanvasText` edge inside the box under forced
+   * colors, for a floating surface that takes focus. Forced colors drop the
+   * surface's shadow, its only edge. The inset edge adds no size, so a layer
+   * keeps the size its viewport gutters allow. Keyboard focus draws the ring
+   * in its place.
+   */
+  focusVisibleOrForcedColorsEdge: {
+    outlineWidth: {
+      default: '0',
+      ':focus-visible': focusOutlineLonghands.outlineWidth,
+      '@media (forced-colors: active)': {
+        default: '1px',
+        ':focus-visible': focusOutlineLonghands.outlineWidth,
+      },
+    },
+    outlineStyle: {
+      default: 'none',
+      ':focus-visible': focusOutlineLonghands.outlineStyle,
+      '@media (forced-colors: active)': {
+        default: 'solid',
+        ':focus-visible': focusOutlineLonghands.outlineStyle,
+      },
+    },
+    outlineColor: {
+      default: null,
+      ':focus-visible': focusOutlineLonghands.outlineColor,
+      '@media (forced-colors: active)': {
+        default: 'CanvasText',
+        ':focus-visible': focusOutlineLonghands.outlineColor,
+      },
+    },
+    outlineOffset: {
+      default: '0',
+      ':focus-visible': FOCUS_OUTLINE_OFFSET,
+      '@media (forced-colors: active)': {
+        default: '-1px',
+        ':focus-visible': FOCUS_OUTLINE_OFFSET,
+      },
+    },
+  },
+});
+
+/** `focusOutlineProps.focusVisible` with the forced-colors surface edge. */
+export const surfaceFocusOutlineProps = makeFocusOutlineProps(
+  surfaceFocusOutlineStyles.focusVisibleOrForcedColorsEdge,
+);

@@ -40,7 +40,7 @@ import {usePopover} from './usePopover';
 import type {UsePopoverReturn} from './usePopover';
 import {Dialog} from '../Dialog';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {surfaceFocusOutlineStyles} from '../utils/focusOutline.stylex';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -1118,7 +1118,7 @@ describe('Popover', () => {
       await waitFor(() => expect(dialog).toHaveFocus());
       // The painted surface carries the focus ring with its forced-colors edge.
       for (const className of stylex
-        .props(focusOutlineStyles.focusVisibleOrForcedColorsEdge)
+        .props(surfaceFocusOutlineStyles.focusVisibleOrForcedColorsEdge)
         .className!.split(' ')) {
         expect(dialog).toHaveClass(className);
       }

@@ -54,7 +54,10 @@ import {
 } from '../hooks/focusableSelector';
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOutlineProps,
+  surfaceFocusOutlineProps,
+} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {themeProps} from '../utils/themeProps';
@@ -118,7 +121,7 @@ const styles = stylex.create({
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
     // Its forced-colors edge comes with the focus ring
-    // (focusOutlineProps.focusVisibleOrForcedColorsEdge).
+    // (surfaceFocusOutlineProps).
   },
   // An open popover whose separate anchor resolves to nothing shows no
   // surface until it does: an unanchored layer would sit at the page origin.
@@ -977,7 +980,7 @@ function usePopoverImplementation(
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
               (hasSurface
-                ? focusOutlineProps.focusVisibleOrForcedColorsEdge
+                ? surfaceFocusOutlineProps
                 : focusOutlineProps.focusVisible)(
                 styles.contentWrapper,
                 hasSurface && styles.surface,
