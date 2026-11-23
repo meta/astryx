@@ -13,14 +13,6 @@
  *   idle within a time cap, whatever the input
  */
 
-// The touch modules (the animator, the gesture host, the recognizers and the
-// touch parts built on them) are about 45 KB gzip. A page that never sees a
-// finger must not pay for them in its first load, and every page still has
-// them once it settles. So the first component that uses them schedules one
-// load: after the page's first paint, when the main thread is idle, and no
-// later than LOAD_CAP_MS after that paint. An input never starts or hurries
-// the load.
-//
 // A press in flight at the load finishes by its click. The touch parts track
 // only the presses that start after they mount.
 //

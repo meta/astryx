@@ -92,7 +92,31 @@ const isLinkToFolder = at =>
   fs.lstatSync(at).isSymbolicLink() &&
   fs.realpathSync(at) === fs.realpathSync(FOLDER());
 
-describe('the computer text defers to a project\'s own Astryx text', () => {
+describe("the computer text defers to a project's own Astryx text", () => {
+  it('renders through the shared skill-file writer: the frontmatter, then the hash line over the rest', () => {
+    const text = renderComputerAgentText({
+      command: 'astryx',
+      install: 'npm install -g @astryxdesign/cli',
+    });
+    const lines = text.split('\n');
+    expect(lines.slice(0, 5)).toEqual([
+      '---',
+      'name: astryx',
+      lines[2],
+      '---',
+      '',
+    ]);
+    expect(lines[2]).toMatch(/^description: ".+"$/u);
+    expect(lines[5]).toBe('<!-- ASTRYX:START -->');
+    const hashLine = /^<!-- astryx-managed sha256:([0-9a-f]{64}) -->$/u.exec(
+      lines[6],
+    );
+    expect(hashLine).not.toBeNull();
+    const rest = [...lines.slice(0, 6), ...lines.slice(7)].join('\n');
+    expect(createHash('sha256').update(rest).digest('hex')).toBe(hashLine?.[1]);
+    expect(text.endsWith('<!-- ASTRYX:END -->\n')).toBe(true);
+  });
+
   it('says so right after its opening sentence, and names no command', () => {
     const text = renderComputerAgentText({command: 'astryx'});
     const line =

@@ -138,16 +138,9 @@ describe('part facts from Core', () => {
     );
   }, 240_000);
 
-  it('points a text property on a part whose inner text sizes itself to its token', async ctx => {
+  it('writes a text property on a part whose inner text sizes itself into its token', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('b', {cwd, like: 'butter'});
-    const r = await refusal(() =>
-      themeEditSet('b', 'font-weight', '700', {cwd, on: 'top-nav-heading'}),
-    );
-    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(
-      /set b --font-weight-semibold 700 --on top-nav-heading$/,
-    );
     expect(await answer('bold app name in the top nav', 'b')).toMatch(
       /set b --font-weight-semibold 700 --on top-nav-heading/,
     );
@@ -155,6 +148,16 @@ describe('part facts from Core', () => {
     const text = JSON.stringify(data.results);
     expect(text).toMatch(/--text-large-size/);
     expect(text).not.toMatch(/font-size 1\.094rem/);
+    const set = await themeEditSet('b', 'font-weight', '700', {
+      cwd,
+      on: 'top-nav-heading',
+    });
+    expect(JSON.stringify(set)).toMatch(
+      /the value goes into --font-weight-semibold on top-nav-heading/,
+    );
+    expect(
+      fs.readFileSync(path.join(cwd, 'themes/b/b.css'), 'utf8'),
+    ).toMatch(/--font-weight-semibold: 700/);
   }, 240_000);
 
   it('routes a border on a date-time input to the boxes that draw its edges', async ctx => {

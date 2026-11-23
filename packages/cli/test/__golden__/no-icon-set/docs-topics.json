@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "e41a8634edba6f179b0a455f1c76e213f04a4bed3a0662a3c6bff261d3c142d7",
+      "skeleton": "bb4dcd414d45a39dd4743c19e9975a818c4a14a6f6b755243167141d2d8bc936",
       "mentions": []
     },
     "browser-support": {
@@ -166,7 +166,7 @@
         "component-and-library-icons",
         "component-icon-slots"
       ],
-      "skeleton": "206b12fc6081d11de22b5e9aa8c2cbf3755acf167da9442cab0f89c3080ca101",
+      "skeleton": "c6797356fdd95f1ef602fca99e9893a4ea2610cd6b062fa0edec0d2871bafd69",
       "mentions": [
         "This lets you swap the icon set (e.g."
       ]
@@ -249,7 +249,7 @@
         "what-each-file-does",
         "further-reading"
       ],
-      "skeleton": "af5541b78883db8a65d292340cecdaffa0c6b1052b77921ba0025a2ab51f75eb",
+      "skeleton": "00b317a69c53bda5309c0d45cfdc3be3d7e2b55da08780e35a4de4e21d4bb4e4",
       "mentions": []
     },
     "theme": {
@@ -258,6 +258,7 @@
         "look-after-each-change",
         "denser-or-roomier",
         "one-kind-of-part",
+        "values-a-part-shows",
         "no-app-yet",
         "share-with-other-teams",
         "quick-start",
@@ -266,7 +267,7 @@
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "0265677164b16d22adfd3e60e3a7238e4c89b1f27f1a2aab9fcd0ad9bc4042ef",
+      "skeleton": "5a279841589fba38be44c2d05ef19f6d5f9002dd8d8bd538ead8b2907752a353",
       "mentions": []
     },
     "use-a-theme": {
@@ -280,7 +281,7 @@
         "nesting-themes",
         "runtime-vs-built-themes"
       ],
-      "skeleton": "c2941d6fc4d91afea2972ff0934246160d80dfecfcbfbafa36a86e406cb0cb96",
+      "skeleton": "e657033b7f181f816924a1de793dcdda9cd22d6e0630d0be30b8e6fe4707493f",
       "mentions": []
     },
     "use-integrations": {

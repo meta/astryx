@@ -2,7 +2,8 @@
 
 /**
  * @file motionQueries.ts
- * @input The window's media queries
+ * @input The window's media queries, through reducesMotion with no element
+ *   (the person's Reduce Motion setting, without a theme's 'always')
  * @output defaultPrefersReducedMotion and defaultIsCoarsePointer, read at the
  *   moment of the call
  * @position Shared by the animator and by code that reads the motion policy
@@ -10,19 +11,18 @@
  *   after first paint through utils/touchRuntime.ts)
  */
 
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
+
 /**
- * Whether the user asked for reduced motion (`prefers-reduced-motion:
- * reduce`), read at the moment of the call. The animator uses it by default
- * for its Reduce Motion substitution. A component does not read it to pick a
- * curve of its own: `animator.reducedMotion()` or `reducedMotionFade()` gives
- * the policy's answer. False without a window (server rendering).
+ * Whether the person's Reduce Motion setting is on (`prefers-reduced-motion:
+ * reduce`), read at the moment of the call, without a theme's `'always'`
+ * (`reducesMotion` adds that, and the animator calls it). A component never
+ * reads it to pick a curve of its own: `animator.reducedMotion()` or
+ * `reducedMotionFade()` gives the policy's answer. False without a window
+ * (server rendering).
  */
 export function defaultPrefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
+  return reducesMotion();
 }
 
 /** Whether the primary pointer is coarse: `(pointer: coarse)`. */

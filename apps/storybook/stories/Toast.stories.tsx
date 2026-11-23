@@ -715,6 +715,59 @@ export const NoProvider: StoryObj = {
 };
 
 // =============================================================================
+// Fallback viewport under a Theme
+// =============================================================================
+
+const fallbackPageTheme = defineTheme({
+  name: 'toast-fallback-page',
+  tokens: {'--radius-container': '0px'},
+});
+
+const fallbackRegionTheme = defineTheme({
+  name: 'toast-fallback-region',
+  tokens: {'--radius-container': '24px'},
+});
+
+/**
+ * The story sets the toolbar theme to none, so no `LayerProvider` is above it.
+ * Both buttons then show their toasts in the fallback viewport, which sits
+ * outside both Themes.
+ */
+export const FallbackUnderTheme: StoryObj = {
+  name: 'Accessibility / Fallback viewport under a Theme',
+  // The toasts stay up, so they would cover the docs page.
+  tags: ['!autodocs'],
+  globals: {astryxTheme: 'none'},
+  render: function FallbackUnderThemeStory() {
+    return (
+      <Theme theme={fallbackPageTheme} mode="light">
+        <Stack gap={2}>
+          <FallbackThemeTrigger label="Save page" body="Page saved" />
+          <Theme theme={fallbackRegionTheme} mode="light">
+            <FallbackThemeTrigger label="Save region" body="Region saved" />
+          </Theme>
+        </Stack>
+      </Theme>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A page Theme with a second Theme around one region, and no `LayerProvider`. A toast from either button draws under the Theme around that button, also after a host page names its own theme on the root element.',
+      },
+    },
+  },
+};
+
+function FallbackThemeTrigger({label, body}: {label: string; body: string}) {
+  const toast = useToast();
+  return (
+    <Button label={label} onClick={() => toast({body, isAutoHide: false})} />
+  );
+}
+
+// =============================================================================
 // Toast over Dialog
 // =============================================================================
 

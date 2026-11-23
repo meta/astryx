@@ -25,10 +25,11 @@ import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
+  ClockIcon,
   FolderIcon,
-  DocumentTextIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+  DocumentIcon,
+  SearchIcon,
+} from '@astryxdesign/template-icons';
 
 const styles: Record<string, CSSProperties> = {
   contentFill: {
@@ -50,14 +51,6 @@ const styles: Record<string, CSSProperties> = {
   },
   metadataCompact: {
     gap: 'var(--spacing-1) var(--spacing-3)',
-  },
-  historyTimelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    backgroundColor: 'var(--color-border-emphasized)',
-    marginTop: 6,
-    flexShrink: 0,
   },
   editorArea: {
     overflow: 'auto',
@@ -142,7 +135,7 @@ function buildFileTree(
   const file = (id: string): TreeListItemData => ({
     id,
     label: label(id),
-    startContent: <Icon icon={DocumentTextIcon} size="xsm" />,
+    startContent: <Icon icon={DocumentIcon} size="xsm" />,
     onClick: () => onFileClick(id),
   });
   return [
@@ -262,7 +255,7 @@ export default function ResizableWorkspacePage() {
                           value=""
                           placeholder="Search"
                           size="md"
-                          startIcon={MagnifyingGlassIcon}
+                          startIcon={SearchIcon}
                         />
                         <TreeList items={fileTree} density="compact" />
                       </Stack>
@@ -487,8 +480,10 @@ export default function ResizableWorkspacePage() {
                                           </Text>
                                         }
                                         startContent={
-                                          <span
-                                            style={styles.historyTimelineDot}
+                                          <Icon
+                                            icon={ClockIcon}
+                                            size="xsm"
+                                            color="secondary"
                                           />
                                         }
                                       />

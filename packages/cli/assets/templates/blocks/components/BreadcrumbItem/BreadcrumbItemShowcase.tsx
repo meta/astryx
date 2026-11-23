@@ -6,7 +6,7 @@ import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
 import {Icon} from '@astryxdesign/core/Icon';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
-import {HomeIcon} from '@heroicons/react/24/outline';
+import {HomeIcon} from '@astryxdesign/template-icons';
 
 export default function BreadcrumbItemShowcase() {
   return (

@@ -7,9 +7,10 @@
  * @input Pointer and context-menu events through the shared input stream;
  *   keydown and click on the document, and on each other document a control
  *   lives in (listenForGestures)
- * @output Exports the gesture identity, whether its click has run, whether a
- *   press is down, awaits its click or is being released (afterRelease runs
- *   a callback once that release is handled), the press claims (claimPress,
+ * @output Exports the gesture identity, the element the input in hand landed
+ *   on (currentInputTarget), whether its click has run, whether a press is
+ *   down, awaits its click or is being released (afterRelease runs a callback
+ *   once that release is handled), the press claims (claimPress,
  *   claimContextMenuPress), counting in another document (listenForGestures),
  *   and the touch tap recognizer (useTapRecognizer, TOUCH_POINTER_TYPES)
  * @position Internal to the package, not exported. useLayer reads it to tell
@@ -55,6 +56,9 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   // The other documents (a frame, a pop-out window) whose presses count.
   listenedDocuments: new WeakSet<Document>(),
   unsubscribePress: null as (() => void) | null,
+  // The press, keystroke or click last seen, and the element it landed on.
+  inputEvent: null as Event | null,
+  inputTarget: null as EventTarget | null,
 }));
 
 /**
@@ -77,10 +81,27 @@ function ensureFields(): void {
   if (state.listenedDocuments === undefined) {
     state.listenedDocuments = new WeakSet();
   }
+  if (state.inputTarget === undefined) {
+    state.inputTarget = null;
+  }
+  if (state.inputEvent === undefined) {
+    state.inputEvent = null;
+  }
 }
 
-function advance() {
+// The input in hand counts for as long as its own dispatch runs, which
+// includes a controlled open's synchronous effects.
+function noteInputTarget(event: Event): void {
+  ensureFields();
+  state.inputEvent = event;
+  state.inputTarget = event.composedPath()[0] ?? event.target;
+}
+
+function advance(event?: Event) {
   state.gesture += 1;
+  if (event != null) {
+    noteInputTarget(event);
+  }
 }
 
 // The page listens for a press's end and its context menu only while a press
@@ -91,7 +112,7 @@ function startPress(event: PointerEvent) {
   state.isDispatchingRelease = false;
   // A mark from an earlier press never reaches this one.
   clearTouchEndMark();
-  advance();
+  advance(event);
   state.pressPointerId = event.pointerId;
   state.pressGesture = state.gesture;
   const view = event.view ?? document.defaultView;
@@ -136,6 +157,7 @@ function markContextMenu() {
 
 function markClicked(event: MouseEvent) {
   ensureFields();
+  noteInputTarget(event);
   state.clickedGesture = state.gesture;
   // A click the page dispatches while the release itself is dispatched (a
   // menu row's activation) comes before the release's light dismiss, so it
@@ -198,6 +220,20 @@ export function listenForGestures(doc: Document | null | undefined): void {
 export function currentGesture(): number {
   listen();
   return state.gesture;
+}
+
+/**
+ * The element the press, keystroke or click being handled landed on, or null
+ * once its dispatch is over.
+ */
+export function currentInputTarget(): EventTarget | null {
+  listen();
+  ensureFields();
+  const {inputEvent} = state;
+  // An event's phase is none again once its dispatch is over.
+  return inputEvent != null && inputEvent.eventPhase !== 0
+    ? state.inputTarget
+    : null;
 }
 
 /** Whether the click belonging to the current gesture already bubbled. */

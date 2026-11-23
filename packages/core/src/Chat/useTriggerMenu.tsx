@@ -31,6 +31,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {cutText} from '../utils/textDirection';
 import {usePopover} from '../Popover/usePopover';
 import {isPressInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -962,11 +963,9 @@ export function useTriggerMenu(
                 styles.item,
                 idx === state.highlightedIndex && styles.itemHighlighted,
               )}>
-              {activeTrigger.renderItem ? (
-                activeTrigger.renderItem(item)
-              ) : (
-                <span {...stylex.props(styles.itemLabel)}>{item.label}</span>
-              )}
+              {activeTrigger.renderItem
+                ? activeTrigger.renderItem(item)
+                : cutText(item.label, styles.itemLabel)}
             </div>
           );
         });

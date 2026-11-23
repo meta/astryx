@@ -67,6 +67,22 @@ beforeEach(() => {
 });
 
 describe('SegmentedControl', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and leaves a right-to-left label in the page direction', () => {
+    render(
+      <div dir="rtl">
+        <SegmentedControl value="month" onChange={() => {}} label="Range">
+          <SegmentedControlItem value="month" label="Monthly" />
+          <SegmentedControlItem value="week" label="שבועי" />
+          <SegmentedControlItem value="new" label="iPhone جديد" />
+        </SegmentedControl>
+      </div>,
+    );
+    expect(screen.getByText('Monthly')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('שבועי')).not.toHaveAttribute('dir');
+    expect(screen.getByText('iPhone جديد')).not.toHaveAttribute('dir');
+    expect(screen.getByRole('radio', {name: 'Monthly'})).toBeTruthy();
+  });
+
   it('calls onChange when an item is clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();

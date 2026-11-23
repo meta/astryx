@@ -17,6 +17,7 @@ import {
   beforeAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
@@ -39,10 +40,14 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
-import {isInHeldLayer} from '../Layer/inputHold';
+import {holdInput, isInHeldLayer} from '../Layer/inputHold';
 import {runPopoverOperation} from '../Layer/popoverOperations';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+
+// Spied, so a case about the press model alone can stub the presentation's
+// input hold: jsdom never ends a presentation.
+vi.mock('../Layer/inputHold', {spy: true});
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -3680,6 +3685,10 @@ describe('DropdownMenu press model', () => {
 
   it('under a coarse pointer a finger opens the menu as it presses the trigger (no scroll view), and a slide picks', () => {
     stubCoarsePointer();
+    // The press model alone: jsdom never ends the grow, so its input hold
+    // would hold this gesture to its end.
+    vi.mocked(holdInput).mockImplementation(() => () => {});
+    onTestFinished(() => vi.mocked(holdInput).mockRestore());
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
@@ -4116,6 +4125,10 @@ describe('DropdownMenu press model', () => {
 
     it('coarse primary pointer: a finger opens the menu once, as it presses, and it closes once at a pick (module AR5)', () => {
       stubCoarsePointer();
+      // The press model alone: jsdom never ends the grow, so its input hold
+      // would hold this gesture to its end.
+      vi.mocked(holdInput).mockImplementation(() => () => {});
+      onTestFinished(() => vi.mocked(holdInput).mockRestore());
       const {trigger, onOpenChange, onPick} = renderCountingMenu();
       fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
@@ -4506,17 +4519,20 @@ describe('DropdownMenu focus return after a pointer pick', () => {
       expect(focus.mock.calls.at(-1)).toEqual([{preventScroll: true}]);
     });
 
-    it('clears a ring the browser already drew before refocusing after a pointer pick', async () => {
+    it('returns focus without a ring after a pointer pick, before the browser can draw one', async () => {
       const user = userEvent.setup();
       const trigger = renderCustomMenu();
       await user.click(trigger);
-      // WebKit's own popover focus restoration can focus the trigger, with a
-      // ring, before the menu moves focus, and focusing the focused element
-      // changes nothing.
+      // The browser's own popover focus restoration focuses the trigger, with
+      // a ring, while focus is still inside the closing popover. The menu
+      // returns focus as it starts to close, so that restore has nothing to do.
       const hidePopover = HTMLElement.prototype.hidePopover;
       HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        const hadFocus = this.contains(document.activeElement);
         hidePopover.call(this);
-        trigger.focus();
+        if (hadFocus) {
+          trigger.focus();
+        }
       });
       const matches = HTMLElement.prototype.matches;
       vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
@@ -4524,19 +4540,16 @@ describe('DropdownMenu focus return after a pointer pick', () => {
         selector: string,
       ) {
         return selector === ':focus-visible'
-          ? this === trigger
+          ? this === trigger && document.activeElement === trigger
           : matches.call(this, selector);
       });
       const blur = vi.spyOn(trigger, 'blur');
       const focus = vi.spyOn(trigger, 'focus');
       await user.click(item('Edit'));
-      expect(blur).toHaveBeenCalledTimes(1);
+      expect(blur).not.toHaveBeenCalled();
       expect(focus.mock.calls.at(-1)).toEqual([
         {preventScroll: true, focusVisible: false},
       ]);
-      expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
-        focus.mock.invocationCallOrder.at(-1) ?? 0,
-      );
       expect(trigger).toHaveFocus();
     });
   });
