@@ -35,7 +35,7 @@ deciding_specs: [spec:AST-116/DEC-12]
 | Builder impact          | A component author puts surface rendering behind the shared module loader and capability code behind its own import. The check names the import chain that breaks a boundary.                                                                                                                                                                    |
 | Compatibility/readiness | Additive and internal: no public API changes. Current-state impact lists today's crossings; the allowlist records each one until it is fixed.                                                                                                                                                                                                    |
 | Review checks           | Reject a static import of a surface module or a capability module from a public import outside the allowlist; an `import()` of a touch module; a surface whose trigger loses its ARIA wiring, focus, or an early intent across the load; a layout shift on load.                                                                                 |
-| Governing rules         | DEC-1, DEC-2, DEC-3, DEC-4; `architecture:react-component-runtime` INV13; `architecture:component-style-authoring` INV6; `spec:AST-080` DEC-5; `spec:AST-013` FR9.                                                                                                                                                                               |
+| Governing rules         | DEC-1, DEC-2, DEC-3, DEC-4, DEC-6; `architecture:react-component-runtime` INV13; `architecture:component-style-authoring` INV6; `spec:AST-080` DEC-5; `spec:AST-013` FR9.                                                                                                                                                                        |
 
 This table is a review projection; the body below is authoritative.
 
@@ -113,7 +113,11 @@ one pending load per module, caches a success, and resets after a failure.
   `pointerenter` from a mouse or pen, `focus`, `pointerdown` from any pointer,
   or open request (a controlled open, a keyboard shortcut, a context-menu
   invocation). The listeners use native events only; they recognize no
-  gesture. A component's own record may start the load earlier at a named
+  gesture, with one exception (DEC-6): before its surface loads, a trigger
+  that holds a touch for it cancels the lift of a press that is already a long
+  press by the shared long-press numbers, so that lift makes no click. It
+  starts no timer and opens nothing, and the loaded surface still recognizes
+  the press from the held touch. A component's own record may start the load earlier at a named
   moment after the page's first render. The `Tooltip` and `HoverCard`
   surfaces do not wait for intent: their load starts after the page's first
   paint, on every page that renders one of their triggers, and no input starts
@@ -171,7 +175,8 @@ one pending load per module, caches a success, and resets after a failure.
   INV13). The bundler keeps one copy per page, whether a base import or a
   loaded surface brings them. `import()` targets a surface module, never a
   touch module. INV2's listeners recognize no gesture, so a base import that
-  defers its surface carries no touch code for it. Telling a tap from a
+  defers its surface carries no touch code for it; DEC-6's lift check reads
+  only the shared long-press numbers (`motion/uikit/longPress`). Telling a tap from a
   scroll belongs to the loaded surface, which reads the `click` that follows
   a tap.
 - **INV9 — A check holds the boundaries per entry.** A CI check builds each
@@ -417,6 +422,30 @@ stays invisible.
 
 Amended: `spec:AST-116` DEC-12 accepts one optional feature over this
 allowance, `usePopover`'s `tabBehavior: 'pageOrder'`. INV10 names it.
+
+### DEC-6 — A held long press's lift makes no click before its surface loads
+
+**Reference:** `architecture:component-import-boundaries/DEC-6`
+**Decider:** pending owner approval
+
+A trigger that holds a touch for a surface that has not loaded cancels the
+`touchend` of a press that is already a long press: one finger, down for
+`LONG_PRESS_DURATION_MS`, and never past `LONG_PRESS_ALLOWABLE_MOVEMENT_PX` on
+either axis. The browser then makes no click for that lift, as the loaded
+surface's press model makes none for a long press it accepted (`spec:AST-094`
+FR21). The trigger starts no timer, opens nothing and recognizes nothing else.
+The loaded surface still recognizes the press from the held touch. The check
+adds only the shared long-press numbers to the base import. A tap, or a press
+that moved past the tolerance, keeps its click.
+
+Rejected: leaving the lift to the loaded surface, because on iOS the lift's
+click then acts on the trigger's content (a Table heading sorts its column)
+before the held long press opens the menu.
+Rejected: loading the Table context menu after first paint, because every page
+with such a table then pays for the menu, and a slow network still lets the
+lift come before the load.
+Rejected: the shared long-press detector and click guard in the base import,
+because they add eager code for the same rule.
 
 ## Open questions
 

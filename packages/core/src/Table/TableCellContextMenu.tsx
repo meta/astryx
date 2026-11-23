@@ -12,7 +12,9 @@
  * cell renders the trigger, and the menu loads beside it, so the content
  * keeps its node, focus and state. The cell holds an invocation that comes
  * before the load and replays it when the menu arrives. It recognizes no
- * gesture itself: the loaded menu reads a held touch's events.
+ * gesture itself: the loaded menu reads a held touch's events. It only
+ * cancels the lift of a held press that is already a long press, so that
+ * lift makes no click.
  */
 
 import {
