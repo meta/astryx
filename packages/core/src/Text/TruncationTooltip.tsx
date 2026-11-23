@@ -159,8 +159,8 @@ export function useTruncationTooltipInterest(
   // Set by the first move of a hover until the pointer leaves, so a hover
   // measures the text once, not on every move.
   const isHoverStartedRef = useRef(false);
-  // The window's input stream hears mouse moves while the text can show a
-  // tooltip, so a move at a still mouse's point is told apart.
+  // The text holds its window's mouse moves while it can show a tooltip.
+  // isMouseMove then tells a still mouse's repeated move from a real move.
   useEffect(() => {
     if (!isEnabled && measure == null) {
       return;
