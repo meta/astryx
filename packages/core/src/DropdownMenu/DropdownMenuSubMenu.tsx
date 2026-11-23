@@ -99,6 +99,7 @@ import {
   rtlStyles,
 } from '../utils';
 import {visibleText} from '../utils/accessibleName';
+import {cutTextDirection, isolatedText} from '../utils/textDirection';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -531,6 +532,29 @@ function hideRegionedFlyoutsIn(menu: HTMLElement | null): void {
  * </DropdownMenu>
  * ```
  */
+// The parent title goes into the translated "Back to …" text through this
+// slot, so the title can keep its own direction there.
+const PARENT_SLOT = '\u0000';
+
+/**
+ * "Back to <parent>" with the parent title in its own isolated span: a title
+ * in the other script than the menu keeps its own direction and punctuation
+ * order inside the row's text.
+ */
+function backToLabel(template: string, parent: string): ReactNode {
+  if (!template.includes(PARENT_SLOT)) {
+    return template;
+  }
+  const [before, after = ''] = template.split(PARENT_SLOT);
+  return (
+    <>
+      {before}
+      {isolatedText(parent, undefined, cutTextDirection(parent).dir)}
+      {after}
+    </>
+  );
+}
+
 export function DropdownMenuSubMenu(
   props: DropdownMenuSubMenuProps,
 ): ReactNode {
@@ -622,7 +646,10 @@ export function DropdownMenuSubMenu(
   const parentLabel = menuCtx?.menuLabel;
   const backLabel =
     parentLabel != null
-      ? t('@astryx.dropdownMenu.backTo', {parent: parentLabel})
+      ? backToLabel(
+          t('@astryx.dropdownMenu.backTo', {parent: PARENT_SLOT}),
+          parentLabel,
+        )
       : t('@astryx.dropdownMenu.back');
 
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);

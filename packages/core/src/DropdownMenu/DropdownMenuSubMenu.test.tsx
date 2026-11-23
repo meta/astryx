@@ -1592,6 +1592,30 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('keeps a right-to-left parent title in its own direction inside the Back row (bidirectionality DR2)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    const title = 'مرحبا 42!';
+    render(
+      <DropdownMenu button={{label: title}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: new RegExp(title)});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const back = await waitFor(() => shownRow(`Back to ${title}`));
+    const isolated = Array.from(back.querySelectorAll('span')).find(
+      span => span.textContent === title,
+    );
+    expect(isolated).toHaveAttribute('dir', 'rtl');
+  });
+
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
