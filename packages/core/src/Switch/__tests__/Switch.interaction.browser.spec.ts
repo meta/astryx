@@ -14,6 +14,9 @@
  * SYNC: useSwitchTouch.ts, switchTouch.ts, motion/uikit/switch.ts.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
   expect,
   test,
@@ -2161,9 +2164,46 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     };
   }
 
+  /**
+   * The run's P14 stall tally: one line per checked run, its test and its
+   * stall count. Every worker of the run appends to the same file in the
+   * project's output folder, which Playwright empties when a run starts.
+   */
+  function runStallTally(): string {
+    return path.join(test.info().project.outputDir, 'p14-frame-stalls.tsv');
+  }
+
+  /**
+   * Adds this run's stalls to `tally` and reads the run's stalls so far: the
+   * total, and how many tests saw one. Stalls spread over many tests read as
+   * a starved machine; stalls in one test with quiet neighbours, as a freeze.
+   */
+  function countRunStalls(
+    tally: string,
+    stalls: number,
+  ): {runWide: number; tests: number} {
+    fs.mkdirSync(path.dirname(tally), {recursive: true});
+    const title = test.info().titlePath.join(' › ').replaceAll('\t', ' ');
+    fs.appendFileSync(tally, `${title}\t${stalls}\n`);
+    const rows = fs
+      .readFileSync(tally, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map(line => {
+        const tab = line.lastIndexOf('\t');
+        return {test: line.slice(0, tab), stalls: Number(line.slice(tab + 1))};
+      });
+    return {
+      runWide: rows.reduce((sum, row) => sum + row.stalls, 0),
+      tests: new Set(rows.filter(row => row.stalls > 0).map(row => row.test))
+        .size,
+    };
+  }
+
   function expectCaughtWithoutAJump(
     samples: [number, number][],
     read: [number, number][] = samples,
+    {tally = runStallTally()}: {tally?: string} = {},
   ): void {
     // The stall count is recorded before any check, so a failing run reports
     // it too. The log line is what CI's job log shows; the annotation is for
@@ -2172,13 +2212,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const MAX_STALLS = 2;
     const gaps = samples.slice(1).map(([time], i) => time - samples[i][0]);
     const stalls = gaps.filter(gap => gap > STALL_GAP_MS).length;
+    const run = countRunStalls(tally, stalls);
+    const counts = `this test ${stalls}, run-wide ${run.runWide} across ${run.tests} ${run.tests === 1 ? 'test' : 'tests'} so far`;
     test.info().annotations.push({
       type: 'P14 frame stalls',
-      description: `${stalls} frame gap(s) longer than three frames`,
+      description: `frame gaps longer than three frames: ${counts}`,
     });
-    console.warn(
-      `P14 frame stalls: ${stalls} frame gap(s) longer than three frames (${test.info().title})`,
-    );
+    console.warn(`P14 frame stalls: ${counts} (${test.info().title})`);
     const xs = samples.map(([, x]) => x);
     const farthest = Math.max(...xs) - xs[0];
     // It turned around mid-travel, short of the on end...
@@ -2217,9 +2257,17 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         frames: samples.length,
         min: samples.length,
         longestGapMs: Math.max(...gaps),
-        cause: `${stalls} frame gaps longer than three frames in one run, where at most ${MAX_STALLS} pass: a loaded machine, or a freeze in the product`,
+        cause: `${stalls} frame gaps longer than three frames in one run, where at most ${MAX_STALLS} pass: a loaded machine, or a freeze in the product (stalls: ${counts})`,
       });
     }
+  }
+
+  /** A tally of its own for a check on recorded samples, with no page. */
+  function scratchTally(): string {
+    return path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'p14-stalls-')),
+      'tally.tsv',
+    );
   }
 
   // The jump check on recorded samples, with no page. A frame stall that
@@ -2228,6 +2276,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   // gap, and a jump after a frame read just over three frames late still
   // fail.
   test('P14 · the jump check reads the catch-up after a frame stall as motion, not a jump', () => {
+    const tally = scratchTally();
     const steps: [number, number][] = [];
     for (let i = 0; i < 12; i++) {
       const previous = steps[i - 1]?.[1] ?? 98;
@@ -2236,31 +2285,43 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const [lastTime, lastX] = steps[11];
     // The recorded failure: a 302 ms stall paints the thumb where it was,
     // and 2.8 ms later the frame catches up 8 px.
-    expectCaughtWithoutAJump([
-      ...steps,
-      [lastTime + 302, lastX],
-      [lastTime + 304.8, lastX - 8],
-    ]);
+    expectCaughtWithoutAJump(
+      [...steps, [lastTime + 302, lastX], [lastTime + 304.8, lastX - 8]],
+      undefined,
+      {tally},
+    );
     // 8 px in one ordinary frame.
     expect(() =>
-      expectCaughtWithoutAJump([...steps, [lastTime + 1000 / 60, lastX - 8]]),
+      expectCaughtWithoutAJump(
+        [...steps, [lastTime + 1000 / 60, lastX - 8]],
+        undefined,
+        {tally},
+      ),
     ).toThrow();
     // The frozen catch: a 60 ms gap in which the thumb moved, then a 5.7 px
     // snap in one frame.
     expect(() =>
-      expectCaughtWithoutAJump([
-        ...steps,
-        [lastTime + 60, lastX - 2.7],
-        [lastTime + 60 + 1000 / 60, lastX + 3],
-      ]),
+      expectCaughtWithoutAJump(
+        [
+          ...steps,
+          [lastTime + 60, lastX - 2.7],
+          [lastTime + 60 + 1000 / 60, lastX + 3],
+        ],
+        undefined,
+        {tally},
+      ),
     ).toThrow();
     // One frame in three, read 1 ms late, then 13 px in one frame.
     expect(() =>
-      expectCaughtWithoutAJump([
-        [0, 100],
-        [51, 104],
-        [51 + 1000 / 60, 91],
-      ]),
+      expectCaughtWithoutAJump(
+        [
+          [0, 100],
+          [51, 104],
+          [51 + 1000 / 60, 91],
+        ],
+        undefined,
+        {tally},
+      ),
     ).toThrow();
   });
 
@@ -2268,6 +2329,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   // a moving thumb still passes; three stalls in one run fail, even when each
   // catch-up alone reads as motion.
   test('P14 · the jump check tolerates one frame stall and fails on three', () => {
+    const tally = scratchTally();
     const FRAME = 1000 / 60;
     const run = (stallAt: number[]): [number, number][] => {
       const samples: [number, number][] = [];
@@ -2282,9 +2344,45 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       }
       return samples;
     };
-    expectCaughtWithoutAJump(run([8]));
-    expect(() => expectCaughtWithoutAJump(run([5, 12, 20]))).toThrow(
-      FrameStarvationError,
+    expectCaughtWithoutAJump(run([8]), undefined, {tally});
+    expect(() =>
+      expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally}),
+    ).toThrow(FrameStarvationError);
+  });
+
+  // The stall count names this test's stalls and the run's so far, so a
+  // starved runner (stalls in many tests) reads apart from a freeze (stalls in
+  // one test, quiet neighbours). It adds no rule: the per-test limit decides.
+  test('P14 · the stall count reports this test and the run, apart', () => {
+    const FRAME = 1000 / 60;
+    const run = (stallAt: number[]): [number, number][] => {
+      const samples: [number, number][] = [];
+      let time = 0;
+      let x = 98;
+      for (let i = 0; i < 30; i++) {
+        const stalled = stallAt.includes(i);
+        time += stalled ? 120 : FRAME;
+        x += (i < 15 ? 1 : -1) * (stalled ? 0 : 1);
+        samples.push([time, x]);
+      }
+      return samples;
+    };
+    // Starvation: two other tests already stalled in this run.
+    const starved = scratchTally();
+    fs.writeFileSync(starved, 'Switch › P14 · one\t2\nSwitch › P14 · two\t3\n');
+    expect(() =>
+      expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: starved}),
+    ).toThrow(/stalls: this test 3, run-wide 8 across 3 tests so far/);
+    // A freeze: the neighbours ran without a stall.
+    const quiet = scratchTally();
+    fs.writeFileSync(quiet, 'Switch › P14 · one\t0\nSwitch › P14 · two\t0\n');
+    expect(() =>
+      expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: quiet}),
+    ).toThrow(/stalls: this test 3, run-wide 3 across 1 test so far/);
+    // A passing run is counted as well, and still passes.
+    expectCaughtWithoutAJump(run([8]), undefined, {tally: quiet});
+    expect(fs.readFileSync(quiet, 'utf8').trim().split('\n').at(-1)).toMatch(
+      /\t1$/,
     );
   });
 
