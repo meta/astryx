@@ -73,19 +73,28 @@ async function edgesOf(target: Locator) {
       outlineStyle === 'none'
         ? 0
         : parseFloat(computed.getPropertyValue('outline-width'));
+    const outlineOffset = parseFloat(
+      computed.getPropertyValue('outline-offset'),
+    );
     return (['Top', 'Right', 'Bottom', 'Left'] as const).map(side => {
       const style = computed.getPropertyValue(`border-${side}-style`);
       const borderWidth =
         style === 'none' || style === 'hidden'
           ? 0
           : parseFloat(computed.getPropertyValue(`border-${side}-width`));
-      return {side, width: Math.max(borderWidth, outlineWidth)};
+      return {
+        side,
+        width: Math.max(borderWidth, outlineWidth),
+        // An outline edge must sit inside the box, so it adds no size.
+        outlineInside: outlineWidth === 0 || outlineOffset <= -outlineWidth,
+      };
     });
   });
 }
 
 async function expectEdge(target: Locator, name: string): Promise<void> {
   for (const edge of await edgesOf(target)) {
+    expect(edge.outlineInside, `${name} ${edge.side} edge inside`).toBe(true);
     expect(
       edge.width,
       `${name} ${edge.side} edge width`,
@@ -176,7 +185,7 @@ const SURFACES: ReadonlyArray<Surface> = [
 
 test.describe('floating surfaces in forced colors', () => {
   for (const entry of SURFACES) {
-    test(`${entry.name} surface has a border`, async ({page}) => {
+    test(`${entry.name} surface has an edge`, async ({page}) => {
       await open(page, entry.storyId, 'active');
       await entry.reveal(page);
       const surface = entry.surface(page);
@@ -210,6 +219,31 @@ test('a capped DropdownMenu keeps its edge inside the 16 px bottom gutter', asyn
   expect(viewport - bottom).toBeGreaterThanOrEqual(16 - 0.5);
 });
 
+for (const forcedColors of ['active', 'none'] as const) {
+  test(`a keyboard-focused Popover dialog surface keeps the focus ring (forced colors ${forcedColors})`, async ({
+    page,
+  }) => {
+    await open(page, 'core-popover--default', forcedColors);
+    await trigger(page).click();
+    const surface = page.locator('.astryx-popover').first();
+    await surface.waitFor({state: 'visible'});
+    // Keyboard modality, then focus on the surface itself.
+    await page.keyboard.press('Shift');
+    await surface.evaluate(el => (el as HTMLElement).focus());
+    const ring = await surface.evaluate(el => {
+      const computed = getComputedStyle(el);
+      return {
+        focusVisible: el.matches(':focus-visible'),
+        width: parseFloat(computed.outlineWidth),
+        style: computed.outlineStyle,
+      };
+    });
+    expect(ring.focusVisible).toBe(true);
+    expect(ring.style).not.toBe('none');
+    expect(ring.width).toBeGreaterThanOrEqual(2);
+  });
+}
+
 test('a fullscreen Dialog has no edge to draw and fits the viewport', async ({
   page,
 }) => {
@@ -230,7 +264,7 @@ test('a fullscreen Dialog has no edge to draw and fits the viewport', async ({
 
 test.describe('floating surfaces outside forced colors', () => {
   for (const entry of SURFACES) {
-    test(`${entry.name} surface gains no border`, async ({page}) => {
+    test(`${entry.name} surface gains no edge`, async ({page}) => {
       await open(page, entry.storyId, 'none');
       await entry.reveal(page);
       const surface = entry.surface(page);

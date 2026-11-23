@@ -58,15 +58,19 @@ function borderDeclarationsOutsideMedia(el: Element): string[] {
   return Array.from(el.classList).flatMap(cls =>
     Array.from(
       css.matchAll(
-        new RegExp(`\\.${cls}(?![0-9a-z_-])[^{]*\\{([^}]*)\\}`, 'gi'),
+        new RegExp(`\\.${cls}(?![0-9a-z_-])([^{]*)\\{([^}]*)\\}`, 'gi'),
       ),
-      m => m[1],
+      // The focus ring's own `:focus-visible` rules are the ring, not an edge.
+      m => (m[1].includes(':focus-visible') ? '' : m[2]),
     )
       .join(';')
       .split(';')
       .map(d => d.replace(/\s+/g, ''))
-      .filter(d =>
-        /^(border-(width|style)|outline-(width|style|offset)):/.test(d),
+      .filter(
+        d =>
+          /^border-(width|style):/.test(d) ||
+          (/^outline-(width|style):/.test(d) &&
+            !/:(0|0px|none)(!important)?$/.test(d)),
       ),
   );
 }

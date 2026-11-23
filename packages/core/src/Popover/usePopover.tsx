@@ -117,25 +117,8 @@ const styles = stylex.create({
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    // An inset outline draws that edge inside the box, so the layer keeps the
-    // size its viewport gutters allow.
-    outlineWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    outlineStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    outlineColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
-    outlineOffset: {
-      default: null,
-      '@media (forced-colors: active)': '-1px',
-    },
+    // Its forced-colors edge comes with the focus ring
+    // (focusOutlineProps.focusVisibleOrForcedColorsEdge).
   },
   // An open popover whose separate anchor resolves to nothing shows no
   // surface until it does: an unanchored layer would sit at the page origin.
@@ -993,7 +976,9 @@ function usePopoverImplementation(
             tabIndex={role === 'dialog' ? -1 : undefined}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
-              focusOutlineProps.focusVisible(
+              (hasSurface
+                ? focusOutlineProps.focusVisibleOrForcedColorsEdge
+                : focusOutlineProps.focusVisible)(
                 styles.contentWrapper,
                 hasSurface && styles.surface,
                 padding != null && paddingStyles[padding],
