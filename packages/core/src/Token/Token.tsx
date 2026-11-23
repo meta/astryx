@@ -54,6 +54,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Token/Token.generated';
 import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 
 registerEnglishFallback(english);
 
@@ -127,6 +128,22 @@ export interface TokenProps extends BaseProps<HTMLElement> {
 // =============================================================================
 // Styles
 // =============================================================================
+
+/**
+ * The link a Token's label sits in, when that link belongs to the same Token.
+ * A link Token swaps its anchor when it becomes disabled or enabled again, and
+ * a router link may hold no ref; the label is the Token's own, so focus is
+ * found from it.
+ */
+function tokenLinkOfLabel(label: HTMLElement): HTMLElement | null {
+  const link = label.closest<HTMLElement>('a, [role="link"]');
+  const token = label.closest('.astryx-token');
+  return link != null &&
+    token != null &&
+    link.closest('.astryx-token') === token
+    ? link
+    : null;
+}
 
 const styles = stylex.create({
   base: {
@@ -333,6 +350,11 @@ export function Token({
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
   const naming = use(TokenNamingContext);
+  // A focused link that becomes disabled, or enabled again, keeps focus
+  // across the anchor swap.
+  const labelRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
+    getFocusTarget: tokenLinkOfLabel,
+  });
 
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
@@ -368,6 +390,7 @@ export function Token({
     <>
       {icon}
       <span
+        ref={labelRef}
         {...labelDirection}
         {...stylex.props(
           styles.label,
@@ -498,6 +521,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
+            ref={labelRef}
             {...labelDirection}
             {...stylex.props(
               styles.label,
