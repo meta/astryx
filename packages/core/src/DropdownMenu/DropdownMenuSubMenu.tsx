@@ -1223,7 +1223,7 @@ export function DropdownMenuSubMenu(
         : undefined)}
       {...(surface === 'flyout'
         ? // The flyout's frame paints its surface, so the menu target rides
-          // on it; a drilled-in view sits inside the root's surface.
+          // on it.
           mergeProps(
             themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(
@@ -1234,11 +1234,17 @@ export function DropdownMenuSubMenu(
               layerAnimations.end,
             ),
           )
-        : stylex.props(
-            regionStyles.frame,
-            rootSurface?.menuMaxHeight != null &&
-              dynamicRegionStyles.viewMaxHeight(rootSurface.menuMaxHeight),
-            frameProps.hidden === true && regionStyles.hidden,
+        : // A drilled-in view shows while the root's menu, which carries the
+          // menu target, steps aside, so the view carries the target in its
+          // place.
+          mergeProps(
+            themeProps('dropdown-menu', {presentation: 'popover'}),
+            stylex.props(
+              regionStyles.frame,
+              rootSurface?.menuMaxHeight != null &&
+                dynamicRegionStyles.viewMaxHeight(rootSurface.menuMaxHeight),
+              frameProps.hidden === true && regionStyles.hidden,
+            ),
           ))}>
       {isRenderable(header) && (
         <div
