@@ -44,6 +44,7 @@ jobs:
             scripts/vitest-node-durations.json
             scripts/vitest-node-durations.min-node.json
             packages/cli/package.json
+            packages/cli/api/theme-edit/*.test.mjs
           sparse-checkout-cone-mode: false
           persist-credentials: false
       # As many legs as keep the slowest near 20 minutes on this Node, by its
