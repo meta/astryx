@@ -11,6 +11,22 @@ import os from 'node:os';
 import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
+/**
+ * Whether the shell can change a path the audit read from a command: the path
+ * holds a pattern, a variable or an escape, or a backtick, a variable or an
+ * unmatched quote continues its word. Such a path can expand into a run.
+ */
+export function shellCanExpand(command, raw) {
+  if (/[*?[{$\\`]/.test(raw)) return true;
+  for (let at = command.indexOf(raw); at !== -1; at = command.indexOf(raw, at + 1)) {
+    const before = command[at - 1];
+    const after = command[at + raw.length];
+    const closesQuote = (after === "'" || after === '"') && after === before;
+    if (after !== undefined && !/[\s;|&()<>]/.test(after) && !closesQuote) return true;
+  }
+  return false;
+}
+
 /** System locations an agent may name without reading project data. */
 const ALLOWED_PREFIXES = ['/dev/null', '/dev/stdout', '/dev/stderr', '/usr/', '/bin/', '/etc/', '/lib', '/proc/self/'];
 
@@ -298,7 +314,7 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
  * Only naming a root or such a folder (`ls ~`, `find / -name`) is a warning. Any other outside path is a
  * warning to review: a command can name a path without reading it. A path in the system temp folder
  * outside every root, such as a backup the agent copies to `/tmp`, is listed apart as a temp path
- * when it is literal; a shell pattern there stays a warning, because it can expand into a run:
+ * when it is literal; a path there that the shell can expand stays a warning, because it can reach a run:
  * the agents that run at the same time share that folder. The agent's own temp folder (`ownTemp`,
  * its TMPDIR) is its own.
  * @param {string[]} lines
@@ -322,7 +338,7 @@ export function auditTranscript(
   // The agent saves long tool output in its own session folder and reads it back.
   const ownSession = path.join(home, '.claude', 'projects', workspace.replace(/[^A-Za-z0-9]/g, '-'));
   let shellCwd = workspace;
-  const check = (raw, tool, resolved = resolveRaw(raw, workspace, home), {relative = false, recursive = false} = {}) => {
+  const check = (raw, tool, resolved = resolveRaw(raw, workspace, home), {relative = false, recursive = false, expands = false} = {}) => {
     if (isInside(resolved, ownSession) || isInside(resolved, workspace)) return;
     if (ownTemp && isInside(resolved, ownTemp)) return;
     // A recursive reader of a root, or of a folder above one, reads the files inside it.
@@ -340,8 +356,8 @@ export function auditTranscript(
       return;
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
-    // A shell pattern can expand into another run, so only a literal path counts as a temp path.
-    const literal = !/[*?[{]/.test(raw);
+    // A path the shell can expand can reach another run, so only a literal path counts as a temp path.
+    const literal = !expands && !/[*?[{]/.test(raw);
     if (literal && tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
       tempPaths.push({tool, path: raw});
       return;
@@ -366,7 +382,7 @@ export function auditTranscript(
       const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd, home);
       for (const {raw, resolved, relative, recursive, unknown} of found) {
         if (unknown) warnings.push({tool: use.name, path: raw});
-        else check(raw, use.name, resolved, {relative, recursive});
+        else check(raw, use.name, resolved, {relative, recursive, expands: shellCanExpand(input.command, raw)});
       }
       shellCwd = cwd;
       if (/\b(astryx|shadcn)\b/.test(input.command)) docsCommands.push(input.command.slice(0, 200));

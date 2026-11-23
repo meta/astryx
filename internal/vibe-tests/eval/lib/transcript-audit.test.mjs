@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {auditTranscript, pathsInCommand, resolveCommandPaths} from './transcript-audit.mjs';
+import {auditTranscript, pathsInCommand, resolveCommandPaths, shellCanExpand} from './transcript-audit.mjs';
 
 const WORKSPACE = '/runs/r1/runs/task__arm__r1/workspace';
 const SENSITIVE = ['/runs/r1', '/repo', '/home/agent'];
@@ -98,6 +98,19 @@ describe('auditTranscript', () => {
     expect(audit.tempPaths).toEqual([]);
   });
 
+  it('keeps a temp path that a variable, an escape or a backtick changes on the warning list', () => {
+    const commands = [
+      'E=astryx-vibe-eval/s1; cat /tmp/$E/runs/form__arm__r1/workspace/src/App.tsx',
+      'cat /tmp/astryx\\-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx',
+      'cat /tmp/astryx-vibe-`echo eval`/s1/runs/form__arm__r1/workspace/src/App.tsx',
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.tempPaths).toEqual([]);
+      expect(audit.warnings.length).toBeGreaterThan(0);
+    }
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];
@@ -114,6 +127,21 @@ describe('auditTranscript', () => {
 
   it('skips lines that are not JSON', () => {
     expect(auditTranscript(['not json', ''], WORKSPACE, SENSITIVE).toolCalls).toBe(0);
+  });
+});
+
+describe('shellCanExpand', () => {
+  it('reads a plain or quoted path as literal', () => {
+    expect(shellCanExpand('cp src/a.ts /tmp/a.bak && cat /tmp/a.bak', '/tmp/a.bak')).toBe(false);
+    expect(shellCanExpand('cat "/tmp/a.bak"', '/tmp/a.bak')).toBe(false);
+    expect(shellCanExpand('cat /tmp/a.bak>out.txt', '/tmp/a.bak')).toBe(false);
+  });
+
+  it('flags a variable, an escape, a pattern or a backtick that continues the word', () => {
+    expect(shellCanExpand('cat /tmp/$E/x', '/tmp/$E/x')).toBe(true);
+    expect(shellCanExpand('cat /tmp/a\\-b/x', '/tmp/a\\-b/x')).toBe(true);
+    expect(shellCanExpand('cat /tmp/*/x', '/tmp/*/x')).toBe(true);
+    expect(shellCanExpand('cat /tmp/a-`echo b`/x', '/tmp/a-')).toBe(true);
   });
 });
 
