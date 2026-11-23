@@ -106,7 +106,10 @@ describe('Astryx babel wrapper -- library StyleX prefix', () => {
         [
           astryxBabelPlugin,
           {
-            unstable_moduleResolution: {type: 'commonJS', rootDir: process.cwd()},
+            unstable_moduleResolution: {
+              type: 'commonJS',
+              rootDir: process.cwd(),
+            },
           },
         ],
       ],
