@@ -210,8 +210,8 @@ export default function InvoicePreviewSplit() {
       name: 'ResizeHandle',
       displayName: 'Resize Handle',
       description:
-        'Draggable separator between panels. Pill-grip design: invisible at rest, ' +
-        'visible on hover (0.6 opacity), fully opaque during drag (1.0). Keyboard-accessible.',
+        'Draggable separator between panels. Pill grip: shown at rest by default; ' +
+        'with isAlwaysVisible false, hidden at rest and shown on hover, keyboard focus and drag. Keyboard-accessible.',
       props: [
         {
           name: 'direction',
