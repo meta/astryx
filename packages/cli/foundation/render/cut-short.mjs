@@ -11,8 +11,8 @@
  *   (`flex-shrink: 0` on it, the line the editor offers) draws it whole;
  *   `CUT_SHORT_PREFIX`, the line prefix a picture script prints it after.
  * @position run by picture-chrome.mjs and picture-playwright.mjs once the
- *   page is drawn as the picture shows it; read back by `screenshot` in
- *   api/theme-edit/_preview.mjs from the script's stdout
+ *   page is drawn as the picture shows it; read back by `takePictures` in
+ *   foundation/pictures/pictures.mjs from the script's stdout
  */
 
 /* global document, getComputedStyle, HTMLElement -- cutShortText runs in the page */

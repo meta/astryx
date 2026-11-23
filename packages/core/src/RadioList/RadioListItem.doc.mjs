@@ -59,7 +59,7 @@ export const docs = {
     {
       name: 'startContent',
       type: 'ReactNode',
-      description: 'Content to render before the radio circle.',
+      description: 'Content to render after the radio circle, before the label.',
       slotElements: [
         {
           __element: 'Icon',
@@ -89,6 +89,11 @@ export const docs = {
           },
         },
       ],
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the option row element.',
     },
   ],
 };
@@ -141,12 +146,17 @@ export const docsZh = {
     {
       name: 'startContent',
       type: 'ReactNode',
-      description: '在单选圆圈前渲染的内容。',
+      description: '在单选圆圈之后、标签之前渲染的内容。',
     },
     {
       name: 'endContent',
       type: 'ReactNode',
       description: '在标签后渲染的内容。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: '转发至选项行元素的 ref。',
     },
   ],
 };
@@ -165,8 +175,8 @@ export const docsDense = {
       'Plain-text radio name replacing the derived label. Use when visible text is absent; otherwise retain every visible label word.',
     value: 'Value of this radio item.',
     description: 'Secondary content below label. String or ReactNode.',
-    isDisabled: 'Whether this individual radio item disabled.',
-    startContent: 'Content rendered before radio circle.',
+    isDisabled: 'Whether this individual radio item is disabled.',
+    startContent: 'Content rendered after radio circle, before label.',
     endContent: 'Content rendered after label.',
   },
 };

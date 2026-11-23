@@ -83,6 +83,20 @@ function SortableTable({
 
 describe('useTableSortable', () => {
   describe('rendering', () => {
+    it('gives a plain-text label its own direction, so a cut Latin label keeps its start', () => {
+      render(
+        <SortableTable
+          columns={[
+            {key: 'name', header: 'Name', sortable: true},
+            {key: 'email', header: 'אימייל', sortable: true},
+          ]}
+        />,
+      );
+      expect(screen.getByText('Name')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('אימייל')).toHaveAttribute('dir', 'rtl');
+      expect(screen.getByRole('button', {name: 'Name'})).toBeInTheDocument();
+    });
+
     it('renders sort icon for sortable columns', () => {
       render(<SortableTable />);
 

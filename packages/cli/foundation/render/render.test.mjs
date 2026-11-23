@@ -547,6 +547,9 @@ describe('oneColorModeOf: the modes a page\'s root theme draws in', () => {
     expect(oneColorModeOf(root, null, [retroLight1, '.dark [data-astryx-theme="retro"]{--color-background-body:#111}'])).toBeNull();
     // An @scope's `to (...)` limit does not name the root.
     expect(oneColorModeOf(root, null, ['@scope ([data-astryx-theme="night"]) to ([data-astryx-theme="retro"]) { :scope { --color-background-body:#101314 } }'])).toBeNull();
+    // An adaptation's block, on the scope root with its theme attribute, is
+    // not the theme's root rule: its page color does not count.
+    expect(oneColorModeOf(root, null, [retroLight1, '@media (pointer: coarse) { @scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { :scope:where([data-astryx-theme]) { --color-background-body:#111 } } }'])).toBe('light');
     // A part's or another theme's page color for one mode in a sheet that
     // names the theme keeps both modes too: the export never guesses one mode
     // past such a rule. A sheet that never names the theme says nothing.

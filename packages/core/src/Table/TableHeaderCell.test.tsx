@@ -100,12 +100,15 @@ function headerCellDeclarations(container: HTMLElement): string[] {
 }
 
 /** A children-mode Table with one header cell and one body cell. */
-function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
+function renderChildrenMode(
+  textOverflow?: 'wrap' | 'truncate',
+  heading = 'Jobs',
+) {
   return render(
     <Table textOverflow={textOverflow}>
       <TableHeader>
         <TableRow>
-          <TableHeaderCell>Jobs</TableHeaderCell>
+          <TableHeaderCell>{heading}</TableHeaderCell>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -122,6 +125,31 @@ function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
 // =============================================================================
 
 describe('TableHeaderCell', () => {
+  it('gives a truncating plain-text heading its own direction, so a Latin heading keeps its start', () => {
+    renderChildrenMode('truncate');
+    const heading = screen.getByText('Jobs');
+    expect(heading.tagName).toBe('SPAN');
+    expect(heading).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByRole('columnheader', {name: 'Jobs'})).toBeTruthy();
+  });
+
+  it('gives a truncating right-to-left heading its own right-to-left direction, so it keeps its start on a left-to-right page', () => {
+    renderChildrenMode('truncate', 'משרות');
+    const heading = screen.getByText('משרות');
+    expect(heading.tagName).toBe('SPAN');
+    expect(heading).toHaveAttribute('dir', 'rtl');
+  });
+
+  it('keeps a truncating heading that mixes both scripts as plain text in the cell, as before', () => {
+    renderChildrenMode('truncate', 'Invoice for שירה כהן');
+    expect(screen.getByText('Invoice for שירה כהן').tagName).toBe('TH');
+  });
+
+  it('keeps a wrapping heading as plain text in the cell', () => {
+    renderChildrenMode('wrap');
+    expect(screen.getByText('Jobs').tagName).toBe('TH');
+  });
+
   it('renders a th element around its children', () => {
     const {container} = renderStandalone(
       <TableHeaderCell>Name</TableHeaderCell>,

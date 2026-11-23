@@ -734,6 +734,96 @@ function changeFields(data) {
   ];
 }
 
+/** How many variant lines the text of `show --on` gives before it counts the rest. */
+const VARIANT_LINES = 4;
+
+/**
+ * A part value's final value as one short text.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue['value']} v
+ */
+function valueText(v) {
+  if (v == null) return 'no value';
+  if (typeof v === 'string') return v;
+  // (A mode left out is not shown yet; a mode given as null has no value.)
+  return /** @type {const} */ (['light', 'dark'])
+    .filter(m => v[m] !== undefined)
+    .map(m => `${m} ${v[m] ?? 'no value'}`)
+    .join(', ');
+}
+
+/**
+ * The text of `show --on`: the part at rest, one line per property, then
+ * the variants' values that differ from rest, a few, counted; the JSON
+ * carries every value.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowPartResponse['data']} d
+ */
+function partValueBlocks(d) {
+  // (A token a rule sets on the part is in the JSON; the text gives the
+  // properties the part draws.)
+  const drawn = d.values.filter(v => !v.property.startsWith('--'));
+  const rest = drawn.filter(v => v.when == null && v.state == null);
+  const restOf = new Map(rest.map(v => [v.property, valueText(v.value)]));
+  const variants = drawn.filter(
+    v =>
+      (v.when != null || v.state != null) &&
+      valueText(v.value) !== restOf.get(v.property),
+  );
+  // A combined condition that draws what one of its conditions draws alone
+  // (`variant:blue+selected:true` as `variant:blue`) says nothing more.
+  const alone = new Set(
+    variants.map(
+      v => `${v.when}|${v.state}|${v.property}|${valueText(v.value)}`,
+    ),
+  );
+  // A condition set cannot name (two variants at once) that draws what
+  // one of its variants draws alone says nothing more either.
+  const wordsOf = (/** @type {any} */ v) =>
+    v.notSettable
+      ? (v.when ?? '')
+          .split(' ')
+          .map((/** @type {string} */ w) => w.replace('=', ':'))
+      : (v.when ?? '').split('+');
+  const shown = variants.filter(
+    v =>
+      !wordsOf(v).some(
+        (/** @type {string} */ w) =>
+          w !== v.when &&
+          alone.has(`${w}|${v.state}|${v.property}|${valueText(v.value)}`),
+      ),
+  );
+  /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
+  const row = v => ({
+    ...(v.when != null || v.state != null
+      ? {
+          when:
+            [v.when, v.state].filter(Boolean).join(' ') +
+            (v.notSettable ? ' (not settable)' : ''),
+        }
+      : {}),
+    property: v.property,
+    value: valueText(v.value),
+    tokens: (Array.isArray(v.tokens)
+      ? v.tokens
+      : [...new Set([...(v.tokens.light ?? []), ...(v.tokens.dark ?? [])])]
+    ).join(' '),
+    source: v.source,
+  });
+  return [
+    section(
+      `${d.part} in ${d.theme} (${d.kind} theme), at rest: ${rest.length} value${rest.length === 1 ? '' : 's'}`,
+    ),
+    records(rest.map(row), {layout: 'inline'}),
+    ...(shown.length
+      ? [
+          section(
+            `in variants: ${shown.length} value${shown.length === 1 ? '' : 's'} that differ${shown.length > VARIANT_LINES ? `, the first ${VARIANT_LINES} here (--json lists every value)` : ''}`,
+          ),
+          records(shown.slice(0, VARIANT_LINES).map(row), {layout: 'inline'}),
+        ]
+      : []),
+  ];
+}
+
 /**
  * The text of `show`: the theme, then each color with its seed and the shade
  * each token uses, the notes on moved shades, and the generated files last.
@@ -1516,9 +1606,12 @@ function previewExtraWords(sub, doc, head) {
  * there is none.
  * @param {string} name
  * @param {unknown[]} rest the words after the theme
- * @param {{png?: boolean, section?: string}} o the options read
+ * @param {{png?: boolean, section?: string, on?: string}} o the options read
  */
 function showStray(name, rest, o) {
+  // (Beside --on, the refusal offers no other show: a show without --on
+  // writes the pages, and the lookup's own line is not offered yet.)
+  const offer = (/** @type {string} */ line) => (o.on ? null : line);
   // The theme typed as an option (`show --theme t`), as set and undo read
   // it: the show on that theme, never its help alone.
   const asOption = /^--?(?:theme|name)$/i.test(String(name));
@@ -1532,7 +1625,9 @@ function showStray(name, rest, o) {
         option: String(name),
         note: "the theme is show's first word",
       },
-      `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+      offer(
+        `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+      ),
     );
   }
   const stray = rest.map(String).find(w => w.startsWith('-'));
@@ -1545,7 +1640,9 @@ function showStray(name, rest, o) {
     showDoc,
     `${EDITOR} show`,
     {option: stray},
-    `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    offer(
+      `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    ),
   );
 }
 
@@ -2418,12 +2515,33 @@ export function registerExperimentalTheme(group, program) {
           ? cliError(
               `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
               {
+                // (Beside --on no other show is offered: a show without
+                // --on writes the pages.)
+                suggestions: o.on
+                  ? []
+                  : [
+                      {
+                        // The first section given that `show` takes, else the
+                        // whole sheet.
+                        name: cmd(
+                          `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                        ),
+                        reason: 'do this instead',
+                      },
+                    ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
+        // One part's values: a lookup of one part.
+        (new Set(flagValues('on')).size > 1
+          ? cliError(
+              `--on looks up one part, and was given ${flagValues('on').length} (${flagValues('on').join(', ')}); give one.`,
+              {
                 suggestions: [
                   {
-                    // The first section given that `show` takes, else the
-                    // whole sheet.
                     name: cmd(
-                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                      `${EDITOR} show ${name} --on ${flagValues('on')[0]}`,
                     ),
                     reason: 'do this instead',
                   },
@@ -2439,8 +2557,12 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               png: o.png ?? false,
               section: o.section,
+              ...(o.on != null ? {on: o.on} : {}),
             }),
-          r => showBlocks(r.data),
+          r =>
+            r.type === 'themeEdit.showPart'
+              ? partValueBlocks(r.data)
+              : showBlocks(/** @type {any} */ (r).data),
         ),
     }),
     showDoc,

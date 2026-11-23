@@ -124,6 +124,12 @@ export const categories: SandboxCategory[] = [
           'A pushed NavigationStack screen with a Done row or a strip at its edge, and a RefreshControl list, on a page that scrolls with the document, to check taps and pulls on a phone',
       },
       {
+        name: 'Menu Grow Cases',
+        href: '/pages/menu-grow-cases/',
+        description:
+          'Large DropdownMenus and a Popover that grow out of their trigger: tall, wide, many rows, nested, at the edges and flipped, on a page that scrolls with the document',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:

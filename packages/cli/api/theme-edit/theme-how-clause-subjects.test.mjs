@@ -461,13 +461,73 @@ const ROWS = [
     },
   ],
   [
-    'an example said inside a sentence never frees another sentence\'s item',
+    "an example said inside a sentence never frees another sentence's item",
     {
       q: 'Header: navy, e.g. a dark blue. Cards: white background, gray header.',
       has: [
         "background-color '#1e3a8a' --on app-shell-header",
         "background-color '#ffffff' --on card --when variant:default --mode light",
       ],
+    },
+  ],
+  [
+    "an example inside the list's own sentence keeps the list's items",
+    {
+      q: 'Header: navy. Cards: white background (e.g. snow), gray header.',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /light-dark\(#9e9e9e, #525252\)' --on app-shell-header/,
+    },
+  ],
+  [
+    'a bracketed example with a comma after "e.g." is an aside',
+    {
+      q: 'Header (e.g., the top bar): navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /border-top/,
+    },
+  ],
+  [
+    'a bracketed example after a part is an aside',
+    {
+      q: 'Header (e.g. the top bar): navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /border-top/,
+    },
+  ],
+  [
+    'an example-led ask on its own line is an ask',
+    {
+      q: 'Header: navy\nFor example buttons red',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#dc2626' --on button",
+      ],
+    },
+  ],
+  [
+    'an example-led ask after a semicolon is an ask',
+    {
+      q: 'Header: navy; e.g. buttons red',
+      has: [
+        "background-color '#1e3a8a' --on app-shell-header",
+        "background-color '#dc2626' --on button",
+      ],
+    },
+  ],
+  [
+    'an example never reaches across a line break',
+    {
+      q: 'Cards: white background, e.g. snow\nHeader: navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#1e3a8a' --on card/,
+    },
+  ],
+  [
+    '"etc." before another ask still ends its sentence',
+    {
+      q: 'cards white, buttons blue etc. header navy',
+      has: ["background-color '#1e3a8a' --on app-shell-header"],
+      never: /#2563eb' --on app-shell-header/,
     },
   ],
   [

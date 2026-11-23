@@ -16,7 +16,11 @@ import DurationShardSequencer, {
   durationsFile,
 } from './vitest-shard-sequencer.mjs';
 import {splitByDuration} from './lib/duration-split.mjs';
-import {PER_FILE_SECONDS, nodeFileCost} from './vitest-node-legs.mjs';
+import {
+  PER_FILE_SECONDS,
+  drawsInRealChrome,
+  nodeFileCost,
+} from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const recorded = readDurations();
@@ -80,12 +84,18 @@ describe('duration-balanced Node legs', () => {
   );
 
   it.each([4, 6])(
-    'never puts two of the %i slowest files in one leg, and keeps legs within a slow file of each other',
+    'never puts two of the slowest files in one leg, and keeps legs within a slow file of each other (%i legs)',
     count => {
       const legs = partitionByDuration(files, count, recorded);
       const legOf = file => legs.findIndex(leg => leg.includes(file));
-      const top = slowest.slice(0, count).map(legOf);
-      expect(new Set(top).size).toBe(count);
+      // The last leg holds the real-Chrome files and light files only
+      // (nodeLegsApart), so the heavy files spread over the other legs.
+      const top = slowest
+        .filter(file => !drawsInRealChrome(file))
+        .slice(0, count - 1)
+        .map(legOf);
+      expect(new Set(top).size).toBe(count - 1);
+      expect(top).not.toContain(count - 1);
       // Greedy slowest-first: legs differ by at most the slowest file's time.
       const totals = legs.map(total);
       expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(
@@ -102,8 +112,11 @@ describe('duration-balanced Node legs', () => {
       const zeros = files.filter(zero).length;
       expect(zeros).toBeGreaterThan(100);
       const mean = files.length / count;
-      for (const leg of legs) {
-        expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
+      for (const [index, leg] of legs.entries()) {
+        // The real-Chrome files' leg tops up with light files only, so it
+        // holds more of them.
+        if (index < count - 1)
+          expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
         expect(leg.filter(zero).length).toBeLessThanOrEqual(
           (zeros / count) * 1.5,
         );
