@@ -474,10 +474,14 @@ for (const item of cases) {
             : controlled.querySelector<HTMLElement>(
                 '[role="menu"], [role="none"]',
               );
+        // A view with a header or footer shows beside the root, which steps
+        // aside; the first shown menu stands in for it then.
         const rootMenu =
           rootBox !== null && rootBox.getClientRects().length > 0
             ? rootBox
-            : null;
+            : (Array.from(
+                document.querySelectorAll<HTMLElement>('[role="menu"]'),
+              ).find(node => node.getClientRects().length > 0) ?? null);
         const subject =
           rootMenu === null
             ? null
