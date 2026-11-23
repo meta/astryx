@@ -370,6 +370,20 @@ const regionStyles = stylex.create({
   hidden: {
     display: 'none',
   },
+  // A drilled-in view's frame carries the menu target, so a theme's corner
+  // variables reach it; its rows keep the default corners.
+  viewRowCorners: {
+    '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
+    '--_dropdown-menu-padding': spacingVars['--spacing-1'],
+  },
 });
 
 export type DropdownMenuSubMenuPresentation =
@@ -1365,6 +1379,7 @@ export function DropdownMenuSubMenu(
                     {...surfaceOwnerProps}
                     {...stylex.props(
                       regionStyles.menu,
+                      regionStyles.viewRowCorners,
                       hasOverflow && flyoutStyles.scrollable,
                       hasOverflow
                         ? flyoutStyles.touchPanYPinchZoom
