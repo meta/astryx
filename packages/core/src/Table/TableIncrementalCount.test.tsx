@@ -101,7 +101,7 @@ describe('incrementally loaded Table row totals', () => {
       'aria-rowcount',
     );
   });
-  it('preserves legacy non-windowed caller counts during incremental loading', () => {
+  it('counts the header row in caller-supplied indexing during incremental loading', () => {
     render(<Fixture hasMore isWindowed={false} />);
     expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '91');
     expect(screen.getAllByRole('row')[1]).toHaveAttribute('aria-rowindex', '5');

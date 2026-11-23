@@ -657,7 +657,8 @@ export interface BaseTableProps<
   plugins?: TablePlugin<T>[];
 
   /**
-   * ARIA row index (1-based) assigned to the **first** rendered body row.
+   * Position of the **first** rendered body row among the body rows, counted
+   * from 1.
    *
    * The row ordinal is an accessibility concern independent of any visible
    * index column: `aria-rowindex` on each `<tr>` should reflect the row's
@@ -667,9 +668,9 @@ export interface BaseTableProps<
    *
    * Setting this (or {@link rowCount}) opts the table into emitting
    * `aria-rowindex` on body rows and `aria-rowcount` on the `<table>`. Data
-   * rows are numbered from this value. The header row counts as ARIA row 1,
-   * so the table adds the header row to every body row index. This value
-   * stays in body-row units.
+   * rows are numbered from this value. The header row is ARIA row 1, so the
+   * first body row gets `aria-rowindex` equal to this value plus 1. Pass this
+   * value in body-row units.
    *
    * Applies to data-driven mode only (ignored in children mode).
    *
