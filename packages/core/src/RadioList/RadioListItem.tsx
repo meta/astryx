@@ -203,7 +203,7 @@ export interface RadioListItemProps extends BaseProps<HTMLDivElement> {
    */
   isDisabled?: boolean;
   /**
-   * Content to render before the radio circle.
+   * Content to render after the radio circle, before the label.
    */
   startContent?: ReactNode;
   /**
@@ -213,7 +213,7 @@ export interface RadioListItemProps extends BaseProps<HTMLDivElement> {
 }
 
 /**
- * An individual radio item within an RadioList.
+ * An individual radio item within a RadioList.
  *
  * @example
  * ```
