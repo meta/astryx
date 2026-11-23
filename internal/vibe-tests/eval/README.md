@@ -69,7 +69,11 @@ literals. The script or pattern of `sed` and search commands is text, not a
 path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
-`report.md` lists every run with warnings for a person to review. When the agent exits or times out, the runner kills its whole process
+`report.md` lists every run with warnings for a person to review. A path in the
+system temp folder outside every run, such as a backup an agent copies to
+`/tmp`, is not a warning: `report.md` lists those runs apart, because the agents
+that run at the same time share that folder. Each agent gets its own TMPDIR in
+its run folder, so tools that honor TMPDIR keep their files apart. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
 A run where the agent fails before its first turn, writes no result, or cannot
@@ -187,6 +191,10 @@ what the eval measures, so compare results only within one arm version.
   `tar -C`, a subshell `cd`, `pushd`, a symlink), a read behind a variable or
   an encoded path, and a script the agent writes and then runs give a warning
   at most. Running each agent in an isolated filesystem would close this.
+- Agents that run at the same time share the system temp folder. A file one
+  agent writes to a literal `/tmp` path, another agent can read. The report
+  lists the runs that used that folder; it cannot tell whether one agent read
+  another's file.
 - The audit reads `sed` and search options from per-command lists. An option
   missing from those lists can shift which word it reads as the script or
   pattern, so a quoted path there can pass, or a correct pattern can fail.

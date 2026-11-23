@@ -3,13 +3,20 @@
 /**
  * @file Reads an agent transcript and lists every path outside the workspace.
  * @input stream JSON transcript lines and the workspace's real path
- * @output tool counts, docs commands, violations and warnings
+ * @output tool counts, docs commands, violations, warnings and temp-folder paths
  * @position Called by run.mjs after each agent run
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {isInside} from './workspace.mjs';
+
+/** The system temp folder, by its given name and its real name. */
+function systemTempRoots() {
+  const roots = [os.tmpdir(), '/tmp'];
+  return [...new Set(roots.flatMap(root => [path.resolve(root), fs.existsSync(root) ? fs.realpathSync(root) : root]))];
+}
 
 /** System locations an agent may name without reading project data. */
 const ALLOWED_PREFIXES = ['/dev/null', '/dev/stdout', '/dev/stderr', '/usr/', '/bin/', '/etc/', '/lib', '/proc/self/'];
@@ -296,14 +303,26 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
  * probes, other runs) is a violation, and so is a recursive read (`grep -r`,
  * `rg`, `find -exec`, the Grep tool) of a root or a folder that holds one.
  * Only naming a root or such a folder (`ls ~`, `find / -name`) is a warning. Any other outside path is a
- * warning to review: a command can name a path without reading it.
+ * warning to review: a command can name a path without reading it. A path in the system temp folder
+ * outside every root, such as a backup the agent copies to `/tmp`, is listed apart as a temp path:
+ * the agents that run at the same time share that folder. The agent's own temp folder (`ownTemp`,
+ * its TMPDIR) is its own.
  * @param {string[]} lines
  * @param {string} workspace real path of the workspace
  * @param {string[]} sensitiveRoots
+ * @param {string} [home]
+ * @param {{ownTemp?: string, tempRoots?: string[]}} [options]
  */
-export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os.homedir()) {
+export function auditTranscript(
+  lines,
+  workspace,
+  sensitiveRoots = [],
+  home = os.homedir(),
+  {ownTemp, tempRoots = systemTempRoots()} = {},
+) {
   const violations = [];
   const warnings = [];
+  const tempPaths = [];
   const docsCommands = [];
   const tools = {};
   // The agent saves long tool output in its own session folder and reads it back.
@@ -311,6 +330,7 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
   let shellCwd = workspace;
   const check = (raw, tool, resolved = resolveRaw(raw, workspace, home), {relative = false, recursive = false} = {}) => {
     if (isInside(resolved, ownSession) || isInside(resolved, workspace)) return;
+    if (ownTemp && isInside(resolved, ownTemp)) return;
     // A recursive reader of a root, or of a folder above one, reads the files inside it.
     const holds = root => isInside(root, resolved);
     const reads = sensitiveRoots.some(root => (resolved !== root && isInside(resolved, root)) || (recursive && holds(root)));
@@ -326,6 +346,10 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
       return;
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
+    if (tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
+      tempPaths.push({tool, path: raw});
+      return;
+    }
     warnings.push({tool, path: raw});
   };
 
@@ -353,5 +377,5 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
     }
   }
   const toolCalls = Object.values(tools).reduce((a, b) => a + b, 0);
-  return {tools, toolCalls, violations, warnings, docsCommands};
+  return {tools, toolCalls, violations, warnings, tempPaths, docsCommands};
 }

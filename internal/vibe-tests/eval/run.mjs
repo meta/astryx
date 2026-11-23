@@ -226,7 +226,7 @@ export function modelMismatch(agent, model) {
 
 /** Audits the transcript, grades the workspace, and sets the record's verdict. */
 async function judge({record, lines, workspace, runRoot, arm, task, browser, model, sensitiveRoots, agent}) {
-  record.audit = auditTranscript(lines, workspace, sensitiveRoots);
+  record.audit = auditTranscript(lines, workspace, sensitiveRoots, undefined, {ownTemp: path.join(runRoot, 'tmp')});
   const outDir = path.join(runRoot, 'grade');
   fs.rmSync(outDir, {recursive: true, force: true});
   record.grade = await gradeWorkspace({workspace, arm, task, browser, outDir});
@@ -377,6 +377,7 @@ async function evaluate(options) {
         maxBudgetUsd: options.runBudgetUsd,
         timeoutMs: options.timeoutMs,
         transcriptPath: path.join(runRoot, 'transcript.jsonl'),
+        tempDir: path.join(runRoot, 'tmp'),
       });
       record.agent = {
         exitCode: agent.exitCode,

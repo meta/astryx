@@ -59,6 +59,41 @@ describe('auditTranscript', () => {
     expect(audit.warnings).toEqual([{tool: 'Bash', path: '/opt/thing'}]);
   });
 
+  it('lists a temp-folder path outside every run apart from the warnings', () => {
+    const lines = [
+      toolUse('Bash', {command: 'cp src/astryx-themes.ts /tmp/themes.bak'}),
+      toolUse('Read', {file_path: '/tmp/themes.bak'}),
+    ];
+    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+    expect(audit.violations).toEqual([]);
+    expect(audit.warnings).toEqual([]);
+    expect(audit.tempPaths).toEqual([
+      {tool: 'Bash', path: '/tmp/themes.bak'},
+      {tool: 'Read', path: '/tmp/themes.bak'},
+    ]);
+  });
+
+  it('still fails another run under the temp folder and warns on the temp folder itself', () => {
+    const sensitive = [...SENSITIVE, '/tmp/astryx-vibe-eval'];
+    const lines = [
+      toolUse('Read', {file_path: '/tmp/astryx-vibe-eval/old/runs/x/workspace/src/App.tsx'}),
+      toolUse('Bash', {command: 'ls /tmp'}),
+    ];
+    const audit = auditTranscript(lines, WORKSPACE, sensitive, '/home/agent', {tempRoots: ['/tmp']});
+    expect(audit.violations).toEqual([{tool: 'Read', path: '/tmp/astryx-vibe-eval/old/runs/x/workspace/src/App.tsx'}]);
+    expect(audit.warnings).toEqual([{tool: 'Bash', path: '/tmp'}]);
+    expect(audit.tempPaths).toEqual([]);
+  });
+
+  it('allows the agent its own temp folder inside its run', () => {
+    const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
+    const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];
+    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {ownTemp, tempRoots: ['/tmp']});
+    expect(audit.violations).toEqual([]);
+    expect(audit.warnings).toEqual([]);
+    expect(audit.tempPaths).toEqual([]);
+  });
+
   it('treats web tools and sub-agents as violations', () => {
     const lines = [toolUse('WebFetch', {url: 'https://example.com'}), toolUse('Task', {prompt: 'x'})];
     expect(auditTranscript(lines, WORKSPACE, SENSITIVE).violations).toHaveLength(2);
