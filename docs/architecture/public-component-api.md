@@ -120,7 +120,7 @@ guidance owns the process used to propose and test APIs.
   `springs.contextMenuLift`, so it does not name a layout distance. An element
   ref a hook takes is named for the element's job, as `containerRef`,
   `scrollRef`, `menuRef`, `triggerRef`, and `inputRef` are, or `ref` when the element has
-  no narrower job.
+  no narrower job (INV29).
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
   a composed child. One interaction behavior is one prop, never parallel touch,
@@ -334,6 +334,44 @@ guidance owns the process used to propose and test APIs.
   including a reachable member tagged internal, goes to human review with that
   row listed, for an owner of this record, as `architecture:knowledge-contracts`
   change coupling step 6 describes. A removed or renamed row follows INV9.
+- **INV29 — A ref input ends in `Ref`.** A public prop or hook option whose
+  value is a React ref has a name that ends in `Ref`. Its type is
+  `RefObject<T | null>`, or `Ref<T>` when it also accepts a callback ref
+  (INV8). It does not take a bare element, and it does not take a function
+  that returns an element, alone or in a union with a ref. A ref that a hook
+  returns for the caller to attach also ends in `Ref` and has the type
+  `RefCallback<T>` or `RefObject<T | null>`, as `usePopover`'s `triggerRef`
+  and `useHoverCard`'s `positionRef` do. A name that ends in `Ref` holds a ref
+  and nothing else. A bare `ref` conforms: a component's `ref` prop (INV8); a
+  hook's element ref, as an option or a return, when the element has no
+  narrower job (INV2); and a returned ref that combines several refs for one
+  element, as `useTooltip`'s and `useHoverCard`'s `ref` do. A function that
+  computes an element from its arguments,
+  such as `useGridFocus`'s `getFocusTarget(cell)`, is a callback, not an
+  element input. A prop or hook option that names the same role as an
+  existing one uses its name and wording: the element a layer sits on is
+  `anchorRef`,
+  as on Tooltip, Popover, and BaseTypeahead; the element that opens a layer
+  is `triggerRef`, as on `useMenuPress` and `useTouchTrigger`; and an
+  imperative handle is `handleRef`, as on Calendar, Carousel, and
+  ComplexSelector. A ref is React-only: a core contract states the need in
+  platform-neutral words, and the React contract maps it to a `…Ref` prop
+  (`spec:AST-082` FR4). A `create…` equivalent (INV22) keeps the option's
+  name and takes any object with a `current` element, so code outside React
+  can pass one. A shipped input that breaks this rule changes only under INV9
+  and INV21a.
+- **INV30 — Public-API review holds each new name to the system.** For each
+  added or changed row of a pull request's API delta (INV24), public-API
+  review finds the components and hooks that already have a prop, option, or
+  return member for the same role. It searches by the role's words and by
+  the type, not only by the new name. It compares the row with those
+  members, with INV2, INV29, and DEC-1, and with
+  [API conventions](../contributing/api-conventions.md). It raises each
+  mismatch in name, wording, type, default, or meaning as a finding, names
+  the existing member that the row must match, and does not mark a mismatch
+  as optional. A row that matches no existing role states that it found
+  none. A new prop that the component can replace with a better default
+  behavior is a finding (INV4).
 
 This record applies to stable public packages, and INV23 also applies to Lab
 source. Lab components are not stable public promises until promotion.
@@ -460,6 +498,37 @@ The owner said: "okay let's get rid of this massive file. We don't need it, we s
 
 Rejected: keeping a committed generated API report per package.
 
+### DEC-8 — Ref inputs end in `Ref` and take only a ref
+
+**Reference:** `architecture:public-component-api/DEC-8`
+**Decider:** `cixzhang`, `2026-11-18 13:28 PT`
+
+The owner said: "all refs should be postfixed with Ref and we should add that
+to the API consistency spec, these ref props are also not available outside
+of react", and, on `usePopover`'s anchor: "so it should be anchorRef to
+match, I think we have patterns like this in hovercard/tooltip? Match the
+language". A `Ref` suffix tells a caller the input wants a ref before they
+read its type. One name per role lets a caller who knows Tooltip's
+`anchorRef` find Popover's. A ref is React-only, so the
+core contract states the need without one (`spec:AST-082` FR4).
+
+Rejected: an input that takes a ref or a getter, because the name cannot say
+both and the getter has no form outside React either; and a new name for a
+role that an existing input already names.
+
+### DEC-9 — Public-API review searches for the same role and raises every mismatch
+
+**Reference:** `architecture:public-component-api/DEC-9`
+**Decider:** `cixzhang`, `2026-11-18 13:35 PT`
+
+The owner said: "when we have codebunny review API updates, we should hold a
+high bar for API consistency, it should search for related components and
+refer to API naming conventions spec. Then raise where we don't match". A
+public prop is permanent once it ships (INV9), so review catches a mismatch
+before it ships, when a rename costs nothing.
+
+Rejected: reviewing a new name only against its own component.
+
 ## Verification
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -485,6 +554,8 @@ Rejected: keeping a committed generated API report per package.
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
 | INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                          | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes a pull request that changes a published package when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance              |
 | INV25                   | Public-API review routing against the pull request's API delta                                                           | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
+| INV29                   | Public-API review of the generated declaration inventory (INV24); a lint rule is a known gap                             | A public prop, hook option, or returned ref that holds a React ref and does not end in `Ref`, other than a bare `ref` that INV29 allows; a `…Ref` member whose type is not a ref; a ref input that also accepts a bare element or a getter; a new input for a role that an existing input already names, under a different name or wording                                                                                                                                              |
+| INV30                   | The review bot's API delta notes and its findings on the pull request                                                    | A delta row with no search for existing members of the same role; a mismatch with an existing member, INV2, INV29, DEC-1, or the API conventions that review does not raise; a mismatch marked optional                                                                                                                                                                                                                                                                                 |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
@@ -530,6 +601,14 @@ Known verification gaps:
   and has no `create…` factory yet; no full inventory exists yet. Each conforms
   by adding its factory; a shipped hook's signature changes only when a real
   need arises (INV21a).
+- INV29 gap: no lint rule checks the `Ref` suffix or the ref type;
+  public-API review is the only check. Four shipped members break the rule:
+  `useMenuPress`'s `getScroller` and `useLayerDismissal`'s `getContainer` take
+  a getter, Popover's `anchorRef` takes `RefObject<HTMLElement>`, which
+  excludes `null`, and `useLayer` returns its trigger ref as `ref`, not
+  `triggerRef`. INV21a keeps them until a real need arises. Lab
+  ChatVirtualizer's `scrollElement` takes an element; it must conform on
+  promotion, since this record applies to stable public packages.
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
