@@ -2,8 +2,7 @@
 
 'use client';
 
-import {useTruncation} from '@astryxdesign/core/Text';
-import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {Text} from '@astryxdesign/core/Text';
 import {
   Table,
   TableBody,
@@ -37,50 +36,20 @@ const FILES: FileAsset[] = [
   },
 ];
 
-function TruncatedCell({children}: {children: string}) {
-  const truncation = useTruncation({maxLines: 1});
+// Text truncates the path to its line count and, built on useTruncation,
+// shows it in full in its own tooltip only while it is cut off. Text's tooltip
+// describes the cell once it has first shown.
+function TruncatedCell({
+  children,
+  maxLines,
+}: {
+  children: string;
+  maxLines: 1 | 2;
+}) {
   return (
-    <Tooltip
-      content={truncation.fullText}
-      placement="above"
-      isEnabled={truncation.isTruncated}>
-      <span
-        ref={truncation.ref}
-        tabIndex={truncation.isTruncated ? 0 : undefined}
-        style={{
-          display: 'block',
-          maxWidth: 120,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-        {children}
-      </span>
-    </Tooltip>
-  );
-}
-
-function ClampedCell({children}: {children: string}) {
-  const truncation = useTruncation({maxLines: 2});
-  return (
-    <Tooltip
-      content={truncation.fullText}
-      placement="above"
-      isEnabled={truncation.isTruncated}>
-      <span
-        ref={truncation.ref}
-        tabIndex={truncation.isTruncated ? 0 : undefined}
-        style={{
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          maxWidth: 120,
-          wordBreak: 'break-all',
-        }}>
-        {children}
-      </span>
-    </Tooltip>
+    <Text type="body" maxLines={maxLines} style={{maxWidth: 120}}>
+      {children}
+    </Text>
   );
 }
 
@@ -98,11 +67,9 @@ export default function UseTruncationHookUsage() {
           <TableRow key={file.name}>
             <TableCell>{file.name}</TableCell>
             <TableCell>
-              {file.mode === 'clamped' ? (
-                <ClampedCell>{file.path}</ClampedCell>
-              ) : (
-                <TruncatedCell>{file.path}</TruncatedCell>
-              )}
+              <TruncatedCell maxLines={file.mode === 'clamped' ? 2 : 1}>
+                {file.path}
+              </TruncatedCell>
             </TableCell>
           </TableRow>
         ))}

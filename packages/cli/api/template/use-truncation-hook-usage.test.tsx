@@ -3,7 +3,7 @@
 
 /**
  * The useTruncation example demonstrates text truncation across table cells
- * with single-line and multi-line clamps.
+ * with Text's own truncation tooltip, on one line and clamped to two.
  */
 
 import {act} from 'react';
@@ -61,7 +61,7 @@ describe('useTruncationHookUsage example', () => {
     expect(container.textContent).toContain('README.md');
   });
 
-  it('renders measured text elements across all table cells', async () => {
+  it('wraps no cell in its own Tooltip, so no path is described at load', async () => {
     root = createRoot(container);
     act(() => {
       root!.render(<UseTruncationHookUsage />);
@@ -69,8 +69,6 @@ describe('useTruncationHookUsage example', () => {
 
     await act(async () => {});
 
-    // In the DOM, cells containing paths render span elements with truncation refs
-    const spans = Array.from(container.querySelectorAll('td span'));
-    expect(spans.length).toBe(3);
+    expect(container.querySelector('[aria-describedby]')).toBeNull();
   });
 });
