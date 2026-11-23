@@ -5318,6 +5318,9 @@ jobs:
           exit 1
 
       - name: Trust the checkout in the container
+        env:
+          # The same HOME as the spec step's, so the specs' git reads it.
+          HOME: /root
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup Node and pnpm
@@ -5414,6 +5417,9 @@ jobs:
           exit 1
 
       - name: Trust the checkout in the container
+        env:
+          # The same HOME as the spec step's, so the specs' git reads it.
+          HOME: /root
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # A head from before the Firefox project has no Firefox specs to run.
