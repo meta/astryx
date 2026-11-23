@@ -972,6 +972,10 @@ function DropdownMenuPopover({
 
   // The name a custom trigger gives the menu, read off it as the menu opens.
   const [triggerName, setTriggerName] = useState<string | undefined>(undefined);
+  // The trigger's own aria-labelledby, read off a custom trigger.
+  const [triggerLabelledBy, setTriggerLabelledBy] = useState<
+    string | undefined
+  >(undefined);
 
   // Open state
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -1143,6 +1147,20 @@ function DropdownMenuPopover({
     }
   }, [renderTrigger, hasRegions, triggerName]);
 
+  // Synchronizes the trigger's aria-labelledby from the custom trigger's DOM.
+  // AccName prohibits recursive aria-labelledby lookups. Pointing the menu at
+  // the trigger's label targets avoids chaining.
+  useIsomorphicLayoutEffect(() => {
+    if (renderTrigger != null) {
+      const next =
+        buttonRef.current?.getAttribute('aria-labelledby')?.trim() || undefined;
+      if (next !== triggerLabelledBy) {
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- aria-labelledby is read from the custom trigger's DOM
+        setTriggerLabelledBy(next);
+      }
+    }
+  }, [renderTrigger, triggerLabelledBy]);
+
   const handleLayerShow = useCallback(() => {
     acceptedOpenRef.current = true;
     holdOpeningPressRef.current();
@@ -1152,6 +1170,9 @@ function DropdownMenuPopover({
     resetFocusReturn();
     if (renderTrigger != null) {
       setTriggerName(readAccessibleName(buttonRef.current));
+      setTriggerLabelledBy(
+        buttonRef.current?.getAttribute('aria-labelledby')?.trim() || undefined,
+      );
     }
     if (notifyClickOnShowRef.current) {
       notifyClickOnShowRef.current = false;
@@ -1921,9 +1942,10 @@ function DropdownMenuPopover({
                 : button.label
             }
             aria-labelledby={
-              renderTrigger != null && rest['aria-label'] == null
-                ? triggerId
-                : (rest['aria-labelledby'] as string | undefined)
+              (rest['aria-labelledby'] as string | undefined) ??
+              (renderTrigger != null && rest['aria-label'] == null
+                ? (triggerLabelledBy ?? triggerId)
+                : undefined)
             }
             onKeyDown={listKeyDown}
             onFocus={event => {

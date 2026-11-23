@@ -4227,6 +4227,31 @@ describe('DropdownMenu custom trigger', () => {
     );
   });
 
+  it('computes accessible name from custom trigger named by aria-labelledby', async () => {
+    const user = userEvent.setup();
+    render(
+      <div>
+        <span id="project-label">Project actions</span>
+        <DropdownMenu
+          renderTrigger={props => (
+            <button {...props} type="button" aria-labelledby="project-label">
+              <span aria-hidden="true">⋯</span>
+            </button>
+          )}
+          items={[{label: 'Archive'}]}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    const menu = screen.getByRole('menu', {hidden: true});
+    expect(menu).toHaveAttribute('aria-labelledby', 'project-label');
+    expect(menu).toHaveAccessibleName('Project actions');
+
+    await user.click(trigger);
+    expect(menu).toHaveAttribute('aria-labelledby', 'project-label');
+    expect(menu).toHaveAccessibleName('Project actions');
+  });
+
   it('a disabled custom trigger never opens the bottom sheet', async () => {
     const user = userEvent.setup();
     render(
