@@ -591,6 +591,15 @@
     }
   },
   {
+    "component": "NavHeadingMenuItem",
+    "storyId": "core-navheadingmenuitem--states",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
+      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
+    }
+  },
+  {
     "component": "NumberInput",
     "storyId": "core-numberinput--with-number-steppers",
     "dims": ["D2"],

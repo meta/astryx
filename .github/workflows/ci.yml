@@ -182,11 +182,14 @@ jobs:
           # .github/scripts/lib holds the glob matcher it shares, and brings
           # the .github/scripts files the release-critical label check reads
           # (run-labels.cjs and review-signal-decision.cjs).
+          # The Node leg planner reads the real-Chrome test files' sources
+          # (scripts/vitest-node-legs.mjs nodeLegsApart).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
             .github/scripts/lib
             scripts/lib
+            packages/cli/api/theme-edit
           path: .ci-admission
           persist-credentials: false
 
@@ -197,11 +200,14 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         with:
+          # The Node leg planner reads the real-Chrome test files' sources
+          # (scripts/vitest-node-legs.mjs nodeLegsApart).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
             .github/scripts/lib
             scripts/lib
+            packages/cli/api/theme-edit
           path: .ci-admission
           persist-credentials: false
 

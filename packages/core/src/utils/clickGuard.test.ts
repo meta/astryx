@@ -313,6 +313,36 @@ describe('clickGuard', () => {
     expect(isClickGuardArmed(document)).toBe(false);
   });
 
+  it("armed with the touch's target, cancels that touch's touchend after the target leaves the document, where the window never hears it (overlay-dismissal FR11)", () => {
+    const target = button();
+    armClickGuard(document, {
+      staysInstalled: true,
+      cancelsTouchEnd: true,
+      touchIdentifier: 7,
+      touchTarget: target,
+    });
+    // The pick closed the menu: the row the touch began on is gone.
+    target.remove();
+    expect(touchEndOf(target, 7).defaultPrevented).toBe(true);
+    expect(isClickGuardArmed(document)).toBe(false);
+    // Disarmed, it leaves the target's next touchend alone.
+    expect(touchEndOf(target, 7).defaultPrevented).toBe(false);
+  });
+
+  it("armed with the touch's target, cancels a touchend the window hears only once", () => {
+    const target = button();
+    const onTouchEnd = vi.fn((event: Event) => event.defaultPrevented);
+    target.addEventListener('touchend', onTouchEnd);
+    armClickGuard(document, {
+      cancelsTouchEnd: true,
+      touchIdentifier: 7,
+      touchTarget: target,
+    });
+    expect(touchEndOf(target, 7).defaultPrevented).toBe(true);
+    expect(onTouchEnd).toHaveBeenCalledTimes(1);
+    expect(isClickGuardArmed(document)).toBe(false);
+  });
+
   it('leaves an uncancelable touchend alone, and stays armed for a click that may follow it', () => {
     const target = button();
     armClickGuard(document, {cancelsTouchEnd: true});

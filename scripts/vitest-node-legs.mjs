@@ -13,8 +13,9 @@
  *   width. The Main workflow's `main-commit` runs it with `--main` for the
  *   unit run's test-node matrix: as many legs as shorten the slowest leg
  *   (DEC-17), whose legs also run the swizzle proof's slices. Each leg's Vitest sequencer (scripts/vitest-shard-sequencer.mjs)
- *   splits the files with the same cost function (`nodeFileCost`), so the
- *   legs it plans are the legs that run. Node built-ins and repository
+ *   splits the files with the same cost function (`nodeFileCost`) and the
+ *   same real-Chrome leg (`nodeLegsApart`), so the legs it plans are the
+ *   legs that run. Node built-ins and repository
  *   modules only: `room` has no installed dependencies.
  */
 
@@ -140,6 +141,63 @@ export function nodeFileCost(files, seconds, {idle = new Set()} = {}) {
   return file => (idle.has(file) ? 0 : recorded(file)) + PER_FILE_SECONDS;
 }
 
+// A Node test file that draws pages in a real Chrome says so with
+// `realRenders(true)` (packages/cli/test-utils/theme-render-stub.mjs).
+const REAL_CHROME_SOURCE = /\brealRenders\(\s*true\s*\)/;
+
+// The most seconds a file may plan to join the real-Chrome files' leg.
+// Packing, conformance and other heavy files take the CPU that Chrome's
+// picture scans need, and the pictures have a fixed time bound.
+export const BESIDE_REAL_CHROME_SECONDS = 10;
+
+// A test that packs the CLI (`packed-*.test.mjs`) never joins that leg, even
+// when its recorded time is short: a cold pack cache packs again.
+const PACKING_TEST = /(^|\/)packed-[^/]*\.test\.mjs$/;
+
+/** @type {Map<string, boolean>} */
+const drawsInChrome = new Map();
+
+/**
+ * Whether a Node test file draws pages in a real Chrome, from its source.
+ * A file that cannot be read does not.
+ * @param {string} file repository-relative
+ * @param {string} [root]
+ */
+export function drawsInRealChrome(file, root = ROOT) {
+  const key = `${root}\0${file}`;
+  if (!drawsInChrome.has(key)) {
+    let source = '';
+    try {
+      source = fs.readFileSync(path.join(root, file), 'utf8');
+    } catch {
+      // Not in this checkout.
+    }
+    drawsInChrome.set(key, REAL_CHROME_SOURCE.test(source));
+  }
+  return /** @type {boolean} */ (drawsInChrome.get(key));
+}
+
+/**
+ * How a Node split keeps the real-Chrome files apart: they share the last
+ * leg, and only files that plan at most `BESIDE_REAL_CHROME_SECONDS` and
+ * pack nothing join them there. The planners and the sequencer use the same rule.
+ * @param {(file: string) => number} cost
+ * @param {{root?: string, realChrome?: (file: string) => boolean}} [options]
+ * @returns {import('./lib/duration-split.mjs').KeptApart}
+ */
+export function nodeLegsApart(
+  cost,
+  {root = ROOT, realChrome = file => drawsInRealChrome(file, root)} = {},
+) {
+  return {
+    together: realChrome,
+    besideTogether: file =>
+      !realChrome(file) &&
+      !PACKING_TEST.test(file) &&
+      cost(file) <= BESIDE_REAL_CHROME_SECONDS,
+  };
+}
+
 /**
  * The fewest legs, up to `MAX_NODE_LEGS`, whose every leg plans at most
  * `LEG_BUDGET_SECONDS`, split as the sequencer splits.
@@ -153,6 +211,7 @@ export function planNodeLegs(files, seconds) {
   const plan = fitLegsToBudget(files, cost, {
     budget: LEG_BUDGET_SECONDS,
     maxLegs: MAX_NODE_LEGS,
+    ...nodeLegsApart(cost),
   });
   const legs = Math.max(1, plan.count);
   const fits = plan.longest <= LEG_BUDGET_SECONDS;
@@ -181,7 +240,7 @@ export function planMainNodeLegs(files, seconds) {
   const longestAt = count =>
     Math.max(
       0,
-      ...splitByDuration(files, count, cost).map(leg =>
+      ...splitByDuration(files, count, cost, [], nodeLegsApart(cost)).map(leg =>
         leg.reduce((sum, file) => sum + cost(file), 0),
       ),
     );
@@ -302,6 +361,7 @@ export function planMinNodeLegs(files, seconds) {
   const plan = fitLegsToBudget(files, cost, {
     budget: MIN_NODE_LEG_BUDGET_SECONDS,
     maxLegs: MAX_MIN_NODE_LEGS,
+    ...nodeLegsApart(cost),
   });
   const legs = Math.max(1, plan.count);
   const fits = plan.longest <= MIN_NODE_LEG_BUDGET_SECONDS;
