@@ -848,7 +848,8 @@ export function planOverLimit(legs, isPullRequest) {
  * The legs an opt-in run needs: enough that each leg's recorded time fits
  * LEG_BUDGET_MS, at most `maxLegs` (`fitLegsToBudget`, as the dependent-audit
  * planner). It starts at the total over the budget and adds a leg while one
- * is still over it. A file longer than the budget runs in a leg of its own.
+ * is still over it. A file longer than the budget runs in a leg of its own,
+ * unless, at `maxLegs`, an even split is shorter (`fitLegsToBudget`).
  * An empty selection plans one leg with no files. The recorded times come from
  * release legs that run four files at once on four cores; one file alone on a
  * pull-request runner runs faster, so a leg sums them without the default
