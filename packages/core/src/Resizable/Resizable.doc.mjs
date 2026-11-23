@@ -210,8 +210,8 @@ export default function InvoicePreviewSplit() {
       name: 'ResizeHandle',
       displayName: 'Resize Handle',
       description:
-        'Draggable separator between panels. Pill grip: shown at rest by default; ' +
-        'with isAlwaysVisible false, hidden at rest and shown on hover, keyboard focus and drag. Keyboard-accessible.',
+        'Draggable separator between panels. Pill grip: shown at rest unless `isAlwaysVisible` is false; ' +
+        'then shown only on hover, keyboard focus and drag. Keyboard-accessible.',
       props: [
         {
           name: 'direction',
@@ -335,7 +335,7 @@ export const docsDense = {
     {
       name: 'ResizeHandle',
       description:
-        'Draggable separator between panels. Pill grip: shown at rest by default; with isAlwaysVisible false, hidden at rest and shown on hover, keyboard focus and drag. Keyboard-accessible.',
+        'Draggable separator between panels. Pill grip: shown at rest unless `isAlwaysVisible` is false; then shown only on hover, keyboard focus and drag. Keyboard-accessible.',
       propDescriptions: {
         direction:
           'layout direction: determines cursor + indicator orientation',
