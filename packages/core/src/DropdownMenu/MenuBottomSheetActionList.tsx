@@ -56,9 +56,15 @@ function sheetElementAtPoint(
     return element;
   }
   const row = element.closest('li');
-  // A control in the row's content keeps its own press, as Item's own click
-  // rule decides.
-  if (row != null && hasInteractiveAncestor(element, row)) {
+  // A control in the row's content keeps its own press. This is Item's click
+  // rule: the shared walk, plus a form control or link it skips (a read-only
+  // input).
+  const control = element.closest('button, a, input, select, textarea');
+  if (
+    row != null &&
+    ((control != null && row.contains(control)) ||
+      hasInteractiveAncestor(element, row))
+  ) {
     return element;
   }
   if (row != null) {

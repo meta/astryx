@@ -245,9 +245,13 @@ describe('MenuBottomSheetActionList', () => {
       ],
       [
         'a disabled button',
-        <button key="b" type="button" disabled>
+        <button key="b" type="button" disabled aria-label="Pin">
           Pin
         </button>,
+      ],
+      [
+        'a read-only checkbox',
+        <input key="r" type="checkbox" aria-readonly="true" aria-label="Pin" />,
       ],
     ] as const)(
       'a press on %s in a row’s end content runs no row',
@@ -255,18 +259,8 @@ describe('MenuBottomSheetActionList', () => {
         const {onSelect} = renderRows([
           {label: 'Notes', onClick: () => {}, endContent: control},
         ]);
-        press(
-          screen.getByRole(_kind === 'a switch' ? 'switch' : 'button', {
-            name: 'Pin',
-          }),
-          'touch',
-        );
-        press(
-          screen.getByRole(_kind === 'a switch' ? 'switch' : 'button', {
-            name: 'Pin',
-          }),
-          'mouse',
-        );
+        press(screen.getByLabelText('Pin'), 'touch');
+        press(screen.getByLabelText('Pin'), 'mouse');
         expect(onSelect).not.toHaveBeenCalled();
       },
     );
