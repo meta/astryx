@@ -26,8 +26,13 @@ import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
 import {visibleText} from '../utils/accessibleName';
 
-/** The action rows: ListItem renders its action as a button (or a link). */
-const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
+/**
+ * The elements a press runs. ListItem renders a row's action as a button (or a
+ * link). A button, link, checkbox or switch in a row's end content runs its own
+ * press the same way.
+ */
+const SHEET_ROW_SELECTOR =
+  'button:not(:disabled), a[href], input[type="checkbox"]:not(:disabled)';
 
 /** Whether the document can hit-test a point (jsdom cannot). */
 function canHitTestByPoint(): boolean {
