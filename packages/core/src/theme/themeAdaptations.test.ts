@@ -274,6 +274,47 @@ describe('rule order and writes', () => {
     );
   });
 
+  it('writes the token block on the scope root with its theme attribute, not a bare :scope', () => {
+    const theme = defineTheme({
+      name: 'coarse',
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--size-element-md': '40px'}},
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+
+    // A bare :scope is filed with the rules every element tries.
+    expect(css).not.toMatch(/^\s*:scope\s*\{/m);
+    expect(css).toContain(
+      ':scope:where([data-astryx-theme]) {\n    --size-element-md: 40px;',
+    );
+  });
+
+  it('replays an authored status role on the scope root with its theme attribute', () => {
+    const theme = defineTheme({
+      name: 'coarse',
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-error': '#c00'}},
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+
+    expect(css).not.toMatch(/^\s*:scope\s*\{/m);
+    expect(css).toMatch(
+      /:scope:where\(\[data-astryx-theme\]\) \{\n\s+--color-text-error: #c00;/,
+    );
+  });
+
   it('writes nothing for a part value a rule leaves undefined, and still refuses null', () => {
     const theme = defineTheme(
       adaptationInput([

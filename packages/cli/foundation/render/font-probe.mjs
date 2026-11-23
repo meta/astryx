@@ -9,8 +9,8 @@
  *   result after.
  * @position Run by the picture scripts (picture-chrome.mjs,
  *   picture-playwright.mjs) after the picture is taken; read by
- *   `screenshot` in api/theme-edit/_preview.mjs, which names a stack this
- *   machine has none of the families for.
+ *   `pictureFontNotes` in foundation/pictures/pictures.mjs, which names a
+ *   stack this machine has none of the families for.
  */
 
 /** The line prefix a picture script prints the probe's result after. */

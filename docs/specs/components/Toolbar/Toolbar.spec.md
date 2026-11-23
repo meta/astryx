@@ -86,8 +86,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   they fit the toolbar, so the row wraps and the end lane moves to a second
   line; the tabs scroll only when they are wider than the toolbar. With a
   bottom divider, the selected tab's indicator sits on the rail while the lanes
-  share one line and on its tab while the row is wrapped; after a resize that
-  wraps or unwraps the row, the indicator can lag by one frame.
+  share one line and on its tab while the row is wrapped.
 - **The tab stop does not follow a pointer click.** After a click on a control
   that does not hold the stop, the stop stays on the earlier control, so
   Shift+Tab from the clicked control lands on that earlier control inside the

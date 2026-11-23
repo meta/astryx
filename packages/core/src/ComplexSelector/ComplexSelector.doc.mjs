@@ -27,7 +27,7 @@ const anatomy = [
     name: 'Icon-rendered start icon',
     required: false,
     description:
-      'Optional leading semantic icon or icon component rendered through Icon.',
+      'Optional leading icon, by built-in meaning or icon component, rendered through Icon.',
   },
   {
     name: 'Caller-rendered start content',
@@ -200,7 +200,7 @@ export const docs = {
         {
           name: 'startIcon',
           type: 'ReactNode | IconType',
-          description: 'Icon displayed at the start of the trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+          description: 'Icon displayed at the start of the trigger; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
         },
         {
           name: 'width',
@@ -425,7 +425,7 @@ export const docsDense = {
     triggerLabel: 'Closed trigger label/content.',
     variant:
       'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
-    startIcon: 'Leading trigger icon; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    startIcon: 'Leading trigger icon; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     placement: 'Popup placement.',
     alignment: 'Popup alignment.',
     renderTrigger:
