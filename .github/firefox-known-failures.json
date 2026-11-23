@@ -7,54 +7,9 @@
       "tracking": "firefox-hover-specs-other-3"
     },
     {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuItemAudit.a11y.chromium.spec.ts",
-      "title": "narrow-light",
-      "tracking": "firefox-hover-specs-other-3"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "butter-light-open",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "neutral-dark-hover",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "neutral-dark-open",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "neutral-dark-pressed",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "neutral-light-hover",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "neutral-light-open",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
-      "title": "neutral-light-pressed",
-      "tracking": "firefox-hover-placement-anchor"
-    },
-    {
       "file": "packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts",
       "title": "rtl-light-open",
       "tracking": "firefox-hover-placement-anchor"
-    },
-    {
-      "file": "packages/core/src/DropdownMenu/__tests__/SubMenuHeaderFooter.a11y.chromium.spec.ts",
-      "title": "a header with a choice › a flyout the pointer has left stays open while an arrow moves the choice in its header",
-      "tracking": "firefox-submenu-pointer-left-focus"
     },
     {
       "file": "packages/core/src/HoverCard/__tests__/HoverCardAudit.a11y.chromium.spec.ts",
