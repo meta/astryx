@@ -32,7 +32,7 @@ import {visibleText} from '../utils/accessibleName';
  * press the same way.
  */
 const SHEET_ROW_SELECTOR =
-  'button:not(:disabled), a[href], input[type="checkbox"]:not(:disabled)';
+  'button:not(:disabled), a[href], input[type="checkbox"]:not(:disabled, [aria-disabled="true"])';
 
 /** Whether the document can hit-test a point (jsdom cannot). */
 function canHitTestByPoint(): boolean {

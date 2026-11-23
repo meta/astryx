@@ -257,6 +257,12 @@ export class SwitchTouchController {
   private pressTime: number | null = null;
   /** The thumb's offset when the current finger landed. */
   private downOffset = 0;
+  /**
+   * The value when the current finger landed. A lift commits from it, so a
+   * click that already toggled the input during the press (a menu that runs
+   * the press on its release, for example) is not undone by the lift.
+   */
+  private downIsOn = false;
   private drag: Drag | null = null;
   /** The finger's last travel along x, for a lift that reports none. */
   private lastTravel = 0;
@@ -591,6 +597,7 @@ export class SwitchTouchController {
     this.drag = null;
     this.lastTravel = 0;
     this.downOffset = this.offsetAt(time);
+    this.downIsOn = this.isOn;
   }
 
   /** Passive: a mouse, a pen or a finger on the switch, UIControl's events. */
@@ -735,7 +742,7 @@ export class SwitchTouchController {
     }
     this.released = true;
     this.clearTimers();
-    const commit = commitOnRelease(this.drag?.flip ?? null, this.isOn);
+    const commit = commitOnRelease(this.drag?.flip ?? null, this.downIsOn);
     this.drag = null;
     if (this.pressTime == null) {
       // A tap quicker than a scroller's content delay: the press begins now.

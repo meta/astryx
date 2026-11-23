@@ -7,7 +7,8 @@
  * @output Proof that a press on a sheet row outside its action (its icon, its
  *   padding, a submenu row's chevron) runs the row, as a press on its label
  *   does, for a finger and for a mouse. A press on a section heading runs no
- *   row and leaves the sheet open.
+ *   row and leaves the sheet open. A tap or a click on a switch or a checkbox
+ *   in a row's end content toggles it once and runs no row.
  * @position Evidence for MenuBottomSheetActionList's whole-row press; the
  *   row lookup itself is unit-tested in MenuBottomSheetActionList.test.tsx
  */
@@ -29,6 +30,7 @@ const storybook = withStorybook(test);
 const ACTION_SHEET = 'core-dropdownmenu--action-sheet-presentation';
 const DRILL_IN = 'core-dropdownmenu--compact-drill-in-presentation';
 const SECTIONED = 'core-dropdownmenu--sectioned-action-sheet-presentation';
+const END_CONTROLS = 'core-dropdownmenu--action-sheet-end-content-controls';
 
 interface Point {
   x: number;
@@ -164,6 +166,62 @@ test.describe('a mouse on a sheet row', () => {
 
       await expect(page.getByRole('dialog')).toBeHidden();
       expect(picked).toEqual(['Duplicate project']);
+    });
+  }
+});
+
+/** The end-content controls of END_CONTROLS, by accessible role and name. */
+const END_CONTROLS_CASES = [
+  {kind: 'Switch', role: 'switch', name: 'Pinned'},
+  {kind: 'CheckboxInput', role: 'checkbox', name: 'Starred'},
+  {kind: 'a native checkbox', role: 'checkbox', name: 'Archived'},
+] as const;
+
+/** The middle of `locator`'s box: where a person aims at the control. */
+async function controlCenter(locator: Locator): Promise<Point> {
+  const box = await locator.boundingBox();
+  if (box == null) {
+    throw new Error('the control has no rendered box');
+  }
+  return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+}
+
+/**
+ * Waits past every late activation a control could make: a switch that has
+ * no browser click clicks its input once the click window passes.
+ */
+async function waitPastLateClicks(page: Page): Promise<void> {
+  await page.waitForTimeout(800);
+}
+
+test.describe("a control in a sheet row's end content", () => {
+  for (const {kind, role, name} of END_CONTROLS_CASES) {
+    test(`a tap on ${kind} toggles it once and runs no row`, async ({page}) => {
+      const picked = await openSheet(page, END_CONTROLS);
+      const driver = await touchDriver(page);
+      const control = page.getByRole('dialog').getByRole(role, {name});
+      await expect(control).not.toBeChecked();
+
+      await driver.tap(await controlCenter(control));
+      await waitPastLateClicks(page);
+
+      await expect(control).toBeChecked();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      expect(picked).toEqual([]);
+    });
+
+    test(`a click on ${kind} toggles it once and runs no row`, async ({
+      page,
+    }) => {
+      const picked = await openSheet(page, END_CONTROLS);
+      const control = page.getByRole('dialog').getByRole(role, {name});
+      const {x, y} = await controlCenter(control);
+      await page.mouse.click(x, y);
+      await waitPastLateClicks(page);
+
+      await expect(control).toBeChecked();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      expect(picked).toEqual([]);
     });
   }
 });
