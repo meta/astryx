@@ -43,9 +43,9 @@ export const docs = {
     },
     {
       name: 'changeAction',
-      type: '(value: number) => void | Promise<void>',
+      type: '(value: number | null) => void | Promise<void>',
       description:
-        'Async action fired after onChange (if not prevented). Triggers optimistic update and shows a loading spinner while pending.',
+        'Async action fired after onChange. Triggers optimistic update and shows a loading spinner while pending.',
     },
     {
       name: 'size',
@@ -403,9 +403,9 @@ export const docsZh = {
     },
     {
       name: 'changeAction',
-      type: '(value: number) => void | Promise<void>',
+      type: '(value: number | null) => void | Promise<void>',
       description:
-        '在 onChange 之后（如果未被阻止）触发的异步操作。触发乐观更新并在挂起时显示加载旋转器。',
+        '在 onChange 之后触发的异步操作。触发乐观更新并在挂起时显示加载旋转器。',
     },
     {
       name: 'size',
@@ -798,7 +798,7 @@ export const docsDense = {
     onChange:
       'Callback when a valid text edit commits on blur/Enter, or a step/clear control changes the value.',
     changeAction:
-      'Async action after onChange (if not prevented). Triggers optimistic update+spinner while pending.',
+      'Async action after onChange. Triggers optimistic update+spinner while pending.',
     size: 'Size variant.',
     isLabelHidden: 'Visually hide label (still accessible to screen readers).',
     description: 'Text between label + input.',

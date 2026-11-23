@@ -3402,6 +3402,96 @@ describe('NumberInput changeAction and isLoading', () => {
     expect(calls).toEqual(['onChange', 'changeAction']);
   });
 
+  it('runs changeAction after onChange when held stepper is released', async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: string[] = [];
+      const onChange = vi.fn(() => calls.push('onChange'));
+      const changeAction = vi.fn(async () => {
+        calls.push('changeAction');
+      });
+
+      render(
+        <NumberInput
+          label="Amount"
+          value={5}
+          hasNumberSteppers
+          onChange={onChange}
+          changeAction={changeAction}
+        />,
+      );
+
+      const increment = screen.getByLabelText(/increment/i);
+      const mousePress = {button: 0, pointerId: 1, pointerType: 'mouse'};
+
+      fireEvent.pointerDown(increment, mousePress);
+      act(() => {
+        vi.advanceTimersByTime(500 + 250);
+      });
+      fireEvent.pointerUp(increment, mousePress);
+
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(7);
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith(7);
+      expect(calls).toEqual(['onChange', 'changeAction']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs changeAction after onChange when draft is emptied on blur and Enter', async () => {
+    // 1. Emptied on blur
+    const blurCalls: string[] = [];
+    const onBlurChange = vi.fn(() => blurCalls.push('onChange'));
+    const onBlurAction = vi.fn(async () => {
+      blurCalls.push('changeAction');
+    });
+
+    const {unmount} = render(
+      <NumberInput
+        label="Amount"
+        value={10}
+        hasClear
+        onChange={onBlurChange}
+        changeAction={onBlurAction}
+      />,
+    );
+
+    const blurInput = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(blurInput, {target: {value: ''}});
+    fireEvent.blur(blurInput);
+
+    expect(onBlurChange).toHaveBeenCalledExactlyOnceWith(null);
+    expect(onBlurAction).toHaveBeenCalledExactlyOnceWith(null);
+    expect(blurCalls).toEqual(['onChange', 'changeAction']);
+
+    unmount();
+
+    // 2. Emptied on Enter
+    const enterCalls: string[] = [];
+    const onEnterChange = vi.fn(() => enterCalls.push('onChange'));
+    const onEnterAction = vi.fn(async () => {
+      enterCalls.push('changeAction');
+    });
+
+    render(
+      <NumberInput
+        label="Amount"
+        value={10}
+        hasClear
+        onChange={onEnterChange}
+        changeAction={onEnterAction}
+      />,
+    );
+
+    const enterInput = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(enterInput, {target: {value: ''}});
+    fireEvent.keyDown(enterInput, {key: 'Enter'});
+
+    expect(onEnterChange).toHaveBeenCalledExactlyOnceWith(null);
+    expect(onEnterAction).toHaveBeenCalledExactlyOnceWith(null);
+    expect(enterCalls).toEqual(['onChange', 'changeAction']);
+  });
+
   it('presents proposed value optimistically while changeAction is pending', async () => {
     const deferred = createDeferred();
     const onSave = vi.fn(async () => deferred.promise);

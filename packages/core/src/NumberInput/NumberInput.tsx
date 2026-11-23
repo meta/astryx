@@ -570,9 +570,7 @@ type NumberInputPropsClearable = NumberInputPropsBase & {
    * Action to perform when the value changes. Supports async actions with optimistic updates.
    * When clearable, the action may receive null when cleared.
    */
-  changeAction?:
-    | ((value: number | null) => void | Promise<void>)
-    | ((value: number) => void | Promise<void>);
+  changeAction?: (value: number | null) => void | Promise<void>;
 };
 
 export type NumberInputProps =
