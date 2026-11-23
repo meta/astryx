@@ -4,8 +4,9 @@
  * @file SelectorTriggerPress.interaction.browser.spec.ts
  * @input The ghost and secondary variant stories of Selector, MultiSelector
  *   and ComplexSelector in a built Storybook.
- * @output Real-engine proof that a press on a Selector-family trigger paints
- *   and never scales the trigger, with motion and under Reduce Motion.
+ * @output Real-engine proof that a mouse or finger press on a Selector-family
+ *   trigger paints the pressed tint and never scales the trigger, with motion
+ *   and under Reduce Motion.
  * @position The triggers use the press-feedback record's momentary-control
  *   recipe. Their records state no press scale, and under reduced motion no
  *   press scales (`design:reduced-motion` DR1).
@@ -17,6 +18,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {touchDriver} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -37,16 +39,56 @@ const STORIES = [
   'core-complexselector--controlled-toolbar-trigger',
 ];
 
-/** The transforms on the trigger and its three nearest ancestors. */
-async function transformsWhilePressed(page: Page): Promise<string[]> {
+type PressInput = 'mouse' | 'finger';
+
+/**
+ * Holds a press on the trigger and reads, while it is held: the transforms on
+ * the trigger and its three nearest ancestors, and whether the pressable box
+ * paints the pressed tint (its background image differs from rest).
+ */
+async function whilePressed(
+  page: Page,
+  input: PressInput,
+): Promise<{transforms: string[]; isTinted: boolean}> {
   const trigger = page.locator('#storybook-root [role="combobox"]').first();
   await expect(trigger).toBeVisible();
   const box = await trigger.boundingBox();
   if (box == null) {
     throw new Error('no trigger box');
   }
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
+  const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+  const tintOf = () =>
+    trigger.evaluate(node => {
+      const pressable = node.closest('[data-astryx-pressable]') ?? node;
+      return getComputedStyle(pressable).backgroundImage;
+    });
+  const rest = await tintOf();
+  let release: () => Promise<void>;
+  if (input === 'mouse') {
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    // A release away from the trigger, so the list does not open.
+    release = async () => {
+      await page.mouse.move(2, 2);
+      await page.mouse.up();
+    };
+  } else {
+    const finger = await (await touchDriver(page)).press(at);
+    // A lift after the finger leaves the trigger, so the list does not open.
+    release = async () => {
+      await finger.move({x: 2, y: 2});
+      await finger.lift();
+    };
+  }
+  await expect
+    .poll(
+      () =>
+        trigger.evaluate(
+          node => node.closest('[data-astryx-press="on"]') != null,
+        ),
+      {message: 'the press reaches the trigger'},
+    )
+    .toBe(true);
   // Longer than the press transition, so a scale would have landed.
   await page.waitForTimeout(350);
   const transforms = await trigger.evaluate(node => {
@@ -61,28 +103,31 @@ async function transformsWhilePressed(page: Page): Promise<string[]> {
     }
     return out;
   });
-  // A release away from the trigger, so the list does not open.
-  await page.mouse.move(2, 2);
-  await page.mouse.up();
-  return transforms;
+  const isTinted = (await tintOf()) !== rest;
+  await release();
+  return {transforms, isTinted};
 }
 
-for (const reducedMotion of ['no-preference', 'reduce'] as const) {
-  for (const story of STORIES) {
-    test(`a mouse press on ${story} does not scale the trigger (${reducedMotion})`, async ({
-      page,
-    }) => {
-      await page.emulateMedia({reducedMotion});
-      await page.goto(
-        `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
-      );
-      expect(await transformsWhilePressed(page)).toEqual([
-        'none none',
-        'none none',
-        'none none',
-        'none none',
-      ]);
-    });
+for (const input of ['mouse', 'finger'] as const) {
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    for (const story of STORIES) {
+      test(`a ${input} press on ${story} paints and does not scale the trigger (${reducedMotion})`, async ({
+        page,
+      }) => {
+        await page.emulateMedia({reducedMotion});
+        await page.goto(
+          `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
+        );
+        const pressed = await whilePressed(page, input);
+        expect(pressed.isTinted, 'the pressed tint paints').toBe(true);
+        expect(pressed.transforms).toEqual([
+          'none none',
+          'none none',
+          'none none',
+          'none none',
+        ]);
+      });
+    }
   }
 }
 
