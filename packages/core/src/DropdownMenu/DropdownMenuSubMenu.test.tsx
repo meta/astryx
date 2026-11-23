@@ -22,13 +22,14 @@ import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
+import {menuDirectionMirror} from './menuDirectionMirror.stylex';
 import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {IconButton} from '../IconButton';
 import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {Theme, defineTheme} from '../theme';
-import {rtlStyles} from '../utils';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {rtlStyles} from '../utils';
 
 beforeEach(() => {
   HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
@@ -209,7 +210,9 @@ describe('DropdownMenuSubMenu', () => {
 
   it('mirrors its indicator and keyboard directions under RTL', async () => {
     const user = userEvent.setup();
-    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+    const {className: mirrorClassName} = stylex.props(
+      menuDirectionMirror.mirror,
+    );
     const mirrorClasses = mirrorClassName?.split(' ') ?? [];
     expect(mirrorClasses.length).toBeGreaterThan(0);
     render(
@@ -251,6 +254,27 @@ describe('DropdownMenuSubMenu', () => {
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
     expect(trigger).toHaveFocus();
+  });
+
+  it('does not flip its indicator by the document direction alone', async () => {
+    const user = userEvent.setup();
+    const {className: documentMirrorClassName} = stylex.props(rtlStyles.mirror);
+    render(
+      <div dir="rtl">
+        <div dir="ltr">
+          <MoveMenu />
+        </div>
+      </div>,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const indicator = screen
+      .getByRole('menuitem', {name: /Move to/, hidden: true})
+      .querySelector('.astryx-icon');
+    expect(indicator).not.toBeNull();
+    for (const className of documentMirrorClassName?.split(' ') ?? []) {
+      expect(indicator).not.toHaveClass(className);
+    }
   });
 
   it('names the flyout from its trigger via aria-labelledby', async () => {
