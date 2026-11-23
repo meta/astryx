@@ -70,7 +70,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+import {costOf, fitLegsToBudget} from '../../scripts/lib/duration-split.mjs';
 
 export const EVIDENCE_DIR = 'pr-a11y-evidence';
 
@@ -846,38 +846,31 @@ export function planOverLimit(legs, isPullRequest) {
 
 /**
  * The legs an opt-in run needs: enough that each leg's recorded time fits
- * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
- * least time (`splitByDuration`, as the other leg planners). It starts at the
- * total over the budget and adds a leg while the longest is still over it,
- * because a split by whole files can leave one leg a little over. A file
- * longer than the budget alone sets the budget: no leg count splits it. The recorded
- * times come from release legs that run four files at once on four cores; one
- * file alone on a pull-request runner runs faster, so a leg sums them without
- * the default check's margin.
+ * LEG_BUDGET_MS, at most `maxLegs` (`fitLegsToBudget`, as the dependent-audit
+ * planner). It starts at the total over the budget and adds a leg while one
+ * is still over it. A file longer than the budget runs in a leg of its own.
+ * An empty selection plans one leg with no files. The recorded times come from
+ * release legs that run four files at once on four cores; one file alone on a
+ * pull-request runner runs faster, so a leg sums them without the default
+ * check's margin.
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs
  */
 export function planLegs(files, seconds, maxLegs) {
+  if (files.length === 0) return {count: 1, shares: [[]], longestMs: 0};
   const cost = costOf(files, seconds);
-  const sum = list => list.reduce((total, file) => total + cost(file), 0);
-  const most = Math.max(1, maxLegs);
-  const longestMs = shares =>
-    Math.max(...shares.map(share => sum(share) * 1000));
-  let count = Math.min(
-    most,
-    Math.max(1, Math.ceil((sum(files) * 1000) / LEG_BUDGET_MS)),
-  );
-  const budgetMs = Math.max(
-    LEG_BUDGET_MS,
-    ...files.map(file => cost(file) * 1000),
-  );
-  let shares = splitByDuration(files, count, cost);
-  while (count < most && count < files.length && longestMs(shares) > budgetMs) {
-    count += 1;
-    shares = splitByDuration(files, count, cost);
-  }
-  return {count, shares, longestMs: longestMs(shares)};
+  const totalMs = files.reduce((sum, file) => sum + cost(file), 0) * 1000;
+  const plan = fitLegsToBudget(files, cost, {
+    budget: LEG_BUDGET_MS / 1000,
+    maxLegs: Math.max(1, maxLegs),
+    start: Math.ceil(totalMs / LEG_BUDGET_MS),
+  });
+  return {
+    count: plan.count,
+    shares: plan.shares,
+    longestMs: plan.longest * 1000,
+  };
 }
 
 /**

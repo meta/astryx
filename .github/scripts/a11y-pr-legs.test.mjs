@@ -301,6 +301,19 @@ describe('a wide opt-in selection', () => {
     const legs = planLegs(files, seconds, pullRequestMaxLegs());
     expect(legs.count).toBe(3);
     expect(legs.longestMs).toBe(390 * 1000);
+    // A file over ten minutes runs alone, and the others still fit.
+    const long = {
+      'long.spec.ts': 660,
+      'a.spec.ts': 330,
+      'b.spec.ts': 330,
+      'c.spec.ts': 330,
+    };
+    const apart = planLegs(Object.keys(long), long, pullRequestMaxLegs());
+    expect(apart.shares).toContainEqual(['long.spec.ts']);
+    for (const share of apart.shares.filter(s => !s.includes('long.spec.ts')))
+      expect(
+        share.reduce((sum, file) => sum + long[file], 0),
+      ).toBeLessThanOrEqual(600);
   });
 
   it('keeps a small selection at five legs or fewer', () => {
