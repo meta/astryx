@@ -56,9 +56,12 @@ const PLAYER_RADIUS = radiusVars['--radius-element'];
 const COMPACT_PLAYER = '@container (max-width: 360px)';
 /**
  * The theme's track color can match the dark frosted bar. So the bar paints
- * the empty part of its timeline with a tint of its own accent color.
+ * the empty part of its timeline with a tint of its own accent color. At 45
+ * percent it keeps 3:1 against the frost over a white or a black picture.
+ * The buffered range takes 70 percent, between the empty and played parts.
  */
-const FROSTED_TRACK = `color-mix(in srgb, ${colorVars['--color-accent']} 24%, transparent)`;
+const FROSTED_TRACK = `color-mix(in srgb, ${colorVars['--color-accent']} 45%, transparent)`;
+const FROSTED_BUFFERED = `color-mix(in srgb, ${colorVars['--color-accent']} 70%, transparent)`;
 
 const styles = stylex.create({
   root: {
@@ -122,6 +125,7 @@ const styles = stylex.create({
     insetInlineEnd: 'var(--_media-bar-inset)',
     insetBlockEnd: 'var(--_media-bar-inset)',
     '--_media-timeline-track': FROSTED_TRACK,
+    '--_media-timeline-buffered': FROSTED_BUFFERED,
     display: 'flex',
     alignItems: 'center',
     gap: {

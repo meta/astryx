@@ -194,7 +194,8 @@ const probe = stylex.create({
     },
   },
   frostedTrack: {
-    '--_media-timeline-track': `color-mix(in srgb, ${colorVars['--color-accent']} 24%, transparent)`,
+    '--_media-timeline-track': `color-mix(in srgb, ${colorVars['--color-accent']} 45%, transparent)`,
+    '--_media-timeline-buffered': `color-mix(in srgb, ${colorVars['--color-accent']} 70%, transparent)`,
   },
   onMediaFrost: {
     backgroundColor: {
@@ -712,7 +713,7 @@ describe('VideoPlayer control bar', () => {
     expect(hasDeclaration(bar, probe.onMediaFrost)).toBe(true);
   });
 
-  it('paints the empty part of its timeline in its own accent color at 24 percent', () => {
+  it('paints the empty part of its timeline in its own accent color at 45 percent, and the buffered range at 70 percent', () => {
     const {bar} = renderBar();
     expect(hasDeclaration(bar, probe.frostedTrack)).toBe(true);
     const [trackClass] = atomicClasses(probe.trackFromSurface);

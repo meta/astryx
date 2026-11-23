@@ -193,17 +193,17 @@ test('a tooltip from the compact bar keeps the size of the page around the playe
 });
 
 for (const story of ['small-player', 'video']) {
-  test(`the empty track on the video bar is the bar's accent at 24 percent (${story})`, async ({
+  test(`the empty track on the video bar is the bar's accent at 45 percent (${story})`, async ({
     page,
   }) => {
     await open(page, story);
     const track = await readTrack(
       page,
       BAR,
-      'color-mix(in srgb, var(--color-accent) 24%, transparent)',
+      'color-mix(in srgb, var(--color-accent) 45%, transparent)',
     );
     expect(track.painted).toBe(track.expected);
-    expect(track.painted).toMatch(/\/ 0\.24\)$/);
+    expect(track.painted).toMatch(/\/ 0\.45\)$/);
   });
 }
 
@@ -344,4 +344,37 @@ for (const story of ['small-player', 'video']) {
       contrast(parseColor(paint.icon), overWhite(parseColor(paint.bar))),
     ).toBeGreaterThanOrEqual(4.5);
   });
+}
+
+test('the empty track on the video bar keeps 3:1 against the bar over a white or a black picture', async ({
+  page,
+}) => {
+  await open(page, 'video');
+  const paint = await page.locator(BAR).evaluate(bar => {
+    const timeline = bar.querySelector('[role="slider"]')?.closest('[dir]');
+    const layer = timeline?.querySelector(':scope > [aria-hidden="true"]');
+    const segment = Array.from(layer?.children ?? []).find(
+      child => child.children.length === 2,
+    );
+    if (segment == null) {
+      throw new Error('the timeline drew no track segment');
+    }
+    return {
+      bar: getComputedStyle(bar).backgroundColor,
+      track: getComputedStyle(segment).backgroundColor,
+    };
+  });
+  const frost = parseColor(paint.bar);
+  const track = parseColor(paint.track);
+  for (const picture of [
+    [255, 255, 255, 1],
+    [0, 0, 0, 1],
+  ] as Rgba[]) {
+    const ground = over(frost, picture);
+    expect(contrast(over(track, ground), ground)).toBeGreaterThanOrEqual(3);
+  }
+});
+
+function over([r, g, b, a]: Rgba, [ur, ug, ub]: Rgba): Rgba {
+  return [r * a + ur * (1 - a), g * a + ug * (1 - a), b * a + ub * (1 - a), 1];
 }
