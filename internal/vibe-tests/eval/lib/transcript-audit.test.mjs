@@ -220,6 +220,34 @@ describe('auditTranscript', () => {
     expect(expanded.tempPaths).toEqual([]);
   });
 
+  it('audits a substitution after escaped backslashes and the lines after a quoted <<', () => {
+    const other = '/runs/r1/runs/form__other__r1/workspace/src/App.tsx';
+    const escaped = auditTranscript(
+      [toolUse('Bash', {command: `cat > notes.txt <<EOF\n\\\\$(cp ${other} /tmp/x)\nEOF`})],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
+    expect(escaped.violations.map(item => item.path)).toContain(other);
+    const quoted = auditTranscript(
+      [toolUse('Bash', {command: `echo '<<EOF'\ncp ${other} /tmp/y\nEOF`})],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
+    expect(quoted.violations.map(item => item.path)).toContain(other);
+    const commented = auditTranscript(
+      [toolUse('Bash', {command: `true # <<EOF\ncp ${other} /tmp/z\nEOF`})],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
+    expect(commented.violations.map(item => item.path)).toContain(other);
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];

@@ -97,20 +97,45 @@ export function splitHeredocs(command) {
   const code = [];
   const shell = command.replace(
     /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g,
-    (_whole, before, quote, _marker, after, body) => {
+    (whole, before, quote, _marker, after, body) => {
+      // A `<<` inside quotes or a comment opens no heredoc, so the lines after
+      // it are shell text and stay in the audit.
+      if (isQuotedOrCommented(before)) return whole;
       const runner = `${before} ${after}`;
       if (SHELL.test(runner)) return `${runner}\n${body}`;
       if (INTERPRETER.test(runner)) code.push(body);
       // The shell runs command substitutions in an unquoted heredoc body.
       if (!quote) {
-        // An escaped `\$(` or backtick is literal text, so it does not run.
-        const substitutions = [...body.matchAll(/(?<!\\)\$\(([^)]*)\)|(?<!\\)`([^`]*)`/g)].map(match => match[1] ?? match[2]);
+        // An odd run of backslashes escapes `$(` or a backtick, so it does not
+        // run; an even run is escaped backslashes, and the substitution runs.
+        const substitutions = [...body.matchAll(/(\\*)(?:\$\(([^)]*)\)|`([^`]*)`)/g)]
+          .filter(match => match[1].length % 2 === 0)
+          .map(match => match[2] ?? match[3]);
         if (substitutions.length > 0) return `${runner}\n${substitutions.join('\n')}`;
       }
       return runner;
     },
   );
   return {shell, code};
+}
+
+/** Whether the end of `text` is inside an open quote or a `#` comment. */
+function isQuotedOrCommented(text) {
+  let quote = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (quote) {
+      if (char === quote) quote = null;
+      else if (char === '\\' && quote === '"') i += 1;
+    } else if (char === '\\') {
+      i += 1;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === '#' && (i === 0 || /\s/.test(text[i - 1]))) {
+      return true;
+    }
+  }
+  return quote !== null;
 }
 
 /** In code, a path is a string literal, so division, comments and a lone '/' are not paths. */
