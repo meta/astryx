@@ -1592,6 +1592,26 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('exposes only the drilled-in view as a menu, and the root again after Back (AR3)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(<PhoneMenu />);
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const view = await waitFor(() => shownMenu('Move to'));
+    expect(view.parentElement?.closest('[role="menu"]')).toBeNull();
+    expect(
+      screen.queryAllByRole('menu', {name: 'Actions', ...h}).filter(isShown),
+    ).toEqual([]);
+
+    await user.click(shownRow('Back to Actions'));
+    await waitFor(() => expect(shownMenu('Actions')).toBeDefined());
+  });
+
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();

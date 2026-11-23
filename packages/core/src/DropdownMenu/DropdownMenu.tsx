@@ -1718,7 +1718,7 @@ function DropdownMenuPopover({
     : styles.popoverMatchTrigger;
 
   // The drill-in view stack for sub-menus on a phone.
-  const {drillIn, wrapContent} = useMenuDrillIn(isOpen);
+  const {drillIn, isDrilled, wrapContent} = useMenuDrillIn(isOpen);
   // The surface host is owned through a ref. State keeps only a key that
   // changes whenever a host element attaches, the host included when it
   // moves (a header or footer coming or going), so sub-menus re-render into
@@ -1905,7 +1905,9 @@ function DropdownMenuPopover({
                 el?.closest<HTMLDivElement>('[popover]') ?? null;
             }}
             id={menuId}
-            role="menu"
+            // While a sub-menu's view shows in place of the rows, that view is
+            // the one menu, so this box stops being a menu around it.
+            role={isDrilled ? 'none' : 'menu'}
             // Pointer opens focus the container so arrows, typeahead, Escape and
             // Tab remain owned by the menu without pre-highlighting an item.
             // An overflowing menu joins the Tab order so its scrollable region is
@@ -1916,14 +1918,18 @@ function DropdownMenuPopover({
             // screen readers announce e.g. "Actions menu" rather than an unnamed
             // menu (menus-13). A custom trigger names it by reference.
             aria-label={
-              renderTrigger != null
-                ? (rest['aria-label'] as string | undefined)
-                : button.label
+              isDrilled
+                ? undefined
+                : renderTrigger != null
+                  ? (rest['aria-label'] as string | undefined)
+                  : button.label
             }
             aria-labelledby={
-              renderTrigger != null && rest['aria-label'] == null
-                ? triggerId
-                : (rest['aria-labelledby'] as string | undefined)
+              isDrilled
+                ? undefined
+                : renderTrigger != null && rest['aria-label'] == null
+                  ? triggerId
+                  : (rest['aria-labelledby'] as string | undefined)
             }
             onKeyDown={listKeyDown}
             onFocus={event => {
