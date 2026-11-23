@@ -1788,15 +1788,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 12
+              "templates": 13
             },
             {
               "definition": "<text>",
-              "templates": 12
-            },
-            {
-              "definition": "<text>",
-              "templates": 11
+              "templates": 13
             },
             {
               "definition": "<text>",
@@ -1820,11 +1816,15 @@
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
+            },
+            {
+              "definition": "<text>",
+              "templates": 11
             },
             {
               "definition": "<text>",
