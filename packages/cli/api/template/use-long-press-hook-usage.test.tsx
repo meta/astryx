@@ -54,6 +54,7 @@ vi.mock('@astryxdesign/core/Card', () => ({
 function panelPosition(menu: HTMLElement | null): {
   left?: string;
   top?: string;
+  transform?: string;
 } {
   return JSON.parse(menu?.getAttribute('data-style') ?? '{}');
 }
@@ -84,9 +85,13 @@ function dispatchTouch(
   target: HTMLElement,
   type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
   touches: Array<{clientX: number; clientY: number}> = [],
+  timeStamp?: number,
 ): Event {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.defineProperty(event, 'touches', {value: touches});
+  if (timeStamp != null) {
+    Object.defineProperty(event, 'timeStamp', {value: timeStamp});
+  }
   act(() => {
     target.dispatchEvent(event);
   });
@@ -127,10 +132,10 @@ describe('useLongPressHookUsage example', () => {
     expect(menu).not.toBeNull();
     expect(menu?.getAttribute('aria-label')).toBe('Document actions');
     expect(menu?.textContent).toContain('Opened by long press at (120, 64)');
-    // The panel's corner is the touch point, clamped to the surface.
+    // The panel's top-left corner is the touch point.
     expect(panelPosition(menu)).toMatchObject({
       left: 'clamp(0px, 120px, calc(100% - 180px))',
-      top: 'clamp(0px, 64px, calc(100% - 200px))',
+      top: '64px',
     });
 
     // Chromium fires a synthetic contextmenu with pointerType 'touch' after long press.
@@ -152,7 +157,7 @@ describe('useLongPressHookUsage example', () => {
     ).toContain('Opened by long press at (120, 64)');
   });
 
-  it('keeps the panel inside the surface when the press is near its end', () => {
+  it('follows the press down the surface and keeps the panel inside it', () => {
     renderExample();
     const surface = getSurface();
     // A narrow surface, as in a phone-width docs preview.
@@ -160,18 +165,44 @@ describe('useLongPressHookUsage example', () => {
       DOMRect.fromRect({x: 0, y: 0, width: 300, height: 200}),
     );
 
-    dispatchTouch(surface, 'touchstart', [{clientX: 290, clientY: 190}]);
+    const openAt = (clientX: number, clientY: number) => {
+      dispatchTouch(surface, 'touchstart', [{clientX, clientY}]);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      dispatchTouch(surface, 'touchend');
+      return container.querySelector<HTMLElement>('[role="group"]');
+    };
+
+    const high = openAt(40, 20);
+    expect(panelPosition(high).top).toBe('20px');
     act(() => {
-      vi.advanceTimersByTime(500);
+      surface.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+      );
     });
 
-    const menu = container.querySelector<HTMLElement>('[role="group"]');
-    expect(menu?.textContent).toContain('Opened by long press at (290, 190)');
-    // CSS clamps the corner so the whole panel stays inside the surface.
-    expect(panelPosition(menu)).toMatchObject({
+    const low = openAt(290, 190);
+    expect(low?.textContent).toContain('Opened by long press at (290, 190)');
+    // The corner follows the press; CSS keeps the width inside the surface and
+    // moves the panel up by no more than it needs to fit the 200px surface.
+    expect(panelPosition(low)).toMatchObject({
       left: 'clamp(0px, 290px, calc(100% - 180px))',
-      top: 'clamp(0px, 190px, calc(100% - 200px))',
+      top: '190px',
+      transform: 'translateY(min(0px, max(-190px, calc(10px - 100%))))',
     });
+  });
+
+  it('cancels a lift that reports the long press late, as on a busy page', () => {
+    renderExample();
+    const surface = getSurface();
+    const start = Date.now();
+
+    dispatchTouch(surface, 'touchstart', [{clientX: 120, clientY: 64}], start);
+    // The timer has not run, but the lift is stamped past the 500ms hold.
+    const lift = dispatchTouch(surface, 'touchend', [], start + 600);
+    expect(container.querySelector('[role="group"]')).not.toBeNull();
+    expect(lift.defaultPrevented).toBe(true);
   });
 
   it('cancels the lift after a long press, so the release clicks nothing under the finger', () => {

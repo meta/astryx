@@ -22,21 +22,23 @@ type TriggerSource = 'long press' | 'right-click' | 'button';
 interface MenuPosition {
   x: number;
   y: number;
+  // The surface's height when the panel opened, so CSS can keep the panel in it.
+  surfaceHeight: number;
   source: TriggerSource;
 }
 
 const MENU_OFFSET_Y = 8;
 const MENU_WIDTH = 180;
-// Room for the panel's note and its three actions in every theme. The surface
-// is at least this tall, so a panel clamped to the surface always fits.
-const MENU_MAX_HEIGHT = 200;
+// Room for the panel's note and its three actions in every theme, so the panel
+// opened anywhere on the surface stays inside it.
+const SURFACE_MIN_HEIGHT = 200;
 
 const styles = stylex.create({
   surface: {
     position: 'relative',
     width: '100%',
     maxWidth: 360,
-    minHeight: MENU_MAX_HEIGHT,
+    minHeight: SURFACE_MIN_HEIGHT,
     // Safari, the browser that starts a text selection on a long press, reads
     // only the prefixed property; Chrome and Firefox read it too.
     WebkitUserSelect: 'none',
@@ -44,12 +46,15 @@ const styles = stylex.create({
   // The card fills the surface, so the area that listens for the press is
   // the area a person sees.
   card: {flexGrow: 1},
-  panel: (x: number, y: number) => ({
+  panel: (x: number, y: number, surfaceHeight: number) => ({
     position: 'absolute',
-    // The point sets the panel's corner; the clamp keeps the whole panel
-    // inside the surface, whatever the surface's width.
+    // The point sets the panel's top-left corner. The clamp keeps the panel's
+    // width inside the surface. A translate percentage is of the panel's own
+    // height, so near the bottom the panel moves up just enough to fit, and
+    // never above the surface's top.
     left: `clamp(0px, ${x}px, calc(100% - ${MENU_WIDTH}px))`,
-    top: `clamp(0px, ${y}px, calc(100% - ${MENU_MAX_HEIGHT}px))`,
+    top: `${y}px`,
+    transform: `translateY(min(0px, max(-${y}px, calc(${surfaceHeight - y}px - 100%))))`,
     zIndex: 1,
   }),
 });
@@ -65,12 +70,14 @@ export default function UseLongPressHookUsage() {
   );
 
   const openMenuAt = (point: {x: number; y: number}, source: TriggerSource) => {
-    const rect = surfaceRef.current?.getBoundingClientRect();
-    const rawX = rect ? point.x - rect.left : point.x;
-    const rawY = rect ? point.y - rect.top : point.y;
-    const x = Math.max(0, Math.round(rawX));
-    const y = Math.max(0, Math.round(rawY));
-    setMenu({x, y, source});
+    const surface = surfaceRef.current;
+    if (!surface) {
+      return;
+    }
+    const rect = surface.getBoundingClientRect();
+    const x = Math.max(0, Math.round(point.x - rect.left));
+    const y = Math.max(0, Math.round(point.y - rect.top));
+    setMenu({x, y, surfaceHeight: Math.round(rect.height), source});
   };
 
   // Only the four touch handlers belong on the DOM element; start, moveTo, and
@@ -88,12 +95,13 @@ export default function UseLongPressHookUsage() {
   };
 
   // The finger that opened the panel lifts over it. Canceling that lift stops
-  // the browser's click, so the release does not run the action under it.
+  // the browser's click, so the release does not run the action under it. The
+  // hook runs first: on a busy page it can report the long press in this lift.
   const handleTouchEnd = (e: TouchEvent<HTMLElement>) => {
+    onTouchEnd(e);
     if (hasLongPressFiredRef.current) {
       e.preventDefault();
     }
-    onTouchEnd(e);
   };
 
   const closeMenu = () => {
@@ -113,10 +121,10 @@ export default function UseLongPressHookUsage() {
 
   const handleOpenFromButton = (e: MouseEvent<HTMLButtonElement>) => {
     const buttonRect = e.currentTarget.getBoundingClientRect();
-    const fallbackX = buttonRect.width > 0 ? buttonRect.left : 240;
-    const fallbackY =
-      buttonRect.height > 0 ? buttonRect.bottom + MENU_OFFSET_Y : 48;
-    openMenuAt({x: fallbackX, y: fallbackY}, 'button');
+    openMenuAt(
+      {x: buttonRect.left, y: buttonRect.bottom + MENU_OFFSET_Y},
+      'button',
+    );
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -181,7 +189,7 @@ export default function UseLongPressHookUsage() {
             aria-label="Document actions"
             padding={2}
             width={MENU_WIDTH}
-            xstyle={styles.panel(menu.x, menu.y)}>
+            xstyle={styles.panel(menu.x, menu.y, menu.surfaceHeight)}>
             <VStack gap={1}>
               <Text type="supporting" color="secondary">
                 Opened by {menu.source} at ({menu.x}, {menu.y})
