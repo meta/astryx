@@ -1,14 +1,65 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
  * @file useMenuOverflow.test.tsx
- * @input A menu element, the open state, and window and visual-viewport resize events
- * @output Evidence that one viewport change measures the menu once
- * @position Resize-listener coverage of the shared menu overflow hook
+ * @input A menu element, the open state, a remount of the menu element, and
+ *   window and visual-viewport resize events
+ * @output Evidence that the observers follow a remounted menu and that one
+ *   viewport change measures the menu once
+ * @position Unit coverage of the shared menu overflow hook
  */
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {useMenuOverflow} from './useMenuOverflow';
+
+/** A menu whose list remounts when a footer comes or goes, as DropdownMenu's does. */
+function Menu({hasFooter}: {hasFooter: boolean}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useMenuOverflow(listRef, 'rows', true);
+  const list = <div ref={listRef} data-testid="list" />;
+  return hasFooter ? (
+    <section>
+      {list}
+      <footer>Footer</footer>
+    </section>
+  ) : (
+    list
+  );
+}
+
+describe('useMenuOverflow', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('observes the list element that is mounted now, after it remounts', () => {
+    const observed: Element[] = [];
+    const disconnected: Element[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        private targets: Element[] = [];
+        observe(target: Element) {
+          this.targets.push(target);
+          observed.push(target);
+        }
+        disconnect() {
+          disconnected.push(...this.targets);
+        }
+        unobserve() {}
+      },
+    );
+    const {rerender, getByTestId} = render(<Menu hasFooter={false} />);
+    const first = getByTestId('list');
+    expect(observed.at(-1)).toBe(first);
+
+    rerender(<Menu hasFooter />);
+    const second = getByTestId('list');
+    expect(second).not.toBe(first);
+    expect(observed.at(-1)).toBe(second);
+    expect(disconnected).toContain(first);
+  });
+});
 
 function OverflowProbe({isOpen}: {isOpen: boolean}) {
   const menuRef = useRef<HTMLDivElement>(null);
