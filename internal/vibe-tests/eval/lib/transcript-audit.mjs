@@ -12,17 +12,21 @@ import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
 /**
- * Whether the shell can change a path the audit read from a command: the path
- * holds a pattern, a variable or an escape, or a backtick, a variable or an
- * unmatched quote continues its word. Such a path can expand into a run.
+ * Whether the shell or an interpreter can change a path the audit read from a
+ * command. A path is plain only when it holds path characters and no `..`, and
+ * each time it occurs it is a whole word: bare, or in quotes that close right
+ * after it, with a word end after that. Anything else can expand into a run.
  */
 export function shellCanExpand(command, raw) {
-  if (/[*?[{$\\`]/.test(raw)) return true;
+  if (!/^[\w./+-]+$/.test(raw) || raw.split('/').includes('..')) return true;
   for (let at = command.indexOf(raw); at !== -1; at = command.indexOf(raw, at + 1)) {
-    const before = command[at - 1];
-    const after = command[at + raw.length];
-    const closesQuote = (after === "'" || after === '"') && after === before;
-    if (after !== undefined && !/[\s;|&()<>]/.test(after) && !closesQuote) return true;
+    const opener = command[at - 1];
+    let end = at + raw.length;
+    if (opener === "'" || opener === '"') {
+      if (command[end] !== opener) return true;
+      end += 1;
+    }
+    if (end < command.length && !/[\s;|&()<>]/.test(command[end])) return true;
   }
   return false;
 }
@@ -357,7 +361,9 @@ export function auditTranscript(
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
     // A path the shell can expand can reach another run, so only a literal path counts as a temp path.
-    const literal = !expands && !/[*?[{]/.test(raw);
+    // A path that begins the name of a run root can be joined into that root.
+    const startsRoot = sensitiveRoots.some(root => root.startsWith(resolved));
+    const literal = !expands && !startsRoot && !/[*?[{]/.test(raw);
     if (literal && tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
       tempPaths.push({tool, path: raw});
       return;

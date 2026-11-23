@@ -111,6 +111,20 @@ describe('auditTranscript', () => {
     }
   });
 
+  it('keeps a temp path that a quote, a space, a parent folder or a string join changes on the warning list', () => {
+    const sensitive = [...SENSITIVE, '/tmp/astryx-vibe-eval'];
+    const commands = [
+      'cat "/tmp/astryx-vibe-"eval/s1/runs/form__arm__r1/workspace/src/App.tsx',
+      'X=eval; cat "/tmp/astryx-vibe-"$X/s1/runs/form__arm__r1/workspace/src/App.tsx',
+      'cat "/tmp/x y/../astryx-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx"',
+      'node -e "require(\'fs\').readFileSync(\'/tmp/astryx-vibe-\'+\'eval/s1/runs/form__arm__r1/workspace/src/App.tsx\')"',
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, sensitive, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.tempPaths).toEqual([]);
+    }
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];
@@ -134,6 +148,8 @@ describe('shellCanExpand', () => {
   it('reads a plain or quoted path as literal', () => {
     expect(shellCanExpand('cp src/a.ts /tmp/a.bak && cat /tmp/a.bak', '/tmp/a.bak')).toBe(false);
     expect(shellCanExpand('cat "/tmp/a.bak"', '/tmp/a.bak')).toBe(false);
+    expect(shellCanExpand('cat "/tmp/a"b.bak', '/tmp/a')).toBe(true);
+    expect(shellCanExpand('cat /tmp/x/../y', '/tmp/x/../y')).toBe(true);
     expect(shellCanExpand('cat /tmp/a.bak>out.txt', '/tmp/a.bak')).toBe(false);
   });
 
