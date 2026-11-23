@@ -13,6 +13,12 @@ import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import UseIndicatorFocusRingHookUsage from '../../assets/templates/blocks/components/Hooks/useIndicatorFocusRingHookUsage';
 
+// The block's own styles are compiled in a product; here they only need to load.
+vi.mock('@stylexjs/stylex', () => ({
+  create: <T,>(styles: T) => styles,
+  props: () => ({}),
+}));
+
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
 
