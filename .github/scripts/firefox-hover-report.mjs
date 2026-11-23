@@ -143,7 +143,8 @@ if (
   }
   const known = JSON.parse(fs.readFileSync(KNOWN, 'utf8')).failures;
   const result = buildReport(report, known, {
-    sha: process.env.GITHUB_SHA ?? '',
+    // On a pull request, GITHUB_SHA is GitHub's test merge commit.
+    sha: process.env.ASTRYX_HEAD_SHA || process.env.GITHUB_SHA || '',
   });
   if (outDir) {
     fs.mkdirSync(outDir, {recursive: true});

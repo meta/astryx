@@ -4146,6 +4146,8 @@ jobs:
       chromium: ${{ steps.matrix.outputs.chromium }}
       webkit: ${{ steps.matrix.outputs.webkit }}
       chromium_specs: ${{ steps.select-chromium.outputs.specs }}
+      # Whether pr-firefox-hover runs (true when the scope cannot be decided).
+      firefox: ${{ steps.scope-firefox.outputs.applies }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -4193,6 +4195,17 @@ jobs:
           lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
           component-audit: 'true'
+
+      # The Firefox hover specs (pr-firefox-hover): a change to the five hover
+      # components' code or specs, or to the shared hover and dismiss code,
+      # the Firefox spec list, its known failures or its report.
+      - name: Decide the Firefox hover specs' scope
+        id: scope-firefox
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(packages/core/src/(?:DropdownMenu|HoverCard|InfoTip|NavMenu|Tooltip)/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.stories\.[^/]+|\.interaction\.browser\.spec\.ts)$)|packages/core/src/hooks/useMenuHover\.ts$|packages/core/src/Layer/(?:useLayer|useLayerDismissal|useTouchTrigger|layerSurfacePress|outsidePress)\.tsx?$|packages/core/src/utils/(?:interactionModality|triggerFocus|focusReturn)\.ts$|playwright\.config\.ts$|internal/a11y-spec/|\.github/firefox-known-failures\.json$|\.github/scripts/firefox-hover-report\.mjs$|\.github/scripts/lib/a11y-spec-files\.mjs$)'
+          outside-pull-request: skip
+          requires-head-file: playwright.config.ts
 
       - name: Keep the leg planner from the workflow's commit
         if: steps.scope-chromium.outputs.applies == 'true' || steps.scope-webkit.outputs.applies == 'true'
@@ -5305,6 +5318,9 @@ jobs:
           exit 1
 
       - name: Trust the checkout in the container
+        env:
+          # The same HOME as the spec step's, so the specs' git reads it.
+          HOME: /root
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup Node and pnpm
@@ -5349,6 +5365,129 @@ jobs:
             firefox-hover-output
           if-no-files-found: ignore
           retention-days: 90
+
+  # A pull request's Firefox hover specs, when it changes what they reach
+  # (interaction-legs decides it). Report-only: the specs cannot fail this job,
+  # no join reads it, and no check requires it. The report counts the failures
+  # .github/firefox-known-failures.json lists apart from new ones, and annotates
+  # each new one as an error, so a change that adds a Firefox failure shows in
+  # review. It runs only once the heavy suites run (spec:AST-030 FR20) and waits
+  # for room like the other heavy legs (FR16).
+  pr-firefox-hover:
+    needs: [room, admission, heavy-ci, build-storybook, interaction-legs]
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) && !cancelled() && needs.heavy-ci.outputs.deferred != 'true' && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' && needs.build-storybook.result == 'success' && needs.interaction-legs.outputs.firefox == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Playwright image the WebKit legs use: Firefox and its system
+    # libraries are already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    # Report-only, so no per-author heavy-suite cap holds it (FR16 caps the
+    # interaction proofs and the Build contracts).
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Checkout (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Trust the checkout in the container
+        env:
+          # The same HOME as the spec step's, so the specs' git reads it.
+          HOME: /root
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # A head from before the Firefox project has no Firefox specs to run.
+      - name: Find the Firefox project in the head
+        id: project
+        run: |
+          if grep -q "name: 'firefox'" playwright.config.ts; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node and pnpm
+        if: steps.project.outputs.present == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.project.outputs.present == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright Firefox
+        if: steps.project.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install firefox
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      - name: Run the Firefox hover specs
+        id: specs
+        if: steps.project.outputs.present == 'true'
+        continue-on-error: true
+        env:
+          # The image runs as root, and a container job's HOME is a folder the
+          # runner's user owns: Firefox does not start as root there.
+          HOME: /root
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: firefox-hover.json
+        run: pnpm exec playwright test --config playwright.config.ts --project firefox --reporter list,json --output firefox-hover-output
+
+      - name: Name a head without the Firefox project
+        if: always() && steps.project.outputs.present != 'true'
+        run: echo "::notice::This head predates the Firefox hover specs; merge main to run them."
+
+      - name: Name a head without the Firefox hover report
+        if: (always()) && hashFiles('.github/scripts/firefox-hover-report.mjs') == ''
+        run: echo "::notice::This head has no Firefox hover report; merge main for the report."
+
+      - name: Report the Firefox hover results
+        if: always() && hashFiles('.github/scripts/firefox-hover-report.mjs') != ''
+        env:
+          # The head this job checked out, not GitHub's test merge commit.
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node .github/scripts/firefox-hover-report.mjs firefox-hover.json firefox-hover-report
+          cat firefox-hover-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Firefox hover report
+        if: always() && steps.project.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: firefox-hover-report-${{ github.run_attempt }}
+          path: |
+            firefox-hover-report
+            firefox-hover-output
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration

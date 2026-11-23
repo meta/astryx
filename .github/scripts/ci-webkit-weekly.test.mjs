@@ -375,6 +375,12 @@ describe("the weekly run's Firefox hover specs (report-only)", () => {
     );
     // Firefox does not start as root in a HOME the runner's user owns.
     expect(specs.env.HOME).toBe('/root');
+    // Its git reads the safe-directory entry the trust step wrote: the
+    // trust step writes it under the same HOME.
+    const trust = job.steps.find(
+      each => each.name === 'Trust the checkout in the container',
+    );
+    expect(trust.env?.HOME).toBe(specs.env.HOME);
   });
 
   it('stays out of the weekly verdict, so a red holds no release', () => {
