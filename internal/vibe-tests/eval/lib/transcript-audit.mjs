@@ -7,16 +7,9 @@
  * @position Called by run.mjs after each agent run
  */
 
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {isInside} from './workspace.mjs';
-
-/** The system temp folder, by its given name and its real name. */
-function systemTempRoots() {
-  const roots = [os.tmpdir(), '/tmp'];
-  return [...new Set(roots.flatMap(root => [path.resolve(root), fs.existsSync(root) ? fs.realpathSync(root) : root]))];
-}
+import {givenAndRealPaths, isInside} from './workspace.mjs';
 
 /** System locations an agent may name without reading project data. */
 const ALLOWED_PREFIXES = ['/dev/null', '/dev/stdout', '/dev/stderr', '/usr/', '/bin/', '/etc/', '/lib', '/proc/self/'];
@@ -304,7 +297,8 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
  * `rg`, `find -exec`, the Grep tool) of a root or a folder that holds one.
  * Only naming a root or such a folder (`ls ~`, `find / -name`) is a warning. Any other outside path is a
  * warning to review: a command can name a path without reading it. A path in the system temp folder
- * outside every root, such as a backup the agent copies to `/tmp`, is listed apart as a temp path:
+ * outside every root, such as a backup the agent copies to `/tmp`, is listed apart as a temp path
+ * when it is literal; a shell pattern there stays a warning, because it can expand into a run:
  * the agents that run at the same time share that folder. The agent's own temp folder (`ownTemp`,
  * its TMPDIR) is its own.
  * @param {string[]} lines
@@ -318,7 +312,7 @@ export function auditTranscript(
   workspace,
   sensitiveRoots = [],
   home = os.homedir(),
-  {ownTemp, tempRoots = systemTempRoots()} = {},
+  {ownTemp, tempRoots = givenAndRealPaths([os.tmpdir(), '/tmp'])} = {},
 ) {
   const violations = [];
   const warnings = [];
@@ -346,7 +340,9 @@ export function auditTranscript(
       return;
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
-    if (tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
+    // A shell pattern can expand into another run, so only a literal path counts as a temp path.
+    const literal = !/[*?[{]/.test(raw);
+    if (literal && tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
       tempPaths.push({tool, path: raw});
       return;
     }

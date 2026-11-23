@@ -85,6 +85,19 @@ describe('auditTranscript', () => {
     expect(audit.tempPaths).toEqual([]);
   });
 
+  it('keeps a shell pattern under the temp folder on the warning list', () => {
+    const lines = [
+      toolUse('Bash', {command: 'cat /tmp/*/*/runs/*/workspace/src/App.tsx'}),
+      toolUse('Glob', {pattern: '/tmp/**/workspace/src/App.tsx'}),
+    ];
+    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+    expect(audit.warnings).toEqual([
+      {tool: 'Bash', path: '/tmp/*/*/runs/*/workspace/src/App.tsx'},
+      {tool: 'Glob', path: '/tmp/**/workspace/src/App.tsx'},
+    ]);
+    expect(audit.tempPaths).toEqual([]);
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];

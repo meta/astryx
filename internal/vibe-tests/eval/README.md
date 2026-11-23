@@ -72,8 +72,10 @@ outside path, including a root named by another command, is a warning, and
 `report.md` lists every run with warnings for a person to review. A path in the
 system temp folder outside every run, such as a backup an agent copies to
 `/tmp`, is not a warning: `report.md` lists those runs apart, because the agents
-that run at the same time share that folder. Each agent gets its own TMPDIR in
-its run folder, so tools that honor TMPDIR keep their files apart. When the agent exits or times out, the runner kills its whole process
+that run at the same time share that folder. A shell pattern there stays a
+warning, because it can expand into a run. Each agent gets its own TMPDIR in
+its run folder, removed after the run, so tools that honor TMPDIR keep their
+files apart. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
 A run where the agent fails before its first turn, writes no result, or cannot
@@ -194,7 +196,9 @@ what the eval measures, so compare results only within one arm version.
 - Agents that run at the same time share the system temp folder. A file one
   agent writes to a literal `/tmp` path, another agent can read. The report
   lists the runs that used that folder; it cannot tell whether one agent read
-  another's file.
+  another's file. A second eval that runs at the same time with its own `--out`
+  outside the default run root is not one of the audited roots, so give
+  concurrent evals the default run root.
 - The audit reads `sed` and search options from per-command lists. An option
   missing from those lists can shift which word it reads as the script or
   pattern, so a quoted path there can pass, or a correct pattern can fail.
