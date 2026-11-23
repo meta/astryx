@@ -7,11 +7,9 @@
  *   the menu's own direction is right-to-left
  * @position Used by the sub-menu row's flyout chevron and its Back chevron
  *
- * The menu reads its own direction for the keys that open and close a
- * flyout, and the flyout opens on the side that direction gives. `:dir(rtl)`
- * reads that same direction. `rtlStyles.mirror` reads the nearest
- * `[dir="rtl"]` ancestor, so it flips the icon in a local LTR menu inside an
- * RTL document, against the key and the flyout.
+ * The open and close keys read the menu's own direction. `:dir(rtl)`
+ * follows the same `dir`. `rtlStyles.mirror` matches any RTL ancestor, so it
+ * flips the icon in an LTR menu inside an RTL page.
  */
 
 import * as stylex from '@stylexjs/stylex';
