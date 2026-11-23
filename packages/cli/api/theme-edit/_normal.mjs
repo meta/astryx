@@ -17,9 +17,22 @@ import {
   fontStack,
   wordTable,
 } from './_tables.mjs';
-import {colorProblem, hex, parseColor} from './_color.mjs';
+import {colorOpacitiesAsCss, colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues, takesWholeNumbersOnly, unitsJoined} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+
+/**
+ * An English noun's plural, as a part's name is said in the plural
+ * ("switch" → "switches", "body" → "bodies", "card" → "cards").
+ * @param {string} word
+ * @returns {string}
+ */
+export function pluralOf(word) {
+  const w = String(word);
+  if (/(?:s|x|z|ch|sh)$/i.test(w)) return `${w}es`;
+  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`;
+  return `${w}s`;
+}
 
 /**
  * A value as CSS reads it, for every value type: every Unicode space
@@ -237,6 +250,31 @@ export function normalizeEntry(thing, value) {
     t = t.slice(1).trim();
     v = v.replace(/\s*\}\s*$/, '');
   }
+  // The editor's own result line pasted with its head (`[ok] t: corners =
+  // pill (whole theme)`, `t: corners pill -> round`): the head (the status
+  // and the theme's name) is no part of the setting.
+  // (Typed as one argument, the status may come apart from the rest.)
+  const whole =
+    v == null || v.trim() === ''
+      ? t
+      : /^\[ok\]$/i.test(t)
+        ? `${t} ${v.trim()}`
+        : null;
+  if (whole != null) {
+    const head =
+      /^(?:\[ok\]\s*)?[a-z][a-z0-9-]*:\s+(\S+\s*(?:=|\S.*?(?:->|\u2192)).*)$/i.exec(
+        whole,
+      );
+    const status = /^\[ok\]\s+(\S.*)$/i.exec(whole);
+    if (head || status) v = undefined;
+    if (head) {
+      t = head[1].trim();
+      pasted = true;
+    } else if (status) {
+      t = status[1].trim();
+      pasted = true;
+    }
+  }
   /** The scope the editor's own printed line names after its value. @type {EntryScope | undefined} */
   let scope;
   // The editor's own change line pasted back (`corners pill -> round`,
@@ -268,7 +306,10 @@ export function normalizeEntry(thing, value) {
   } else if (
     v == null ||
     v.trim() === '' ||
-    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v)
+    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v) ||
+    // A declaration whose value went on past a space (`font=Inter,` then
+    // `Arial`, an unquoted list split by the shell): the rest of its value.
+    /^[^\s:=]+\s*[:=]\s*\S/.test(t)
   ) {
     // A mode label after the thing (`--color-accent (dark mode): #7c3aed`)
     // goes with the scope, as on a change line, also when the words after
@@ -683,7 +724,9 @@ export function colorPair(value) {
 
 /**
  * A value without the debris a copy brings along: a trailing `;`, a
- * `!important`, a comment. One of the exact cleanups a repair may offer.
+ * `!important`, a comment, an old browser hack's escape at its end (`\9`,
+ * `\0`, which browsers read as part of the last word, so they drop the
+ * value). One of the exact cleanups a repair may offer.
  * @param {string} v
  * @returns {string}
  */
@@ -692,6 +735,7 @@ export function withoutCopyDebris(v) {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\s*!\s*important\b/gi, '')
     .replace(/[\s;]+$/, '')
+    .replace(/\s*\\[09]$/, '')
     .trim();
 }
 
@@ -992,12 +1036,19 @@ export const thousandsSetting = thing => {
  * @returns {string}
  */
 export function stateSpelling(text) {
+  // Several states at once are joined by +, with or without spaces around
+  // it (`selected + hover`): each is read on its own.
   return String(text)
-    .trim()
-    .replace(/^:+/, '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[\s_]+/g, '-')
-    .toLowerCase();
+    .split(/\s*\+\s*/)
+    .map(piece =>
+      piece
+        .trim()
+        .replace(/^:+/, '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/[\s_]+/g, '-')
+        .toLowerCase(),
+    )
+    .join('+');
 }
 
 /**
@@ -1005,7 +1056,8 @@ export function stateSpelling(text) {
  * value names one (`dark-only`), with the word mode (`darkmode`, `dark
  * mode`, `mode dark`), or as a word for it (MODE_WORDS: night, day). The
  * one mode reader: the `--mode` flag, a mode label in a value, a saved
- * entry's mode and the settings file's mode all read it.
+ * entry's mode and the settings file's mode all read it; a typo of a mode
+ * is read by {@link modeNear}.
  * @param {unknown} text
  * @returns {'light' | 'dark' | null}
  */
@@ -1017,6 +1069,58 @@ export function modeWord(text) {
   const m = /^(?:(light|dark)(?:-?only|-?mode)?|mode-?(light|dark))$/.exec(w);
   if (m) return /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
   return MODE_WORDS[w] ?? null;
+}
+
+/**
+ * The one mode a word names as {@link modeWord} reads it, or as a typo of
+ * light or dark that keeps its letters (`drak`, `darkk`, `ligth`, `lght`,
+ * `drak mode`, `kdar`): its letters in any order, or one doubled, dropped or
+ * added, never one
+ * letter for another, so a word of its own (right, tight, bark, park) is
+ * never a mode. The reading of a mode a person types with a typo, wherever
+ * it is typed: the `--mode` flag, a mode label in a `set` value or a `how`
+ * question; each offers or writes the line with the mode it names.
+ * @param {unknown} text
+ * @returns {'light' | 'dark' | null}
+ */
+export function modeNear(text) {
+  const exact = modeWord(text);
+  if (exact) return exact;
+  const stem = String(text ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/-?(?:only|mode)$/, '')
+    .replace(/^mode-?/, '');
+  // Same letters in any order (`kdar`), or one letter more or fewer
+  // within the typo limit.
+  const near = /** @type {const} */ (['light', 'dark']).filter(mode =>
+    stem.length === mode.length
+      ? lettersBeyond(stem, mode) === 0
+      : typoNear(stem, mode) &&
+        lettersBeyond(mode, stem) <= (stem.length < mode.length ? 1 : 0) &&
+        lettersBeyond(stem, mode) <= (stem.length > mode.length ? 1 : 0),
+  );
+  return near.length === 1 ? near[0] : null;
+}
+
+/**
+ * How many letters one word has beyond the other's, counted with repeats
+ * (`darkk` has one beyond `dark`; `bark` one beyond it too).
+ * @param {string} a
+ * @param {string} b
+ */
+function lettersBeyond(a, b) {
+  /** @type {Map<string, number>} */
+  const left = new Map();
+  for (const c of b) left.set(c, (left.get(c) ?? 0) + 1);
+  let more = 0;
+  for (const c of a) {
+    const k = left.get(c) ?? 0;
+    if (k) left.set(c, k - 1);
+    else more++;
+  }
+  return more;
 }
 
 /**
@@ -1297,7 +1401,8 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * The declared sources: (1) the value typed, under the exact readings of
  * typedReading, sameToken and numbersEqual, the words joined into a CSS
  * color name (`dark red` is darkred), or the color the typed color is
- * (rgb() as its hex, a see-through color opaque); (2) a documented table
+ * (rgb() as its hex, a see-through color opaque, Tailwind's `black/5` as
+ * rgb(0 0 0 / 0.05)); (2) a documented table
  * registered with documentReadings, documentNumericTable or documentRange;
  * (3) the theme's own saved value of the line's setting, for a setting
  * other than the one typed (a keep or unlock line); (4) the setting's
@@ -1306,11 +1411,84 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * typo (typoOf); (6) the typed value with each color written as one mode's
  * half of `light-dark()` (a shadow's color for one mode, which no color
  * longhand holds), the other half anything. Several values of one kind typed for a setting that takes
- * one (`1.5 2`) may be read as the first.
- * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
+ * one (`1.5 2`) may be read as the first. (8) The words of the typed value
+ * that name the line's own part or state (`scope`: `card 8px`, `red on
+ * button`, `button:hover: red`) are carried by its --on and --state, so the
+ * rest is the value read.
+ * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string, scope?: {on?: string, state?: string}}} line
  * @returns {true | number[] | {oneOf: number[]} | false}
  */
-export function readsTyped({
+export function readsTyped(line) {
+  const read = readsTypedValue(line);
+  if (read === true || !line.scope?.on) return read;
+  const typed = String(line.typed).trim();
+  const on = String(line.scope.on).toLowerCase();
+  const typedThing = String(line.typedThing ?? '').toLowerCase();
+  const esc = (/** @type {string} */ x) =>
+    x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The part typed in the setting's place (`card padding 20px`): the
+  // line's --on carries the part, and its setting the name typed first in
+  // the value, so the rest is the value read.
+  const partFirst =
+    typedThing &&
+    [
+      typedThing,
+      typedThing.replace(/e?s$/, ''),
+      typedThing.replace(/s$/, ''),
+    ].includes(on) &&
+    line.thing
+      ? typed.replace(
+          new RegExp(`^${esc(String(line.thing))}\\s*(?:[:=]\\s*|\\s+)`, 'i'),
+          '',
+        )
+      : null;
+  for (const rest of [withoutScopeWords(typed, line.scope), partFirst])
+    if (
+      rest != null &&
+      rest !== typed &&
+      rest.trim() &&
+      readsTypedValue({
+        ...line,
+        typed: rest.replace(/\s*;\s*$/, ''),
+        typedThing: line.thing,
+      }) === true
+    )
+      return true;
+  return read;
+}
+
+/**
+ * The typed value without the words that name a part (or one of its
+ * plurals) and its state, as a label (`card: 8px`, `button = red`,
+ * `button:hover: red`), after `on` (`red on button`), or as the first or
+ * last word (`card 8px`, `8px card`); null when it names neither.
+ * @param {string} typed
+ * @param {{on?: string, state?: string}} scope
+ * @returns {string | null}
+ */
+function withoutScopeWords(typed, scope) {
+  const on = String(scope.on ?? '').toLowerCase();
+  if (!on) return null;
+  const esc = (/** @type {string} */ x) =>
+    x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const words = on.split('-').map(esc).join('[\\s-]+');
+  const part = `(?:${words})(?:e?s)?`;
+  const state = scope.state ? `(?::+\\s*${esc(scope.state)})?` : '';
+  const t = typed.trim();
+  for (const re of [
+    new RegExp(`^${part}${state}\\s*[:=]\\s*(\\S.*)$`, 'i'),
+    new RegExp(`^(\\S.*?)\\s+on\\s+(?:the\\s+)?${part}$`, 'i'),
+    new RegExp(`^${part}\\s+(\\S.*)$`, 'i'),
+    new RegExp(`^(\\S.*?)\\s+${part}$`, 'i'),
+  ]) {
+    const m = re.exec(t);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+/** @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line */
+function readsTypedValue({
   offered,
   typed,
   thing = '',
@@ -1423,6 +1601,11 @@ export function readsTyped({
     /^#[0-9a-f]{3,8}$/.test(o) &&
     (color ? hex(color) === o : colorProblem(t)?.opaque === o)
   )
+    return true;
+  // A color with an opacity after its slash, as Tailwind writes it
+  // (`black/5`), is that color at that opacity, as CSS writes it.
+  const clear = colorOpacitiesAsCss(t);
+  if (clear && !clear.unread.length && clear.css.trim().toLowerCase() === o)
     return true;
   // One half of a light and a dark pair: for the line that sets that mode,
   // or, as the light one, for a color dial, which makes both modes from
@@ -1617,6 +1800,7 @@ export function readsTyped({
       if (
         i > 0 &&
         /^font(-family)?$|^--font-family/.test(typedKey) &&
+        !READINGS.has(w) &&
         Object.keys(WEIGHT_WORDS).some(
           x => typoNear(w, x) && (x === o || READINGS.get(x)?.has(o)),
         )
@@ -1667,11 +1851,15 @@ function dialWords(key) {
  * value: each reads it whole, or the parts they carry cover every typed
  * token. A part alone (`all` for `all 200`, `bold` for `extra bold`) is not
  * offered.
+ * A line read whole that offers one of several typed values (`padding-top
+ * 2px` for `2px 15px 3px`) carries the tokens it offers; a line that reads
+ * the whole value carries none, so a part alone is still not offered.
  * @param {Array<true | number[] | {oneOf: number[]} | false>} reads
  * @param {string} typed
  * @param {string} [thing] the setting typed (its numbers' reading)
+ * @param {Array<string | undefined>} [offered] each line's value, beside its read
  */
-export function coversTyped(reads, typed, thing = '') {
+export function coversTyped(reads, typed, thing = '', offered = []) {
   const T = tokensOf(
     typedReading(listWords(thing, typed), {
       thousands: thousandsSetting(thing),
@@ -1687,6 +1875,16 @@ export function coversTyped(reads, typed, thing = '') {
   const typedCount = new Map();
   for (const w of T) typedCount.set(w, (typedCount.get(w) ?? 0) + 1);
   for (const r of reads) if (Array.isArray(r)) r.forEach(carry);
+  // (Only a line that offers fewer tokens than were typed: a line that
+  // reads the whole value never makes a part alone offerable beside it.)
+  for (const [i, r] of reads.entries()) {
+    if (r !== true || offered[i] == null) continue;
+    const own = tokensOf(String(offered[i]).replace(/^(["'])(.*)\1$/, '$2'));
+    if (own.length >= T.length) continue;
+    for (const w of own)
+      if ((carried.get(w) ?? 0) < (typedCount.get(w) ?? 0))
+        carried.set(w, (carried.get(w) ?? 0) + 1);
+  }
   // A line whose one token may be any of several takes one the others
   // left.
   for (const r of reads)

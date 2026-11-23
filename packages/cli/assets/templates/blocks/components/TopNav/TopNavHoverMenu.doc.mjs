@@ -11,12 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['TopNav', 'TopNavMenu', 'NavIcon', 'Button'],
-  icons: {
-    BoltIcon: 'bolt',
-    ChartBarIcon: 'chart',
-    CodeBracketIcon: 'code',
-    CubeIcon: 'package',
-    ShieldCheckIcon: 'shield',
-    UserCircleIcon: 'userCircle',
-  },
 };

@@ -76,8 +76,10 @@ export const nativePickerSegmentStyles = stylex.create({
     '::-webkit-calendar-picker-indicator': {
       display: 'none',
     },
+    // The value takes the field's alignment, which follows the page even
+    // when the field's own direction follows the locale.
     '::-webkit-date-and-time-value': {
-      textAlign: 'start',
+      textAlign: 'inherit',
       marginBlock: 0,
       marginInline: 0,
       paddingBlock: 0,

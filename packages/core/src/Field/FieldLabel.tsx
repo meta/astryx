@@ -32,6 +32,7 @@ import {renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
+import {withTextDirection} from '../utils/textDirection';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {
@@ -66,8 +67,15 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
-    fontWeight: fontWeightVars['--font-weight-medium'],
-    color: colorVars['--color-text-secondary'],
+    // Arial, Helvetica, Liberation Sans, and Segoe UI have no 500 face, and
+    // CSS resolves a missing 500 to the regular face. Semibold resolves up to
+    // a heavier face, so the label stays heavier than its description with
+    // every font.
+    fontWeight: fontWeightVars['--font-weight-semibold'],
+    // The label names the control, so it takes the primary text colour. The
+    // description and the optionality marker stay secondary and read as
+    // supporting text beside it.
+    color: colorVars['--color-text-primary'],
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -294,11 +302,18 @@ export function FieldLabel({
     inputRef: controlRef,
     disabled: !forwardsDescriptionClick,
   });
-
+  // Plain text with no right-to-left letter keeps its written order on a
+  // right-to-left page. The direction goes on an inner span, so the label's
+  // alignment and its marker still follow the page. A hidden label has no
+  // visual order to keep, so its text stays as the caller wrote it.
+  const labelText = isLabelHidden ? label : withTextDirection(label);
+  const descriptionText = isLabelHidden
+    ? description
+    : withTextDirection(description);
   const labelContent = (
     <>
       {labelIcon && renderIconSlot(labelIcon, {size: 'sm', color: 'inherit'})}
-      {label}
+      {labelText}
       {statusText && (
         <span {...stylex.props(styles.optionalRequired)}>
           <span aria-hidden="true"> ∙ </span>
@@ -377,7 +392,7 @@ export function FieldLabel({
           forwardsDescriptionClick && styles.descriptionClickable,
           isLabelHidden && styles.srOnly,
         )}>
-        {description}
+        {descriptionText}
       </span>
     </div>
   );

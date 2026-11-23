@@ -10,15 +10,16 @@
  */
 
 import {toEntry} from '../_adapter.mjs';
-import {catalogEntry, defaultVersion} from '../_catalog-view.mjs';
+import {catalogEntry, defaultVersion, shownEntry} from '../_catalog-view.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
 /**
  * Build the discover.detail response for one package. The project's installed
  * copy describes itself; any other version is described by its source. For a
- * package the project does not have, `install` is the package-manager command
- * that adds it — printed, never run.
+ * package the project does not have, `install` says how to add it (the
+ * project's integration install guidance, else the package-manager command)
+ * — printed, never run.
  *
  * @param {import('../_adapter.mjs').InstalledPackage[]} packages
  * @param {string} name package name, e.g. `@scope/name`
@@ -27,12 +28,16 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
  *   version?: string,
  *   add?: (name: string, version?: string) => string,
  *   installedAs?: string,
- * }} [options]
+ *   iconSets?: boolean,
+ * }} [options] `iconSets`: icon features are on in the project
  * @returns {import('../discover.type.mjs').DiscoverDetailResponse}
  */
 export function detail(packages, name, options = {}) {
-  const {catalog, version, add, installedAs} = options;
+  const {catalog: listed, version, add, installedAs, iconSets} = options;
   const pkg = packages.find(p => p.name === name);
+  const catalog =
+    listed &&
+    shownEntry(listed, {installed: pkg != null || !!installedAs, iconSets});
   if (!pkg && !catalog) {
     throw new AstryxError(
       `Package "${name}" not found`,
@@ -63,7 +68,10 @@ export function detail(packages, name, options = {}) {
     : {
         ...catalogEntry(
           /** @type {NonNullable<typeof catalog>} */ (catalog),
-          version ?? defaultVersion(/** @type {NonNullable<typeof catalog>} */ (catalog)),
+          version ??
+            defaultVersion(
+              /** @type {NonNullable<typeof catalog>} */ (catalog),
+            ),
         ),
         installed: pkg != null,
         ...(pkg?.version ? {installedVersion: pkg.version} : {}),

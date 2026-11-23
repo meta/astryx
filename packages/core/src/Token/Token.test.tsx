@@ -13,9 +13,30 @@ import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Token} from './Token';
+import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import type {TokenColor} from './Token';
 
 describe('Token', () => {
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: () => {}}],
+    ['link', {href: '#tag'}],
+  ])(
+    'gives a %s token label in one script its own direction, and leaves a mixed label to the page',
+    (_, props) => {
+      render(
+        <div dir="ltr">
+          <Token label="Design" {...props} />
+          <Token label="עיצוב" {...props} />
+          <Token label="iPhone של דנה" {...props} />
+        </div>,
+      );
+      expect(screen.getByText('Design')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByText('עיצוב')).toHaveAttribute('dir', 'rtl');
+      expect(screen.getByText('iPhone של דנה')).not.toHaveAttribute('dir');
+    },
+  );
+
   it('renders with label', () => {
     render(<Token label="Tag" />);
     expect(screen.getByText('Tag')).toBeInTheDocument();
@@ -110,6 +131,21 @@ describe('Token', () => {
     fireEvent.click(removeButton);
     expect(handleRemove).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: vi.fn()}],
+    ['link', {href: '/test'}],
+  ])(
+    'marks the remove button of a %s token as its own pressable surface',
+    (_, props) => {
+      render(<Token label="Removable" onRemove={vi.fn()} {...props} />);
+      const removeButton = screen.getByRole('button', {
+        name: 'Remove Removable',
+      });
+      expect(removeButton).toHaveAttribute(PRESSABLE_ATTRIBUTE);
+    },
+  );
 
   it.each([
     ['static', {}],
@@ -852,5 +888,11 @@ describe('popup state on a clickable token (FR10)', () => {
     expect(button).toHaveAttribute('aria-haspopup', 'dialog');
     expect(button).toHaveAttribute('aria-expanded', 'false');
     expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
+  });
+
+  it('passes aria-pressed to the inner button, so the token is a toggle', () => {
+    render(<Token label="Open" onClick={() => {}} aria-pressed={true} />);
+    const button = screen.getByRole('button', {name: 'Open', pressed: true});
+    expect(button.parentElement).not.toHaveAttribute('aria-pressed');
   });
 });

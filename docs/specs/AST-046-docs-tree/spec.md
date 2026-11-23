@@ -106,7 +106,14 @@ and references from other packages are an open question (OQ2).
   title, then identity.
 - **FR5 — `astryx docs` reads the tree one level at a time.** `astryx docs
 <route>` MUST resolve a flat topic first, then a tree route, except that a
-  topic whose route the tree gives to another doc (FR11) opens that doc. A namespace MUST
+  topic whose route the tree gives to another doc (FR11) opens that doc. When
+  neither names a doc, a text that spells a doc's route, or the name of a doc
+  below a namespace, in another way MUST open that doc: case does not count,
+  spaces, hyphens, slashes, dots, and underscores all separate words, and the
+  order of the words does not count (`tokens.tokens-color` and `color tokens`
+  open `tokens/tokens-color`). A route spelled this way answers before a name.
+  The read opens a doc only when exactly one doc answers, and never an
+  experimental doc; otherwise the text is an unknown topic (FR6). A namespace MUST
   print its title, its summary, and each slot's children one level down, each
   with its summary and the command to open it; it MUST NOT inline its
   grandchildren. When a child's title is not its route name
@@ -134,7 +141,24 @@ and references from other packages are an open question (OQ2).
   gives; its suggestions MUST name the route of each guide that returned a
   section, or of every guide below the namespace when none did. An unknown
   route MUST fail with `ERR_UNKNOWN_TOPIC` and suggest the children of the
-  deepest namespace the route reaches.
+  deepest namespace the route reaches, closest first by each child's route,
+  title, and declared keywords; the child that its route words alone put first
+  stays first when the typed text holds every word of its route. When the rest
+  of the route after that namespace has the words of exactly one doc further
+  below it, by that doc's last route segment or title, that doc is suggested
+  too: right after the child that stays first, or first when no child does.
+  When that doc is the child that stays first, it is listed once, first. An
+  experimental doc is never suggested this way. Any other
+  text that names no doc MUST fail with `ERR_UNKNOWN_TOPIC` too. It suggests
+  the docs whose own name it is, or whose route it spells with hyphens, when
+  any exist. Otherwise, when no other command's entry matches the text
+  (`spec:AST-083` FR7), it suggests the docs whose route, title, or declared
+  keywords carry a typed word, closest first: at most five, and never more
+  than the topics and top-level namespaces it would otherwise list. The route
+  that list puts first stays first when the typed text holds every word of
+  that route. An experimental doc is never suggested for a word. When no doc
+  carries a typed word, or another command's entry matches, it suggests the
+  topics and top-level namespaces, closest first.
 - **FR7 — The topic list names the tree.** `astryx docs --json` MUST list each
   top-level namespace in `meta.namespaces`, so `data` stays the topic list, and
   every entry in it reads as a topic. The text view MUST show the namespaces first,
@@ -177,7 +201,10 @@ and references from other packages are an open question (OQ2).
   topic result's command MUST list the topic's sections when it has more than
   one. A typed doc MUST also match by its own name, and a doc part by each
   identifier it defines or names in code (`assertResponse`,
-  `ERR_UNKNOWN_SECTION`). A docs-only search (`--type doc`) MUST NOT need
+  `ERR_UNKNOWN_SECTION`). A namespace that sums up the docs beneath it MUST
+  NOT answer a query word through its text when one of those docs answers it
+  at least as strongly, so the doc that holds the rule is the hit
+  (`spec:AST-083` FR1). A docs-only search (`--type doc`) MUST NOT need
   `@astryxdesign/core`, because `astryx docs` does not.
 - **FR11 — Integrations join the tree.** A configured integration MAY ship
   namespace docs, and guides with `placement`, in its docs directory. The tree
@@ -203,7 +230,16 @@ and references from other packages are an open question (OQ2).
   adds one; the JSON read already names each section's package. A replaced
   topic or guide MUST name the package it replaced as `replacedPackage`,
   beside `replaces`. A `replaces` or `extends` that names no topic and no
-  guide, such as a namespace, changes nothing.
+  guide, such as a namespace, changes nothing. An extension's section MAY
+  replace a section of the doc it extends by an authored `id` that is that
+  section's key, by its exact title, or by a title whose key is that section's
+  `id`, and the last package configured wins it. It MUST NOT replace a section
+  another package added unless one of the two carries an authored `id` that is
+  the other's key or a title fragment of the other, so two packages that add
+  sections of one title both keep them. When a section one package added holds
+  the key that a section of another package, placed after it, derives from its
+  title, the later section MUST be read by the key its provider id derives, a
+  hyphen, and its title key, with a numeric suffix when that key is taken.
   When two providers claim one route, the CLI's own docs MUST keep it,
   including its flat topics' names and the generated topic levels, then integrations
   in configured order; between integrations a namespace keeps its route over a
@@ -300,6 +336,34 @@ and references from other packages are an open question (OQ2).
   namespace with no guide below it, such as a generated topic level (FR12), has
   no page. The docsite build MUST fail when a slug is both a page and a
   redirect, or both a flat topic and a namespace page.
+- **FR15 — A doc may also be a skill.** An integration's flat topic or
+  placed guide MAY declare `skill: {name, description}`. `astryx docs skills`
+  MUST list every skill the folder has (the project skill in a project, the
+  computer-level skill, then each declared skill in load order), and
+  `astryx docs skills/<name>` MUST print one, when no doc holds that route. A
+  skill whose value is not an object with a string name and description,
+  whose name is not lowercase words joined by hyphens, is longer than 64
+  characters, is `astryx` or `astryx-project`, or repeats an earlier one, or
+  whose description breaks a rule of an agent-docs block line (blank,
+  surrounding space, control characters or line separators, marker text) or
+  is longer than 1,024 code points, MUST be left out with a note naming why,
+  and its doc and the package's other docs still load; `integration check`
+  reports the note as `invalid_skill`, marked `next`. The agent-docs block
+  MUST hold one line per kept skill under `INTEGRATIONS:`, ``- `<package>`
+skill `<name>`: <description> Read it with `astryx docs skills/<name>`.``,
+  and no line when no skill is kept. In each project skill place `init`
+  writes (`spec:AST-081` FR7), a `--once` copy included, `init` MUST write
+  each kept skill as `<folder>/<name>/SKILL.md` (the doc's text under skill
+  frontmatter, under the managed-file rules: copies together or not at all,
+  a person's file kept) and remove one it wrote for a skill that is no
+  longer kept (no integration declares it, or it is left out), except while
+  any integration's docs cannot be read, when no copy is removed; `init --remove`
+  removes the integration skills with the project skill. `upgrade` reports
+  each such file in `agentDocs.skills` with its `skill` and writes or
+  removes it with `--apply`; `doctor`'s `skill-places` check names missing,
+  stale, kept and leftover integration skill files and skills left out, in a
+  project that keeps only the block too; and `discover` lists each package's
+  `skills`.
 
 ### Platform support
 
@@ -347,7 +411,7 @@ Phase 1 changes these surfaces:
 | ------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1, FR3, FR4 | Tree builder fixture tests                                                    | three authored levels; adoption with and without `groupBy`; reversed input order; order and title sort                                                                                                                                                                                                                                                          | A route that ignores the parent, a folder that implies a parent, or a tree that depends on input order                                                                                                                                                                                                     |
 | FR2           | Tree builder failure fixtures                                                 | no slot; unknown slot; a slot that refuses the kind; another package's parent; not a reference; two adopters; a cycle                                                                                                                                                                                                                                           | A failed placement that falls back to adoption, or a failure without a diagnostic                                                                                                                                                                                                                          |
-| FR5, FR6, FR7 | `docs()` dispatcher tests and CLI runs                                        | `cli`, `cli/api`, one function, the placed guide and its sections, the old name, a typo route; a section on a namespace that one guide, no guide, and two guides hold; the topic list read with and without a depth, and a guide one integration replaces                                                                                                       | A namespace that inlines grandchildren, a lost section read, a section read that picks one of two guides, a wrong error code, a listed doc attributed to the package whose route it took, or an experimental doc listed unmarked                                                                           |
+| FR5, FR6, FR7 | `docs()` dispatcher tests and CLI runs                                        | `cli`, `cli/api`, one function, the placed guide and its sections, the old name, a typo route, a route in another spelling or word order, a text only a title or keyword carries; a section on a namespace that one guide, no guide, and two guides hold; the topic list read with and without a depth, and a guide one integration replaces                    | A namespace that inlines grandchildren, a lost section read, a section read that picks one of two guides, a wrong error code, a listed doc attributed to the package whose route it took, or an experimental doc listed unmarked                                                                           |
 | FR8           | Doctor tests                                                                  | this repo; a fixture tree with a broken placement                                                                                                                                                                                                                                                                                                               | A broken tree or an unplaced CLI doc that passes                                                                                                                                                                                                                                                           |
 | FR9           | Real-tree tests and the route inventory                                       | every command, function, schema, and enum doc; every exported API function                                                                                                                                                                                                                                                                                      | A CLI typed doc without its route, or a route inventory row the tree contradicts                                                                                                                                                                                                                           |
 | FR10          | Search tests and CLI runs                                                     | a guide section; a typed doc by its own name; an error code; a topic hit; no core installed                                                                                                                                                                                                                                                                     | A section hit whose command reads the whole topic, or a docs-only search that needs core                                                                                                                                                                                                                   |
@@ -355,6 +419,7 @@ Phase 1 changes these surfaces:
 | FR12          | `docs()` tests, the graph walk, and search tests                              | the level and its children in list order; a topic's Up, Previous, and Next; a flat topic hit's parent; an integration's flat topic                                                                                                                                                                                                                              | A flat topic without a home, a topic whose name changes, or a level that lists a placed guide                                                                                                                                                                                                              |
 | FR13          | Split tests over the topic before and after, the graph walk, and search tests | each old section key read through the namespace; a link and a token reference to the old topic; a `--dense` read; the topic list and a search for one section                                                                                                                                                                                                   | A dropped, merged, or copied section; a changed title or `id`; a reference left on the old identity; a name listed twice; a section found twice                                                                                                                                                            |
 | FR14          | Docsite page-generation and route-resolution tests                            | a split namespace; a nested namespace; a nested namespace with its own page; a page with a named sidebar parent in another group; a package-page namespace; a namespace with a `category`, and one whose guides are all foundations docs; a generated topic level                                                                                               | An old address that stops resolving or lands in a sidebar group other than its own or its named parent's, a permanent guide redirect, a guide page on a non-package namespace, a nested page its root page also holds, or a slug that is both a page and a redirect                                        |
+| FR15          | Skill discovery, `docs skills` and init `--to skills` tests                   | a valid skill on a topic and on a guide; each broken rule; a repeated name across two packages; `docs skills/<name>` for each kind of skill                                                                                                                                                                                                                     | A broken skill that is written or fails its doc, a repeated name that wins, or a skill `docs skills` does not list                                                                                                                                                                                         |
 
 ## Decision log
 

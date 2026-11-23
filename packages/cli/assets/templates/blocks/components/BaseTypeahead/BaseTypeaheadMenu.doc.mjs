@@ -19,5 +19,4 @@ export const doc = {
     'RadioList',
     'Text',
   ],
-  icons: {FunnelIcon: 'funnel'},
 };

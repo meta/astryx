@@ -39,6 +39,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Citation/Citation.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -77,8 +82,13 @@ const styles = stylex.create({
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
-    verticalAlign: 'baseline',
-    height: spacingVars['--spacing-5'],
+    // A flex chip takes its baseline from its first item. An icon has no text
+    // baseline, so its bottom edge sat on the line and the chip rode above
+    // it. Centred, it sits on the line with or without an icon.
+    verticalAlign: 'middle',
+    // A min-height would add the borders to the line and make the default
+    // pill 22 px tall. A taller line grows the pill.
+    height: `max(${spacingVars['--spacing-5']}, 1lh)`,
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: typeScaleVars['--text-supporting-weight'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
@@ -139,7 +149,11 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-accent-muted'],
     borderRadius: radiusVars['--radius-full'],
     minWidth: spacingVars['--spacing-5'],
-    height: spacingVars['--spacing-5'],
+    // Its spacing size at the default text size, where one line is shorter.
+    // A taller line grows the badge, but only to 1.5em, which holds the text
+    // box of common UI fonts (Noto Sans needs about 1.4em). A superscript
+    // badge as tall as the line raises the line more.
+    height: `max(${spacingVars['--spacing-5']}, min(1lh, 1.5em))`,
     paddingInline: spacingVars['--spacing-1'],
     textDecoration: 'none',
     transitionProperty: 'background-color',
@@ -194,6 +208,13 @@ export function Citation({
   'data-testid': testId,
   ...rest
 }: CitationProps): React.ReactElement {
+  if (process.env.NODE_ENV !== 'production' && source == null) {
+    throw devPropError(
+      'Citation',
+      'source',
+      "is required, for example source={{title: 'Annual report', url: 'https://example.com/report'}}. Citation does not read children.",
+    );
+  }
   const t = useComponentTranslator();
   const title = source.title ?? String(number);
   const href =

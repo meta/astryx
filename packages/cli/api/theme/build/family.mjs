@@ -43,18 +43,22 @@ export function resolveThemeFamily(members) {
         `Theme "${member.theme.name}" has an invalid normalized parent.`,
       );
     }
-    const parentName = parent?.name ?? null;
-    if (parentName && !byName.has(parentName)) {
-      throw new Error(
-        `Theme "${member.theme.name}" is missing selected ancestor "${parentName}".`,
-      );
-    }
+    // A member whose base is not selected is a root: the family's one root
+    // may extend a base of its own (a package theme), which its resolved
+    // values carry, as its standalone build does.
+    const selectedParent = parent?.name ?? null;
+    const parentName =
+      selectedParent && byName.has(selectedParent) ? selectedParent : null;
     if (parentName && parent !== byName.get(parentName).sourceTheme) {
       throw new Error(
         `Theme "${member.theme.name}" does not extend the selected "${parentName}" source.`,
       );
     }
-    return {...member, parentName};
+    return {
+      ...member,
+      parentName,
+      unselectedBase: parentName ? null : selectedParent,
+    };
   });
   const resolved = new Map(
     withParents.map(member => [member.theme.name, member]),
@@ -75,6 +79,13 @@ export function resolveThemeFamily(members) {
   for (const member of withParents) visit(member);
   const roots = withParents.filter(member => member.parentName === null);
   if (roots.length !== 1) {
+    // A member whose base is not selected, beside another root, misses that
+    // ancestor: named so, with the base it extends.
+    const missing = roots.find(member => member.unselectedBase);
+    if (roots.length > 1 && missing)
+      throw new Error(
+        `Theme "${missing.theme.name}" is missing selected ancestor "${missing.unselectedBase}": a family has one root, and only the root may extend a theme the family does not select. Select "${missing.unselectedBase}" too, or build "${missing.theme.name}" on its own.`,
+      );
     throw new Error(
       `A theme family must have exactly one selected root; found ${roots.length}.`,
     );
@@ -435,8 +446,10 @@ function colorSchemeSections(members) {
   return [...groups].reduce((result, [css, names]) => {
     const identities = familyScopeSelector(names), top = `${identities}:not(:where([data-astryx-theme] [data-astryx-theme]))`;
     const active = (/** @type {string} */ selector) => `${selector}${identities},\n${selector}:where(:not([data-astryx-theme])):has(${top})`;
-    result.base.push(`@scope (${identities}) to (${THEME_SCOPE_TO}) {\n  :where(:scope:not([data-theme]):not(html[data-theme] *)) { color-scheme: light dark; }\n  :where(:scope:not([data-theme]):is(html[data-theme="light"] *)) { color-scheme: light; }\n  :where(:scope:not([data-theme]):is(html[data-theme="dark"] *)) { color-scheme: dark; }\n}`);
-    result.themed.push(css.replace(':root', active(':root')).replace('html[data-theme="light"]', active('html[data-theme="light"]')).replace('html[data-theme="dark"]', active('html[data-theme="dark"]')));
+    // A member follows the page's scheme, as a standalone theme does: only a
+    // mode the page forces on html pins it.
+    result.base.push(`@scope (${identities}) to (${THEME_SCOPE_TO}) {\n  :where(:scope:not([data-theme]):is(html[data-theme="light"] *)) { color-scheme: light; }\n  :where(:scope:not([data-theme]):is(html[data-theme="dark"] *)) { color-scheme: dark; }\n}`);
+    result.themed.push(css.replace('html[data-theme="light"]', active('html[data-theme="light"]')).replace('html[data-theme="dark"]', active('html[data-theme="dark"]')));
     return result;
   }, /** @type {{base: string[], themed: string[]}} */ ({base: [], themed: []}));
 }

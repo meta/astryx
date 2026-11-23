@@ -33,12 +33,12 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
 import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   colorVars,
-  sizeVars,
   radiusVars,
   spacingVars,
   typographyVars,
@@ -114,6 +114,8 @@ import {
   parseLocaleTime,
   resolveHourFormat,
 } from '../utils/timeFormat';
+import {getLocaleDirection} from '../i18n/getLocaleDirection';
+import {isolatedText, localeTextStyles} from '../utils/textDirection';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -298,17 +300,7 @@ const timeOptionSizeStyles = stylex.create({
 
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 export interface DateTimeInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
@@ -764,6 +756,7 @@ function PointerDateTimeField({
   };
   const t = useComponentTranslator();
   const locale = useLocale();
+  const textDirection = getLocaleDirection(locale);
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
   // (`adaptive-native` coarse) and `legacy` (deprecated `always`):
@@ -1914,8 +1907,10 @@ function PointerDateTimeField({
                 aria-controls={popover.isOpen ? popover.id : undefined}
                 aria-autocomplete="none"
                 autoComplete="off"
+                dir={controlProps.dir ?? textDirection}
                 {...stylex.props(
                   styles.input,
+                  localeTextStyles.pageAlign,
                   isEffectivelyDisabled && styles.inputDisabled,
                   isDateInvalid && styles.inputInvalid,
                 )}
@@ -2065,8 +2060,10 @@ function PointerDateTimeField({
                     : undefined
                 }
                 aria-busy={isBusy || undefined}
+                dir={textDirection}
                 {...stylex.props(
                   styles.input,
+                  localeTextStyles.pageAlign,
                   isEffectivelyDisabled && styles.inputDisabled,
                   typedTime.isRejected && styles.inputInvalid,
                 )}
@@ -2147,7 +2144,7 @@ function PointerDateTimeField({
                         isSelected && styles.timeOptionSelected,
                       ),
                     )}>
-                    {option.label}
+                    {isolatedText(option.label, undefined, textDirection)}
                   </div>
                 );
               })}

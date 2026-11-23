@@ -10,7 +10,8 @@
  * @input Parsed package.json, package directory, and a public subpath
  * @output The public specifier and confined target file, when exported, the
  *   file a subpath's `source` condition names, when the package has it, and
- *   the target a subpath maps to under given conditions
+ *   the target a subpath maps to under given conditions, and the confined
+ *   file it names
  * @position packages/cli/foundation/discovery — shared package import metadata
  */
 
@@ -76,13 +77,15 @@ function patternKeyCompare(a, b) {
  * Find an exact or one-star subpath mapping and the wildcard value it matched.
  * @param {Record<string, unknown>} map
  * @param {string} subpath
+ * @param {string} [keyStart] what each key of the map starts with: `./` for
+ *   `exports`, `#` for `imports`
  */
-function subpathValue(map, subpath) {
+function subpathValue(map, subpath, keyStart = './') {
   if (Object.hasOwn(map, subpath)) {
     return {found: map[subpath] != null, value: map[subpath], wildcard: ''};
   }
   const patterns = Object.keys(map)
-    .filter(key => key.startsWith('./') && key.split('*').length === 2)
+    .filter(key => key.startsWith(keyStart) && key.split('*').length === 2)
     .sort(patternKeyCompare);
   for (const pattern of patterns) {
     const star = pattern.indexOf('*');
@@ -237,6 +240,44 @@ export function conditionalExportTarget(exportsField, subpath, conditions) {
   if (!selected) return null;
   const target = conditionTarget(selected.value, conditions);
   return target === null ? null : target.replaceAll('*', selected.wildcard);
+}
+
+/**
+ * The target a package's `imports` maps a `#` specifier to under a list of
+ * conditions, its wildcard filled in, as written in the package
+ * (`./src/x`), by the rules `conditionalExportTarget` reads `exports` with.
+ * Null when the package maps no such key.
+ * @param {unknown} importsField
+ * @param {string} specifier a `#` specifier
+ * @param {readonly string[]} conditions
+ * @returns {string|null}
+ */
+export function packageImportTarget(importsField, specifier, conditions) {
+  if (!isRecord(importsField) || !specifier.startsWith('#')) return null;
+  const selected = subpathValue(importsField, specifier, '#');
+  if (!selected.found) return null;
+  const target = conditionTarget(selected.value, conditions);
+  return target === null ? null : target.replaceAll('*', selected.wildcard);
+}
+
+/**
+ * The file one subpath of a package's exports maps to under a list of
+ * conditions, kept inside the package and a regular file. Null when the
+ * package exports no such subpath under those conditions.
+ * @param {unknown} exportsField
+ * @param {string} packageDir
+ * @param {string} subpath `.` or a `./`-prefixed subpath
+ * @param {readonly string[]} conditions
+ * @returns {string|null}
+ */
+export function conditionalExportFile(
+  exportsField,
+  packageDir,
+  subpath,
+  conditions,
+) {
+  const target = conditionalExportTarget(exportsField, subpath, conditions);
+  return target ? resolveTarget(packageDir, target) : null;
 }
 
 /**

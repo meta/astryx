@@ -9,6 +9,7 @@
  * @position api/theme-edit — compile-time knowledge over the part data
  */
 
+import {ratioDown} from '../theme/palette/generate/color.mjs';
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 import {splitTop} from './_css.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -35,9 +36,16 @@ const SOFT =
   /^--(color-data|color-syntax|syntax|duration|ease|z-|layer|breakpoint|text-display-\d|color-icon-[a-z]+$)/;
 
 /** @typedef {{token: string, props: string[], when: string[]}} Read */
-/** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
+/** @typedef {{message: string, run: string[], also: string[], soft?: boolean, held?: string[]}} CheckFailure */
 /** @typedef {import('./_parts.mjs').PartData} PartData */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
+
+/** The aspect group each property belongs to, the first group that lists it. */
+const GROUP_OF_PROP = new Map(
+  Object.entries(GROUPS)
+    .flatMap(([g, ps]) => ps.map(p => /** @type {[string, string]} */ ([p, g])))
+    .reverse(),
+);
 
 /**
  * @param {import('./_project.mjs').ThemeProject} project
@@ -90,8 +98,7 @@ export function makeCompiler(project, parts) {
   const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
-  const groupOfProp = p =>
-    Object.entries(GROUPS).find(([, ps]) => ps.includes(p))?.[0] ?? null;
+  const groupOfProp = p => GROUP_OF_PROP.get(p) ?? null;
 
   /** @param {string} t @returns {string | null} */
   function groupOfToken(t) {
@@ -325,9 +332,11 @@ export function makeCompiler(project, parts) {
    * @param {string} token
    * @param {string} value
    * @param {string} P
+   * @param {string} [when] the --when the token is set under (`variant:strong`)
+   * @param {string} [also] the rest of the flags the setting carries (` --state hover --mode dark`), kept on the lines offered
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P) {
+  function checkTokenOn(theme, target, token, value, P, when, also = '') {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -337,6 +346,115 @@ export function makeCompiler(project, parts) {
       };
     }
     const g = groupOfToken(token);
+    // Under a variant: only what the part reads in that variant's rules (or
+    // rules that name no variant) counts.
+    // (Several conditions, `variant:ghost+size:sm`: a rule counts when it
+    // names none of them otherwise; the message names the first.)
+    const whens = String(when ?? '')
+      .split('+')
+      .map(w => w.split(':'))
+      .filter(([p, v]) => p && v);
+    const [wProp, wVal] = whens[0] ?? [];
+    if (wProp && wVal && allReads(target).has(token)) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const inVariant = (/** @type {string} */ c) => {
+        const attrs = c.split(' ')[0].split(',');
+        return whens.every(([p, v]) => {
+          const own = attrs.find(a => a.startsWith(`${p}=`));
+          return !own || own === `${p}=${v}`;
+        });
+      };
+      // (What a line inside the part declares is recorded as the part's
+      // own already; any other part inside it that reads the token takes
+      // it.)
+      const inside =
+        !MAP[target]?.line?.length &&
+        (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (conds.length && !conds.some(inVariant) && !inside) {
+        const there = [
+          ...new Set(
+            Object.values(MAP[target]?.own ?? {}).flatMap(x =>
+              Object.entries(x.tokens ?? {})
+                .filter(([, cs]) =>
+                  /** @type {string[]} */ (cs).some(inVariant),
+                )
+                .map(([t]) => t)
+                .filter(
+                  t =>
+                    groupOfToken(t) === g &&
+                    /^--color-/.test(t) === /^--color-/.test(token),
+                ),
+            ),
+          ),
+        ];
+        return {
+          message: `${target} (${wProp} ${wVal}) never reads ${token}: only its other ${wProp}s do.${there.length ? ` There it reads ${there.slice(0, 4).join(', ')}.` : ''}`,
+          run: there
+            .slice(0, 3)
+            .map(
+              t =>
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}${also}`,
+            ),
+          also: [],
+        };
+      }
+    }
+    // Read only under conditions the part is not drawn in by default (a
+    // link reads --color-text-primary only as color primary; drawn as it
+    // is, it reads --color-text-accent): set on the part with no
+    // condition, it changes nothing in its default look. Said, with the
+    // token that look reads and the condition that reads this one.
+    if (
+      !wProp &&
+      allReads(target).has(token) &&
+      (g === 'text' || g === 'background')
+    ) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const attrsOf = (/** @type {string} */ c) => c.split(' ')[0];
+      const drawn = [
+        ...new Set(
+          parts.pairs
+            .filter(p =>
+              g === 'text' ? p.fg.target === target : p.bg.target === target,
+            )
+            .map(p => (g === 'text' ? p.fg.tokens[0] : p.bg.tokens[0]))
+            .filter(Boolean),
+        ),
+      ];
+      const inside = (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (
+        conds.length &&
+        conds.every(c => /=/.test(attrsOf(c))) &&
+        drawn.length &&
+        !drawn.includes(token) &&
+        !inside
+      ) {
+        const named = [
+          ...new Set(
+            conds
+              .flatMap(c => attrsOf(c).split(','))
+              .map(a => a.replace('=', ':')),
+          ),
+        ];
+        return {
+          soft: true,
+          message: `${target} reads ${token} only when ${named.join(' or ')}; as drawn by default it reads ${drawn.join(', ')}, so this changes nothing in its default look. For the default look: ${P} set ${theme} ${drawn[0]} ${quoteCommandArgument(value)} --on ${target}${also}; for ${named[0]} alone: ${P} set ${theme} ${token} ${quoteCommandArgument(value)} --on ${target} --when ${named[0]}${also}`,
+          run: [
+            `${P} set ${theme} ${drawn[0]} ${quoteCommandArgument(value)} --on ${target}${also}`,
+            `${P} set ${theme} ${token} ${quoteCommandArgument(value)} --on ${target} --when ${named[0]}${also}`,
+          ],
+          also: [],
+        };
+      }
+    }
     if (allReads(target).has(token)) {
       // Read, but maybe only for another property: an error color that feeds
       // only the focus outline does not paint the background.
@@ -347,10 +465,32 @@ export function makeCompiler(project, parts) {
           : g === 'background'
             ? ['background-color', 'background', 'background-image']
             : null;
+      // A fill token on a part Core also draws with no fill of its own
+      // where it sits in another part (main content inside an app shell is
+      // transparent there, and the shell's own fill shows; the census sees
+      // that clear fill in no condition of the part's own): the token still
+      // reaches what inside reads it, but not that part's look there. Said,
+      // with the property that paints the part itself everywhere.
+      const clear = ['background-color', 'background'].some(
+        prop =>
+          (MAP[target]?.own?.[prop]?.values ?? []).includes('transparent') &&
+          !Object.values(MAP[target]?.at?.[prop] ?? {}).includes('transparent'),
+      );
+      if (
+        g === 'background' &&
+        clear &&
+        fed.some(f => f.part === target && (wanted ?? []).includes(f.prop))
+      )
+        return {
+          soft: true,
+          message: `${target} is also drawn with no fill of its own inside another part (main content in an app shell is transparent, and the shell's fill shows), so there ${token} colors only what inside ${target} reads it, not ${target} itself. To paint ${target} itself everywhere: ${P} set ${theme} background-color ${quoteCommandArgument(value)} --on ${target}${when ? ` --when ${when}` : ''}${also}`,
+          run: [
+            `${P} set ${theme} background-color ${quoteCommandArgument(value)} --on ${target}${when ? ` --when ${when}` : ''}${also}`,
+          ],
+          also: [],
+        };
       // The part reads the token the user named: it is set as asked, and
       // the result names what it feeds.
-      void wanted;
-      void fed;
       return null;
     }
     // Only a token of the same kind takes the value: a weight never goes to
@@ -396,15 +536,35 @@ export function makeCompiler(project, parts) {
                 ? 'font-family'
                 : 'font-weight'
         : g && DIRECT[g];
-    if (direct)
-      run.push(
-        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
-      );
     const kids = g
       ? (MAP[target]?.contains ?? [])
           .filter(c => partReads(c, g).length)
           .slice(0, 4)
       : [];
+    // A part that reads no font token of this kind, holding parts that do
+    // (a tab list's tabs size their text from --text-label-size): those
+    // tokens,
+    // set on it, reach each of them; the property set on it directly does
+    // not, since they set it themselves.
+    const kidTokens =
+      reads.length || g !== 'font'
+        ? []
+        : [
+            ...new Set(
+              kids.flatMap(c =>
+                partReads(c, /** @type {string} */ (g))
+                  .filter(r => kindOf(r.token) === kindOf(token))
+                  .map(r => r.token),
+              ),
+            ),
+          ].slice(0, 3);
+    run.push(
+      ...kidTokens.map(t => `${P} set ${theme} ${t} ${v} --on ${target}`),
+    );
+    if (direct && !kidTokens.length)
+      run.push(
+        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
+      );
     const what = g
       ? `${target}'s ${g} comes from ${
           reads.length
@@ -414,12 +574,16 @@ export function makeCompiler(project, parts) {
                   r => r.token + fmtWhen(r.when) + statusNote(target, r.token),
                 )
                 .join(', ')
-            : 'no token, so set the property directly'
+            : kidTokens.length
+              ? `no token; the parts inside it read ${kidTokens.join(', ')} for theirs, so set ${kidTokens.length > 1 ? 'those' : 'that'} on ${target}`
+              : 'no token, so set the property directly'
         }`
       : `${target} reads: ${[...allReads(target)].slice(0, 8).join(', ')}`;
     return {
       message: `${target} never reads ${token}. ${what}.`,
       run,
+      // (The tokens the parts it holds read for this, when it reads none.)
+      held: kidTokens,
       also: kids.length
         ? [
             `parts inside ${target} with their own ${g}: ${kids.join(', ')} (${HOW} ${kids[0]})`,
@@ -472,11 +636,24 @@ export function makeCompiler(project, parts) {
       info?.targets.find(x => x.className === `astryx-${target}`) ??
       info?.targets[0];
     const fromDocs = t?.values ?? {};
+    // (A doc that lists the part with no values for a prop, a shared
+    // indicator's doc, leaves them to another doc that lists the same part
+    // with them: CheckboxInput names its box's sizes.)
+    /** @param {string} p */
+    const elsewhere = p =>
+      Object.values(project.components ?? {})
+        .flatMap((/** @type {any} */ c) => c.targets ?? [])
+        .find(
+          (/** @type {any} */ x) =>
+            x.className === `astryx-${target}` && x.values?.[p]?.length,
+        )?.values[p];
     const seen = MAP[target]?.attrs ?? {};
     /** @type {Record<string, string[]>} */
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
-      out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+      out[p] = fromDocs[p]?.length
+        ? fromDocs[p]
+        : (elsewhere(p) ?? seen[p] ?? []);
     // A state Core marks with more than one value (a checkbox's checked and
     // indeterminate looks) is a condition --when names by value.
     for (const st of TARGET.get(target)?.states ?? [])
@@ -534,16 +711,25 @@ export function makeCompiler(project, parts) {
    * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
    * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
-   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
+   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined, drawnByRule?: (pair: TextPair, side: 'fg' | 'bg', mode: string) => boolean}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   *   `drawnByRule`: whether the base theme's own rule for a part draws a
+   *   side (not its token), so the side is named by its color.
    * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
-    {parseColor, ratio, alphaOf, compositeOver, page},
+    {
+      parseColor,
+      ratio,
+      alphaOf,
+      compositeOver,
+      page,
+      drawnByRule = () => false,
+    },
     extra = [],
   ) {
     /**
@@ -552,13 +738,23 @@ export function makeCompiler(project, parts) {
      * the part sits in, else the page).
      * @param {unknown} fg @param {unknown} bg @param {string} m
      * @param {unknown} [beneath]
+     * @param {boolean} [onPage] whether a see-through region sits on the page
      */
-    const drawn = (fg, bg, m, beneath = page(m)) => {
+    const drawn = (fg, bg, m, beneath = page(m), onPage = true) => {
       /** @type {[number, number, number]} */
-      const ground =
-        parseColor(beneath) ??
-        parseColor(page(m)) ??
-        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const pageColor =
+        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      // (A see-through region, a translucent top bar, is drawn over the
+      // page itself. A surface Core draws in its own scheme, a lightbox,
+      // sits over its media and a blurred page, not a bare one: its color
+      // is the ground as it is.)
+      const region = parseColor(beneath);
+      /** @type {[number, number, number]} */
+      const ground = !region
+        ? pageColor
+        : onPage
+          ? compositeOver(region, alphaOf(beneath), pageColor)
+          : region;
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
@@ -566,6 +762,56 @@ export function makeCompiler(project, parts) {
       const top = parseColor(fg);
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
+    };
+    /**
+     * The color a one-layer linear or radial gradient has where centered
+     * text sits: the middle of a linear one, the center of a radial one,
+     * between the stops around that place; null for any other (several
+     * layers, a conic or repeating one, a stop with no fixed color).
+     * @param {string} v
+     * @returns {string | null}
+     */
+    const colorBehindText = v => {
+      const m = /^(linear|radial)-gradient\((.*)\)$/s.exec(v.trim());
+      if (!m || splitTop(v.trim(), ',').length !== 1) return null;
+      const args = splitTop(m[2], ',').map(x => x.trim());
+      if (
+        args[0] &&
+        /^(to\b|at\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+          args[0],
+        )
+      )
+        args.shift();
+      /** @type {Array<{c: [number, number, number], a: number, at: number | null}>} */
+      const stops = [];
+      for (const arg of args) {
+        const pos = /\s(-?[\d.]+)%$/.exec(arg);
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        const c = parseColor(color);
+        if (!c) return null;
+        stops.push({
+          c,
+          a: alphaOf(color),
+          at: pos ? Number(pos[1]) / 100 : null,
+        });
+      }
+      if (stops.length < 2) return null;
+      // Positions a stop leaves out are spread evenly, as CSS spreads them.
+      stops.forEach((x, i) => {
+        if (x.at == null) x.at = i / (stops.length - 1);
+      });
+      const at = m[1] === 'linear' ? 0.5 : 0;
+      const i = stops.findIndex(x => /** @type {number} */ (x.at) >= at);
+      if (i <= 0) {
+        const x = stops[Math.max(0, i)];
+        return `rgba(${x.c.join(', ')}, ${x.a})`;
+      }
+      const [lo, hi] = [stops[i - 1], stops[i]];
+      const span =
+        /** @type {number} */ (hi.at) - /** @type {number} */ (lo.at);
+      const f = span > 0 ? (at - /** @type {number} */ (lo.at)) / span : 0;
+      const mix = lo.c.map((v0, k) => Math.round(v0 + (hi.c[k] - v0) * f));
+      return `rgba(${mix.join(', ')}, ${lo.a + (hi.a - lo.a) * f})`;
     };
     /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null, pair: any}>} */
     const out = [];
@@ -579,9 +825,16 @@ export function makeCompiler(project, parts) {
     );
     for (const p of [...parts.pairs, ...extra]) {
       if (replaced.has(p)) continue;
+      // Text drawn in a disabled color marks an inactive control, which
+      // needs no 4.5:1 (and must stay dimmer than the live text beside it).
+      if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
+        continue;
+      // (Text on another part that sets text of its own takes that part's
+      // text; a part's own color set on it, `ownColor`, is its text there.)
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
+        !(/** @type {any} */ (p).ownColor) &&
         partReads(p.bg.target, 'text').length
       )
         continue;
@@ -596,22 +849,31 @@ export function makeCompiler(project, parts) {
         // one is measured as the pair itself already is.
         if (
           region &&
+          !(/** @type {any} */ (p).mediaOf) &&
           alphaOf(whole) >= 1 &&
           !/gradient|url\(/.test(String(whole))
         )
           continue;
-        // A gradient is measured at each of its color stops, the worst one
-        // counting; an image, or a stop with no fixed color, is not checked.
-        const stops = /gradient|url\(/.test(String(whole))
-          ? gradientStops(String(whole))
-          : [whole];
+        // A gradient is measured where the text sits on it: a linear or
+        // radial one at the color it has under the text (its middle, or its
+        // center), so a glossy highlight at an edge is not taken for the
+        // ground; any other at each of its color stops, the worst one
+        // counting. An image, or a stop with no fixed color, is not checked.
+        const behind = /gradient/.test(String(whole))
+          ? colorBehindText(String(whole))
+          : null;
+        const stops = behind
+          ? [behind]
+          : /gradient|url\(/.test(String(whole))
+            ? gradientStops(String(whole))
+            : [whole];
         if (!stops) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
           continue;
         }
         const measured = stops.map(stop => ({
           stop,
-          pair: drawn(fg, stop, m, beneath),
+          pair: drawn(fg, stop, m, beneath, !(/** @type {any} */ (p).mediaOf)),
         }));
         if (stops.length > 1 && measured.some(x => !x.pair)) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
@@ -648,7 +910,15 @@ export function makeCompiler(project, parts) {
           m,
           baseBeneath,
         );
-        if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
+        // No worse than the base theme draws it: none of the theme's own,
+        // and where the theme draws neither side, the base theme's own
+        // failure (`base`), a note with its line.
+        const baseDrawn =
+          fg === baseValue(p, 'fg', m) &&
+          bg === baseValue(p, 'bg', m) &&
+          beneath === baseBeneath;
+        if (was && ratio(was[0], was[1]) <= r + 0.05 && !baseDrawn) continue;
+        const base = Boolean(was && ratio(was[0], was[1]) <= r + 0.05);
         // Pairs alike in color are one problem only when they read the same
         // token on the same part: text on another token or on another part
         // is another fix, and shows as they part ways.
@@ -658,12 +928,14 @@ export function makeCompiler(project, parts) {
         out.push({
           part: p.text,
           mode: m,
-          ratio: Number(r.toFixed(2)),
+          // (Cut down, never rounded up: just under a need never meets it.)
+          ratio: ratioDown(r),
           sample: p.sample,
           // A side the theme changed is named by the value it set, not the
           // token the part reads without it.
+          // (So is one the base theme's own rule draws, not its token.)
           fg:
-            fg !== baseValue(p, 'fg', m)
+            fg !== baseValue(p, 'fg', m) || drawnByRule(p, 'fg', m)
               ? String(fg)
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
@@ -673,10 +945,11 @@ export function makeCompiler(project, parts) {
             region && alphaOf(bg) < 1
               ? `${p.over?.target}'s ${beneath !== baseBeneath ? String(beneath) : (p.over?.tokens[0] ?? String(beneath))}`
               : null,
-          bg:
-            stops.length > 1
+          bg: behind
+            ? `${bg}, its gradient where the text sits`
+            : stops.length > 1
               ? `${bg}, a stop of its gradient`
-              : bg !== baseValue(p, 'bg', m)
+              : bg !== baseValue(p, 'bg', m) || drawnByRule(p, 'bg', m)
                 ? String(bg)
                 : (p.bg.tokens[0] ?? String(bg)),
           // What a fix needs: the token the text reads, the part that draws
@@ -687,6 +960,7 @@ export function makeCompiler(project, parts) {
           when: /** @type {any} */ (p).when ?? null,
           ground: pair[1],
           pair: p,
+          ...(base ? {base: true} : {}),
         });
       }
     }

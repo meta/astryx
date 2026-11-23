@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # Nightly perf scenes: real-Chromium mount, interaction and leak numbers for
-# five fixed scenes (apps/sandbox/src/app/(raw)/pages/perf-scenes/), measured
+# six fixed scenes (apps/sandbox/src/app/(raw)/pages/perf-scenes/), measured
 # on main every night and compared with main's own 7-day median.
 #
 # - Runs nightly on main and by manual dispatch (spec:AST-030 FR18). A pull

@@ -32,6 +32,7 @@ import {
   visualResult,
   wideReport,
 } from './touched-components.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const ci = yaml.parse(
   fs.readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'),
@@ -859,7 +860,7 @@ describe('pr-component-a11y-contracts routing', () => {
     }
     // Only the selection and head checkouts: no later checkout moves the tree.
     expect(
-      contracts.steps
+      withoutCheckoutRetries(contracts.steps)
         .filter(candidate => candidate.uses?.startsWith('actions/checkout@'))
         .map(({name}) => name),
     ).toEqual([

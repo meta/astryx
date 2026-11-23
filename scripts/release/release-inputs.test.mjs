@@ -95,6 +95,36 @@ describe('admitRelease', () => {
     );
   });
 
+  it('omits the authenticated archived tag from the release base', () => {
+    const result = admitRelease(checkout('0.6.6', {f: FIX}), {
+      version: '0.6.6',
+      tags: TAGS,
+      archivedTag: 'v0.6.6',
+    });
+    expect(result).toMatchObject({
+      latestStable: '0.6.5',
+      tier: 'patch',
+      problems: [],
+    });
+  });
+
+  it('refuses a mismatched or missing archived tag', () => {
+    expect(
+      admitRelease(checkout('0.6.6', {f: FIX}), {
+        version: '0.6.6',
+        tags: TAGS,
+        archivedTag: 'v0.6.5',
+      }).problems[0],
+    ).toMatch(/does not match release 0\.6\.6/);
+    expect(
+      admitRelease(checkout('0.6.6', {f: FIX}), {
+        version: '0.6.6',
+        tags: ['v0.6.5'],
+        archivedTag: 'v0.6.6',
+      }).problems[0],
+    ).toMatch(/is not present/);
+  });
+
   it('reads the base from tags, never from a canary', () => {
     const result = admitRelease(checkout('0.7.1', {f: FIX}), {
       version: '0.7.1',

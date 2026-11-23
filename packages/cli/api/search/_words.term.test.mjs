@@ -2,8 +2,8 @@
 
 /**
  * @file A term's words (termWords in _words.mjs) answer as sameWord and
- * startsAWordOf did, and scoring one candidate builds the term's forms once,
- * not once for every word it compares.
+ * startsAWordOf did, and scoring builds the term's forms once: not once for
+ * every word it compares, and not again for the next candidate.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -153,10 +153,13 @@ describe('termWords', () => {
     };
     try {
       scoreCandidate('dashboards', candidate);
+      // One set for the term's forms, one for the prose pattern's roots.
+      expect(built).toBe(2);
+      // The next candidate scored with the same term builds neither again.
+      scoreCandidate('dashboards', {...candidate, name: 'ChartAxis'});
+      expect(built).toBe(2);
     } finally {
       globalThis.Set = RealSet;
     }
-    // One set for the term's forms, one for the prose pattern's roots.
-    expect(built).toBe(2);
   });
 });
