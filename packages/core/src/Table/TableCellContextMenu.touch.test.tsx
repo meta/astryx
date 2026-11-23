@@ -4,7 +4,8 @@
  * @file TableCellContextMenu.touch.test.tsx
  * @output Tests what an invocation before the menu loads does once it loads:
  *   a long press opens the menu, timed and recognized by the loaded menu from
- *   the held touch, a tap or a moved press does not, only the last held cell
+ *   the held touch, and its early lift adds no click; a tap or a moved press
+ *   does not open it and keeps its click; only the last held cell
  *   opens, a later press or key drops the hold, the held point stays in the
  *   cell across a scroll, focus returns to the cell, and an unmounted cell
  *   drops only its own hold
@@ -127,6 +128,47 @@ describe('TableCellContextMenu early invocation', () => {
       screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
     ).toBeTruthy();
     expect(gate.factoryRuns).toBe(runsBefore + 1);
+  });
+
+  it('cancels the lift of a press held past the deadline before the menu loads, so the lift adds no click', async () => {
+    const {trigger, loadMenu} = await renderColdCell('Hold me');
+    fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
+    fireEvent.touchMove(trigger, {touches: [{clientX: 14, clientY: 12}]});
+    await wait(650);
+    // A cancelled touchend makes no click, so the cell's content does not act.
+    expect(fireEvent.touchEnd(trigger, {touches: []})).toBe(false);
+
+    await loadMenu();
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+    ).toBeTruthy();
+  });
+
+  it('keeps the click of a tap before and after the menu loads, and of a moved press', async () => {
+    const {triggers, loadMenu} = await renderColdCells([
+      {label: 'Tap'},
+      {label: 'Scroll'},
+    ]);
+    // A short tap keeps its click, so the content (a sort button) acts.
+    fireEvent.touchStart(triggers[0], {touches: [{clientX: 10, clientY: 10}]});
+    await wait(100);
+    expect(fireEvent.touchEnd(triggers[0], {touches: []})).toBe(true);
+
+    fireEvent.touchStart(triggers[1], {touches: [{clientX: 10, clientY: 10}]});
+    fireEvent.touchMove(triggers[1], {touches: [{clientX: 10, clientY: 60}]});
+    await wait(650);
+    expect(fireEvent.touchEnd(triggers[1], {touches: []})).toBe(true);
+
+    await loadMenu();
+    await wait(600);
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+
+    fireEvent.touchStart(triggers[0], {touches: [{clientX: 10, clientY: 10}]});
+    await wait(100);
+    expect(fireEvent.touchEnd(triggers[0], {touches: []})).toBe(true);
+    await wait(600);
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
   });
 
   it('does not open the menu for a tap before the menu loads', async () => {

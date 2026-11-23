@@ -38,6 +38,10 @@ import {
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {currentGesture} from '../Layer/gestureCounter';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from '../motion/uikit/longPress';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {createModuleLoader} from '../utils/moduleLoader';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
@@ -178,6 +182,36 @@ function holdTouchEvent(
     return held;
   }
   return {...held, events: [...held.events, {phase, event}]};
+}
+
+/**
+ * Whether a held press that lifts with `end` is already a long press: one
+ * finger, down for the long-press time, and never past the movement
+ * tolerance. The loaded menu opens for it, so its lift is not a tap.
+ */
+function isHeldLongPress(
+  held: HeldTouch | null,
+  end: ReactTouchEvent<HTMLElement>,
+): boolean {
+  const [first, ...rest] = held?.events ?? [];
+  const from = first?.event.touches[0];
+  if (first?.phase !== 'start' || from == null) {
+    return false;
+  }
+  for (const {phase, event} of rest) {
+    if (phase !== 'move') {
+      return false;
+    }
+    const at = event.touches[0];
+    if (
+      at == null ||
+      Math.abs(at.clientX - from.clientX) > LONG_PRESS_ALLOWABLE_MOVEMENT_PX ||
+      Math.abs(at.clientY - from.clientY) > LONG_PRESS_ALLOWABLE_MOVEMENT_PX
+    ) {
+      return false;
+    }
+  }
+  return end.timeStamp - first.event.timeStamp >= LONG_PRESS_DURATION_MS;
 }
 
 function replayTouch(
@@ -363,9 +397,16 @@ function CellTrigger({
           const handlers = handlersRef.current;
           if (handlers != null) {
             handlers.onTouchEnd(event);
-          } else {
-            holdTouch('end', event);
+            return;
           }
+          // A loaded menu opens under a held finger, so the lift's click
+          // never reaches the content. Before the menu loads, cancel the
+          // lift of a long press: the browser then makes no click, and the
+          // content (a sort button) does not act on the menu's gesture.
+          if (isHeldLongPress(heldTouchRef.current, event)) {
+            event.preventDefault();
+          }
+          holdTouch('end', event);
         }}
         onTouchCancel={event => {
           const handlers = handlersRef.current;

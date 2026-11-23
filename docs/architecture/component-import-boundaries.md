@@ -252,7 +252,7 @@ entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
 apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
 IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 54.3 KB eager.
+crossings brings the same module. Table carries 54.4 KB eager.
 
 ### Must not reach
 
