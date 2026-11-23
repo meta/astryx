@@ -2173,7 +2173,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
    * The run's Switch frame-stall tally: one line per checked screencast, its
    * engine and test, and its stalls, in the project's output folder, which
    * Playwright empties when a run starts. One worker runs this file top to
-   * bottom (`fullyParallel: false`), so a check reads only the proofs above
+   * bottom (`fullyParallel: false`), so a check reads only the casts above
    * it, and the run's whole reading is the last `Switch frame stalls:` line.
    */
   function runStallTally(): string {
@@ -2205,9 +2205,10 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
 
   /**
    * Adds this check's stalls to the run's tally and names them beside the
-   * neighbours': the Switch proofs above it in this run that screencast, their
-   * stalls and how many of them saw one. Stalls in many neighbours read as a
-   * starved runner; stalls in one test with quiet neighbours, as a freeze.
+   * neighbours': the Switch casts above it in this run (a proof's own earlier
+   * casts included), their stalls, and how many tests saw one. Stalls in many
+   * neighbours read as a starved runner; stalls in one test with quiet
+   * neighbours, as a freeze.
    * P14's two page cases run first, so their own lines name no other scene:
    * the run's reading is the last `Switch frame stalls:` line. A check on
    * recorded samples passes its own `tally`, and prints nothing. `toTally`
@@ -2219,11 +2220,20 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       label = 'Switch frame stalls',
       tally,
       toTally = stalls,
-    }: {label?: string; tally?: string; toTally?: number} = {},
+      cast,
+    }: {
+      label?: string;
+      tally?: string;
+      toTally?: number;
+      cast?: string;
+    } = {},
   ): string {
     const file = tally ?? runStallTally();
-    // The project name keeps a local run of both engines apart.
-    const me = [test.info().project.name, ...test.info().titlePath]
+    // The project name keeps a local run of both engines apart. A test that
+    // casts more than once names each cast, so each later cast reads the
+    // earlier ones as neighbours.
+    const me = [test.info().project.name, ...test.info().titlePath, cast ?? []]
+      .flat()
       .join(' › ')
       .replaceAll('\t', ' ');
     fs.mkdirSync(path.dirname(file), {recursive: true});
@@ -2441,6 +2451,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(() =>
       expectCaughtWithoutAJump(run([5, 12, 20]), undefined, {tally: quiet}),
     ).toThrow(/stalls: this test 3, neighbours 0 across 0 tests so far/);
+    // A test that casts twice names each cast: the second reads the first.
+    const twice = scratchTally('twice.tsv');
+    reportStalls(3, {tally: twice, cast: 'cast 1'});
+    expect(reportStalls(0, {tally: twice, cast: 'cast 2'})).toBe(
+      'this test 0, neighbours 3 across 1 test so far',
+    );
     // A passing run is counted as well, and still passes. Its own earlier
     // rows are not neighbours.
     expectCaughtWithoutAJump(run([8]), undefined, {tally: quiet});
@@ -3121,12 +3137,17 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await expect(input).toBeChecked();
     await waitForSwitchRest(page, thumb);
     const castFrames = await cast.stop();
-    // This proof scripts no `blockMainThread` block: every gap counts.
-    reportStalls(unscriptedStalls(castFrames.map(f => f.t)));
     const onLeft = await restLeft();
     const block = await page.evaluate(
       () =>
         (window as unknown as {__block?: {from: number; to: number}}).__block,
+    );
+    // The page's own busy loop on the lift is this proof's scripted block.
+    reportStalls(
+      unscriptedStalls(
+        castFrames.map(f => f.t),
+        block == null ? [] : [block],
+      ),
     );
     expect(block, 'the page was busy after the lift').toBeDefined();
     const samples = await thumbOnControlClock(page, castFrames, controls);
@@ -3248,7 +3269,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const evidence: unknown[] = [];
     const directions = [true, false, true, false];
     const landings: {inBlock: boolean; gap: number}[] = [];
+    let castNumber = 0;
     for (const on of directions) {
+      castNumber += 1;
       const cast = await startScreencast(page);
       // The page waits for the travel one frame into its curve, not for the
       // lift's scale, and blocks from a task queued in that frame. So the
@@ -3286,6 +3309,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
           castFrames.map(f => f.t),
           [block],
         ),
+        {cast: `cast ${castNumber}`},
       );
       // Only the frames the proof reads are decoded.
       const read = castFrames.filter(
@@ -3580,7 +3604,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const runs: BusyRun[] = [];
     const evidence: unknown[] = [];
     const landings: {inBlock: boolean; gap: number}[] = [];
+    let castNumber = 0;
     for (const on of [true, false]) {
+      castNumber += 1;
       const cast = await startScreencast(page);
       // The page waits for the track's own fade one frame into its curve, and
       // blocks from a task queued in that frame. A round trip from here would
@@ -3618,6 +3644,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
           castFrames.map(f => f.t),
           [block],
         ),
+        {cast: `cast ${castNumber}`},
       );
       // Only the frames the proof reads are decoded.
       const read = castFrames.filter(
