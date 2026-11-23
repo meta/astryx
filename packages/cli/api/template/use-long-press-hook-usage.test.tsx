@@ -9,7 +9,7 @@
  * button keeps every action reachable with a standard click.
  */
 
-import {act} from 'react';
+import {act, createElement, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import UseLongPressHookUsage from '../../assets/templates/blocks/components/Hooks/useLongPressHookUsage';
@@ -26,6 +26,26 @@ const style = vi.hoisted(() => ({
 vi.mock('@stylexjs/stylex', () => ({
   create: <T,>(styles: T) => styles,
   props: style.attribute,
+}));
+// Card renders through its own compiled styles, which the stub above does not
+// reach, so a plain stand-in shows the panel's style list on `data-style`.
+vi.mock('@astryxdesign/core/Card', () => ({
+  Card: ({
+    xstyle,
+    children,
+    role,
+    'aria-label': ariaLabel,
+  }: {
+    xstyle?: unknown;
+    children: ReactNode;
+    role?: string;
+    'aria-label'?: string;
+  }) =>
+    createElement(
+      'div',
+      {role, 'aria-label': ariaLabel, ...style.attribute(xstyle)},
+      children,
+    ),
 }));
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
