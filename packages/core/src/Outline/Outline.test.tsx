@@ -30,6 +30,23 @@ const items: OutlineItem[] = [
   {id: 'api', label: 'API', level: 3},
 ];
 
+describe('Outline item labels', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and leaves a right-to-left label in the page direction', () => {
+    render(
+      <div dir="rtl">
+        <Outline
+          items={[
+            {id: 'overview', label: 'Settings overview', level: 2},
+            {id: 'he', label: 'סקירת הגדרות', level: 2},
+          ]}
+        />
+      </div>,
+    );
+    expect(screen.getByText('Settings overview')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('סקירת הגדרות')).not.toHaveAttribute('dir');
+  });
+});
+
 describe('parseOutlineFromMarkdown', () => {
   it('extracts headings with generated ids', () => {
     expect(parseOutlineFromMarkdown('# Intro\n\n## Getting Started')).toEqual([

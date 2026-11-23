@@ -94,6 +94,24 @@ describe('TopNav', () => {
     expect(text.className).toContain('mobileBarHeadingText');
   });
 
+  it('gives a Latin plain-text mobile-bar heading its own direction, and leaves a right-to-left heading in the page direction', () => {
+    render(
+      <div dir="rtl">
+        <TopNavRenderContext value="mobile-bar">
+          <TopNav heading="Northwind Analytics" />
+        </TopNavRenderContext>
+        <TopNavRenderContext value="mobile-bar">
+          <TopNav heading="ניתוח נתונים" />
+        </TopNavRenderContext>
+      </div>,
+    );
+    expect(screen.getByText('Northwind Analytics')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+    expect(screen.getByText('ניתוח נתונים')).not.toHaveAttribute('dir');
+  });
+
   it('passes an element heading through unwrapped in mobile-bar mode', () => {
     render(
       <TopNavRenderContext value="mobile-bar">

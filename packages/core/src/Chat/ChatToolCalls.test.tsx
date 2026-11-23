@@ -2,7 +2,7 @@
 
 import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, within} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {Theme} from '../theme/Theme';
 import {defineTheme} from '../theme/defineTheme';
@@ -10,6 +10,56 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {ChatToolCalls} from './ChatToolCalls';
 
 describe('ChatToolCalls', () => {
+  const summary = () => within(screen.getByRole('button'));
+
+  it('gives a Latin name and target their own direction in a row, and leaves right-to-left text in the page direction', () => {
+    render(
+      <div dir="rtl">
+        <ChatToolCalls
+          defaultIsExpanded
+          calls={[
+            {name: 'read_file', target: 'src/index.ts', status: 'complete'},
+            {name: 'קריאה', target: 'קובץ', status: 'complete'},
+          ]}
+        />
+      </div>,
+    );
+    expect(screen.getByText('read_file')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('src/index.ts')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('קריאה')).not.toHaveAttribute('dir');
+    expect(screen.getByText('קובץ')).not.toHaveAttribute('dir');
+  });
+
+  it("gives the collapsed summary's Latin name and target their own direction, and leaves right-to-left text in the page direction", () => {
+    const {unmount} = render(
+      <div dir="rtl">
+        <ChatToolCalls
+          defaultIsExpanded={false}
+          calls={[
+            {name: 'a', status: 'complete'},
+            {name: 'read_file', target: 'src/index.ts', status: 'running'},
+          ]}
+        />
+      </div>,
+    );
+    expect(summary().getByText('read_file')).toHaveAttribute('dir', 'ltr');
+    expect(summary().getByText('src/index.ts')).toHaveAttribute('dir', 'ltr');
+    unmount();
+    render(
+      <div dir="rtl">
+        <ChatToolCalls
+          defaultIsExpanded={false}
+          calls={[
+            {name: 'a', status: 'complete'},
+            {name: 'קריאה', target: 'קובץ', status: 'running'},
+          ]}
+        />
+      </div>,
+    );
+    expect(summary().getByText('קריאה')).not.toHaveAttribute('dir');
+    expect(summary().getByText('קובץ')).not.toHaveAttribute('dir');
+  });
+
   it('renders nothing for empty calls', () => {
     const {container} = render(<ChatToolCalls calls={[]} />);
     expect(container.firstChild).toBeNull();
