@@ -190,8 +190,10 @@ const BenchmarkFile = memo(function BenchmarkFile({
       file={file}
       viewMode={viewMode}
       language={language}
-      isCollapsed={isCollapsed}
-      onCollapsedChange={next => onToggle(path, next)}
+      collapsible={{
+        isOpen: !isCollapsed,
+        onOpenChange: isOpen => onToggle(path, !isOpen),
+      }}
     />
   );
 });

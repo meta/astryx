@@ -198,9 +198,9 @@ describe('DiffViewer', () => {
 
   it('collapses and expands from the header', async () => {
     const user = userEvent.setup();
-    const onCollapsedChange = vi.fn();
+    const onOpenChange = vi.fn();
     const {container} = render(
-      <DiffViewer file={FILE} onCollapsedChange={onCollapsedChange} />,
+      <DiffViewer file={FILE} collapsible={{onOpenChange}} />,
     );
     const toggle = screen.getByRole('button', {name: 'src/greet.ts'});
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -209,12 +209,26 @@ describe('DiffViewer', () => {
     expect(container.querySelector(`[id="${regionId}"]`)).not.toBeNull();
 
     await user.click(toggle);
-    expect(onCollapsedChange).toHaveBeenLastCalledWith(true);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(container.querySelector('table')).toBeNull();
 
     await user.click(toggle);
-    expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(container.querySelector('table')).not.toBeNull();
+  });
+
+  it('starts collapsed with defaultIsOpen false', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <DiffViewer file={FILE} collapsible={{defaultIsOpen: false}} />,
+    );
+    const toggle = screen.getByRole('button', {name: 'src/greet.ts'});
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(container.querySelector('table')).toBeNull();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(container.querySelector('table')).not.toBeNull();
   });
 
@@ -245,28 +259,25 @@ describe('DiffViewer', () => {
     expect(glyph.getAttribute('class')).not.toBe(expanded.glyph);
   });
 
-  it('follows a controlled collapsed state', async () => {
+  it('follows a controlled open state', async () => {
     const user = userEvent.setup();
-    const onCollapsedChange = vi.fn();
+    const onOpenChange = vi.fn();
     const {container} = render(
-      <DiffViewer
-        file={FILE}
-        isCollapsed
-        onCollapsedChange={onCollapsedChange}
-      />,
+      <DiffViewer file={FILE} collapsible={{isOpen: false, onOpenChange}} />,
     );
     await user.click(screen.getByRole('button', {name: 'src/greet.ts'}));
-    expect(onCollapsedChange).toHaveBeenCalledWith(false);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
     // Still collapsed: the caller owns the state.
     expect(container.querySelector('table')).toBeNull();
   });
 
   it('renders the path as plain text when not collapsible', () => {
-    render(<DiffViewer file={FILE} isCollapsible={false} />);
+    const {container} = render(<DiffViewer file={FILE} collapsible={false} />);
     expect(
       screen.queryByRole('button', {name: 'src/greet.ts'}),
     ).not.toBeInTheDocument();
     expect(screen.getByText('src/greet.ts')).toBeInTheDocument();
+    expect(container.querySelector('table')).not.toBeNull();
   });
 
   it('renders annotation rows under the lines they belong to', () => {
