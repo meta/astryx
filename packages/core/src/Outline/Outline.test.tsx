@@ -31,7 +31,7 @@ const items: OutlineItem[] = [
 ];
 
 describe('Outline item labels', () => {
-  it('gives a Latin label its own direction, so a cut label keeps its start, and leaves a right-to-left label in the page direction', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
     render(
       <div dir="rtl">
         <Outline
@@ -43,7 +43,7 @@ describe('Outline item labels', () => {
       </div>,
     );
     expect(screen.getByText('Settings overview')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('סקירת הגדרות')).not.toHaveAttribute('dir');
+    expect(screen.getByText('סקירת הגדרות')).toHaveAttribute('dir', 'rtl');
   });
 });
 

@@ -31,7 +31,7 @@ import {resolveContextActions} from '../../tableContextMenu';
 import {createDevWarnings} from '../../../utils/devWarning';
 import {INTERACTIVE_SELECTORS} from '../../../hooks/useClickableContainer';
 import {
-  textDirectionProps,
+  cutTextDirection,
   truncatedTextStyles,
 } from '../../../utils/textDirection';
 import type {
@@ -256,7 +256,7 @@ function SortLabel({
   labelRef: (label: HTMLSpanElement | null) => void;
   children: ReactNode;
 }) {
-  const {dir} = textDirectionProps(children);
+  const {dir} = cutTextDirection(children);
   return (
     <span
       ref={labelRef}
