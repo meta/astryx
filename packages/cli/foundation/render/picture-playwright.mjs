@@ -5,20 +5,25 @@
  * one browser for all, run as its own process by the editor's browser
  * runner.
  * @input argv: the Playwright entry file, the batch (JSON: each job's page
- *   .html, picture .png and color mode), and a browser to use instead of
- *   Playwright's own
+ *   .html, picture .png, color mode and, optionally, its window: a
+ *   phone's), and a browser to use instead of Playwright's own
  * @output each picture at its path, and on stdout, each line led by its
  *   job's place and a tab: the fonts it drew its text in (font-probe.mjs),
  *   the text it draws cut short (cut-short.mjs), and PICTURE_TAKEN once it
  *   is whole; on failure, Playwright's error on stderr and exit code 1
- * @position run by `screenshot` in api/theme-edit/_preview.mjs through
- *   `runBrowser`, which gives it a temp folder of its own, its time bound and its stop
+ * @position run by `takePictures` in foundation/pictures/pictures.mjs
+ *   through `runBrowser`, which gives it a temp folder of its own, its time
+ *   bound and its stop
  */
 
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
+import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
+import {PART_BOXES_PREFIX, partBoxes} from './part-boxes.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
+  FIT_CELLS,
+  PLACE_LAYERS,
   PICTURE_PAGES_AT_ONCE,
   PICTURE_TAKEN,
   PICTURE_WINDOW,
@@ -29,7 +34,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [entry, batch, executablePath] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[], window?: {width: number, height: number, mobile?: boolean}}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -46,9 +51,11 @@ try {
     await eachAtOnce(
       jobs,
       PICTURE_PAGES_AT_ONCE,
-      async ({html, png, mode}, i) => {
+      async ({html, png, mode, boxes, window: view}, i) => {
+        // A job's `window` (a phone's) replaces the editor's window.
         const page = await browser.newPage({
-          viewport: {...PICTURE_WINDOW},
+          viewport: {width: (view ?? PICTURE_WINDOW).width, height: (view ?? PICTURE_WINDOW).height},
+          ...(view?.mobile ? {isMobile: true, hasTouch: true} : {}),
           colorScheme: mode === 'dark' ? 'dark' : 'light',
         });
         // The page loads its own files only: a remote stylesheet, font or
@@ -68,6 +75,10 @@ try {
         // Playwright's own animations: 'disabled' would put a looping one
         // back at its first frame, where a skeleton is faint.
         await page.evaluate(SETTLE_ANIMATIONS);
+        // Text a part cuts when narrow gets the room it needs (FIT_CELLS).
+        await page.evaluate(FIT_CELLS);
+        // An overlay drawn after its part sits under its opener (PLACE_LAYERS).
+        await page.evaluate(PLACE_LAYERS);
         // A whole-page picture makes the page see a resize; a part that
         // redraws on it (a responsive chart) would start over and be
         // pictured empty. The page's script is held while it is taken.
@@ -93,6 +104,22 @@ try {
         } catch {
           // Not measured.
         }
+        // The text the picture draws too faint to read, the same way.
+        try {
+          const faint = await page.evaluate(lowContrastText);
+          say(i, `${LOW_CONTRAST_PREFIX}${JSON.stringify(faint)}`);
+        } catch {
+          // Not measured.
+        }
+        // The size of each part the job names, for a check that compares
+        // two pictures' boxes.
+        if (boxes?.length)
+          try {
+            const sized = await page.evaluate(partBoxes, boxes);
+            say(i, `${PART_BOXES_PREFIX}${JSON.stringify(sized)}`);
+          } catch {
+            // Not measured.
+          }
         await page.close?.().catch(() => {});
         say(i, PICTURE_TAKEN);
       },

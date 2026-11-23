@@ -206,6 +206,21 @@ export function startsATermWordOf(t, text) {
 }
 
 /**
+ * Whether a term is one of a text's words, in any of its forms, however short
+ * against the whole text: `chat` in ChatComposer.
+ * @param {TermWords} t
+ * @param {string} text - The name or keyword as authored.
+ * @returns {boolean}
+ */
+export function isATermWordOf(t, text) {
+  const words = wordsOf(text);
+  for (let i = 0; i < words.length; i++) {
+    if (sameTermWord(t, words[i])) return true;
+  }
+  return false;
+}
+
+/**
  * Whether a term is one of a text's words, or the start of one, however
  * short against the whole text: `avata` in AvatarGroupInteractive.
  * @param {TermWords} t

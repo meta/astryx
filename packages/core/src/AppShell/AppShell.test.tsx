@@ -40,6 +40,7 @@ import {TopNav, TopNavHeading, TopNavItem} from '../TopNav';
 import {TextInput} from '../TextInput';
 import {useAppShellMobile} from './AppShellMobileContext';
 import {Theme, defineTheme} from '../theme';
+import {loadMobileNavDrawer} from '../MobileNav/MobileNavToggle';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -56,14 +57,37 @@ beforeAll(() => {
 });
 
 // Mock ResizeObserver
+// Records what each observer watches, so a test can send the notification a
+// browser sends after it lays those elements out.
+const resizeObservers = new Set<MockResizeObserver>();
 class MockResizeObserver {
   callback: ResizeObserverCallback;
+  targets = new Set<Element>();
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    resizeObservers.add(this);
   }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe(target: Element) {
+    this.targets.add(target);
+  }
+  unobserve(target: Element) {
+    this.targets.delete(target);
+  }
+  disconnect() {
+    this.targets.clear();
+    resizeObservers.delete(this);
+  }
+}
+
+function notifyResizeObservers() {
+  for (const resizeObserver of [...resizeObservers]) {
+    const entries = [...resizeObserver.targets].map(
+      target => ({target}) as ResizeObserverEntry,
+    );
+    if (entries.length > 0) {
+      resizeObserver.callback(entries, resizeObserver);
+    }
+  }
 }
 
 vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -126,6 +150,12 @@ afterEach(() => {
   act(() => {
     document.documentElement.removeAttribute('data-astryx-theme');
   });
+});
+
+// These cases test the drawer once it has loaded. MobileNavDrawer.test.tsx
+// tests the closed placeholder and the load itself.
+beforeAll(async () => {
+  await loadMobileNavDrawer();
 });
 
 describe('AppShell', () => {
@@ -1549,6 +1579,9 @@ describe('AppShell main keyboard access', () => {
 
   beforeEach(() => {
     frames = [];
+    // Earlier suites leave their own observer in place; these tests send the
+    // browser's notification through the recording one.
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -1598,6 +1631,10 @@ describe('AppShell main keyboard access', () => {
   }
 
   function remeasure() {
+    // The browser lays main out and notifies before the window resizes.
+    act(() => {
+      notifyResizeObservers();
+    });
     act(() => {
       window.dispatchEvent(new Event('resize'));
     });
@@ -1716,12 +1753,16 @@ describe('AppShell main keyboard access', () => {
     remeasure();
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
 
-    // Back in fill, main is measured as it attaches, with no other signal.
+    // Back in fill, main is measured at the first resize notification, with
+    // no other signal.
     rerender(
       <AppShell topNav={<div>Nav</div>}>
         <p>Long content</p>
       </AppShell>,
     );
+    act(() => {
+      notifyResizeObservers();
+    });
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '0');
   });
 

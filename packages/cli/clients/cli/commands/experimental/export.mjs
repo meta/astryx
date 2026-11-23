@@ -33,7 +33,7 @@ export function registerExperimentalExport(group, program) {
     fn: renderFn,
     action: async (
       /** @type {string | undefined} */ file,
-      /** @type {{out?: string, reverse?: boolean, title?: string, overwrite?: boolean}} */ options,
+      /** @type {{out?: string, reverse?: boolean, title?: string, overwrite?: boolean, pictures?: boolean}} */ options,
     ) => {
       const json = program.opts().json || false;
       /** @type {Awaited<ReturnType<typeof renderApi>>} */
@@ -45,6 +45,7 @@ export function registerExperimentalExport(group, program) {
           reverse: options.reverse ?? false,
           title: options.title,
           overwrite: options.overwrite ?? false,
+          pictures: options.pictures ?? false,
         });
       } catch (e) {
         const err = /** @type {import('../../../../api/error.mjs').AstryxError} */ (e);

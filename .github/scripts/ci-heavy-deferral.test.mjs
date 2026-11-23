@@ -208,6 +208,8 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     vi.useFakeTimers();
     const job = ci.jobs['heavy-ci'];
     expect(job.permissions.statuses).toBe('read');
+    // The review reads when the head was pushed from its check suites.
+    expect(job.permissions.checks).toBe('read');
     const gate = job.steps.find(item => item.id === 'gate');
     expect(gate.env.HEAD_SHA).toBe('${{ github.event.pull_request.head.sha }}');
     expect(job.steps.find(item => item.id === 'decide').env.REVIEW_PASSES).toBe(

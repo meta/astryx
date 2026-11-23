@@ -174,7 +174,7 @@ export interface RadioListProps extends Omit<
    */
   labelTooltip?: string;
   /**
-   * Test ID for the outer container.
+   * Test ID for the `role="radiogroup"` element.
    */
   'data-testid'?: string;
   /**

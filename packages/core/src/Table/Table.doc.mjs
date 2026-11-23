@@ -155,6 +155,13 @@ export const docs = {
         default: 'unset (a pinned cell shows its base)',
         private: true,
       },
+      {
+        name: '--_table-open-row-divider-width',
+        description:
+          "The divider width of an open expandable row's cells: 0, because the expansion panel below the row draws the divider, so the row and its panel read as one unit.",
+        default: "unset (a cell draws the theme's border width)",
+        private: true,
+      },
     ],
     derived: [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
     componentIcons: [
@@ -205,7 +212,7 @@ export const docs = {
       name: 'columns',
       type: 'TableColumn<T>[]',
       description:
-        "Column definitions: each column has {key, header, width?, align?, renderCell?}, and Table has no onRowClick prop: to open a row, put a Link or Button in its main cell's renderCell; on a phone, column floors wider than the screen scroll sideways, so for a phone-first page also render a List and switch with a StyleX `display` rule under `@media` (Best practices). The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.",
+        "Column definitions: each column has {key, header, width?, align?, renderCell?}, and Table has no onRowClick prop; the supported way to open a dialog, side panel or detail page from a row is a Link or Button in the row's main cell (renderCell) that opens it, and to show a row's details inline on a click anywhere on it, use useTableRowExpansion with hasRowClickExpansion; on a phone, column floors wider than the screen scroll sideways, so for a phone-first page also render one List with `hasDividers` (not a Card per item) and switch with a StyleX `display` rule under `@media` (Best practices). The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.",
     },
     {
       name: 'idKey',
@@ -328,7 +335,12 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs attention.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not put a control (a button, link, or input) in the header of a sortable column. The Sort control wraps the whole header, so the control nests inside it and assistive technology cannot operate it. Keep header controls on columns that are not sortable.',
       },
       {
         guidance: true,
@@ -363,17 +375,22 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Column floors that add up to more than the screen, from `minWidth`, `pixel()` or long tokens, make the table scroll sideways on a phone: the columns past the edge stay out of sight until the reader swipes.',
+          'When you pass `columns`, floors set with `minWidth` or `pixel()` are minimums and cell content never widens a column, except that a windowed table\u2019s numbering column fits its largest number (only children mode sizes columns to content). When the floors add up to more than the screen, the table scrolls sideways on a phone: the columns past the edge stay out of sight until the reader swipes.',
       },
       {
         guidance: true,
         description:
-          "For a page read mostly on phones, show the data as a List below a breakpoint instead of a wide table. Render both the List and the Table, and switch them with a StyleX `display` rule, for example `display: {default: 'none', '@media (max-width: 560px)': 'block'}` on the List\u2019s wrapper and the reverse on the Table\u2019s. CSS picks the layout in the first paint and without script; `useMediaQuery` picks it only after the page\u2019s script runs.",
+          "For a page read mostly on phones, show the data as a List below a breakpoint instead of a wide table. Render both the List and the Table, and switch them with a StyleX `display` rule, for example `display: {default: 'none', '@media (not (min-width: 768px))': 'block'}` on the List\u2019s wrapper and the reverse on the Table\u2019s, below the theme\u2019s `md` breakpoint (768px by default, or your theme\u2019s own `md`). CSS picks the layout in the first paint and without script; `useMediaQuery` picks it only after the page\u2019s script runs.",
       },
       {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Put a solid Badge (success, warning, error, info) in every cell of a column. The repeated fills compete with the data; pair a StatusDot with Text instead.',
       },
       {
         guidance: false,
@@ -441,7 +458,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Pair a StatusDot with Text, and keep a solid Badge for the rare cell that needs attention.',
       },
       {
         guidance: true,
@@ -456,22 +473,27 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Keep long tokens such as code identifiers whole. When you pass `columns`, a data-driven table sizes them from their definitions, not their content, so a token that does not fit its column breaks inside the token. Give that column proportional(1, {minWidth}) or pixel() wide enough for the token, or compose the table in children mode, whose columns follow their content.',
+          '让代码标识符等长词元保持完整。传入 `columns` 时，数据驱动的 Table 按列定义而不是内容确定列宽，所以放不下的词元会在词元内部断开。给该列设置足够宽的 proportional(1, {minWidth}) 或 pixel()，或者改用 children 模式组合 Table，其列宽随内容变化。',
       },
       {
         guidance: true,
         description:
-          'Column floors that add up to more than the screen, from `minWidth`, `pixel()` or long tokens, make the table scroll sideways on a phone: the columns past the edge stay out of sight until the reader swipes.',
+          '传入 `columns` 时，用 `minWidth` 或 `pixel()` 设置的列宽是最小值，单元格内容不会加宽列，只有开启窗口化的 Table 的行号列会加宽以容纳最后一个行号（只有 children 模式按内容确定列宽）。这些最小宽度加起来超过屏幕宽度时，Table 在手机上会横向滚动：超出边缘的列在读者滑动之前一直看不到。',
       },
       {
         guidance: true,
         description:
-          "For a page read mostly on phones, show the data as a List below a breakpoint instead of a wide table. Render both the List and the Table, and switch them with a StyleX `display` rule, for example `display: {default: 'none', '@media (max-width: 560px)': 'block'}` on the List\u2019s wrapper and the reverse on the Table\u2019s. CSS picks the layout in the first paint and without script; `useMediaQuery` picks it only after the page\u2019s script runs.",
+          "主要在手机上阅读的页面，在断点以下用 List 展示数据，而不是一张宽表格。同时渲染 List 和 Table，并用 StyleX `display` 规则切换：例如在 List 的外层容器上写 `display: {default: 'none', '@media (not (min-width: 768px))': 'block'}`，在 Table 的外层容器上写相反的规则，断点取主题的 `md` 断点（默认 768px；如果主题改了 `md`，用主题的值）。CSS 在首次绘制时、无需脚本就能选对布局；`useMediaQuery` 要等页面脚本运行后才会切换。",
       },
       {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Put a solid Badge (success, warning, error, info) in every cell of a column. The repeated fills compete with the data; pair a StatusDot with Text instead.',
       },
       {
         guidance: false,
@@ -486,7 +508,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
+    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Text, StatusDot, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
       'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
@@ -499,7 +521,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+          'Compose cells via renderCell w/ Text, StatusDot, Avatar. Pair StatusDot w/ Text; solid Badge only for the rare cell that needs attention.',
       },
       {
         guidance: true,
@@ -534,12 +556,17 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Floors (`minWidth`, `pixel()`, long tokens) wider than the screen = sideways scroll on a phone; columns past the edge hidden until a swipe.',
+          'With `columns`: floors (`minWidth`, `pixel()`) are minimums; content never widens a column, except a windowed numbering column (children mode sizes to content). Floors wider than the screen = sideways scroll on a phone; columns past the edge hidden until a swipe.',
       },
       {
         guidance: true,
         description:
-          'Phone-first page: below a breakpoint show the data as a List instead of the Table. Render both; switch w/ a StyleX `display` rule under `@media (max-width: …)` (CSS: right layout at first paint, no script). Not `useMediaQuery` (only after script).',
+          'Phone-first page: below a breakpoint show the data as a List instead of the Table. Render both; switch w/ a StyleX `display` rule under `@media (not (min-width: 768px))` (theme `md` breakpoint; CSS: right layout at first paint, no script). Not `useMediaQuery` (only after script).',
+      },
+      {
+        guidance: false,
+        description:
+          'Put a control (button, link, input) in a sortable column header: the Sort control wraps the header, so the nested control is inoperable for assistive technology. Keep header controls on unsortable columns.',
       },
       {
         guidance: false,

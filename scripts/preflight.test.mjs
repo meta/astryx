@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, it} from 'vitest';
+import {afterAll, describe, expect, it} from 'vitest';
 import {
   chromiumScopeFromCi,
   chromiumSpecs,
@@ -25,6 +25,7 @@ import {
   planChecks,
   runChecks,
   stopReason,
+  workspaceExports,
 } from './preflight.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -116,6 +117,47 @@ describe('planChecks', () => {
   });
 });
 
+describe('the interaction specs step', () => {
+  // Playwright's --project takes every value after it, so the selected
+  // spec files go before it.
+  const run = selection => {
+    const dir = tmp();
+    const checks = planChecks({
+      scope: classify([change('packages/core/src/Button/Button.tsx')]),
+      mergeBase: 'abc123',
+      changed: ['packages/core/src/Button/Button.tsx'],
+      browser: true,
+      tmp: dir,
+      chromiumScope: '^packages/',
+    });
+    const step = byId(checks, 'interaction specs');
+    const ran = [];
+    runChecks([step], {
+      exec: (argv, {stdout}) => {
+        if (argv.includes('select-chromium'))
+          fs.writeFileSync(argv[argv.indexOf('--out') + 1], selection);
+        ran.push(argv.join(' '));
+        if (stdout) fs.writeFileSync(stdout, '');
+        return 0;
+      },
+      now: () => 0,
+    });
+    return ran.at(-1);
+  };
+
+  it('passes the selected specs before --project chromium', () => {
+    expect(run('{"full": false, "specs": ["a.spec.ts", "b.spec.ts"]}')).toBe(
+      'pnpm test:interaction a.spec.ts b.spec.ts --project chromium',
+    );
+  });
+
+  it('runs every Chromium spec when the selection is full', () => {
+    expect(run('{"full": true, "reason": "shared"}')).toBe(
+      'pnpm test:interaction --project chromium',
+    );
+  });
+});
+
 describe('the formatting check', () => {
   it("passes Prettier only the TypeScript and Markdown files CI's step checks", () => {
     const lint = argvs(
@@ -132,9 +174,11 @@ describe('the formatting check', () => {
     );
   });
 
-  it('skips it on the spec lane, as CI does', () => {
+  it('checks a changed record on the spec lane, as CI does', () => {
     const lint = argvs(byId(plan(['docs/specs/AST-030/spec.md']), 'lint'));
-    expect(lint.join('\n')).not.toContain('prettier');
+    expect(lint).toContain(
+      'pnpm exec prettier --check --ignore-unknown docs/specs/AST-030/spec.md',
+    );
   });
 });
 
@@ -274,6 +318,35 @@ describe('runChecks', () => {
 });
 
 describe('--quick with workspace builds missing', () => {
+  // A workspace with nothing built, so the answers do not depend on whether
+  // this checkout ran `pnpm build`.
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-unbuilt-'));
+  const put = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(fixture, file)), {recursive: true});
+    fs.writeFileSync(path.join(fixture, file), text);
+  };
+  put(
+    'pnpm-workspace.yaml',
+    "packages:\n  - 'packages/*'\n  - 'packages/themes/*'\n  - 'internal/*'\n",
+  );
+  const pkg = (dir, name, exports) =>
+    put(`${dir}/package.json`, JSON.stringify({name, exports}));
+  pkg('packages/core', '@astryxdesign/core', {
+    '.': {types: './dist/index.d.ts'},
+    './utils': {types: './dist/utils/index.d.ts'},
+    './theme/tokens.stylex': {types: './dist/theme/tokens.stylex.d.ts'},
+  });
+  pkg('packages/lab', '@astryxdesign/lab', {'.': {types: './dist/index.d.ts'}});
+  pkg('packages/themes/neutral', '@astryxdesign/theme-neutral', {
+    './built': {types: './dist/neutral.d.ts'},
+  });
+  pkg('internal/a11y-spec', '@astryxdesign/a11y-spec', {'.': './src/index.ts'});
+  put('internal/a11y-spec/src/index.ts', '');
+  const declares = workspaceExports(fixture);
+  /** @param {string} text */
+  const unbuilt = text => missingBuilds(text, {declares});
+  afterAll(() => fs.rmSync(fixture, {recursive: true, force: true}));
+
   const missing = [
     "assets/templates/pages/a/page.tsx(9,28): error TS2307: Cannot find module '@astryxdesign/theme-neutral/built' or its corresponding type declarations.",
     "src/x.ts(1,1): error TS2307: Cannot find module '../../core/dist/index.js' or its corresponding type declarations.",
@@ -281,19 +354,19 @@ describe('--quick with workspace builds missing', () => {
   const real = `${missing}\nsrc/y.ts(3,5): error TS2322: Type 'string' is not assignable to type 'number'.`;
 
   it('names missing builds only when every error is a missing build output', () => {
-    expect(missingBuilds(missing)).toBe(
+    expect(unbuilt(missing)).toBe(
       'skipped, workspace builds missing; run `pnpm build` first',
     );
-    expect(missingBuilds(real)).toBeNull();
-    expect(missingBuilds('no errors here')).toBeNull();
+    expect(unbuilt(real)).toBeNull();
+    expect(unbuilt('no errors here')).toBeNull();
     expect(
-      missingBuilds(
+      unbuilt(
         "a.ts(1,1): error TS2307: Cannot find module 'left-pad' or its corresponding type declarations.",
       ),
     ).toBeNull();
     // A third-party package's dist path is not a workspace build.
     expect(
-      missingBuilds(
+      unbuilt(
         "a.ts(1,1): error TS2307: Cannot find module 'next/dist/shared/lib/image-config' or its corresponding type declarations.",
       ),
     ).toBeNull();
@@ -304,11 +377,136 @@ describe('--quick with workspace builds missing', () => {
       './dist/index.js',
     ])
       expect(
-        missingBuilds(
+        unbuilt(
           `a.ts(1,1): error TS2307: Cannot find module '${specifier}' or its corresponding type declarations.`,
         ),
         specifier,
       ).toBe('skipped, workspace builds missing; run `pnpm build` first');
+  });
+
+  const SKIPPED = 'skipped, workspace builds missing; run `pnpm build` first';
+  const unresolved = (file, specifier) =>
+    `${file}(1,1): error TS2307: Cannot find module '${specifier}' or its corresponding type declarations.`;
+  const implicitAny = (file, code = 'TS7006') =>
+    `${file}(2,3): error ${code}: Parameter 'v' implicitly has an 'any' type.`;
+
+  it('counts any unresolved workspace package import as a missing build, bare or by subpath', () => {
+    for (const specifier of [
+      '@astryxdesign/lab',
+      '@astryxdesign/core',
+      '@astryxdesign/core/utils',
+      '@astryxdesign/core/theme/tokens.stylex',
+    ])
+      expect(unbuilt(unresolved('src/a.ts', specifier)), specifier).toBe(
+        SKIPPED,
+      );
+    // A package outside the workspace scope is still a real error.
+    expect(unbuilt(unresolved('src/a.ts', '@astryx/other'))).toBeNull();
+  });
+
+  it('still fails on a workspace subpath no package exports, or an unknown package', () => {
+    // A typo that a build never fixes.
+    expect(
+      unbuilt(unresolved('src/a.ts', '@astryxdesign/core/utilz')),
+    ).toBeNull();
+    expect(
+      unbuilt(unresolved('src/a.ts', '@astryxdesign/no-such-package')),
+    ).toBeNull();
+  });
+
+  it('counts a declared entry only while the file it names for types is absent', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-exports-'));
+    const write = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), text);
+    };
+    try {
+      write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+      write(
+        'packages/core/package.json',
+        JSON.stringify({
+          name: '@astryxdesign/core',
+          exports: {
+            '.': {types: './dist/index.d.ts', default: './dist/index.js'},
+            './utils': {
+              import: {types: './dist/utils.d.ts', default: './dist/utils.js'},
+            },
+            './locales/*.json': './locales/*.json',
+            './source': './src/index.ts',
+          },
+        }),
+      );
+      write('packages/core/src/index.ts', '');
+      write('packages/core/locales/en.json', '{}');
+      let declares = workspaceExports(root);
+      expect(declares('@astryxdesign/core')).toBe(true);
+      expect(declares('@astryxdesign/core/utils')).toBe(true);
+      expect(declares('@astryxdesign/core/locales/pseudo.json')).toBe(true);
+      // The file exists, so a build cannot be what is missing.
+      expect(declares('@astryxdesign/core/locales/en.json')).toBe(false);
+      expect(declares('@astryxdesign/core/source')).toBe(false);
+      expect(declares('@astryxdesign/core/utilz')).toBe(false);
+      expect(declares('@astryxdesign/no-such-package')).toBe(false);
+      write('packages/core/dist/index.d.ts', '');
+      declares = workspaceExports(root);
+      expect(declares('@astryxdesign/core')).toBe(false);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('still fails on an import of a workspace package whose entry files exist', () => {
+    // a11y-spec's entries are source files, so no build clears this error; it
+    // is an import from a package the importer does not depend on.
+    expect(
+      unbuilt(
+        [
+          unresolved('src/Chart/a.ts', '@astryxdesign/a11y-spec'),
+          implicitAny('src/Chart/a.ts'),
+        ].join('\n'),
+      ),
+    ).toBeNull();
+    // An injected reader decides alone.
+    expect(
+      missingBuilds(unresolved('src/a.ts', '@astryxdesign/core/utilz'), {
+        declares: () => true,
+      }),
+    ).toBe(SKIPPED);
+  });
+
+  it('treats implicit-any errors in a file with an unresolved workspace import as follow-ons', () => {
+    expect(
+      unbuilt(
+        [
+          unresolved('src/Chart/webgl.ts', '@astryxdesign/core/utils'),
+          implicitAny('src/Chart/webgl.ts'),
+          implicitAny('src/Chart/webgl.ts', 'TS7031'),
+        ].join('\n'),
+      ),
+    ).toBe(SKIPPED);
+  });
+
+  it('still fails on an implicit-any error in a file with no unresolved workspace import', () => {
+    expect(
+      unbuilt(
+        [
+          unresolved('src/Chart/webgl.ts', '@astryxdesign/core/utils'),
+          implicitAny('src/Other/other.ts'),
+        ].join('\n'),
+      ),
+    ).toBeNull();
+    expect(unbuilt(implicitAny('src/Other/other.ts'))).toBeNull();
+  });
+
+  it('still fails on any other error beside the unresolved imports', () => {
+    expect(
+      unbuilt(
+        [
+          unresolved('src/a.ts', '@astryxdesign/lab'),
+          "src/a.ts(3,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+        ].join('\n'),
+      ),
+    ).toBeNull();
   });
 
   it('plans the quick typecheck to keep its output and judge it', () => {
@@ -333,7 +531,7 @@ describe('--quick with workspace builds missing', () => {
             argv: ['tsc'],
             stdout: log,
             tee: true,
-            skipWhen: missingBuilds,
+            skipWhen: unbuilt,
           },
         ],
       },
