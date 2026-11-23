@@ -15,23 +15,18 @@
  * mounted above them, and its refs hand focus to the new ones.
  */
 
-import {
-  createContext,
-  use,
-  useMemo,
-  type ComponentProps,
-  type ReactNode,
-} from 'react';
+import {use, useMemo, type ComponentProps, type ReactNode} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 
 type FocusHandoffRef<T extends HTMLElement> = (
   node: T | null,
 ) => (() => void) | undefined;
 
-const TokenFocusHandoffContext = createContext<{
+const TokenFocusHandoffContext = createSharedContext<{
   labelRef: FocusHandoffRef<HTMLSpanElement>;
   removeButtonRef: FocusHandoffRef<HTMLButtonElement>;
-} | null>(null);
+} | null>('TokenFocusHandoffContext', 1, null);
 TokenFocusHandoffContext.displayName = 'TokenFocusHandoffContext';
 
 /**
