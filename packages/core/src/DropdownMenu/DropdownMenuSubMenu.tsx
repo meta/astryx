@@ -521,17 +521,17 @@ function hideRegionedFlyoutsIn(menu: HTMLElement | null): void {
 const PARENT_SLOT = '\u0000';
 
 /**
- * "Back to <parent>" on one cut line in the template's own direction, with the
- * parent title in its own isolated span: a title in the other script than the
- * template keeps its own direction and punctuation order, and the words stay
- * in the template's order on either page.
+ * "Back to <parent>" on one line that ends in an ellipsis. The label takes
+ * the direction of its whole text, so a label that mixes scripts follows the
+ * page. The parent title sits in its own isolated span, so it keeps its own
+ * character order.
  */
 function backToLabel(template: string, parent: string): ReactNode {
   if (!template.includes(PARENT_SLOT)) {
     return template;
   }
   const [before, after = ''] = template.split(PARENT_SLOT);
-  const {dir} = cutTextDirection(before + after);
+  const {dir} = cutTextDirection(before + parent + after);
   return (
     <span
       dir={dir}

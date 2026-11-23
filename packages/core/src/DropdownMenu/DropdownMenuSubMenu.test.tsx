@@ -1643,6 +1643,33 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     expect(label?.textContent).toBe(`Back to ${title}`);
   });
 
+  it('lets a Back label with a mixed parent title follow a right-to-left page, as a mixed cut label does', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    const title = 'ملف PDF';
+    render(
+      <div dir="rtl">
+        <DropdownMenu button={{label: title}}>
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Folder A" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+      </div>,
+    );
+    const trigger = screen.getByRole('button', {name: new RegExp(title)});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    await user.click(shownRow('Move to'));
+    const back = await waitFor(() => shownRow(`Back to ${title}`));
+    const spans = Array.from(back.querySelectorAll('span'));
+    const label = spans.find(span => span.textContent === `Back to ${title}`);
+    const isolated = spans.find(span => span.textContent === title);
+    expect(label).not.toHaveAttribute('dir');
+    expect(isolated).not.toHaveAttribute('dir');
+  });
+
   it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
