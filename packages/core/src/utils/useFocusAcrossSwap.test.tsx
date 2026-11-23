@@ -15,8 +15,15 @@ import {
   useImperativeHandle,
   type Ref,
 } from 'react';
-import {act, render, renderHook, screen} from '@testing-library/react';
-import {describe, expect, it, vi} from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from '@testing-library/react';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {__resetInteractionModalityForTest} from './interactionModality';
 import {useFocusAcrossSwap} from './useFocusAcrossSwap';
 
 function getContentOwner(node: HTMLSpanElement) {
@@ -285,5 +292,46 @@ describe('useFocusAcrossSwap', () => {
     // A later replacement must not take focus from the earlier handoff.
     rerender(<OptionalContentExample hasContent revision={1} />);
     expect(screen.getByRole('button')).not.toHaveFocus();
+  });
+});
+
+describe('useFocusAcrossSwap focus ring', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The focus options the replacement row receives after `press` on the row. */
+  function restoreFocusAfter(press: (row: HTMLElement) => void) {
+    const forwardedRef = createRef<HTMLElement>();
+    const {rerender} = render(
+      <DirectExample isDisabled={false} forwardedRef={forwardedRef} />,
+    );
+    const row = screen.getByRole('button');
+    press(row);
+    row.focus();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    rerender(<DirectExample isDisabled forwardedRef={forwardedRef} />);
+    const replacement = screen.getByRole('button');
+    expect(replacement).not.toBe(row);
+    expect(replacement).toHaveFocus();
+    return focus.mock.calls.filter(
+      (_call, index) => focus.mock.contexts[index] === replacement,
+    );
+  }
+
+  it('restores focus without the keyboard ring after a pointer press', () => {
+    const calls = restoreFocusAfter(row => fireEvent.pointerDown(row));
+    expect(calls).toEqual([[{preventScroll: true, focusVisible: false}]]);
+  });
+
+  it('restores focus with the keyboard ring after a key press', () => {
+    const calls = restoreFocusAfter(row =>
+      fireEvent.keyDown(row, {key: 'ArrowDown'}),
+    );
+    expect(calls).toEqual([[{preventScroll: true}]]);
   });
 });

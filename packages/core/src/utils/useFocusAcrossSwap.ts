@@ -11,6 +11,9 @@
  *   replaces the element, so focus would fall to the page; spec:AST-085 FR4
  *   keeps it on the row.
  *
+ * The restored focus shows the keyboard ring only after keyboard input, as
+ * every programmatic focus move does.
+ *
  * The ref cleanup runs before the old node is removed, so `activeElement` is
  * still readable there. Only a different node replacing a removed one takes
  * focus, and only if focus has fallen to the page: React also detaches and
@@ -20,7 +23,8 @@
  */
 
 import {useCallback, useEffect, useRef, type Ref} from 'react';
-import {isFocusUnclaimed, ownsFocus} from './focusReturn';
+import {focusForLastInput, isFocusUnclaimed, ownsFocus} from './focusReturn';
+import {useInteractionModalityTracking} from './interactionModality';
 import {mergeRefs} from './mergeRefs';
 import {isHTMLElement} from './nodeType';
 
@@ -55,6 +59,7 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
     getFocusTarget?: (node: T) => HTMLElement | null;
   } = {},
 ): (node: T | null) => (() => void) | undefined {
+  const {ref: modalityRef} = useInteractionModalityTracking();
   const focusedNodeRef = useRef<{
     target: HTMLElement;
     source: T;
@@ -83,9 +88,9 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
         !wasHidden(outgoing.source) &&
         isFocusUnclaimed(target)
       ) {
-        target.focus({preventScroll: true});
+        focusForLastInput(target, {preventScroll: true});
       }
-      const release = mergeRefs<T>(ref)(node);
+      const release = mergeRefs<T>(ref, modalityRef)(node);
       return () => {
         const outgoing =
           target && ownsFocus(target) ? {target, source: node} : null;
@@ -102,6 +107,6 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
         release?.();
       };
     },
-    [ref, getFocusTarget],
+    [ref, getFocusTarget, modalityRef],
   );
 }
