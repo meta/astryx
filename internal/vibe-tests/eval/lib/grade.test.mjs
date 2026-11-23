@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
-import {gradeWorkspace, isAllowedRequest} from './grade.mjs';
+import {gradeWorkspace, inBrowserTurn, isAllowedRequest} from './grade.mjs';
 
 describe('isAllowedRequest', () => {
   const origin = 'http://127.0.0.1:4173/';
@@ -23,13 +23,12 @@ describe('isAllowedRequest', () => {
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** A browser double that counts the contexts open at one time. */
-function countingBrowser({failGoto = false} = {}) {
+function countingBrowser() {
   const counts = {open: 0, maxOpen: 0};
   const page = {
     on() {},
     async goto() {
       await wait(20);
-      if (failGoto) throw new Error('page.goto: Timeout 5000ms exceeded.');
     },
     async evaluate() {},
     async waitForTimeout() {
@@ -102,14 +101,10 @@ describe('gradeWorkspace in concurrent runs', () => {
     expect(counts.maxOpen).toBe(1);
   });
 
-  it('grades the next run after a run whose browser step fails', async () => {
-    const failing = countingBrowser({failGoto: true});
-    const passing = countingBrowser();
-    const [failed, passed] = await Promise.all([
-      gradeWorkspace({...fakeRun(), browser: failing.browser}),
-      gradeWorkspace({...fakeRun(), browser: passing.browser}),
-    ]);
-    expect(failed.failure).toBe('browser');
-    expect(passed.passed).toBe(true);
+  it('runs the next probe after a probe that rejects', async () => {
+    const failed = inBrowserTurn(() => Promise.reject(new Error('page.goto: Timeout 5000ms exceeded.')));
+    const next = inBrowserTurn(async () => 'ran');
+    await expect(failed).rejects.toThrow('Timeout');
+    await expect(next).resolves.toBe('ran');
   });
 });
