@@ -9,7 +9,7 @@ export const doc = {
   description:
     'Pairs useLongPress with a pointer contextmenu handler and an explicit Actions button on a document card, opening a contextual action panel positioned at the touch or cursor point.',
   isReady: true,
-  aspectRatio: 16 / 9,
+  aspectRatio: 4 / 3,
   keywords: [
     'context menu',
     'press and hold',

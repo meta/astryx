@@ -2,7 +2,13 @@
 
 'use client';
 
-import {useRef, useState, type KeyboardEvent, type MouseEvent} from 'react';
+import {
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type TouchEvent,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -51,6 +57,7 @@ const styles = stylex.create({
 export default function UseLongPressHookUsage() {
   const surfaceRef = useRef<HTMLElement>(null);
   const actionsButtonRef = useRef<HTMLButtonElement>(null);
+  const hasLongPressFiredRef = useRef(false);
   const [menu, setMenu] = useState<MenuPosition | null>(null);
   const [isPinned, setIsPinned] = useState(false);
   const [lastAction, setLastAction] = useState(
@@ -70,9 +77,24 @@ export default function UseLongPressHookUsage() {
   // cancel are the imperative API for custom pointer state machines.
   const {onTouchStart, onTouchMove, onTouchEnd, onTouchCancel} = useLongPress({
     onLongPress: point => {
+      hasLongPressFiredRef.current = true;
       openMenuAt(point, 'long press');
     },
   });
+
+  const handleTouchStart = (e: TouchEvent<HTMLElement>) => {
+    hasLongPressFiredRef.current = false;
+    onTouchStart(e);
+  };
+
+  // The finger that opened the panel lifts over it. Canceling that lift stops
+  // the browser's click, so the release does not run the action under it.
+  const handleTouchEnd = (e: TouchEvent<HTMLElement>) => {
+    if (hasLongPressFiredRef.current) {
+      e.preventDefault();
+    }
+    onTouchEnd(e);
+  };
 
   const closeMenu = () => {
     setMenu(null);
@@ -125,16 +147,16 @@ export default function UseLongPressHookUsage() {
         ref={surfaceRef}
         data-testid="long-press-surface"
         xstyle={styles.surface}
-        onTouchStart={onTouchStart}
+        onTouchStart={handleTouchStart}
         onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        onTouchEnd={handleTouchEnd}
         onTouchCancel={onTouchCancel}
         onContextMenu={handleContextMenu}
         onKeyDown={handleKeyDown}>
         <Card padding={4} xstyle={styles.card}>
           <VStack gap={2}>
-            <HStack gap={2} justify="between" vAlign="center">
-              <HStack gap={2} vAlign="center">
+            <HStack gap={2} justify="between" vAlign="center" wrap="wrap">
+              <HStack gap={2} vAlign="center" wrap="wrap">
                 <Heading level={3}>Q3 launch brief.pdf</Heading>
                 {isPinned && <Badge variant="success" label="Pinned" />}
               </HStack>

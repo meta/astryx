@@ -14,8 +14,29 @@ import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import UseLongPressHookUsage from '../../assets/templates/blocks/components/Hooks/useLongPressHookUsage';
 
+// The node project does not compile StyleX. The stub merges a style list into
+// one object on `data-style`, so a case reads the position the block applies.
+const style = vi.hoisted(() => ({
+  attribute: (...styles: unknown[]) => ({
+    'data-style': JSON.stringify(
+      Object.assign({}, ...styles.flat(Infinity).filter(Boolean)),
+    ),
+  }),
+}));
+vi.mock('@stylexjs/stylex', () => ({
+  create: <T,>(styles: T) => styles,
+  props: style.attribute,
+}));
+
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
+
+function panelPosition(menu: HTMLElement | null): {
+  left?: string;
+  top?: string;
+} {
+  return JSON.parse(menu?.getAttribute('data-style') ?? '{}');
+}
 
 let root: Root | null = null;
 let container: HTMLElement;
@@ -43,12 +64,13 @@ function dispatchTouch(
   target: HTMLElement,
   type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
   touches: Array<{clientX: number; clientY: number}> = [],
-): void {
+): Event {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.defineProperty(event, 'touches', {value: touches});
   act(() => {
     target.dispatchEvent(event);
   });
+  return event;
 }
 
 beforeEach(() => {
@@ -86,9 +108,10 @@ describe('useLongPressHookUsage example', () => {
     expect(menu?.getAttribute('aria-label')).toBe('Document actions');
     expect(menu?.textContent).toContain('Opened by long press at (120, 64)');
     // The panel's corner is the touch point, clamped to the surface.
-    const position = menu?.getAttribute('style') ?? '';
-    expect(position).toContain('clamp(0px, 120px, calc(100% - 180px))');
-    expect(position).toContain('clamp(0px, 64px, calc(100% - 200px))');
+    expect(panelPosition(menu)).toMatchObject({
+      left: 'clamp(0px, 120px, calc(100% - 180px))',
+      top: 'clamp(0px, 64px, calc(100% - 200px))',
+    });
 
     // Chromium fires a synthetic contextmenu with pointerType 'touch' after long press.
     const syntheticTouchContext = new MouseEvent('contextmenu', {
@@ -125,9 +148,31 @@ describe('useLongPressHookUsage example', () => {
     const menu = container.querySelector<HTMLElement>('[role="group"]');
     expect(menu?.textContent).toContain('Opened by long press at (290, 190)');
     // CSS clamps the corner so the whole panel stays inside the surface.
-    const position = menu?.getAttribute('style') ?? '';
-    expect(position).toContain('clamp(0px, 290px, calc(100% - 180px))');
-    expect(position).toContain('clamp(0px, 190px, calc(100% - 200px))');
+    expect(panelPosition(menu)).toMatchObject({
+      left: 'clamp(0px, 290px, calc(100% - 180px))',
+      top: 'clamp(0px, 190px, calc(100% - 200px))',
+    });
+  });
+
+  it('cancels the lift after a long press, so the release clicks nothing under the finger', () => {
+    renderExample();
+    const surface = getSurface();
+
+    dispatchTouch(surface, 'touchstart', [{clientX: 290, clientY: 190}]);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(container.querySelector('[role="group"]')).not.toBeNull();
+    // A canceled touchend stops the browser's click on what is under the finger.
+    expect(dispatchTouch(surface, 'touchend').defaultPrevented).toBe(true);
+    expect(container.querySelector('[role="group"]')).not.toBeNull();
+
+    // A tap that is not a long press lifts as usual.
+    dispatchTouch(surface, 'touchstart', [{clientX: 40, clientY: 50}]);
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(dispatchTouch(surface, 'touchend').defaultPrevented).toBe(false);
   });
 
   it('cancels the pending long press on early lift or movement beyond 10px', () => {
