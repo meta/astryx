@@ -11,7 +11,9 @@
  * @position Node coverage for the Firefox hover runs' report
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
@@ -150,5 +152,36 @@ describe('the known Firefox failures', () => {
     }
     const keys = known.map(failure => `${failure.file}\u0000${failure.title}`);
     expect(keys).toEqual([...new Set(keys)].sort((a, b) => a.localeCompare(b)));
+  });
+});
+
+describe('the report script', () => {
+  it("labels the report with ASTRYX_HEAD_SHA before GITHUB_SHA (a pull request's test merge commit)", () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'firefox-report-'));
+    const script = fileURLToPath(
+      new URL('./firefox-hover-report.mjs', import.meta.url),
+    );
+    const run = env => {
+      execFileSync(
+        process.execPath,
+        [script, path.join(out, 'none.json'), out],
+        {
+          env: {
+            ...process.env,
+            GITHUB_SHA: 'merge1',
+            ASTRYX_HEAD_SHA: '',
+            ...env,
+          },
+          stdio: 'ignore',
+        },
+      );
+      return fs.readFileSync(path.join(out, 'report.md'), 'utf8');
+    };
+    try {
+      expect(run({ASTRYX_HEAD_SHA: 'head1'})).toContain('for head1');
+      expect(run({})).toContain('for merge1');
+    } finally {
+      fs.rmSync(out, {recursive: true, force: true});
+    }
   });
 });

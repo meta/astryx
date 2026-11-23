@@ -707,6 +707,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
             cancelsTouchEnd: native?.pointerType === 'touch',
             touchIdentifier: touchIdentifierRef.current ?? undefined,
             touchTarget: touchTargetRef.current ?? undefined,
+            staysArmedAfterTouchEnd: true,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -740,6 +741,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
               cancelsTouchEnd: native?.pointerType === 'touch',
               touchIdentifier: touchIdentifierRef.current ?? undefined,
               touchTarget: touchTargetRef.current ?? undefined,
+              staysArmedAfterTouchEnd: true,
             });
           }
           if (effect.dismiss) {

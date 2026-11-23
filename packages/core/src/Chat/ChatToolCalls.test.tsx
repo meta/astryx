@@ -12,7 +12,7 @@ import {ChatToolCalls} from './ChatToolCalls';
 describe('ChatToolCalls', () => {
   const summary = () => within(screen.getByRole('button'));
 
-  it('gives a Latin name and target their own direction in a row, and leaves right-to-left text in the page direction', () => {
+  it('gives a Latin name and target their own direction in a row, and gives right-to-left text its own right-to-left direction', () => {
     render(
       <div dir="rtl">
         <ChatToolCalls
@@ -26,11 +26,11 @@ describe('ChatToolCalls', () => {
     );
     expect(screen.getByText('read_file')).toHaveAttribute('dir', 'ltr');
     expect(screen.getByText('src/index.ts')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('קריאה')).not.toHaveAttribute('dir');
-    expect(screen.getByText('קובץ')).not.toHaveAttribute('dir');
+    expect(screen.getByText('קריאה')).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText('קובץ')).toHaveAttribute('dir', 'rtl');
   });
 
-  it("gives the collapsed summary's Latin name and target their own direction, and leaves right-to-left text in the page direction", () => {
+  it("gives the collapsed summary's Latin name and target their own direction, and right-to-left text its own right-to-left direction", () => {
     const {unmount} = render(
       <div dir="rtl">
         <ChatToolCalls
@@ -56,8 +56,8 @@ describe('ChatToolCalls', () => {
         />
       </div>,
     );
-    expect(summary().getByText('קריאה')).not.toHaveAttribute('dir');
-    expect(summary().getByText('קובץ')).not.toHaveAttribute('dir');
+    expect(summary().getByText('קריאה')).toHaveAttribute('dir', 'rtl');
+    expect(summary().getByText('קובץ')).toHaveAttribute('dir', 'rtl');
   });
 
   it('renders nothing for empty calls', () => {
