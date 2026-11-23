@@ -667,9 +667,9 @@ export interface BaseTableProps<
    *
    * Setting this (or {@link rowCount}) opts the table into emitting
    * `aria-rowindex` on body rows and `aria-rowcount` on the `<table>`. Data
-   * rows are numbered from this value; the header row keeps native table
-   * semantics and is not assigned an ARIA row index (so the visible
-   * `useTableRowIndex` numbering and `aria-rowindex` stay in agreement).
+   * rows are numbered from this value. The header row counts as ARIA row 1,
+   * so the table adds the header row to every body row index. This value
+   * stays in body-row units.
    *
    * Applies to data-driven mode only (ignored in children mode).
    *
@@ -679,7 +679,9 @@ export interface BaseTableProps<
   /**
    * Total number of body rows across **all** pages/windows, used for
    * `aria-rowcount` on the `<table>`. Provide this for paginated data so
-   * assistive tech can announce "row X of Y" against the full dataset.
+   * assistive tech can announce "row X of Y" against the full dataset. This
+   * value excludes the header row. The table adds the header row to
+   * `aria-rowcount`.
    *
    * When omitted but {@link rowIndexStart} is set (a windowed view with an
    * unknown total, e.g. cursor pagination), `aria-rowcount` is set to `-1`

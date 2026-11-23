@@ -685,7 +685,6 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // `-1` (ARIA's "unknown count") for a windowed view with an unknown total.
   const ariaRowIndexingEnabled = rowIndexStart != null || rowCount != null;
   const firstRowAriaIndex = rowIndexStart ?? 1;
-  const ariaRowCount = ariaRowIndexingEnabled ? (rowCount ?? -1) : undefined;
 
   const RowComponent = TableRow as React.ComponentType<TableRowComponentProps>;
   const CellComponent =
@@ -714,6 +713,13 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // discards cannot leave another. No state or ref is written during render.
   const resolvedColumns = internByIdentity(transformedColumns);
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
+  // WAI-ARIA counts every row of the table, header rows included, while
+  // `rowIndexStart` and `rowCount` stay in body-row units.
+  const ariaRowCount = ariaRowIndexingEnabled
+    ? rowCount != null
+      ? rowCount + headerRowCount
+      : -1
+    : undefined;
   const {
     rows: rowsCapability,
     columns: columnsConfig,
@@ -1145,7 +1151,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                 <RowComponent
                   {...headerRowRenderProps.htmlProps}
                   aria-rowindex={
-                    windowPlan.isWindowed
+                    windowPlan.isWindowed || ariaRowIndexingEnabled
                       ? 1
                       : headerRowRenderProps.htmlProps['aria-rowindex']
                   }
@@ -1218,7 +1224,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
                               windowPlan.isWindowed
                                 ? headerRowCount + rowIndex + 1
                                 : ariaRowIndexingEnabled
-                                  ? firstRowAriaIndex + rowIndex
+                                  ? firstRowAriaIndex +
+                                    headerRowCount +
+                                    rowIndex
                                   : undefined
                             }
                           />
