@@ -357,27 +357,27 @@
   },
   "@astryx.powersearch.sheet.relativeDaysAgo": {
     "defaultMessage": "{count, number} {count, plural, one {day} other {days}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeDaysFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {day} other {days}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeWeeksAgo": {
     "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeWeeksFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeMonthsAgo": {
     "defaultMessage": "{count, number} {count, plural, one {month} other {months}} ago",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.relativeMonthsFromNow": {
     "defaultMessage": "{count, number} {count, plural, one {month} other {months}} from now",
-    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices."
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices, and a filter token shows the chosen one as its value."
   },
   "@astryx.powersearch.sheet.fieldOperator": {
     "defaultMessage": "{field} {operator}",
@@ -831,6 +831,10 @@
     "defaultMessage": "Link copied",
     "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after a successful copy. Sentence meaning \"Link copied\"; pairs with `markdownHeadingLinks.copy`."
   },
+  "@astryx.markdownHeadingLinks.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Accessible name on the Markdown heading copy button and text announced once to the assertive live region after the clipboard write fails; the name shows for ~1.5s. Pairs with `markdownHeadingLinks.copy` and `markdownHeadingLinks.copied`."
+  },
   "@astryx.markdownHeadingLinks.copy": {
     "defaultMessage": "Copy link to {heading}",
     "description": "Accessible name on the Markdown heading copy button in its default state. `{heading}` is the heading's plain text, or its generated id when the text is empty; pairs with `markdownHeadingLinks.copied`."
@@ -1026,6 +1030,10 @@
   "@astryx.slider.required": {
     "defaultMessage": "Required",
     "description": "Screen-reader-only text that a required Slider adds to its description. One word, neutral tone."
+  },
+  "@astryx.slider.rangeValue": {
+    "defaultMessage": "{start} – {end}",
+    "description": "Text value of a range slider beside its track: the two selected values. `{start}` and `{end}` are already formatted numbers. Example: `20 – 80`."
   },
   "@astryx.tabBar.badgedItem": {
     "defaultMessage": "{label}, {badge}",
@@ -1290,6 +1298,14 @@
   "@astryx.dateRangeInput.dialogLabel": {
     "defaultMessage": "Choose date range",
     "description": "Screen-reader-only accessible name for the popover dialog opened from a DateRangeInput. Imperative verb + noun phrase."
+  },
+  "@astryx.dateRangeInput.triggerLabel": {
+    "defaultMessage": "{label}: {value}",
+    "description": "Accessible name of the date range field trigger. `{label}` is the field label; `{value}` is the selected range, or the placeholder when nothing is selected. Example: `Travel dates: Mar 1 – Mar 10`."
+  },
+  "@astryx.dateRangeInput.rangeValue": {
+    "defaultMessage": "{start} – {end}",
+    "description": "The selected range on the date range field trigger. `{start}` and `{end}` are already formatted dates. Example: `Mar 1 – Mar 10`."
   },
   "@astryx.dateTimeInput.placeholder": {
     "defaultMessage": "Select a date",
@@ -1935,6 +1951,10 @@
     "defaultMessage": "Thumbnail",
     "description": "Generic screen-reader name for a Thumbnail (image preview) that has no `alt` or `label`. Last-resort fallback so the control is never nameless; prefer a real name via `alt` or `label`."
   },
+  "@astryx.thumbnail.nameWithAlt": {
+    "defaultMessage": "{label} — {alt}",
+    "description": "Accessible name of a thumbnail that has both a label and image alt text. `{label}` is the caller label, such as a file name; `{alt}` describes the image. Example: `Invoice.pdf — First page of the invoice`."
+  },
   "@astryx.timeInput.clearLabel": {
     "defaultMessage": "Clear {label}",
     "description": "Screen-reader-only label on the X that clears the value from a TimeInput. Example: `Clear Start time`."
@@ -1994,6 +2014,10 @@
   "@astryx.multiSelector.selectedCount": {
     "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
     "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
+  },
+  "@astryx.multiSelector.overflowCount": {
+    "defaultMessage": "+{count, number}",
+    "description": "How many more options are selected than a multi-select trigger shows: after its badges, and as the last item of its list of labels (`Red, Green, Blue, +2`). `{count}` is how many more. Translators may replace the plus sign."
   },
   "@astryx.multiSelector.createOption": {
     "defaultMessage": "Create \"{query}\"",

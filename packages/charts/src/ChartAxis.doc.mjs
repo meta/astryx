@@ -104,9 +104,9 @@ export const docs = {
     },
     {
       name: 'tickFormat',
-      type: '(value: unknown) => string',
+      type: '(value: unknown) => string | null | undefined',
       description:
-        'Formats each retained tick. When omitted, continuous scales use d3 formatting and band scales use their category strings.',
+        'Formats each retained tick. When omitted, or when it returns null or undefined, continuous scales use d3 formatting and band scales use their category strings.',
     },
     {
       name: 'truncate',

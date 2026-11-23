@@ -142,7 +142,9 @@ happens between pages.
 ### Focus and keyboard
 
 - **FR14 — The backdrop decides modality.** A step without a backdrop is a
-  non-modal popover (`spec:AST-116` FR12; `component:Tour` AR1). Tab moves
+  non-modal popover with the Tab and Escape behavior of
+  `tabBehavior: 'pageOrder'` (`spec:AST-116` FR12; `component:Tour` AR1). Tab
+  moves
   from its callout through the page in the browser's order, the anchor stays
   operable by keyboard and by pointer, and Escape ends the tour with
   `'escape'` only while focus is in the callout, or on or inside its anchor
@@ -321,6 +323,9 @@ boundary and Tab stays in the callout.
 
 Rejected: a non-modal step under a backdrop, which lets the keyboard reach
 controls that a pointer cannot.
+
+Amended: what this decision calls non-modal is a popover with
+`tabBehavior: 'pageOrder'` (`spec:AST-116` DEC-11).
 
 ## Open questions
 

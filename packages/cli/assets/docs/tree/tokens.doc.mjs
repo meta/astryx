@@ -39,7 +39,8 @@ export const docs = {
         "Control heights: --size-element-sm, --size-element-md, --size-element-lg",
         "Shadow: --shadow-low, --shadow-med, --shadow-high",
         "Type: --text-heading-1-size to --text-heading-6-size, --text-body-size, --font-weight-semibold",
-        "Charts: --color-data-categorical-<color> for each series, where <color> is blue, orange, purple, green, pink, cyan, red, teal, brown, or indigo, from dataVars in @astryxdesign/core/theme/dataTokens.stylex"
+        "Charts: --color-data-categorical-<color> for each series, where <color> is blue, orange, purple, green, pink, cyan, red, teal, brown, or indigo, from dataVars in @astryxdesign/core/theme/dataTokens.stylex; --color-data-neutral for labels and reference lines",
+        "Ordered scales and heatmaps: --color-data-<ramp>-1 (lightest) to --color-data-<ramp>-5 (darkest), where <ramp> is blue, shamrock, orange, pink, purple, red, teal, yellow, or gray"
       ]
     },
     {

@@ -15,6 +15,13 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {stageSharedTheme} from './_shared-source.mjs';
+import {
+  appCopyDescriptor,
+  appCopyMarkedNames,
+  carriesAppCopyMark,
+} from '../theme-edit/_marks.mjs';
+import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
+import {newerRecipe} from './palette/generate/newer-recipe.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -71,7 +78,12 @@ import {stripCopyrightHeader} from '../../foundation/text/copyright-header.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  isFolderOrLinkToOne,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
 import {forkFileNames, renamedEntry} from './_fork.mjs';
 import {
@@ -1384,6 +1396,49 @@ async function withThemeAppLock(cwd, fn) {
 }
 
 /**
+ * The ways forward from `theme add` of a slug no theme has: a near name (a
+ * typo) leads, as the command meant; then, unless a package was named, the
+ * doc on where a theme you wrote must live; then the other themes, nearest
+ * first.
+ * @param {string} slug
+ * @param {Array<any>} available
+ * @param {string} cwd
+ * @param {string | undefined} pkg
+ */
+function unknownThemeSuggestions(slug, available, cwd, pkg) {
+  const themes = themeCommandsFor('theme add', slug, available, cwd).map(
+    ({theme, name}) => ({
+      name,
+      reason:
+        theme.source === 'bundled'
+          ? 'bundled theme'
+          : theme.source === 'local'
+            ? 'local theme'
+            : `provided by ${theme.package}`,
+      distance: levenshteinDistance(
+        String(slug).toLowerCase(),
+        theme.slug.toLowerCase(),
+      ),
+    }),
+  );
+  const near = Math.min(3, Math.max(1, Math.floor(String(slug).length / 3)));
+  const lead = themes.filter(theme => theme.distance <= near);
+  const rest = themes.filter(theme => theme.distance > near);
+  const docs = pkg
+    ? []
+    : [
+        {
+          name: formatCliCommand(
+            'docs author-a-theme creating-a-custom-theme',
+            cwd,
+          ),
+          reason: `how a theme you wrote lives in ${LOCAL_THEME_ROOT}/ so theme add finds it`,
+        },
+      ];
+  return [...lead, ...docs, ...rest].map(({name, reason}) => ({name, reason}));
+}
+
+/**
  * Add one available built theme to the app record.
  * @param {string} slug
  * @param {{cwd?: string, package?: string, makeDefault?: boolean}} [options]
@@ -1405,19 +1460,12 @@ async function addThemeToAppLocked(slug, cwd, options) {
   const match = await findTheme(slug, {cwd, package: options.package});
   if (!match) {
     const available = await listAvailableThemes(cwd);
+    // A theme the person wrote and built elsewhere is no theme `theme add`
+    // finds by name: the message says where one must live to be added, and
+    // how a built theme is used without it.
     throw new AstryxError(
-      `Unknown theme "${slug}"${options.package ? ` in package "${options.package}"` : ''}.`,
-      themeCommandsFor('theme add', slug, available, cwd).map(
-        ({theme, name}) => ({
-          name,
-          reason:
-            theme.source === 'bundled'
-              ? 'bundled theme'
-              : theme.source === 'local'
-                ? 'local theme'
-                : `provided by ${theme.package}`,
-        }),
-      ),
+      `Unknown theme "${slug}"${options.package ? ` in package "${options.package}"` : ''}.${options.package ? '' : ` A theme you wrote is added by name from ${LOCAL_THEME_ROOT}/<slug>/, where a theme source sits beside a same-stem .doc.mjs descriptor; a theme you built elsewhere needs no add: import its built module and stylesheet in your app, as theme build prints with --detail full.`}`,
+      unknownThemeSuggestions(slug, available, cwd, options.package),
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }
@@ -1758,7 +1806,7 @@ function fileHash(file) {
  * The receipt of a shared theme's copy in `dir`, or null when the folder
  * holds none (a theme the app wrote or ejected itself).
  * @param {string} dir
- * @returns {{from: string, files: Record<string, string>, installed: string[], madeRoot?: boolean} | null}
+ * @returns {{from: string, files: Record<string, string>, installed: string[], madeRoot?: boolean, editor: {files: Record<string, string>, madeRoot?: boolean} | null} | null}
  */
 function readSharedReceipt(dir) {
   /** @type {any} */
@@ -1783,6 +1831,12 @@ function readSharedReceipt(dir) {
   // are ever read from it.
   return {
     ...receipt,
+    editor:
+      receipt.editor &&
+      typeof receipt.editor.files === 'object' &&
+      receipt.editor.files !== null
+        ? receipt.editor
+        : null,
     files: Object.fromEntries(
       Object.entries(receipt.files).filter(
         ([name, hash]) =>
@@ -1818,6 +1872,104 @@ function sharedFileIn(dir, name) {
   } catch {
     return null;
   }
+}
+
+/** The most a shared theme's editor settings file may hold. */
+const EDITOR_SETTINGS_MAX_BYTES = 1024 * 1024;
+
+/**
+ * Why a shared copy cannot stay the editor's, or null when it can: the
+ * editor rewrites only files under its own mark, so a copy file at a name it
+ * writes that lacks the mark (a copy the editor did not write) would stop
+ * its builds from updating the copy.
+ * @param {string} dir the staged theme folder
+ * @param {string} exportName the theme's export ("<camel>Theme")
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function sharedCopyUnmarked(dir, exportName, slug) {
+  // (The descriptor is written by the add itself, under the mark.)
+  for (const n of appCopyMarkedNames(exportName, slug).slice(1)) {
+    const at = path.join(dir, n);
+    if (fs.existsSync(at) && !carriesAppCopyMark(fs.readFileSync(at, 'utf-8')))
+      return `its copy's ${n} is not the one those working files build, so they would not keep the copy current; the theme's own build is added`;
+  }
+  return null;
+}
+
+/**
+ * Why a shared theme's editor state is not copied, or null. Its files are
+ * read as data and none of them runs: the settings file must parse as the
+ * editor's settings and pass the checks the editor gives a saved file; a
+ * palette made with a recipe this CLI does not make, or a theme source with
+ * edits of its own, is code, which the add does not copy.
+ * @param {string} dir the staged editor folder
+ * @param {string} slug
+ * @returns {Promise<string | null>}
+ */
+async function sharedEditorProblem(dir, slug) {
+  const file = path.join(dir, `${slug}.settings.json`);
+  if (fs.statSync(file).size > EDITOR_SETTINGS_MAX_BYTES)
+    return `its ${slug}.settings.json is larger than ${EDITOR_SETTINGS_MAX_BYTES / 1024} KB, more than a settings file holds`;
+  // (Loaded here, through the editor's adapter, which finds the built-in
+  // themes its settings reader checks against: the editor's settings module
+  // builds on this adapter.)
+  await import('../theme-edit/_adapter.mjs');
+  const {settingsJson, settingsProblem, themeSource} =
+    await import('../theme-edit/_settings.mjs');
+  const data = settingsJson(fs.readFileSync(file, 'utf-8'));
+  if (data === undefined) return `its ${slug}.settings.json is not JSON`;
+  const problem = settingsProblem(data);
+  // (The check's own words name experimental commands: the add says it in
+  // its own.)
+  if (problem)
+    return `its ${slug}.settings.json does not pass the settings checks`;
+  const paletteFile = path.join(dir, 'palette.config.json');
+  if (fs.existsSync(paletteFile)) {
+    /** @type {any} */
+    let palette;
+    try {
+      palette = JSON.parse(fs.readFileSync(paletteFile, 'utf-8'));
+    } catch {
+      return 'its palette.config.json is not JSON';
+    }
+    const recipe = palette?.recipe;
+    // (A recipe this CLI does not make keeps its palette in its palette
+    // module, which is code: theme add copies no code.)
+    if (recipe != null && !PALETTE_RECIPES.includes(recipe))
+      return newerRecipe(recipe)
+        ? `it was made with the palette recipe ${String(recipe)}, which a newer CLI makes and keeps in its palette module; theme add copies no code, so the theme's own build is added`
+        : `it was made with the palette recipe ${String(recipe)}, which no Astryx CLI makes`;
+  }
+  // (The theme's source with the sharer's own edits is code, which theme add
+  // does not copy; without it the editor's next build would drop them.)
+  const source = path.join(dir, `${slug}.theme.ts`);
+  if (
+    fs.existsSync(source) &&
+    fs.readFileSync(source, 'utf-8') !== themeSource(slug)
+  )
+    return `its ${slug}.theme.ts has edits of its own, which are code that theme add does not copy; the theme's own build is added`;
+  return null;
+}
+
+/**
+ * The editor state files a receipt names, kept only when inside the editor's
+ * folder for the theme (the receipt is a file anyone can edit), or null when
+ * the add kept no editor state.
+ * @param {{editor: {files: Record<string, string>} | null} | null} receipt
+ * @param {string} editorDir
+ * @returns {Record<string, string> | null}
+ */
+function sharedEditorFiles(receipt, editorDir) {
+  if (!receipt?.editor) return null;
+  return Object.fromEntries(
+    Object.entries(receipt.editor.files).filter(
+      ([name, hash]) =>
+        typeof hash === 'string' &&
+        !FOLDER_JUNK.has(path.basename(name)) &&
+        sharedFileIn(editorDir, name) != null,
+    ),
+  );
 }
 
 /**
@@ -1921,11 +2073,59 @@ export async function addSharedThemeToApp(source, options) {
       ? previous.madeRoot === true
       : !fs.existsSync(root);
     if (fs.existsSync(target)) {
-      const changed = previous ? changedSharedFiles(target, previous) : [];
+      let changed = previous ? changedSharedFiles(target, previous) : [];
+      // (A built file of the copy that holds exactly what the editor builds
+      // from the working files this add copied, still unchanged, and the
+      // editor's own theme source, is the editor's own, which a re-add
+      // replaces. The copy's descriptor and font stylesheet, and any change
+      // beside changed working files or an edited source, stop it.)
+      const working = sharedEditorFiles(
+        previous,
+        path.join(projectDir, 'themes', name),
+      );
+      const editorDir = path.join(projectDir, 'themes', name);
+      if (
+        changed.length &&
+        working &&
+        previous?.editor &&
+        // (Every working file the add copied is listed, there and
+        // unchanged: a deleted one is a change too.)
+        Object.keys(working).length > 0 &&
+        Object.keys(working).length ===
+          Object.keys(previous.editor.files).length &&
+        Object.keys(working).every(file =>
+          fs.existsSync(path.join(editorDir, file)),
+        ) &&
+        !changedSharedFiles(editorDir, {files: working}).length
+      ) {
+        await import('../theme-edit/_adapter.mjs');
+        const {themeSource, loadTheme, staleBuild} =
+          await import('../theme-edit/_settings.mjs');
+        const source = path.join(editorDir, `${name}.theme.ts`);
+        // (The theme's source is the builder's to edit: built files from an
+        // edited or deleted source are their work, never replaced. And the
+        // build compared with is the one made from these files now: the
+        // editor's own check of the build against its inputs.)
+        let current = /** @type {Set<string>} */ (new Set());
+        try {
+          if (
+            fs.existsSync(source) &&
+            fs.readFileSync(source, 'utf-8') === themeSource(name) &&
+            !staleBuild(projectDir, name, loadTheme(projectDir, name))
+          ) {
+            const {appCopyBuiltCurrent} =
+              await import('../theme-edit/_preview.mjs');
+            current = appCopyBuiltCurrent(projectDir, name);
+          }
+        } catch {
+          // A theme the editor cannot read leaves every change in place.
+        }
+        changed = changed.filter(file => !current.has(file));
+      }
       if (!previous || changed.length > 0) {
         throw new AstryxError(
           previous
-            ? `The ${name} theme is already in this app (${relFrom(cwd, target)}), added from a shared theme, and ${changed.join(', ')} changed since; adding it again would replace those changes, so nothing was written.`
+            ? `The ${name} theme is already in this app (${relFrom(cwd, target)}), added from a shared theme, and ${changed.join(', ')} changed since; adding it again would replace those changes, so nothing was written. To take the shared theme's files again, delete ${changed.length > 1 ? 'those files' : 'that file'} (or move your changes out of ${changed.length > 1 ? 'them' : 'it'}), then add it again.`
             : `A theme named "${name}" is already in this app (${relFrom(cwd, target)}), and theme add did not write it; adding this one would replace it, so nothing was written.`,
           previous
             ? undefined
@@ -1946,6 +2146,78 @@ export async function addSharedThemeToApp(source, options) {
     // on any failure.
     /** @type {string[]} */
     let added = [];
+    // The theme editor's saved state the bundle carries goes to the editor's
+    // folder for the theme (themes/<name>/), where `theme editor` opens it:
+    // only into a folder that is not there, or over this add's own earlier
+    // copy of it, unchanged and with nothing added; otherwise it is left
+    // out, and said.
+    const editorRoot = path.join(projectDir, 'themes');
+    const editorDir = path.join(editorRoot, name);
+    const previousEditor = sharedEditorFiles(previous, editorDir);
+    /** @type {string | null} */
+    let editorNote = null;
+    /** @type {'new' | 'replace' | null} */
+    let editorPlan = null;
+    const editorRefusal = !staged.editor
+      ? null
+      : staged.editor.dir == null
+        ? staged.editor.notCopied
+        : (sharedCopyUnmarked(
+            path.join(staged.root, name),
+            theme.exportName,
+            name,
+          ) ?? (await sharedEditorProblem(staged.editor.dir, name)));
+    // (A file where the editor's folder goes, a `themes` file at the app
+    // root, holds no folder to copy into: the theme is added without the
+    // editor state.)
+    // (A link counts as what it leads to; one that leads nowhere holds no
+    // folder either: the editor's own rule for its folder.)
+    const editorBlocked = staged.editor?.dir
+      ? [editorRoot, editorDir].find(at => {
+          try {
+            return (
+              fs.lstatSync(at, {throwIfNoEntry: false}) &&
+              !isFolderOrLinkToOne(at)
+            );
+          } catch {
+            // (A path that does not read holds no folder to copy into.)
+            return true;
+          }
+        })
+      : undefined;
+    if (staged.editor && editorRefusal) editorNote = editorRefusal;
+    else if (staged.editor && editorBlocked)
+      editorNote = `${relFrom(cwd, editorBlocked)} is not a folder; it is left as it is`;
+    else if (staged.editor) {
+      // (Read before anything is moved, so a folder it cannot read leaves
+      // the app as it was and adds the theme without the editor state.)
+      try {
+        // (A folder of only system files, `.DS_Store`, holds no editor state.)
+        if (folderIsEmpty(editorDir)) editorPlan = 'new';
+        else if (
+          previousEditor &&
+          changedSharedFiles(editorDir, {files: previousEditor}).length === 0 &&
+          filesUnder(editorDir).every(
+            file =>
+              file in previousEditor || FOLDER_JUNK.has(path.basename(file)),
+          )
+        )
+          editorPlan = 'replace';
+        else
+          editorNote = `${relFrom(cwd, editorDir)} already holds files that theme add did not write, or that changed since; it is left as it is`;
+      } catch {
+        editorNote = `${relFrom(cwd, editorDir)} could not be read; it is left as it is`;
+      }
+    }
+    const editorMadeRoot = previous?.editor
+      ? previous.editor.madeRoot === true
+      : !fs.existsSync(editorRoot);
+    /** @type {string | null} */
+    let editorAside = null;
+    let editorWriting = false;
+    // (A folder of only system files that is there before the add stays;
+    // a failed add takes out only what it copied into it.)
+    const editorDirWasThere = fs.existsSync(editorDir);
     /** @type {string | null} */
     let aside = null;
     if (previous) {
@@ -1964,13 +2236,70 @@ export async function addSharedThemeToApp(source, options) {
       fs.renameSync(target, aside);
     }
     /** @type {string[]} */
+    let editorFiles = [];
+    /** @type {string[]} */
     let newlyInstalled = [];
     try {
+      if (staged.editor?.dir && editorPlan) {
+        if (editorPlan === 'replace') {
+          const asideAt = path.join(
+            editorRoot,
+            `.astryx-shared-${name}-${process.pid}`,
+          );
+          fs.renameSync(editorDir, asideAt);
+          editorAside = asideAt;
+        }
+        editorWriting = true;
+        // (Data files only: the editor builds the theme's source when it
+        // opens the theme, so no shared code is copied or run.)
+        editorFiles = filesUnder(staged.editor.dir).filter(file =>
+          isDataFile(name, file),
+        );
+        for (const file of editorFiles) {
+          const to = path.join(editorDir, file);
+          fs.mkdirSync(path.dirname(to), {recursive: true});
+          fs.copyFileSync(path.join(staged.editor.dir, file), to);
+        }
+      }
       const {outputDir, files} = ejectThemeFiles(theme, {
         cwd,
         targetPath: relFrom(cwd, target),
         takenSlugs: new Set(),
       });
+      // With the editor's state beside it, the copy stays the editor's: its
+      // descriptor keeps the shared theme's display name and description,
+      // with the editor's mark and maintained: false, so the editor's next
+      // builds update it. That holds for state already there too, when it
+      // is this bundle's own (the same settings, as working files a remove
+      // kept are) and the bundle's state passes every check a copy would.
+      const settingsName = `${name}.settings.json`;
+      const sameText = (/** @type {string} */ a, /** @type {string} */ b) => {
+        try {
+          return fs.readFileSync(a, 'utf-8') === fs.readFileSync(b, 'utf-8');
+        } catch {
+          return false;
+        }
+      };
+      const stateThere =
+        !editorFiles.length &&
+        staged.editor?.dir != null &&
+        !editorRefusal &&
+        sameText(
+          path.join(editorDir, settingsName),
+          path.join(staged.editor.dir, settingsName),
+        );
+      if (editorFiles.length || stateThere) {
+        const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
+        if (doc) {
+          fs.writeFileSync(
+            path.join(target, doc),
+            appCopyDescriptor(name, {
+              displayName: theme.displayName,
+              description: theme.description,
+            }),
+          );
+        }
+      }
       const install = installSharedThemeNeeds(
         forkNeeds(outputDir, files, cwd),
         projectDir,
@@ -1994,6 +2323,28 @@ export async function addSharedThemeToApp(source, options) {
             ),
             installed,
             ...(madeRoot ? {madeRoot: true} : {}),
+            ...(editorFiles.length
+              ? {
+                  editor: {
+                    files: Object.fromEntries(
+                      editorFiles.map(file => [
+                        file,
+                        fileHash(path.join(editorDir, file)),
+                      ]),
+                    ),
+                    ...(editorMadeRoot ? {madeRoot: true} : {}),
+                  },
+                }
+              : previousEditor && Object.keys(previousEditor).length
+                ? {
+                    // (This add copied no editor state: the earlier add's
+                    // list stays, so remove still takes those files back.)
+                    editor: {
+                      files: previousEditor,
+                      ...(previous?.editor?.madeRoot ? {madeRoot: true} : {}),
+                    },
+                  }
+                : {}),
           },
           null,
           2,
@@ -2037,9 +2388,20 @@ export async function addSharedThemeToApp(source, options) {
         written: [
           ...files.map(file => relFrom(cwd, path.join(target, file))),
           relFrom(cwd, path.join(target, SHARED_RECEIPT)),
+          ...editorFiles.map(file => relFrom(cwd, path.join(editorDir, file))),
           relFrom(cwd, path.join(projectDir, result.data.modulePath)),
           ...lockfiles.map(file => relFrom(cwd, file)),
         ],
+        ...(staged.editor
+          ? {
+              workingFiles: {
+                from: staged.editor.folder,
+                outputDir: relFrom(cwd, editorDir),
+                files: editorFiles,
+                ...(editorNote ? {notCopied: editorNote} : {}),
+              },
+            }
+          : {}),
         config: {
           module: result.data.modulePath,
           default: name,
@@ -2056,6 +2418,18 @@ export async function addSharedThemeToApp(source, options) {
         }
         fs.rmSync(aside, {recursive: true, force: true});
       }
+      if (editorAside) {
+        // The system files beside the earlier copy (.DS_Store) stay.
+        for (const file of filesUnder(editorAside).filter(f =>
+          FOLDER_JUNK.has(path.basename(f)),
+        )) {
+          const to = path.join(editorDir, file);
+          if (fs.existsSync(to)) continue;
+          fs.mkdirSync(path.dirname(to), {recursive: true});
+          fs.renameSync(path.join(editorAside, file), to);
+        }
+        fs.rmSync(editorAside, {recursive: true, force: true});
+      }
       return result;
     } catch (error) {
       // The folder was made by this add (a taken one is refused above, and
@@ -2064,6 +2438,19 @@ export async function addSharedThemeToApp(source, options) {
       fs.rmSync(target, {recursive: true, force: true});
       if (aside) fs.renameSync(aside, target);
       if (madeRoot) removeEmptyFolder(root, {deep: true});
+      if (editorAside) {
+        fs.rmSync(editorDir, {recursive: true, force: true});
+        fs.renameSync(editorAside, editorDir);
+      } else if (editorWriting && editorDirWasThere && staged.editor?.dir) {
+        for (const file of filesUnder(staged.editor.dir))
+          fs.rmSync(path.join(editorDir, file), {force: true});
+        for (const entry of fs.readdirSync(editorDir, {withFileTypes: true}))
+          if (entry.isDirectory())
+            removeEmptyFolder(path.join(editorDir, entry.name), {deep: true});
+      } else if (editorWriting) {
+        fs.rmSync(editorDir, {recursive: true, force: true});
+        if (editorMadeRoot) removeEmptyFolder(editorRoot);
+      }
       // (An uninstall that fails is said with the error, never hidden.)
       if (newlyInstalled.length > 0) {
         const undone = runPackageManager(projectDir, 'remove', newlyInstalled);
@@ -2106,6 +2493,16 @@ function installLockfiles(projectDir) {
     if (dir === top || path.dirname(dir) === dir) return [];
   }
 }
+
+/**
+ * Whether a file of the editor's saved state is the data a shared theme's
+ * add copies: the theme's settings and its palette data, nothing else (no
+ * code, no undo history).
+ * @param {string} slug
+ * @param {string} file
+ */
+const isDataFile = (slug, file) =>
+  file === `${slug}.settings.json` || file === 'palette.config.json';
 
 /**
  * Every file under `dir`, relative to it, in `/` form.
@@ -2190,31 +2587,66 @@ function scriptsOff(pm, action, projectDir) {
 /**
  * Undo what `theme add` did for a shared theme whose record was just
  * removed: delete each file its copy wrote that still holds what it wrote,
- * keep (and name) any the builder changed, and uninstall the packages it
- * installed that no theme still in the record is owned by or imports. A
- * local theme with no
+ * and uninstall the packages it installed that no theme still in the record
+ * is owned by or imports. When a file of the copy changed, the whole copy
+ * stays instead, with its receipt and packages, and the changed files are
+ * named. A local theme with no
  * receipt (one the app wrote or ejected itself) is left as it is.
  * @param {string} projectDir
  * @param {string} slug
  * @param {Record<string, string>} remaining the record's other themes, slug to owner
- * @returns {{removed: string[], kept: string[], uninstalled: string[], uninstallError?: string} | null}
+ * @returns {{removed: string[], kept: string[], keptWorkingFiles?: string[], uninstalled: string[], uninstallError?: string} | null}
  */
 function undoSharedTheme(projectDir, slug, remaining) {
   const dir = path.join(projectDir, LOCAL_THEME_ROOT, slug);
   const receipt = readSharedReceipt(dir);
   if (!receipt) return null;
+  // (The copy's kept files are named inside the copy, as on main.)
   const kept = changedSharedFiles(dir, receipt);
   /** @type {string[]} */
   const removed = [];
-  for (const file of Object.keys(receipt.files)) {
-    if (kept.includes(file) || !fs.existsSync(path.join(dir, file))) continue;
-    fs.rmSync(path.join(dir, file), {force: true});
-    removed.push(relFrom(projectDir, path.join(dir, file)));
+  /** @type {string[]} */
+  const keptWorkingFiles = [];
+  // (A copy with a file kept stays whole, its receipt too, so the folder is
+  // a copy a re-add of the same theme recognizes, never a part of one.)
+  if (!kept.length) {
+    for (const file of Object.keys(receipt.files)) {
+      if (!fs.existsSync(path.join(dir, file))) continue;
+      fs.rmSync(path.join(dir, file), {force: true});
+      removed.push(relFrom(projectDir, path.join(dir, file)));
+    }
+    fs.rmSync(path.join(dir, SHARED_RECEIPT), {force: true});
+    removeEmptyFolder(dir, {deep: true});
   }
-  fs.rmSync(path.join(dir, SHARED_RECEIPT), {force: true});
-  removeEmptyFolder(dir, {deep: true});
   const root = path.join(projectDir, LOCAL_THEME_ROOT);
   if (receipt.madeRoot) removeEmptyFolder(root);
+  // The working files the add kept: its unchanged files go. When the folder
+  // holds files the add did not write (what the editor built there since),
+  // the theme is still edited there, so every copied file stays, named.
+  const editorDir = path.join(projectDir, 'themes', slug);
+  const editorFiles = sharedEditorFiles(receipt, editorDir);
+  if (editorFiles) {
+    const changedEditor = changedSharedFiles(editorDir, {files: editorFiles});
+    const builtSince =
+      fs.existsSync(editorDir) &&
+      filesUnder(editorDir).some(
+        file => !(file in editorFiles) && !FOLDER_JUNK.has(path.basename(file)),
+      );
+    for (const file of Object.keys(editorFiles)) {
+      const at = path.join(editorDir, file);
+      if (!fs.existsSync(at)) continue;
+      // (A copy kept whole keeps the working files that go with it.)
+      if (kept.length || builtSince || changedEditor.includes(file))
+        keptWorkingFiles.push(relFrom(projectDir, at));
+      else {
+        fs.rmSync(at, {force: true});
+        removed.push(relFrom(projectDir, at));
+      }
+    }
+    removeEmptyFolder(editorDir, {deep: true});
+    if (receipt.editor?.madeRoot)
+      removeEmptyFolder(path.join(projectDir, 'themes'));
+  }
   // A package a theme still in the record is owned by or imports stays,
   // and so does one the generated module or another local theme imports.
   /** @type {Set<string>} */
@@ -2248,13 +2680,18 @@ function undoSharedTheme(projectDir, slug, remaining) {
         importsOf(path.join(otherDir, file));
   }
   for (const file of themeModuleCandidates(projectDir)) importsOf(file);
-  const uninstall = receipt.installed.filter(name => !stillUsed.has(name));
-  if (uninstall.length === 0) return {removed, kept, uninstalled: []};
+  // (A copy kept whole still imports what the add installed: those stay.)
+  const uninstall = kept.length
+    ? []
+    : receipt.installed.filter(name => !stillUsed.has(name));
+  const more = keptWorkingFiles.length ? {keptWorkingFiles} : {};
+  if (uninstall.length === 0) return {removed, kept, ...more, uninstalled: []};
   const run = runPackageManager(projectDir, 'remove', uninstall);
-  if (run.ok) return {removed, kept, uninstalled: uninstall};
+  if (run.ok) return {removed, kept, ...more, uninstalled: uninstall};
   return {
     removed,
     kept,
+    ...more,
     uninstalled: [],
     uninstallError: `${run.command} failed: ${run.why}`,
   };
