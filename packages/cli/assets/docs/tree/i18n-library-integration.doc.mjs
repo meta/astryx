@@ -12,7 +12,11 @@ export const docs = {
   type: 'generic',
   name: 'i18n-library-integration',
   title: 'Library Integration',
-  placement: {parent: 'namespace:internationalization', slot: 'guides', order: 20},
+  placement: {
+    parent: 'namespace:internationalization',
+    slot: 'guides',
+    order: 20,
+  },
   category: 'guide',
   description:
     "Override astryx's default text, coexist with react-intl / i18next / next-intl / LinguiJS, or use astryx as your i18n library.",
@@ -31,7 +35,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Use `overrides` to change individual strings without shipping a full catalog. Overrides are keyed by locale and merged on top of the built-in and user-supplied catalogs.',
+          text: 'Use `overrides` to change individual Astryx strings across your app without shipping a full catalog. Overrides are keyed by locale and merged on top of the built-in and user-supplied catalogs.',
         },
         {
           type: 'code',
@@ -46,7 +50,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Overrides win over both bundled English and any `messages` catalog for the same key. Use them for brand voice tweaks or one-off wording changes.',
+          text: 'Overrides win over both bundled English and any `messages` catalog for the same key, for every component in the subtree. Use them to change Astryx wording across your app, such as brand voice. To reword one component, use its prop for that string when it has one, such as `placeholder`, `emptySearchText` or `cancelLabel`: the prop replaces the default in every locale, and other instances keep it.',
         },
       ],
     },

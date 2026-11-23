@@ -23,6 +23,7 @@ import stylexPlugin from '@stylexjs/babel-plugin';
 import ts from 'typescript';
 import {registryItemSchema, registrySchema} from 'shadcn/schema';
 import {stripCopyrightHeader} from '../../../packages/cli/foundation/text/copyright-header.mjs';
+import {fillTemplatePlaceholders} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {
   missingPublishedImport,
   packageExportsSpecifier,
@@ -317,17 +318,21 @@ export function withReplacementNote(description, replaced) {
 }
 
 /**
- * The entry with the source a copy starts from. An entry whose `source` is
- * already a copy, such as `template show` output, names its authored file in
- * `authoredSourcePath`; the install applies every copy replacement to that file.
+ * The entry with the source a copy starts from, its icon placeholders
+ * filled. An entry whose `source` is already a copy, such as `template show`
+ * output, names its authored file in `authoredSourcePath`; the install applies
+ * every other copy replacement to that file.
  * @template {{source: string, authoredSourcePath?: string | null}} T
  * @param {T} entry
  * @returns {T}
  */
 function withAuthoredSource(entry) {
-  return entry.authoredSourcePath
-    ? {...entry, source: fs.readFileSync(entry.authoredSourcePath, 'utf-8')}
-    : entry;
+  // An icon placeholder imports a private package, so the registry ships
+  // the library import a copy writes instead.
+  const source = entry.authoredSourcePath
+    ? fs.readFileSync(entry.authoredSourcePath, 'utf-8')
+    : entry.source;
+  return {...entry, source: fillTemplatePlaceholders(source).source};
 }
 
 function withCompositionReceipt(item, identity, sourceVersion) {

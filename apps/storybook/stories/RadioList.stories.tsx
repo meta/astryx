@@ -4,7 +4,10 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
 import {Link} from '@astryxdesign/core/Link';
+import {Button} from '@astryxdesign/core/Button';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 
 const meta: Meta<typeof RadioList> = {
   title: 'Core/RadioList',
@@ -286,17 +289,29 @@ export const WithEndContent: Story = {
         <RadioListItem
           label="Free"
           value="free"
-          endContent={<span style={{color: '#0D8626'}}>$0/mo</span>}
+          endContent={
+            <Text type="body" color="secondary">
+              $0/mo
+            </Text>
+          }
         />
         <RadioListItem
           label="Pro"
           value="pro"
-          endContent={<span style={{color: '#0064E0'}}>$9/mo</span>}
+          endContent={
+            <Text type="body" color="secondary">
+              $9/mo
+            </Text>
+          }
         />
         <RadioListItem
           label="Enterprise"
           value="enterprise"
-          endContent={<span style={{color: '#5B08D8'}}>Custom</span>}
+          endContent={
+            <Text type="body" color="secondary">
+              Custom
+            </Text>
+          }
         />
       </RadioList>
     );
@@ -438,6 +453,47 @@ export const PressedState: Story = {
           isDisabled
         />
       </RadioList>
+    );
+  },
+};
+
+function SelectionBetweenControls() {
+  const [value, setValue] = useState('sms');
+  return (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+      <Button label="Before" />
+      <RadioList
+        label="Notification preference"
+        value={value}
+        onChange={setValue}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+        <RadioListItem label="Push notification" value="push" />
+      </RadioList>
+      <Button label="After" />
+    </div>
+  );
+}
+
+/** One Tab stop: Tab from any radio leaves the group, however it got focus. */
+export const TabLeavesGroup: Story = {
+  render: () => <SelectionBetweenControls />,
+};
+
+/** The same group in the middle of an open modal Dialog. */
+export const TabLeavesGroupInDialog: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <Dialog isOpen={isOpen} onOpenChange={open => setIsOpen(open)}>
+        <DialogHeader
+          title="Notifications"
+          onOpenChange={open => setIsOpen(open)}
+        />
+        <div style={{padding: 24}}>
+          <SelectionBetweenControls />
+        </div>
+      </Dialog>
     );
   },
 };

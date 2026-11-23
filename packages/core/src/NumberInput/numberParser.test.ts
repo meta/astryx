@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {formatEditableNumber, parseLocaleNumber} from './numberParser';
+import {
+  formatEditableNumber,
+  formatPercent,
+  parseLocaleNumber,
+} from './numberParser';
 
 const NBSP = '\u00A0';
 const NARROW_NBSP = '\u202F';
@@ -218,5 +222,15 @@ describe('formatEditableNumber', () => {
         ).toBe(value);
       }
     }
+  });
+});
+
+describe('formatPercent', () => {
+  it('writes a whole percentage as the locale does', () => {
+    expect(formatPercent(0, 'en')).toBe('0%');
+    expect(formatPercent(45, 'en')).toBe('45%');
+    expect(formatPercent(100, 'en')).toBe('100%');
+    expect(formatPercent(45, 'tr')).toBe('%45');
+    expect(formatPercent(45, 'de')).toBe('45\u00A0%');
   });
 });

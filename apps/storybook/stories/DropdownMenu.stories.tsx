@@ -818,7 +818,7 @@ export const RTL: Story = {
     docs: {
       description: {
         story:
-          'In RTL contexts (CSS direction property or dir attribute) the menu right-edge-aligns to the trigger and grows toward the left — the logical mirror of the LTR default (#3389). Both direction mechanisms are shown; the popover inherits direction from the trigger subtree and the self-* position-area keywords mirror it in pure CSS.',
+          'In RTL contexts (CSS direction property or dir attribute) the menu right-edge-aligns to the trigger and grows toward the left — the logical mirror of the LTR default (#3389). Both direction mechanisms are shown; the popover inherits direction from the trigger subtree and the logical anchor() insets mirror it in pure CSS.',
       },
     },
   },
@@ -963,6 +963,37 @@ export const Submenu: Story = {
       description: {
         story:
           'DropdownMenuSubMenu is a single menu row that reveals a nested flyout of its own children. Hover or Right arrow (Left in RTL) / Enter / Space opens it and moves focus to its first item; Left arrow / Escape closes it and returns focus to the trigger. The flyout opens inline-end by default and auto-flips at the viewport edge.',
+      },
+    },
+  },
+};
+
+export const SubmenuRadioGroup: Story = {
+  render: function SubmenuRadioGroupStory({
+    presentation: _,
+    ...args
+  }: StoryArgs) {
+    const [sort, setSort] = useState('newest');
+    return (
+      <DropdownMenu button={{label: 'View'}} {...args}>
+        <DropdownMenuItem label="Refresh" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Sort by">
+          <DropdownMenuRadioGroup
+            value={sort}
+            onChange={setSort}
+            label="Sort by">
+            <DropdownMenuRadioItem value="newest" label="Newest" />
+            <DropdownMenuRadioItem value="oldest" label="Oldest" />
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A DropdownMenuRadioGroup inside a DropdownMenuSubMenu. Picking a value closes the whole menu.',
       },
     },
   },

@@ -101,19 +101,19 @@ import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {Rectangle, Scatter, ScatterChart, XAxis, YAxis, ZAxis} from 'recharts';
 import {
-  AudioLines,
-  Box,
-  CircleCheck,
-  CircleX,
-  Cpu,
-  FileText,
-  Image as ImageIcon,
-  Plus,
-  Sparkles,
-  Type,
-  Video,
-  Zap,
-} from 'lucide-react';
+  AudioIcon,
+  PackageIcon,
+  SuccessIcon,
+  ErrorIcon,
+  CpuIcon,
+  DocumentIcon,
+  ImageIcon,
+  AddIcon,
+  SparklesIcon,
+  TextIcon,
+  VideoIcon,
+  BoltIcon,
+} from '@astryxdesign/template-icons/lucide';
 
 // ============= CANDIDATES =============
 
@@ -133,11 +133,11 @@ const MODALITY_ORDER: Modality[] = [
 ];
 
 const MODALITY_ICON: Record<Modality, IconType> = {
-  text: Type,
+  text: TextIcon,
   image: ImageIcon,
-  audio: AudioLines,
-  video: Video,
-  document: FileText,
+  audio: AudioIcon,
+  video: VideoIcon,
+  document: DocumentIcon,
 };
 
 /**
@@ -382,10 +382,10 @@ const MODEL_BY_ID = new Map(MODELS.map(model => [model.id, model]));
  * distinction that does not exist.
  */
 const PROVIDER_ICON: Record<string, IconType> = {
-  Northwind: Cpu,
-  'Calder Labs': Sparkles,
-  Halcyon: Zap,
-  'Sable AI': Box,
+  Northwind: CpuIcon,
+  'Calder Labs': SparklesIcon,
+  Halcyon: BoltIcon,
+  'Sable AI': PackageIcon,
 };
 
 /**
@@ -1289,7 +1289,7 @@ export default function ModelComparisonTemplate() {
                   hAlign="end"
                   height={CELL_CONTENT_HEIGHT}>
                   <Icon
-                    icon={value ? CircleCheck : CircleX}
+                    icon={value ? SuccessIcon : ErrorIcon}
                     size="md"
                     color={value ? 'success' : 'error'}
                     label={value ? 'Supported' : 'Not supported'}
@@ -1423,7 +1423,7 @@ export default function ModelComparisonTemplate() {
             <Button
               label="Add model"
               variant="secondary"
-              icon={<Icon icon={Plus} size="sm" />}
+              icon={<Icon icon={AddIcon} size="sm" />}
               isDisabled={nextModel == null}
               onClick={addModel}
             />

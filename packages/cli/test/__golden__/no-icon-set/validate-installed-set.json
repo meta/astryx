@@ -190,6 +190,15 @@
             ]
           },
           {
+            "name": "alert",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "alignBottom",
             "description": "<text>",
             "words": [
@@ -303,6 +312,15 @@
             ]
           },
           {
+            "name": "article",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "attach",
             "description": "<text>",
             "words": [
@@ -325,6 +343,16 @@
             "name": "bank",
             "description": "<text>",
             "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "block",
+            "description": "<text>",
+            "words": [
+              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -403,10 +431,28 @@
             ]
           },
           {
+            "name": "channel",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "chart",
             "description": "<text>",
             "words": [
               "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "checklist",
+            "description": "<text>",
+            "words": [
               "<text>",
               "<text>",
               "<text>"
@@ -474,6 +520,14 @@
             ]
           },
           {
+            "name": "columnSettings",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "compose",
             "description": "<text>",
             "words": [
@@ -505,6 +559,14 @@
             ]
           },
           {
+            "name": "copyText",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "cornerRadius",
             "description": "<text>",
             "words": [
@@ -524,7 +586,25 @@
             ]
           },
           {
+            "name": "create",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "creditCard",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "currency",
             "description": "<text>",
             "words": [
               "<text>",
@@ -628,6 +708,17 @@
             "name": "emoji",
             "description": "<text>",
             "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "exitFullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
               "<text>",
               "<text>",
               "<text>",
@@ -743,6 +834,17 @@
             ]
           },
           {
+            "name": "fullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "gift",
             "description": "<text>",
             "words": [
@@ -798,6 +900,24 @@
             ]
           },
           {
+            "name": "groupRows",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "halftone",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "heart",
             "description": "<text>",
             "words": [
@@ -806,7 +926,25 @@
             ]
           },
           {
+            "name": "help",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "home",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "house",
             "description": "<text>",
             "words": [
               "<text>",
@@ -904,6 +1042,14 @@
             ]
           },
           {
+            "name": "listView",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "location",
             "description": "<text>",
             "words": [
@@ -940,6 +1086,15 @@
             ]
           },
           {
+            "name": "media",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "mention",
             "description": "<text>",
             "words": [
@@ -954,7 +1109,6 @@
             "name": "message",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>"
             ]
@@ -980,6 +1134,14 @@
           },
           {
             "name": "moon",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "moveToFolder",
             "description": "<text>",
             "words": [
               "<text>",
@@ -1090,6 +1252,14 @@
             ]
           },
           {
+            "name": "paste",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "pause",
             "description": "<text>",
             "words": [
@@ -1170,6 +1340,15 @@
             ]
           },
           {
+            "name": "review",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "rocket",
             "description": "<text>",
             "words": [
@@ -1211,6 +1390,15 @@
             "description": "<text>",
             "words": [
               "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "schedule",
+            "description": "<text>",
+            "words": [
               "<text>",
               "<text>",
               "<text>"
@@ -1272,6 +1460,15 @@
           },
           {
             "name": "shoppingBag",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "signal",
             "description": "<text>",
             "words": [
               "<text>",
@@ -1350,6 +1547,15 @@
             ]
           },
           {
+            "name": "team",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "text",
             "description": "<text>",
             "words": [
@@ -1362,8 +1568,6 @@
             "name": "textCase",
             "description": "<text>",
             "words": [
-              "<text>",
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1509,6 +1713,15 @@
             ]
           },
           {
+            "name": "verified",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "video",
             "description": "<text>",
             "words": [
@@ -1575,10 +1788,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 13
-            },
-            {
-              "definition": "<text>",
               "templates": 12
             },
             {
@@ -1611,7 +1820,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 11
+              "templates": 10
+            },
+            {
+              "definition": "<text>",
+              "templates": 10
             },
             {
               "definition": "<text>",
@@ -1620,6 +1833,14 @@
             {
               "definition": "<text>",
               "templates": 10
+            },
+            {
+              "definition": "<text>",
+              "templates": 9
+            },
+            {
+              "definition": "<text>",
+              "templates": 9
             },
             {
               "definition": "<text>",
@@ -1643,10 +1864,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 8
-            },
-            {
-              "definition": "<text>",
               "templates": 7
             },
             {
@@ -1703,18 +1920,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 6
-            },
-            {
-              "definition": "<text>",
-              "templates": 6
-            },
-            {
-              "definition": "<text>",
-              "templates": 6
-            },
-            {
-              "definition": "<text>",
               "templates": 5
             },
             {
@@ -1791,7 +1996,11 @@
             },
             {
               "definition": "<text>",
-              "templates": 3
+              "templates": 4
+            },
+            {
+              "definition": "<text>",
+              "templates": 4
             },
             {
               "definition": "<text>",
@@ -1855,14 +2064,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 3
-            },
-            {
-              "definition": "<text>",
-              "templates": 3
-            },
-            {
-              "definition": "<text>",
               "templates": 2
             },
             {
@@ -1968,6 +2169,98 @@
             {
               "definition": "<text>",
               "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 2
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
+            },
+            {
+              "definition": "<text>",
+              "templates": 1
             },
             {
               "definition": "<text>",

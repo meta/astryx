@@ -60,16 +60,28 @@ describe('what the changes did not reach', () => {
         await themeEditSet('b', 'accent', '#0b5cfe', {cwd})
       ).data;
       expect(set.missedOn).toEqual(made.missedOn);
-      // The text names the first parts.
+      // It brought none of them: the text does not repeat the missed line.
+      expect(set.missedNew).toBe(0);
       const r = await runCli(
         ['experimental', 'theme', 'editor', 'set', 'b', 'accent', '#0b5cff'],
         {cwd},
       );
-      expect(r.stdout).toMatch(
+      expect(r.stdout).not.toMatch(/^missed:/m);
+      // (A change that brings misses says them, and names where they are.)
+      await themeEditNew('b3', {cwd, like: 'butter'});
+      const first = await runCli(
+        ['experimental', 'theme', 'editor', 'set', 'b3', 'accent', '#0b5cff'],
+        {cwd},
+      );
+      expect(first.stdout).toMatch(
         new RegExp(
-          `^missed: \\d+ misses? on \\d+ parts? the theme's changes did not reach \\(${made.missedOn[0]}`,
+          `^missed: this change left \\d+ new miss(?:es)?; \\d+ misses? on \\d+ parts? the theme's changes did not reach \\(${made.missedOn[0]}`,
           'm',
         ),
+      );
+      // (It says what the line means and that nothing is broken.)
+      expect(first.stdout).toMatch(
+        /^missed: .*: each still shows the base theme's own look there\. Keep each one, or bring it in line with your changes: show lists the first misses with their lines/m,
       );
     },
     T,

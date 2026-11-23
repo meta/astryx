@@ -74,7 +74,7 @@ describe('icon-set guide', () => {
       '--new-definition',
       formatCliCommand('docs cli/experimental/icon-definitions'),
       'icon_builtin_definition_missing',
-      'Unmapped icon definitions (optional)',
+      'Unmapped icon meanings (optional)',
       'unmappedDefinitions',
       'icon_module_not_public',
       'icon_not_component',
@@ -90,6 +90,22 @@ describe('icon-set guide', () => {
       '`experimental.iconSet`',
       '`experimental.iconSets`',
       '`icon.newSet`',
+    ]) {
+      expect(stdout).toContain(phrase);
+    }
+  });
+
+  it('shows how to make a set inside an app, with no other package', async () => {
+    const {status, stdout} = await runCli(['docs', GUIDE, 'in-your-app']);
+    expect(status).toBe(0);
+    for (const phrase of [
+      'Make a set inside your app',
+      formatCliCommand(
+        'experimental icon new-set heroicons --from @heroicons/react/24/outline',
+      ),
+      formatCliCommand('experimental icon use heroicons'),
+      '"private": true',
+      "import {themeIcons} from 'app';",
     ]) {
       expect(stdout).toContain(phrase);
     }

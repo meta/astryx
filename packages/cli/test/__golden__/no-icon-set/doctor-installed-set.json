@@ -81,6 +81,18 @@
         "fix": "<text>"
       },
       {
+        "id": "button-actions",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 1"
+      },
+      {
+        "id": "core-props",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 0"
+      },
+      {
         "id": "agent-docs",
         "label": "<text>",
         "status": "info",
@@ -130,17 +142,17 @@
         "id": "docs-tree",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 203 32 13"
+        "message": "<text> 205 33 14"
       },
       {
         "id": "docs-progressive-disclosure",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 119 32"
+        "message": "<text> 121 32"
       }
     ],
     "summary": {
-      "pass": 11,
+      "pass": 13,
       "warn": 4,
       "fail": 0,
       "info": 5

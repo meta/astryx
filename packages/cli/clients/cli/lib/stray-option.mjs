@@ -54,7 +54,7 @@ function pathOf(cmd) {
  * @param {(option: OptionLike) => boolean} keep
  * @returns {OptionLike[]}
  */
-function optionsInReach(cmd, keep) {
+export function optionsInReach(cmd, keep) {
   /** @type {OptionLike[]} */
   const options = [];
   for (
@@ -284,12 +284,32 @@ function runAsMeant(cmd, path, stray, message, words, offered) {
  * @type {Record<string, Record<string, string>>}
  */
 const REMOVED_OPTIONS = {
-  'experimental render': {
+  'experimental export': {
     '--static': "--static is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
     '--interactive':
       "--interactive is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
   },
 };
+
+/**
+ * Options that answer a question in other tools. No Astryx command asks one,
+ * so the run without the option is the run as meant.
+ */
+const CONFIRM_OPTIONS = new Set([
+  '--yes',
+  '-y',
+  '--assume-yes',
+  '--non-interactive',
+  '--no-interactive',
+  '--no-input',
+]);
+
+/**
+ * The option that lets a command write, on a command that only previews
+ * without it. A `--yes` there means "go ahead", so the answer names it.
+ * @type {Record<string, string>}
+ */
+const APPROVAL_OPTIONS = {upgrade: '--apply'};
 
 /**
  * The answer to an option a command does not take.
@@ -328,6 +348,38 @@ export function strayOptionAnswer(
         },
       ],
     };
+  }
+  if (CONFIRM_OPTIONS.has(stray.split('=')[0])) {
+    const flag = stray.split('=')[0];
+    const run = words.filter(word => word.split('=')[0] !== flag);
+    const line = (/** @type {string[]} */ w) =>
+      formatCliCommand(w.map(x => quoteCommandArgument(x)).join(' '));
+    const approval = APPROVAL_OPTIONS[path.join(' ')];
+    // A listing run writes nothing, so it takes no approval.
+    const approved =
+      approval && !run.includes(approval) && !run.includes('--list')
+        ? [...run, approval]
+        : null;
+    if (
+      approved &&
+      runParses(rootOf(cmd), approved) &&
+      runParses(rootOf(cmd), run)
+    )
+      return {
+        message: `${flag} is not needed: Astryx commands never ask questions. ${path.join(' ')} writes only with ${approval}.`,
+        suggestions: [
+          {name: line(approved), reason: 'do this instead: write the changes'},
+          {
+            name: line(run),
+            reason: `without ${approval}: see what it would change first`,
+          },
+        ],
+      };
+    if (runParses(rootOf(cmd), run))
+      return {
+        message: `${flag} is not needed: Astryx commands never ask questions. Drop it and run the command again.`,
+        suggestions: [{name: line(run), reason: 'do this instead'}],
+      };
   }
   const json = path.length === 0 || jsonSupported(path.join(' '));
   const offered = optionsInReach(

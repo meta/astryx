@@ -18,6 +18,17 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'shard-watchdog-'));
 afterAll(() => fs.rmSync(scratch, {recursive: true, force: true}));
 
 /**
+ * The watchdog's settings and its times file come only from each case: a Node
+ * leg exports them for its own run, and its times file records that leg's
+ * files, so a fixture run must not take any of them over.
+ */
+function withoutShardSettings() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => !k.startsWith('VITEST_SHARD_')),
+  );
+}
+
+/**
  * @param {string[]} files
  * @param {Record<string, string>} env
  * @param {{timeout?: number}} [options]
@@ -38,7 +49,7 @@ function runFixtures(files, env, {timeout = 60_000} = {}) {
       cwd: root,
       encoding: 'utf8',
       timeout,
-      env: {...process.env, CI: 'true', ...env},
+      env: {...withoutShardSettings(), CI: 'true', ...env},
     },
   );
 }
@@ -94,6 +105,33 @@ describe('the Node shard watchdog', () => {
     expect(out).toContain('::warning title=Node shard near its limit::');
   }, 60_000);
 
+  it('fails a stuck run whatever the leg running these tests sets for its own watchdog', () => {
+    const saved = {
+      name: process.env.VITEST_SHARD_WATCHDOG_NAME_ONLY,
+      seconds: process.env.VITEST_SHARD_WATCHDOG_SECONDS,
+    };
+    // As Main's Node step sets them for its own leg.
+    process.env.VITEST_SHARD_WATCHDOG_NAME_ONLY = '1';
+    process.env.VITEST_SHARD_WATCHDOG_SECONDS = '600';
+    try {
+      const result = runFixtures(['hang-import.fixture.mjs'], {
+        VITEST_SHARD_WATCHDOG_SECONDS: '4',
+      });
+      const out = result.stdout + result.stderr;
+      expect(result.status, out).toBe(1);
+      expect(out).toContain(
+        '::error title=Node shard stuck::shard stuck in scripts/fixtures/shard-watchdog/hang-import.fixture.mjs',
+      );
+    } finally {
+      for (const [k, v] of /** @type {const} */ ([
+        ['VITEST_SHARD_WATCHDOG_NAME_ONLY', saved.name],
+        ['VITEST_SHARD_WATCHDOG_SECONDS', saved.seconds],
+      ]))
+        if (v == null) delete process.env[k];
+        else process.env[k] = v;
+    }
+  }, 60_000);
+
   it('names a file that hangs while it loads, before any test starts', () => {
     const result = runFixtures(['hang-import.fixture.mjs'], {
       VITEST_SHARD_WATCHDOG_SECONDS: '4',
@@ -135,5 +173,24 @@ describe('the Node shard watchdog', () => {
     ];
     // It spent 1.5 s loading and well under a second in its test.
     expect(seconds).toBeLessThan(1);
+  }, 60_000);
+
+  it('leaves the times file of the leg running these tests untouched', () => {
+    const legTimes = path.join(scratch, 'leg-times.json');
+    const recorded = '{"packages/core/src/Button/Button.test.ts": 1.25}\n';
+    fs.writeFileSync(legTimes, recorded);
+    const saved = process.env.VITEST_SHARD_TIMES_FILE;
+    // As a Node leg sets it for its own files.
+    process.env.VITEST_SHARD_TIMES_FILE = legTimes;
+    try {
+      const result = runFixtures(['quick.fixture.mjs'], {
+        VITEST_SHARD_WATCHDOG_SECONDS: '60',
+      });
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(fs.readFileSync(legTimes, 'utf8')).toBe(recorded);
+    } finally {
+      if (saved == null) delete process.env.VITEST_SHARD_TIMES_FILE;
+      else process.env.VITEST_SHARD_TIMES_FILE = saved;
+    }
   }, 60_000);
 });

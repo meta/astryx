@@ -11,7 +11,9 @@
  *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
  *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
  *   group's box from its edge members, and shrinks a side the members do not
- *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on
+ *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on.
+ *   `screenScale` reads how far transforms scale a box, and `layoutSize` a
+ *   box's untransformed size (hooks/useOverflow.ts uses both)
  * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
  *   Groups that measure their actions at press start pass `resolveHitTarget`;
  *   a standalone control writes `watchHitArea`'s insets to an invisible
@@ -349,7 +351,7 @@ interface Watch {
     toLayout: (rect: HitRect) => HitRect,
   ) => HitInsets;
   readonly checkAtPress: boolean;
-  readonly onInsets: (insets: HitInsets) => void;
+  readonly onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void;
   isVisible: boolean;
   last: HitInsets;
   /** The ancestor animations the watch waits out before a pass reads it. */
@@ -413,12 +415,16 @@ function sameInsets(a: HitInsets, b: HitInsets): boolean {
   );
 }
 
-function deliver(watch: Watch, insets: HitInsets): void {
+function deliver(
+  watch: Watch,
+  insets: HitInsets,
+  readSettling: SettlingRead,
+): void {
   if (sameInsets(watch.last, insets)) {
     return;
   }
   watch.last = insets;
-  watch.onInsets(insets);
+  watch.onInsets(insets, readSettling);
 }
 
 /** Whether `candidate` is the control itself, or part of it. */
@@ -448,14 +454,64 @@ function plainRect(element: Element): HitRect {
 /** A box that the transforms around it leave at its layout size. */
 const UNSCALED = {x: 1, y: 1} as const;
 
+/**
+ * What `screenScale` reads as unscaled. `pixels`: a box within this many
+ * pixels of its whole-pixel offset size, read without a style lookup (0 turns
+ * the shortcut off). `ratio`: a scale less than this far from 1.
+ */
+export interface ScreenScaleTolerance {
+  readonly pixels: number;
+  readonly ratio: number;
+}
+
 /** One axis of a box's scale on screen: its client size over its layout size. */
-function axisScale(onScreen: number, layout: number): number {
+function axisScale(onScreen: number, layout: number, ratio: number): number {
   if (!(layout > 0) || !(onScreen > 0)) {
     return 1;
   }
   const scale = onScreen / layout;
-  // Within rounding of 1 the box is at its layout size: no change to the rects.
-  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+  // Within the tolerance of 1 the box is at its layout size.
+  return Math.abs(scale - 1) < ratio ? 1 : scale;
+}
+
+/**
+ * Hit areas: within a pixel of its layout size a box reads as unscaled, which
+ * bounds the inset error at about a pixel and skips a style lookup.
+ */
+const HIT_AREA_TOLERANCE: ScreenScaleTolerance = {pixels: 1, ratio: 1e-3};
+
+/**
+ * A box's border-box size in layout px, from its computed style. Transforms
+ * do not change it, and it keeps the sub-pixel size a scaled rect loses to
+ * the browser's rounding. Null when the style has no pixel width.
+ */
+export function layoutSize(
+  element: Element,
+): {width: number; height: number} | null {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style == null || !style.width.endsWith('px')) {
+    return null;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const isContentBox = style.boxSizing !== 'border-box';
+  return {
+    width:
+      px(style.width) +
+      (isContentBox
+        ? px(style.paddingLeft) +
+          px(style.paddingRight) +
+          px(style.borderLeftWidth) +
+          px(style.borderRightWidth)
+        : 0),
+    height:
+      px(style.height) +
+      (isContentBox
+        ? px(style.paddingTop) +
+          px(style.paddingBottom) +
+          px(style.borderTopWidth) +
+          px(style.borderBottomWidth)
+        : 0),
+  };
 }
 
 /**
@@ -464,9 +520,10 @@ function axisScale(onScreen: number, layout: number): number {
  * the layout box keeps the size the layer settles at. Only a scale is
  * expected: a rotated or skewed box would read as a larger scale.
  */
-function screenScale(
+export function screenScale(
   element: Element,
   onScreen: HitRect,
+  tolerance: ScreenScaleTolerance,
 ): {x: number; y: number} {
   // The offset size is the layout size in whole pixels, unaffected by
   // transforms, and costs no style resolution. A box with none, such as an SVG
@@ -477,40 +534,24 @@ function screenScale(
   if (offsetWidth === 0 || offsetHeight === 0) {
     return UNSCALED;
   }
-  // Within a pixel of its layout size the box reads as unscaled, which bounds
-  // the inset error at about a pixel. Only a box that a transform shrinks or
-  // grows reads its exact size from the computed style.
+  // Within `tolerance.pixels` of its layout size the box reads as unscaled.
+  // Any other box reads its exact size from the computed style.
   if (
-    Math.abs(onScreen.right - onScreen.left - offsetWidth) <= 1 &&
-    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= 1
+    tolerance.pixels > 0 &&
+    Math.abs(onScreen.right - onScreen.left - offsetWidth) <=
+      tolerance.pixels &&
+    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= tolerance.pixels
   ) {
     return UNSCALED;
   }
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style == null || !style.width.endsWith('px')) {
+  const size = layoutSize(element);
+  if (size == null) {
     return UNSCALED;
   }
-  const px = (value: string) => Number.parseFloat(value) || 0;
-  const isContentBox = style.boxSizing !== 'border-box';
-  const width =
-    px(style.width) +
-    (isContentBox
-      ? px(style.paddingLeft) +
-        px(style.paddingRight) +
-        px(style.borderLeftWidth) +
-        px(style.borderRightWidth)
-      : 0);
-  const height =
-    px(style.height) +
-    (isContentBox
-      ? px(style.paddingTop) +
-        px(style.paddingBottom) +
-        px(style.borderTopWidth) +
-        px(style.borderBottomWidth)
-      : 0);
+  const {width, height} = size;
   return {
-    x: axisScale(onScreen.right - onScreen.left, width),
-    y: axisScale(onScreen.bottom - onScreen.top, height),
+    x: axisScale(onScreen.right - onScreen.left, width, tolerance.ratio),
+    y: axisScale(onScreen.bottom - onScreen.top, height, tolerance.ratio),
   };
 }
 
@@ -678,13 +719,55 @@ function readCandidates(doc: Document): Candidate[] {
   }));
 }
 
+/**
+ * Whether a tap can reach `element`. A touch nearer a neighbour that no tap
+ * reaches is still the control's. Only the touch check asks. The measuring
+ * pass reads no style, so such a neighbour still stops a hit area halfway.
+ * That strip takes no tap from anyone. Opacity does not count: a control
+ * drawn at opacity 0, such as a native input over its own drawn box, takes
+ * the tap.
+ */
+function takesTaps(element: Element): boolean {
+  if (element.matches(':disabled') || element.closest('[inert]') != null) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return true;
+  }
+  const style = view.getComputedStyle(element);
+  if (style.pointerEvents === 'none') {
+    return false;
+  }
+  if (typeof element.checkVisibility === 'function') {
+    return element.checkVisibility({checkVisibilityCSS: true});
+  }
+  // Without `checkVisibility`, its two checks are read from the styles.
+  if (style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+  for (
+    let node = element.parentElement;
+    node != null;
+    node = node.parentElement
+  ) {
+    if (
+      view.getComputedStyle(node).getPropertyValue('content-visibility') ===
+      'hidden'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** A control's rect and clamped insets, from candidates already read. */
 function measureOne(
   watch: Watch,
   candidates: ReadonlyArray<Candidate>,
-): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
+): {target: HitRect; insets: HitInsets; neighbours: Candidate[]} {
   const target = plainRect(watch.element);
-  const scale = screenScale(watch.element, target);
+  const scale = screenScale(watch.element, target, HIT_AREA_TOLERANCE);
   // Two targets each growing up to half the minimum reach each other from a
   // minimum apart.
   const reach = Math.max(0, watch.minSize);
@@ -694,15 +777,13 @@ function measureOne(
     bottom: reach * scale.y,
     left: reach * scale.x,
   });
-  const neighbours = candidates
-    .filter(
-      ({element, rect}) =>
-        rect.right > rect.left &&
-        rect.bottom > rect.top &&
-        intersects(band, rect) &&
-        !isOwn(watch, element),
-    )
-    .map(({rect}) => rect);
+  const neighbours = candidates.filter(
+    ({element, rect}) =>
+      rect.right > rect.left &&
+      rect.bottom > rect.top &&
+      intersects(band, rect) &&
+      !isOwn(watch, element),
+  );
   return {
     target,
     // The insets are in the control's layout px. The returned rects stay in
@@ -712,7 +793,7 @@ function measureOne(
     // still counts that neighbour.
     insets: clampedHitInsets(
       inLayout(target, target, scale),
-      neighbours.map(rect => inLayout(rect, target, scale)),
+      neighbours.map(({rect}) => inLayout(rect, target, scale)),
       watch.minSize,
       watch.growth?.(inLayout(target, target, scale), rect =>
         inLayout(rect, target, scale),
@@ -742,6 +823,27 @@ export function settlingAnimations(root: Element | Document): Animation[] {
     const end = animation.effect?.getComputedTiming().endTime;
     return typeof end === 'number' && Number.isFinite(end);
   });
+}
+
+/** Reads `settlingAnimations` of a root. */
+export type SettlingRead = (root: Element) => Animation[];
+
+/**
+ * A `settlingAnimations` read for one loop of writes, which reads each root
+ * once. Each read recalculates the styles that the loop's earlier writes
+ * changed, so one read per root also prevents those recalculations. A write
+ * of hit insets starts no animation, so a root's list stays true for the loop.
+ */
+function readOncePerRoot(): SettlingRead {
+  const reads = new Map<Element, Animation[]>();
+  return root => {
+    let animations = reads.get(root);
+    if (animations === undefined) {
+      animations = settlingAnimations(root);
+      reads.set(root, animations);
+    }
+    return animations;
+  };
 }
 
 /** The properties whose animation moves or resizes a box on screen. */
@@ -848,8 +950,9 @@ function measure(): void {
     results.push({watch, insets: measureOne(watch, candidates).insets});
   }
   // Writes.
+  const readSettling = readOncePerRoot();
   for (const {watch, insets} of results) {
-    deliver(watch, insets);
+    deliver(watch, insets, readSettling);
   }
   if (pending.size > 0) {
     requestFrame();
@@ -1070,7 +1173,8 @@ function isNearerNeighbour(
       press.y,
     );
     isNearer ||= neighbours.some(
-      rect => distanceTo(rect, press.x, press.y) < own,
+      ({element: neighbour, rect}) =>
+        distanceTo(rect, press.x, press.y) < own && takesTaps(neighbour),
     );
     // The press still scales the control, so these insets read a scaled box.
     // A pass after the press's motion ends takes the insets instead.
@@ -1288,8 +1392,9 @@ function onPointerChange(): void {
     return;
   }
   stopObserving();
+  const readSettling = readOncePerRoot();
   for (const entry of watched.values()) {
-    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS));
+    entry.watches.forEach(watch => deliver(watch, NO_HIT_INSETS, readSettling));
   }
 }
 
@@ -1345,6 +1450,7 @@ export function resetHitAreaForTests(): void {
 /**
  * Keeps `element`'s hit insets live until the returned function runs:
  * `onInsets` hears each change (typically `writeHitInsets` on the control).
+ * A pass also gives it a read of settling animations that its writes share.
  * Where the primary pointer is not coarse, the insets are 0, and only the
  * pointer query is listened to. Where it is, the shared per-frame pass
  * measures the element while it is on screen. It measures again on a resize
@@ -1354,7 +1460,7 @@ export function resetHitAreaForTests(): void {
  */
 export function watchHitArea(
   element: Element,
-  onInsets: (insets: HitInsets) => void,
+  onInsets: (insets: HitInsets, readSettling?: SettlingRead) => void,
   {
     minSize = MIN_TOUCH_TARGET,
     ownsDescendantTouches = false,
