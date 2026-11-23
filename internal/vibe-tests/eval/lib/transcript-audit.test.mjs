@@ -1,5 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {auditTranscript, pathsInCommand, resolveCommandPaths, shellCanExpand} from './transcript-audit.mjs';
 
@@ -162,6 +165,44 @@ describe('auditTranscript', () => {
     const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
     expect(audit.warnings).toEqual([]);
     expect(audit.tempPaths.map(item => item.path)).toEqual(expect.arrayContaining(['/tmp/bak', '/tmp/bak/App.tsx']));
+  });
+
+  it('checks a program after a single ampersand and drops commands that read file names from data', () => {
+    const commands = [
+      'echo & ln -s astryx-vibe-eval /tmp/q',
+      "printf '%s%s\\0' /tmp/astryx-vibe- eval/s1/runs/form__arm__r1/workspace/src/App.tsx | sort --files0-from=-",
+      'wc --files0-from=/tmp/list',
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.tempPaths).toEqual([]);
+    }
+    const redirect = auditTranscript(
+      [toolUse('Bash', {command: 'cp src/App.tsx /tmp/App.bak 2>&1'})],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
+    expect(redirect.tempPaths).toEqual([{tool: 'Bash', path: '/tmp/App.bak'}]);
+  });
+
+  it('keeps a temp path that links into a run on the warning list', () => {
+    const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vibe-audit-')));
+    const run = path.join(temp, 'run');
+    fs.mkdirSync(path.join(run, 'src'), {recursive: true});
+    fs.writeFileSync(path.join(run, 'src', 'App.tsx'), 'x');
+    const link = path.join(temp, 'q');
+    fs.symlinkSync(run, link);
+    try {
+      const audit = auditTranscript([toolUse('Read', {file_path: `${link}/src/App.tsx`})], WORKSPACE, [...SENSITIVE, run], '/home/agent', {
+        tempRoots: [temp],
+      });
+      expect(audit.tempPaths).toEqual([]);
+      expect(audit.warnings).toEqual([{tool: 'Read', path: `${link}/src/App.tsx`}]);
+    } finally {
+      fs.rmSync(temp, {recursive: true, force: true});
+    }
   });
 
   it('allows the agent its own temp folder inside its run', () => {

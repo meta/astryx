@@ -7,12 +7,20 @@
  * @position Called by run.mjs after each agent run
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
 /** File commands that take their paths as written. Any other program can build a path at run time. */
-const PLAIN_COMMAND = /^(?:cp|mv|cat|ls|rm|mkdir|touch|diff|cmp|head|tail|wc|sort|tee|echo|printf|cd)$/;
+const PLAIN_COMMAND = /^(?:cp|mv|cat|ls|rm|mkdir|touch|diff|cmp|head|tail|tee|echo|printf|cd)$/;
+
+/** Where a path leads after links: the real path of its nearest existing folder, plus the rest. */
+function linkTarget(file) {
+  let existing = file;
+  while (!fs.existsSync(existing) && path.dirname(existing) !== existing) existing = path.dirname(existing);
+  return path.join(fs.realpathSync(existing), path.relative(existing, file));
+}
 
 /**
  * Whether the shell or an interpreter can change a path the audit read from a
@@ -26,7 +34,8 @@ export function shellCanExpand(command, raw) {
   if (/[$`{}]/.test(command)) return true;
   const {shell, code} = splitHeredocs(command);
   if (code.length > 0) return true;
-  for (const stage of shell.split(/&&|\|\|?|;|\n|[()]/)) {
+  // A single `&` starts a new command, except in a redirect such as `2>&1` or `&>`.
+  for (const stage of shell.split(/&&|\|\|?|;|(?<![<>])&(?!>)|\n|[()]/)) {
     const program = stage.trim().split(/\s+/)[0];
     if (program && !PLAIN_COMMAND.test(program)) return true;
   }
@@ -381,6 +390,11 @@ export function auditTranscript(
     // A path the shell can expand can reach another run, so only a literal path counts as a temp path.
     const literal = !expands && !/[*?[{]/.test(raw);
     if (literal && tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
+      // A link the agent made can point a temp path into a run, so the path's target decides.
+      if (sensitiveRoots.some(root => isInside(linkTarget(resolved), root))) {
+        warnings.push({tool, path: raw});
+        return;
+      }
       tempPaths.push({tool, path: raw});
       return;
     }
