@@ -1116,8 +1116,9 @@ describe('Popover', () => {
         hidden: true,
       });
       await waitFor(() => expect(dialog).toHaveFocus());
+      // The painted surface carries the focus ring with its forced-colors edge.
       for (const className of stylex
-        .props(focusOutlineStyles.focusVisible)
+        .props(focusOutlineStyles.focusVisibleOrForcedColorsEdge)
         .className!.split(' ')) {
         expect(dialog).toHaveClass(className);
       }

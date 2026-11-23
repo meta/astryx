@@ -198,7 +198,8 @@ test.describe('floating surfaces in forced colors', () => {
 test('a capped DropdownMenu keeps its edge inside the 16 px bottom gutter', async ({
   page,
 }) => {
-  await page.setViewportSize({width: 800, height: 285});
+  // Short enough that the gutters cap the menu.
+  await page.setViewportSize({width: 800, height: 220});
   await open(page, 'core-dropdownmenu--with-sections', 'active');
   await trigger(page).click();
   const surface = page
