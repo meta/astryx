@@ -94,6 +94,24 @@ describe('TopNav', () => {
     expect(text.className).toContain('mobileBarHeadingText');
   });
 
+  it('gives a Latin plain-text mobile-bar heading its own direction, and gives a right-to-left heading its own right-to-left direction', () => {
+    render(
+      <div dir="rtl">
+        <TopNavRenderContext value="mobile-bar">
+          <TopNav heading="Northwind Analytics" />
+        </TopNavRenderContext>
+        <TopNavRenderContext value="mobile-bar">
+          <TopNav heading="ניתוח נתונים" />
+        </TopNavRenderContext>
+      </div>,
+    );
+    expect(screen.getByText('Northwind Analytics')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+    expect(screen.getByText('ניתוח נתונים')).toHaveAttribute('dir', 'rtl');
+  });
+
   it('passes an element heading through unwrapped in mobile-bar mode', () => {
     render(
       <TopNavRenderContext value="mobile-bar">
@@ -450,6 +468,31 @@ describe('TopNavHeading', () => {
     const ref = vi.fn();
     render(<TopNavHeading heading="Test" ref={ref} />);
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
+  });
+
+  it("holds a NavHeadingMenu's items in its own named menu, with no menu inside it", async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    render(
+      <TopNavHeading
+        heading="Acme"
+        menu={
+          <NavHeadingMenu>
+            <NavHeadingMenuItem label="Docs" href="/docs" />
+            <NavHeadingMenuItem label="Status" href="/status" />
+          </NavHeadingMenu>
+        }
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Acme, Open menu'}));
+    const menus = screen.getAllByRole('menu', {hidden: true});
+    expect(menus).toHaveLength(1);
+    expect(menus[0]).toHaveAccessibleName('Acme');
+    for (const name of ['Docs', 'Status']) {
+      expect(menus[0]).toContainElement(
+        screen.getByRole('menuitem', {name, hidden: true}),
+      );
+    }
   });
 
   it('includes the visible heading in the menu trigger name without hrefs', () => {

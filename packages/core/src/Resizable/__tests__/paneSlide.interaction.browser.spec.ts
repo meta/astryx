@@ -796,6 +796,8 @@ interface EdgeFrame {
   drawnEdge: number;
   handle: number;
   contentStart: number;
+  /** Whether the frame came after the page heard the pointer's lift. */
+  isAfterLift: boolean;
 }
 
 /** Records the pane, its first button, its handle and the content each frame. */
@@ -811,6 +813,14 @@ async function recordEdgeFrames(page: Page): Promise<void> {
     const button = pane?.querySelector('button');
     const frames: EdgeFrame[] = [];
     (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames = frames;
+    let isAfterLift = false;
+    window.addEventListener(
+      'pointerup',
+      () => {
+        isAfterLift = true;
+      },
+      {capture: true, once: true},
+    );
     const step = () => {
       if (pane == null || content == null || handle == null || button == null) {
         return;
@@ -822,6 +832,7 @@ async function recordEdgeFrames(page: Page): Promise<void> {
         drawnEdge: pane.getBoundingClientRect().right,
         handle: handleBox.left + handleBox.width / 2,
         contentStart: content.getBoundingClientRect().left,
+        isAfterLift,
       });
       if (frames.length < 2000) {
         requestAnimationFrame(step);
@@ -1364,4 +1375,30 @@ test('under Reduce Motion the pane does not travel, and focus still leaves it', 
   expect(opening.glides).toBe(false);
   expect(travelling(opening.frames)).toBe(0);
   expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
+});
+
+test("under a theme's reducedMotion: 'always' mark, with the setting off, the edge past the maximum returns at the lift with no spring-back", async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  // The root theme's mark on <html>; Theme writes it for 'always'.
+  await page.evaluate(() => {
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+  });
+  const at = await pressHandle(page);
+  const rest = at.x + 120;
+  // 200 px plus 260 px of pull would be 460 px against a 320 px maximum.
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  await page.waitForTimeout(100);
+  await recordEdgeFrames(page);
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  // Only the frames after the page heard the lift: a frame can run between
+  // the start of the recording and the lift's dispatch.
+  const frames = (await edgeFrames(page)).filter(frame => frame.isAfterLift);
+  expect(frames.length).toBeGreaterThan(0);
+  // No frame stands past the limit: the edge is back at once.
+  expect(frames.filter(frame => frame.handle > rest + 1)).toEqual([]);
+  expect(frames.at(-1)?.handle).toBeCloseTo(rest, 0);
 });

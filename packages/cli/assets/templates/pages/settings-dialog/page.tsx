@@ -97,58 +97,58 @@ import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VStack} from '@astryxdesign/core/VStack';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
-  ArrowDownOnSquareIcon,
-  ArrowDownTrayIcon,
-  ArrowUturnLeftIcon,
-  AtSymbolIcon,
-  Bars3BottomLeftIcon,
-  Bars3Icon,
-  BeakerIcon,
-  BellIcon,
-  BriefcaseIcon,
-  CalendarDaysIcon,
-  ChatBubbleLeftRightIcon,
+  SaveIcon,
+  DownloadIcon,
+  UndoIcon,
+  MentionIcon,
+  PanelLeftIcon,
+  MenuIcon,
+  ExperimentIcon,
+  NotificationIcon,
+  WorkIcon,
+  ScheduleIcon,
+  ConversationIcon,
   ChevronRightIcon,
   ClockIcon,
-  CodeBracketIcon,
-  Cog6ToothIcon,
-  CommandLineIcon,
-  ComputerDesktopIcon,
+  CodeIcon,
+  SettingsIcon,
+  KeyboardIcon,
+  DesktopIcon,
   CreditCardIcon,
-  CubeIcon,
-  DevicePhoneMobileIcon,
-  DocumentMagnifyingGlassIcon,
-  DocumentTextIcon,
-  EnvelopeIcon,
+  PackageIcon,
+  MobileIcon,
+  DocumentSearchIcon,
+  DocumentIcon,
+  MailIcon,
   EyeIcon,
-  FingerPrintIcon,
+  FingerprintIcon,
   FolderIcon,
-  GlobeAltIcon,
-  HandRaisedIcon,
+  GlobeIcon,
+  RaiseHandIcon,
   KeyIcon,
   LanguageIcon,
   LinkIcon,
-  LockClosedIcon,
-  MagnifyingGlassIcon,
-  MapPinIcon,
+  LockIcon,
+  SearchIcon,
+  LocationIcon,
   MoonIcon,
   PaintBrushIcon,
-  PencilSquareIcon,
-  PuzzlePieceIcon,
-  QuestionMarkCircleIcon,
-  ReceiptPercentIcon,
-  ShieldCheckIcon,
+  ComposeIcon,
+  IntegrationIcon,
+  HelpIcon,
+  DiscountIcon,
+  ShieldIcon,
   SignalIcon,
   SparklesIcon,
-  SpeakerWaveIcon,
+  AudioIcon,
   SunIcon,
   SwatchIcon,
   TagIcon,
-  TrashIcon,
+  DeleteIcon,
   UserCircleIcon,
   UserIcon,
   UsersIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 import * as stylex from '@stylexjs/stylex';
 import {
   Children,
@@ -389,7 +389,7 @@ const PANEL_GROUPS: {label: string; panels: PanelConfig[]}[] = [
         id: 'security',
         label: 'Login & security',
         description: 'Sign-in methods and the devices signed in right now.',
-        icon: LockClosedIcon,
+        icon: LockIcon,
       },
       {
         id: 'billing',
@@ -412,19 +412,19 @@ const PANEL_GROUPS: {label: string; panels: PanelConfig[]}[] = [
         id: 'notifications',
         label: 'Notifications',
         description: 'What reaches you, and where it arrives.',
-        icon: BellIcon,
+        icon: NotificationIcon,
       },
       {
         id: 'shortcuts',
         label: 'Keyboard shortcuts',
         description: 'Rebind or switch off any shortcut on this surface.',
-        icon: CommandLineIcon,
+        icon: KeyboardIcon,
       },
       {
         id: 'language',
         label: 'Language & region',
         description: 'Language, formats, and time zone.',
-        icon: GlobeAltIcon,
+        icon: GlobeIcon,
       },
     ],
   },
@@ -435,19 +435,19 @@ const PANEL_GROUPS: {label: string; panels: PanelConfig[]}[] = [
         id: 'privacy',
         label: 'Privacy',
         description: 'What you share, and what we keep.',
-        icon: ShieldCheckIcon,
+        icon: ShieldIcon,
       },
       {
         id: 'integrations',
         label: 'Connected apps',
         description: 'Services with access to this workspace.',
-        icon: PuzzlePieceIcon,
+        icon: IntegrationIcon,
       },
       {
         id: 'developer',
         label: 'Developer',
         description: 'API access and pre-release features.',
-        icon: CodeBracketIcon,
+        icon: CodeIcon,
       },
     ],
   },
@@ -489,7 +489,7 @@ const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     title: 'Active sessions',
     description: 'Devices currently signed in to this account',
     panel: 'security',
-    icon: ComputerDesktopIcon,
+    icon: DesktopIcon,
   },
   {
     title: 'Plan',
@@ -513,7 +513,7 @@ const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     title: 'Email notifications',
     description: 'Mentions, comments, and the weekly digest',
     panel: 'notifications',
-    icon: EnvelopeIcon,
+    icon: MailIcon,
   },
   {
     title: 'Quiet hours',
@@ -525,37 +525,37 @@ const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     title: 'Keyboard shortcuts',
     description: 'Rebind a shortcut, or switch one off',
     panel: 'shortcuts',
-    icon: CommandLineIcon,
+    icon: KeyboardIcon,
   },
   {
     title: 'Time zone',
     description: 'Used for scheduling and timestamps',
     panel: 'language',
-    icon: GlobeAltIcon,
+    icon: GlobeIcon,
   },
   {
     title: 'Read receipts',
     description: 'Let people see when you have read a message',
     panel: 'privacy',
-    icon: ShieldCheckIcon,
+    icon: ShieldIcon,
   },
   {
     title: 'Export my data',
     description: 'Download everything this account holds',
     panel: 'privacy',
-    icon: ArrowDownTrayIcon,
+    icon: DownloadIcon,
   },
   {
     title: 'Connected apps',
     description: 'Calendar, storage, and chat integrations',
     panel: 'integrations',
-    icon: PuzzlePieceIcon,
+    icon: IntegrationIcon,
   },
   {
     title: 'API access',
     description: 'Personal access tokens and webhooks',
     panel: 'developer',
-    icon: CodeBracketIcon,
+    icon: CodeIcon,
   },
 ];
 
@@ -849,7 +849,7 @@ function ProfilePanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Job title"
-          icon={BriefcaseIcon}
+          icon={WorkIcon}
           description="Appears under your name on your profile card."
           control={
             <TextInput
@@ -950,7 +950,7 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="Two-factor authentication"
           titleAccessory={<Token label="Recommended" size="sm" color="green" />}
           description="Ask for a code from your authenticator app at sign-in."
-          icon={ShieldCheckIcon}
+          icon={ShieldIcon}
           control={
             <Switch
               label="Two-factor authentication"
@@ -962,7 +962,7 @@ function SecurityPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Passkeys"
-          icon={FingerPrintIcon}
+          icon={FingerprintIcon}
           description="No passkeys yet."
           control={
             <Button
@@ -986,12 +986,12 @@ function SecurityPanel({settings, update}: PanelProps) {
           title="MacBook Pro · Chrome"
           titleAccessory={<Token label="This device" size="sm" />}
           description="San Francisco, California · Active now"
-          icon={ComputerDesktopIcon}
+          icon={DesktopIcon}
         />
         <SettingsRow
           title="iPhone 15 · Safari"
           description="San Francisco, California · 2 hours ago"
-          icon={DevicePhoneMobileIcon}
+          icon={MobileIcon}
           control={
             <Button
               label="Sign out"
@@ -1010,7 +1010,7 @@ function SecurityPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Windows · Edge"
           description="Austin, Texas · March 30 at 19:31"
-          icon={ComputerDesktopIcon}
+          icon={DesktopIcon}
           control={
             <Button
               label="Sign out"
@@ -1038,7 +1038,7 @@ function BillingPanel({settings, update}: PanelProps) {
       <SettingsCard title="Plan">
         <SettingsRow
           title="Current plan"
-          icon={CubeIcon}
+          icon={PackageIcon}
           titleAccessory={<Token label="Team" size="sm" color="blue" />}
           description="$12 per seat, per month. Renews on April 1."
           control={
@@ -1080,7 +1080,7 @@ function BillingPanel({settings, update}: PanelProps) {
       <SettingsCard title="Invoices">
         <SettingsRow
           title="Billing email"
-          icon={EnvelopeIcon}
+          icon={MailIcon}
           description="Where receipts and payment failures are sent."
           control={
             <TextInput
@@ -1096,7 +1096,7 @@ function BillingPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Email invoices"
-          icon={ReceiptPercentIcon}
+          icon={DiscountIcon}
           description="Send a PDF copy every time we charge the card."
           control={
             <Switch
@@ -1227,7 +1227,7 @@ const THEME_CHOICES: {
     value: 'system',
     label: 'System',
     scheme: 'system',
-    icon: ComputerDesktopIcon,
+    icon: DesktopIcon,
   },
 ];
 
@@ -1406,7 +1406,7 @@ function AppearancePanel({settings, update}: PanelProps) {
       <SettingsCard title="Typography">
         <SettingsRow
           title="Interface font"
-          icon={DocumentTextIcon}
+          icon={DocumentIcon}
           description="Menus, labels, and message text."
           control={
             <Selector
@@ -1429,7 +1429,7 @@ function AppearancePanel({settings, update}: PanelProps) {
       <SettingsCard title="Layout">
         <SettingsRow
           title="Interface density"
-          icon={Bars3Icon}
+          icon={MenuIcon}
           description="How much breathing room rows and lists get."
           control={
             <SegmentedControl
@@ -1444,7 +1444,7 @@ function AppearancePanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Reduce motion"
-          icon={HandRaisedIcon}
+          icon={RaiseHandIcon}
           description="Skip transitions and animated transforms."
           control={
             <Switch
@@ -1467,7 +1467,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Mentions"
           description="Someone types your name."
-          icon={AtSymbolIcon}
+          icon={MentionIcon}
           control={
             <Switch
               label="Email me about mentions"
@@ -1480,7 +1480,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Comments"
           description="Replies on threads you are part of."
-          icon={ChatBubbleLeftRightIcon}
+          icon={ConversationIcon}
           control={
             <Switch
               label="Email me about comments"
@@ -1493,7 +1493,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Weekly digest"
           description="One summary every Monday morning."
-          icon={EnvelopeIcon}
+          icon={MailIcon}
           control={
             <Switch
               label="Send the weekly digest"
@@ -1508,7 +1508,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
       <SettingsCard title="Desktop">
         <SettingsRow
           title="Desktop notifications"
-          icon={ComputerDesktopIcon}
+          icon={DesktopIcon}
           description="Requires permission from your browser."
           control={
             <Switch
@@ -1521,7 +1521,7 @@ function NotificationsPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Play a sound"
-          icon={SpeakerWaveIcon}
+          icon={AudioIcon}
           control={
             <Switch
               label="Play a sound"
@@ -1579,37 +1579,37 @@ const SHORTCUTS: ShortcutDef[] = [
   {
     id: 'search',
     label: 'Search everything',
-    icon: MagnifyingGlassIcon,
+    icon: SearchIcon,
     binding: {mod: true, key: 'k'},
   },
   {
     id: 'new',
     label: 'New item',
-    icon: PencilSquareIcon,
+    icon: ComposeIcon,
     binding: {mod: true, key: 'n'},
   },
   {
     id: 'save',
     label: 'Save',
-    icon: ArrowDownOnSquareIcon,
+    icon: SaveIcon,
     binding: {mod: true, key: 's'},
   },
   {
     id: 'settings',
     label: 'Open settings',
-    icon: Cog6ToothIcon,
+    icon: SettingsIcon,
     binding: {mod: true, key: ','},
   },
   {
     id: 'sidebar',
     label: 'Toggle the sidebar',
-    icon: Bars3BottomLeftIcon,
+    icon: PanelLeftIcon,
     binding: {mod: true, shift: true, key: 'b'},
   },
   {
     id: 'help',
     label: 'Shortcut cheat sheet',
-    icon: QuestionMarkCircleIcon,
+    icon: HelpIcon,
     binding: {shift: true, key: '?'},
   },
 ];
@@ -1760,11 +1760,7 @@ function ShortcutRow({
             <IconButton
               label={`Reset ${def.label} to its default`}
               icon={
-                <Icon
-                  icon={ArrowUturnLeftIcon}
-                  size="sm"
-                  xstyle={rtlStyles.mirror}
-                />
+                <Icon icon={UndoIcon} size="sm" xstyle={rtlStyles.mirror} />
               }
               variant="ghost"
               size="sm"
@@ -1886,11 +1882,7 @@ function ShortcutsPanel() {
               variant="ghost"
               size="sm"
               icon={
-                <Icon
-                  icon={ArrowUturnLeftIcon}
-                  size="sm"
-                  xstyle={rtlStyles.mirror}
-                />
+                <Icon icon={UndoIcon} size="sm" xstyle={rtlStyles.mirror} />
               }
               onClick={() => {
                 setOverrides({});
@@ -1930,7 +1922,7 @@ function LanguagePanel({settings, update}: PanelProps) {
       />
       <SettingsRow
         title="Region format"
-        icon={MapPinIcon}
+        icon={LocationIcon}
         description="Dates, numbers, and currency."
         control={
           <Selector
@@ -1951,7 +1943,7 @@ function LanguagePanel({settings, update}: PanelProps) {
       />
       <SettingsRow
         title="Time zone"
-        icon={GlobeAltIcon}
+        icon={GlobeIcon}
         description="Used for scheduling and every timestamp you see."
         control={
           <Selector
@@ -1977,7 +1969,7 @@ function LanguagePanel({settings, update}: PanelProps) {
       />
       <SettingsRow
         title="Start the week on"
-        icon={CalendarDaysIcon}
+        icon={ScheduleIcon}
         control={
           <SegmentedControl
             label="Start the week on"
@@ -2001,7 +1993,7 @@ function PrivacyPanel({settings, update}: PanelProps) {
       <SettingsCard title="Visibility">
         <SettingsRow
           title="Discoverable by email"
-          icon={MagnifyingGlassIcon}
+          icon={SearchIcon}
           description="Let people find your profile by searching your address."
           control={
             <Switch
@@ -2057,7 +2049,7 @@ function PrivacyPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Export my data"
           description="We will email a download link within 24 hours."
-          icon={ArrowDownTrayIcon}
+          icon={DownloadIcon}
           control={
             <Button
               label="Request export"
@@ -2076,7 +2068,7 @@ function PrivacyPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="Delete my account"
           description="Permanent, and it takes the workspace with it."
-          icon={TrashIcon}
+          icon={DeleteIcon}
           control={
             <Button
               label="Delete"
@@ -2114,7 +2106,7 @@ function IntegrationsPanel() {
       <SettingsRow
         title="Calendar"
         description="Connected as alex@example.com"
-        icon={CalendarDaysIcon}
+        icon={ScheduleIcon}
         control={
           <Button
             label="Disconnect"
@@ -2152,7 +2144,7 @@ function IntegrationsPanel() {
       <SettingsRow
         title="Chat"
         description="Post updates to a channel when work ships."
-        icon={ChatBubbleLeftRightIcon}
+        icon={ConversationIcon}
         control={
           <Button
             label="Connect"
@@ -2179,7 +2171,7 @@ function DeveloperPanel({settings, update}: PanelProps) {
         <SettingsRow
           title="API access"
           description="Issue tokens that act on your behalf."
-          icon={CodeBracketIcon}
+          icon={CodeIcon}
           control={
             <Switch
               label="API access"
@@ -2211,7 +2203,7 @@ function DeveloperPanel({settings, update}: PanelProps) {
       <SettingsCard title="Pre-release">
         <SettingsRow
           title="Early access features"
-          icon={BeakerIcon}
+          icon={ExperimentIcon}
           titleAccessory={<Token label="Beta" size="sm" color="purple" />}
           description="Unfinished work, turned on for your account only."
           control={
@@ -2225,7 +2217,7 @@ function DeveloperPanel({settings, update}: PanelProps) {
         />
         <SettingsRow
           title="Verbose logging"
-          icon={DocumentMagnifyingGlassIcon}
+          icon={DocumentSearchIcon}
           description="Write a detailed trace to the browser console."
           control={
             <Switch
@@ -2436,7 +2428,7 @@ function SettingsSearchInput({search}: {search: SettingsSearch}) {
       // The bare component, NOT `<Icon icon={...} />`: `TextInput` tints an icon
       // it renders itself, and returns an already-rendered element verbatim —
       // which leaves the magnifier a step darker than the placeholder beside it.
-      startIcon={MagnifyingGlassIcon}
+      startIcon={SearchIcon}
       role="combobox"
       aria-autocomplete="list"
       aria-controls="settings-search-results"

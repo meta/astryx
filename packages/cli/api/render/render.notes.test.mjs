@@ -124,6 +124,20 @@ describe('a rendered file describes itself', () => {
     expect(note.slice(4, -3)).not.toMatch(/-->|<!--/);
   });
 
+  it('tells a reader to install the CLI globally while online, since npx cannot fetch it offline', () => {
+    const note = html.slice(html.indexOf('<!--'), html.indexOf('-->') + 3);
+    expect(note).toContain(
+      `To work offline later, install the CLI for your computer while online (npx @astryxdesign/cli@${cliVersion()} docs global/install-once):`,
+    );
+    expect(note).toContain(`npm install --global @astryxdesign/cli@${cliVersion()}`);
+    expect(note).toContain(
+      'Then, still online, run steps 1 and 3 once as astryx, so it keeps the Core a render needs.',
+    );
+    expect(note).toContain(
+      'Offline, run the same commands as astryx: npx cannot fetch the CLI without a network.',
+    );
+  });
+
   it('never spells the opening tag of the embedded block outside the block, so every CLI finds the block', () => {
     expect(html.split(`<script type="${SOURCE_TYPE}"`)).toHaveLength(2);
     const block = readSourceBlock(html);
@@ -153,7 +167,7 @@ describe('a rendered file describes itself', () => {
     const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
     const after = html.slice(html.indexOf('</script>', start) + '</script>'.length);
     expect(after.startsWith(
-      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script>`,
+      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script type="module">`,
     )).toBe(true);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
   });

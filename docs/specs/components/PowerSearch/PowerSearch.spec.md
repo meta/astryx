@@ -983,29 +983,23 @@ that the editor would not run).
 
 ## Open questions
 
-- Known gap, pre-existing in the popover presentation, against
-  `architecture:internationalization/INV1a`: its token writes the list,
-  date-range, and nested summaries ("{n} items", "date range", "{n} filters") as
-  English literals, joins the items of a list value with a literal ", " where
-  FR12's rows use the locale's list format, and shows a relative-date value as
-  the stored key (`3d_ago`), and its relative-date editor writes the choice
-  labels ("3 days ago") as English literals. `formatFilterValue` resolves its
-  summaries from the catalog but differs from the token in four places: it
-  says "{n} entities" for an
-  entity list where the token says "{n} items"; it formats an `integer` or
-  `float` through the locale's number format and appends the operator's `units`
-  where the token prints the raw number; it collapses a list to a count when the
-  joined text exceeds the width budget, where the token compares the labels'
-  total length, so the two collapse at different lengths; and it cuts a single
-  value at a different length and with a different mark — the token's budget is
-  `maxTokenLength` less the field and operator label lengths, at least 10, with
-  3 characters of slack and "..." (three periods), where `formatFilterValue`
-  cuts at `maxTokenLength` with "…" (the ellipsis character) — (both show a
-  relative-date value as stored). The sheet presentation resolves all of these
-  from the catalog, or the locale's formats, on its own surfaces (FR12, FR20)
-  and shows the popover token's text on the trigger, except a date, which FR11
-  reads in `timezoneID` or its fallback zone; changing the token's and the
-  editor's own text is a separate stable change for the owner.
+- Known gap against FR12's "same words": `formatFilterValue`, which the
+  exported `PowerSearchToken` and the popover tokenizer's item labels use,
+  differs from the token's value text (`formatTokenValueText`) in four places:
+  it says "{n} entities" for an entity list where the token says "{n} items";
+  it formats an `integer` or `float` through the locale's number format,
+  rounded to three fraction digits, and appends the operator's `units`, where
+  the token writes the number unrounded, with no grouping and no units
+  (`String(value)` where the locale writes Latin digits and a `.` decimal
+  mark); it collapses a list to a count when the joined text exceeds the width
+  budget, where the token compares the labels' total length, so the two
+  collapse at different lengths; and it cuts a single value at a different
+  length and with a different mark — the token's budget is `maxTokenLength`
+  less the field and operator label lengths, at least 10, with 3 characters of
+  slack and "..." (three periods), where `formatFilterValue` cuts at
+  `maxTokenLength` with "…" (the ellipsis character). Both resolve the list,
+  date-range and nested summaries and a relative-date value from the catalog,
+  and join a list with the locale's list format.
 - Known gap against `family:input-fields/FR10`, opened by DEC-3: the sheet
   presentation's trigger composes Field for the box the tokenizer field has,
   so PowerSearch is a component that composes Field, which FR10 binds

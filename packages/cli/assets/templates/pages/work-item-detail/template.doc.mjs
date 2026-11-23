@@ -20,16 +20,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Work Item Detail',
-  icons: {
-    ArrowLeftIcon: 'arrowLeft',
-    BellIcon: 'notification',
-    DocumentTextIcon: 'document',
-    EyeIcon: 'eye',
-    LinkIcon: 'link',
-    PencilIcon: 'edit',
-    PhotoIcon: 'image',
-    ShareIcon: 'share',
-    TrashIcon: 'delete',
-    ViewColumnsIcon: 'viewColumns',
-  },
 };

@@ -29,6 +29,7 @@ import {
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {
+  findDeclaredWorkspaceRoot,
   findInstalledPackage,
   findProjectCoreDir,
 } from '../../foundation/fs/paths.mjs';
@@ -44,7 +45,8 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {string} coreDir - The folder of the installed Core package.
  * @property {string} coreVersion
  * @property {string} coreKey - The Core version plus a fingerprint of its stylesheet.
- * @property {string} cacheDir - node_modules/.cache/astryx-theme/<coreKey>
+ * @property {string | null} cacheDir - node_modules/.cache/astryx-theme/<coreKey>;
+ *   null under Yarn Plug'n'Play, which has no node_modules to keep it in
  * @property {any} core - Core's theme module.
  * @property {NodeJS.Require} req - Resolves packages from the project.
  * @property {ProjectTarget[]} targets
@@ -72,7 +74,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {boolean} deprecated - Its doc marks it deprecated: another part replaces it.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
+ * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>, description: string}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), the elements the doc suggests for it, and its description.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -80,18 +82,20 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 9;
+const DOCS_VERSION = 10;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
  * of the node_modules that holds the Core the command reads (the
  * project's own, or a workspace root's). The locks and the part-data cache
  * both live here, so one command never finds two answers. Null without
- * Core.
+ * Core, and null under Yarn Plug'n'Play: there Core resolves into a
+ * read-only package archive, which is no node_modules.
  * @param {string} dir
  * @returns {string | null}
  */
 export function themeCacheRoot(dir) {
+  if (plugAndPlayAbove(dir)) return null;
   const core = findProjectCoreDir(dir);
   if (!core) return null;
   // Core read from source (a fork of the design system, packages/core) is
@@ -105,6 +109,41 @@ export function themeCacheRoot(dir) {
     return path.join(modules, '.cache', 'astryx-theme');
   const own = nodeModulesRoot(dir);
   return own ? path.join(own, 'node_modules', '.cache', 'astryx-theme') : null;
+}
+
+/**
+ * Whether a Yarn Plug'n'Play loader (.pnp.cjs) is at `dir` or above it, up
+ * to its workspace root (or, outside a workspace, the repository root).
+ * @param {string} dir
+ */
+function plugAndPlayAbove(dir) {
+  const root = findDeclaredWorkspaceRoot(dir);
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, '.pnp.cjs'))) return true;
+    if (d === root || (!root && fs.existsSync(path.join(d, '.git'))))
+      return false;
+    if (path.dirname(d) === d) return false;
+  }
+}
+
+/**
+ * Refuse a Yarn Plug'n'Play app: it has no node_modules for the editor to
+ * read Core from, or to keep its locks and cache in. Its .pnp.cjs sits at
+ * the app or at the workspace root above it.
+ * @param {string} dir the app folder, or a folder in it
+ */
+export function refusePlugAndPlay(dir) {
+  if (!plugAndPlayAbove(dir)) return;
+  throw new AstryxError(
+    "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
+    [
+      {
+        name: 'yarn config set nodeLinker node-modules',
+        reason: 'do this first, then yarn install',
+      },
+    ],
+    ERROR_CODES.ERR_PROJECT_REQUIRED,
+  );
 }
 
 /**
@@ -285,6 +324,8 @@ async function readComponents(coreDir) {
               required: p.required === true,
               default: typeof p.default === 'string' ? p.default : null,
               slots: Array.isArray(p.slotElements) ? p.slotElements : [],
+              description:
+                typeof p.description === 'string' ? p.description : '',
             },
           ]),
         ),
@@ -360,23 +401,27 @@ export async function openProject(cwd) {
   }
   const coreKey = `${coreVersion}-${fingerprint}`;
   const core = await import(pathToFileURL(themeFile).href);
-  const cacheDir = path.join(
-    themeCacheRoot(key) ??
-      path.join(
-        nodeModulesRoot(key) ?? key,
-        'node_modules',
-        '.cache',
-        'astryx-theme',
-      ),
-    coreKey,
-  );
+  // A Plug'n'Play app is read (a preview app with no theme reads it), but
+  // nothing is cached: it has no node_modules to keep the cache in.
+  const cacheDir = plugAndPlayAbove(key)
+    ? null
+    : path.join(
+        themeCacheRoot(key) ??
+          path.join(
+            nodeModulesRoot(key) ?? key,
+            'node_modules',
+            '.cache',
+            'astryx-theme',
+          ),
+        coreKey,
+      );
   // Reading every component doc takes a second; it is fixed per Core install.
-  const docsFile = path.join(cacheDir, 'docs.json');
+  const docsFile = cacheDir && path.join(cacheDir, 'docs.json');
   /** @type {{version: number, targets: import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
   let docs = null;
   try {
-    const cached = JSON.parse(fs.readFileSync(docsFile, 'utf8'));
-    if (cached.version === DOCS_VERSION) docs = cached;
+    const cached = docsFile && JSON.parse(fs.readFileSync(docsFile, 'utf8'));
+    if (cached?.version === DOCS_VERSION) docs = cached;
   } catch {
     // Not cached yet.
   }
@@ -389,12 +434,13 @@ export async function openProject(cwd) {
       vars: await collectThemingVars(path.join(coreDir, 'src')),
       components: await readComponents(coreDir),
     }));
-    try {
-      fs.mkdirSync(cacheDir, {recursive: true});
-      fs.writeFileSync(docsFile, JSON.stringify(docs));
-    } catch {
-      // A read-only node_modules: read the docs again next time.
-    }
+    if (cacheDir && docsFile)
+      try {
+        fs.mkdirSync(cacheDir, {recursive: true});
+        fs.writeFileSync(docsFile, JSON.stringify(docs));
+      } catch {
+        // A read-only node_modules: read the docs again next time.
+      }
   }
   const {components, vars} = docs;
   // The value Core writes for each state a target lists: a state that names
@@ -454,12 +500,29 @@ function readInputFields(themeDir) {
  */
 export function importPathOf(project, name) {
   const spec =
-    project.components[name]?.importPath ??
-    oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
-      resolveImportPath(project.coreDir, name),
-    );
+    project.components[name]?.importPath ?? coreImportPath(project, name);
   return spec && spec !== '@astryxdesign/core' ? spec : null;
 }
+
+/**
+ * Where a component's own module is in the installed Core: the same for as
+ * long as that Core is installed (its key names its version and files), so
+ * it is found once in a process for each Core and name.
+ * @param {ThemeProject} project
+ * @param {string} name
+ * @returns {string | null | undefined}
+ */
+function coreImportPath(project, name) {
+  const key = `${project.coreKey}\0${project.coreDir}\0${name}`;
+  if (CORE_IMPORT_PATHS.has(key)) return CORE_IMPORT_PATHS.get(key);
+  const spec = oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
+    resolveImportPath(project.coreDir, name),
+  );
+  if (project.coreKey) CORE_IMPORT_PATHS.set(key, spec);
+  return spec;
+}
+/** @type {Map<string, string | null | undefined>} */
+const CORE_IMPORT_PATHS = new Map();
 
 /**
  * The built module of a base's theme package, resolved the way the theme
@@ -548,7 +611,7 @@ export function baseThemeFile(project, like) {
  * Resolved tokens of the base theme in both modes.
  * @param {ThemeProject} project
  * @param {string | undefined} like
- * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>}>}
+ * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>, onDark: Record<string, string>}>}
  */
 export async function baseResolved(project, like) {
   const {core} = project;
@@ -567,6 +630,14 @@ export async function baseResolved(project, like) {
     // The base theme's own part styles (neutral's pale destructive button),
     // which a one-mode setting keeps in the other mode.
     components: theme.components ?? {},
+    // The tokens the base's dark media rule (`[data-astryx-media="dark"]`:
+    // the lightbox, what sits on the overlay scrim) replaces, with their
+    // values there; Core's own when the base sets none.
+    onDark: Object.fromEntries(
+      Object.entries(theme.__onDark?.tokens ?? {}).filter(
+        ([k, v]) => k.startsWith('--') && typeof v === 'string',
+      ),
+    ),
   };
   return out;
 }

@@ -17,7 +17,8 @@
  *   Core from source is not checked. `built-astryx-purity`: warns with the
  *   findings of the source check in `astryx docs is-my-code-good` (raw
  *   elements Astryx has a component for, raw SVG and icon-library icons,
- *   inline styles, classes, StyleX declarations and imported stylesheets),
+ *   inline styles, classes, StyleX declarations and imported stylesheets,
+ *   except a setup stylesheet that only loads Astryx packages' CSS),
  *   each with its file and line; info, "not inspected", when the path holds
  *   no source with JSX (a bundle is build output, not source).
  * @position Pure: the doctor adapter reads the files (readBuiltPath) and the
@@ -29,6 +30,7 @@
 import {
   BUILT_FILE_LIMIT,
   BUILT_FILE_MAX_MB,
+  doctorStylesheetOnlyLoads,
   doctorThemeWiring,
   readBuiltPath,
   resolveBuiltPath,
@@ -36,6 +38,7 @@ import {
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import * as path from 'node:path';
 
 /** Source files, read for imports and JSX. */
 const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.mjs', '.cjs']);
@@ -652,6 +655,39 @@ function jsxFindings(text, rel, iconNames) {
 }
 
 /**
+ * Whether a source file's relative stylesheet import names a scanned
+ * stylesheet that only loads Astryx packages' CSS: the setup stylesheet the
+ * getting-started steps write (`reset.css`, `astryx.css`, a theme's CSS).
+ * Importing one wires Astryx up; it never styles a page. A sheet with any
+ * rule of its own, or an import from elsewhere, is not one. Each sheet is
+ * read once, and only when a source file imports it.
+ * @param {ReadonlyArray<{rel: string, read: () => string | null}>} files
+ * @param {readonly string[]} packages
+ * @returns {(spec: string, rel: string) => boolean}
+ */
+function astryxSetupStylesheets(files, packages) {
+  const byRel = new Map(files.map(file => [file.rel, file]));
+  /** @type {Map<string, boolean>} */
+  const known = new Map();
+  return (spec, rel) => {
+    if (!spec.startsWith('.')) return false;
+    const sheet = path.posix.join(path.posix.dirname(rel), spec);
+    let setup = known.get(sheet);
+    if (setup === undefined) {
+      const raw =
+        extensionOf(sheet) === '.css' ? byRel.get(sheet)?.read() : null;
+      const specs = raw == null ? null : doctorStylesheetOnlyLoads(raw);
+      setup =
+        specs != null &&
+        specs.length > 0 &&
+        specs.every(each => isAstryxSpecifier(each, packages));
+      known.set(sheet, setup);
+    }
+    return setup;
+  };
+}
+
+/**
  * Read a path and gather the evidence both checks judge.
  * @param {string} target an existing file or folder
  * @param {readonly string[]} packages package names whose components count as
@@ -662,6 +698,7 @@ function jsxFindings(text, rel, iconNames) {
 export function scanBuilt(target, packages, {fileLimit} = {}) {
   const {files, truncated, missing = 0} = readBuiltPath(target, {fileLimit});
   const wiring = doctorThemeWiring(target);
+  const isSetupSheet = astryxSetupStylesheets(files, packages);
   /** @type {BuiltScan} */
   const scan = {
     sourceFiles: 0,
@@ -759,7 +796,8 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
         for (const name of names) iconNames.add(name);
       } else if (
         /\.(?:css|scss|sass|less)$/.test(spec) &&
-        !wiring.has(spec, rel)
+        !wiring.has(spec, rel) &&
+        !isSetupSheet(spec, rel)
       ) {
         scan.findings.push({
           category: 'Styling',

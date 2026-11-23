@@ -10,5 +10,4 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['Item', 'Avatar', 'Badge', 'Icon', 'Text', 'Layout'],
-  icons: {BellIcon: 'notification', DocumentIcon: 'file', UserIcon: 'user'},
 };

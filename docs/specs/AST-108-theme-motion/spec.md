@@ -140,7 +140,10 @@ defineTheme({
   `prefers-reduced-motion` also keys it on that mark; the animator, every script reader of
   `prefers-reduced-motion` (a `matchMedia` or `useMediaQuery` check), and every
   adaptation rule keyed on `when: {motion}` (`spec:AST-012` FR2) treat the
-  preference as set. The mark only adds: an ancestor's `'always'` reaches
+  preference as set. A script reader decides Reduce Motion through the
+  reduced-motion mark's owner module, which counts the person's setting and a
+  theme's `'always'` and loads no animator, theme or StyleX module. The mark
+  only adds: an ancestor's `'always'` reaches
   inside every nested theme, and a nested theme can add `'always'` but never
   removes an ancestor's, since nothing loosens `design:reduced-motion` DR1–DR3
   (DR2a). The server and the client resolve the same
@@ -191,6 +194,7 @@ defineTheme({
 | FR4      | Unit tests of each fixed item                                                        | finger tracking, momentum, rubber band, keyboard, press and hover clocks, loops, Reduce Motion cap; Spinner and Skeleton loops at each tempo                                                                                  | a fixed item that moves with `tempo` or `character`, or a cross-fade longer than 200 ms, fails                                                                                                                                                                                         |
 | FR5      | Theme tests with the released configurations                                         | a `MotionScaleConfig` theme, explicit tokens, an extending theme; an adaptation rule that sets `tempo` or `character`                                                                                                         | changed output for an existing theme, or a knob that beats an explicit field, fails                                                                                                                                                                                                    |
 | FR6      | Server-render tests and import checks                                                | a server render with each `reducedMotion`; importing the theme and motion modules; `'always'` with the person's setting off, across components that key on `prefers-reduced-motion`; a nested theme under an `'always'` theme | a DOM access at import or on the server, theme CSS emitted for `'system'`, a hydration change, or a component style, script reader, or `when: {motion}` rule that ignores the root mark under `'always'`, or a nested theme that restores motion under an ancestor's `'always'`, fails |
+| FR6      | Guard test of script readers                                                         | `motion/reducedMotionReaders.test.ts`: script spellings of the setting's query, uses of the exported pointer-split query constants, and calls of the animator's setting-only read                                             | a script reader that decides Reduce Motion from the setting alone fails                                                                                                                                                                                                                |
 | FR7      | Docs review                                                                          | each listed doc                                                                                                                                                                                                               | a doc without the knobs, the fixed list, or the precedence fails                                                                                                                                                                                                                       |
 
 ## Decision log

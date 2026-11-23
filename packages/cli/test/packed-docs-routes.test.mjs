@@ -106,6 +106,9 @@ registerHooks({
       env: {
         ...process.env,
         COUNT_TO: counter,
+        // A run's background Core download would write into this test's
+        // cache after the run, while afterAll removes it.
+        CI: '1',
         NO_UPDATE_NOTIFIER: '1',
         // No kept summaries: each run reads the stored routes itself.
         XDG_CACHE_HOME: path.join(work, 'no-cache'),

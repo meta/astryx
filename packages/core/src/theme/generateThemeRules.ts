@@ -867,12 +867,22 @@ function generatedMediaStatusRoleDefaults(
   return aliases;
 }
 
+/**
+ * The scope root always has the theme attribute. The lower limit stops at the
+ * next themed element, so only the root matches. `:where()` keeps the 0,1,0
+ * specificity of `:scope`. Under a list of theme names, Chromium tries a bare
+ * `:scope` on every element. The attribute lets other elements skip this rule.
+ * Keep `:scope` first: the theme editor skips rules that start with it.
+ */
+const ADAPTATION_SCOPE_ROOT = `:scope:where([data-${dataAttrNamespace}-theme])`;
+
 /** The `:scope` token block for portable and theme-local token values. */
 function tokenBlock(
   source: ThemeRuleSource,
   location: string,
   sink: DiagnosticSink,
   tokenEntries: [string, string][] = Object.entries(source.tokens),
+  rootSelector: string = ':scope',
 ): string | null {
   const declarations = [
     // Font sizes follow the reader's text size where the root Theme sets the
@@ -892,7 +902,7 @@ function tokenBlock(
     .join('\n');
   const hasEntries =
     tokenEntries.length > 0 || Object.keys(source.localTokens ?? {}).length > 0;
-  return hasEntries ? `  :scope {\n${declarations}\n  }` : null;
+  return hasEntries ? `  ${rootSelector} {\n${declarations}\n  }` : null;
 }
 
 /** `components.button["variant:secondary"]`-style location for a rule. */
@@ -2033,10 +2043,13 @@ function generateAdaptationRuleRules(
   themeDarkPageSides: ReadonlySet<MediaSide>,
 ): string[] {
   const parts: string[] = [];
-  const tokens = tokenBlock(rule, location, sink, [
-    ...Object.entries(rule.tokens),
-    ...statusRoleDefaults,
-  ]);
+  const tokens = tokenBlock(
+    rule,
+    location,
+    sink,
+    [...Object.entries(rule.tokens), ...statusRoleDefaults],
+    ADAPTATION_SCOPE_ROOT,
+  );
   if (tokens !== null) {
     parts.push(tokens);
   }
@@ -2144,6 +2157,7 @@ export function generateAdaptationCSS(
       `adaptations[${index}].statusRoles.`,
       sink,
       roleEntries,
+      ADAPTATION_SCOPE_ROOT,
     );
     if (roleRule !== null) {
       blocks.push(
