@@ -352,12 +352,14 @@ export function Token({
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
   const naming = use(TokenNamingContext);
-  // A focused link that becomes disabled, or enabled again, keeps focus
-  // when its control is replaced: a link becomes a plain anchor, or a link
-  // with onClick or inside a trigger becomes a button.
+  // Disabling a link Token, or enabling it again, replaces its control. The
+  // label finds the new control and hands focus to it.
   const labelRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
     getFocusTarget: tokenControlOfLabel,
   });
+  // The Remove button is replaced with the rest of the Token's structure, so
+  // it hands focus to its replacement too.
+  const removeButtonRef = useFocusAcrossSwap<HTMLButtonElement>();
 
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
@@ -367,6 +369,7 @@ export function Token({
 
   const removeButton = onRemove != null && (
     <button
+      ref={removeButtonRef}
       type="button"
       aria-label={t('@astryx.token.remove', {
         label: naming?.removeName ?? label,

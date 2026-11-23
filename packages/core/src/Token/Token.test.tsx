@@ -1057,6 +1057,26 @@ describe('Token: a focused link that becomes disabled keeps focus', () => {
     expect(screen.getByText('Tag').closest('a, button')).toHaveFocus();
   });
 
+  it('keeps focus on Remove when a link with onClick becomes disabled and back', () => {
+    const fixture = (isDisabled: boolean) => (
+      <Token
+        label="Tag"
+        href="#destination"
+        onClick={() => {}}
+        onRemove={() => {}}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('button', {name: 'Remove Tag'}).focus();
+    rerender(fixture(true));
+    const remove = screen.getByRole('button', {name: 'Remove Tag'});
+    expect(remove).toHaveFocus();
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    rerender(fixture(false));
+    expect(screen.getByRole('button', {name: 'Remove Tag'})).toHaveFocus();
+  });
+
   it('leaves focus that moved elsewhere where it is', () => {
     const fixture = (isDisabled: boolean) => (
       <>
