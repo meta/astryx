@@ -3022,6 +3022,11 @@
       "aliases": []
     },
     {
+      "name": "example-selectable-card-group-shipping-speed",
+      "path": "examples/selectable-card-group/shipping-speed",
+      "aliases": []
+    },
+    {
       "name": "example-selectable-card-elevated",
       "path": "examples/selectable-card/elevated",
       "aliases": []
@@ -3914,6 +3919,11 @@
     {
       "name": "example-use-image-mode-photo-caption",
       "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
+      "name": "example-use-indicator-focus-ring-custom-checkbox-ring",
+      "path": "examples/use-indicator-focus-ring/custom-checkbox-ring",
       "aliases": []
     },
     {
@@ -5299,6 +5309,11 @@
     {
       "name": "showcase-segmented-control-default",
       "path": "showcases/segmented-control/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-selectable-card-group-plan-picker",
+      "path": "showcases/selectable-card-group/plan-picker",
       "aliases": []
     },
     {

@@ -1592,6 +1592,23 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('drills in from a menu that mounts open, as from one opened by its trigger (FR11)', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}} isMenuOpen>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(shownRow('Move to'));
+    await waitFor(() =>
+      expect(visibleRows()).toEqual(['Back to Actions', 'Folder A']),
+    );
+  });
+
   it('keeps a right-to-left parent title in its own direction inside the Back row (bidirectionality DR2)', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
