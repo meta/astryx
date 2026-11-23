@@ -2170,14 +2170,18 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   const BLOCK_MARGIN_MS = 50;
 
   /**
-   * The run's Switch frame-stall tally: one line per checked screencast, its
-   * engine and test, and its stalls, in the project's output folder, which
-   * Playwright empties when a run starts. One worker runs this file top to
+   * The run's Switch frame-stall tally, one file per engine in the project's
+   * output folder, which Playwright empties when a run starts: one line per
+   * checked cast, its test, its cast and its stalls. One worker runs this file top to
    * bottom (`fullyParallel: false`), so a check reads only the casts above
    * it, and the run's whole reading is the last `Switch frame stalls:` line.
    */
   function runStallTally(): string {
-    return path.join(test.info().project.outputDir, 'switch-frame-stalls.tsv');
+    // Both engines share the output folder in a local run: a file each.
+    return path.join(
+      test.info().project.outputDir,
+      `switch-frame-stalls-${test.info().project.name}.tsv`,
+    );
   }
 
   /**
@@ -2229,9 +2233,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     } = {},
   ): string {
     const file = tally ?? runStallTally();
-    // The project name keeps a local run of both engines apart. A test that
-    // casts more than once names each cast in a column of its own, so each
-    // later cast reads the earlier ones as neighbours, and a test counts once.
+    // A test that casts more than once names each cast in a column of its
+    // own, so each later cast reads the earlier ones as neighbours, and a test
+    // counts once.
     const me = [test.info().project.name, ...test.info().titlePath]
       .join(' › ')
       .replaceAll('\t', ' ');
@@ -2488,10 +2492,14 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const block = {from: 9 * FRAME + 10, to: 9 * FRAME + 690};
     expect(unscriptedStalls(times)).toBe(2);
     expect(unscriptedStalls(times, [block])).toBe(1);
-    // The margin covers a gap that starts just after the block ends.
-    expect(
-      unscriptedStalls(times, [{from: block.from, to: last + 200 - 40}]),
-    ).toBe(0);
+    // The margin covers a gap that starts up to 50 ms after the block ends,
+    // and no later.
+    expect(unscriptedStalls(times, [{from: block.from, to: last - 40}])).toBe(
+      0,
+    );
+    expect(unscriptedStalls(times, [{from: block.from, to: last - 60}])).toBe(
+      1,
+    );
   });
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({
