@@ -3022,6 +3022,11 @@
       "aliases": []
     },
     {
+      "name": "example-selectable-card-group-shipping-speed",
+      "path": "examples/selectable-card-group/shipping-speed",
+      "aliases": []
+    },
+    {
       "name": "example-selectable-card-elevated",
       "path": "examples/selectable-card/elevated",
       "aliases": []
@@ -5304,6 +5309,11 @@
     {
       "name": "showcase-segmented-control-default",
       "path": "showcases/segmented-control/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-selectable-card-group-plan-picker",
+      "path": "showcases/selectable-card-group/plan-picker",
       "aliases": []
     },
     {
