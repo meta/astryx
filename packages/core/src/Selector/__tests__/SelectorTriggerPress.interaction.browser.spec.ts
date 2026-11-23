@@ -57,7 +57,7 @@ async function whilePressed(
     throw new Error('no trigger box');
   }
   const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
-  const tintOf = () =>
+  const tintOf = async () =>
     trigger.evaluate(node => {
       const pressable = node.closest('[data-astryx-pressable]') ?? node;
       return getComputedStyle(pressable).backgroundImage;
@@ -82,7 +82,7 @@ async function whilePressed(
   }
   await expect
     .poll(
-      () =>
+      async () =>
         trigger.evaluate(
           node => node.closest('[data-astryx-press="on"]') != null,
         ),
