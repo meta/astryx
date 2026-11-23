@@ -27,11 +27,11 @@ interface MenuPosition {
   source: TriggerSource;
 }
 
-const MENU_OFFSET_Y = 8;
+const MENU_GAP = 8;
 const MENU_WIDTH = 180;
-// Room for the panel's note and its three actions in every theme, so the panel
-// opened anywhere on the surface stays inside it.
-const SURFACE_MIN_HEIGHT = 200;
+// Room for the panel's note and its three actions in every theme (the tallest
+// theme's panel is about 202px), so the panel stays inside the surface.
+const SURFACE_MIN_HEIGHT = 216;
 
 const styles = stylex.create({
   surface: {
@@ -119,12 +119,18 @@ export default function UseLongPressHookUsage() {
     openMenuAt({x: e.clientX, y: e.clientY}, 'right-click');
   };
 
+  // The panel opens beside the Actions button, never over it: before the
+  // button when there is room, after it otherwise (the button can wrap to the
+  // start of its own row on a narrow card).
   const handleOpenFromButton = (e: MouseEvent<HTMLButtonElement>) => {
     const buttonRect = e.currentTarget.getBoundingClientRect();
-    openMenuAt(
-      {x: buttonRect.left, y: buttonRect.bottom + MENU_OFFSET_Y},
-      'button',
-    );
+    const surfaceLeft = surfaceRef.current?.getBoundingClientRect().left ?? 0;
+    const hasRoomBefore =
+      buttonRect.left - surfaceLeft >= MENU_WIDTH + MENU_GAP;
+    const x = hasRoomBefore
+      ? buttonRect.left - MENU_WIDTH - MENU_GAP
+      : buttonRect.right + MENU_GAP;
+    openMenuAt({x, y: buttonRect.top}, 'button');
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {

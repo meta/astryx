@@ -281,6 +281,48 @@ describe('useLongPressHookUsage example', () => {
     expect(container.textContent).toContain('Pinned via right-click (88, 36).');
   });
 
+  it('opens the Actions panel beside the button, never over it', () => {
+    renderExample();
+    const surface = getSurface();
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 0, width: 340, height: 216}),
+    );
+    const actionsButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button'),
+    ).find(button => button.textContent === 'Actions');
+    if (!actionsButton) {
+      throw new Error('Expected the Actions button');
+    }
+    const openFrom = (rect: DOMRect) => {
+      vi.spyOn(actionsButton, 'getBoundingClientRect').mockReturnValue(rect);
+      act(() => {
+        actionsButton.click();
+      });
+      const menu = container.querySelector<HTMLElement>('[role="group"]');
+      act(() => {
+        surface.dispatchEvent(
+          new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+        );
+      });
+      return menu;
+    };
+
+    // The button at the end of its row: the panel opens before it.
+    const before = openFrom(
+      DOMRect.fromRect({x: 236, y: 16, width: 88, height: 40}),
+    );
+    expect(before?.textContent).toContain('Opened by button at (48, 16)');
+    expect(panelPosition(before).left).toBe(
+      'clamp(0px, 48px, calc(100% - 180px))',
+    );
+
+    // The button wrapped to the start of its own row: the panel opens after it.
+    const after = openFrom(
+      DOMRect.fromRect({x: 16, y: 64, width: 88, height: 40}),
+    );
+    expect(after?.textContent).toContain('Opened by button at (112, 64)');
+  });
+
   it('provides an explicit Actions button fallback and returns focus when closed', () => {
     renderExample();
 
