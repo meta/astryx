@@ -248,6 +248,21 @@ describe('auditTranscript', () => {
     expect(commented.violations.map(item => item.path)).toContain(other);
   });
 
+  it('keeps the lines after a <<< or a << it cannot be sure of as shell text', () => {
+    const other = '/runs/r1/runs/form__other__r1/workspace/src/App.tsx';
+    const commands = [
+      `echo 'note\ncat <<EOF'\ncp ${other} /tmp/y2\nEOF`,
+      `echo hi;#<<EOF\ncp ${other} /tmp/y3\nEOF`,
+      `echo $'\\'<<EOF'\ncp ${other} /tmp/y4\nEOF`,
+      `cat <<< EOF\ncp ${other} /tmp/y1\nEOF`,
+      `cat <<EOF | /bin/sh\ncp ${other} /tmp/y5\nEOF`,
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.violations.map(item => item.path)).toContain(other);
+    }
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];

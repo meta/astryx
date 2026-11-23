@@ -35,11 +35,7 @@ export function shellCanExpand(command, raw) {
   // brace in a file the agent writes does not count as an expansion.
   const {shell, code} = splitHeredocs(command);
   if (code.length > 0 || /[$`{}]/.test(shell)) return true;
-  // A single `&` starts a new command, except in a redirect such as `2>&1` or `&>`.
-  for (const stage of shell.split(/&&|\|\|?|;|(?<![<>])&(?!>)|\n|[()]/)) {
-    const program = stage.trim().split(/\s+/)[0];
-    if (program && !PLAIN_COMMAND.test(program)) return true;
-  }
+  if (!runsOnlyPlainCommands(shell)) return true;
   if (!/^[\w./+-]+$/.test(raw) || raw.split('/').includes('..')) return true;
   for (let at = command.indexOf(raw); at !== -1; at = command.indexOf(raw, at + 1)) {
     const opener = command[at - 1];
@@ -95,47 +91,84 @@ const SHELL = /(?:^|[\s|;&(])(?:bash|sh|zsh)(?=[\s<]|$)/;
  */
 export function splitHeredocs(command) {
   const code = [];
-  const shell = command.replace(
-    /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g,
-    (whole, before, quote, _marker, after, body) => {
-      // A `<<` inside quotes or a comment opens no heredoc, so the lines after
-      // it are shell text and stay in the audit.
-      if (isQuotedOrCommented(before)) return whole;
-      const runner = `${before} ${after}`;
-      if (SHELL.test(runner)) return `${runner}\n${body}`;
-      if (INTERPRETER.test(runner)) code.push(body);
-      // The shell runs command substitutions in an unquoted heredoc body.
-      if (!quote) {
-        // An odd run of backslashes escapes `$(` or a backtick, so it does not
-        // run; an even run is escaped backslashes, and the substitution runs.
-        const substitutions = [...body.matchAll(/(\\*)(?:\$\(([^)]*)\)|`([^`]*)`)/g)]
-          .filter(match => match[1].length % 2 === 0)
-          .map(match => match[2] ?? match[3]);
-        if (substitutions.length > 0) return `${runner}\n${substitutions.join('\n')}`;
-      }
-      return runner;
-    },
-  );
-  return {shell, code};
+  let shell = '';
+  let last = 0;
+  const heredoc = /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g;
+  for (const match of command.matchAll(heredoc)) {
+    const [whole, before, quote, , after, body] = match;
+    shell += command.slice(last, match.index);
+    last = match.index + whole.length;
+    // Drop a body only when it is surely a heredoc and its reader is known.
+    // A here-string (`<<<`), or a `<<` in a quote or comment open from the
+    // start of the command, opens no heredoc, and a reader the audit does not
+    // know can run the body, so those lines stay shell text.
+    if (before.endsWith('<') || isQuotedOrCommented(shell + before)) {
+      shell += whole;
+      continue;
+    }
+    const runner = `${before} ${after}`;
+    if (SHELL.test(runner)) {
+      shell += `${runner}\n${body}`;
+      continue;
+    }
+    if (INTERPRETER.test(runner)) code.push(body);
+    else if (!runsOnlyPlainCommands(runner)) {
+      shell += whole;
+      continue;
+    }
+    // The shell runs command substitutions in an unquoted heredoc body. An odd
+    // run of backslashes escapes `$(` or a backtick, so it does not run; an
+    // even run is escaped backslashes, and the substitution runs.
+    const substitutions = quote
+      ? []
+      : [...body.matchAll(/(\\*)(?:\$\(([^)]*)\)|`([^`]*)`)/g)]
+          .filter(substitution => substitution[1].length % 2 === 0)
+          .map(substitution => substitution[2] ?? substitution[3]);
+    shell += substitutions.length > 0 ? `${runner}\n${substitutions.join('\n')}` : runner;
+  }
+  return {shell: shell + command.slice(last), code};
 }
 
-/** Whether the end of `text` is inside an open quote or a `#` comment. */
+/**
+ * Whether the end of `text` is inside an open quote or a `#` comment. A quote
+ * can span lines, `$'…'` takes backslash escapes, and a comment starts at a
+ * word start and ends at a newline.
+ */
 function isQuotedOrCommented(text) {
   let quote = null;
+  let isComment = false;
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
-    if (quote) {
-      if (char === quote) quote = null;
-      else if (char === '\\' && quote === '"') i += 1;
+    if (isComment) {
+      if (char === '\n') isComment = false;
+    } else if (quote === "'") {
+      if (char === "'") quote = null;
+    } else if (quote === '"' || quote === "$'") {
+      if (char === '\\') i += 1;
+      else if (char === quote.at(-1)) quote = null;
     } else if (char === '\\') {
+      i += 1;
+    } else if (char === '$' && text[i + 1] === "'") {
+      quote = "$'";
       i += 1;
     } else if (char === "'" || char === '"') {
       quote = char;
-    } else if (char === '#' && (i === 0 || /\s/.test(text[i - 1]))) {
-      return true;
+    } else if (char === '#' && (i === 0 || /[\s;&|()<>]/.test(text[i - 1]))) {
+      isComment = true;
     }
   }
-  return quote !== null;
+  return quote !== null || isComment;
+}
+
+/** Whether every program in shell text is a plain file command named as a bare word. */
+function runsOnlyPlainCommands(text) {
+  // A single `&` starts a new command, except in a redirect such as `2>&1` or `&>`.
+  return text
+    .split(/&&|\|\|?|;|(?<![<>])&(?!>)|\n|[()]/)
+    .every(stage => {
+      const program = stage.trim().split(/\s+/)[0];
+      return !program || PLAIN_COMMAND.test(program);
+    });
 }
 
 /** In code, a path is a string literal, so division, comments and a lone '/' are not paths. */
