@@ -20,6 +20,36 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 /**
+ * Calls `onChange` when the menu resizes, its DOM changes, an image in it
+ * loads, or the window or the visual viewport resizes. Returns the function
+ * that stops it.
+ */
+function observeMenu(menu: HTMLElement, onChange: () => void): () => void {
+  const resizeObserver =
+    typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(onChange);
+  const mutationObserver =
+    typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(onChange);
+  resizeObserver?.observe(menu);
+  mutationObserver?.observe(menu, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+  menu.addEventListener('load', onChange, true);
+  window.addEventListener('resize', onChange);
+  window.visualViewport?.addEventListener('resize', onChange);
+  return () => {
+    resizeObserver?.disconnect();
+    mutationObserver?.disconnect();
+    menu.removeEventListener('load', onChange, true);
+    window.removeEventListener('resize', onChange);
+    window.visualViewport?.removeEventListener('resize', onChange);
+  };
+}
+
+/**
  * Detect block-axis overflow without making a fitting menu a scroll container.
  *
  * `expectedOverflow` is the answer the owner can give before any measure (a
@@ -63,42 +93,35 @@ export function useMenuOverflow(
     );
   }, [menuRef]);
 
-  // Syncs the overflow measurement with the open menu. It measures, then
-  // observes resize, DOM changes and window resize.
+  // Syncs the overflow measurement with the open menu element. It measures,
+  // then observes resize, DOM changes and window resize. The owner can remount
+  // the element without a change this hook sees (a header or footer wraps it in
+  // a new frame), so every commit compares the element and moves the
+  // observers to a new one.
+  const observedRef = useRef<HTMLElement | null>(null);
+  const stopObservingRef = useRef<(() => void) | null>(null);
   useIsomorphicLayoutEffect(() => {
-    if (!isOpen) {
+    const menu = isOpen ? menuRef.current : null;
+    if (menu === observedRef.current) {
       return;
     }
-    const menu = menuRef.current;
+    stopObservingRef.current?.();
+    stopObservingRef.current = null;
+    observedRef.current = menu;
     if (!menu) {
       return;
     }
     measureOverflow();
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(measureOverflow);
-    const mutationObserver =
-      typeof MutationObserver === 'undefined'
-        ? null
-        : new MutationObserver(measureOverflow);
-    resizeObserver?.observe(menu);
-    mutationObserver?.observe(menu, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-    menu.addEventListener('load', measureOverflow, true);
-    window.addEventListener('resize', measureOverflow);
-    window.visualViewport?.addEventListener('resize', measureOverflow);
-    return () => {
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
-      menu.removeEventListener('load', measureOverflow, true);
-      window.removeEventListener('resize', measureOverflow);
-      window.visualViewport?.removeEventListener('resize', measureOverflow);
-    };
-  }, [isOpen, measureOverflow, menuRef]);
+    stopObservingRef.current = observeMenu(menu, measureOverflow);
+  });
+  useIsomorphicLayoutEffect(
+    () => () => {
+      stopObservingRef.current?.();
+      stopObservingRef.current = null;
+      observedRef.current = null;
+    },
+    [],
+  );
 
   // Measures overflow again after the content changes while the menu is open.
   useIsomorphicLayoutEffect(() => {
