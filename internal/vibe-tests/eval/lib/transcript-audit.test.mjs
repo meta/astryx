@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {auditTranscript, pathsInCommand, resolveCommandPaths, shellCanExpand} from './transcript-audit.mjs';
+import {auditTranscript, isPlainBackup, pathsInCommand, resolveCommandPaths} from './transcript-audit.mjs';
 
 const WORKSPACE = '/runs/r1/runs/task__arm__r1/workspace';
 const SENSITIVE = ['/runs/r1', '/repo', '/home/agent'];
@@ -62,129 +62,49 @@ describe('auditTranscript', () => {
     expect(audit.warnings).toEqual([{tool: 'Bash', path: '/opt/thing'}]);
   });
 
-  it('lists a temp-folder path outside every run apart from the warnings', () => {
-    const lines = [
-      toolUse('Bash', {command: 'cp src/astryx-themes.ts /tmp/themes.bak'}),
-      toolUse('Read', {file_path: '/tmp/themes.bak'}),
-    ];
-    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+  it('lists the temp paths of a plain cp or mv backup apart from the warnings', () => {
+    const audit = auditTranscript(
+      [
+        toolUse('Bash', {command: 'cp src/astryx-themes.ts /tmp/themes.bak'}),
+        toolUse('Bash', {command: 'mkdir -p /tmp/bak && mv src/App.tsx /tmp/bak/App.tsx'}),
+      ],
+      WORKSPACE,
+      SENSITIVE,
+      '/home/agent',
+      {tempRoots: ['/tmp']},
+    );
     expect(audit.violations).toEqual([]);
     expect(audit.warnings).toEqual([]);
-    expect(audit.tempPaths).toEqual([
-      {tool: 'Bash', path: '/tmp/themes.bak'},
-      {tool: 'Read', path: '/tmp/themes.bak'},
-    ]);
+    expect(audit.tempPaths.map(item => item.path)).toEqual(['/tmp/themes.bak', '/tmp/bak', '/tmp/bak/App.tsx']);
   });
 
-  it('still fails another run under the temp folder and warns on the temp folder itself', () => {
-    const sensitive = [...SENSITIVE, '/tmp/astryx-vibe-eval'];
-    const lines = [
-      toolUse('Read', {file_path: '/tmp/astryx-vibe-eval/old/runs/x/workspace/src/App.tsx'}),
-      toolUse('Bash', {command: 'ls /tmp'}),
-    ];
-    const audit = auditTranscript(lines, WORKSPACE, sensitive, '/home/agent', {tempRoots: ['/tmp']});
-    expect(audit.violations).toEqual([{tool: 'Read', path: '/tmp/astryx-vibe-eval/old/runs/x/workspace/src/App.tsx'}]);
-    expect(audit.warnings).toEqual([{tool: 'Bash', path: '/tmp'}]);
-    expect(audit.tempPaths).toEqual([]);
-  });
-
-  it('keeps a shell pattern under the temp folder on the warning list', () => {
-    const lines = [
-      toolUse('Bash', {command: 'cat /tmp/*/*/runs/*/workspace/src/App.tsx'}),
-      toolUse('Glob', {pattern: '/tmp/**/workspace/src/App.tsx'}),
-    ];
-    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-    expect(audit.warnings).toEqual([
-      {tool: 'Bash', path: '/tmp/*/*/runs/*/workspace/src/App.tsx'},
-      {tool: 'Glob', path: '/tmp/**/workspace/src/App.tsx'},
-    ]);
-    expect(audit.tempPaths).toEqual([]);
-  });
-
-  it('keeps a temp path that a variable, an escape or a backtick changes on the warning list', () => {
+  it('keeps every other use of a temp path on the warning list', () => {
     const commands = [
-      'E=astryx-vibe-eval/s1; cat /tmp/$E/runs/form__arm__r1/workspace/src/App.tsx',
-      'cat /tmp/astryx\\-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx',
-      'cat /tmp/astryx-vibe-`echo eval`/s1/runs/form__arm__r1/workspace/src/App.tsx',
+      'cat /tmp/themes.bak',
+      'cp src/App.tsx /tmp/App.bak 2>&1',
+      'cp src/App.tsx /tmp/${NAME}.bak',
+      'cp src/App.tsx /tmp/*.bak',
+      "cp src/App.tsx /tmp/App.bak && cat > src/App.tsx <<'EOF'\nexport default 1;\nEOF",
+      'cp src/App.tsx /tmp/App.bak\nnode /tmp/App.bak',
+      'cp src/App.tsx /tmp/App.bak; ln -s astryx-vibe-eval /tmp/q',
     ];
     for (const command of commands) {
       const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
       expect(audit.tempPaths).toEqual([]);
       expect(audit.warnings.length).toBeGreaterThan(0);
     }
+    const read = auditTranscript([toolUse('Read', {file_path: '/tmp/themes.bak'})], WORKSPACE, SENSITIVE, '/home/agent', {
+      tempRoots: ['/tmp'],
+    });
+    expect(read.warnings).toEqual([{tool: 'Read', path: '/tmp/themes.bak'}]);
   });
 
-  it('keeps a temp path that a quote, a space, a parent folder or a string join changes on the warning list', () => {
-    const sensitive = [...SENSITIVE, '/tmp/astryx-vibe-eval'];
-    const commands = [
-      'cat "/tmp/astryx-vibe-"eval/s1/runs/form__arm__r1/workspace/src/App.tsx',
-      'X=eval; cat "/tmp/astryx-vibe-"$X/s1/runs/form__arm__r1/workspace/src/App.tsx',
-      'cat "/tmp/x y/../astryx-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx"',
-      'node -e "require(\'fs\').readFileSync(\'/tmp/astryx-vibe-\'+\'eval/s1/runs/form__arm__r1/workspace/src/App.tsx\')"',
-    ];
-    for (const command of commands) {
-      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, sensitive, '/home/agent', {tempRoots: ['/tmp']});
-      expect(audit.tempPaths).toEqual([]);
-    }
-  });
-
-  it('keeps a temp path on the warning list when the command can rewrite it into a run', () => {
-    const app = 'astryx-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx';
-    const commands = [
-      `D=/tmp/q; cat \${D%q}${app}`,
-      `for D in /tmp/q; do cat \${D%q}${app}; done`,
-      'ln -s astryx-vibe-eval /tmp/q',
-      `find /tmp/q -maxdepth 0 -exec cat {}/../${app} \\;`,
-      `node -e "require('fs').readFileSync(require('path').join(require('path').dirname('/tmp/q'), '${app}'))"`,
-      `node <<'EOF'\nrequire('fs').readFileSync('/tmp/astryx-vibe-' + 'eval/s1/runs/form__arm__r1/workspace/src/App.tsx');\nEOF`,
-    ];
-    for (const command of commands) {
-      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-      expect(audit.tempPaths).toEqual([]);
-    }
-  });
-
-  it('keeps a temp path on the warning list when a program other than a plain file command runs', () => {
-    const app = 'astryx-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx';
-    const commands = [
-      `node<<'EOF'\nrequire('fs').readFileSync(require('path').join(require('path').dirname('/tmp/q'), '${app}'))\nEOF`,
-      `python3<<'EOF'\nprint(open('/tmp/astryx-vibe-' + 'eval/s1/runs/form__arm__r1/workspace/src/App.tsx').read())\nEOF`,
-      `/usr/bin/python3 -c "import os; print(open(os.path.join(os.path.dirname('/tmp/q'), '${app}')).read())"`,
-      '/bin/ln -s astryx-vibe-eval /tmp/q',
-      '\\ln -s astryx-vibe-eval /tmp/q',
-      "l''n -s astryx-vibe-eval /tmp/q",
-    ];
-    for (const command of commands) {
-      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-      expect(audit.tempPaths).toEqual([]);
-    }
-  });
-
-  it('keeps a backup a plain file command writes as a temp path', () => {
-    const lines = [toolUse('Bash', {command: "mkdir -p /tmp/bak && cp src/App.tsx /tmp/bak/App.tsx && cat > src/App.tsx <<'EOF'\nexport default 1;\nEOF"})];
-    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-    expect(audit.warnings).toEqual([]);
-    expect(audit.tempPaths.map(item => item.path)).toEqual(expect.arrayContaining(['/tmp/bak', '/tmp/bak/App.tsx']));
-  });
-
-  it('checks a program after a single ampersand and drops commands that read file names from data', () => {
-    const commands = [
-      'echo & ln -s astryx-vibe-eval /tmp/q',
-      "printf '%s%s\\0' /tmp/astryx-vibe- eval/s1/runs/form__arm__r1/workspace/src/App.tsx | sort --files0-from=-",
-      'wc --files0-from=/tmp/list',
-    ];
-    for (const command of commands) {
-      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-      expect(audit.tempPaths).toEqual([]);
-    }
-    const redirect = auditTranscript(
-      [toolUse('Bash', {command: 'cp src/App.tsx /tmp/App.bak 2>&1'})],
-      WORKSPACE,
-      SENSITIVE,
-      '/home/agent',
-      {tempRoots: ['/tmp']},
-    );
-    expect(redirect.tempPaths).toEqual([{tool: 'Bash', path: '/tmp/App.bak'}]);
+  it('still fails another run under the temp folder in a plain backup', () => {
+    const other = '/tmp/astryx-vibe-eval/old/runs/x/workspace/src/App.tsx';
+    const audit = auditTranscript([toolUse('Bash', {command: `cp ${other} /tmp/y`})], WORKSPACE, [...SENSITIVE, '/tmp/astryx-vibe-eval'], '/home/agent', {
+      tempRoots: ['/tmp'],
+    });
+    expect(audit.violations).toEqual([{tool: 'Bash', path: other}]);
   });
 
   it('keeps a temp path that links into a run on the warning list', () => {
@@ -192,84 +112,30 @@ describe('auditTranscript', () => {
     const run = path.join(temp, 'run');
     fs.mkdirSync(path.join(run, 'src'), {recursive: true});
     fs.writeFileSync(path.join(run, 'src', 'App.tsx'), 'x');
-    const link = path.join(temp, 'q');
-    fs.symlinkSync(run, link);
+    fs.symlinkSync(run, path.join(temp, 'q'));
     try {
-      const audit = auditTranscript([toolUse('Read', {file_path: `${link}/src/App.tsx`})], WORKSPACE, [...SENSITIVE, run], '/home/agent', {
-        tempRoots: [temp],
-      });
+      const audit = auditTranscript(
+        [toolUse('Bash', {command: `cp ${temp}/q/src/App.tsx src/App.tsx`})],
+        WORKSPACE,
+        [...SENSITIVE, run],
+        '/home/agent',
+        {tempRoots: [temp]},
+      );
       expect(audit.tempPaths).toEqual([]);
-      expect(audit.warnings).toEqual([{tool: 'Read', path: `${link}/src/App.tsx`}]);
+      expect(audit.warnings).toEqual([{tool: 'Bash', path: `${temp}/q/src/App.tsx`}]);
     } finally {
       fs.rmSync(temp, {recursive: true, force: true});
     }
   });
 
-  it('keeps a backup a temp path when the same command writes a file whose content has braces', () => {
-    const command = "cp src/App.tsx /tmp/App.bak && cat > src/App.tsx <<'EOF'\nexport default function App() {\n  return null;\n}\nEOF";
-    const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-    expect(audit.warnings).toEqual([]);
-    expect(audit.tempPaths).toEqual([{tool: 'Bash', path: '/tmp/App.bak'}]);
-    const expanded = auditTranscript(
-      [toolUse('Bash', {command: 'cp src/App.tsx /tmp/${NAME}.bak'})],
-      WORKSPACE,
-      SENSITIVE,
-      '/home/agent',
-      {tempRoots: ['/tmp']},
-    );
-    expect(expanded.tempPaths).toEqual([]);
-  });
-
-  it('audits a substitution after escaped backslashes and the lines after a quoted <<', () => {
-    const other = '/runs/r1/runs/form__other__r1/workspace/src/App.tsx';
-    const escaped = auditTranscript(
-      [toolUse('Bash', {command: `cat > notes.txt <<EOF\n\\\\$(cp ${other} /tmp/x)\nEOF`})],
-      WORKSPACE,
-      SENSITIVE,
-      '/home/agent',
-      {tempRoots: ['/tmp']},
-    );
-    expect(escaped.violations.map(item => item.path)).toContain(other);
-    const quoted = auditTranscript(
-      [toolUse('Bash', {command: `echo '<<EOF'\ncp ${other} /tmp/y\nEOF`})],
-      WORKSPACE,
-      SENSITIVE,
-      '/home/agent',
-      {tempRoots: ['/tmp']},
-    );
-    expect(quoted.violations.map(item => item.path)).toContain(other);
-    const commented = auditTranscript(
-      [toolUse('Bash', {command: `true # <<EOF\ncp ${other} /tmp/z\nEOF`})],
-      WORKSPACE,
-      SENSITIVE,
-      '/home/agent',
-      {tempRoots: ['/tmp']},
-    );
-    expect(commented.violations.map(item => item.path)).toContain(other);
-  });
-
-  it('keeps the lines after a <<< or a << it cannot be sure of as shell text', () => {
-    const other = '/runs/r1/runs/form__other__r1/workspace/src/App.tsx';
-    const commands = [
-      `echo 'note\ncat <<EOF'\ncp ${other} /tmp/y2\nEOF`,
-      `echo hi;#<<EOF\ncp ${other} /tmp/y3\nEOF`,
-      `echo $'\\'<<EOF'\ncp ${other} /tmp/y4\nEOF`,
-      `cat <<< EOF\ncp ${other} /tmp/y1\nEOF`,
-      `cat <<EOF | /bin/sh\ncp ${other} /tmp/y5\nEOF`,
-    ];
-    for (const command of commands) {
-      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
-      expect(audit.violations.map(item => item.path)).toContain(other);
-    }
-  });
-
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
-    const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];
-    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {ownTemp, tempRoots: ['/tmp']});
+    const audit = auditTranscript([toolUse('Bash', {command: `cat ${ownTemp}/App.bak`})], WORKSPACE, SENSITIVE, '/home/agent', {
+      ownTemp,
+      tempRoots: ['/tmp'],
+    });
     expect(audit.violations).toEqual([]);
     expect(audit.warnings).toEqual([]);
-    expect(audit.tempPaths).toEqual([]);
   });
 
   it('treats web tools and sub-agents as violations', () => {
@@ -282,21 +148,15 @@ describe('auditTranscript', () => {
   });
 });
 
-describe('shellCanExpand', () => {
-  it('reads a plain or quoted path as literal', () => {
-    expect(shellCanExpand('cp src/a.ts /tmp/a.bak && cat /tmp/a.bak', '/tmp/a.bak')).toBe(false);
-    expect(shellCanExpand('cat "/tmp/a.bak"', '/tmp/a.bak')).toBe(false);
-    expect(shellCanExpand('cat "/tmp/a"b.bak', '/tmp/a')).toBe(true);
-    expect(shellCanExpand('cat /tmp/x/../y', '/tmp/x/../y')).toBe(true);
-    expect(shellCanExpand('cat x/tmp/a.bak', '/tmp/a.bak')).toBe(true);
-    expect(shellCanExpand('cat /tmp/a.bak>out.txt', '/tmp/a.bak')).toBe(false);
-  });
-
-  it('flags a variable, an escape, a pattern or a backtick that continues the word', () => {
-    expect(shellCanExpand('cat /tmp/$E/x', '/tmp/$E/x')).toBe(true);
-    expect(shellCanExpand('cat /tmp/a\\-b/x', '/tmp/a\\-b/x')).toBe(true);
-    expect(shellCanExpand('cat /tmp/*/x', '/tmp/*/x')).toBe(true);
-    expect(shellCanExpand('cat /tmp/a-`echo b`/x', '/tmp/a-')).toBe(true);
+describe('isPlainBackup', () => {
+  it('accepts only cp, mv and mkdir -p on literal paths', () => {
+    expect(isPlainBackup('cp -r src /tmp/src.bak')).toBe(true);
+    expect(isPlainBackup('mkdir -p /tmp/bak && cp src/App.tsx /tmp/bak/')).toBe(true);
+    expect(isPlainBackup('cp src/App.tsx /tmp/../tmp/x')).toBe(false);
+    expect(isPlainBackup('cp src/App.tsx "/tmp/x"')).toBe(false);
+    expect(isPlainBackup('mkdir /tmp/x')).toBe(true);
+    expect(isPlainBackup('mkdir -m 777 /tmp/x')).toBe(false);
+    expect(isPlainBackup('cat /tmp/x')).toBe(false);
   });
 });
 

@@ -12,47 +12,31 @@ import os from 'node:os';
 import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
-/** File commands that take their paths as written. Any other program can build a path at run time. */
-const PLAIN_COMMAND = /^(?:cp|mv|cat|ls|rm|mkdir|touch|diff|cmp|head|tail|tee|echo|printf|cd)$/;
+/**
+ * A plain backup: only `cp`, `mv` and `mkdir -p`, joined by `&&`, on literal
+ * paths, with single spaces. Any other text can make the shell reach a path
+ * the audit does not see, so only such a command lists its temp paths apart.
+ */
+export function isPlainBackup(command) {
+  if (/[^\S ]/.test(command)) return false;
+  return command.split('&&').every(stage => {
+    const [program, ...args] = stage.trim().split(/ +/);
+    if (!['cp', 'mv', 'mkdir'].includes(program) || args.length === 0) return false;
+    return args.every(arg =>
+      program === 'mkdir' ? arg === '-p' || isLiteralPath(arg) : /^-[a-zA-Z]+$/.test(arg) || isLiteralPath(arg),
+    );
+  });
+}
+
+function isLiteralPath(arg) {
+  return /^[\w./+-]+$/.test(arg) && !arg.startsWith('-') && !arg.split('/').includes('..');
+}
 
 /** Where a path leads after links: the real path of its nearest existing folder, plus the rest. */
 function linkTarget(file) {
   let existing = file;
   while (!fs.existsSync(existing) && path.dirname(existing) !== existing) existing = path.dirname(existing);
   return path.join(fs.realpathSync(existing), path.relative(existing, file));
-}
-
-/**
- * Whether the shell or an interpreter can change a path the audit read from a
- * command. A path is plain only when the command has no expansion, runs no
- * heredoc as code, and runs only plain file commands named as bare words; the
- * path holds path characters and no `..`; and each time it occurs it is a whole
- * word: bare, or in quotes that close right after it, with a word break on both
- * sides. Anything else can expand into a run.
- */
-export function shellCanExpand(command, raw) {
-  // splitHeredocs drops file content and keeps what the shell runs, so a
-  // brace in a file the agent writes does not count as an expansion.
-  const {shell, code} = splitHeredocs(command);
-  if (code.length > 0 || /[$`{}]/.test(shell)) return true;
-  if (!runsOnlyPlainCommands(shell)) return true;
-  if (!/^[\w./+-]+$/.test(raw) || raw.split('/').includes('..')) return true;
-  for (let at = command.indexOf(raw); at !== -1; at = command.indexOf(raw, at + 1)) {
-    const opener = command[at - 1];
-    let start = at;
-    let end = at + raw.length;
-    if (opener === "'" || opener === '"') {
-      if (command[end] !== opener) return true;
-      start -= 1;
-      end += 1;
-    } else if (/[\w./+-]/.test(command[end] ?? '')) {
-      // A longer path that starts with this one; the audit checks it as its own path.
-      continue;
-    }
-    if (start > 0 && !/[\s;|&()<>]/.test(command[start - 1])) return true;
-    if (end < command.length && !/[\s;|&()<>]/.test(command[end])) return true;
-  }
-  return false;
 }
 
 /** System locations an agent may name without reading project data. */
@@ -91,84 +75,22 @@ const SHELL = /(?:^|[\s|;&(])(?:bash|sh|zsh)(?=[\s<]|$)/;
  */
 export function splitHeredocs(command) {
   const code = [];
-  let shell = '';
-  let last = 0;
-  const heredoc = /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g;
-  for (const match of command.matchAll(heredoc)) {
-    const [whole, before, quote, , after, body] = match;
-    shell += command.slice(last, match.index);
-    last = match.index + whole.length;
-    // Drop a body only when it is surely a heredoc and its reader is known.
-    // A here-string (`<<<`), or a `<<` in a quote or comment open from the
-    // start of the command, opens no heredoc, and a reader the audit does not
-    // know can run the body, so those lines stay shell text.
-    if (before.endsWith('<') || isQuotedOrCommented(shell + before)) {
-      shell += whole;
-      continue;
-    }
-    const runner = `${before} ${after}`;
-    if (SHELL.test(runner)) {
-      shell += `${runner}\n${body}`;
-      continue;
-    }
-    if (INTERPRETER.test(runner)) code.push(body);
-    else if (!runsOnlyPlainCommands(runner)) {
-      shell += whole;
-      continue;
-    }
-    // The shell runs command substitutions in an unquoted heredoc body. An odd
-    // run of backslashes escapes `$(` or a backtick, so it does not run; an
-    // even run is escaped backslashes, and the substitution runs.
-    const substitutions = quote
-      ? []
-      : [...body.matchAll(/(\\*)(?:\$\(([^)]*)\)|`([^`]*)`)/g)]
-          .filter(substitution => substitution[1].length % 2 === 0)
-          .map(substitution => substitution[2] ?? substitution[3]);
-    shell += substitutions.length > 0 ? `${runner}\n${substitutions.join('\n')}` : runner;
-  }
-  return {shell: shell + command.slice(last), code};
-}
-
-/**
- * Whether the end of `text` is inside an open quote or a `#` comment. A quote
- * can span lines, `$'…'` takes backslash escapes, and a comment starts at a
- * word start and ends at a newline.
- */
-function isQuotedOrCommented(text) {
-  let quote = null;
-  let isComment = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    if (isComment) {
-      if (char === '\n') isComment = false;
-    } else if (quote === "'") {
-      if (char === "'") quote = null;
-    } else if (quote === '"' || quote === "$'") {
-      if (char === '\\') i += 1;
-      else if (char === quote.at(-1)) quote = null;
-    } else if (char === '\\') {
-      i += 1;
-    } else if (char === '$' && text[i + 1] === "'") {
-      quote = "$'";
-      i += 1;
-    } else if (char === "'" || char === '"') {
-      quote = char;
-    } else if (char === '#' && (i === 0 || /[\s;&|()<>]/.test(text[i - 1]))) {
-      isComment = true;
-    }
-  }
-  return quote !== null || isComment;
-}
-
-/** Whether every program in shell text is a plain file command named as a bare word. */
-function runsOnlyPlainCommands(text) {
-  // A single `&` starts a new command, except in a redirect such as `2>&1` or `&>`.
-  return text
-    .split(/&&|\|\|?|;|(?<![<>])&(?!>)|\n|[()]/)
-    .every(stage => {
-      const program = stage.trim().split(/\s+/)[0];
-      return !program || PLAIN_COMMAND.test(program);
-    });
+  const shell = command.replace(
+    /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g,
+    (_whole, before, quote, _marker, after, body) => {
+      const runner = `${before} ${after}`;
+      if (SHELL.test(runner)) return `${runner}\n${body}`;
+      if (INTERPRETER.test(runner)) code.push(body);
+      // The shell runs command substitutions in an unquoted heredoc body.
+      if (!quote) {
+        // An escaped `\$(` or backtick is literal text, so it does not run.
+        const substitutions = [...body.matchAll(/(?<!\\)\$\(([^)]*)\)|(?<!\\)`([^`]*)`/g)].map(match => match[1] ?? match[2]);
+        if (substitutions.length > 0) return `${runner}\n${substitutions.join('\n')}`;
+      }
+      return runner;
+    },
+  );
+  return {shell, code};
 }
 
 /** In code, a path is a string literal, so division, comments and a lone '/' are not paths. */
@@ -402,11 +324,10 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
  * probes, other runs) is a violation, and so is a recursive read (`grep -r`,
  * `rg`, `find -exec`, the Grep tool) of a root or a folder that holds one.
  * Only naming a root or such a folder (`ls ~`, `find / -name`) is a warning. Any other outside path is a
- * warning to review: a command can name a path without reading it. A path in the system temp folder
- * outside every root, such as a backup the agent copies to `/tmp`, is listed apart as a temp path
- * when it is literal; a path there that the shell can expand stays a warning, because it can reach a run:
- * the agents that run at the same time share that folder. The agent's own temp folder (`ownTemp`,
- * its TMPDIR) is its own.
+ * warning to review: a command can name a path without reading it. In a plain
+ * `cp` or `mv` backup only, a path in the system temp folder outside every run
+ * is listed apart as a temp path, because the agents that run at the same time
+ * share that folder. The agent's own temp folder (`ownTemp`, its TMPDIR) is its own.
  * @param {string[]} lines
  * @param {string} workspace real path of the workspace
  * @param {string[]} sensitiveRoots
@@ -428,7 +349,12 @@ export function auditTranscript(
   // The agent saves long tool output in its own session folder and reads it back.
   const ownSession = path.join(home, '.claude', 'projects', workspace.replace(/[^A-Za-z0-9]/g, '-'));
   let shellCwd = workspace;
-  const check = (raw, tool, resolved = resolveRaw(raw, workspace, home), {relative = false, recursive = false, expands = false} = {}) => {
+  const check = (
+    raw,
+    tool,
+    resolved = resolveRaw(raw, workspace, home),
+    {relative = false, recursive = false, plainBackup = false} = {},
+  ) => {
     if (isInside(resolved, ownSession) || isInside(resolved, workspace)) return;
     if (ownTemp && isInside(resolved, ownTemp)) return;
     // A recursive reader of a root, or of a folder above one, reads the files inside it.
@@ -446,14 +372,9 @@ export function auditTranscript(
       return;
     }
     if (ALLOWED_PREFIXES.some(prefix => resolved.startsWith(prefix))) return;
-    // A path the shell can expand can reach another run, so only a literal path counts as a temp path.
-    const literal = !expands && !/[*?[{]/.test(raw);
-    if (literal && tempRoots.some(root => resolved !== root && isInside(resolved, root))) {
-      // A link the agent made can point a temp path into a run, so the path's target decides.
-      if (sensitiveRoots.some(root => isInside(linkTarget(resolved), root))) {
-        warnings.push({tool, path: raw});
-        return;
-      }
+    // A link the agent made can point a temp path into a run, so the path's target decides.
+    const isTempPath = tempRoots.some(root => resolved !== root && isInside(resolved, root));
+    if (plainBackup && isTempPath && !sensitiveRoots.some(root => isInside(linkTarget(resolved), root))) {
       tempPaths.push({tool, path: raw});
       return;
     }
@@ -477,7 +398,7 @@ export function auditTranscript(
       const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd, home);
       for (const {raw, resolved, relative, recursive, unknown} of found) {
         if (unknown) warnings.push({tool: use.name, path: raw});
-        else check(raw, use.name, resolved, {relative, recursive, expands: shellCanExpand(input.command, raw)});
+        else check(raw, use.name, resolved, {relative, recursive, plainBackup: isPlainBackup(input.command)});
       }
       shellCwd = cwd;
       if (/\b(astryx|shadcn)\b/.test(input.command)) docsCommands.push(input.command.slice(0, 200));

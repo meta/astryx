@@ -69,15 +69,14 @@ literals. The script or pattern of `sed` and search commands is text, not a
 path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
-`report.md` lists every run with warnings for a person to review. A path in the
-system temp folder outside every run, such as a backup an agent copies to
-`/tmp`, is not a warning: `report.md` lists those runs apart, because the agents
-that run at the same time share that folder. A path there that the shell can
-change stays a warning, because it can expand into a run: a path that is not a
-whole plain word, and any temp path in a command that runs anything but plain
-file commands (such as `cp`, `cat` and `diff`) or holds an expansion. Each agent gets its own TMPDIR in
-its run folder, removed after the run, so tools that honor TMPDIR keep their
-files apart. When the agent exits or times out, the runner kills its whole process
+`report.md` lists every run with warnings for a person to review. Only a plain
+`cp` or `mv` backup into the system temp folder (with `mkdir -p`, on literal
+paths, nothing else in the command) is listed apart: `report.md` names those
+runs on their own line, because the agents that run at the same time share that
+folder. Any other command or tool that names a temp path stays a warning,
+because the audit cannot tell everything the shell runs. Each agent gets its own
+TMPDIR in its run folder, removed after the run, so tools that honor TMPDIR keep
+their files apart. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
 A run where the agent fails before its first turn, writes no result, or cannot
