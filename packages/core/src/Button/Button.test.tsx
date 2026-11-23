@@ -43,7 +43,7 @@ const narrowRowProbe = stylex.create({
 });
 
 describe('Button', () => {
-  it('gives a Latin label its own direction, so a cut label keeps its start, and leaves a right-to-left label in the page direction', () => {
+  it('gives a Latin label its own direction, so a cut label keeps its start, and gives a right-to-left label its own right-to-left direction', () => {
     render(
       <div dir="rtl">
         <Button label="Monthly report" />
@@ -51,9 +51,25 @@ describe('Button', () => {
       </div>,
     );
     expect(screen.getByText('Monthly report')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('דוח חודשי')).not.toHaveAttribute('dir');
+    expect(screen.getByText('דוח חודשי')).toHaveAttribute('dir', 'rtl');
     expect(screen.getByRole('button', {name: 'Monthly report'})).toBeTruthy();
   });
+
+  it.each(['ltr', 'rtl'])(
+    'leaves a label that mixes both scripts to the page on a %s page, as before',
+    dir => {
+      render(
+        <div dir={dir}>
+          <Button label="Invoice for שירה כהן" />
+          <Button label="iPhone של דנה" />
+        </div>,
+      );
+      expect(screen.getByText('Invoice for שירה כהן')).not.toHaveAttribute(
+        'dir',
+      );
+      expect(screen.getByText('iPhone של דנה')).not.toHaveAttribute('dir');
+    },
+  );
 
   // Retained, narrowed: the shared contract proves the ROLE and the accessible
   // NAME in a real engine (button.role.exposed, button.name.exposed), which is

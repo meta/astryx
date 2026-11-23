@@ -1211,9 +1211,9 @@ export function motionNow(): number {
 }
 
 /**
- * Whether the user asked for reduced motion (`prefers-reduced-motion:
- * reduce`), read at the moment of the call: the preference the animator uses
- * by default for its Reduce Motion substitution. A component never reads it
+ * Whether the person's Reduce Motion setting is on (`prefers-reduced-motion:
+ * reduce`), read at the moment of the call, without a theme's `'always'`
+ * (`reducesMotion` adds that, and the animator calls it). A component never reads it
  * to pick a curve of its own: its motion settings do not override the
  * policy (design:reduced-motion DR4); `animator.reducedMotion()` or
  * `reducedMotionFade()` gives the policy's answer. False without a window
