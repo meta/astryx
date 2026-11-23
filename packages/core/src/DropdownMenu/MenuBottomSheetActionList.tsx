@@ -16,7 +16,7 @@ import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
+import {pressBelongsToControl} from '../hooks/useClickableContainer';
 import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
@@ -56,15 +56,8 @@ function sheetElementAtPoint(
     return element;
   }
   const row = element.closest('li');
-  // A control in the row's content keeps its own press. This is Item's click
-  // rule: the shared walk, plus a form control or link it skips (a read-only
-  // input).
-  const control = element.closest('button, a, input, select, textarea');
-  if (
-    row != null &&
-    ((control != null && row.contains(control)) ||
-      hasInteractiveAncestor(element, row))
-  ) {
+  // A control in the row's content keeps its own press, as in Item's click.
+  if (row != null && pressBelongsToControl(element, row)) {
     return element;
   }
   if (row != null) {
