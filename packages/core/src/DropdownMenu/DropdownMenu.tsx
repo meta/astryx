@@ -576,6 +576,12 @@ function holdInvokerThroughPress(
  * when it is a non-empty string, else the trigger's own accessible name. The
  * popover and the bottom sheet both name the menu through this.
  */
+/** The ids an element names itself by with `aria-labelledby`, if any. */
+function readNameReference(element: HTMLElement | null): string | undefined {
+  const ids = element?.getAttribute('aria-labelledby')?.trim();
+  return ids ? ids : undefined;
+}
+
 function resolveCustomTriggerMenuName(
   callerLabel: unknown,
   triggerName: string | undefined,
@@ -972,6 +978,11 @@ function DropdownMenuPopover({
 
   // The name a custom trigger gives the menu, read off it as the menu opens.
   const [triggerName, setTriggerName] = useState<string | undefined>(undefined);
+  // The ids a custom trigger names itself by. A name reference does not follow
+  // a second reference, so the menu points at these ids, not at the trigger.
+  const [triggerLabelledBy, setTriggerLabelledBy] = useState<
+    string | undefined
+  >(undefined);
 
   // Open state
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -1152,6 +1163,7 @@ function DropdownMenuPopover({
     resetFocusReturn();
     if (renderTrigger != null) {
       setTriggerName(readAccessibleName(buttonRef.current));
+      setTriggerLabelledBy(readNameReference(buttonRef.current));
     }
     if (notifyClickOnShowRef.current) {
       notifyClickOnShowRef.current = false;
@@ -1922,7 +1934,7 @@ function DropdownMenuPopover({
             }
             aria-labelledby={
               renderTrigger != null && rest['aria-label'] == null
-                ? triggerId
+                ? (triggerLabelledBy ?? triggerId)
                 : (rest['aria-labelledby'] as string | undefined)
             }
             onKeyDown={listKeyDown}
