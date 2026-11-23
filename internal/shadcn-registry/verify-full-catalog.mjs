@@ -59,6 +59,42 @@ const USE_PUBLISHED_PACKAGES =
 const MAX_COMMAND_OUTPUT = 16 * 1024 * 1024;
 const COPIED_KINDS = new Set(['showcase', 'example', 'block', 'page']);
 const MODES = {typescript: [true], javascript: [false], all: [true, false]};
+const CONSUMER_BASELINE_PACKAGES = new Set([
+  'react',
+  'react-dom',
+  '@types/react',
+  '@types/react-dom',
+]);
+const SAFE_CHILD_ENV_KEYS = new Set([
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'SYSTEMROOT',
+  'SYSTEMDRIVE',
+  'COMSPEC',
+  'PATHEXT',
+  'PROGRAMFILES',
+  'PROGRAMFILES(X86)',
+  'PROGRAMDATA',
+  'PNPM_HOME',
+  'COREPACK_HOME',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'NPM_CONFIG_REGISTRY',
+  'NODE_EXTRA_CA_CERTS',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+]);
 
 /** The consumer modes to verify, as `tsx` flags: `--mode <name>`, or both. */
 export function selectedModes(argv) {
@@ -84,10 +120,10 @@ function resolveInside(root, relative, label) {
   }
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, relative);
-  if (
-    resolved !== resolvedRoot &&
-    !resolved.startsWith(`${resolvedRoot}${path.sep}`)
-  ) {
+  const rootPrefix = resolvedRoot.endsWith(path.sep)
+    ? resolvedRoot
+    : `${resolvedRoot}${path.sep}`;
+  if (!resolved.startsWith(rootPrefix)) {
     fail(`${label} escapes its root: ${relative}`);
   }
   return resolved;
@@ -96,11 +132,96 @@ function resolveInside(root, relative, label) {
 function packageName(spec) {
   if (spec.startsWith('@')) {
     const slash = spec.indexOf('/');
-    const version = spec.indexOf('@', slash);
+    if (slash === -1) return spec;
+    const version = spec.indexOf('@', slash + 1);
     return version === -1 ? spec : spec.slice(0, version);
   }
   const version = spec.indexOf('@');
   return version === -1 ? spec : spec.slice(0, version);
+}
+
+function importedPackageName(specifier) {
+  if (
+    specifier.startsWith('.') ||
+    specifier.startsWith('/') ||
+    specifier.startsWith('@/') ||
+    specifier.startsWith('~/') ||
+    specifier.startsWith('node:') ||
+    specifier.includes(':')
+  ) {
+    return null;
+  }
+  if (specifier.startsWith('@')) {
+    const parts = specifier.split('/');
+    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : specifier;
+  }
+  return specifier.split('/')[0];
+}
+
+function extractExternalImports(source) {
+  const withoutComments = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const packages = new Set();
+  const staticImportPattern =
+    /^\s*(?:import|export)\s+(?:type\s+)?(?:[^;'"`]*?\bfrom\s+)?['"]([^'"]+)['"]/gm;
+  for (const match of withoutComments.matchAll(staticImportPattern)) {
+    const pkg = importedPackageName(match[1]);
+    if (pkg != null && !CONSUMER_BASELINE_PACKAGES.has(pkg)) {
+      packages.add(pkg);
+    }
+  }
+  const dynamicImportPattern = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const match of withoutComments.matchAll(dynamicImportPattern)) {
+    const pkg = importedPackageName(match[1]);
+    if (pkg != null && !CONSUMER_BASELINE_PACKAGES.has(pkg)) {
+      packages.add(pkg);
+    }
+  }
+  return packages;
+}
+
+function declaredPackagesForItem(item, itemsByName, seen = new Set()) {
+  const declared = new Set();
+  if (seen.has(item.name)) return declared;
+  seen.add(item.name);
+
+  for (const spec of [
+    ...(item.dependencies ?? []),
+    ...(item.devDependencies ?? []),
+    ...(item.peerDependencies ?? []),
+  ]) {
+    declared.add(packageName(spec));
+  }
+  for (const depName of item.registryDependencies ?? []) {
+    const upstream =
+      itemsByName.get(depName) ??
+      itemsByName.get(depName.replace(/^.*\/([^/]+?)(?:\.json)?$/, '$1'));
+    if (upstream != null) {
+      for (const pkg of declaredPackagesForItem(upstream, itemsByName, seen)) {
+        declared.add(pkg);
+      }
+    }
+  }
+  return declared;
+}
+
+function childProcessEnv(scratch) {
+  const env = {
+    CI: 'true',
+    TMPDIR: scratch,
+    TMP: scratch,
+    TEMP: scratch,
+  };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (
+      typeof value === 'string' &&
+      SAFE_CHILD_ENV_KEYS.has(key.toUpperCase())
+    ) {
+      env[key] = value;
+    }
+  }
+  return env;
 }
 
 function localPackageDirs() {
@@ -380,12 +501,6 @@ function writeConsumer(project, items, packageDirs, {tsx}) {
       2,
     )}\n`,
   );
-  // Every dependency is pinned by generated registry data. The consumer is
-  // ephemeral, and local Astryx packages need their checked-in install hooks.
-  fs.writeFileSync(
-    path.join(project, 'pnpm-workspace.yaml'),
-    'packages: []\ndangerouslyAllowAllBuilds: true\n',
-  );
   fs.writeFileSync(
     path.join(project, 'tsconfig.json'),
     `${JSON.stringify(
@@ -465,6 +580,26 @@ function writeConsumer(project, items, packageDirs, {tsx}) {
     itemPaths.push(itemPath);
   }
 
+  // Every dependency is pinned by generated registry data. The consumer is
+  // ephemeral, and only local Astryx packages may run install hooks.
+  const builtDependencies = [
+    ...new Set([
+      ...(packageDirs ? packageDirs.keys() : []),
+      ...[...dependencyNames].filter(name => name.startsWith('@astryxdesign/')),
+    ]),
+  ].sort();
+  const workspaceLines = ['packages: []'];
+  if (builtDependencies.length > 0) {
+    workspaceLines.push('onlyBuiltDependencies:');
+    for (const name of builtDependencies) {
+      workspaceLines.push(`  - ${JSON.stringify(name)}`);
+    }
+  }
+  fs.writeFileSync(
+    path.join(project, 'pnpm-workspace.yaml'),
+    `${workspaceLines.join('\n')}\n`,
+  );
+
   return {dependencyNames, itemPaths};
 }
 
@@ -476,13 +611,16 @@ function runShadcn(project, itemPaths) {
   // transforms: keep them inside the consumer, which main() removes.
   const scratch = path.join(project, '.tmp');
   fs.mkdirSync(scratch, {recursive: true});
+  const relativeItemPaths = itemPaths.map(itemPath =>
+    path.relative(project, itemPath),
+  );
   const result = spawnSync(
     SHADCN_BIN,
-    ['add', ...itemPaths, '--yes', '--overwrite', '--silent'],
+    ['add', ...relativeItemPaths, '--yes', '--overwrite', '--silent'],
     {
       cwd: project,
       encoding: 'utf8',
-      env: {...process.env, CI: 'true', TMPDIR: scratch},
+      env: childProcessEnv(scratch),
       maxBuffer: MAX_COMMAND_OUTPUT,
       timeout: 10 * 60_000,
     },
@@ -510,10 +648,12 @@ function expectedInstalledFile(file, tsx) {
 }
 
 function verifyInstall(project, items, dependencyNames, {tsx}) {
+  const itemsByName = new Map(items.map(item => [item.name, item]));
   const sources = [];
   let installedFiles = 0;
 
   for (const item of items) {
+    const declared = declaredPackagesForItem(item, itemsByName);
     for (const file of item.files) {
       const expected = expectedInstalledFile(file, tsx);
       const installed = resolveInside(
@@ -536,6 +676,13 @@ function verifyInstall(project, items, dependencyNames, {tsx}) {
         !/\.d\.[cm]?ts$/.test(expected.target)
       ) {
         sources.push(installed);
+        for (const importedPkg of extractExternalImports(actual)) {
+          if (!declared.has(importedPkg)) {
+            fail(
+              `${item.name} imports ${importedPkg} in ${expected.target} without declaring it in dependencies`,
+            );
+          }
+        }
       }
     }
   }
