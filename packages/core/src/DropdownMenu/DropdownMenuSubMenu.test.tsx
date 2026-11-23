@@ -1663,10 +1663,12 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     );
     await user.click(shownRow('Move to'));
     const back = await waitFor(() => shownRow(`Back to ${title}`));
-    const spans = Array.from(back.querySelectorAll('span'));
-    const label = spans.find(span => span.textContent === `Back to ${title}`);
-    const isolated = spans.find(span => span.textContent === title);
-    expect(label).not.toHaveAttribute('dir');
+    const isolated = Array.from(back.querySelectorAll('span')).find(
+      span => span.textContent === title,
+    );
+    // The label span is the title's parent; neither sets a direction.
+    expect(isolated?.parentElement?.textContent).toBe(`Back to ${title}`);
+    expect(isolated?.parentElement).not.toHaveAttribute('dir');
     expect(isolated).not.toHaveAttribute('dir');
   });
 
