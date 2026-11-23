@@ -141,6 +141,29 @@ describe('auditTranscript', () => {
     }
   });
 
+  it('keeps a temp path on the warning list when a program other than a plain file command runs', () => {
+    const app = 'astryx-vibe-eval/s1/runs/form__arm__r1/workspace/src/App.tsx';
+    const commands = [
+      `node<<'EOF'\nrequire('fs').readFileSync(require('path').join(require('path').dirname('/tmp/q'), '${app}'))\nEOF`,
+      `python3<<'EOF'\nprint(open('/tmp/astryx-vibe-' + 'eval/s1/runs/form__arm__r1/workspace/src/App.tsx').read())\nEOF`,
+      `/usr/bin/python3 -c "import os; print(open(os.path.join(os.path.dirname('/tmp/q'), '${app}')).read())"`,
+      '/bin/ln -s astryx-vibe-eval /tmp/q',
+      '\\ln -s astryx-vibe-eval /tmp/q',
+      "l''n -s astryx-vibe-eval /tmp/q",
+    ];
+    for (const command of commands) {
+      const audit = auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+      expect(audit.tempPaths).toEqual([]);
+    }
+  });
+
+  it('keeps a backup a plain file command writes as a temp path', () => {
+    const lines = [toolUse('Bash', {command: "mkdir -p /tmp/bak && cp src/App.tsx /tmp/bak/App.tsx && cat > src/App.tsx <<'EOF'\nexport default 1;\nEOF"})];
+    const audit = auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent', {tempRoots: ['/tmp']});
+    expect(audit.warnings).toEqual([]);
+    expect(audit.tempPaths.map(item => item.path)).toEqual(expect.arrayContaining(['/tmp/bak', '/tmp/bak/App.tsx']));
+  });
+
   it('allows the agent its own temp folder inside its run', () => {
     const ownTemp = '/runs/r1/runs/task__arm__r1/tmp';
     const lines = [toolUse('Bash', {command: `cp src/App.tsx ${ownTemp}/App.bak`})];

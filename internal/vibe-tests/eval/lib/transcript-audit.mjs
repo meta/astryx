@@ -11,18 +11,25 @@ import os from 'node:os';
 import path from 'node:path';
 import {givenAndRealPaths, isInside} from './workspace.mjs';
 
-/** Command text that can build or redirect a path at run time: expansions, links, finders and interpreters. */
-const REWRITES = /[$`{}]|(?:^|[\s|;&(])(?:ln|find|xargs|eval|env|python3?|node|deno|bun|tsx|bash|sh|zsh|ruby|perl)(?=\s|$)/;
+/** File commands that take their paths as written. Any other program can build a path at run time. */
+const PLAIN_COMMAND = /^(?:cp|mv|cat|ls|rm|mkdir|touch|diff|cmp|head|tail|wc|sort|tee|echo|printf|cd)$/;
 
 /**
  * Whether the shell or an interpreter can change a path the audit read from a
- * command. A path is plain only when the command builds no path at run time,
- * the path holds path characters and no `..`, and each time it occurs it is a
- * whole word: bare, or in quotes that close right after it, with a word break
- * on both sides. Anything else can expand into a run.
+ * command. A path is plain only when the command has no expansion, runs no
+ * heredoc as code, and runs only plain file commands named as bare words; the
+ * path holds path characters and no `..`; and each time it occurs it is a whole
+ * word: bare, or in quotes that close right after it, with a word break on both
+ * sides. Anything else can expand into a run.
  */
 export function shellCanExpand(command, raw) {
-  if (REWRITES.test(command)) return true;
+  if (/[$`{}]/.test(command)) return true;
+  const {shell, code} = splitHeredocs(command);
+  if (code.length > 0) return true;
+  for (const stage of shell.split(/&&|\|\|?|;|\n|[()]/)) {
+    const program = stage.trim().split(/\s+/)[0];
+    if (program && !PLAIN_COMMAND.test(program)) return true;
+  }
   if (!/^[\w./+-]+$/.test(raw) || raw.split('/').includes('..')) return true;
   for (let at = command.indexOf(raw); at !== -1; at = command.indexOf(raw, at + 1)) {
     const opener = command[at - 1];
@@ -32,6 +39,9 @@ export function shellCanExpand(command, raw) {
       if (command[end] !== opener) return true;
       start -= 1;
       end += 1;
+    } else if (/[\w./+-]/.test(command[end] ?? '')) {
+      // A longer path that starts with this one; the audit checks it as its own path.
+      continue;
     }
     if (start > 0 && !/[\s;|&()<>]/.test(command[start - 1])) return true;
     if (end < command.length && !/[\s;|&()<>]/.test(command[end])) return true;
