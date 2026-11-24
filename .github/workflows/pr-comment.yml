@@ -109,7 +109,8 @@ jobs:
             core.setOutput('run_id', String(identity.sourceRunId));
             core.setOutput('run_attempt', String(identity.sourceRunAttempt));
             core.setOutput('source_conclusion', identity.sourceConclusion);
-            core.setOutput('spec_only', String(changeScope.specOnly));
+            // A docs-only change takes the spec-only lane, as in CI.
+            core.setOutput('spec_only', String(changeScope.specOnly || changeScope.docsOnly === true));
             core.setOutput('tooling_only', String(changeScope.toolingOnly));
 
   spec-only-reconcile:

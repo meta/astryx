@@ -219,25 +219,27 @@ const RECORD_LITERAL =
 /**
  * A Markdown file or the license at the repository root: a relative path
  * (`'../../README.md'`, `new URL('../AGENTS.md', import.meta.url)`) or a name
- * joined to the repository root (`path.join(root, 'README.md')`). A bare name
- * alone is often a fixture's own file, so it does not count.
+ * joined to some folder (`path.join(REPO, 'README.md')`,
+ * `path.join(CLI, '..', '..', 'AGENTS.md')`). The folder is not resolved, so
+ * a fixture's own README counts too: that runs one more test, never one fewer.
+ * A bare name alone (`'README.md'`) does not count.
  */
 const ROOT_DOC_RELATIVE =
   /(['"`])((?:\.\.\/)+(?:[A-Za-z][\w.-]*\.md|LICENSE))\1/g;
-const ROOT_DOC_JOINED =
-  /\b(?:root|ROOT|repoRoot|REPO_ROOT|repositoryRoot|REPOSITORY_ROOT)\s*,\s*(['"`])([A-Za-z][\w.-]*\.md|LICENSE)\1/g;
+const ROOT_DOC_JOINED = /,\s*(['"`])([A-Za-z][\w.-]*\.md|LICENSE)\1/g;
+/** The Changesets folder, by name or a path into it. */
+const CHANGESET_LITERAL = /(['"`])(?:\.\.\/)*\.changeset(?:\/[^'"`\n]*)?\1/;
 const ROOT_DOC = /^(?:[^/]+\.md|LICENSE)$/;
 /** `path.join(root, 'docs', 'specs', …)` and the like: the whole root. */
 const RECORD_SEGMENTS =
   /(['"])(docs|packages)\1\s*,\s*(['"])(specs|families|design|themes)\3/g;
-/** `path.join(root, 'docs', …)` with any other folder: the whole docs/ tree. */
 /** `path.join(root, 'docs', …)`, outside the record folders above: the whole docs/ tree. */
 const DOCS_SEGMENT =
   /\b(?:root|ROOT|repoRoot|REPO_ROOT|repositoryRoot|REPOSITORY_ROOT)\s*,\s*(['"])docs\1(?!\s*,\s*(['"])(?:specs|families|design)\2)/;
 // A changed record: a spec record, or the recorded test times, whose readers
 // run for a change only to them (spec:AST-030 FR13).
 const RECORD_PATH =
-  /^(?:docs\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$|\.github\/playwright-leg-durations\.json$|[^/]+\.md$|LICENSE$)/;
+  /^(?:docs\/|\.changeset\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$|\.github\/playwright-leg-durations\.json$|[^/]+\.md$|LICENSE$)/;
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {
@@ -304,6 +306,7 @@ function recordPathsIn(file, source, isPath) {
   }
   for (const [, , name] of body.matchAll(ROOT_DOC_JOINED))
     if (isPath(name)) paths.add(name);
+  if (CHANGESET_LITERAL.test(body)) paths.add('.changeset/');
   return paths;
 }
 

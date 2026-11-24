@@ -219,6 +219,29 @@ describe('specReaderTests: the tests a docs-only change runs', () => {
   });
 });
 
+describe('specReaderTests over this repository', () => {
+  const tracked = execFileSync('git', ['ls-files', '-z'], {
+    cwd: path.resolve(import.meta.dirname, '../..'),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter(Boolean);
+  const readTracked = file =>
+    fs.readFileSync(
+      path.join(path.resolve(import.meta.dirname, '../..'), file),
+      'utf8',
+    );
+
+  it.each([
+    ['README.md', 'packages/cli/test/docs-topic-refs.test.mjs'],
+    ['AGENTS.md', 'packages/cli/test/docs-graph.test.mjs'],
+    ['.changeset/a-new-note.md', 'packages/cli/test/docs-topic-refs.test.mjs'],
+  ])('runs the test that reads %s', (changed, reader) => {
+    expect(specReaderTests(tracked, readTracked, [changed])).toContain(reader);
+  });
+});
+
 describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)', () => {
   const sources = {
     // Reads one record by a path relative to itself.

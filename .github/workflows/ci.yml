@@ -767,8 +767,6 @@ jobs:
       statuses: read
     outputs:
       deferred: ${{ steps.decide.outputs.deferred }}
-      # No package or docsite code changed: the required joins pass at once.
-      docs_only: ${{ steps.scope.outputs.docs_only }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -884,6 +882,9 @@ jobs:
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     outputs:
       lab_only: ${{ steps.scope.outputs.lab_only }}
+      # No package or docsite code changed: the required join says it is not
+      # affected. This job runs in every attempt, a re-run included.
+      docs_only: ${{ steps.scope.outputs.docs_only }}
       # The browser contracts apply: the docsite was built, and the change is
       # shared infrastructure or more than component tests, stories, spec
       # records and changesets.
@@ -1214,7 +1215,7 @@ jobs:
       # has work, so the check passes at once and says why. This is its own
       # success, never the deferral path below.
       - name: 'Not affected: no package or docsite changes'
-        if: needs.heavy-ci.outputs.docs_only == 'true'
+        if: needs.docsite-build.outputs.docs_only == 'true'
         run: |
           echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
           echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
@@ -2494,15 +2495,6 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
 
-      # No package or docsite code changed (spec:AST-030 FR2): nothing here
-      # has work, so the check passes at once and says why. This is its own
-      # success, never the deferral path below.
-      - name: 'Not affected: no package or docsite changes'
-        if: needs.heavy-ci.outputs.docs_only == 'true'
-        run: |
-          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
-          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
-
       # The PR report says why the heavy checks did not run. Recorded here,
       # in a job a failed-jobs re-run repeats, so its attempt has the record.
       - name: Record the deferral for the PR report
@@ -2558,6 +2550,15 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      # No package or docsite code changed (spec:AST-030 FR2): nothing here
+      # has work, so the check passes at once and says why. This is its own
+      # success, never the deferral path below.
+      - name: 'Not affected: no package or docsite changes'
+        if: steps.scope.outputs.docs_only == 'true'
+        run: |
+          echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
+          echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"
+
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
@@ -2569,26 +2570,26 @@ jobs:
       # plan's check, which fails test-node, is the check that gates it.
       - name: Check out the repository
         id: checkout_3
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true'
         uses: actions/checkout@v7
         timeout-minutes: 5
         continue-on-error: true
 
       - name: Check out the repository (second try)
         id: checkout_3_again
-        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
+        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped'
         uses: actions/checkout@v7
         timeout-minutes: 5
         continue-on-error: true
 
       - name: Stop when the checkout failed twice
-        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
+        if: (steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true') && steps.checkout_3.outcome != 'success' && steps.checkout_3.outcome != 'skipped' && steps.checkout_3_again.outcome != 'success'
         run: |
           echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
           exit 1
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}
@@ -2679,6 +2680,9 @@ jobs:
       short_hash: ${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
       pr_number: ${{ steps.urls.outputs.pr_number }}
       lab_only: ${{ steps.scope.outputs.lab_only }}
+      # No package or docsite code changed: the required join says it is not
+      # affected. This job runs in every attempt, a re-run included.
+      docs_only: ${{ steps.scope.outputs.docs_only }}
     env:
       # A release interaction check compares a release candidate with
       # release/interaction-check-base, a throwaway cut far behind main: an
@@ -3357,7 +3361,7 @@ jobs:
       # has work, so the check passes at once and says why. This is its own
       # success, never the deferral path below.
       - name: 'Not affected: no package or docsite changes'
-        if: needs.heavy-ci.outputs.docs_only == 'true'
+        if: needs.build-storybook.outputs.docs_only == 'true'
         run: |
           echo "::notice title=Not affected::Not affected: no package or docsite changes: this change touches only documentation, records or release notes, so there is nothing to build or test."
           echo "Not affected: no package or docsite changes. This change touches only documentation, records or release notes, so there is nothing to build or test." >> "$GITHUB_STEP_SUMMARY"

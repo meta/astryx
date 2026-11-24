@@ -39,10 +39,11 @@ describe('the docs-only lane', () => {
     );
   });
 
-  it('reaches the required joins through heavy-ci, which never defers it', () => {
-    expect(ci.jobs['heavy-ci'].outputs.docs_only).toBe(
-      '${{ steps.scope.outputs.docs_only }}',
-    );
+  it('reaches each required join from a job that runs in every attempt, and is never deferred', () => {
+    for (const name of ['build-storybook', 'docsite-build'])
+      expect(ci.jobs[name].outputs.docs_only, name).toBe(
+        '${{ steps.scope.outputs.docs_only }}',
+      );
     // A docs-only change comes in as spec_only, which the decision exempts.
     const decide = step(
       ci.jobs['heavy-ci'],
@@ -54,26 +55,57 @@ describe('the docs-only lane', () => {
     );
   });
 
-  it.each(['build', 'test', 'docsite-test'])(
-    'lets %s pass at once and say why',
-    name => {
-      const job = ci.jobs[name];
-      const notice = step(job, NOT_AFFECTED);
-      expect(notice, name).toBeDefined();
-      expect(notice.if).toBe("needs.heavy-ci.outputs.docs_only == 'true'");
-      expect(notice.run).toContain(
-        `::notice title=Not affected::${NOT_AFFECTED}: this change touches only documentation, records or release notes, so there is nothing to build or test.`,
+  it.each([
+    ['build', "needs.build-storybook.outputs.docs_only == 'true'"],
+    ['docsite-test', "needs.docsite-build.outputs.docs_only == 'true'"],
+    ['test', "steps.scope.outputs.docs_only == 'true'"],
+  ])('lets %s pass at once and say why', (name, condition) => {
+    const job = ci.jobs[name];
+    const notice = step(job, NOT_AFFECTED);
+    expect(notice, name).toBeDefined();
+    expect(notice.if).toBe(condition);
+    expect(notice.run).toContain(
+      `::notice title=Not affected::${NOT_AFFECTED}: this change touches only documentation, records or release notes, so there is nothing to build or test.`,
+    );
+    expect(notice.run).toContain('>> "$GITHUB_STEP_SUMMARY"');
+    // It reports on its own, never through the deferral path.
+    expect(notice.run).not.toContain('exit 1');
+    if (name === 'test') {
+      // The test join reads its own scope, so the notice follows it.
+      expect(job.steps.indexOf(notice)).toBeGreaterThan(
+        job.steps.indexOf(step(job, "Decide this job's scope")),
       );
-      expect(notice.run).toContain('>> "$GITHUB_STEP_SUMMARY"');
-      // It reports on its own, not through the deferral path.
-      const deferral = job.steps.findIndex(
-        each => each.name === 'Heavy CI deferred',
+    } else {
+      expect(job.steps.indexOf(notice)).toBeLessThan(
+        job.steps.indexOf(step(job, 'Heavy CI deferred')),
       );
-      expect(deferral).toBeGreaterThan(-1);
-      expect(job.steps.indexOf(notice)).toBeLessThan(deferral);
-      expect(notice.run).not.toContain('exit 1');
-    },
-  );
+    }
+  });
+
+  it('still fails the test join when a test that reads a changed document fails', () => {
+    const join = step(ci.jobs.test, 'Require expected test-owner outcomes');
+    expect(join.if).toContain("steps.scope.outputs.docs_only == 'true'");
+  });
+
+  it('reads docs-only as the spec-only lane wherever the JSON result is read', () => {
+    expect(
+      fs.readFileSync(
+        path.join(root, '.github/workflows/pr-comment.yml'),
+        'utf8',
+      ),
+    ).toContain(
+      "core.setOutput('spec_only', String(changeScope.specOnly || changeScope.docsOnly === true));",
+    );
+    const preflight = fs.readFileSync(
+      path.join(root, 'scripts/preflight.mjs'),
+      'utf8',
+    );
+    expect(
+      preflight.split(
+        'const specOnly = scope.specOnly || scope.timesOnly || scope.docsOnly === true;',
+      ),
+    ).toHaveLength(3);
+  });
 
   it('keeps the repository guardrails in lint for a docs-only change', () => {
     const lane =

@@ -505,7 +505,7 @@ describe('Node-tooling CI routing', () => {
     // require the release bump's own validation; so does a change only to the
     // recorded Node test times, which the Node leg plan's check gates.
     expect(testJoin.if).toBe(
-      "steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'",
+      "steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true' || steps.scope.outputs.docs_only == 'true'",
     );
     expect(testJoin.env).toMatchObject({
       RELEASE_BUMP: '${{ steps.scope.outputs.release_bump }}',
