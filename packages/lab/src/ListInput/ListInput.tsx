@@ -201,6 +201,10 @@ const GRIP = reorderHandle.grip;
 const TARGET_REACH = reorderHandle.targetReach;
 const HANDLE_ROOM = `calc(${GRIP} + ${TARGET_REACH})`;
 const TOUCH_HANDLE_ROOM = `calc(${GRIP} + ${reorderHandle.touchReach})`;
+// Core's handle stays clear of the record's start by a finger's reach, less
+// the inset it reads. Half that reach as the inset centres the handle in its
+// track under a coarse pointer.
+const TOUCH_HANDLE_CENTRE = `calc(${reorderHandle.touchReach} / 2)`;
 // A handle that hangs before a record sits its grip and its target's reach
 // outside it, so the target stops at the record's first field. The target
 // reaches past that. The group takes the room, as much of it as its
@@ -290,6 +294,9 @@ const styles = stylex.create({
   // always or under a coarse pointer, it has a track of its own, and the
   // record's content lines up past it. A record without a handle fills the
   // track with its `::before`, so every first field starts in one column.
+  // Under a coarse pointer the handle is centred in its track: a finger's
+  // target then reaches as far toward the first field as an end handle's
+  // reaches toward Remove.
   handleControls: {
     display: 'grid',
     gridTemplateColumns: {
@@ -301,6 +308,10 @@ const styles = stylex.create({
       default: 0,
       '@media (pointer: coarse)': spacingVars['--spacing-1'],
     },
+    '--_item-inset-inline': {
+      default: null,
+      '@media (pointer: coarse)': TOUCH_HANDLE_CENTRE,
+    },
   },
   shownHandleControls: {
     display: 'grid',
@@ -310,6 +321,10 @@ const styles = stylex.create({
     },
     alignItems: 'center',
     columnGap: spacingVars['--spacing-1'],
+    '--_item-inset-inline': {
+      default: null,
+      '@media (pointer: coarse)': TOUCH_HANDLE_CENTRE,
+    },
   },
   handleControlsWithoutHandle: {
     '::before': {
