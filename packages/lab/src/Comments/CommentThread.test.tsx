@@ -27,7 +27,9 @@ vi.mock('../EmojiPicker/emojiData', () => ({
   ],
 }));
 
+import * as stylex from '@stylexjs/stylex';
 import {Popover} from '@astryxdesign/core/Popover';
+import {focusVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {CommentThread, type CommentThreadProps} from './CommentThread';
 import {
   unsavedDraftOf,
@@ -209,6 +211,43 @@ describe('CommentThread', () => {
     expect(onSelectedChange).toHaveBeenLastCalledWith(false);
     expect(toggle).toHaveFocus();
   });
+
+  it.each([
+    ['selected', {isSelected: true}, THREAD],
+    ['highlighted', {}, {...THREAD, isHighlighted: true}],
+  ] as const)(
+    'shows the focus ring on a %s thread that has keyboard focus',
+    async (_state, props, comment) => {
+      const user = userEvent.setup();
+      const focusRing = stylex.create({
+        ring: {
+          outlineStyle: focusVars['--focus-outline-style'],
+          outlineWidth: focusVars['--focus-outline-width'],
+        },
+      });
+      const ringAtoms = stylex
+        .props(focusRing.ring)
+        .className!.split(' ')
+        .filter(name => name.includes('x') && !name.includes('__'));
+      expect(ringAtoms.length).toBeGreaterThan(0);
+      render(
+        <CommentThread
+          comment={comment}
+          currentUser={VIEWER}
+          onSubmit={vi.fn()}
+          {...props}
+        />,
+      );
+      await settle();
+      const toggle = screen.getByRole('button', {name: 'Thread by Maya Chen'});
+      await user.tab();
+      expect(toggle).toHaveFocus();
+      const surface = toggle.closest('[data-thread-surface]');
+      for (const name of ringAtoms) {
+        expect(surface).toHaveClass(name);
+      }
+    },
+  );
 
   it('forwards the reply draft lifecycle through a standalone thread', async () => {
     const onComposerDraftChange = vi.fn();

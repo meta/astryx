@@ -237,10 +237,12 @@ function ThreadSurface({
     </VisuallyHidden>
   ) : null;
   const interactionProps = isSelectable ? {onClick, onMouseUp} : {};
+  // The focus ring comes last. The forced-colors selection outline unsets
+  // the outline outside forced colors, so it must not override the ring.
   const sharedXstyle = [
     isSelectable && styles.surface,
-    isSelectable && isFocused && styles.surfaceFocused,
     isFilled && styles.selectedForcedColors,
+    isSelectable && isFocused && styles.surfaceFocused,
   ];
 
   if (surface === 'section') {
