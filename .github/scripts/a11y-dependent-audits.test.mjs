@@ -8,7 +8,8 @@
  * release check. A change to shared Button's disabled state once passed every
  * pull-request check and then failed the release check in ChatSendButton's
  * audit. The dependent-audits legs close that gap for the primitives the list
- * names, within at most three legs of about ten minutes each.
+ * names, within at most three legs of about ten minutes each on a first run,
+ * or four when a fourth runs every owed audit.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -22,7 +23,10 @@ import yaml from 'yaml';
 import {
   budgetFor,
   changedPrimitives,
+  COMPLETING_MAX_LEGS,
+  deferredMessage,
   dependentAudits,
+  fitLegs,
   LATER_MAX_LEGS,
   legsFor,
   listAuditSpecs,
@@ -218,6 +222,47 @@ describe("a component's source change runs its own audits", () => {
     expect(alone.shares).toEqual([[file('A')]]);
   });
 
+  // Many components' own audits of 70 s each: 32 need more than three legs of
+  // ten minutes but fit four; 58 do not fit four.
+  const many = count => {
+    const names = Array.from({length: count}, (_, i) => `C${i}`);
+    const file = name =>
+      `packages/core/src/${name}/__tests__/${name}Audit.a11y.chromium.spec.ts`;
+    return {
+      changed: names.map(name => `packages/core/src/${name}/${name}.tsx`),
+      primitives: ['core/Button'],
+      specs: names.map(name => ({file: file(name), mode: 'audit'})),
+      importers: new Map(),
+      seconds: Object.fromEntries(names.map(name => [file(name), 70])),
+    };
+  };
+
+  it('takes a fourth leg on a first run when that runs every owed audit', () => {
+    expect(COMPLETING_MAX_LEGS).toBe(MAX_LEGS + 1);
+    const options = many(32);
+    const first = planDependentAudits(options);
+    expect(first.owed).toHaveLength(32);
+    // Three legs cannot hold them; four can.
+    expect(
+      fitLegs(first.owed, options.seconds, MAX_LEGS).longestMs,
+    ).toBeGreaterThan(LEG_BUDGET_MS);
+    expect(first.files).toEqual(first.owed);
+    expect(first.deferred).toEqual([]);
+    expect(first.complete).toBe(true);
+    expect(first.count).toBe(COMPLETING_MAX_LEGS);
+    expect(first.longestMs).toBeLessThanOrEqual(LEG_BUDGET_MS);
+  });
+
+  it('still defers on a first run when four legs cannot run every owed audit', () => {
+    const first = planDependentAudits(many(58));
+    expect(first.deferred.length).toBeGreaterThan(0);
+    expect(first.files.length + first.deferred.length).toBe(58);
+    expect(first.complete).toBe(false);
+    // What it cannot finish it runs in three legs, as before.
+    expect(first.count).toBeLessThanOrEqual(MAX_LEGS);
+    expect(first.longestMs).toBeLessThanOrEqual(LEG_BUDGET_MS);
+  });
+
   it('names the audits a first run cannot fit, and runs them all later at the same head', () => {
     const first = planDependentAudits(wide);
     expect(first.owed).toHaveLength(5);
@@ -265,6 +310,23 @@ describe('an undecided scope', () => {
         budgetFor(plan.files, seconds),
       );
     }
+  });
+
+  it('points deferred audits at the audits-at-head dispatch for this head', () => {
+    const message = deferredMessage(
+      {deferred: ['a', 'b']},
+      {repo: 'owner/repo', pr: '42', head: 'abc123'},
+    );
+    const command =
+      'gh workflow run audits-at-head.yml -R owner/repo -f pr=42 -f head=abc123';
+    expect(message.annotation).toBe(
+      `::warning title=Audits not yet run::2 owed audit spec files do not fit four legs of ten minutes. Dispatch audits-at-head for this head: it runs only the audits this change owes, at this head, and merge-guard accepts its record. ${command}`,
+    );
+    expect(message.summary).toBe(
+      `Not yet run (2). Dispatch audits-at-head for this head; it runs only the audits this change owes, at this head:\n\n\`${command}\``,
+    );
+    expect(message.annotation).not.toContain('Re-run all jobs');
+    expect(message.summary).not.toContain('re-run all jobs');
   });
 
   it('asks for a split only when GitHub truncated the file list', () => {
@@ -346,6 +408,11 @@ describe('the dependent-audits jobs', () => {
       "steps.scope.outputs.decided != 'false'",
     );
     expect(run.env.RUN_ATTEMPT).toBe('${{ github.run_attempt }}');
+    // The deferred-audit notice names this pull request and head.
+    expect(run.env.PR_NUMBER).toBe('${{ github.event.pull_request.number }}');
+    expect(run.env.ASTRYX_HEAD_SHA).toBe(
+      '${{ github.event.pull_request.head.sha || github.sha }}',
+    );
     expect(step(planJob, 'Require the changed-file list').run).toContain(
       'exit 1',
     );
