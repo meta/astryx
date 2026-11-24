@@ -13,7 +13,11 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {EXCLUDED, chooseTypecheck} from './typecheck-scope.mjs';
+import {
+  EXCLUDED,
+  chooseTypecheck,
+  readExternalInputs,
+} from './typecheck-scope.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -53,6 +57,38 @@ describe('the typecheck scope', () => {
     expect(short(choice.packages)).toEqual(
       expect.arrayContaining(['core', 'lab', 'charts', 'cli', 'storybook']),
     );
+  });
+
+  it('typechecks the package a moved file left, as well as the one it reached', () => {
+    // git lists both sides because the job's diff passes --no-renames.
+    expect(read('.github/scripts/typecheck-scope.mjs')).toContain(
+      "['diff', '--name-only', '--no-renames', '-z', base, 'HEAD']",
+    );
+    const choice = scope([
+      'packages/charts/src/Bar/Bar.tsx',
+      'packages/vega/src/Bar/Bar.tsx',
+    ]);
+    expect(short(choice.packages)).toEqual(
+      expect.arrayContaining(['charts', 'cli', 'vega']),
+    );
+  });
+
+  it("counts a file a package's tsconfig maps or includes as touching that package", () => {
+    const externalInputs = readExternalInputs(root, manifests);
+    expect(externalInputs['packages/cli']).toContain(
+      'apps/docsite/src/templateDemoContent/demoContent.tsx',
+    );
+    const choice = chooseTypecheck({
+      fullSuite: 'false',
+      mergeBase: BASE,
+      manifests,
+      externalInputs,
+      changedFiles: () => [
+        'apps/docsite/src/templateDemoContent/demoContent.tsx',
+        'packages/richtext/src/Editor.tsx',
+      ],
+    });
+    expect(short(choice.packages)).toContain('cli');
   });
 
   it('never selects the packages the root typecheck leaves out', () => {

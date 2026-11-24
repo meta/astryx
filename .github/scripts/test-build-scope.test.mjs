@@ -87,6 +87,46 @@ describe('test-build scope', () => {
     },
   );
 
+  it('follows every file the part runs, read from the commands themselves', () => {
+    // contracts: the root test:build script.
+    const rootScripts = JSON.parse(read('package.json')).scripts;
+    const FILE =
+      /(?:^|\s)((?:packages|scripts|internal|\.github)\/[\w./-]+\.(?:[cm]?js|ts|tsx))/g;
+    const contracts = [...rootScripts['test:build'].matchAll(FILE)].map(
+      ([, file]) => file,
+    );
+    // The theme cascade script is run by name: `node .github/scripts/…`.
+    expect(contracts.length).toBeGreaterThan(0);
+    expect([...TEST_BUILD_PARTS.contracts.entries].sort()).toEqual(
+      [...new Set(contracts)].sort(),
+    );
+    // fixtures: the two steps of that part, a package script followed into
+    // its package.
+    const fixtures = [];
+    for (const name of [
+      'Verify canonical setup compositions',
+      'Verify guest fixture contrast',
+    ]) {
+      const run = step(name).run;
+      fixtures.push(...[...run.matchAll(FILE)].map(([, file]) => file));
+      for (const [, pkg, script] of run.matchAll(
+        /pnpm -F (@[\w/-]+) ([\w:-]+)/g,
+      )) {
+        const folder = packageDirs[pkg];
+        const command = JSON.parse(read(`${folder}/package.json`)).scripts[
+          script
+        ];
+        for (const [, file] of command.matchAll(
+          /(?:^|\s)node ([\w./-]+\.[cm]?js)/g,
+        ))
+          fixtures.push(`${folder}/${file}`);
+      }
+    }
+    expect([...TEST_BUILD_PARTS.fixtures.entries].sort()).toEqual(
+      [...new Set(fixtures)].sort(),
+    );
+  });
+
   it('decides each part from its own list in the job', () => {
     const scope = step("Decide this job's scope");
     expect(scope.with.paths).toBe(

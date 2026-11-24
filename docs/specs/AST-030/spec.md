@@ -349,8 +349,9 @@ they are separately named.
   repository sources; every other owner runs as for shared infrastructure, all
   interaction proofs and the repository-wide lint included.
   A change with any other shared path runs every Vitest test. Without shared
-  infrastructure, the typecheck owner checks the packages the change touches,
-  the packages that depend on them at run time (`dependencies` and
+  infrastructure, the typecheck owner checks the packages the change touches
+  (a file in a package, or one the package's own tsconfig maps or includes;
+  a moved file touches the package it left too), the packages that depend on them at run time (`dependencies` and
   `peerDependencies`, followed on), and the packages whose own checks use any
   of those (`devDependencies`, one step); it checks every package when it
   cannot read the merge base or the package list, and names the packages it
@@ -358,8 +359,7 @@ they are separately named.
   the change reaches a path its tests read, and otherwise passes as not
   affected; the lists of those paths cover every workspace package the part's
   tests import or read, with each package's run-time dependencies, and a test
-  fails when a part reads a package its list leaves out. The docsite owner
-  does not build for a change only to the native package. Every fail-closed
+  fails when a part reads a package its list leaves out. Every fail-closed
   condition of FR3–FR4 also runs the full suite. `main`, release branches,
   merge-group entries and `release-check` dispatches always run the full suite,
   and release checks keep FR12's full scope.

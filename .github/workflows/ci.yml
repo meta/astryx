@@ -926,7 +926,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(?:apps/docsite/|(?!(?:.*/)?__tests__/|.*\.(?:test|spec)\.[cm]?[jt]sx?$|apps/storybook/|.*\.stories\.[jt]sx?$|docs/specs/|\.changeset/|internal/a11y-spec/|internal/interaction-harness/|packages/native/))'
+          paths: '^(?:apps/docsite/|(?!(?:.*/)?__tests__/|.*\.(?:test|spec)\.[cm]?[jt]sx?$|apps/storybook/|.*\.stories\.[jt]sx?$|docs/specs/|\.changeset/|internal/a11y-spec/|internal/interaction-harness/))'
 
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'

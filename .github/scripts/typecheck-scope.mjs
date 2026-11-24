@@ -2,7 +2,8 @@
 
 /**
  * @file Which workspace packages a pull request's typecheck covers
- *   (spec:AST-030 FR13): the packages its change touches, the packages that
+ *   (spec:AST-030 FR13): the packages its change touches (a file under a
+ *   package, or one its tsconfig maps or includes), the packages that
  *   depend on those at run time (through `dependencies` or
  *   `peerDependencies`, followed on), and the packages that use any of them
  *   in their own checks (`devDependencies`, not followed on). A shared or
@@ -36,6 +37,9 @@ export const EXCLUDED = Object.freeze([
  * @param {Record<string, {name: string, dependencies?: object,
  *   peerDependencies?: object, devDependencies?: object}>} input.manifests
  *   each workspace package's folder and manifest
+ * @param {Record<string, string[]>} [input.externalInputs] each package
+ *   folder's inputs outside it (its tsconfig `paths`, `include` and `files`),
+ *   as repository paths: a change under one touches that package
  * @returns {{mode: 'all' | 'some' | 'none', packages: string[], reason: string}}
  */
 export function chooseTypecheck({
@@ -43,6 +47,7 @@ export function chooseTypecheck({
   mergeBase,
   changedFiles,
   manifests,
+  externalInputs = {},
 }) {
   const all = reason => ({mode: 'all', packages: [], reason});
   if (fullSuite !== 'false')
@@ -61,6 +66,14 @@ export function chooseTypecheck({
   for (const file of changed) {
     const folder = folders.find(each => file.startsWith(`${each}/`));
     if (folder) touched.add(manifests[folder].name);
+    for (const [owner, inputs] of Object.entries(externalInputs))
+      if (
+        manifests[owner] &&
+        inputs.some(input =>
+          input.endsWith('/') ? file.startsWith(input) : file === input,
+        )
+      )
+        touched.add(manifests[owner].name);
   }
   const uses = (manifest, kinds, names) =>
     kinds.some(kind =>
@@ -119,6 +132,82 @@ export function readManifests(root, list) {
   return manifests;
 }
 
+/** JSON with comments and trailing commas, as tsconfig files allow. */
+function parseJsonc(text) {
+  return JSON.parse(
+    text
+      .replace(
+        /("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
+        (all, string) => string ?? '',
+      )
+      .replace(/,(\s*[}\]])/g, '$1'),
+  );
+}
+
+/**
+ * Each package's typecheck inputs outside its folder: what its own tsconfig
+ * files map (`paths`) or include (`include`, `files`) there, as repository
+ * paths. A folder ends in `/`; a glob is cut at its first `*`.
+ * @param {string} root
+ * @param {Record<string, object>} manifests
+ * @returns {Record<string, string[]>}
+ */
+export function readExternalInputs(root, manifests) {
+  /** @type {Record<string, string[]>} */
+  const inputs = {};
+  for (const folder of Object.keys(manifests)) {
+    const dir = path.join(root, folder);
+    let names = [];
+    try {
+      names = fs
+        .readdirSync(dir)
+        .filter(name => /^tsconfig[\w.-]*\.json$/.test(name));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      let config;
+      try {
+        config = parseJsonc(fs.readFileSync(path.join(dir, name), 'utf8'));
+      } catch {
+        continue;
+      }
+      const options = config.compilerOptions ?? {};
+      const base = path.join(dir, options.baseUrl ?? '.');
+      const targets = [
+        ...Object.values(options.paths ?? {})
+          .flat()
+          .map(target => path.join(base, String(target))),
+        ...[...(config.include ?? []), ...(config.files ?? [])].map(entry =>
+          path.join(dir, String(entry)),
+        ),
+      ];
+      for (const target of targets) {
+        const fixed = target.split('*')[0];
+        const relative = path.relative(root, fixed).split(path.sep).join('/');
+        if (
+          relative === '' ||
+          relative.startsWith('..') ||
+          relative.includes('node_modules') ||
+          relative === folder ||
+          relative.startsWith(`${folder}/`)
+        )
+          continue;
+        let isFolder = /[\\/]$/.test(fixed);
+        try {
+          isFolder ||= fs.statSync(fixed).isDirectory();
+        } catch {
+          // A path that does not exist yet names itself.
+        }
+        const entry = isFolder ? `${relative}/` : relative;
+        inputs[folder] ??= [];
+        if (!inputs[folder].includes(entry)) inputs[folder].push(entry);
+      }
+    }
+  }
+  return inputs;
+}
+
 function main() {
   const root = process.cwd();
   let manifests = {};
@@ -146,12 +235,14 @@ function main() {
         fullSuite: process.env.FULL_SUITE ?? 'true',
         mergeBase: process.env.MERGE_BASE ?? '',
         manifests,
+        externalInputs: readExternalInputs(root, manifests),
+        // Both sides of a move: the package a file left changes too.
         changedFiles: base =>
-          execFileSync('git', ['diff', '--name-only', '-z', base, 'HEAD'], {
-            cwd: root,
-            encoding: 'utf8',
-            maxBuffer: 64 * 1024 * 1024,
-          })
+          execFileSync(
+            'git',
+            ['diff', '--name-only', '--no-renames', '-z', base, 'HEAD'],
+            {cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
+          )
             .split('\0')
             .filter(Boolean),
       });
