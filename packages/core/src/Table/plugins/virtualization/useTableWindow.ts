@@ -12,9 +12,10 @@
  *   (`virtualization/useListWindow`); DOM refs are effect resources, with no
  *   owned observation
  */
-import {useMemo, useRef, useState, type RefObject} from 'react';
+import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import {useDevWarningPerMessage} from '../../../hooks/useDevWarning';
+import {createDevWarnings} from '../../../utils/devWarning';
 import {
   calculateListWindow,
   isPositiveFinite,
@@ -32,6 +33,11 @@ import {
   type UseTableRowsVirtualizationConfig,
 } from './useTableRowsVirtualization';
 import {getCellAtColumn, getCellColumnIndex} from '../../tableColumnWindowing';
+
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+const UNBOUNDED_PARENT_MESSAGE =
+  "Every row is mounted because the Table's scroll area is as tall as all of its rows. Give the Table's parent a height so windowing can bound them.";
 
 export type TableWindowGeometry = ListWindowGeometry;
 export type TableWindowGeometrySource = ListWindowGeometrySource;
@@ -400,16 +406,19 @@ export function useTableWindow<T>({
           },
     [config],
   );
-  const hasValidConfig =
-    declared !== undefined &&
-    calculateListWindow({
-      rowCount: data.length,
-      rowHeight: declared.rowHeight,
-      viewportHeight: declared.initialViewportHeight,
-      scrollTop: 0,
-      startOffset: 0,
-      isMeasured: false,
-    }) !== null;
+  // The first window, which the server and first client also mount.
+  const seedPlan =
+    declared === undefined
+      ? null
+      : calculateListWindow({
+          rowCount: data.length,
+          rowHeight: declared.rowHeight,
+          viewportHeight: declared.initialViewportHeight,
+          scrollTop: 0,
+          startOffset: 0,
+          isMeasured: false,
+        });
+  const hasValidConfig = seedPlan !== null;
   const isRejected =
     violation?.data === data &&
     violation.keys === keys &&
@@ -451,6 +460,35 @@ export function useTableWindow<T>({
     viewport,
     focusContainer: body,
   });
+
+  // Every row shows at once, and there are more rows than the first window.
+  // Either the parent gives the Table no height, so its scroll area grows to
+  // its content, or a sized parent has room for every row.
+  const showsEveryRow =
+    plan != null &&
+    seedPlan != null &&
+    data.length > seedPlan.end &&
+    snapshot.isMeasured &&
+    isPositiveFinite(snapshot.viewportHeight) &&
+    snapshot.viewportHeight + 1 >= snapshot.startOffset + plan.totalHeight;
+  const [warnings] = useState(createDevWarnings);
+  useEffect(() => {
+    // Development diagnostic: only a scroll area as tall as its content means
+    // the parent gives no height. A sized parent with room leaves space below.
+    const area = viewport.current;
+    const content = area?.firstElementChild;
+    if (
+      process.env.NODE_ENV === 'production' ||
+      !showsEveryRow ||
+      area == null ||
+      content == null
+    ) {
+      return;
+    }
+    if (content.getBoundingClientRect().height + 1 >= area.clientHeight) {
+      warnings('Table', UNBOUNDED_PARENT_MESSAGE);
+    }
+  }, [showsEveryRow, viewport, warnings]);
 
   const totalHeight = plan?.totalHeight ?? 0;
   const revision = snapshot.revision;
