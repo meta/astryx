@@ -981,9 +981,8 @@ export function useSheetGestures({
     const settleInsetBasis = settleInsetBasisRef.current;
     if (settlingLayoutOffsetRef.current != null && settleInsetBasis != null) {
       // The settle keeps its layout split until it lands. Only its end
-      // point moves: the transform transition turns toward the new target
-      // from where the sheet is now, and the landing swaps in the new
-      // layout offset.
+      // point moves. The transform turns toward the new target from where
+      // the sheet is now. The landing swaps in the new layout offset.
       pendingScrollPreservationInsetRef.current = preservationInsetForOffset(
         settleInsetBasis.baseLayoutOffset,
         targetLayoutOffset,
@@ -1041,14 +1040,11 @@ export function useSheetGestures({
     };
   }, [isOpen, reanchorToSettledDetent]);
 
-  // The other inputs to the same geometry: the snap points themselves and the
-  // reserve below the screen. A host that swaps the points while the sheet
-  // rests has moved the stops out from under it, exactly as a rotation does,
-  // so re-anchor the same way. The reserve follows the viewport, but the host
-  // writes it on the render after the resize event, so the re-anchor in the
-  // resize listener measures the old one; re-anchor again once it is written.
-  // Skipped on the first run — the sheet is already anchored to the detents
-  // it opened with.
+  // New snap points move the stops, as a rotation does, so re-anchor.
+  // The host writes the new reserve in the render after a resize. So the
+  // resize listener measures the old reserve. Re-anchor again once the new
+  // one is written. The first run does nothing: the sheet is already
+  // anchored to the detents it opened with.
   const hasAnchoredSnapHeightsRef = useRef(false);
   useLayoutEffect(() => {
     if (!hasAnchoredSnapHeightsRef.current) {

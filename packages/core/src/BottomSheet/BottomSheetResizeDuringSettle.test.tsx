@@ -267,6 +267,22 @@ describe('BottomSheet: a window resize while the sheet settles', () => {
     expect(layoutHeight(sheet)).toBeCloseTo(halfDetentLayoutHeightFor(806), 1);
   });
 
+  it('lands a release on its detent when the window shrinks mid-settle', () => {
+    vi.stubGlobal('innerHeight', 806);
+    const observers = mockResizeObservers();
+    render(<Panel state={{kind: 'open', entering: false}} />);
+    const sheet = getSheet();
+    measureBox(sheet);
+    layOut(observers, sheet, borderBoxFor(806));
+
+    releaseTowardHalfDetent();
+    resizeTo(782);
+    landSettle(sheet);
+
+    expect(layoutHeight(sheet)).toBeCloseTo(halfDetentLayoutHeightFor(782), 1);
+    expect(snapshot(sheet).visible).toBeCloseTo(0.5 * 782, 1);
+  });
+
   it('leaves nothing for a later resize to correct', () => {
     const observers = mockResizeObservers();
     render(<Panel state={{kind: 'open', entering: false}} />);
