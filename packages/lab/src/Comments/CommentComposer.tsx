@@ -116,8 +116,8 @@ type AgentCommandItem = ChatComposerTriggerItem & {
   auxiliaryData: CommentAgentCommand;
 };
 
-function renderAgentCommandItem(item: ChatComposerTriggerItem): ReactNode {
-  const agent = (item as AgentCommandItem).auxiliaryData;
+function AgentCommandOption({agent}: {agent: CommentAgentCommand}) {
+  const t = useTranslator();
   return (
     <HStack gap={2} align="center">
       <Avatar
@@ -128,12 +128,25 @@ function renderAgentCommandItem(item: ChatComposerTriggerItem): ReactNode {
         tooltip={false}
       />
       <VStack gap={0.5}>
-        <Text weight="semibold">{`/${agent.command} <prompt>`}</Text>
+        <Text weight="semibold">
+          {t('@astryx.commentComposer.agentCommandUsage', {
+            command: agent.command,
+          })}
+        </Text>
         <Text type="supporting" color="secondary">
-          {`${agent.name} · ${agent.description}`}
+          {t('@astryx.commentComposer.agentCommandSummary', {
+            name: agent.name,
+            description: agent.description,
+          })}
         </Text>
       </VStack>
     </HStack>
+  );
+}
+
+function renderAgentCommandItem(item: ChatComposerTriggerItem): ReactNode {
+  return (
+    <AgentCommandOption agent={(item as AgentCommandItem).auxiliaryData} />
   );
 }
 

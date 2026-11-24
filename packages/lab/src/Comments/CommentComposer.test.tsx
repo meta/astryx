@@ -8,6 +8,7 @@ import {
   type ComponentProps,
 } from 'react';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
   afterAll,
   afterEach,
@@ -36,6 +37,7 @@ vi.mock('../EmojiPicker/emojiData', () => ({
   ],
 }));
 
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {CommentComposer, CommentComposerBase} from './CommentComposer';
 
 const originalMatches = HTMLElement.prototype.matches;
@@ -123,6 +125,42 @@ describe('CommentComposer', () => {
     fireEvent.click(screen.getByTestId('composer'));
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(onAncestorClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('words the agent command menu through the catalog', async () => {
+    const user = userEvent.setup();
+    function Host() {
+      const [value, setValue] = useState('');
+      return (
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {
+              '@astryx.commentComposer.agentCommandUsage':
+                "/{command} '<demande>'",
+              '@astryx.commentComposer.agentCommandSummary':
+                '{name} : {description}',
+            },
+          }}>
+          <CommentComposer
+            value={value}
+            onChange={setValue}
+            onSubmit={vi.fn()}
+            agentCommands={[
+              {
+                command: 'ask',
+                name: 'Assistant',
+                description: 'Répond aux questions',
+              },
+            ]}
+          />
+        </InternationalizationProvider>
+      );
+    }
+    render(<Host />);
+    await user.type(screen.getByRole('combobox'), '/');
+    expect(await screen.findByText('/ask <demande>')).toBeTruthy();
+    expect(screen.getByText('Assistant : Répond aux questions')).toBeTruthy();
   });
 
   it('posts the draft from Post, and never an empty one', async () => {
