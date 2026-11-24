@@ -242,7 +242,7 @@ describe('Banner', () => {
     },
   );
 
-  it('names the dismiss button "Dismiss {title}" once: its "Dismiss" tooltip shows but adds no description', () => {
+  it('names the dismiss button "Dismiss {title}" once: its "Dismiss" tooltip shows but adds no description', async () => {
     render(
       <Banner status="info" title="Project A was archived" isDismissable />,
     );
@@ -250,11 +250,8 @@ describe('Banner', () => {
       name: 'Dismiss Project A was archived',
     });
     expect(button).toHaveAccessibleDescription('');
-    expect(
-      screen
-        .getAllByRole('tooltip', {hidden: true})
-        .some(tooltip => tooltip.textContent === 'Dismiss'),
-    ).toBe(true);
+    expect(getTooltipDescriptions()).toHaveLength(0);
+    expect(await tooltipTextOnHover(button)).toBe('Dismiss');
   });
 
   it('renders dismiss button when isDismissable', () => {
@@ -1026,7 +1023,7 @@ describe('Banner', () => {
       );
     });
 
-    it('keeps a translated verb when the titled message falls back to English', () => {
+    it('keeps a translated verb when the titled message falls back to English', async () => {
       render(
         <InternationalizationProvider
           locale="de-DE"
@@ -1040,11 +1037,7 @@ describe('Banner', () => {
         name: 'Schließen Wartungshinweis',
       });
       expect(button).toHaveAccessibleDescription('');
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Schließen'),
-      ).toBe(true);
+      expect(await tooltipTextOnHover(button)).toBe('Schließen');
     });
   });
 });
