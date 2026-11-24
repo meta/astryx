@@ -779,7 +779,6 @@ export class SwitchTouchController {
       this.showSide(commit, time, undefined, true);
     }
     this.pressEnded(time, true);
-    this.clearDragFlipped();
     const surface = this.elements?.surface;
     if (byBrowserClick && surface != null) {
       // The lift's own click activates the input natively: the switch then
@@ -837,7 +836,6 @@ export class SwitchTouchController {
     this.drag = null;
     this.showSide(this.isOn, time, undefined, true);
     this.pressEnded(time, true);
-    this.clearDragFlipped();
   }
 
   // --- Visuals ---------------------------------------------------------------
@@ -979,6 +977,7 @@ export class SwitchTouchController {
 
   /** The press ended (a release, a cancel or the switch turning off). */
   private pressEnded(time: number = now(), touchRelease = false): void {
+    this.clearDragFlipped();
     this.pressTime = null;
     this.settle(time, touchRelease);
   }
