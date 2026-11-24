@@ -26,7 +26,7 @@ const templatesDir = path.resolve(
 
 const RENDERED = [
   '<!doctype html><html><head><title>Page</title><style>.a{color:red}</style></head>',
-  '<body><div data-astryx-theme="neutral"><img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/></div>',
+  '<body><div data-astryx-theme="neutral"><img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=384&amp;q=75" alt=""/></div>',
   '<script type="application/x-astryx-source">{"files":[{"path":"page.tsx","text":"/template-assets/light-product-1.png"}]}</script>',
   '</body></html>',
 ].join('');
@@ -66,7 +66,7 @@ describe('previewDocument', () => {
 
   it('keeps the image URLs of the rendered page', () => {
     expect(html).toContain(
-      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=384&amp;q=75" alt=""/>',
     );
   });
 
@@ -191,7 +191,7 @@ export default function Page() {
 
   it('keeps the image URLs of the rendered page and loads them at low priority', () => {
     expect(markup).toContain(
-      '<img fetchpriority="low" decoding="async" src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+      '<img fetchpriority="low" decoding="async" src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=384&amp;q=75" alt=""/>',
     );
   });
 });
@@ -266,7 +266,7 @@ describe('stagePreviewPage', () => {
     "const logo = '/template-assets/logo.svg';",
   ].join('\n');
   const PAGE_FOR_PREVIEW = [
-    "const photo = '/_next/image?url=%2Ftemplate-assets%2Fhero.png&w=640&q=75';",
+    "const photo = '/_next/image?url=%2Ftemplate-assets%2Fhero.png&w=384&q=75';",
     "const missing = '/template-assets/does-not-exist.png';",
     "const logo = '/template-assets/logo.svg';",
   ].join('\n');
