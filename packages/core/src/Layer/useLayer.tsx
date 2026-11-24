@@ -1225,6 +1225,21 @@ function readPortalWritingContext(
 }
 
 /**
+ * The `dir` for a portalled layer whose writing context copies a direction the
+ * host lacks. A direction the caller's own `style` sets wins, so it gets none.
+ */
+function portalDir(
+  portalStyle: React.CSSProperties | null,
+  callerStyle: React.CSSProperties | undefined,
+): 'ltr' | 'rtl' | undefined {
+  const direction = portalStyle?.direction;
+  if (callerStyle?.direction != null) {
+    return undefined;
+  }
+  return direction === 'ltr' || direction === 'rtl' ? direction : undefined;
+}
+
+/**
  * Compute the `position-try-fallbacks` list for a placement. Chromium tries
  * no more than five options after the layer's own position.
  *
@@ -1681,6 +1696,7 @@ function useLayerImplementation(
       );
       if (portalStyle.direction != null && popover.style.direction === '') {
         popover.style.direction = portalStyle.direction;
+        popover.setAttribute('dir', portalStyle.direction);
       }
       if (portalStyle.writingMode != null && popover.style.writingMode === '') {
         popover.style.writingMode = portalStyle.writingMode;
@@ -2756,6 +2772,9 @@ function useLayerImplementation(
             : {})}
           role={role}
           aria-label={ariaLabel}
+          // A copied direction also goes on `dir`, so `:dir()` inside the
+          // layer agrees with the direction its layout uses.
+          dir={portalDir(mount.portalStyle, extraStyle)}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
           style={{
