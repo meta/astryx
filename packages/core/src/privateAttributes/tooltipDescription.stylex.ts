@@ -6,7 +6,8 @@
  * @output tooltipDescriptionProps, which mark a tooltip's hidden description,
  *   isTooltipDescription, which reads the mark, and groupEndStyles, the trailing-edge styles of ButtonGroup and InputGroup
  *   members, which skip that description when they find the last member.
- *   The forced-colors outer edge also skips hidden elements.
+ *   The forced-colors outer edge also skips elements with the `hidden`
+ *   attribute.
  * @position Owner module of the private tooltip-description attribute: the
  *   only file that writes its name or its selector. useTooltip marks the
  *   description; Button and InputGroup's group styles spread groupEndStyles.
@@ -30,25 +31,27 @@ export function isTooltipDescription(element: Element): boolean {
   return element.hasAttribute('data-astryx-tooltip-description');
 }
 
-// The group's last member: the last sibling that is not layer infrastructure
-// (a popover, a layer's inert template, a native dialog) or a tooltip's hidden
+// The siblings that are not members: layer infrastructure (a popover, a
+// layer's inert template, a native dialog) and a tooltip's hidden
 // description. Any other sibling still counts as a member, as `:last-child`
 // did, so a caller's own element keeps the corners it had.
+const MEMBER =
+  ':not([popover]):not(template):not(dialog):not([data-astryx-tooltip-description])';
+
+// The group's last member.
 //
 // `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet is global,
 // and WebKit re-evaluates a sibling-relative `:has()` against every earlier
 // sibling on each insertion, so filling any container became quadratic. A
 // member is never one of the skipped pieces, so being the last such sibling is
 // the same as having none after it.
-const IS_LAST_MEMBER =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not([data-astryx-tooltip-description]))';
+const IS_LAST_MEMBER = `:nth-last-child(1 of ${MEMBER})`;
 
-// The last member that renders anything: as IS_LAST_MEMBER, and past hidden
-// elements too. A hidden follower still counts as a member for the corners, so
-// they keep IS_LAST_MEMBER. The forced-colors outer edge closes on the last
-// button a person can see, or the group's outline stays open.
-const IS_LAST_RENDERED_MEMBER =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not([data-astryx-tooltip-description]):not([hidden]))';
+// The last member without the `hidden` attribute. A follower with that
+// attribute still counts as a member for the corners, so they keep
+// IS_LAST_MEMBER. The forced-colors outer edge closes on the last button
+// before such followers, or the group's outline stays open.
+const IS_LAST_RENDERED_MEMBER = `:nth-last-child(1 of ${MEMBER}:not([hidden]))`;
 
 // A direct child of an InputGroup with a member after it.
 const GROUP_CHILD_FOLLOWED = `:where(.astryx-input-group > *):not(${IS_LAST_MEMBER})`;
