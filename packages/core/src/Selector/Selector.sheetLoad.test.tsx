@@ -114,7 +114,10 @@ describe('Selector bottom-sheet load', () => {
     trigger.focus();
     fireEvent.pointerUp(trigger, {pointerType: 'touch'});
     fireEvent.click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // The open is held until the frame renders the listbox: the trigger
+    // reports no expanded list and names nothing yet.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
     expect(frameModule.requests).toBe(1);
     expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
 
@@ -131,5 +134,6 @@ describe('Selector bottom-sheet load', () => {
     const listbox = screen.getByRole('listbox', {hidden: true});
     expect(listbox.contains(document.activeElement)).toBe(true);
     expect(trigger).toHaveAttribute('aria-controls', listbox.id);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 });

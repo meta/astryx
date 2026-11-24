@@ -2638,6 +2638,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     !isEffectivelyReadOnly &&
     (surface.activePresentation !== 'bottom-sheet' ||
       (surface.isOpen && isListboxMounted));
+  // An open the sheet's frame has not rendered yet is a held intent: the
+  // trigger reports it expanded only once its listbox is in the document.
+  const isExpanded =
+    !isEffectivelyReadOnly &&
+    surface.isOpen &&
+    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
 
   if (renderTrigger != null) {
     // A caller's control gets no pointer props from the selector, so its
@@ -2717,7 +2723,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           : isGrid
             ? 'grid'
             : 'listbox',
-      'aria-expanded': isEffectivelyReadOnly ? false : surface.isOpen,
+      'aria-expanded': isExpanded,
       'aria-controls': isListboxReferable ? listboxId : undefined,
       'aria-busy': isBusy || undefined,
       'aria-disabled': isDisabled || callerProps['aria-disabled'],
@@ -2834,7 +2840,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                   ? 'grid'
                   : 'listbox'
           }
-          aria-expanded={isEffectivelyReadOnly ? false : surface.isOpen}
+          aria-expanded={isExpanded}
           aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={

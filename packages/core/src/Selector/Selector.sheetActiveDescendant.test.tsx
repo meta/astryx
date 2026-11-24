@@ -93,8 +93,9 @@ describe('Selector bottom-sheet active option', () => {
     await user.keyboard('{Enter}');
 
     // Open, but the sheet's surface has not loaded: no option exists yet, so
-    // the trigger must not point at one.
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // the trigger reports no expanded list and points at nothing.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).not.toHaveAttribute('aria-controls');
     expect(screen.queryByRole('option', {hidden: true})).toBeNull();
     expect(trigger).not.toHaveAttribute('aria-activedescendant');
 

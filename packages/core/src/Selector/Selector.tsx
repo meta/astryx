@@ -2259,6 +2259,12 @@ export function Selector<T extends SelectorOptionType>(
     !isEffectivelyReadOnly &&
     (surface.activePresentation !== 'bottom-sheet' ||
       (surface.isOpen && isListboxMounted));
+  // An open the sheet's frame has not rendered yet is a held intent: the
+  // trigger reports it expanded only once its listbox is in the document.
+  const isExpanded =
+    !isEffectivelyReadOnly &&
+    surface.isOpen &&
+    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
 
   let selectionSurface: ReactNode = null;
   if (surface.activePresentation === 'bottom-sheet') {
@@ -2438,7 +2444,7 @@ export function Selector<T extends SelectorOptionType>(
                 ? 'dialog'
                 : 'listbox'
           }
-          aria-expanded={isEffectivelyReadOnly ? false : surface.isOpen}
+          aria-expanded={isExpanded}
           aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={

@@ -62,7 +62,8 @@ describe('Selector bottom-sheet load failure', () => {
     const trigger = screen.getByRole('combobox');
 
     fireEvent.click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // Held until the frame renders its listbox, which it never does here.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
     await settle();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
