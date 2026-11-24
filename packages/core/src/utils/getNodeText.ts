@@ -144,8 +144,9 @@ function joinPieces(pieces: ReadonlyArray<TextPiece>): string {
  * The plain text a node renders through strings, numbers and element
  * children, as it reads on the page: inline elements join the text beside
  * them, and a block element, a `<br>` or a component stands apart with a
- * space, also when an inline element holds it. Text a component renders internally, from props other than
- * `children`, is not reachable and yields `''`.
+ * space, also when an inline element holds it. Text a component renders
+ * internally, from props other than `children`, is not reachable and yields
+ * `''`.
  */
 export function getNodeText(node: ReactNode): string {
   return joinPieces(piecesOf(node));
