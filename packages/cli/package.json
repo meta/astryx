@@ -130,21 +130,21 @@
     "@babel/plugin-transform-react-jsx": "7.29.7",
     "@babel/plugin-transform-typescript": "7.29.7",
     "@babel/types": "7.29.8",
-    "@csstools/css-syntax-patches-for-csstree": "1.1.6",
+    "@csstools/css-syntax-patches-for-csstree": "1.1.17",
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
     "css-tree": "3.2.1",
     "esbuild": "catalog:",
     "globals": "17.14.0",
-    "ignore": "^7.0.14",
+    "ignore": "^7.0.16",
     "jiti": "^2.7.0",
     "jscodeshift": "^17.4.0",
     "linkedom": "^0.18.15",
     "node-diff3": "3.2.1",
-    "postcss": "^8.5.23",
-    "postcss-selector-parser": "^7.1.6",
-    "recast": "0.23.21",
+    "postcss": "^8.5.33",
+    "postcss-selector-parser": "^7.2.1",
+    "recast": "0.24.3",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
@@ -164,7 +164,7 @@
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "lucide-react": "^1.66.0",
-    "recharts": "^3.10.1"
+    "lucide-react": "^1.74.0",
+    "recharts": "^3.11.0"
   }
 }

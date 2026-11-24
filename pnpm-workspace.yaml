@@ -41,10 +41,10 @@ minimumReleaseAgeExclude:
 # ranges in packages/* stay loose on purpose; those are consumer contracts,
 # not workspace pins.
 catalog:
-  vite: ^8.1.3
-  '@stylexjs/stylex': ^0.19.1
-  '@stylexjs/babel-plugin': ^0.19.1
-  '@stylexjs/postcss-plugin': ^0.19.1
+  vite: ^8.3.8
+  '@stylexjs/stylex': ^0.19.2
+  '@stylexjs/babel-plugin': ^0.19.2
+  '@stylexjs/postcss-plugin': ^0.19.2
   # Keep all four on the same Babel major. Dependabot raised cli (#4067) and
   # preset-react (#3839) to 8.x on their own while core and preset-typescript
   # stayed on 7.x, and 8.x peers on `@babel/core: ^8.0.0` — a combination no
@@ -55,7 +55,7 @@ catalog:
   '@babel/preset-typescript': ^7.29.7
   '@testing-library/react': ^16.3.3
   '@testing-library/jest-dom': ^6.6.0
-  prettier: ^3.9.10
+  prettier: ^3.10.1
   esbuild: ^0.28.2
 
 # Moved from package.json's "pnpm" field: pnpm 11 no longer reads

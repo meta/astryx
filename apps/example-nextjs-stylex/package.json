@@ -8,16 +8,16 @@
     "start": "next start"
   },
   "dependencies": {
-    "@stylexjs/stylex": "^0.19.1",
+    "@stylexjs/stylex": "^0.19.2",
     "@astryxdesign/core": "*",
     "@astryxdesign/theme-neutral": "*",
-    "next": "^16.3.6",
+    "next": "^16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@stylexjs/babel-plugin": "^0.19.1",
-    "@stylexjs/postcss-plugin": "^0.19.1",
+    "@stylexjs/babel-plugin": "^0.19.2",
+    "@stylexjs/postcss-plugin": "^0.19.2",
     "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
     "@types/node": "^25.9.3",
