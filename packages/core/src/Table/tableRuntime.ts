@@ -220,5 +220,6 @@ export function createTableRuntime() {
 }
 export type TableRuntime = ReturnType<typeof createTableRuntime>;
 export const TableRuntimeContext = createSharedContext<
-  (TableRuntime & {viewportHeight?: number; isLoadingAdmitted?: boolean}) | null
->('TableRuntimeContext', 1, null);
+  | (TableRuntime & {isBlockViewport: boolean; isLoadingAdmitted?: boolean})
+  | null
+>('TableRuntimeContext', 2, null);

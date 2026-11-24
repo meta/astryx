@@ -283,7 +283,7 @@ function InfiniteScrollSurface({
   const t = useComponentTranslator();
   const tableRuntime = use(TableRuntimeContext);
   // Table bounds its block viewport only while it windows its rows.
-  const hasBlockViewport = tableRuntime?.viewportHeight != null;
+  const hasBlockViewport = tableRuntime?.isBlockViewport === true;
   // Table denies loading under a caller's scroll wrapper. A surface rendered
   // outside any Table has no runtime to deny it.
   const isTableAdmitted = tableRuntime?.isLoadingAdmitted !== false;
