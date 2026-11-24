@@ -19,6 +19,7 @@
 import {useSyncExternalStore, type ReactElement} from 'react';
 import {warnOnce} from '../utils/devWarning';
 import {createModuleLoader} from '../utils/moduleLoader';
+import {sharedState} from '../utils/sharedRealm';
 import type * as FrameModule from './SelectorBottomSheetFrame';
 import type {SelectorBottomSheetProps} from './SelectorBottomSheetFrame';
 
@@ -29,7 +30,12 @@ const frame = createModuleLoader<typeof FrameModule>(
 );
 
 // Hosts that wait for the frame. Each one renders again when it arrives.
-const frameListeners = new Set<() => void>();
+// Shared by every copy of Core, as the shared-identity check requires.
+const frameListeners = sharedState(
+  'Selector/SelectorBottomSheet/frameListeners',
+  1,
+  () => new Set<() => void>(),
+);
 
 function subscribeToFrame(listener: () => void): () => void {
   frameListeners.add(listener);
