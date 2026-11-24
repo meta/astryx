@@ -29,11 +29,18 @@ const step = name => steps.find(each => each.name === name);
 const GIB = 1024 ** 3;
 
 /** One recorded process, as the preload writes it. */
-const row = (command, peakUsed, heapLimit = 6 * GIB, maxRss = peakUsed * 1.4) =>
-  JSON.stringify({pid: 1, command, peakUsed, heapLimit, maxRss});
+const row = (command, liveHeap, heapLimit = 6 * GIB) =>
+  JSON.stringify({
+    pid: 1,
+    command,
+    liveHeap,
+    heldHeap: liveHeap * 1.3,
+    heapLimit,
+    maxRss: liveHeap * 1.4,
+  });
 
 describe('the report', () => {
-  it('names the process nearest its heap limit, and warns at 80%', () => {
+  it('names the process whose live heap is nearest its limit, and warns at 80%', () => {
     const lines = [
       row('pnpm lint', 0.1 * GIB),
       row('eslint . --cache', 5.0 * GIB),
@@ -42,9 +49,11 @@ describe('the report', () => {
     const {summary, warning} = reportHeapPeaks(lines);
     expect(WARN_SHARE).toBe(0.8);
     expect(summary).toContain('eslint . --cache');
-    expect(summary).toContain('5.00 GiB of a 6.00 GiB heap (83%)');
+    expect(summary).toContain(
+      '`eslint . --cache` kept 5.00 GiB of a 6.00 GiB heap (83%) live after a full garbage collection; V8 held at most 6.50 GiB',
+    );
     expect(warning).toMatch(
-      /^::warning title=Lint heap near its limit::eslint \. --cache peaked at 5\.00 GiB of its 6\.00 GiB heap \(83%\)/,
+      /^::warning title=Lint heap near its limit::eslint \. --cache kept 5\.00 GiB of its 6\.00 GiB heap \(83%\) live, past 80%/,
     );
   });
 
@@ -52,7 +61,7 @@ describe('the report', () => {
     const {summary, warning} = reportHeapPeaks([
       row('eslint . --cache', 4.0 * GIB),
     ]);
-    expect(summary).toContain('4.00 GiB of a 6.00 GiB heap (67%)');
+    expect(summary).toContain('4.00 GiB of a 6.00 GiB heap (67%) live');
     expect(warning).toBe('');
   });
 
@@ -82,9 +91,12 @@ describe('the report', () => {
       process.execPath,
       [
         '--max-old-space-size=256',
+        '--expose-gc',
         `--import=${path.join(root, '.github/scripts/lint-heap-peak.mjs')}`,
         '-e',
-        'globalThis.keep = Array.from({length: 2e5}, (_, i) => ({i}));',
+        // Keeps about 40 MB live through a full collection; the observer
+        // reads the heap when the collection's entry arrives.
+        'globalThis.keep = Array.from({length: 4e5}, (_, i) => ({i, s: String(i)})); gc(); setTimeout(() => {}, 50);',
       ],
       {encoding: 'utf8', env: {...process.env, LINT_HEAP_PEAK_FILE: file}},
     );
@@ -94,10 +106,11 @@ describe('the report', () => {
       .trim()
       .split('\n')
       .map(line => JSON.parse(line));
-    expect(recorded.peakUsed).toBeGreaterThan(0);
+    expect(recorded.liveHeap).toBeGreaterThan(20 * 1024 ** 2);
+    expect(recorded.heldHeap).toBeGreaterThanOrEqual(recorded.liveHeap);
     expect(recorded.heapLimit).toBeGreaterThan(200 * 1024 ** 2);
     expect(recorded.heapLimit).toBeLessThan(400 * 1024 ** 2);
-    expect(recorded.maxRss).toBeGreaterThan(recorded.peakUsed);
+    expect(recorded.maxRss).toBeGreaterThan(recorded.liveHeap);
   });
 });
 

@@ -3,8 +3,9 @@
 /**
  * @file The Lint job's heap tripwire. Preloaded into each Node process of the
  *   type-aware lint steps (NODE_OPTIONS `--import`), it records the process's
- *   peak heap, its heap limit and its peak RSS. `report <file>` then names the
- *   process nearest its limit in the job summary and warns at WARN_SHARE.
+ *   live heap (the most a full garbage collection left in use), its heap
+ *   limit, the most heap V8 held, and its peak RSS. `report <file>` then names
+ *   the process nearest its limit in the job summary and warns at WARN_SHARE.
  * @input LINT_HEAP_PEAK_FILE, the record file a preloaded process appends to.
  * @output One JSON line per process; the report's summary and warning.
  * @position CI tooling for lint.yml. It only reports: it never fails a run.
@@ -12,6 +13,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {PerformanceObserver, constants} from 'node:perf_hooks';
 import {pathToFileURL} from 'node:url';
 import v8 from 'node:v8';
 
@@ -34,34 +36,49 @@ export function reportHeapPeaks(lines) {
     .filter(record => record.heapLimit > 0);
   if (records.length === 0)
     return {summary: 'Lint heap: no process recorded its peak.', warning: ''};
-  const share = record => record.peakUsed / record.heapLimit;
+  const share = record => record.liveHeap / record.heapLimit;
   const top = records.reduce((best, next) =>
     share(next) > share(best) ? next : best,
   );
-  const peak = `${gib(top.peakUsed)} of a ${gib(top.heapLimit)} heap (${percent(share(top))})`;
-  const summary = `Lint heap: \`${top.command}\` peaked at ${peak}; its peak RSS was ${gib(top.maxRss)}.`;
+  const live = `${gib(top.liveHeap)} of a ${gib(top.heapLimit)} heap (${percent(share(top))})`;
+  const summary = `Lint heap: \`${top.command}\` kept ${live} live after a full garbage collection; V8 held at most ${gib(top.heldHeap)}, and its peak RSS was ${gib(top.maxRss)}.`;
   const warning =
     share(top) >= WARN_SHARE
-      ? `::warning title=Lint heap near its limit::${top.command} peaked at ${gib(top.peakUsed)} of its ${gib(top.heapLimit)} heap (${percent(share(top))}), past ${percent(WARN_SHARE)}. Before it runs out: lint core's source with a source-only tsconfig, and core's tests in their own step.`
+      ? `::warning title=Lint heap near its limit::${top.command} kept ${gib(top.liveHeap)} of its ${gib(top.heapLimit)} heap (${percent(share(top))}) live, past ${percent(WARN_SHARE)}. Before it runs out: lint core's source with a source-only tsconfig, and core's tests in their own step.`
       : '';
   return {summary, warning};
 }
 
 /**
- * Records this process's peak heap at exit. Timers sample the heap between
- * tasks, and the exit sample adds the heap V8 holds then: a stretch of
- * synchronous work can peak between samples, but V8 keeps the heap it grew.
+ * Records this process's heap at exit. The live heap is the most a full
+ * garbage collection left in use: V8 lets the heap grow towards its limit
+ * before it collects, so the most it held says little about what the process
+ * needs, and a full collection that cannot free enough is what runs out.
  * @param {string} file
  */
 function recordPeak(file) {
-  let peakUsed = 0;
+  let liveHeap = 0;
+  let heldHeap = 0;
   const sample = () => {
     const stats = v8.getHeapStatistics();
-    peakUsed = Math.max(peakUsed, stats.used_heap_size, stats.total_heap_size);
+    heldHeap = Math.max(heldHeap, stats.total_heap_size);
+    return stats.used_heap_size;
   };
+  const observer = new PerformanceObserver(list => {
+    if (
+      list
+        .getEntries()
+        .some(
+          entry => entry.detail?.kind === constants.NODE_PERFORMANCE_GC_MAJOR,
+        )
+    )
+      liveHeap = Math.max(liveHeap, sample());
+  });
+  observer.observe({entryTypes: ['gc']});
   setInterval(sample, 100).unref();
   process.on('exit', () => {
     sample();
+    observer.disconnect();
     const argv = process.argv.slice(1);
     const command = [path.basename(argv[0] ?? 'node'), ...argv.slice(1)]
       .join(' ')
@@ -72,7 +89,8 @@ function recordPeak(file) {
         `${JSON.stringify({
           pid: process.pid,
           command,
-          peakUsed,
+          liveHeap,
+          heldHeap,
           heapLimit: v8.getHeapStatistics().heap_size_limit,
           maxRss: process.resourceUsage().maxRSS * 1024,
         })}\n`,
