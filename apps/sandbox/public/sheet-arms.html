@@ -1,0 +1,357 @@
+<!-- Copyright (c) Meta Platforms, Inc. and affiliates. -->
+
+<!doctype html>
+<!--
+  Bottom sheet dialog, three ways to open it. Load one arm per run, fresh:
+    #p0  native modal (showModal)
+    #p3  show() + aria-modal + aria-hidden outside
+    #p4  popover in the top layer + aria-modal + aria-hidden outside + late-content observer
+  Add &late=5s to add a late message that long after the sheet opens (e.g. #p4&late=5s).
+  Every arm opens with focus on Option A. P3 and P4 return focus to the opener on close;
+  P0 keeps the browser's own return, which in WebKit may land on the document body because
+  WebKit does not focus a tapped button.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bottom sheet dialog: three ways to open it</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page-bg: #f6f6f4;
+    --text: #1d1d1b;
+    --muted: #4f4f4b;
+    --line: #cfcfc9;
+    --accent: #2457c5;
+    --focus: #f0a000;
+    --sheet-bg: #ffffff;
+    --scrim: rgba(0, 0, 0, 0.5);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page-bg); color: var(--text); font-size: 18px; line-height: 1.45; }
+  button, a { font: inherit; }
+  button:focus, a:focus { outline: 4px solid var(--focus); outline-offset: 2px; }
+  header.page-header {
+    position: sticky; top: 0; z-index: 1;
+    padding: 12px 16px; background: #ffffff; border-bottom: 1px solid var(--line);
+  }
+  header.page-header h1 { font-size: 18px; margin: 0 0 6px; }
+  .arm-label { display: block; font-size: 26px; font-weight: 800; color: var(--accent); }
+  .arm-detail { display: block; min-height: 5.8em; font-size: 15px; color: var(--muted); }
+  nav.arms { display: flex; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: #fbfbfa; flex-wrap: wrap; }
+  nav.arms a { display: inline-flex; align-items: center; min-height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; color: var(--accent); background: #ffffff; text-decoration: none; }
+  nav.arms a[aria-current="true"] { background: var(--accent); color: #ffffff; border-color: var(--accent); font-weight: 700; }
+  main { padding: 8px 16px 140px; }
+  main p { margin: 16px 0; }
+  .big-button {
+    display: block; width: 100%; min-height: 56px; margin: 12px 0; padding: 12px 18px;
+    border-radius: 14px; border: 2px solid var(--line); background: #ffffff; color: var(--text); font-weight: 700; font-size: 20px;
+  }
+  .big-button.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+  .page-button { min-height: 48px; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line); background: #ffffff; color: var(--text); }
+  .state-banner {
+    margin: 16px 0; padding: 16px; border-radius: 14px; font-size: 22px; font-weight: 800; text-align: center;
+    background: #e5f4e8; color: #1f5f2d; border: 2px solid #9fd0aa;
+  }
+  .state-banner.open { background: #fdecc8; color: #6b4a00; border-color: #e8c26a; }
+  /* A late message is a new child of body, pinned to the top edge so it stays in view without covering the state banner. */
+  .activity { margin: 0 0 8px; min-height: 1.4em; font-size: 18px; font-weight: 700; color: #8a2a00; text-align: center; }
+  .late-message { position: fixed; left: 0; right: 0; top: 0; z-index: 2; margin: 0; padding: 8px 16px; font-size: 15px; font-weight: 700; background: #fff4d6; border-bottom: 2px solid #e8d9a8; }
+
+  /* The sheet host: one full-viewport box; the panel sits at its foot. */
+  dialog.sheet-host {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100dvh; max-width: none; max-height: none;
+    margin: 0; padding: 0; border: 0; overflow: visible;
+    background: transparent; color: var(--text);
+  }
+  dialog.sheet-host::backdrop { background: var(--scrim); }
+  /* A dialog shown as a popover has no open attribute: show it by its popover state. */
+  dialog.sheet-host:popover-open { display: block; }
+  /* The arm without a top layer paints its own scrim on the host box. */
+  dialog.sheet-host.paints-own-scrim { background: var(--scrim); z-index: 2147483647; }
+  .sheet-panel {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    max-height: 85dvh; overflow: auto;
+    padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+    background: var(--sheet-bg); border-radius: 18px 18px 0 0;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  }
+  .sheet-grip { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 10px; }
+  .sheet-head { display: flex; align-items: center; gap: 12px; }
+  .sheet-head h2 { font-size: 22px; margin: 0; flex: 1; }
+  .sheet-close { min-height: 48px; min-width: 88px; padding: 10px 16px; border-radius: 12px; border: 2px solid var(--line); background: #ffffff; font-weight: 700; }
+  .sheet-arm { font-size: 16px; font-weight: 700; color: var(--accent); margin: 6px 0 0; }
+  .options { list-style: none; margin: 12px 0 0; padding: 0; }
+  .options button {
+    display: block; width: 100%; min-height: 56px; text-align: left;
+    padding: 14px 16px; margin: 8px 0; border-radius: 14px;
+    border: 2px solid var(--line); background: #ffffff; color: var(--text);
+  }
+  .options button[aria-pressed="true"] { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<header class="page-header">
+  <h1>Example page</h1>
+  <span class="arm-label" id="arm-label">Arm</span>
+  <span class="arm-detail" id="arm-detail"></span>
+</header>
+<nav class="arms" aria-label="Arms">
+  <a href="#p0">P0</a>
+  <a href="#p3">P3</a>
+  <a href="#p4">P4</a>
+</nav>
+<main id="page">
+  <p class="state-banner" id="state-banner">Sheet closed</p>
+  <p class="activity" id="activity" aria-live="off"></p>
+  <button type="button" class="big-button primary" id="opener">Open the sheet</button>
+  <button type="button" class="big-button" id="add-late">Add a late message</button>
+  <p>This is a background paragraph. It sits behind the sheet while the sheet is open.</p>
+  <p>A second background paragraph, with a <a href="#background" id="background-link">background link</a> in it.</p>
+  <p><button type="button" class="page-button" id="background-button">Background button</button></p>
+  <p>A third background paragraph. Find-in-page and screen readers should treat it according to the arm.</p>
+</main>
+
+<dialog class="sheet-host" id="sheet" aria-labelledby="sheet-title">
+  <div class="sheet-panel" id="sheet-panel">
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <h2 id="sheet-title">Choose an option</h2>
+      <button type="button" class="sheet-close" id="sheet-close">Close</button>
+    </div>
+    <p class="sheet-arm" id="sheet-arm"></p>
+    <ul class="options">
+      <li><button type="button" aria-pressed="true" autofocus>Option A</button></li>
+      <li><button type="button" aria-pressed="false">Option B</button></li>
+      <li><button type="button" aria-pressed="false">Option C</button></li>
+    </ul>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  "use strict";
+  // Hash: #p0, #p3 or #p4, optionally with &late=5s to add a late message that long after the sheet opens.
+  const ARMS = {
+    p0: { name: "P0", detail: "Native modal: showModal(). Escape path: the native cancel." },
+    p3: { name: "P3", detail: "show() + aria-modal + aria-hidden outside. Escape path: close watcher where available, Escape key otherwise." },
+    p4: { name: "P4", detail: "Popover in the top layer + aria-modal + aria-hidden outside + late-content observer. Escape path: close watcher where available, Escape key otherwise." },
+  };
+  const sheet = document.getElementById("sheet");
+  const panel = document.getElementById("sheet-panel");
+  const opener = document.getElementById("opener");
+  const banner = document.getElementById("state-banner");
+  const armLabel = document.getElementById("arm-label");
+  const armDetail = document.getElementById("arm-detail");
+  const sheetArm = document.getElementById("sheet-arm");
+  const SKIP = new Set(["SCRIPT", "STYLE", "LINK", "META", "TEMPLATE", "NOSCRIPT"]);
+  const hasCloseWatcher = typeof CloseWatcher === "function";
+
+  let state = null; // the open sheet: its arm, hidden elements and cleanups
+
+  function parseHash() {
+    const parts = location.hash.replace(/^#/, "").toLowerCase().split("&");
+    const arm = ARMS[parts[0]] ? parts[0] : "p0";
+    let lateMs = null;
+    for (const part of parts.slice(1)) {
+      const match = /^late=(\d+(?:\.\d+)?)s$/.exec(part);
+      if (match) lateMs = Math.round(Number(match[1]) * 1000);
+    }
+    return { arm, lateMs };
+  }
+
+  function renderArm() {
+    const { arm, lateMs } = parseHash();
+    armLabel.textContent = "Arm " + ARMS[arm].name;
+    armDetail.textContent = ARMS[arm].detail + (lateMs == null ? "" : " A late message is added " + lateMs / 1000 + " s after the sheet opens.");
+    sheetArm.textContent = "Arm " + ARMS[arm].name;
+    for (const link of document.querySelectorAll("nav.arms a")) {
+      link.setAttribute("aria-current", link.getAttribute("href") === "#" + arm ? "true" : "false");
+    }
+  }
+
+  function showState(open, reason) {
+    banner.classList.toggle("open", open);
+    banner.textContent = open ? "Sheet open" : "Sheet closed" + (reason ? " by: " + reason : "");
+  }
+
+  // aria-hidden on every sibling along the dialog's ancestor chain, never an ancestor.
+  function hideOutside(touched) {
+    let node = sheet;
+    while (node && node !== document.body) {
+      const parent = node.parentElement;
+      if (!parent) break;
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling === node || SKIP.has(sibling.tagName)) continue;
+        if (sibling.getAttribute("aria-hidden") === "true") continue;
+        sibling.setAttribute("aria-hidden", "true");
+        touched.push(sibling);
+      }
+      node = parent;
+    }
+  }
+
+  // A minimal focus trap for the arms without native modality.
+  function trapTab(event) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(panel.querySelectorAll("button, a[href]"));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (!panel.contains(document.activeElement)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  // The reader's escape gesture and the platform's close request, for the arms without native modality:
+  // a close watcher where the browser has one (Escape, the Android back gesture), and the Escape key
+  // everywhere (a hardware Escape; an escape gesture the browser delivers as an Escape key).
+  function listenForEscape(cleanups) {
+    if (hasCloseWatcher) {
+      const watcher = new CloseWatcher();
+      watcher.onclose = () => closeSheet("close request");
+      cleanups.push(() => watcher.destroy());
+    }
+    const onKey = (event) => {
+      if (event.key === "Escape" || event.key === "Esc") {
+        event.preventDefault();
+        closeSheet("Escape key");
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    cleanups.push(() => document.removeEventListener("keydown", onKey, true));
+  }
+
+  function openSheet() {
+    if (state !== null) return;
+    const { arm, lateMs } = parseHash();
+    const touched = [];
+    const cleanups = [];
+
+    if (arm === "p0") {
+      sheet.showModal();
+    } else if (arm === "p3") {
+      sheet.setAttribute("aria-modal", "true");
+      sheet.classList.add("paints-own-scrim");
+      hideOutside(touched);
+      sheet.show();
+      document.addEventListener("keydown", trapTab, true);
+      cleanups.push(() => document.removeEventListener("keydown", trapTab, true));
+      listenForEscape(cleanups);
+    } else {
+      sheet.setAttribute("popover", "manual");
+      sheet.setAttribute("aria-modal", "true");
+      sheet.showPopover();
+      hideOutside(touched);
+      // Content added outside the sheet while it is open is hidden too; nested top-layer
+      // content and live regions are left alone.
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          for (const added of record.addedNodes) {
+            if (!(added instanceof Element) || added.contains(sheet) || sheet.contains(added)) continue;
+            if (added.matches("dialog, [popover], [role=dialog], [aria-live], [role=status], [role=alert]")) continue;
+            if (SKIP.has(added.tagName) || added.getAttribute("aria-hidden") === "true") continue;
+            added.setAttribute("aria-hidden", "true");
+            touched.push(added);
+          }
+        }
+      });
+      let ancestor = sheet.parentElement;
+      while (ancestor) {
+        observer.observe(ancestor, { childList: true });
+        if (ancestor === document.body) break;
+        ancestor = ancestor.parentElement;
+      }
+      cleanups.push(() => observer.disconnect());
+      document.addEventListener("keydown", trapTab, true);
+      cleanups.push(() => document.removeEventListener("keydown", trapTab, true));
+      listenForEscape(cleanups);
+    }
+    if (lateMs != null) {
+      const timer = setTimeout(addLateMessage, lateMs);
+      cleanups.push(() => clearTimeout(timer));
+    }
+    state = { arm, touched, cleanups };
+    showState(true);
+  }
+
+  function closeSheet(reason) {
+    if (state === null) return;
+    const { arm, touched, cleanups } = state;
+    state = null;
+    for (const cleanup of cleanups.splice(0)) {
+      try { cleanup(); } catch (error) { /* keep closing */ }
+    }
+    if (arm === "p4") {
+      if (sheet.matches(":popover-open")) sheet.hidePopover();
+      sheet.removeAttribute("popover");
+    } else if (sheet.open) {
+      sheet.close();
+    }
+    sheet.removeAttribute("aria-modal");
+    sheet.classList.remove("paints-own-scrim");
+    for (const element of touched) element.removeAttribute("aria-hidden");
+    showState(false, reason);
+    if (arm !== "p0") opener.focus();
+  }
+
+  function addLateMessage() {
+    const late = document.createElement("p");
+    late.className = "late-message";
+    late.textContent = "Late message: added after the sheet opened.";
+    document.body.insertBefore(late, document.body.firstChild);
+  }
+
+  // The native modal: Escape and the reader's escape gesture arrive as its cancel.
+  let nativeCancel = false;
+  sheet.addEventListener("cancel", () => {
+    nativeCancel = true;
+  });
+  sheet.addEventListener("close", () => {
+    if (state !== null && state.arm === "p0") closeSheet(nativeCancel ? "native cancel" : "close");
+    nativeCancel = false;
+  });
+  // A tap on the scrim (the host box outside the panel) closes the sheet.
+  sheet.addEventListener("click", (event) => {
+    if (event.target === sheet) closeSheet("scrim tap");
+  });
+  document.getElementById("sheet-close").addEventListener("click", () => closeSheet("close button"));
+  document.getElementById("add-late").addEventListener("click", () => addLateMessage());
+  const activity = document.getElementById("activity");
+  document.getElementById("background-link").addEventListener("click", (event) => {
+    event.preventDefault();
+    activity.textContent = "Background link activated";
+  });
+  document.getElementById("background-button").addEventListener("click", () => {
+    activity.textContent = "Background button activated";
+  });
+  for (const option of panel.querySelectorAll(".options button")) {
+    option.addEventListener("click", () => {
+      for (const other of panel.querySelectorAll(".options button")) other.setAttribute("aria-pressed", "false");
+      option.setAttribute("aria-pressed", "true");
+    });
+  }
+  opener.addEventListener("click", () => openSheet());
+  window.addEventListener("hashchange", () => {
+    const next = location.hash.replace(/^#/, "").toLowerCase().split("&")[0];
+    if (!ARMS[next]) return;
+    closeSheet("arm change");
+    for (const late of document.querySelectorAll(".late-message")) late.remove();
+    activity.textContent = "";
+    renderArm();
+  });
+  renderArm();
+})();
+</script>
+</body>
+</html>
