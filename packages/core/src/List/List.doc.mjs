@@ -31,6 +31,16 @@ export const docs = {
         private: true,
       },
     ],
+    componentIcons: [
+      {
+        slot: 'list-reorder-handle',
+        description:
+          "The grip on a reorderable row's reorder handle (`reorderable`). The handle is the grip alone, in a 1rem box. The slot's `size` changes only the icon, centred on that box: the handle's target and the room rows keep for it stay the same.",
+        fallback: '`drag` at the `sm` size',
+        whenNull:
+          'The handle draws no grip. It keeps its name, its place, its target and its drag.',
+      },
+    ],
   },
   description: 'List container with density, dividers, and header support.',
   props: [
@@ -183,7 +193,7 @@ export const docs = {
         name: 'Reorder handle',
         required: false,
         description:
-          'With reorderable: the button at the end of each row that can move. It drags the row, and toggles its reorder mode.',
+          "With reorderable: the button at the end of each row that can move. It draws the `drag` icon, which a theme replaces through `componentIcons['list-reorder-handle']`. It drags the row, and toggles its reorder mode.",
       },
       {
         name: 'Reorder hint',
@@ -257,7 +267,7 @@ export const docsZh = {
         name: 'Reorder handle',
         required: false,
         description:
-          'With reorderable: the button at the end of each row that can move. It drags the row, and toggles its reorder mode.',
+          "With reorderable: the button at the end of each row that can move. It draws the `drag` icon, which a theme replaces through `componentIcons['list-reorder-handle']`. It drags the row, and toggles its reorder mode.",
       },
       {
         name: 'Reorder hint',
@@ -334,7 +344,7 @@ export const docsDense = {
         name: 'Reorder handle',
         required: false,
         description:
-          'With reorderable: the button at the end of each row that can move. It drags the row, and toggles its reorder mode.',
+          "With reorderable: the button at the end of each row that can move. It draws the `drag` icon, which a theme replaces through `componentIcons['list-reorder-handle']`. It drags the row, and toggles its reorder mode.",
       },
       {
         name: 'Reorder hint',

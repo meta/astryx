@@ -28,6 +28,7 @@ import {
   expect,
   test,
   type Browser,
+  type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
@@ -1031,6 +1032,152 @@ test("with a mouse the handle keeps a plain button's text selection and callout"
     // Chromium has no `-webkit-touch-callout`, so that value is compared in
     // WebKit only.
     expect(styles.handle).toEqual(styles.plain);
+  } finally {
+    await story.close();
+  }
+});
+
+/** Whether each point lands on `handle`: elementFromPoint, at each point. */
+async function landsOn(
+  handle: Locator,
+  points: ReadonlyArray<readonly [number, number]>,
+): Promise<boolean[]> {
+  return handle.evaluate(
+    (element, at) =>
+      at.map(
+        ([x, y]) =>
+          document
+            .elementFromPoint(x, y)
+            ?.closest('button[data-astryx-list-reorder]') === element,
+      ),
+    points,
+  );
+}
+
+/** The points `reach` px from a centre: the four sides and two corners. */
+function ring(cx: number, cy: number, reach: number) {
+  return [
+    [cx - reach, cy],
+    [cx + reach, cy],
+    [cx, cy - reach],
+    [cx, cy + reach],
+    [cx - reach, cy - reach],
+    [cx + reach, cy + reach],
+  ] as const;
+}
+
+test('the handle is its grip, and a mouse hits it anywhere in the square of at least 24 px round it (WCAG 2.5.8)', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    const handle = page.getByRole('button', {name: 'Reorder Sent'});
+    await expect(handle).toBeVisible();
+    const box = await handle.boundingBox();
+    if (box == null) {
+      throw new Error('no handle');
+    }
+    // The `sm` grip at a 16 px root, with no box round it.
+    expect(box.width).toBeCloseTo(16, 0);
+    expect(box.height).toBeCloseTo(16, 0);
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    expect(await landsOn(handle, ring(cx, cy, 11.5))).toEqual(
+      Array(6).fill(true),
+    );
+    // Just past the target, the row's own content.
+    expect(await landsOn(handle, [[cx + 12.5, cy]])).toEqual([false]);
+    // The target stays inside the row, clear of the list's clip.
+    const rowRight = await handle
+      .locator('xpath=ancestor::li[1]')
+      .evaluate(element => element.getBoundingClientRect().right);
+    expect(cx + 12).toBeLessThanOrEqual(rowRight + 0.5);
+  } finally {
+    await story.close();
+  }
+});
+
+test('at a 20 px root the grip grows, and its target and ring follow it, centred', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '20px';
+    });
+    const handle = page.getByRole('button', {name: 'Reorder Sent'});
+    await expect
+      .poll(async () => (await handle.boundingBox())?.width ?? 0)
+      .toBeCloseTo(20, 0);
+    const box = await handle.boundingBox();
+    if (box == null) {
+      throw new Error('no handle');
+    }
+    expect(box.height).toBeCloseTo(20, 0);
+    const grip = await handle.evaluate(element => {
+      const icon = element.querySelector('svg')?.getBoundingClientRect();
+      const own = element.getBoundingClientRect();
+      return icon == null
+        ? null
+        : {
+            dx: icon.left + icon.width / 2 - (own.left + own.width / 2),
+            dy: icon.top + icon.height / 2 - (own.top + own.height / 2),
+            width: icon.width,
+          };
+    });
+    // The grip fills the handle, centred in it.
+    expect(grip?.width).toBeCloseTo(20, 0);
+    expect(Math.abs(grip?.dx ?? 99)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(grip?.dy ?? 99)).toBeLessThanOrEqual(0.5);
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    // The target reaches 4 px past the larger grip on every side.
+    expect(await landsOn(handle, ring(cx, cy, 13.5))).toEqual(
+      Array(6).fill(true),
+    );
+    expect(await landsOn(handle, [[cx + 14.5, cy]])).toEqual([false]);
+    // The ring's outer edge is the target's edge.
+    await handle.focus();
+    const offset = await handle.evaluate(element => {
+      const style = getComputedStyle(element);
+      return (
+        parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth || '0')
+      );
+    });
+    expect(offset).toBeCloseTo(4, 0);
+  } finally {
+    await story.close();
+  }
+});
+
+test('in reorder mode the fill sits under the grip, in forced colors too', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    const handle = page.getByRole('button', {name: 'Reorder Sent'});
+    await handle.focus();
+    await page.keyboard.press('Enter');
+    await expect(handle).toHaveAttribute('aria-pressed', 'true');
+    const setGripShown = async (shown: boolean) =>
+      handle.evaluate((element, isShown) => {
+        const grip = element.querySelector('svg');
+        if (grip != null) {
+          grip.style.visibility = isShown ? '' : 'hidden';
+        }
+      }, shown);
+    for (const forcedColors of ['none', 'active'] as const) {
+      await page.emulateMedia({forcedColors});
+      const withGrip = await handle.screenshot({animations: 'disabled'});
+      await setGripShown(false);
+      const withoutGrip = await handle.screenshot({animations: 'disabled'});
+      await setGripShown(true);
+      // A grip under the fill would leave the two pictures the same.
+      expect(withGrip.equals(withoutGrip), forcedColors).toBe(false);
+    }
   } finally {
     await story.close();
   }
