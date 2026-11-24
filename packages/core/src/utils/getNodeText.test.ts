@@ -25,7 +25,9 @@ describe('getNodeText', () => {
       'March 1.',
     );
     expect(
-      getNodeText(createElement(Fragment, null, 'H', createElement('sub', null, 2), 'O')),
+      getNodeText(
+        createElement(Fragment, null, 'H', createElement('sub', null, 2), 'O'),
+      ),
     ).toBe('H2O');
     expect(getNodeText([42, '%'])).toBe('42%');
   });
@@ -50,8 +52,9 @@ describe('getNodeText', () => {
   });
 
   it('yields nothing for empty nodes and text a component renders from other props', () => {
-    for (const node of [null, undefined, true, false, []])
-      {expect(getNodeText(node)).toBe('');}
+    for (const node of [null, undefined, true, false, []]) {
+      expect(getNodeText(node)).toBe('');
+    }
     const Labelled = ({label}: {label: string}) => label;
     expect(getNodeText(createElement(Labelled, {label: 'Hidden'}))).toBe('');
   });
