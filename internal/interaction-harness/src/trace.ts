@@ -8,7 +8,8 @@
  *   (Layout, Paint, UpdateLayoutTree, PrePaint, …) between two marks — and
  *   `installLongTaskLog` / `readLongTasks`. `longTasksOf` gives each long task
  *   its wall and thread time. `layoutSources` names what ran each counted
- *   Layout and what invalidated layout before it.
+ *   Layout and what invalidated layout before it. `restyleSources` gives each
+ *   style recalculation its element count and the invalidations before it.
  * @position The "no Layout/Paint during a transform/opacity animation" proof.
  *   A compositor animation costs the main thread nothing per frame; one that
  *   animates a layout property, or writes styles from JavaScript each frame,
@@ -256,6 +257,66 @@ export function layoutSources(
     });
 }
 
+/** A counted style recalculation and the style invalidations before it. */
+export interface RestyleSource {
+  /** The recalculation's time, epoch ms. */
+  readonly t: number;
+  /** How many elements it restyled. */
+  readonly elements: number;
+  /**
+   * Each style invalidation since the previous recalculation, as text. The
+   * trace names the node and the reason only when it tracks invalidations
+   * (`trackInvalidations`).
+   */
+  readonly invalidations: readonly string[];
+}
+
+const STYLE_INVALIDATIONS = new Set([
+  'ScheduleStyleRecalculation',
+  'StyleRecalcInvalidationTracking',
+  'StyleInvalidatorInvalidationTracking',
+]);
+
+/**
+ * Explains each style recalculation in `[from, to]` (epoch ms) from a trace
+ * that kept its events: how many elements it restyled, and every style
+ * invalidation since the previous recalculation. An invalidation names the
+ * node a write changed, which is not always the node that restyles: a change
+ * to an inherited property restyles the node's descendants too.
+ */
+export function restyleSources(
+  trace: RenderingTrace,
+  from: number,
+  to: number,
+): RestyleSource[] {
+  const main = trace.mainThread;
+  if (main == null) {
+    throw new Error(
+      'restyleSources: the trace kept no events; trace with {keepEvents: true}',
+    );
+  }
+  const sources: RestyleSource[] = [];
+  let pending: string[] = [];
+  for (const e of main) {
+    if (STYLE_INVALIDATIONS.has(e.name)) {
+      pending.push(describeEvent(e));
+      continue;
+    }
+    if (e.name !== 'UpdateLayoutTree') {
+      continue;
+    }
+    const elements = e.args?.elementCount;
+    if (typeof elements !== 'number') {
+      continue;
+    }
+    if (e.t >= from && e.t <= to) {
+      sources.push({t: e.t, elements, invalidations: pending});
+    }
+    pending = [];
+  }
+  return sources;
+}
+
 export interface TraceEvent {
   name: string;
   cat: string;
@@ -285,7 +346,17 @@ export interface TraceEvent {
 export async function traceRendering(
   page: Page,
   body: () => Promise<unknown>,
-  {keepEvents = false}: {keepEvents?: boolean} = {},
+  {
+    keepEvents = false,
+    trackInvalidations = false,
+  }: {
+    keepEvents?: boolean;
+    /**
+     * Also traces each invalidation's node and reason, which
+     * `layoutSources` and `restyleSources` then name.
+     */
+    trackInvalidations?: boolean;
+  } = {},
 ): Promise<RenderingTrace> {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -303,6 +374,9 @@ export async function traceRendering(
         'disabled-by-default-devtools.timeline',
         'blink.user_timing',
         'toplevel',
+        ...(trackInvalidations
+          ? ['disabled-by-default-devtools.timeline.invalidationTracking']
+          : []),
       ],
       excludedCategories: ['*'],
     },

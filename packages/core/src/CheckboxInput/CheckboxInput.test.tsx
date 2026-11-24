@@ -579,15 +579,50 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent(
-        'Terms are managed by your administrator',
-      );
+      // The tooltip's layer mounts at its first show.
+      const tooltip = () => screen.getByRole('tooltip', h);
       fireEvent.mouseEnter(getRow());
       fireEvent.pointerMove(getRow());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
+      expect(tooltip()).toHaveTextContent(
+        'Terms are managed by your administrator',
+      );
       fireEvent.mouseLeave(getRow());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
+    });
+
+    it('renders the reason once before and after its tooltip first shows, and the checkbox reads it once', async () => {
+      const REASON = 'Terms are managed by your administrator';
+      const holders = () =>
+        Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(
+          element =>
+            Array.from(element.childNodes).some(
+              node =>
+                node.nodeType === Node.TEXT_NODE && node.textContent === REASON,
+            ),
+        );
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage={REASON}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      expect(holders()).toHaveLength(1);
+      expect(checkbox).toHaveAccessibleDescription(REASON);
+      fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
+      expect(holders()).toHaveLength(1);
+      expect(screen.getByRole('tooltip', h)).toContainElement(holders()[0]);
+      expect(checkbox).toHaveAccessibleDescription(REASON);
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -601,10 +636,11 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('checkbox', h)).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -684,7 +720,7 @@ describe('CheckboxInput', () => {
       );
     });
 
-    it('renders the reason once, in the tooltip, after mount', async () => {
+    it('describes the input with the reason once, before and after the tooltip shows', async () => {
       render(
         <CheckboxInput
           label="Accept terms"
@@ -695,23 +731,16 @@ describe('CheckboxInput', () => {
         />,
       );
       const checkbox = screen.getByRole('checkbox', h);
-      const tooltip = screen.getByRole('tooltip', h);
-      await waitFor(() =>
-        expect(
-          screen.getAllByText('Terms are managed by your administrator', {
-            ignore: false,
-          }),
-        ).toHaveLength(1),
+      // No layer before the first show; the hidden reason describes the input.
+      expect(screen.queryByRole('tooltip', h)).toBeNull();
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
       );
-      const describedBy = checkbox.getAttribute('aria-describedby') ?? '';
-      const reason = describedBy
-        .split(' ')
-        .map(id => document.getElementById(id))
-        .find(
-          element =>
-            element?.textContent === 'Terms are managed by your administrator',
-        );
-      expect(tooltip.contains(reason ?? null)).toBe(true);
+      fireEvent.mouseEnter(getRow());
+      fireEvent.pointerMove(getRow());
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
       expect(checkbox).toHaveAccessibleDescription(
         'Terms are managed by your administrator',
       );

@@ -69,7 +69,15 @@ literals. The script or pattern of `sed` and search commands is text, not a
 path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
-`report.md` lists every run with warnings for a person to review. When the agent exits or times out, the runner kills its whole process
+`report.md` lists every run with warnings for a person to review. Only a plain
+backup is listed apart: a command that is nothing but `cp`, `mv` and
+`mkdir -p`, joined by `&&`, on literal paths with single spaces, copying into
+or out of the system temp folder. `report.md` names those runs on their own
+line, because the agents that run at the same time share that
+folder. Any other command or tool that names a temp path stays a warning,
+because the audit cannot tell everything the shell runs. Each agent gets its own
+TMPDIR in its run folder, removed after the run, so tools that honor TMPDIR keep
+their files apart. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
 A run where the agent fails before its first turn, writes no result, or cannot
@@ -192,6 +200,14 @@ what the eval measures, so compare results only within one arm version.
   `tar -C`, a subshell `cd`, `pushd`, a symlink), a read behind a variable or
   an encoded path, and a script the agent writes and then runs give a warning
   at most. Running each agent in an isolated filesystem would close this.
+- Agents that run at the same time share the system temp folder. A file one
+  agent writes to a literal `/tmp` path, another agent can read. The report
+  lists the runs that used that folder; it cannot tell whether one agent read
+  another's file. A second eval that runs at the same time with its own `--out`
+  outside the default run root is not one of the audited roots, so give
+  concurrent evals the default run root. The audit resolves links in temp
+  paths when it runs, after the agent exits, so a link that a script made and
+  removed before then is not seen.
 - The audit reads `sed` and search options from per-command lists. An option
   missing from those lists can shift which word it reads as the script or
   pattern, so a quoted path there can pass, or a correct pattern can fail.

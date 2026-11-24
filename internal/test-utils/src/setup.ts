@@ -28,8 +28,14 @@ import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 // after interaction). That makes such assertions liable to flaky "found multiple
 // elements" failures under load. Ignore live regions in text matching (tests
 // that assert an announcement query the region directly, e.g. by role="status").
+// A tooltip's description is a hidden copy of its text after the
+// trigger (`<span hidden>`); text queries skip it too, and tests that
+// assert the description read it through the trigger's accessible description.
 // Keeps the jsdom defaults (script, style).
-configure({defaultIgnore: 'script, style, [data-astryx-live-region]'});
+configure({
+  defaultIgnore:
+    'script, style, [data-astryx-live-region], span[hidden][id$="-description"]',
+});
 
 // The click guard (packages/core/src/utils/clickGuard.ts) is armed per
 // document by a gesture that already acted and disarms itself 400 ms later.
