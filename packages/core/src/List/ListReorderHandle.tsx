@@ -7,8 +7,8 @@
  * @input The List's reorder session (List/listReorderEngine.tsx, through
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
- * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
- *   `UNREAD_HANDLE_NAME`. The handle ends a reorderable List row. A finger
+ * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
+ *   `UNREAD_HANDLE_NAME` and `reorderHandleGrowth`. The handle ends a reorderable List row. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
  *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
  *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
@@ -53,7 +53,8 @@ import {
 import {listReorderHandleProps} from '../privateAttributes/listReorder.stylex';
 import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
-import {useTouchHitArea} from '../utils/touchHitArea';
+import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
+import {MIN_TOUCH_TARGET, type HitInsets, type HitRect} from '../utils/hitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {
   registerEnglishFallback,
@@ -78,8 +79,9 @@ registerEnglishFallback(english);
 /**
  * The handle's target with a fine pointer, px: an invisible square round the
  * grip, at least the WCAG 2.5.8 minimum. A finger's 44 px target is a
- * coarse-only hit layer, clamped so it never takes from a neighbour
- * (utils/hitArea.ts). SYNC: utils/hitArea.ts MIN_TOUCH_TARGET.
+ * coarse-only hit layer, clamped so it never takes from a neighbour or
+ * reaches past its list (utils/hitArea.ts, `reorderHandleGrowth`).
+ * SYNC: utils/hitArea.ts MIN_TOUCH_TARGET.
  */
 const TARGET_SIZE = 24;
 const TOUCH_TARGET_SIZE = 44;
@@ -103,6 +105,36 @@ const TARGET_REACH = `max(${TARGET_MIN_REACH}px, (${TARGET_SIZE}px - ${GRIP}) / 
 const INSET = 'var(--_item-inset-inline, 0px)';
 const EDGE_GUARD = `max(0px, calc(${TARGET_REACH} - ${INSET}))`;
 const TOUCH_EDGE_GUARD = `max(0px, calc((${TOUCH_TARGET_SIZE}px - ${GRIP}) / 2 - ${INSET}))`;
+
+/**
+ * A finger's target grows toward 44 px, centred on the grip, but it stays
+ * inside its list on the block axis. On the first and last rows, a control
+ * right against the list's top or bottom edge then keeps its taps, as it does
+ * next to the rows' own targets. `toLayout` maps a client rect to
+ * the handle's layout px.
+ */
+export function reorderHandleGrowth(
+  target: HitRect,
+  toLayout: (rect: HitRect) => HitRect,
+  element: HTMLElement,
+): HitInsets {
+  const x = Math.max(0, (MIN_TOUCH_TARGET - (target.right - target.left)) / 2);
+  const y = Math.max(0, (MIN_TOUCH_TARGET - (target.bottom - target.top)) / 2);
+  const list = element.closest('ul, ol');
+  if (list == null) {
+    return {top: y, right: x, bottom: y, left: x};
+  }
+  const {top, bottom, left, right} = list.getBoundingClientRect();
+  const box = toLayout({top, bottom, left, right});
+  return {
+    top: Math.max(0, Math.min(y, target.top - box.top)),
+    right: x,
+    bottom: Math.max(0, Math.min(y, box.bottom - target.bottom)),
+    left: x,
+  };
+}
+
+const HANDLE_HIT_AREA: TouchHitAreaOptions = {growth: reorderHandleGrowth};
 
 const styles = stylex.create({
   handle: {
@@ -321,7 +353,7 @@ export function ListReorderHandle({
   const isEnabled = controller != null && !isDisabled;
   // A finger's target: the shared touch hit area grows the handle's hit
   // layer where the primary pointer is coarse.
-  const hitAreaRef = useTouchHitArea(true);
+  const hitAreaRef = useTouchHitArea(true, HANDLE_HIT_AREA);
   const handleRef = useMergedRefs(ref, hitAreaRef);
   // A handle that stops taking gestures mid-drag sends a drag of its row
   // home, whichever pointer or key drives it. Its row may be disabled or no
