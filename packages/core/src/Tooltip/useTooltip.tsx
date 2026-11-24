@@ -35,9 +35,10 @@ import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
 import {afterFirstPaint, createModuleLoader} from '../utils/moduleLoader';
-import {sharedState, sharedStore} from '../utils/sharedRealm';
+import {sharedState, sharedStore, sharedWeakMap} from '../utils/sharedRealm';
 import {isElement} from '../utils/nodeType';
 import {
+  TooltipDescribesContext,
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
 } from './tooltipPresentInterest';
@@ -255,6 +256,36 @@ const loader = sharedState('tooltip/use-tooltip/loader', 1, () => ({
 const subscribe = surfaceStore.subscribe;
 const getSurface = surfaceStore.get;
 
+// The attached triggers of enabled tooltips that describe them, with how many
+// such tooltips each has. Until the load, a trigger has no description that
+// names its tooltip, so code that yields to a caller's tooltip reads this.
+const describedTriggers = sharedWeakMap<Element, number>(
+  'tooltip/use-tooltip/described-triggers',
+  1,
+);
+
+/**
+ * Whether `element` is the trigger of a tooltip that will describe it once the
+ * page loads the tooltip surface. After the load, the trigger's
+ * `aria-describedby` tells this, so this is false.
+ */
+export function isTooltipTriggerBeforeLoad(element: Element): boolean {
+  return getSurface() == null && (describedTriggers.get(element) ?? 0) > 0;
+}
+
+/** Counts `element` as a described trigger until the returned call. */
+function countDescribedTrigger(element: Element): () => void {
+  describedTriggers.set(element, (describedTriggers.get(element) ?? 0) + 1);
+  return () => {
+    const count = (describedTriggers.get(element) ?? 1) - 1;
+    if (count > 0) {
+      describedTriggers.set(element, count);
+    } else {
+      describedTriggers.delete(element);
+    }
+  };
+}
+
 function getServerSurface(): null {
   return null;
 }
@@ -416,6 +447,7 @@ function createTooltipBridge(
   reportLayer: (ids: TooltipLayerIds | null) => void,
   onShowDropped: () => void,
   isEnabled: () => boolean,
+  describes: () => boolean,
 ): TooltipBridge {
   const interestRef: RefObject<TooltipPresentInterestState> = {
     current: {interest: null, tapEvent: null, isRead: true},
@@ -488,9 +520,15 @@ function createTooltipBridge(
       detachPosition = attach(surface.positionRef, element);
     }
   };
+  let uncountTrigger: (() => void) | null = null;
   const setInteraction = (element: HTMLElement | null) => {
     detachInteraction?.();
     detachInteraction = null;
+    uncountTrigger?.();
+    uncountTrigger = null;
+    if (element != null && isEnabled() && describes()) {
+      uncountTrigger = countDescribedTrigger(element);
+    }
     interactionElement?.removeEventListener('pointerenter', noteEntry);
     interactionElement?.removeEventListener('pointerdown', notePress);
     interactionElement?.removeEventListener('focusin', retryIfEnabled);
@@ -648,11 +686,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // out in the same task, before the frame paints, and never ahead of it.
   const [layerIds, setLayerIds] = useState<TooltipLayerIds | null>(null);
   const optionsRef = useCommittedRef(options);
+  const describesRef = useCommittedRef(use(TooltipDescribesContext));
   const [bridge] = useState(() =>
     createTooltipBridge(
       setLayerIds,
       () => optionsRef.current.onHide?.(),
       () => optionsRef.current.isEnabled !== false,
+      () => describesRef.current,
     ),
   );
   const isEnabled = options.isEnabled !== false;

@@ -35,6 +35,8 @@ import {resetSharedStateForTest} from '../utils/sharedRealm';
 const loads = {
   surface: 0,
   surfaceContents: [] as unknown[],
+  // A test that needs another module to load first holds the surface here.
+  surfaceGate: null as Promise<void> | null,
   layer: 0,
   failures: 0,
 };
@@ -42,6 +44,7 @@ const loads = {
 function mockLoads() {
   vi.doMock('./tooltipSurface', async importOriginal => {
     loads.surface += 1;
+    await loads.surfaceGate;
     if (loads.failures > 0) {
       loads.failures -= 1;
       throw new Error('offline');
@@ -112,6 +115,7 @@ beforeEach(async () => {
   resetSharedStateForTest('utils/module-loader/');
   loads.surface = 0;
   loads.surfaceContents = [];
+  loads.surfaceGate = null;
   loads.layer = 0;
   loads.failures = 0;
   hovered = null;
@@ -574,6 +578,62 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     fireEvent.click(infoTip);
     expect(loads.surface).toBe(0);
     expect(infoTip).toHaveFocus();
+  });
+
+  it("a wrapped Button whose cut label takes keyboard focus before the load shows only the caller's tooltip at the load (component:Button FR18)", async () => {
+    const LABEL = 'Save and continue to the next step';
+    const proto = window.HTMLElement.prototype;
+    const scrollWidth = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    const offsetWidth = Object.getOwnPropertyDescriptor(proto, 'offsetWidth');
+    // Every element reports content wider than its box, as a cut label does.
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
+    });
+    try {
+      const {Button} = await import('../Button/Button');
+      render(
+        <Tooltip content="Saves your draft">
+          <Button label={LABEL} />
+        </Tooltip>,
+      );
+      isFocusVisible = true;
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      // The cut-text module loads a frame and a task after paint. The
+      // tooltip surface also waits for idle, so it lands later.
+      let releaseSurface = () => {};
+      loads.surfaceGate = new Promise<void>(resolve => {
+        releaseSurface = resolve;
+      });
+      act(() => screen.getByRole('button', {name: LABEL}).focus());
+      await act(async () => {
+        vi.advanceTimersToNextFrame();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      await act(async () => {
+        await vi.dynamicImportSettled();
+      });
+      releaseSurface();
+      await act(async () => {
+        await pendingTooltipLoad();
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(layerOf('Saves your draft')?.matches(':popover-open')).toBe(true);
+      expect(layerOf(LABEL)?.matches(':popover-open') ?? false).toBe(false);
+    } finally {
+      if (scrollWidth) {
+        Object.defineProperty(proto, 'scrollWidth', scrollWidth);
+      }
+      if (offsetWidth) {
+        Object.defineProperty(proto, 'offsetWidth', offsetWidth);
+      }
+    }
   });
 
   it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {
