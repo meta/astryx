@@ -111,6 +111,21 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
     {keepEvents: true, trackInvalidations: true},
   );
   const sources = restyleSources(trace, steady.from, steady.to);
+  // The scrim's opacity as the dialog, the sheet and the sheet's first
+  // content element compute it, read after the trace. The sheet ends the
+  // property's inheritance, so its content computes no value. A value there
+  // means the dialog's writes reach the content.
+  const scrimOpacity = await sheet.evaluate(element => {
+    const read = (node: Element | null) =>
+      node == null
+        ? null
+        : getComputedStyle(node).getPropertyValue('--_sheet-scrim-opacity');
+    return {
+      dialog: read(element.closest('dialog')),
+      sheet: read(element),
+      content: read(element.firstElementChild),
+    };
+  });
   const restyled = sources.map(source => source.elements);
   const oversized = sources.filter(
     source => source.elements > RESTYLED_PER_MOVE,
@@ -119,6 +134,7 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
     {
       restyled,
       sheetElements: contentElements,
+      scrimOpacity,
       oversized: oversized.map(source => ({
         elements: source.elements,
         after: source.invalidations,
@@ -132,7 +148,11 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
       'bottomsheet-drag-restyle',
       {
         'rendering-events.json': JSON.stringify({steady, events: trace.events}),
-        'restyle-sources.json': JSON.stringify({steady, sources}, null, 1),
+        'restyle-sources.json': JSON.stringify(
+          {steady, scrimOpacity, sources},
+          null,
+          1,
+        ),
       },
       test.info(),
     );
