@@ -48,9 +48,11 @@ function mockLoads() {
     const surface = await importOriginal<typeof SurfaceModule>();
     return {
       ...surface,
-      TooltipSurface: async (props: SurfaceModule.TooltipSurfaceProps) => {
+      TooltipSurface: (
+        props: SurfaceModule.TooltipSurfaceProps,
+      ): ReactElement => {
         loads.surfaceContents.push(props.content);
-        return surface.TooltipSurface(props);
+        return <surface.TooltipSurface {...props} />;
       },
     };
   });
