@@ -396,13 +396,13 @@ a measured, sourced difference exists.
   settle time in a gesture component, or from the main curve's duration and
   easing in a tap component, and never runs on independent timing.
 
-  | Main interaction                  | Motion                                                                                                                                                                                                          | Components                                                                                                                                 |
-  | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-  | Gesture                           | Springs                                                                                                                                                                                                         | BottomSheet, Drawer, swipeable List rows, Lightbox, the pager and Carousel, ContextMenu's long-press presentation, Slider, pull-to-refresh |
-  | Gesture                           | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded                                              | the DateInput and TimeInput wheels                                                                                                         |
-  | Tap                               | Curve tokens                                                                                                                                                                                                    | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
-  | Gesture-capable                   | Springs under a touch presentation: the thumb drags, so every tap, click, key or value change settles on the same spring; without a touch presentation they keep the theme's curve (owner decision, 2026-11-04) | Switch, SegmentedControl                                                                                                                   |
-  | Open (as its record states today) | Theme timing for a tap dismiss; a spring from the release for a swipe                                                                                                                                           | Toast                                                                                                                                      |
+  | Main interaction                  | Motion                                                                                                                                                                                                                                                                                                                                                | Components                                                                                                                                 |
+  | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | Gesture                           | Springs                                                                                                                                                                                                                                                                                                                                               | BottomSheet, Drawer, swipeable List rows, Lightbox, the pager and Carousel, ContextMenu's long-press presentation, Slider, pull-to-refresh |
+  | Gesture                           | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded                                                                                                                                                                                    | the DateInput and TimeInput wheels                                                                                                         |
+  | Tap                               | Curve tokens                                                                                                                                                                                                                                                                                                                                          | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
+  | Gesture-capable                   | Springs under a touch presentation: the thumb drags, so every tap, click, key or value change settles on the same spring; without a touch presentation they keep the theme's curve (owner decision, 2026-11-04). Until the shared touch runtime has loaded (FR43; `architecture:react-component-runtime` INV13), they change at once, with no spring. | Switch, SegmentedControl                                                                                                                   |
+  | Open (as its record states today) | Theme timing for a tap dismiss; a spring from the release for a swipe                                                                                                                                                                                                                                                                                 | Toast                                                                                                                                      |
 
   Toast keeps the motion its record states today: theme timing for a tap
   dismiss, and a spring from the release for a swipe (`component:Toast` FR5).
@@ -840,74 +840,79 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   pager, a picker wheel or a row, follows a mouse, a pen, a trackpad and a
   finger alike, with the same rubber band past its ends, wherever its record
   lets that pointer drag it, and a release from any of them settles on FR45's
-  spring from the release velocity. These stay
-  off: row swipe actions under a mouse drag, which would take the browser's text
-  selection and native drag, while a trackpad's horizontal scroll swipes a
-  row (`spec:AST-057` AR2, DEC-7); a
-  pinch under a pen; the screen-edge pan under a mouse, a trackpad, or a pen;
-  the slide across an action group under a mouse, and under any pointer
-  outside the touch presentation (`family:action-groups` FR1); and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
-  neighbor's target. On the web, a pan takes a trackpad's two-finger scroll
-  where its record allows it, and never a mouse wheel's notches. A scroll is a
-  trackpad's only when it carries Chromium's and WebKit's trackpad signature:
-  pixel deltas whose `wheelDelta` is three times the delta, with no whole tick
-  (a `wheelDelta` that is a multiple of 120 over a delta that is a multiple of
-  40 px) and no accelerated-mouse remainder (a fractional part under 0.01 px).
-  Any other scroll, Shift+wheel and a tilt wheel included, is a mouse wheel's,
-  and a mouse wheel scrolls what is under it. A thumb that sets a value, a
-  slider's or a switch's where it pans, takes neither, so a scroll over it goes
-  to the scroll under it (DEC-23). The web reports no trackpad contact or
-  phase, so one splitter reads every trackpad stream (DEC-24): while the
-  fingers move, a pause of 180 ms on a vertical pan or 220 ms on a horizontal
-  one ends the gesture; the fingers' lift is read at the fourth or later delta
-  of a shrinking run, once the run has lost a fifth of its size; momentum after
-  the lift never moves a surface or continues a gesture; and during momentum a
-  reversal, a delta that rises against the decay, or a 50 ms gap starts a new
-  gesture without a pointer move; a late, coalesced wheel event that continues
-  the glide's deceleration belongs to the same flick. While the splitter has
-  not yet decided
-  between a lift and fingers still moving, the surface keeps moving at the
-  fingers' last speed, never farther than that speed carries it over the held
-  deltas; a lift then continues without a stop, and fingers that keep moving
-  take up the difference. A pan released at the lift releases with the
-  fingers' last velocity (FR36); a pan whose stream stops releases still. A
-  window blur or a hidden page cancels a trackpad pan, as the browser taking a
-  touch cancels a finger's. A pinch takes a ctrl-wheel and ends 100 ms after
-  its last event. A BottomSheet's pull
-  follows a trackpad as it follows a finger: a sheet a swipe cannot close
-  (`purpose` `form` or `required`) stretches past its resting place on FR3's
-  rubber band for a finger and a trackpad alike, the same travel giving the
-  same stretch, a trackpad's pull reaching no farther than the sheet's height,
-  and springs back at the release; an `info` sheet closes on a flick or past
-  its close distance and otherwise springs back (FR36, FR37), and a close its
-  owner refuses rests as `component:BottomSheet` FR21 states; a mouse wheel
-  never moves a sheet. A pager follows a trackpad swipe, never more than one
-  page from where the swipe began, rubber-banded at its first and last page; it
-  commits past half a page or on a flick, never on a speed spike that moved it
-  less than a tenth of a page, and a swipe that lands during a settle starts
-  from that settle's page, so back-to-back swipes page on. A swipe row follows
-  a trackpad swipe from its first event past its 8 px start and settles at the
-  release to the nearest detent by position and velocity, and a long fast swipe
-  fires the outermost action where `spec:AST-057` allows a full swipe; within
-  one gesture an open row only closes, never passing rest to its other side.
-  Every followed trackpad pan runs one shared path (the splitter, the pan, the
-  snap-point drag and the animator), and a component declares only its detents
-  and actions, a row's being `spec:AST-057`'s. One shared
-  context request module, `gestures/contextRequest.ts`, answers a finger's or
-  a pen's long press, a right click, and Shift+F10 or the context-menu key. It
-  makes one request per gesture, names the input that made it, and keeps the
-  browser's own menu closed. A hold loses to a claim another recognizer made
-  first. The headless context menu (`spec:AST-107` FR8) makes its request
-  through it, and ContextMenu through that menu (`component:ContextMenu`
-  FR10). One module keeps these rules the same in every menu. The
-  press model has a fine-pointer profile with no delay (FR11); and with a
-  mouse, a trackpad, or a pen where the primary pointer is fine a reorder
-  starts on a drag from its handle without a hold, while a pen where the
-  primary pointer is coarse keeps the finger's hold (`spec:AST-103` FR3). Under a fine pointer only a
-  component that uses a gesture listens (FR24), and under reduced motion a
-  release from a mouse, a trackpad, or a pen follows `design:reduced-motion`
-  DR2 on a coarse primary pointer and DR3 otherwise; and gestures add no
-  stylesheet bytes (DEC-21).
+  spring from the release velocity. These stay off: row swipe actions under a
+  mouse drag, which would take the browser's text selection and native drag,
+  while a trackpad's horizontal scroll swipes a row (`spec:AST-057` AR2,
+  DEC-7); a pinch under a pen; the screen-edge pan under a mouse, a trackpad,
+  or a pen; the slide across an action group under a mouse, and under any
+  pointer outside the touch presentation (`family:action-groups` FR1); and the
+  44 px coarse-pointer touch target, which stays coarse-only and never
+  overlaps a neighbor's target. On the web, a pan takes a trackpad's
+  two-finger scroll where its record allows it, and never a mouse wheel's
+  notches. A scroll is a trackpad's only when it carries Chromium's and
+  WebKit's trackpad signature: pixel deltas whose `wheelDelta` is three times
+  the delta, with no whole tick (a `wheelDelta` that is a multiple of 120 over
+  a delta that is a multiple of 40 px) and no accelerated-mouse remainder (a
+  fractional part under 0.01 px). Any other scroll, Shift+wheel and a tilt
+  wheel included, is a mouse wheel's, and a mouse wheel scrolls what is under
+  it. A thumb that sets a value, a slider's or a switch's where it pans, takes
+  neither, so a scroll over it goes to the scroll under it (DEC-23). The web
+  reports no trackpad contact or phase, so one splitter reads every trackpad
+  stream (DEC-24): while the fingers move, a pause of 180 ms on a vertical pan
+  or 220 ms on a horizontal one ends the gesture; the fingers' lift is read at
+  the fourth or later delta of a shrinking run, once the run has lost a fifth
+  of its size; momentum after the lift never moves a surface or continues a
+  gesture; and during momentum a reversal, a delta that rises against the
+  decay, or a 50 ms gap starts a new gesture without a pointer move; a late,
+  coalesced wheel event that continues the glide's deceleration belongs to the
+  same flick. While the splitter has not yet decided between a lift and
+  fingers still moving, the surface keeps moving at the fingers' last speed,
+  never farther than that speed carries it over the held deltas; a lift then
+  continues without a stop, and fingers that keep moving take up the
+  difference. A pan released at the lift releases with the fingers' last
+  velocity (FR36); a pan whose stream stops releases still. A window blur or a
+  hidden page cancels a trackpad pan, as the browser taking a touch cancels a
+  finger's. A pinch takes a ctrl-wheel and ends 100 ms after its last event. A
+  BottomSheet's pull follows a trackpad as it follows a finger: a sheet a
+  swipe cannot close (`purpose` `form` or `required`) stretches past its
+  resting place on FR3's rubber band for a finger and a trackpad alike, the
+  same travel giving the same stretch, a trackpad's pull reaching no farther
+  than the sheet's height, and springs back at the release; an `info` sheet
+  closes on a flick or past its close distance and otherwise springs back
+  (FR36, FR37), and a close its owner refuses rests as `component:BottomSheet`
+  FR21 states; a mouse wheel never moves a sheet. A pager follows a trackpad
+  swipe, never more than one page from where the swipe began, rubber-banded at
+  its first and last page; it commits past half a page or on a flick, never on
+  a speed spike that moved it less than a tenth of a page, and a swipe that
+  lands during a settle starts from that settle's page, so back-to-back swipes
+  page on. A swipe row follows a trackpad swipe from its first event past its
+  8 px start and settles at the release to the nearest detent by position and
+  velocity, and a long fast swipe fires the outermost action where
+  `spec:AST-057` allows a full swipe; within one gesture an open row only
+  closes, never passing rest to its other side. Every followed trackpad pan
+  runs one shared path (the splitter, the pan, the snap-point drag and the
+  animator), and a component declares only its detents and actions, a row's
+  being `spec:AST-057`'s. One shared context request module,
+  `gestures/contextRequest.ts`, answers a finger's or a pen's long press, a
+  right click, and Shift+F10 or the context-menu key. It makes one request per
+  gesture, names the input that made it, and keeps the browser's own menu
+  closed. A hold loses to a claim another recognizer made first. The headless
+  context menu (`spec:AST-107` FR8) makes its request through it, and
+  ContextMenu through that menu (`component:ContextMenu` FR10). One module
+  keeps these rules the same in every menu. The press model has a fine-pointer
+  profile with no delay (FR11); and with a mouse, a trackpad, or a pen where
+  the primary pointer is fine a reorder starts on a drag from its handle
+  without a hold, while a pen where the primary pointer is coarse keeps the
+  finger's hold (`spec:AST-103` FR3). Under a fine pointer only a component
+  that uses a gesture listens (FR24), and under reduced motion a release from
+  a mouse, a trackpad, or a pen follows `design:reduced-motion` DR2 on a
+  coarse primary pointer and DR3 otherwise; and gestures add no stylesheet
+  bytes (DEC-21). Until the shared touch runtime has loaded
+  (`architecture:react-component-runtime` INV13; `spec:AST-080` DEC-5
+  amendment), SegmentedControl and Switch work by taps, clicks and keys, with
+  no drag tracking and no slide or spring; a bottom sheet still drags, and a
+  drag that closes it takes the stylesheet exit instead of the spring. A
+  gesture in that window does not start the load.
 
 ### Platform support
 
@@ -1044,8 +1049,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   component's touch exit that a tap, a key or the program starts plays
   `spec:AST-090`'s `--duration-exit` and `--ease-exit`, and no exit switch
   removes it (FR7; `spec:AST-090` FR14 and DEC-5 carry it). On Switch and
-  SegmentedControl, every change under a touch presentation settles on the
-  spring, as it does today; without a touch presentation a click, a key or a
+  SegmentedControl, every change under a touch presentation settles on the spring, as it does today, except that until the shared touch runtime has loaded (FR43; `architecture:react-component-runtime` INV13) they change at once, with no spring; without a touch presentation a click, a key or a
   change of value keeps the theme's curve, unchanged. Implementation gap:
   ProgressBar's fill still moves linearly for `progress.fillTrackMs` times the
   share of the track moved under a coarse pointer (`component:ProgressBar` FR4).
@@ -1110,6 +1114,8 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | SegmentedControl            | Selection slide on a click, a key or a program change without a touch presentation             | The theme's duration and easing                          | Unchanged: the theme's curve                                                                                                                                         |
 | SegmentedControl            | A mouse's or a pen's drag release                                                              | Slides on the theme's duration                           | Settles on a spring from the release velocity                                                                                                                        |
 
+Until the shared touch runtime has loaded (FR43; `architecture:react-component-runtime` INV13), the Switch and SegmentedControl rows under a touch presentation, Switch's lift and both mouse and pen drag rows play none of this: under a touch presentation those changes land at once, with no spring, lift or followed drag. Without a touch presentation, a Switch change keeps the theme's curve, and a SegmentedControl change runs the segments' own transition with no slide.
+
 ## Verification
 
 | Contract        | Verification                                                                                                                                                                                                                                                                         | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -1154,7 +1160,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR42            | Default-theme geometry tests under a coarse and a fine pointer, and hit-testing between adjacent targets                                                                                                                                                                             | every component at phone width with a finger and with a mouse; a dense toolbar; a chip and its remove button; a Switch beside a label link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a default-theme box that grows under touch or at phone width other than with its text, or, where no component or module record sets the hit area, a touch target under 44 px where neighbors allow it or a hit area that overlaps a neighbor's target, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR43            | Browser tests with a mouse, a trackpad, a pen, a finger, and the keyboard, and resource counts                                                                                                                                                                                       | a pan by drag and by wheel; a slider's thumb under a wheel and a trackpad scroll; a ctrl-wheel pinch; a long press, a right click, and Shift+F10; a mouse press; a handle drag; a row swipe with a mouse and a trackpad; a component with no gesture                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a gesture missing under a mouse or pen, a mouse-drag swipe action, a pen pinch, an edge pan under a mouse, a trackpad, or a pen, a press delay under a fine pointer, a wheel or trackpad scroll that changes a thumb's value or does not reach the scroll under it, an idle listener in a component with no gesture, or added stylesheet bytes, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR43 trackpad   | Unit tests on timed wheel streams; WebKit browser tests with trackpad streams (Chromium's driver wheels read as a mouse wheel)                                                                                                                                                       | a form and a required sheet pulled 30 to 240 px by a finger and by a trackpad; mouse lines, notches, ticks and accelerated deltas over a sheet, a pager and a row; ten swipes each starting mid-momentum, ten whose momentum ends, and a slow drag with 150 ms pauses; a trackpad flick and a slow stopped drag on an info sheet; a fling, a slow 60 px swipe, a 42 px spike and back-to-back swipes on a pager; a row opened and swiped back within one gesture, and a long fast swipe; a pinch ending; a trackpad pan through a window blur and through a hidden page                                                                                                                                                                                                                                                                    | a trackpad stretch that differs from a finger's for the same travel (120 px gives 54 px on the reference sheet), a mouse wheel that moves a sheet, a pager or a row, splitter counts other than ten, ten and one, momentum that moves a surface, a flick released with no velocity, a pager that travels past one page or pages on a spike, an info sheet a flick leaves open or a slow stopped drag closes, an open row that reveals its other side within one gesture, a trackpad pan a window blur or a hidden page leaves mid-gesture, or a pinch that ends after 100 ms fails                                                                                                                                                                                                                                                      |
-| FR44            | Unit tests of a pen press a window blur ends, on a Switch, a Slider and the host, under a coarse and a fine pointer                                                                                                                                                                  | a pen press on a Switch and on a Slider, blur mid-press: nothing toggles or commits; a pen whose contact ends in `pointercancel`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | with the host keeping no note of a blur-cancelled pen, the Switch toggles at the pen's click                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR44            | Unit tests of a pen press a window blur ends, on a Switch, a Slider and the host, under a coarse and a fine pointer; `touchRuntime.components.test.tsx` (a SegmentedControl press cancelled before the touch runtime loads)                                                          | a pen press on a Switch and on a Slider, blur mid-press: nothing toggles or commits; a pen whose contact ends in `pointercancel`; a SegmentedControl press cancelled before the touch runtime loads                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | with the host keeping no note of a blur-cancelled pen, the Switch toggles at the pen's click; with the press note dropped before the load, the cancelled SegmentedControl press selects at its click                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari devices; Android Chrome in the Android emulator or on a real Pixel (DEC-27)                                                                                                               | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | all (DEC-31)    | The evidence-carry check, before device or emulator evidence from an earlier head counts at a later head                                                                                                                                                                             | a later head that only merges `main`; the pull request's own changes byte-identical or changed; a merge that changes a file the pull request changes, a direct import of those changes, a shared motion or layer module, or none of them; a generated file among the pull request's own files that CI proves regenerates identically, or does not prove; a commit, or an overlap with the pull request's own files, confined to test-only files as DEC-31 defines them, or knowledge records, or not                                                                                                                                                                                                                                                                                                                                       | the evidence-carry check compares the PR's own diff between the two heads, and the merge's changed files against the files the PR changes, the changes' direct imports and the shared motion and layer modules (currently `motion/transientCopy`, `motion/inertClone`, `motion/animator`, `motion/carryAnimations`, `Layer/useLayer`, `hooks/usePager`, and the gesture arena and host of `architecture:react-component-runtime` INV13's shared touch set, `gestures/GestureArena` and `gestures/GestureHost`); any overlap fails, except a generated file among the pull request's own files that CI proves regenerates identically at the new head; a changed own diff, or an overlap with the pull request's own files, confined to test-only files as DEC-31 defines them, knowledge records or `.changeset/` release notes, passes |
 

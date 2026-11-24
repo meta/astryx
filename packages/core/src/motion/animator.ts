@@ -188,6 +188,13 @@
  * - /packages/core/src/motion/README.md
  */
 
+import {SETTLE_THRESHOLD} from './settleThreshold';
+import {
+  defaultIsCoarsePointer,
+  defaultPrefersReducedMotion,
+} from './motionQueries';
+
+export {defaultIsCoarsePointer, defaultPrefersReducedMotion};
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
@@ -710,19 +717,7 @@ const IDENTITY: Record<MotionProperty, number> = {
   opacity: 1,
 };
 
-/**
- * Within this of its target a curve is over (in the property's own unit). A
- * curve built outside the animator (a progress curve) settles where a call
- * would with this as its epsilon.
- */
-export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
-  x: 0.05,
-  y: 0.05,
-  rotate: 0.01,
-  scaleX: 0.0001,
-  scaleY: 0.0001,
-  opacity: 0.001,
-};
+export {SETTLE_THRESHOLD};
 
 /**
  * Keyframes are added until linear interpolation is within this: a quarter of
@@ -1208,28 +1203,6 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
 /** The time the motion clock reads (`performance.now()`'s time base). */
 export function motionNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
-}
-
-/**
- * Whether the person's Reduce Motion setting is on (`prefers-reduced-motion:
- * reduce`), read at the moment of the call, without a theme's `'always'`
- * (`reducesMotion` adds that, and the animator calls it). A component never reads it
- * to pick a curve of its own: its motion settings do not override the
- * policy (design:reduced-motion DR4); `animator.reducedMotion()` or
- * `reducedMotionFade()` gives the policy's answer. False without a window
- * (server rendering).
- */
-export function defaultPrefersReducedMotion(): boolean {
-  return reducesMotion();
-}
-
-/** Whether the primary pointer is coarse: `(pointer: coarse)`. */
-export function defaultIsCoarsePointer(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(pointer: coarse)').matches
-  );
 }
 
 /**

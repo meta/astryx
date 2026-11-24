@@ -18,11 +18,8 @@ import {flushSync} from 'react-dom';
 import {useAttachment} from '../hooks/useAttachment';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {
-  animatorFor,
-  type Animator,
-  type MotionHandle,
-} from '../motion/animator';
+import type {Animator, MotionHandle} from '../motion/animator';
+import {getTouchRuntime, useTouchRuntime} from '../utils/touchRuntime';
 import {KEYBOARD_SPRING} from '../motion/uikit/springs';
 import {deepActiveElement} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
@@ -192,6 +189,9 @@ export function useMobileKeyboard(
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
   const isTouch = useMediaQuery(TOUCH_QUERY, false);
+  // A ride moves with the animator, which comes with the shared touch runtime.
+  // Its load re-attaches the docked target below.
+  const hasTouchRuntime = useTouchRuntime() != null;
 
   const dismiss = useCallback(
     (focusTarget?: HTMLElement) => {
@@ -238,7 +238,7 @@ export function useMobileKeyboard(
         ? keepFieldAboveKeyboard(target, {offset})
         : followKeyboard(target, {move, offset});
     },
-    `${isEnabled}|${move}|${reservesInset}|${offset}|${isTouch}`,
+    `${isEnabled}|${move}|${reservesInset}|${offset}|${isTouch}|${hasTouchRuntime}`,
   );
 
   useAttachment(
@@ -274,7 +274,7 @@ export function useMobileKeyboard(
       const contentAnimator = (): Animator | null => {
         const content = body.firstElementChild;
         return guide != null && content instanceof HTMLElement
-          ? animatorFor(content)
+          ? (getTouchRuntime()?.animatorFor(content) ?? null)
           : null;
       };
       // How far a ride has moved the content from where its layout puts it, as
@@ -659,7 +659,7 @@ export function useMobileKeyboard(
         return ownsFocusTransitions &&
           guide == null &&
           content instanceof HTMLElement
-          ? animatorFor(content)
+          ? (getTouchRuntime()?.animatorFor(content) ?? null)
           : null;
       };
       const rideKeyboardSpring = (

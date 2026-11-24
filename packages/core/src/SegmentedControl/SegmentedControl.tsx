@@ -17,7 +17,13 @@
  * - /packages/cli/assets/templates/blocks/components/SegmentedControl/ (showcase blocks)
  */
 
-import React, {useMemo, useCallback, useRef, type ReactNode} from 'react';
+import React, {
+  useMemo,
+  useCallback,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
@@ -37,7 +43,15 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchPresentation} from '../utils/touchPresentation';
-import {useSegmentedSelectionMotion} from './useSegmentedSelectionMotion';
+import type {SegmentedSelection} from './useSegmentedSelectionMotion';
+import {isPressAwaitingClick} from '../Layer/gestureCounter';
+import {createTouchPart, useTouchPart} from '../utils/touchRuntime';
+
+// The selection motion and press tracking load only on a page that imports
+// a SegmentedControl.
+const segmentedTouchPart = createTouchPart(
+  async () => import('./segmentedTouchPart'),
+);
 
 export interface SegmentedControlProps extends Omit<
   BaseProps<HTMLDivElement>,
@@ -328,13 +342,22 @@ export function SegmentedControl({
   const trackRef = useRef<HTMLDivElement | null>(null);
   // Every pointer's press is tracked. A drag from the selected segment
   // carries the lens, and the lift commits the segment nearest the pointer.
-  // A lift outside the control commits nothing.
-  const {selection, attachTrack} = useSegmentedSelectionMotion(
-    trackRef,
-    value,
-    isTouchPresentation,
-    !isDisabled,
-  );
+  // A lift off the control commits the segment under the pointer's
+  // horizontal position. The motion and the tracking are this control's
+  // touch part, which the touch loader loads after first paint. Until then a
+  // tap or a click selects, and the selection moves at once.
+  const touchPart = useTouchPart(segmentedTouchPart);
+  const motionSelectionRef = useRef<SegmentedSelection | null>(null);
+  // A press selects through its click, so a caller's `preventDefault()`
+  // vetoes it. A press the browser cancels selects nothing. Until that click
+  // runs, a focus move does not select. The gesture counter also sees a press
+  // that began before the runtime loaded.
+  const [selection] = useState<SegmentedSelection>(() => ({
+    isPressing: () =>
+      (motionSelectionRef.current?.isPressing() ?? false) ||
+      isPressAwaitingClick(),
+    keyPressed: () => motionSelectionRef.current?.keyPressed(),
+  }));
 
   // Disabled-reason tooltip. Applies to the whole-group disabled state. The
   // tooltip listeners attach to the radiogroup container, which keeps pointer
@@ -458,13 +481,7 @@ export function SegmentedControl({
   return (
     <SegmentedControlContext value={contextValue}>
       <div
-        ref={useMergedRefs(
-          ref,
-          listRef,
-          trackRef,
-          attachTrack,
-          disabledMessageTooltip.ref,
-        )}
+        ref={useMergedRefs(ref, listRef, trackRef, disabledMessageTooltip.ref)}
         {...rest}
         role="radiogroup"
         aria-label={label}
@@ -493,6 +510,15 @@ export function SegmentedControl({
         {children}
         {hint.hintElement}
       </div>
+      {touchPart != null && (
+        <touchPart.SegmentedMotion
+          trackRef={trackRef}
+          value={value}
+          isPresenting={isTouchPresentation}
+          isTracking={!isDisabled}
+          selectionRef={motionSelectionRef}
+        />
+      )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </SegmentedControlContext>

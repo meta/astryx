@@ -18,7 +18,15 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {CheckboxList} from '../CheckboxList/CheckboxList';
 import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
@@ -30,6 +38,13 @@ import {Switch} from '../Switch/Switch';
 import {coarsePrimaryPointer} from '../gestures/__tests__/pointerQuery';
 import {stubMatchMedia} from '../__tests__/stubMatchMedia';
 import {BROWSER_CLICK_WAIT_MS} from '../utils/browserClickWait';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// The switch's hold comes with the shared touch runtime once the page has
+// loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 /** Dispatches a finger's pointer event, which the shared press controller hears. */
 function press(target: Element, type: 'pointerdown' | 'pointerup') {

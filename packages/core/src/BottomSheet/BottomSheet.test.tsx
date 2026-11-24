@@ -17,6 +17,7 @@ import {
   beforeEach,
   afterEach,
   onTestFinished,
+  beforeAll,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {
@@ -38,6 +39,13 @@ import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // A press that starts and ends on the scrim: the browser targets the dialog
 // element with the pointer events and with the click.

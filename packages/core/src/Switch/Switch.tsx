@@ -68,9 +68,15 @@ import {
   pressVars,
 } from '../utils/interactionOverlay.stylex';
 import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
-import {useSwitchTouch, type SwitchTouchParts} from './useSwitchTouch';
+import type {SwitchTouchParts} from './useSwitchTouch';
+import {createTouchPart, useTouchPart} from '../utils/touchRuntime';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+
+// The thumb drag and its springs load only on a page that imports a Switch.
+const switchTouchPart = createTouchPart(
+  async () => import('./switchTouchPart'),
+);
 
 /**
  * The track box of each size, px (width × height), for the touch
@@ -1016,14 +1022,23 @@ export function Switch({
     }
     return watchHitArea(surface, insets => writeHitInsets(surface, insets));
   }, [isDisabled]);
-  useSwitchTouch(touchParts, {
-    isOn,
-    isInteractive: !isDisabled && !isBusy,
-    isDisabled,
-    trackSize: TRACK_SIZE[size],
-    thumbSize: THUMB_SIZE[size],
-    otherTrackProps: trackPropsFor(!isOn),
-  });
+  // The thumb drag and its springs are this control's touch part, which the
+  // touch loader loads after first paint. Until then a tap or a click toggles.
+  const loadedTouchPart = useTouchPart(switchTouchPart);
+  const touchPart =
+    loadedTouchPart != null ? (
+      <loadedTouchPart.SwitchTouch
+        parts={touchParts}
+        options={{
+          isOn,
+          isInteractive: !isDisabled && !isBusy,
+          isDisabled,
+          trackSize: TRACK_SIZE[size],
+          thumbSize: THUMB_SIZE[size],
+          otherTrackProps: trackPropsFor(!isOn),
+        }}
+      />
+    ) : null;
 
   const switchElement = (
     <div
@@ -1187,6 +1202,7 @@ export function Switch({
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {touchPart}
     </div>
   );
 }
