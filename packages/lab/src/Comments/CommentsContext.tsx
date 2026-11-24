@@ -185,6 +185,12 @@ export interface CommentsContextValue {
   ) => void;
   resolve: (comment: AnyComment) => void;
   reopen: (comment: AnyComment) => void;
+  /**
+   * The callback ref of a thread's Mark as resolved or Reopen control. The
+   * control that replaces a pressed one takes focus when focus fell to the
+   * page.
+   */
+  claimResolveFocus: (commentId: string, element: HTMLElement | null) => void;
   retry: (comment: AnyComment) => void;
   requestDelete: (comment: AnyComment) => void;
   openHistory: (comment: AnyComment) => void;
@@ -283,6 +289,12 @@ export function useCommentsController({
   const [deleteError, setDeleteError] = useState<string>();
   const [history, setHistory] = useState<HistoryState | null>(null);
   const replyFocusRequestRef = useRef(0);
+  // The host replaces Mark as resolved with Reopen, and back, only when its
+  // own update arrives. The control a press waits for is kept here until then.
+  const resolveFocusRef = useRef<{
+    commentId: string;
+    action: 'resolve' | 'reopen';
+  } | null>(null);
   const announce = useAnnounce();
   const t = useTranslator();
 
@@ -331,6 +343,46 @@ export function useCommentsController({
         ?.scrollIntoView?.({block: 'nearest'});
     }
   }, [selectedThreadId]);
+
+  const claimResolveFocus = useCallback(
+    (commentId: string, element: HTMLElement | null) => {
+      const pending = resolveFocusRef.current;
+      if (
+        element == null ||
+        pending?.commentId !== commentId ||
+        element.getAttribute('data-comment-action') !== pending.action ||
+        element.closest('[inert]') != null
+      ) {
+        return;
+      }
+      resolveFocusRef.current = null;
+      const active = element.ownerDocument.activeElement;
+      if (
+        active == null ||
+        active === element.ownerDocument.body ||
+        !active.isConnected
+      ) {
+        element.focus();
+      }
+    },
+    [],
+  );
+
+  const runResolveAction = (
+    comment: AnyComment,
+    replacement: 'resolve' | 'reopen',
+    action: () => MaybePromise,
+    failureMessage: string,
+  ) => {
+    resolveFocusRef.current = {commentId: comment.id, action: replacement};
+    void runCommentAction(comment.id, action, failureMessage).then(
+      succeeded => {
+        if (!succeeded && resolveFocusRef.current?.commentId === comment.id) {
+          resolveFocusRef.current = null;
+        }
+      },
+    );
+  };
 
   const composerActionPendingChange = useCallback((isPending: boolean) => {
     setPendingComposerActionCount(count =>
@@ -669,8 +721,9 @@ export function useCommentsController({
       if (onResolveThread == null) {
         return;
       }
-      void runCommentAction(
-        comment.id,
+      runResolveAction(
+        comment,
+        'reopen',
         () => onResolveThread(comment.id),
         t('@astryx.comments.resolveFailed'),
       );
@@ -679,12 +732,14 @@ export function useCommentsController({
       if (onReopenThread == null) {
         return;
       }
-      void runCommentAction(
-        comment.id,
+      runResolveAction(
+        comment,
+        'resolve',
         () => onReopenThread(comment.id),
         t('@astryx.comments.reopenFailed'),
       );
     },
+    claimResolveFocus,
     retry: comment => {
       if (onRetryComment == null) {
         return;

@@ -57,7 +57,12 @@ const styles = stylex.create({
 export type CommentActionId = 'resolve' | 'reopen' | 'react' | 'reply' | 'link';
 
 /** Mark as resolved on an open thread, Reopen on a resolved one. */
-export type ResolveAction = {kind: 'resolve' | 'reopen'; onClick: () => void};
+export type ResolveAction = {
+  kind: 'resolve' | 'reopen';
+  onClick: () => void;
+  /** Lets the control that replaces a pressed one take focus. */
+  controlRef?: (element: HTMLElement | null) => void;
+};
 
 /** One of a comment's action buttons, as it shows. OverflowList renders a
  *  hidden copy of every item to measure it; only the copy in the visible list
@@ -400,6 +405,7 @@ export function CommentActions({
         {resolveAction?.kind === 'resolve' ? (
           <CommentActionSlot key="resolve" data-comment-action="resolve">
             <IconButton
+              ref={resolveAction.controlRef}
               label={resolveLabel}
               tooltip={resolveLabel}
               variant="ghost"
@@ -413,6 +419,7 @@ export function CommentActions({
         ) : resolveAction?.kind === 'reopen' ? (
           <CommentActionSlot key="reopen" data-comment-action="reopen">
             <Button
+              ref={resolveAction.controlRef}
               label={reopenLabel}
               variant="ghost"
               size="sm"

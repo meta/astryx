@@ -377,15 +377,29 @@ export function CommentRow({
   const rowActionsBusy = isBusy || isSubmitting || isComposerActionPending;
   const isResolved = thread?.isResolved === true;
   const isMuted = isResolved || isParentThreadResolved;
+  const {claimResolveFocus} = scope;
+  const commentId = comment.id;
+  const resolveControlRef = useCallback(
+    (element: HTMLElement | null) => claimResolveFocus(commentId, element),
+    [claimResolveFocus, commentId],
+  );
   const resolveAction: ResolveAction | undefined =
     thread == null || thread.canResolve === false || !canMutate
       ? undefined
       : isResolved
         ? can.reopen
-          ? {kind: 'reopen', onClick: () => scope.reopen(comment)}
+          ? {
+              kind: 'reopen',
+              onClick: () => scope.reopen(comment),
+              controlRef: resolveControlRef,
+            }
           : undefined
         : can.resolve
-          ? {kind: 'resolve', onClick: () => scope.resolve(comment)}
+          ? {
+              kind: 'resolve',
+              onClick: () => scope.resolve(comment),
+              controlRef: resolveControlRef,
+            }
           : undefined;
   const hasHistory =
     comment.isEdited === true &&
