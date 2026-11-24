@@ -1226,6 +1226,94 @@ describe('Comments resolved and inline threads', () => {
     expect(onReopenThread).toHaveBeenCalledWith('done');
   });
 
+  it('hands focus to Reopen after a keyboard resolve, and back after Reopen', async () => {
+    const user = userEvent.setup();
+    function Host() {
+      const [isResolved, setIsResolved] = useState(false);
+      return (
+        <Sized>
+          <Comments
+            comments={[
+              {
+                id: 'open',
+                author: OTHER,
+                body: 'Open thread',
+                createdAt: '2026-09-30T19:00:00Z',
+                isResolved,
+              },
+            ]}
+            currentUser={VIEWER}
+            onResolveThread={() => setIsResolved(true)}
+            onReopenThread={() => setIsResolved(false)}
+          />
+        </Sized>
+      );
+    }
+    render(<Host />);
+    within(threadSurface('open'))
+      .getByRole('button', {name: 'Mark as resolved'})
+      .focus();
+    await user.keyboard('{Enter}');
+    await flush();
+    expect(
+      within(threadSurface('open')).getByRole('button', {name: 'Reopen'}),
+    ).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await flush();
+    expect(
+      within(threadSurface('open')).getByRole('button', {
+        name: 'Mark as resolved',
+      }),
+    ).toHaveFocus();
+  });
+
+  it('leaves focus where the viewer moved it when the host resolves later', async () => {
+    const user = userEvent.setup();
+    let finishResolve = () => {};
+    function Host() {
+      const [isResolved, setIsResolved] = useState(false);
+      return (
+        <Sized>
+          <Comments
+            comments={[
+              {
+                id: 'open',
+                author: OTHER,
+                body: 'Open thread',
+                createdAt: '2026-09-30T19:00:00Z',
+                isResolved,
+              },
+            ]}
+            currentUser={VIEWER}
+            onResolveThread={() =>
+              new Promise<void>(resolve => {
+                finishResolve = () => {
+                  setIsResolved(true);
+                  resolve();
+                };
+              })
+            }
+            onReopenThread={() => {}}
+          />
+          <button type="button">Elsewhere</button>
+        </Sized>
+      );
+    }
+    render(<Host />);
+    within(threadSurface('open'))
+      .getByRole('button', {name: 'Mark as resolved'})
+      .focus();
+    await user.keyboard('{Enter}');
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    await act(async () => finishResolve());
+    await flush();
+    expect(
+      within(threadSurface('open')).getByRole('button', {name: 'Reopen'}),
+    ).toBeTruthy();
+    expect(elsewhere).toHaveFocus();
+  });
+
   it('quotes anchored passages and marks orphaned ones Outdated', () => {
     render(
       <Sized>

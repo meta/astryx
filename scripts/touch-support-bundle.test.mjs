@@ -208,6 +208,7 @@ const LAB_ONLY_NAMES = [
   'useTouchHitArea',
   'touchHitAreaStyles',
   'measureLogicalScrollAxis',
+  'useFocusAcrossSwap',
   'timing',
   'useGroupPressTracking',
   'GROUP_PRESS_POINTERS',

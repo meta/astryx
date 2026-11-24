@@ -29,6 +29,7 @@ import {
   useClickableContainer,
   useContainerReveal,
 } from '@astryxdesign/core/hooks';
+import {useFocusAcrossSwap} from '@astryxdesign/core/internal/touch';
 import {HStack, StackItem, VStack} from '@astryxdesign/core/Layout';
 import {Link} from '@astryxdesign/core/Link';
 import {Section} from '@astryxdesign/core/Section';
@@ -377,15 +378,26 @@ export function CommentRow({
   const rowActionsBusy = isBusy || isSubmitting || isComposerActionPending;
   const isResolved = thread?.isResolved === true;
   const isMuted = isResolved || isParentThreadResolved;
+  // The host's update replaces Mark as resolved with Reopen, and back.
+  // The replacement takes focus if the pressed control had it.
+  const resolveControlRef = useFocusAcrossSwap<HTMLElement>();
   const resolveAction: ResolveAction | undefined =
     thread == null || thread.canResolve === false || !canMutate
       ? undefined
       : isResolved
         ? can.reopen
-          ? {kind: 'reopen', onClick: () => scope.reopen(comment)}
+          ? {
+              kind: 'reopen',
+              onClick: () => scope.reopen(comment),
+              controlRef: resolveControlRef,
+            }
           : undefined
         : can.resolve
-          ? {kind: 'resolve', onClick: () => scope.resolve(comment)}
+          ? {
+              kind: 'resolve',
+              onClick: () => scope.resolve(comment),
+              controlRef: resolveControlRef,
+            }
           : undefined;
   const hasHistory =
     comment.isEdited === true &&

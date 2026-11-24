@@ -15,7 +15,7 @@ import {
   useImperativeHandle,
   type Ref,
 } from 'react';
-import {act, render, renderHook, screen} from '@testing-library/react';
+import {act, render, renderHook, screen, within} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 import {useFocusAcrossSwap} from './useFocusAcrossSwap';
 
@@ -72,6 +72,25 @@ function OptionalContentExample({
     <div key={revision} role="button" tabIndex={-1}>
       {hasContent ? <span ref={ref}>Owned content</span> : null}
     </div>
+  );
+}
+
+function MeasuredExample({isDisabled}: {isDisabled: boolean}) {
+  const ref = useFocusAcrossSwap<HTMLElement>();
+  const Element = isDisabled ? 'div' : 'a';
+  const control = (
+    <Element ref={ref} role="button" tabIndex={-1}>
+      Measured
+    </Element>
+  );
+  // As OverflowList does: an inert copy to measure, then the visible one.
+  return (
+    <>
+      <div inert data-testid="measure">
+        {control}
+      </div>
+      <div data-testid="visible">{control}</div>
+    </>
   );
 }
 
@@ -271,6 +290,29 @@ describe('useFocusAcrossSwap', () => {
     rerender(fixture(true, false));
     rerender(fixture(false, true));
     expect(screen.getByRole('button')).not.toHaveFocus();
+  });
+
+  it('carries focus to the visible replacement past an inert copy of the element', () => {
+    const {rerender} = render(<MeasuredExample isDisabled={false} />);
+    within(screen.getByTestId('visible')).getByText('Measured').focus();
+    rerender(<MeasuredExample isDisabled />);
+    expect(
+      within(screen.getByTestId('visible')).getByText('Measured'),
+    ).toHaveFocus();
+  });
+
+  it('keeps the handoff for a control first mounted inside an inert region', () => {
+    const forwardedRef = createRef<HTMLElement>();
+    const fixture = (isCovered: boolean, isDisabled: boolean) => (
+      <div inert={isCovered}>
+        <DirectExample isDisabled={isDisabled} forwardedRef={forwardedRef} />
+      </div>
+    );
+    const {rerender} = render(fixture(true, false));
+    rerender(fixture(false, false));
+    screen.getByRole('button').focus();
+    rerender(fixture(false, true));
+    expect(screen.getByRole('button')).toHaveFocus();
   });
 
   it('expires a handoff from a descendant ref that detaches while its Effect stays connected', async () => {

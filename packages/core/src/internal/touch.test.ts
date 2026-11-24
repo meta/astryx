@@ -210,6 +210,14 @@ describe('internal/touch', () => {
     );
   });
 
+  it("re-exports by name the focus hand-off Lab's Comments reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const swap = await import('../utils/useFocusAcrossSwap');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.useFocusAcrossSwap).toBe('function');
+    expect(entry.useFocusAcrossSwap).toBe(swap.useFocusAcrossSwap);
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');
