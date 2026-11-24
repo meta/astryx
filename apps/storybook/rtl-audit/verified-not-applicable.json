@@ -391,8 +391,8 @@
     "reason": "EmojiPicker is a search field above CSS grids of emoji whose columns follow CSS direction, with sticky group headings and a footer preview in logical-property flex rows; its search glyph is radially symmetric. Its one direction-sensitive behavior, horizontal arrow keys, comes from core useGridFocus, which resolves direction per keydown with isRtlElement; that hook's RTL tests and EmojiPicker's own right-to-left keyboard test cover it, and no audit dimension measures keyboard direction."
   },
   {
-    "component": "lab/CommentPin",
-    "reason": "CommentPin sets its fixed 4px speech-bubble corner with the logical border-end-start-radius longhand (the other corners use logical longhands too), so it mirrors under RTL by construction, and switches transform origin from left-bottom to right-bottom. Absolute examples place the inline-start edge at the anchor and translate only on the block axis, so bottom-start placement mirrors without a physical inline offset. Its flex row, avatar overlap, and padding use logical properties; avatars and the numeric count have no directional glyph or keyboard semantics to reverse."
+    "component": "core/CommentPin",
+    "reason": "CommentPin sets its fixed 2px speech-bubble corner with the logical border-end-start-radius longhand (the other corners use logical longhands too), so it mirrors under RTL by construction, and switches transform origin from left-bottom to right-bottom. Absolute examples place the inline-start edge at the anchor and translate only on the block axis, so bottom-start placement mirrors without a physical inline offset. Its flex row, avatar overlap, and padding use logical properties; avatars and the numeric count have no directional glyph or keyboard semantics to reverse."
   },
   {
     "component": "lab/CommentComposer",

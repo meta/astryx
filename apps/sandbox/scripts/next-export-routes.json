@@ -278,6 +278,8 @@
     "/templates/CommandPalettePickerMode/",
     "/templates/CommandPaletteRichItems/",
     "/templates/CommandPaletteShowcase/",
+    "/templates/CommentPinInMargin/",
+    "/templates/CommentPinShowcase/",
     "/templates/ComplexSelectorDeadlinePicker/",
     "/templates/ComplexSelectorShowcase/",
     "/templates/ComplexSelectorTreeSearch/",

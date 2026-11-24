@@ -3,11 +3,26 @@
 'use client';
 
 /**
- * @file index.ts
- * @input CommentPin implementation and public types
- * @output CommentPin module exports
- * @position Public Lab subpath; re-exported by packages/lab/src/index.ts
+ * @file CommentPin deprecated re-export
+ * @input `@astryxdesign/core/CommentPin`
+ * @output Exports CommentPin and CommentPinProps, each deprecated
+ * @position Lab entry kept for one release after CommentPin moved to Core;
+ *   consumed by packages/lab/src/index.ts
  */
 
-export {CommentPin} from './CommentPin';
-export type {CommentPinProps} from './CommentPin';
+import {
+  CommentPin as CoreCommentPin,
+  type CommentPinProps as CoreCommentPinProps,
+} from '@astryxdesign/core/CommentPin';
+
+/**
+ * @deprecated CommentPin moved to Core: import it from `@astryxdesign/core`.
+ * This Lab export is removed in the next release.
+ */
+export const CommentPin = CoreCommentPin;
+
+/**
+ * @deprecated Import `CommentPinProps` from `@astryxdesign/core`. This Lab
+ * export is removed in the next release.
+ */
+export type CommentPinProps = CoreCommentPinProps;

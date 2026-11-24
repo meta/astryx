@@ -210,6 +210,13 @@ const FIXTURES: Readonly<Record<string, (probe: Probe) => ReactElement>> = {
       <Core.Collapsible trigger="Section">Body</Core.Collapsible>
     </Core.CollapsibleGroup>
   ),
+  CommentPin: probe => (
+    <Core.CommentPin
+      label="Open annotation from Ada"
+      participants={[{id: 'ada', name: 'Ada Lovelace'}]}
+      {...probe}
+    />
+  ),
   ComplexSelector: probe => (
     <Core.ComplexSelector label="Pick" value="a" {...probe}>
       {() => null}

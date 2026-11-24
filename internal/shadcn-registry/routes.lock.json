@@ -302,6 +302,13 @@
       "aliases": []
     },
     {
+      "name": "component-comment-pin",
+      "path": "components/comment-pin",
+      "aliases": [
+        "components/lab/comment-pin"
+      ]
+    },
+    {
       "name": "component-complex-selector",
       "path": "components/complex-selector",
       "aliases": []
@@ -595,11 +602,6 @@
     {
       "name": "component-lab-comment-composer",
       "path": "components/lab/comment-composer",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-comment-pin",
-      "path": "components/lab/comment-pin",
       "aliases": []
     },
     {
