@@ -312,6 +312,37 @@ describe('Popover presentation', () => {
     expect(dialog).toHaveAttribute('aria-label', 'Sort by');
   });
 
+  it('a sheet without a label follows its trigger\u2019s text when the text changes while open (DEC-8)', async () => {
+    isCompactTouch = true;
+    let setCount: (count: number) => void = () => {};
+    function Parent() {
+      const [count, setCountState] = useState(1);
+      setCount = setCountState;
+      return (
+        <Popover
+          presentation="adaptive"
+          content={<button type="button">Apply</button>}>
+          <Button label={`Filters ${count}`}>{`Filters ${count}`}</Button>
+        </Popover>
+      );
+    }
+    render(<Parent />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', {name: 'Filters 1'}));
+      await Promise.resolve();
+    });
+    const dialog = await vi.waitFor(() => {
+      const element = document.querySelector<HTMLDialogElement>('dialog');
+      expect(element).toHaveAttribute('open');
+      return element!;
+    });
+    expect(dialog).toHaveAttribute('aria-label', 'Filters 1');
+
+    act(() => setCount(2));
+
+    expect(dialog).toHaveAttribute('aria-label', 'Filters 2');
+  });
+
   it('a render-prop trigger without a label names the sheet with its text (DEC-8)', async () => {
     isCompactTouch = true;
     render(
@@ -599,8 +630,10 @@ describe('Popover presentation', () => {
     });
     // Never an alertdialog: the sheet always has a way out.
     expect(dialog).not.toHaveAttribute('role', 'alertdialog');
-    // The scrim is the dialog element itself.
+    // The scrim is the dialog element itself; the press starts and ends there.
     act(() => {
+      fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+      fireEvent.pointerUp(dialog, {pointerType: 'touch'});
       fireEvent.click(dialog);
     });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);

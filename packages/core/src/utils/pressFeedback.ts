@@ -67,6 +67,7 @@ import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
 import {isPrimaryClick} from './primaryClick';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -221,9 +222,7 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
 export function pressFadeMs(element: Element): number {
   const exit =
     readThemeTokens(element, {duration: '--duration-exit'}).ms ?? PRESS_FADE_MS;
-  const reduced =
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = reducesMotion(element);
   const bound = parseMotionRoleValue(
     'duration',
     reducedMotionFadeConsts.duration,
@@ -565,8 +564,7 @@ function releasesAtOnce(element: Element): boolean {
   return (
     paintsFinePointerPress(element) &&
     !stylesheetDroppedActive() &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    reducesMotion(element)
   );
 }
 

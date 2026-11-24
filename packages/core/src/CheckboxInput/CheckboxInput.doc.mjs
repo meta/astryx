@@ -129,7 +129,7 @@ export const docs = {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
       description:
-        'Semantic icon name or custom content displayed before the label text. See `astryx docs icons` for valid semantic names.',
+        'Built-in meaning or custom content displayed before the label text. See `astryx docs icons` for the built-in meanings.',
     },
     {
       name: 'status',
@@ -398,7 +398,7 @@ export const docsZh = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: '标签文本前显示的语义图标名称或自定义内容。',
+      description: '标签文本前显示的内置含义或自定义内容。',
     },
     {
       name: 'status',
@@ -505,7 +505,7 @@ export const docsDense = {
     size: 'sm (compact) or md (default)',
     onFocus: 'callback on focus',
     onBlur: 'callback on blur',
-    labelIcon: 'semantic icon name or custom content before label text',
+    labelIcon: 'built-in meaning or custom content before label text',
     status: 'error/warning/success with message; sets aria-invalid on error',
   },
 };

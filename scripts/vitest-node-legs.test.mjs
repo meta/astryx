@@ -27,7 +27,10 @@ import {
   TIGHT_NODE_LEGS,
   WALL_SECONDS,
   WATCHDOG_MARGIN_SECONDS,
+  BESIDE_REAL_CHROME_SECONDS,
+  drawsInRealChrome,
   nodeFileCost,
+  nodeLegsApart,
   nodeLegFiles,
   mainNearLimitNotice,
   minNodeLegFiles,
@@ -275,6 +278,103 @@ describe('the Node leg plan', () => {
     expect(room.outputs['node-reason']).toBe(
       '${{ steps.node-legs.outputs.reason }}',
     );
+  });
+
+  it('finds the files that draw in a real Chrome from their source', () => {
+    expect(
+      drawsInRealChrome(
+        'packages/cli/api/theme-edit/theme-edit-border-added-size.test.mjs',
+      ),
+    ).toBe(true);
+    expect(drawsInRealChrome('scripts/vitest-node-legs.test.mjs')).toBe(false);
+    expect(drawsInRealChrome('no/such/file.test.mjs')).toBe(false);
+  });
+
+  it('gives the real-Chrome files one leg, the last, with no packing or heavy file beside them, on pull requests and main', () => {
+    const main = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    for (const [run, list, legsOf] of [
+      ['pull request', files, plan.legs],
+      ['main', main, planMainNodeLegs(main, seconds).legs],
+    ]) {
+      const chrome = list.filter(file => drawsInRealChrome(file));
+      expect(chrome.length, run).toBeGreaterThan(10);
+      const cost = nodeFileCost(list, seconds);
+      const legs = partitionByDuration(list, legsOf, seconds);
+      const last = legs[legs.length - 1];
+      expect(
+        chrome.filter(file => !last.includes(file)),
+        run,
+      ).toEqual([]);
+      for (const file of last.filter(f => !drawsInRealChrome(f))) {
+        expect(cost(file), `${run}: ${file}`).toBeLessThanOrEqual(
+          BESIDE_REAL_CHROME_SECONDS,
+        );
+        expect(file, run).not.toMatch(/(^|\/)packed-[^/]*\.test\.mjs$/);
+      }
+      // The packing and conformance suites are spread over the other legs.
+      for (const heavy of list.filter(f =>
+        /packed-gather-cache|packed-search-catalog|door-conformance/.test(f),
+      ))
+        expect(last, `${run}: ${heavy}`).not.toContain(heavy);
+    }
+  });
+
+  it("plans from each planner's sparse checkout as the legs split in a full one", () => {
+    // ci.yml's room, deploy.yml's main-commit and cli-minimum-node.yml's
+    // version job plan from sparse checkouts; each must hold every
+    // real-Chrome test file, or it plans another split than the legs run.
+    const workflow = name =>
+      yaml.parse(
+        fs.readFileSync(path.join(ROOT, '.github/workflows', name), 'utf8'),
+      );
+    const planners = [
+      ['ci.yml', 'room'],
+      ['deploy.yml', 'main-commit'],
+      ['cli-minimum-node.yml', 'version'],
+    ];
+    const covers = (step, file) => {
+      const patterns = String(step.with['sparse-checkout'])
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+      if (step.with['sparse-checkout-cone-mode'] === false)
+        return patterns.some(pattern =>
+          path.matchesGlob(file, pattern.replace(/\/$/, '/**')),
+        );
+      return patterns.some(dir =>
+        file.startsWith(`${dir.replace(/\/$/, '')}/`),
+      );
+    };
+    const chrome = files.filter(file => drawsInRealChrome(file));
+    expect(chrome.length).toBeGreaterThan(10);
+    for (const [name, job] of planners) {
+      const steps = workflow(name).jobs[job].steps.filter(
+        step =>
+          String(step.uses ?? '').startsWith('actions/checkout@') &&
+          step.with?.['sparse-checkout'],
+      );
+      expect(steps.length, `${name} ${job}`).toBeGreaterThan(0);
+      for (const step of steps)
+        for (const file of chrome)
+          expect(covers(step, file), `${name} ${job}: ${file}`).toBe(true);
+    }
+    // Planned from room's file set, the split is the one each leg runs.
+    const room = workflow('ci.yml').jobs.room.steps.find(
+      step => step.id === 'checkout',
+    );
+    const readable = file => covers(room, file);
+    const cost = nodeFileCost(files, seconds);
+    expect(
+      splitByDuration(
+        files,
+        plan.legs,
+        cost,
+        [],
+        nodeLegsApart(cost, {
+          realChrome: file => readable(file) && drawsInRealChrome(file),
+        }),
+      ),
+    ).toEqual(partitionByDuration(files, plan.legs, seconds));
   });
 
   it('gives every leg files on a scoped run: the guards it always runs are nearly the whole suite', () => {

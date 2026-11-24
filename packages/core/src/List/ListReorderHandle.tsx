@@ -8,9 +8,9 @@
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
- *   `reorderRowLayout`, `reorderListLayout` and `UNREAD_HANDLE_NAME`. The
- *   handle ends a reorderable List row, or starts it, as the reorderable's
- *   `handle` option places it. A finger
+ *   `reorderRowLayout`, `reorderListLayout`, `UNREAD_HANDLE_NAME` and
+ *   `reorderHandleGrowth`. The handle ends a reorderable List row, or starts
+ *   it, as the reorderable's `handle` option places it. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
  *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
  *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
@@ -62,7 +62,13 @@ import {
 import {listReorderHandleProps} from '../privateAttributes/listReorder.stylex';
 import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
-import {useTouchHitArea} from '../utils/touchHitArea';
+import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
+import {
+  centeredGrowth,
+  MIN_TOUCH_TARGET,
+  type HitInsets,
+  type HitRect,
+} from '../utils/hitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {reorderHandle} from '../internal/reorderHandle.stylex';
 import {styles as revealStyles} from '../hooks/containerReveal.stylex';
@@ -93,9 +99,9 @@ registerEnglishFallback(english);
 const REORDER_GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
 // The grip's box, and how far its target reaches past it, for a fine pointer
 // (at least the WCAG 2.5.8 minimum) and for a finger. A finger's target is a
-// coarse-only hit layer, clamped so it never takes from a neighbour
-// (utils/hitArea.ts). A theme's slot size changes only the icon, which stays
-// centred on the box.
+// coarse-only hit layer, clamped so it never takes from a neighbour or
+// reaches past its list (utils/hitArea.ts, `reorderHandleGrowth`). A theme's
+// slot size changes only the icon, which stays centred on the box.
 const GRIP = reorderHandle.grip;
 const TARGET_REACH = reorderHandle.targetReach;
 const TOUCH_REACH = reorderHandle.touchReach;
@@ -118,6 +124,34 @@ const HANG = `calc(${GRIP} + ${TARGET_REACH})`;
  */
 const HANG_GIVE_BACK = `calc(${TARGET_REACH} - ${spacingVars['--spacing-2']})`;
 const COARSE = '@media (pointer: coarse)';
+
+/**
+ * A finger's target grows toward 44 px, centred on the grip, but it stays
+ * inside its list on the block axis. On the first and last rows, a control
+ * right against the list's top or bottom edge then keeps its taps, as it does
+ * next to the rows' own targets. `toLayout` maps a client rect to
+ * the handle's layout px.
+ */
+export function reorderHandleGrowth(
+  target: HitRect,
+  toLayout: (rect: HitRect) => HitRect,
+  element: HTMLElement,
+): HitInsets {
+  const full = centeredGrowth(target, MIN_TOUCH_TARGET);
+  const list = element.closest('ul, ol');
+  if (list == null) {
+    return full;
+  }
+  const {top, bottom, left, right} = list.getBoundingClientRect();
+  const box = toLayout({top, bottom, left, right});
+  return {
+    ...full,
+    top: Math.max(0, Math.min(full.top, target.top - box.top)),
+    bottom: Math.max(0, Math.min(full.bottom, box.bottom - target.bottom)),
+  };
+}
+
+const HANDLE_HIT_AREA: TouchHitAreaOptions = {growth: reorderHandleGrowth};
 
 const styles = stylex.create({
   handle: {
@@ -571,7 +605,7 @@ export function ListReorderHandle({
   const isEnabled = controller != null && !isDisabled;
   // A finger's target: the shared touch hit area grows the handle's hit
   // layer where the primary pointer is coarse.
-  const hitAreaRef = useTouchHitArea(true);
+  const hitAreaRef = useTouchHitArea(true, HANDLE_HIT_AREA);
   const handleRef = useMergedRefs(ref, hitAreaRef);
   // A handle that stops taking gestures mid-drag sends a drag of its row
   // home, whichever pointer or key drives it. Its row may be disabled or no

@@ -25,6 +25,10 @@ import {FormLayout} from '../FormLayout/FormLayout';
 import {LinkProvider} from '../Link/LinkProvider';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {
+  getTooltipDescriptions,
+  tooltipTextOnHover,
+} from '../__tests__/tooltipDescription';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -178,23 +182,15 @@ describe('Pagination', () => {
       ).toBeNull();
     });
 
-    it('gives the prev/next carets a hover tooltip matching their accessible name', () => {
+    it('gives the prev/next carets a hover tooltip matching their accessible name', async () => {
       // The carets are icon-only, so sighted users need a visible label on
       // hover, not just the accessible name. The tooltip reuses the same
       // localized string, so it adds no description (Button FR12).
       render(<Pagination page={3} onChange={() => {}} totalPages={5} />);
       const prev = screen.getByRole('button', {name: 'Go to previous page'});
       const next = screen.getByRole('button', {name: 'Go to next page'});
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to previous page'),
-      ).toBe(true);
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to next page'),
-      ).toBe(true);
+      expect(await tooltipTextOnHover(prev)).toBe('Go to previous page');
+      expect(await tooltipTextOnHover(next)).toBe('Go to next page');
       expect(prev).not.toHaveAttribute('aria-describedby');
       expect(next).not.toHaveAttribute('aria-describedby');
     });
@@ -2241,7 +2237,7 @@ describe('Pagination', () => {
       expect(onChange.mock.calls).toEqual([[3]]);
     });
 
-    it('shows the tooltip of each link control, and none for an unavailable end', () => {
+    it('shows the tooltip of each link control, and none for an unavailable end', async () => {
       render(
         <Pagination
           page={1}
@@ -2253,11 +2249,21 @@ describe('Pagination', () => {
         />,
       );
       // First and Previous are unavailable on page 1. Next and Last are links.
+      // Their tooltips repeat their names, so they show on hover and add no
+      // description.
       expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .map(tooltip => tooltip.textContent),
-      ).toEqual(['Go to next page', 'Go to last page']);
+        await tooltipTextOnHover(
+          screen.getByRole('link', {name: 'Go to next page'}),
+        ),
+      ).toBe('Go to next page');
+      expect(
+        await tooltipTextOnHover(
+          screen.getByRole('link', {name: 'Go to last page'}),
+        ),
+      ).toBe('Go to last page');
+      expect(getTooltipDescriptions()).toHaveLength(0);
+      // Only the two links mounted a tooltip.
+      expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(2);
     });
 
     it('keeps the dots a radio group and links only Previous and Next', async () => {

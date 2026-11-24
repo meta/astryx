@@ -780,7 +780,7 @@ describe('icon definitions (map)', () => {
       expect.objectContaining({code: 'invalid_icon_set', severity: 'error'}),
     ]);
     expect(issues[0].message).toMatch(
-      /map "orbit" \(icon "home"\) is not an icon definition\. Declare it in definitions\/orbit\.doc\.mjs/,
+      /map "orbit" \(icon "home"\) is not an icon meaning\. Declare it in definitions\/orbit\.doc\.mjs/,
     );
   });
 

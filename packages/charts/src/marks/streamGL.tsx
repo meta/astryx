@@ -19,7 +19,7 @@ import {
   useImperativeHandle,
   useCallback,
   useState,
-  type MutableRefObject,
+  type Ref,
 } from 'react';
 import type {SeriesDef} from '../types';
 import {useChart} from '../ChartContext';
@@ -44,8 +44,12 @@ export interface StreamGLOptions {
   bufferSize?: number;
   lineWidth?: number;
   opacity?: number;
-  /** Ref to receive the push/clear handle */
-  handleRef?: MutableRefObject<StreamGLHandle | null>;
+  /**
+   * Receives the push/clear handle. Takes an object ref or a callback ref.
+   * A callback ref runs with the handle on every attach. On every detach,
+   * React runs the cleanup it returned, or calls it with null.
+   */
+  handleRef?: Ref<StreamGLHandle>;
 }
 
 const VERT = `
@@ -92,7 +96,7 @@ function StreamGLCanvas({
   opacity: number;
   width: number;
   height: number;
-  handleRef?: MutableRefObject<StreamGLHandle | null>;
+  handleRef?: Ref<StreamGLHandle>;
 }) {
   const {xScale, yScale} = useChart();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -271,7 +275,7 @@ function StreamGLCanvas({
 
   // Expose push/clear handle via ref.
   useImperativeHandle(
-    handleRef as MutableRefObject<StreamGLHandle | null>,
+    handleRef,
     () => ({
       push(x: number, y: number) {
         if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -343,11 +347,33 @@ function StreamGLCanvas({
  *
  * @example
  * ```
+ * // Object ref: push data points in a rAF loop or event handler.
  * const streamRef = useRef<StreamGLHandle>(null);
- * // Push data points in a rAF loop or event handler:
  * streamRef.current?.push(Date.now(), value);
  *
  * <Chart series={[streamGL({color: '#10b981', handleRef: streamRef})]} />
+ *
+ * // Callback ref: React calls it on every attach, and the stream buffer can
+ * // be new or kept, so replay the samples to show: clear, then push.
+ * const handleRef = useRef<StreamGLHandle | null>(null);
+ * const samples = useRef([{x: 0, y: 50}]);
+ * const attach = useCallback((handle: StreamGLHandle | null) => {
+ *   handleRef.current = handle;
+ *   if (handle == null) {
+ *     return;
+ *   }
+ *   handle.clear();
+ *   for (const sample of samples.current) {
+ *     handle.push(sample.x, sample.y);
+ *   }
+ * }, []);
+ * // Keep at most bufferSize (500 by default) samples, so a replay stays bounded.
+ * const pushPoint = (point: {x: number; y: number}) => {
+ *   samples.current = [...samples.current, point].slice(-500);
+ *   handleRef.current?.push(point.x, point.y);
+ * };
+ *
+ * <Chart series={[streamGL({color: '#10b981', handleRef: attach})]} />
  * ```
  */
 export function streamGL(options: StreamGLOptions): SeriesDef {

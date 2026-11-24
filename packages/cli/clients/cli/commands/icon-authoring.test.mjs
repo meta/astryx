@@ -459,7 +459,7 @@ describe('icon add', () => {
     expect(refused.code).toBe(1);
     expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
     expect(refused.body.error).toBe(
-      'Icon set "outline" declares no variant "solid". Declare it first, and name the look its icons draw now as the default variant in place of <default>.',
+      'Icon set "outline" declares no variant "solid". Declare it first, and name the variant its icons draw now as the default variant in place of <default>.',
     );
     expect(refused.body.suggestions[0].name).toBe(
       'astryx experimental icon new-set outline --variants <default>,solid --default-variant <default>',
@@ -833,13 +833,13 @@ describe('experimental icon use', () => {
     );
     expect(used.code).toBe(0);
     expect(used.stdout).toContain(
-      '[ok] experimental.iconVariant is now "solid": every icon draws its solid look where its set has one.',
+      '[ok] experimental.iconVariant is now "solid": every icon draws its solid variant where its set has one.',
     );
     expect(used.stdout).toContain(
-      '[note] @acme/lines/lines declares no variants: its icons draw its one look.',
+      '[note] @acme/lines/lines declares no variants, so its icons draw as they are.',
     );
     expect(used.stdout).toContain(
-      "A theme draws the built-in icons in this look with `icons: themeIconsSolid` (import {themeIconsSolid} from '@acme/glyphs').",
+      "A theme draws the built-in icons in this variant with `icons: themeIconsSolid` (import {themeIconsSolid} from '@acme/glyphs').",
     );
     const removed = await runCli(
       ['experimental', 'icon', 'use', 'glyphs', '--backup', 'lines'],
@@ -849,7 +849,7 @@ describe('experimental icon use', () => {
       '[ok] experimental.iconSet already names main set "glyphs" (@acme/glyphs/glyphs), then "lines" (@acme/lines/lines)',
     );
     expect(removed.stdout).toContain(
-      '[ok] Removed experimental.iconVariant (it was "solid"): each set draws its default look.',
+      '[ok] Removed experimental.iconVariant (it was "solid"): each set draws its default variant.',
     );
     const refused = await json(
       ['experimental', 'icon', 'use', 'lines', '--variant', 'solid'],
@@ -1119,7 +1119,7 @@ describe('a library of icon data, through the adapter', () => {
     // The optional definitions left unmapped are listed, never issues.
     expect(codes).not.toContain('"severity":"info"');
     const printed = await runCli(['integration', 'check'], pkg);
-    expect(printed.stdout).toContain('Unmapped icon definitions (optional)');
+    expect(printed.stdout).toContain('Unmapped icon meanings (optional)');
     expect(printed.stdout).toContain(
       'Mapping these is optional and never fails',
     );

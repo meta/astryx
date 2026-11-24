@@ -94,7 +94,7 @@ const moduleUpdateLines = data =>
 const replacedKeyLines = data =>
   (data.replacedKeys ?? []).map(each =>
     text(
-      `[ok] Renamed map key "${each.key}" to "${each.definition}": "${each.definition}" replaced that definition.`,
+      `[ok] Renamed map key "${each.key}" to "${each.definition}": "${each.definition}" replaced that meaning.`,
     ),
   );
 
@@ -185,7 +185,7 @@ export function registerExperimentalIcon(group, program) {
       ).length;
       emit(
         section(
-          `Icon definitions (${definitions.length}, ${definitions.filter(each => each.builtIn).length} built-in)${set ? `, checked against ${set}` : ''}`,
+          `Icon meanings (${definitions.length}, ${definitions.filter(each => each.builtIn).length} built-in)${set ? `, checked against ${set}` : ''}`,
         ),
         list(
           definitions.map(each => {
@@ -214,12 +214,12 @@ export function registerExperimentalIcon(group, program) {
         ...(set && unmappedUsed > 0
           ? [
               text(
-                `${set} does not map ${unmappedUsed} ${unmappedUsed === 1 ? 'definition' : 'definitions'} that templates use; a copied template shows a placeholder for each.`,
+                `${set} does not map ${unmappedUsed} ${unmappedUsed === 1 ? 'meaning' : 'meanings'} that templates use; a copied template shows a placeholder for each.`,
               ),
             ]
           : []),
         text(
-          `Built-in definitions are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
+          `Built-in meanings are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
         ),
       );
       return answered;
@@ -261,7 +261,7 @@ export function registerExperimentalIcon(group, program) {
           ...(others.length > 0
             ? [
                 text(
-                  'Icon definitions that match; an icon set draws them once one is installed:',
+                  'Icon meanings that match; an icon set draws them once one is installed:',
                 ),
                 list(others.map(each => `${each.name}: ${each.description}`)),
               ]
@@ -305,7 +305,7 @@ export function registerExperimentalIcon(group, program) {
               : {}),
             ...(look
               ? {
-                  look: `no ${look.asked} look; draws ${look.used ?? 'its one look'}`,
+                  look: `no ${look.asked} variant; draws ${look.used ?? 'its own export'}`,
                 }
               : {}),
             ...(variants.length > 0
@@ -602,14 +602,14 @@ export function registerExperimentalIcon(group, program) {
               ? [
                   text(
                     variantChanged
-                      ? `[ok] experimental.iconVariant is now "${data.variant}"${data.previousVariant ? ` (it was "${data.previousVariant}")` : ''}: every icon draws its ${data.variant} look where its set has one.`
+                      ? `[ok] experimental.iconVariant is now "${data.variant}"${data.previousVariant ? ` (it was "${data.previousVariant}")` : ''}: every icon draws its ${data.variant} variant where its set has one.`
                       : `[ok] experimental.iconVariant already names "${data.variant}".`,
                   ),
                 ]
               : data.previousVariant
                 ? [
                     text(
-                      `[ok] Removed experimental.iconVariant (it was "${data.previousVariant}"): each set draws its default look.`,
+                      `[ok] Removed experimental.iconVariant (it was "${data.previousVariant}"): each set draws its default variant.`,
                     ),
                   ]
                 : []),
@@ -618,14 +618,14 @@ export function registerExperimentalIcon(group, program) {
               .map(look =>
                 text(
                   look.variant
-                    ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default look, ${look.variant}.`
-                    : `[note] ${look.set} declares no variants: its icons draw its one look.`,
+                    ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default variant, ${look.variant}.`
+                    : `[note] ${look.set} declares no variants, so its icons draw as they are.`,
                 ),
               ),
             ...(data.themeMap
               ? [
                   text(
-                    `A theme draws the built-in icons in this look with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
+                    `A theme draws the built-in icons in this variant with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
                   ),
                 ]
               : []),
@@ -744,7 +744,7 @@ export function registerExperimentalIcon(group, program) {
             const {matches, newDefinition, variant} = result.data;
             emit(
               section(
-                `Icon definitions for ${result.data.export} (${matches.length})`,
+                `Icon meanings for ${result.data.export} (${matches.length})`,
               ),
               ...(matches.length > 0
                 ? [
@@ -763,7 +763,7 @@ export function registerExperimentalIcon(group, program) {
                       },
                     }),
                   ]
-                : [text('No icon definition fits it.')]),
+                : [text('No icon meaning fits it.')]),
               ...(newDefinition
                 ? [
                     text(
@@ -774,12 +774,12 @@ export function registerExperimentalIcon(group, program) {
               ...(variant
                 ? [
                     text(
-                      `The set already has this glyph in another look. Add this one as its variant: ${formatCliCommand(variant)}`,
+                      `The set already has this glyph in another variant. Add this one as its variant: ${formatCliCommand(variant)}`,
                     ),
                   ]
                 : []),
               text(
-                `All icon definitions: ${cli} docs cli/experimental/icon-definitions`,
+                `All icon meanings: ${cli} docs cli/experimental/icon-definitions`,
               ),
             );
             return;
@@ -866,7 +866,7 @@ export function registerExperimentalIcon(group, program) {
         ...(data.suggestions && data.suggestions.length > 0
           ? [
               section(
-                `Suggestions (${data.suggestions.length} for ${new Set(data.suggestions.map(each => each.definition)).size} definitions, not written)`,
+                `Suggestions (${data.suggestions.length} for ${new Set(data.suggestions.map(each => each.definition)).size} meanings, not written)`,
               ),
               list(
                 data.suggestions.map(
@@ -925,7 +925,7 @@ export function registerExperimentalIcon(group, program) {
             words: options.words,
             icon: options.icon,
           }),
-        printNew('icon definition'),
+        printNew('icon meaning'),
       ),
   }).allowExcessArguments(false);
 }

@@ -64,11 +64,11 @@ export async function iconMap(definition, icon, options = {}) {
   const result = await authoring(async () => {
     if (typeof definition !== 'string' || definition.trim() === '') {
       throw new AstryxError(
-        'Name the icon definition to map',
+        'Name the icon meaning to map',
         [
           {
             name: 'astryx docs cli/experimental/icon-definitions',
-            reason: 'every icon definition',
+            reason: 'every icon meaning',
           },
         ],
         ERROR_CODES.ERR_MISSING_ARGUMENT,
@@ -94,14 +94,14 @@ export async function iconMap(definition, icon, options = {}) {
     } else {
       if (!mappableDefinitions(set).has(definition)) {
         throw new AstryxError(
-          `"${definition}" is not an icon definition.`,
+          `"${definition}" is not an icon meaning.`,
           [
             ...closestNames(definition, [...mappableDefinitions(set)]).map(
-              name => ({name, reason: 'a known icon definition'}),
+              name => ({name, reason: 'a known icon meaning'}),
             ),
             {
               name: `astryx experimental icon new-definition ${definition} --set ${set.name}`,
-              reason: 'add it as your own definition',
+              reason: 'add it as your own meaning',
             },
           ],
           ERROR_CODES.ERR_NOT_FOUND,
@@ -210,10 +210,10 @@ async function mapMany({cwd, selector, pairs}) {
     const id = iconIdIn(set, match[2]) ?? match[2];
     if (!known.has(name)) {
       throw new AstryxError(
-        `"${name}" is not an icon definition. Nothing was written.`,
+        `"${name}" is not an icon meaning. Nothing was written.`,
         closestNames(name, [...known]).map(each => ({
           name: each,
-          reason: 'a known icon definition',
+          reason: 'a known icon meaning',
         })),
         ERROR_CODES.ERR_NOT_FOUND,
       );

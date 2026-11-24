@@ -7,7 +7,8 @@
  * @output subscribeInput. Its readers: getLastPointerType, the latest
  *   pointer's type; getLastMousePoint, the latest mouse point; getDownPresses,
  *   each finger and pen press that is down; getTouches, the fingers on the
- *   screen and how many touches started.
+ *   screen and how many touches started. holdMouseMoves and isMouseMove: a
+ *   still mouse's repeated point told from a move.
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
@@ -108,6 +109,21 @@ const touchRecords = realmValue(
   () => new WeakMap<Window, TouchRecord>(),
 );
 
+/**
+ * Each held window's last two mouse points: `before` its latest
+ * `pointermove` and `at` it. `holds` counts the holds, and `stop` ends the
+ * subscription (holdMouseMoves). Its own key keeps the stream's first state
+ * readable by copies built before it.
+ */
+const mouseMoves = realmValue(
+  sharedKey('input-stream/mouse-moves', 1),
+  () =>
+    new WeakMap<
+      Window,
+      {before?: MousePoint; at?: MousePoint; holds: number; stop: () => void}
+    >(),
+);
+
 /** A point in the viewport, in CSS pixels. */
 export interface MousePoint {
   readonly x: number;
@@ -131,6 +147,46 @@ export function getLastPointerType(view: Window): string | null {
  */
 export function getLastMousePoint(view: Window): MousePoint | null {
   return lastMousePoints.get(view) ?? null;
+}
+
+/**
+ * Keeps `view`'s stream hearing mouse moves while a hover target is mounted,
+ * and records the window's last two mouse points for isMouseMove. One
+ * counted subscription per window; it ends with the last release. Without a
+ * window it holds nothing.
+ */
+export function holdMouseMoves(view?: Window | null): () => void {
+  if (!view) {
+    return () => {};
+  }
+  let moves = mouseMoves.get(view);
+  if (!moves) {
+    moves = {holds: 0, stop: subscribeInput(view, 'pointermove', () => {})};
+    mouseMoves.set(view, moves);
+  }
+  const held = moves;
+  held.holds++;
+  return () => {
+    if (!--held.holds) {
+      held.stop();
+      mouseMoves.delete(view);
+    }
+  };
+}
+
+/**
+ * Whether a `pointermove` or `mousemove` moved the mouse, while
+ * holdMouseMoves holds the event's window. After a scroll, WebKit sends a
+ * trusted move at the point where a still mouse already was. A move at the
+ * point before the latest `pointermove` repeats it. The stream records each
+ * `pointermove` before this check runs. A `mousemove` follows its
+ * `pointermove`. An untrusted event counts.
+ */
+export function isMouseMove(event: MouseEvent): boolean {
+  const before = event.isTrusted
+    ? mouseMoves.get(event.view ?? window)?.before
+    : undefined;
+  return before?.x !== event.clientX || before.y !== event.clientY;
 }
 
 /**
@@ -263,7 +319,13 @@ function dispatch(view: Window, channel: Channel, event: Event): void {
     typeof clientX === 'number' &&
     typeof clientY === 'number'
   ) {
-    lastMousePoints.set(view, {x: clientX, y: clientY});
+    const point = {x: clientX, y: clientY};
+    lastMousePoints.set(view, point);
+    const moves = mouseMoves.get(view);
+    if (moves && event.type === 'pointermove') {
+      moves.before = moves.at;
+      moves.at = point;
+    }
   }
   if (pointerType === 'touch' || pointerType === 'pen') {
     recordPress(view, event);

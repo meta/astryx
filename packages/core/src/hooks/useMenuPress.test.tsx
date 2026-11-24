@@ -2,7 +2,8 @@
 
 /**
  * @file useMenuPress.test.tsx
- * @input vitest, @testing-library/react, useMenuPress
+ * @input vitest, @testing-library/react, useMenuPress and
+ *   useMenuPressInternal
  * @output Unit tests for the DOM half of the menu press model: tracking,
  *   highlight, activation, the stray-click swallower, dismissal, the trigger
  *   press and edge autoscroll
@@ -13,14 +14,23 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen, within} from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {
   MENU_PRESS_AUTOSCROLL_ZONE_PX,
   MENU_PRESS_LONG_PRESS_MS,
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
+  elementAtMenuPoint,
   useMenuPress,
+  useMenuPressInternal,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 import {holdInput, isInputShield} from '../Layer/inputHold';
@@ -30,6 +40,32 @@ import {
 } from '../privateAttributes/menuPressLit.stylex';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {scroll} from '../motion/uikit/scroll';
+import {__setEventTrustForTest} from '../utils/clickGuard';
+
+// jsdom sends no trusted event. The events in this set stand in for the
+// browser's own (utils/clickGuard.ts).
+const browserEvents = new WeakSet<Event>();
+beforeEach(() => {
+  __setEventTrustForTest(event => browserEvents.has(event));
+});
+afterEach(() => {
+  __setEventTrustForTest(null);
+});
+
+/** A compatibility mouse event or click that the browser itself sends. */
+function browserMouse(
+  target: Element,
+  type: 'mousedown' | 'mouseup' | 'click',
+): MouseEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    detail: 1,
+  });
+  browserEvents.add(event);
+  target.dispatchEvent(event);
+  return event;
+}
 
 /**
  * The page under a finger (a coarse primary pointer), as WebKit on iOS when
@@ -101,6 +137,7 @@ interface HarnessProps {
   onHighlight?: (row: HTMLElement | null) => void;
   touchModel?: 'pointer' | 'uikit';
   longPressDelayMs?: number;
+  onClickPointerType?: (pointerType: string | null) => void;
 }
 
 function Harness({
@@ -112,6 +149,7 @@ function Harness({
   onHighlight,
   touchModel,
   longPressDelayMs,
+  onClickPointerType,
 }: HarnessProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -123,7 +161,7 @@ function Harness({
   // The harness picks the touch model as DropdownMenu does, through the
   // delay: `touchModel="uikit"` leaves it unset. Without `touchModel` it keeps
   // the pointer model with the released wait.
-  const press = useMenuPress({
+  const {press, triggerClickPointerType} = useMenuPressInternal({
     menuRef,
     triggerRef,
     itemSelector: ITEM_SELECTOR,
@@ -152,6 +190,7 @@ function Harness({
         {...press.triggerProps}
         aria-expanded={isOpen}
         onClick={() => {
+          onClickPointerType?.(triggerClickPointerType());
           if (press.isTriggerClickFromPress()) {
             return;
           }
@@ -196,13 +235,14 @@ function fireTouchEnd(target: Element): Event {
   return event;
 }
 
-/** A cancelable touch event at `target` whose one changed touch has `identifier`. */
+/** A touch event at `target` whose one changed touch has `identifier`. */
 function fireTouch(
   target: Element,
   type: 'touchstart' | 'touchend',
   identifier: number,
+  cancelable = true,
 ): Event {
-  const event = new Event(type, {bubbles: true, cancelable: true});
+  const event = new Event(type, {bubbles: true, cancelable});
   Object.defineProperty(event, 'changedTouches', {
     value: [{identifier, target}],
   });
@@ -217,6 +257,43 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe('useMenuPress — the press a trigger click comes from', () => {
+  function clickAfter(presses: Record<string, unknown>[]) {
+    const seen: (string | null)[] = [];
+    render(<Harness onClickPointerType={type => seen.push(type)} />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    for (const down of presses) {
+      fireEvent.pointerDown(trigger, down);
+    }
+    fireEvent.pointerUp(trigger, presses.at(-1));
+    fireEvent.click(trigger, {detail: 1});
+    return seen;
+  }
+
+  it("reports a finger's or a pen's press for its click", () => {
+    expect(clickAfter([touch()])).toEqual(['touch']);
+    cleanup();
+    expect(clickAfter([pen()])).toEqual(['pen']);
+  });
+
+  it('reports no press after one it ignores: a second finger, or a Control-click', () => {
+    expect(clickAfter([touch(1), touch(2)])).toEqual([null]);
+    cleanup();
+    expect(clickAfter([{...mouse(), ctrlKey: true}])).toEqual([null]);
+  });
+
+  it('reports no press for a click in a later gesture', () => {
+    const seen: (string | null)[] = [];
+    render(<Harness onClickPointerType={type => seen.push(type)} />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    fireEvent.pointerDown(trigger, touch());
+    fireEvent.pointerUp(trigger, touch());
+    fireEvent.keyDown(document.body, {key: 'a'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(seen).toEqual([null]);
+  });
 });
 
 describe('useMenuPress — an input hold over the menu', () => {
@@ -281,6 +358,139 @@ describe('useMenuPress — an input hold over the menu', () => {
     } finally {
       overlay.remove();
     }
+  });
+});
+
+describe('useMenuPress — a hitTest that maps the rest of a row to its item', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  });
+
+  const ACTION = 'button:not(:disabled)';
+
+  /**
+   * The point lookup a Core sheet builds: the menu's own lookup, then a point
+   * in a row's content resolves to the row's own item, its direct child.
+   */
+  function rowItemAt(menu: HTMLElement | null, x: number, y: number) {
+    const element = elementAtMenuPoint(menu, document, x, y);
+    if (element == null || element.closest(ACTION) != null) {
+      return element;
+    }
+    const row = element.closest('li');
+    for (const child of row?.children ?? []) {
+      if (child.matches(ACTION)) {
+        return child;
+      }
+    }
+    return element;
+  }
+
+  /**
+   * Rows whose action is a part of the row, beside an icon, as a list row
+   * renders them. A section row holds rows of its own.
+   */
+  function RowList({
+    onSelect,
+    hasRowLookup = true,
+  }: {
+    onSelect: (label: string) => void;
+    hasRowLookup?: boolean;
+  }) {
+    const menuRef = useRef<HTMLUListElement>(null);
+    const press = useMenuPress({
+      menuRef,
+      itemSelector: ACTION,
+      hitTest: hasRowLookup
+        ? (x, y) => rowItemAt(menuRef.current, x, y)
+        : undefined,
+    });
+    const actionRow = (label: string, isDisabled = false) => (
+      <li key={label} data-testid={`row-${label}`}>
+        <span data-testid={`icon-${label}`}>*</span>
+        <button
+          type="button"
+          disabled={isDisabled}
+          onClick={() => onSelect(label)}>
+          {label}
+        </button>
+        {isDisabled && (
+          <span>
+            <button type="button" onClick={() => onSelect(`${label} pin`)}>
+              Pin
+            </button>
+          </span>
+        )}
+      </li>
+    );
+    return (
+      <ul ref={menuRef} tabIndex={-1} {...press.menuProps}>
+        {actionRow('A')}
+        {actionRow('B')}
+        {actionRow('Off', true)}
+        <li data-testid="section">
+          <h4>Section</h4>
+          <ul>{actionRow('C')}</ul>
+        </li>
+        <p data-testid="note">Not a row</p>
+      </ul>
+    );
+  }
+
+  function pointAt(element: Element) {
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => element,
+    });
+  }
+
+  function press(element: Element) {
+    pointAt(element);
+    fireEvent.pointerDown(element, touch());
+    fireEvent.pointerUp(element, touch());
+  }
+
+  it('a press on the rest of a row picks that row’s own item', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
+    onSelect.mockClear();
+    press(screen.getByTestId('row-A'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('A');
+    onSelect.mockClear();
+    press(screen.getByTestId('icon-C'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('C');
+  });
+
+  it('a finger that moves onto the rest of a row highlights the row’s item', () => {
+    render(<RowList onSelect={() => {}} />);
+    const a = screen.getByRole('button', {name: 'A'});
+    pointAt(a);
+    fireEvent.pointerDown(a, touch());
+    const icon = screen.getByTestId('icon-B');
+    pointAt(icon);
+    fireEvent.pointerMove(icon, touch());
+    expect(screen.getByRole('button', {name: 'B'})).toHaveFocus();
+  });
+
+  it('picks nothing for a row with no enabled item, even with a control in its content, a row around other rows, or content outside every row', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} />);
+    press(screen.getByTestId('icon-Off'));
+    press(screen.getByTestId('row-Off'));
+    press(screen.getByRole('heading', {name: 'Section'}));
+    press(screen.getByTestId('note'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('without the row lookup, a press beside a row’s item picks nothing, as before', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} hasRowLookup={false} />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).not.toHaveBeenCalled();
+    press(screen.getByRole('button', {name: 'B'}));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
   });
 });
 
@@ -789,6 +999,71 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     fireEvent.pointerUp(row('A'), touch(2));
     expect(fireTouch(row('A'), 'touchend', 1).defaultPrevented).toBe(false);
     expect(fireTouch(row('A'), 'touchend', 0).defaultPrevented).toBe(true);
+  });
+
+  it('cancels the touchend of a tap whose row leaves the document before it, where the window never hears it (FR5, spec:AST-094 FR21, FR26)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    const picked = row('A');
+    fireEvent.pointerDown(picked, touch(7));
+    fireTouch(picked, 'touchstart', 7);
+    fireEvent.pointerUp(picked, touch(7));
+    expect(onSelect.mock.calls).toEqual([['A']]);
+    // The pick closed the menu: the row the touch began on is gone.
+    picked.remove();
+    expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
+  });
+
+  it('after a touchstart that was not cancelable, also swallows the compatibility mousedown, mouseup and click that WebKit still sends after the cancelled touchend in a Home Screen web app (FR5, spec:AST-094 FR21, FR26)', () => {
+    const onSelect = vi.fn();
+    const onOutside = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    const outside = screen.getByTestId('outside');
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      outside.addEventListener(type, onOutside);
+    }
+    const picked = row('A');
+    fireEvent.pointerDown(picked, touch(7));
+    fireTouch(picked, 'touchstart', 7, false);
+    fireEvent.pointerUp(picked, touch(7));
+    expect(onSelect.mock.calls).toEqual([['A']]);
+    picked.remove();
+    expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
+    // WebKit aims them at the point where the touch began: here, the control
+    // that the closed menu covered.
+    browserMouse(outside, 'mousedown');
+    browserMouse(outside, 'mouseup');
+    browserMouse(outside, 'click');
+    expect(onOutside).not.toHaveBeenCalled();
+    // A later tap is the page's.
+    fireEvent.pointerDown(outside, touch(8));
+    fireEvent.click(outside, {detail: 1});
+    expect(onOutside).toHaveBeenCalledTimes(1);
+  });
+
+  it('after a cancelable touchstart too, swallows the compatibility mousedown, mouseup and click that WebKit can still send after the cancelled touchend in a Home Screen web app (FR5, spec:AST-094 FR21, FR26)', () => {
+    const onSelect = vi.fn();
+    const onOutside = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    const outside = screen.getByTestId('outside');
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      outside.addEventListener(type, onOutside);
+    }
+    const picked = row('A');
+    fireEvent.pointerDown(picked, touch(7));
+    fireTouch(picked, 'touchstart', 7);
+    fireEvent.pointerUp(picked, touch(7));
+    expect(onSelect.mock.calls).toEqual([['A']]);
+    picked.remove();
+    expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
+    browserMouse(outside, 'mousedown');
+    browserMouse(outside, 'mouseup');
+    browserMouse(outside, 'click');
+    expect(onOutside).not.toHaveBeenCalled();
+    // A later tap is the page's.
+    fireEvent.pointerDown(outside, touch(8));
+    fireEvent.click(outside, {detail: 1});
+    expect(onOutside).toHaveBeenCalledTimes(1);
   });
 });
 
