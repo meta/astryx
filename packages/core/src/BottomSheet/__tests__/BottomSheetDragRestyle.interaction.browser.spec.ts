@@ -5,7 +5,8 @@
  * @input The built "Tall sheet" BottomSheet story, real touch input (Chromium
  *   CDP) and the interaction harness's rendering trace
  * @output A proof of the style work a touch drag does. A move restyles the
- *   dialog and the panel, never the sheet's content.
+ *   dialog and the panel, never the sheet's content. A failure names each
+ *   oversized restyle's element count and the invalidations before it.
  * @position An interaction proof beside
  *   BottomSheetDetent.interaction.browser.spec.ts, on the same harness.
  */
@@ -19,6 +20,7 @@ import {
 import {
   drag,
   openStory,
+  restyleSources,
   touchDriver,
   traceRendering,
   waitForRest,
@@ -29,15 +31,18 @@ import {
 
 const storybook = withStorybook(test);
 
-// The proof fails on CI runners only, with every other move restyling the
-// sheet's content. On a failure CI keeps the Playwright trace, a screenshot
-// and the rendering events of the drag, so the next failure shows the cause.
+// The proof fails on CI runners only, with each move restyling the sheet's
+// content. On a failure CI keeps the Playwright trace, a screenshot and the
+// drag's restyles with their invalidations, so the next failure shows the
+// cause.
 test.use({trace: 'retain-on-failure', screenshot: 'only-on-failure'});
 
 // The most elements one style recalculation may restyle between two moves.
 // A move restyles the dialog, its backdrop, the panel and the edge tint. The
 // limit leaves room for an engine's own boxes. A restyle of the sheet's
-// content counts every element in it.
+// content counts every element in it. The count decides, not the node an
+// invalidation names: an inherited write on the dialog restyles the content
+// below it, and its invalidation names only the dialog.
 const RESTYLED_PER_MOVE = 6;
 
 interface OpenSheet {
@@ -84,41 +89,57 @@ test("a move of a drag restyles the dialog and the panel, not the sheet's conten
   );
   expect(contentElements).toBeGreaterThan(4 * RESTYLED_PER_MOVE);
   let steady = {from: 0, to: 0};
-  const trace = await traceRendering(page, async () => {
-    const played = await driver.play(
-      drag(
-        handle,
-        {x: handle.x, y: handle.y + 240},
-        {durationMs: 600, hz: 60, restMs: 150},
-      ),
-    );
-    const moves = played.filter(event => event.type === 'touchMove');
-    // The steady part of the drag: its first moves commit the drag's start,
-    // and the lift commits its release.
-    steady = {
-      from: moves[4].returnedAt,
-      to: moves[moves.length - 1].dispatchedAt,
-    };
-    await waitForRest(sheet);
-  });
-  const restyled = trace.events
-    .filter(
-      event =>
-        event.name === 'UpdateLayoutTree' &&
-        event.t >= steady.from &&
-        event.t <= steady.to,
-    )
-    .map(event => event.elements ?? 0);
-  if (Math.max(...restyled) > RESTYLED_PER_MOVE) {
+  const trace = await traceRendering(
+    page,
+    async () => {
+      const played = await driver.play(
+        drag(
+          handle,
+          {x: handle.x, y: handle.y + 240},
+          {durationMs: 600, hz: 60, restMs: 150},
+        ),
+      );
+      const moves = played.filter(event => event.type === 'touchMove');
+      // The steady part of the drag: its first moves commit the drag's start,
+      // and the lift commits its release.
+      steady = {
+        from: moves[4].returnedAt,
+        to: moves[moves.length - 1].dispatchedAt,
+      };
+      await waitForRest(sheet);
+    },
+    {keepEvents: true, trackInvalidations: true},
+  );
+  const sources = restyleSources(trace, steady.from, steady.to);
+  const restyled = sources.map(source => source.elements);
+  const oversized = sources.filter(
+    source => source.elements > RESTYLED_PER_MOVE,
+  );
+  const explained = JSON.stringify(
+    {
+      restyled,
+      sheetElements: contentElements,
+      oversized: oversized.map(source => ({
+        elements: source.elements,
+        after: source.invalidations,
+      })),
+    },
+    null,
+    1,
+  );
+  if (oversized.length > 0) {
     await writeEvidence(
       'bottomsheet-drag-restyle',
-      {'rendering-events.json': JSON.stringify({steady, events: trace.events})},
+      {
+        'rendering-events.json': JSON.stringify({steady, events: trace.events}),
+        'restyle-sources.json': JSON.stringify({steady, sources}, null, 1),
+      },
       test.info(),
     );
   }
   // The drag wrote the scrim: a move's recalculation restyles the dialog too.
-  expect(Math.max(...restyled), JSON.stringify(restyled)).toBeGreaterThan(1);
-  expect(Math.max(...restyled), JSON.stringify(restyled)).toBeLessThanOrEqual(
+  expect(Math.max(...restyled), explained).toBeGreaterThan(1);
+  expect(Math.max(...restyled), explained).toBeLessThanOrEqual(
     RESTYLED_PER_MOVE,
   );
 });
