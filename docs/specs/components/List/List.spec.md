@@ -112,6 +112,15 @@ Consumer migration instructions belong in consumer docs and release notes.
   and crossing (FR12).
 - Its rows' menus attaching to the row's own `<li>` (FR13); the More actions
   button, focus return, and a plain row's press paint are open (OQ2).
+- The reorder handle test, `isReorderHandle`, internal to Core and reached
+  through `@astryxdesign/core/internal/reorder`. It tells whether an element
+  is a reorder handle, so a Lab collection that puts the handle beside its
+  own controls tells them apart: ListInput's field focus skips the handle.
+- `@astryxdesign/core/internal/reorderHandle.stylex` holds the reorder
+  handle's grip and reach sizes (`grip`, `targetReach`, `touchReach`), which
+  List, ListInput and TransferList share. It is internal, like the other
+  `internal/*.stylex` entries; `touchReach` derives from `MIN_TOUCH_TARGET`,
+  and a unit test ties them.
 
 **Does not own / non-goals**
 
@@ -243,11 +252,25 @@ Consumer migration instructions belong in consumer docs and release notes.
   `componentIcons['list-reorder-handle']`; with no entry, the grip is the
   `drag` icon at the `sm` size (`spec:AST-103` DEC-8). The slot's size
   changes only the icon.
-- `spec:AST-103` owns reordering. List is its first adopter: it
+- `spec:AST-103` owns reordering. List adopts it: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its trailing edge
-  (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  handle is the one element reordering adds to a row (`spec:AST-103` FR5),
+  at its trailing edge, or at its leading edge when the reorderable's
+  `handle.placement` is `'start'`. The handle always shows and takes its
+  place in the row, unless `handle.revealBehavior` is `'adaptive'`. Then, where
+  the primary pointer is fine, it shows while its row is hovered or holds the
+  focus, and hangs outside the row's content with no width, so the content
+  keeps its place; it sits so that its target stops at the row's content. A reorderable list pads that room on that edge and
+  reaches into its host's padding by as much of it as the padding holds, so
+  the FR9 clip and a clipping host keep the handles; the rows move in only
+  by the room the padding lacks. Under a coarse pointer the handle takes its
+  place in the row, as it does after a list marker at the leading edge and
+  under `outset` and `bleed`, whose rows reach the host's padding edge.
+  Hidden, it keeps its tab stop. At the leading edge, a row that stays put
+  keeps the place its neighbours' handles take, so the labels line up. The
+  layout ships with the reorderable object (`spec:AST-103` FR2). The reorder
+  controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
 
@@ -265,6 +288,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Documentation             | `List.doc.mjs`, Storybook, and `scripts/check-knowledge.mjs`                                 | public prop, values, default, deprecation, and representative composition                                                                                                                                                                                                                                                            | Missing or stale contract, docs, or example fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `audit:List/docs`   |
 | FR13                      | List tests and real-browser tests of a row menu with a mouse, a finger, and the keyboard     | a plain row, a row with `onClick`, a row with `href`; a right click, a long press, Shift+F10, the context-menu key; close by Escape and by choice; a finger's hold, a mouse's right click, the keyboard, and `presentation: 'popover'`                                                                                               | A wrapper element around the `<li>`, a row a context request does not open, focus left in a closed menu or not returned to the row or its button, a plain row without a named "More actions" button, or a focusable row that ignores Shift+F10 fails. A lift or press paint under a mouse, the keyboard, or `presentation: 'popover'`, or a finger's hold on a focusable row without them, fails.                                                                                                                                                                                                                         | `audit:List/layout` |
 | FR13 reorder              | Real-browser tests with a finger and a mouse on a reorderable row with a menu                | a hold on the handle and on the row body of a reorderable row with a menu                                                                                                                                                                                                                                                            | A handle hold that opens the menu, or a body hold that picks the row up, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `audit:List/layout` |
+| Reorder handle sizes      | `internal/reorderHandle.stylex.test.ts`                                                      | the finger's reach                                                                                                                                                                                                                                                                                                                   | A `touchReach` that no longer derives from `MIN_TOUCH_TARGET` fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                     |
 | FR9, DEC-5                | Real-browser whole-counter ink, unordered-parent renderer parity and read-only task geometry | Static Markdown ordered lists nested in unordered and read-only task lists, LTR/RTL; general and swipe-capable Lists                                                                                                                                                                                                                 | Reinstating a Markdown ancestor clip cuts leading counter ink. Under unordered parents, mismatched Markdown/RichText text starts or nested insets fail. Under read-only task parents, checkbox occlusion of counters, changed checked states or incorrect Markdown parent-text anchors fail; this row does not claim task-parent cross-renderer parity coverage. Removing general List clipping lets moving rows paint outside their group.                                                                                                                                                                               | `audit:List/visual` |
 
 ## Decision log
