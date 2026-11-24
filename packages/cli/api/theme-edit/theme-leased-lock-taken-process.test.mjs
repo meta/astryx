@@ -34,6 +34,7 @@ import {
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 
 // (These cases read drawn components: drawn for real.)
 realRenders(true);
@@ -67,12 +68,12 @@ describe('T1: a leased lock and a process id that looks gone', () => {
     fs.mkdirSync(dir);
     const owner = path.join(dir, 'owner.json');
     // The same computer name, a process this run cannot see (another
-    // process space): it looks gone. Use an id above Linux's maximum
-    // (2 ** 22), so an unrelated live process cannot hold this lock.
+    // process space): it looks gone. No live process can hold its id, so
+    // an unrelated process never holds this lock.
     fs.writeFileSync(
       owner,
       JSON.stringify({
-        pid: 2 ** 22 + 7,
+        pid: UNASSIGNABLE_PID,
         host: os.hostname(),
         at: Date.now(),
         ns: 'pid:[1]',
@@ -92,7 +93,7 @@ describe('T1: a leased lock and a process id that looks gone', () => {
     expect(tryLock(dir, {leased: true})).toBe(true);
     const owner = path.join(dir, 'owner.json');
     const record = JSON.parse(fs.readFileSync(owner, 'utf8'));
-    fs.writeFileSync(owner, JSON.stringify({...record, pid: 2 ** 22 + 7}));
+    fs.writeFileSync(owner, JSON.stringify({...record, pid: UNASSIGNABLE_PID}));
     // Without a process space to compare (not Linux), the id is judged as is.
     expect(tryLock(dir, {leased: true})).toBe(true);
   });
@@ -154,7 +155,7 @@ describe('T11', () => {
     await themeEditNew('tt', {cwd});
     const left = path.join(
       cwd,
-      `themes/tt/.tt.settings.json.astryx-${2 ** 22 + 7}-abc123.tmp`,
+      `themes/tt/.tt.settings.json.astryx-${UNASSIGNABLE_PID}-abc123.tmp`,
     );
     fs.writeFileSync(left, '{');
     await themeEditSet('tt', 'corners', 'small', {cwd});

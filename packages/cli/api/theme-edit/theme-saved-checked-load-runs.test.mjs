@@ -41,6 +41,7 @@ import {
   projectFiles,
   refusal,
 } from '../../test-utils/theme-edit-fixture.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -331,7 +332,7 @@ describe('builds that stay the same', () => {
     fs.mkdirSync(lock, {recursive: true});
     fs.writeFileSync(
       path.join(lock, 'owner.json'),
-      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: UNASSIGNABLE_PID, host: os.hostname(), at: 1}),
     );
     expect(tryLock(lock)).toBe(true);
     // The second finds a live holder (this process), not the stale one.

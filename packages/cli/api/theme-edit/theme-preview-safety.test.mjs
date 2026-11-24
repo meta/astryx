@@ -46,6 +46,7 @@ import {
   projectFiles,
   refusal,
 } from '../../test-utils/theme-edit-fixture.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -1443,7 +1444,7 @@ describe('final pass', () => {
         path.join(
           cwd,
           ROUTE,
-          String(f).replace(/astryx-\d+-/, `astryx-${2 ** 22 + 7}-`),
+          String(f).replace(/astryx-\d+-/, `astryx-${UNASSIGNABLE_PID}-`),
         ),
       );
     await themeEditPreviewAdd(undefined, {cwd, template: 'blank'});
@@ -2772,7 +2773,7 @@ describe('final pass 5', () => {
       // Past the files it reads, nothing is removed: see
       // theme-preview-importers.test.mjs, which reads a small tree.
       // A temp file a killed command left goes with the full remove.
-      write(`src/app/z1/.page.tsx.astryx-${2 ** 22 + 7}-abc123.tmp`, 'x');
+      write(`src/app/z1/.page.tsx.astryx-${UNASSIGNABLE_PID}-abc123.tmp`, 'x');
       await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'});
       expect(exists('src/app/z1')).toBe(false);
     } finally {

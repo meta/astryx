@@ -30,6 +30,7 @@ import {
 import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {UNASSIGNABLE_PID} from '../../test-utils/unassignable-pid.mjs';
 // The assertions are about settings, builds, notes and lines, not rendered
 // pages: a render costs seconds, so the pages are written by the stand-in.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -197,7 +198,7 @@ describe('builds', () => {
     fs.mkdirSync(dir, {recursive: true});
     const left = path.join(
       dir,
-      `.z.settings.json.astryx-${2 ** 22 + 7}-abc123.tmp`,
+      `.z.settings.json.astryx-${UNASSIGNABLE_PID}-abc123.tmp`,
     );
     const mine = path.join(dir, '.z.notes.tmp');
     fs.writeFileSync(left, 'x');
