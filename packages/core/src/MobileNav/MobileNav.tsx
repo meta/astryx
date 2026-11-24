@@ -62,12 +62,18 @@ import {
   easeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
 import {Heading} from '../Heading/Heading';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {
+  MAX_CLOSE_DELAY_MS,
+  useAppShellMobile,
+} from '../AppShell/AppShellMobileContext';
+
+export {MAX_CLOSE_DELAY_MS};
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -78,7 +84,6 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -90,6 +95,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MobileNav/MobileNav.generated';
+import {reducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -286,15 +292,6 @@ const dynamicStyles = stylex.create({
 // =============================================================================
 
 /**
- * Longest the drawer will wait before closing, however long the hold is.
- *
- * Exported so `AppShell` can defer hiding this drawer's `Activity` boundary
- * by at least this long too (`ACTIVITY_HIDE_BUFFER_MS` in AppShell.tsx) —
- * otherwise Activity's `display: none !important` lands before this delay's
- * own scheduled `dialog.close()` has a chance to run (#5701).
- */
-export const MAX_CLOSE_DELAY_MS = 250;
-/**
  * Longest the drawer slides in or out for, in ms. Both run for the theme's
  * `--duration-medium`: 410 ms by default, and at most 545 ms on the default
  * scale (`--duration-medium-max`). The slide-out keeps playing after the
@@ -349,12 +346,7 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
   // Reduced motion makes the close sooner; it must not make the hold shorter.
   // Shrinking both leaves no slack — one slow frame between the commit and this
   // macrotask and the drawer has already stopped being rendered.
-  const cap = matchesMediaQuery(
-    dialog.ownerDocument.defaultView,
-    '(prefers-reduced-motion: reduce)',
-  )
-    ? 0
-    : MAX_CLOSE_DELAY_MS;
+  const cap = reducesMotion(dialog) ? 0 : MAX_CLOSE_DELAY_MS;
 
   const hold = parseShortestDurationMs(
     window.getComputedStyle(dialog).transitionDuration,

@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {beforeEach, describe, it, expect, vi} from 'vitest';
-import {Activity, type KeyboardEvent} from 'react';
+import {Activity, createRef, type KeyboardEvent} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link';
@@ -10,6 +11,9 @@ import {NavHeadingMenuItem} from './NavHeadingMenuItem';
 import {NavHeadingCloseContext} from './NavMenuContext';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
+import {getAllInjectedCss} from '../__tests__/forcedColors';
+import {contrastRatio} from '../theme/contrast';
+import {resolveThemeToken} from '../theme/tokens';
 
 describe('NavHeadingMenu', () => {
   it('renders with role="menu"', () => {
@@ -19,6 +23,17 @@ describe('NavHeadingMenu', () => {
       </NavHeadingMenu>,
     );
     expect(screen.getByRole('menu')).toBeInTheDocument();
+  });
+
+  it("is a menu named by the caller's aria-label when it stands alone", () => {
+    render(
+      <NavHeadingMenu aria-label="Workspace">
+        <NavHeadingMenuItem label="Item 1" />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByRole('menu', {name: 'Workspace'})).toContainElement(
+      screen.getByRole('menuitem', {name: 'Item 1'}),
+    );
   });
 
   it('renders children as menuitems', () => {
@@ -639,6 +654,34 @@ describe('NavHeadingMenuItem pass-through props', () => {
     expect(handleMouseEnter).toHaveBeenCalledOnce();
   });
 
+  it('puts its ref, className, style and xstyle on the row element', () => {
+    const linkRef = createRef<HTMLElement>();
+    const actionRef = createRef<HTMLElement>();
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem
+          ref={linkRef}
+          label="Docs"
+          href="/docs"
+          className="caller-class"
+          style={{marginBlockStart: '2px'}}
+          xstyle={itemTestStyles.offset}
+        />
+        <NavHeadingMenuItem
+          ref={actionRef}
+          label="Archive"
+          onClick={() => {}}
+        />
+      </NavHeadingMenu>,
+    );
+    const [link, action] = screen.getAllByRole('menuitem');
+    expect(linkRef.current).toBe(link);
+    expect(actionRef.current).toBe(action);
+    expect(link).toHaveClass('astryx-nav-heading-menu-item', 'caller-class');
+    expect(link.style.marginBlockStart).toBe('2px');
+    expect(itemDeclarations(link, '')).toMatch(/margin-inline-start:\s*4px/);
+  });
+
   it('keeps the menuitem contract over colliding pass-throughs', () => {
     render(
       <NavHeadingMenu>
@@ -730,6 +773,66 @@ describe('NavHeadingMenu as an action group (family:action-groups)', () => {
     expect(onDashboard).not.toHaveBeenCalled();
     expect(onSettings).not.toHaveBeenCalled();
   });
+});
+
+const itemTestStyles = stylex.create({
+  offset: {marginInlineStart: '4px'},
+});
+
+/**
+ * The declarations the item's own classes apply, joined into one string: on
+ * `:focus-visible` (the ring), or unconditionally.
+ */
+function itemDeclarations(
+  item: HTMLElement,
+  condition: ':focus-visible' | '' = ':focus-visible',
+): string {
+  const css = getAllInjectedCss();
+  const declarations: string[] = [];
+  for (const className of Array.from(item.classList)) {
+    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(
+      condition === ''
+        ? `\\.${escaped}(?::not\\(#\\\\#\\))*\\s*\\{([^}]*)\\}`
+        : `\\.${escaped}:focus-visible[^{,]*\\{([^}]*)\\}`,
+      'g',
+    );
+    for (const match of css.matchAll(pattern)) {
+      declarations.push(match[1] ?? '');
+    }
+  }
+  return declarations.join(' ');
+}
+
+describe('NavHeadingMenu focus ring', () => {
+  it('draws the standard focus ring on a keyboard-focused item, inset by its own width', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Documents" href="/docs" />
+        <NavHeadingMenuItem label="Settings" onClick={() => {}} />
+      </NavHeadingMenu>,
+    );
+    for (const item of screen.getAllByRole('menuitem')) {
+      const ring = itemDeclarations(item);
+      expect(ring).toContain('outline-width: var(--focus-outline-width)');
+      expect(ring).toContain('outline-style: var(--focus-outline-style)');
+      expect(ring).toContain('outline-color: var(--focus-outline-color)');
+      expect(itemDeclarations(item, '').replace(/\s+/g, '')).toContain(
+        'outline-offset:calc(-1*var(--focus-outline-width))',
+      );
+    }
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'draws a ring at 3:1 or more against the menu in %s mode',
+    mode => {
+      const ring = resolveThemeToken(null, '--focus-outline-color', {mode});
+      const menu = resolveThemeToken(null, '--color-background-popover', {
+        mode,
+      });
+      expect(contrastRatio(ring, menu)).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
 
 describe('NavHeadingMenu record contract', () => {

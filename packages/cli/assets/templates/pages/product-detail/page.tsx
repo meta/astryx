@@ -49,8 +49,8 @@ const thumbImage: CSSProperties = {
   display: 'block',
 };
 
-import {MinusIcon, PlusIcon, StarIcon} from '@heroicons/react/24/outline';
-import {StarIcon as StarIconSolid} from '@heroicons/react/24/solid';
+import {RemoveIcon, AddIcon, StarIcon} from '@astryxdesign/template-icons';
+import {StarIcon as StarIconSolid} from '@astryxdesign/template-icons/24/solid';
 
 // ─── Star Rating ─────────────────────────────────────────────────────────────
 function StarRating({rating, count}: {rating: number; count: number}) {
@@ -218,7 +218,7 @@ function ProductInfo() {
           <Button
             label="Decrease quantity"
             variant="ghost"
-            icon={<Icon icon={MinusIcon} size="sm" />}
+            icon={<Icon icon={RemoveIcon} size="sm" />}
             clickAction={decrement}
             isDisabled={(quantity ?? 1) <= 1}
             isIconOnly
@@ -237,7 +237,7 @@ function ProductInfo() {
           <Button
             label="Increase quantity"
             variant="ghost"
-            icon={<Icon icon={PlusIcon} size="sm" />}
+            icon={<Icon icon={AddIcon} size="sm" />}
             clickAction={increment}
             isDisabled={(quantity ?? 1) >= 10}
             isIconOnly

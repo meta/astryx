@@ -278,6 +278,7 @@ export async function component(name, options = {}) {
         /** @type {any} */ (
           await linkComponentResponse(await componentRead(name, options), cwd)
         ),
+      cwd,
     ),
   );
 }

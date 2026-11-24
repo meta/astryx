@@ -1,13 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Badge core/Token core/InputGroup ^packages/core/src/utils/textDirection
+// @pr-a11y scope core/Badge core/Token core/InputGroup core/Field core/FieldStatus ^packages/core/src/utils/textDirection
 
 /**
  * @file MixedDirectionText.a11y.chromium.spec.ts
- * @input The `Core/InputGroup`, `Core/Badge` and `Core/Token` Mixed Direction
- *   stories in a built Storybook, in Chromium, with the page's direction set
+ * @input The `Core/InputGroup`, `Core/Badge`, `Core/Token` and `Core/Field`
+ *   Mixed Direction stories in a built Storybook, in Chromium, with the page's direction set
  *   to RTL and to LTR through the Storybook direction global.
  * @output Real-layout proof that caller text in an InputGroupText, a Badge
- *   label and a Token label keeps a readable character order
+ *   label, a Token label, and a Field's label, description and status message
+ *   keep a readable character order
  *   (design:bidirectionality DR2): a URL scheme, a domain suffix, a count and
  *   a handle read in the order they were written under both directions, and
  *   right-to-left text that starts with a Latin word still lays out in the
@@ -44,12 +45,39 @@ const MIXED_TEXTS = [
 ];
 
 const SURFACES = [
-  {name: 'InputGroupText', story: 'core-inputgroup--mixed-direction'},
-  {name: 'Badge', story: 'core-badge--mixed-direction'},
-  {name: 'Token', story: 'core-token--mixed-direction'},
+  {
+    name: 'InputGroupText',
+    story: 'core-inputgroup--mixed-direction',
+    selector: '.astryx-input-group-text',
+  },
+  {
+    name: 'Badge',
+    story: 'core-badge--mixed-direction',
+    selector: '.astryx-badge',
+  },
+  {
+    name: 'Token',
+    story: 'core-token--mixed-direction',
+    selector: '.astryx-token',
+  },
+  {
+    name: 'Field label',
+    story: 'core-field--mixed-direction',
+    selector: 'label[for^="mixed-"]',
+  },
+  {
+    name: 'Field description',
+    story: 'core-field--mixed-direction',
+    selector: '[id^="mixed-"][id$="-desc"]',
+  },
+  {
+    name: 'Field status',
+    story: 'core-field--mixed-direction',
+    selector: '[id^="mixed-"][id$="-status"]',
+  },
 ] as const;
 
-type SurfaceName = (typeof SURFACES)[number]['name'];
+type Surface = (typeof SURFACES)[number];
 
 async function open(page: Page, story: string, direction: 'ltr' | 'rtl') {
   await page.goto(
@@ -73,18 +101,12 @@ type Glyph = {ch: string; x: number};
  */
 async function glyphs(
   page: Page,
-  surface: SurfaceName,
+  surface: Surface,
   index: number,
 ): Promise<Glyph[]> {
   return page.evaluate(
-    ({name, nth}) => {
+    ({name, selector, nth}) => {
       const root = document.getElementById('storybook-root');
-      const selector =
-        name === 'InputGroupText'
-          ? '.astryx-input-group-text'
-          : name === 'Badge'
-            ? '.astryx-badge'
-            : '.astryx-token';
       const host = root?.querySelectorAll(selector)[nth];
       if (host == null) {
         throw new Error(`no ${name} at ${nth}`);
@@ -108,7 +130,7 @@ async function glyphs(
       }
       return out;
     },
-    {name: surface, nth: index},
+    {name: surface.name, selector: surface.selector, nth: index},
   );
 }
 
@@ -126,16 +148,12 @@ for (const surface of SURFACES) {
       await open(page, surface.story, direction);
       const weak: Record<string, string> = {};
       for (const [index, text] of WEAK_TEXTS.entries()) {
-        weak[text] = leftToRight(await glyphs(page, surface.name, index));
+        weak[text] = leftToRight(await glyphs(page, surface, index));
       }
       expect(weak).toEqual(Object.fromEntries(WEAK_TEXTS.map(t => [t, t])));
 
       for (const [offset, {text, latin}] of MIXED_TEXTS.entries()) {
-        const chars = await glyphs(
-          page,
-          surface.name,
-          WEAK_TEXTS.length + offset,
-        );
+        const chars = await glyphs(page, surface, WEAK_TEXTS.length + offset);
         const latinRun = chars.slice(0, latin.length);
         const firstRtl = chars[latin.length + 1];
         // The Latin run keeps its own order...
@@ -150,4 +168,71 @@ for (const surface of SURFACES) {
       }
     });
   }
+}
+
+for (const direction of ['rtl', 'ltr'] as const) {
+  test(`a wrapped Field label aligns its lines to the page's start under ${direction.toUpperCase()}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 800});
+    await open(page, 'core-field--mixed-direction', direction);
+    const edges = await page.evaluate(() => {
+      const label = document.querySelector('label[for="mixed-wrap"]');
+      const text = label?.querySelector('[dir="ltr"]');
+      if (!label || !text) {
+        return null;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const box = label.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        lines: [...range.getClientRects()].map(line => ({
+          left: line.left,
+          right: line.right,
+        })),
+      };
+    });
+    expect(edges).not.toBeNull();
+    expect(edges!.lines.length).toBeGreaterThan(1);
+    for (const line of edges!.lines) {
+      if (direction === 'rtl') {
+        expect(Math.abs(line.right - edges!.right)).toBeLessThanOrEqual(1);
+      } else {
+        expect(Math.abs(line.left - edges!.left)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test(`a wrapped Field label in a centred container stays centred under ${direction.toUpperCase()}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 800});
+    await open(page, 'core-field--mixed-direction', direction);
+    const centres = await page.evaluate(() => {
+      const label = document.querySelector('label[for="mixed-wrap"]');
+      const text = label?.querySelector('[dir="ltr"]');
+      const container = document.getElementById('storybook-root');
+      if (!label || !text || !container) {
+        return null;
+      }
+      container.style.textAlign = 'center';
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const box = label.getBoundingClientRect();
+      return {
+        label: (box.left + box.right) / 2,
+        lines: [...range.getClientRects()].map(
+          line => (line.left + line.right) / 2,
+        ),
+      };
+    });
+    expect(centres).not.toBeNull();
+    expect(centres!.lines.length).toBeGreaterThan(1);
+    // The span takes the container's alignment, on either page direction.
+    for (const centre of centres!.lines) {
+      expect(Math.abs(centre - centres!.label)).toBeLessThanOrEqual(1);
+    }
+  });
 }

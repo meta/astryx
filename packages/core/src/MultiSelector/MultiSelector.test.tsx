@@ -48,6 +48,7 @@ import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -155,6 +156,12 @@ beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
 });
 
+// The labels trigger isolates each item in its own element, so its text
+// spans several text nodes. The match reads the whole text content.
+const textContentIs = (text: string) => (_: string, element: Element | null) =>
+  element?.textContent === text &&
+  [...(element?.children ?? [])].every(child => child.textContent !== text);
+
 describe('MultiSelector', () => {
   const defaultOptions = ['Apple', 'Banana', 'Orange'];
 
@@ -216,6 +223,66 @@ describe('MultiSelector', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'names a bottom-sheet listbox from label (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          presentation="bottom-sheet"
+        />,
+      );
+
+      // With search, the trigger is a button and the search input is the
+      // combobox.
+      await user.click(
+        hasSearch
+          ? screen.getByRole('button', {name: 'Fruit'})
+          : screen.getByRole('combobox'),
+      );
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox', h)).toHaveAttribute(
+        'aria-label',
+        'Fruit',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'keeps the required state on the trigger, not in the listbox name (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          isRequired
+          presentation="bottom-sheet"
+        />,
+      );
+
+      const trigger = hasSearch
+        ? screen.getByRole('button', {name: /Fruit/})
+        : screen.getByRole('combobox');
+      if (hasSearch) {
+        expect(trigger).toHaveAccessibleName(/Required/);
+      } else {
+        expect(trigger).toHaveAttribute('aria-required', 'true');
+      }
+      await user.click(trigger);
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox')).toHaveAccessibleName('Fruit');
+    },
+  );
+
   it('moves keyboard focus into a bottom-sheet listbox', async () => {
     const user = userEvent.setup();
     render(
@@ -251,6 +318,7 @@ describe('MultiSelector', () => {
     fireEvent.click(trigger, {detail: 1});
     const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
     fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+    fireEvent.pointerUp(dialog, {pointerType: 'touch'});
     fireEvent.click(dialog, {detail: 1});
 
     trigger.focus();
@@ -277,6 +345,7 @@ describe('MultiSelector', () => {
     fireEvent.click(trigger, {detail: 1});
     const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
     fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+    fireEvent.pointerUp(dialog, {pointerType: 'touch'});
     fireEvent.click(dialog, {detail: 1});
     rerender(field(true));
     const ring = stylex
@@ -438,6 +507,66 @@ describe('MultiSelector', () => {
     expect(screen.getByText('Apple and 1 more')).toBeInTheDocument();
   });
 
+  it('joins the labels display in the provider locale', () => {
+    render(
+      <InternationalizationProvider locale="de">
+        <MultiSelector
+          label="Obst"
+          options={defaultOptions}
+          value={['Apple', 'Banana', 'Orange']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByText(textContentIs('Apple, Banana und Orange')),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the labels overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {
+            '@astryx.multiSelector.overflowCount': '{count} weitere',
+          },
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.getByText(textContentIs('Apple, Banana, Orange und 2 weitere')),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the badges overflow through one catalog message', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {'@astryx.multiSelector.overflowCount': '{count} weitere'},
+        }}>
+        <MultiSelector
+          label="Obst"
+          options={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          value={['Apple', 'Banana', 'Orange', 'Pear', 'Plum']}
+          onChange={() => {}}
+          triggerDisplay="badges"
+          maxBadges={2}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('3 weitere')).toBeInTheDocument();
+  });
+
   it('formats the labels display with formatValue', () => {
     render(
       <MultiSelector
@@ -495,7 +624,85 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Apple, Banana')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana')),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a right-to-left label that starts with a Latin word in the page direction', () => {
+    render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Team"
+          options={['iPhone חדש', 'Design']}
+          value={['iPhone חדש', 'Design']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </div>,
+    );
+    const label = [
+      ...screen.getByRole('combobox').querySelectorAll('span'),
+    ].find(span => span.textContent === 'iPhone חדש');
+    // No `dir="auto"`: the first strong letter is Latin, which would lay the
+    // Hebrew label out left to right.
+    expect(label).not.toHaveAttribute('dir');
+  });
+
+  it('gives the overflow count the locale direction, so a right-to-left locale keeps its form', () => {
+    render(
+      <InternationalizationProvider locale="he-IL">
+        <MultiSelector
+          label="Team"
+          options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          value={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+          onChange={() => {}}
+          triggerDisplay="labels"
+        />
+      </InternationalizationProvider>,
+    );
+    const spans = [
+      ...screen.getByRole('combobox').querySelectorAll('span'),
+    ].filter(span =>
+      ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
+    );
+    expect(spans.map(span => span.getAttribute('dir'))).toEqual([
+      'ltr',
+      null,
+      null,
+      'rtl',
+    ]);
+  });
+
+  it('isolates each label and the overflow count, keeping the trigger text', () => {
+    render(
+      <MultiSelector
+        label="Team"
+        options={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        value={['Design', 'עיצוב', 'שיווק', 'Sales', 'Support']}
+        onChange={() => {}}
+        triggerDisplay="labels"
+      />,
+    );
+    expect(
+      screen.getByText(textContentIs('Design, עיצוב, שיווק, +2')),
+    ).toBeInTheDocument();
+    const isolated = [...screen.getByRole('combobox').querySelectorAll('span')]
+      .filter(span =>
+        ['Design', 'עיצוב', 'שיווק', '+2'].includes(span.textContent ?? ''),
+      )
+      .map(span => [span.textContent, span.getAttribute('dir')]);
+    expect(isolated).toEqual([
+      ['Design', 'ltr'],
+      ['עיצוב', null],
+      ['שיווק', null],
+      ['+2', 'ltr'],
+    ]);
+    // A screen reader reads the same name and text: no bidi control characters.
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveAccessibleName('Team');
+    expect(trigger).toHaveTextContent('Design, עיצוב, שיווק, +2');
+    expect(trigger.textContent).not.toMatch(/[\u2066-\u2069\u200e\u200f]/);
   });
 
   it('shows labels display with overflow', () => {
@@ -508,7 +715,9 @@ describe('MultiSelector', () => {
         triggerDisplay="labels"
       />,
     );
-    expect(screen.getByText('Apple, Banana, Orange, +2')).toBeInTheDocument();
+    expect(
+      screen.getByText(textContentIs('Apple, Banana, Orange, +2')),
+    ).toBeInTheDocument();
   });
 
   it('opens dropdown on click', async () => {
@@ -2345,17 +2554,20 @@ describe('MultiSelector', () => {
       const container = screen
         .getByTestId('fruit-multi-selector')
         .closest('.astryx-multi-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('Select a table first');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -2372,11 +2584,10 @@ describe('MultiSelector', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 
@@ -2435,7 +2646,7 @@ describe('MultiSelector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2989,12 +3200,37 @@ describe('MultiSelector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltip();
     expect(tooltip).toHaveTextContent('Some rows are hidden');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
+  });
+
+  it('keeps the written order of the status tooltip message under right-to-left', async () => {
+    render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={[]}
+          onChange={() => {}}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    // The tooltip mounts on the first hover; its text keeps the written order.
+    await userEvent.hover(
+      screen.getByRole('button', {name: /warning details/i}),
+    );
+    const tooltip = await screen.findByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
   });
 });
 

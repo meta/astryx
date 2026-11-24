@@ -16,6 +16,7 @@ import {
   generateThemeRules,
   type DefinedTheme,
 } from './index';
+import {radiusCorners} from './generateThemeRules';
 
 /**
  * Inverted surfaces that keep one side in both page modes, so a test about
@@ -1233,6 +1234,90 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
 // =============================================================================
 
 describe('derived var expansion', () => {
+  describe('a radius of each corner', () => {
+    const rule = (name: string, card: Record<string, string>) =>
+      generateThemeRules(
+        defineTheme({name, components: {card: {base: card}}}),
+      ).find(r => r.includes('.astryx-card')) ?? '';
+
+    it('writes each corner of a card radius to its corner variable, and no logical corner', () => {
+      const css = rule('test-corners', {borderRadius: '12px 12px 0 0'});
+      expect(css).toContain('border-radius: 12px 12px 0 0');
+      expect(css).toContain('--_card-radius-top-left: 12px');
+      expect(css).toContain('--_card-radius-top-right: 12px');
+      expect(css).toContain('--_card-radius-bottom-right: 0');
+      expect(css).toContain('--_card-radius-bottom-left: 0');
+      expect(css).toContain('--_card-radius-start-start: initial');
+      expect(css).toContain('--_card-radius-end-end: initial');
+    });
+
+    it('writes the same corner everywhere for one radius, so a rule it overrides leaves no corner behind', () => {
+      const css = rule('test-corners-one', {borderRadius: '32px'});
+      expect(css).toContain('--_card-radius: 32px');
+      for (const corner of [
+        'top-left',
+        'top-right',
+        'bottom-right',
+        'bottom-left',
+      ]) {
+        expect(css).toContain(`--_card-radius-${corner}: 32px`);
+      }
+    });
+
+    it('writes a corner longhand to its own corner variable, after the radius it follows', () => {
+      const css = rule('test-corners-longhand', {
+        borderRadius: '0',
+        borderStartStartRadius: '20px',
+        borderBottomRightRadius: '6px',
+      });
+      expect(css).toContain('--_card-radius-start-start: 20px');
+      expect(css).not.toContain('--_card-radius-start-start: initial');
+      expect(css).toContain('--_card-radius-bottom-right: 6px');
+      expect(css).not.toContain('--_card-radius-bottom-right: 0');
+    });
+
+    it('a radius after a corner longhand replaces that corner', () => {
+      const css = rule('test-corners-replaced', {
+        borderStartStartRadius: '20px',
+        borderRadius: '4px',
+      });
+      expect(css).not.toContain('--_card-radius-start-start: 20px');
+      expect(css).toContain('--_card-radius-start-start: initial');
+    });
+
+    it('writes no corner variable for a component that reads one radius', () => {
+      const css =
+        generateThemeRules(
+          defineTheme({
+            name: 'test-corners-button',
+            components: {button: {base: {borderRadius: '4px 4px 0 0'}}},
+          }),
+        ).find(r => r.includes('.astryx-button')) ?? '';
+      expect(css).toContain('--_button-radius: 4px 4px 0 0');
+      expect(css).not.toContain('--_button-radius-top-left');
+    });
+  });
+
+  it('reads the corners of a radius as its longhands take them', () => {
+    expect(radiusCorners('0 0 6px 6px')).toEqual(['0', '0', '6px', '6px']);
+    expect(radiusCorners('4px 8px')).toEqual(['4px', '8px', '4px', '8px']);
+    expect(radiusCorners('1px 2px 3px')).toEqual(['1px', '2px', '3px', '2px']);
+    expect(radiusCorners('8px 4px / 2px')).toEqual([
+      '8px 2px',
+      '4px 2px',
+      '8px 2px',
+      '4px 2px',
+    ]);
+    expect(radiusCorners('calc(1rem / 2) var(--radius-inner)')).toEqual([
+      'calc(1rem / 2)',
+      'var(--radius-inner)',
+      'calc(1rem / 2)',
+      'var(--radius-inner)',
+    ]);
+    expect(radiusCorners('1px 2px 3px 4px 5px')).toBeNull();
+    expect(radiusCorners('1px / 2px / 3px')).toBeNull();
+  });
+
   /** The rule for one selector text, by its start. */
   const ruleAt = (css: string, start: string) => {
     const at = css.indexOf(start);

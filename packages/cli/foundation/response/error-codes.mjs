@@ -240,7 +240,7 @@ export const ERROR_CODES = Object.freeze({
   ERR_VERSION_DETECT: 'ERR_VERSION_DETECT',
   /** A `--from`/`--to` value was not a valid semver string. */
   ERR_INVALID_VERSION: 'ERR_INVALID_VERSION',
-  /** A required external dependency (e.g. jscodeshift) is missing. */
+  /** A required external dependency (e.g. jscodeshift) is missing, or an installed package needs a package it declares that is not installed (a broken install). */
   ERR_DEP_MISSING: 'ERR_DEP_MISSING',
 
   // ── GitHub CLI ───────────────────────────────────────────────────

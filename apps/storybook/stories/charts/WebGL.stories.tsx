@@ -24,6 +24,7 @@ import {createStreamSamples, scatterData, heatmapData} from './_data';
 const meta: Meta<typeof Chart> = {
   title: 'Charts/Marks/WebGL',
   component: Chart,
+  tags: ['autodocs'],
 };
 export default meta;
 

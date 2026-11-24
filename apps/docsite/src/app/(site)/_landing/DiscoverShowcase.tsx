@@ -4,6 +4,7 @@
 
 import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Card} from '@astryxdesign/core/Card';
@@ -11,17 +12,14 @@ import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {AstryxLogo} from '../../../components/logos';
-import {components} from '../../../generated/componentRegistry';
 import {layout} from '../../../layout.stylex';
 
-// Public core component count, rounded down to the nearest 10 for marketing
-// copy. Sourced from the generated registry so it stays accurate as the library grows.
-const CORE_COMPONENT_COUNT_ROUNDED =
-  Math.floor(
-    (components['@astryxdesign/core'] ?? []).filter(
-      c => !c.hidden && !c.name.startsWith('use'),
-    ).length / 10,
-  ) * 10;
+// Below this width the floating images do not show (styles.floatingImage).
+const IMAGES_SHOW = '(min-width: 960px)';
+// A transparent pixel. A <source> with it gives a screen that does not show
+// the images nothing to download.
+const NO_IMAGE =
+  'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
 
 const styles = stylex.create({
   section: {
@@ -84,7 +82,7 @@ const styles = stylex.create({
     // to the corners, so they'd overlap and cover the card's text.
     display: {
       default: 'none',
-      '@media (min-width: 960px)': 'block',
+      [`@media ${IMAGES_SHOW}`]: 'block',
     },
   },
   // Starting "clumped" pose — images near center with slight offsets/rotations
@@ -192,7 +190,30 @@ const styles = stylex.create({
   },
 });
 
-export function DiscoverShowcase() {
+/**
+ * One floating image. Raw <img>: core has no general-purpose image component.
+ * aria-hidden + empty alt keep it out of the a11y tree.
+ */
+function FloatingImage({src, xstyle}: {src: string; xstyle: StyleXStyles}) {
+  return (
+    <picture>
+      <source media={`not all and ${IMAGES_SHOW}`} srcSet={NO_IMAGE} />
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        {...stylex.props(styles.floatingImage, xstyle)}
+      />
+    </picture>
+  );
+}
+
+export function DiscoverShowcase({
+  coreComponentCount,
+}: {
+  /** Public Core components, rounded down to the nearest 10. */
+  coreComponentCount: number;
+}) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [spread, setSpread] = useState(false);
 
@@ -223,44 +244,27 @@ export function DiscoverShowcase() {
           images. VStack/HStack would impose flex semantics that fight the
           absolute positioning model. */}
       <div ref={stageRef} {...stylex.props(styles.stage)}>
-        {/* Raw <img>s: core has no general-purpose image component. aria-hidden
-            + empty alt keep this pure decoration out of the a11y tree; it
-            animates from a clumped to a spread pose on scroll into view. */}
-        <img
+        {/* Pure decoration: each image animates from a clumped to a spread
+            pose on scroll into view. */}
+        <FloatingImage
           src="/landing/discover-card-1.webp"
-          alt=""
-          aria-hidden="true"
-          {...stylex.props(
-            styles.floatingImage,
-            spread ? styles.floatTopLeftEnd : styles.floatTopLeftStart,
-          )}
+          xstyle={spread ? styles.floatTopLeftEnd : styles.floatTopLeftStart}
         />
-        <img
+        <FloatingImage
           src="/landing/discover-card-3.webp"
-          alt=""
-          aria-hidden="true"
-          {...stylex.props(
-            styles.floatingImage,
-            spread ? styles.floatTopRightEnd : styles.floatTopRightStart,
-          )}
+          xstyle={spread ? styles.floatTopRightEnd : styles.floatTopRightStart}
         />
-        <img
+        <FloatingImage
           src="/landing/discover-card-2.webp"
-          alt=""
-          aria-hidden="true"
-          {...stylex.props(
-            styles.floatingImage,
-            spread ? styles.floatBottomLeftEnd : styles.floatBottomLeftStart,
-          )}
+          xstyle={
+            spread ? styles.floatBottomLeftEnd : styles.floatBottomLeftStart
+          }
         />
-        <img
+        <FloatingImage
           src="/landing/discover-card-4.webp"
-          alt=""
-          aria-hidden="true"
-          {...stylex.props(
-            styles.floatingImage,
-            spread ? styles.floatBottomRightEnd : styles.floatBottomRightStart,
-          )}
+          xstyle={
+            spread ? styles.floatBottomRightEnd : styles.floatBottomRightStart
+          }
         />
         <Card variant="muted" padding={0} xstyle={styles.card}>
           <VStack gap={6} align="center" xstyle={styles.cardContent}>
@@ -278,7 +282,7 @@ export function DiscoverShowcase() {
                 type="body"
                 color="secondary"
                 xstyle={styles.supportingText}>
-                Browse {CORE_COMPONENT_COUNT_ROUNDED}+ components, explore
+                Browse {coreComponentCount}+ components, explore
                 production-ready templates, and tune themes to match your brand;
                 pick a starting point and go.
               </Text>

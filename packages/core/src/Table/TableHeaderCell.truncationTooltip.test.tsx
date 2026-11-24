@@ -5,9 +5,10 @@
  * @input Uses vitest, @testing-library/react, Table, useTableSortable
  * @output Unit tests for the tooltip that shows a header cell's heading when
  *   its column cuts it short
- * @position Testing; validates that a cut heading shows in full on hover and,
- *   where the header is interactive, on keyboard focus, that it adds no
- *   description, and that a heading that fits shows no tooltip
+ * @position Testing; validates that a cut heading shows in full on keyboard
+ *   focus where the header is interactive and on no hover (no native title
+ *   either), that it adds no description, and that a heading that fits shows
+ *   no tooltip
  *
  * SYNC: When TableHeaderCell.tsx changes, update tests to match new behavior
  */
@@ -92,11 +93,16 @@ function tooltip() {
   return screen.queryByRole('tooltip', {hidden: true});
 }
 
-function SortableTable() {
+function SortableTable({
+  textOverflow = 'truncate',
+}: {
+  textOverflow?: 'wrap' | 'truncate';
+}) {
   const [sort, setSort] = useState<TableSortState>([]);
   const sortPlugin = useTableSortable<Row>({sort, onSortChange: setSort});
   return (
     <Table
+      textOverflow={textOverflow}
       data={rows}
       columns={[{key: 'payout', header: HEADING, sortable: true}]}
       plugins={{sort: sortPlugin}}
@@ -132,9 +138,29 @@ describe('TableHeaderCell truncation tooltip', () => {
     });
   });
 
+  it('shows nothing on keyboard focus when the header wraps', async () => {
+    restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+    render(<SortableTable textOverflow="wrap" />);
+    const sortButton = screen.getByRole('button', {name: HEADING});
+    act(() => {
+      sortButton.focus();
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(tooltip()).toBeNull();
+  });
+
   it('shows nothing on a mouse hover, as before', async () => {
     restore = withOverflow(true);
-    render(<Table data={rows} columns={columns} />);
+    render(<Table textOverflow="truncate" data={rows} columns={columns} />);
     const header = screen.getByRole('columnheader');
     act(() => {
       fireEvent.pointerOver(header, {pointerType: 'mouse'});
@@ -144,6 +170,23 @@ describe('TableHeaderCell truncation tooltip', () => {
     });
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(tooltip()).toBeNull();
+    // A native title is a hover disclosure too, and the browser shows it.
+    expect(header.closest('[title]')).toBeNull();
+    expect(header.querySelector('[title]')).toBeNull();
+  });
+
+  it('puts no native title on a string heading when it truncates', () => {
+    render(<Table textOverflow="truncate" data={rows} columns={columns} />);
+    const header = screen.getByRole('columnheader');
+    expect(header.hasAttribute('title')).toBe(false);
+    expect(header.querySelector('[title]')).toBeNull();
+  });
+
+  it('keeps the native title on a string heading when it wraps', () => {
+    render(<Table textOverflow="wrap" data={rows} columns={columns} />);
+    expect(screen.getByRole('columnheader').getAttribute('title')).toBe(
+      HEADING,
+    );
   });
 
   it('shows the full heading on keyboard focus of a sortable header', async () => {
@@ -205,7 +248,17 @@ describe('TableHeaderCell truncation tooltip', () => {
       },
     });
     try {
-      render(<Table data={rows} columns={columns} />);
+      // A plain renderer keeps the body cell's own truncation tooltip out of
+      // the count, so only the header cell could read a layout.
+      render(
+        <Table
+          textOverflow="truncate"
+          data={rows}
+          columns={[
+            {key: 'payout', header: HEADING, renderCell: row => row.payout},
+          ]}
+        />,
+      );
       expect(reads).toBe(0);
     } finally {
       if (original) {
@@ -227,6 +280,7 @@ function SelectableTable() {
   );
   return (
     <Table
+      textOverflow="truncate"
       data={data}
       columns={[{key: 'payout', header: 'Payout'}]}
       idKey="id"
@@ -262,6 +316,64 @@ describe('TableHeaderCell truncation tooltip with row selection', () => {
 });
 
 describe('TableHeaderCell truncation tooltip with a field in the header', () => {
+  it("shows on keyboard focus while a caller's tooltip describes the header cell", async () => {
+    restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+    render(
+      <>
+        <div role="tooltip" id="caller-hint">
+          Sorted by payout
+        </div>
+        <SortableTable />
+      </>,
+    );
+    const header = screen.getByRole('columnheader');
+    header.setAttribute('aria-describedby', 'caller-hint');
+    const sortButton = screen.getByRole('button', {name: HEADING});
+    act(() => {
+      sortButton.focus();
+    });
+    await waitFor(() => {
+      expect(
+        screen
+          .queryAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent?.trim() === HEADING),
+      ).toBe(true);
+    });
+  });
+
+  it('shows on keyboard focus after a press on the header outside its sort control', async () => {
+    restore = withOverflow(true);
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+    render(<SortableTable />);
+    const header = screen.getByRole('columnheader');
+    const sortButton = screen.getByRole('button', {name: HEADING});
+    act(() => {
+      fireEvent.pointerDown(header, {pointerType: 'mouse'});
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      sortButton.focus();
+    });
+    await waitFor(() => {
+      expect(tooltip()).toHaveTextContent(HEADING);
+    });
+  });
+
   it('shows nothing when a pointer focuses a field in a cut header', async () => {
     restore = withOverflow(true);
     const realMatches = Element.prototype.matches;
@@ -276,6 +388,7 @@ describe('TableHeaderCell truncation tooltip with a field in the header', () => 
     });
     render(
       <Table
+        textOverflow="truncate"
         data={rows}
         columns={[
           {
@@ -317,6 +430,7 @@ describe('TableHeaderCell truncation tooltip with header controls', () => {
     withFocusVisible();
     render(
       <Table
+        textOverflow="truncate"
         data={rows}
         columns={[
           {
@@ -347,6 +461,7 @@ describe('TableHeaderCell truncation tooltip with header controls', () => {
     withFocusVisible();
     render(
       <Table
+        textOverflow="truncate"
         data={rows}
         columns={[
           {
@@ -414,6 +529,7 @@ describe('TableHeaderCell truncation tooltip with an inline enum filter', () => 
     });
     return (
       <Table
+        textOverflow="truncate"
         data={data}
         columns={[
           {key: 'department', header: DEPARTMENT, filter: 'department'},

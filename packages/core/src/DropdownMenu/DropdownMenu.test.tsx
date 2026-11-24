@@ -17,6 +17,7 @@ import {
   beforeAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
@@ -39,10 +40,14 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
-import {isInHeldLayer} from '../Layer/inputHold';
+import {holdInput, isInHeldLayer} from '../Layer/inputHold';
 import {runPopoverOperation} from '../Layer/popoverOperations';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+
+// Spied, so a case about the press model alone can stub the presentation's
+// input hold: jsdom never ends a presentation.
+vi.mock('../Layer/inputHold', {spy: true});
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -814,9 +819,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('supports explicit menu placement', () => {
@@ -830,9 +834,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-start span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideAbove');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('supports explicit menu alignment', () => {
@@ -846,9 +849,8 @@ describe('DropdownMenu', () => {
     const popover = screen
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-start',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineEnd');
   });
 
   it('uses block-axis viewport gutters for side placement', () => {
@@ -864,15 +866,15 @@ describe('DropdownMenu', () => {
       .getByRole('menu', {hidden: true})
       .closest('[popover]');
     // The gutter is the layer runtime's (spec:AST-059 FR1, FR7).
-    expect(popover?.className).toContain('useLayer__styles.gutterBlockEnd');
+    expect(popover?.className).toContain('useLayer__styles.alignBlockStart');
     expect(popover?.className).not.toContain(
-      'useLayer__styles.gutterInlineEnd',
+      'useLayer__styles.alignInlineStart',
     );
   });
 
   it('emits the direction-independent logical mapping under an RTL ancestor (#3389)', async () => {
-    // The self-* position-area keywords resolve against the popover's own
-    // inherited direction in the browser, so RTL emits the same string as
+    // The logical anchor insets resolve against the popover's own
+    // inherited direction in the browser, so RTL emits the same styles as
     // LTR and the mirroring is pure CSS. jsdom can't verify the geometry —
     // the DropdownMenu RTL Storybook story is the visual proof surface.
     const user = userEvent.setup();
@@ -885,9 +887,8 @@ describe('DropdownMenu', () => {
     await user.click(screen.getByRole('button', {name: /Actions/}));
 
     const popover = container.querySelector('[popover]');
-    expect(popover?.getAttribute('style')).toContain(
-      'position-area: self-block-end span-self-inline-end',
-    );
+    expect(popover?.className).toContain('useLayer__styles.sideBelow');
+    expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
   });
 
   it('caps default and custom widths to the available viewport', () => {
@@ -944,7 +945,7 @@ describe('DropdownMenu', () => {
         'DropdownMenu__styles.popoverCustomIntrinsicWidth',
       );
       expect(popover?.getAttribute('style')).toContain(menuWidth);
-      expect(popover?.className).toContain('useLayer__styles.gutterInlineEnd');
+      expect(popover?.className).toContain('useLayer__styles.alignInlineStart');
       expect(popover?.getAttribute('style')).not.toContain(`min(${menuWidth},`);
     },
   );
@@ -1038,6 +1039,26 @@ describe('DropdownMenu', () => {
       'aria-expanded',
       'false',
     );
+  });
+
+  it('notifies onOpenChange once when closing an open menu by clicking the trigger', async () => {
+    const user = userEvent.setup();
+    const handleOpenChange = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+        onOpenChange={handleOpenChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(handleOpenChange.mock.calls).toEqual([[true]]);
+
+    await user.click(trigger);
+    expect(handleOpenChange.mock.calls).toEqual([[true], [false]]);
   });
 
   it('restores focus to the trigger after keyboard dismissal', async () => {
@@ -3684,6 +3705,10 @@ describe('DropdownMenu press model', () => {
 
   it('under a coarse pointer a finger opens the menu as it presses the trigger (no scroll view), and a slide picks', () => {
     stubCoarsePointer();
+    // The press model alone: jsdom never ends the grow, so its input hold
+    // would hold this gesture to its end.
+    vi.mocked(holdInput).mockImplementation(() => () => {});
+    onTestFinished(() => vi.mocked(holdInput).mockRestore());
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
@@ -4120,6 +4145,10 @@ describe('DropdownMenu press model', () => {
 
     it('coarse primary pointer: a finger opens the menu once, as it presses, and it closes once at a pick (module AR5)', () => {
       stubCoarsePointer();
+      // The press model alone: jsdom never ends the grow, so its input hold
+      // would hold this gesture to its end.
+      vi.mocked(holdInput).mockImplementation(() => () => {});
+      onTestFinished(() => vi.mocked(holdInput).mockRestore());
       const {trigger, onOpenChange, onPick} = renderCountingMenu();
       fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});
@@ -4510,17 +4539,20 @@ describe('DropdownMenu focus return after a pointer pick', () => {
       expect(focus.mock.calls.at(-1)).toEqual([{preventScroll: true}]);
     });
 
-    it('clears a ring the browser already drew before refocusing after a pointer pick', async () => {
+    it('returns focus without a ring after a pointer pick, before the browser can draw one', async () => {
       const user = userEvent.setup();
       const trigger = renderCustomMenu();
       await user.click(trigger);
-      // WebKit's own popover focus restoration can focus the trigger, with a
-      // ring, before the menu moves focus, and focusing the focused element
-      // changes nothing.
+      // The browser's own popover focus restoration focuses the trigger, with
+      // a ring, while focus is still inside the closing popover. The menu
+      // returns focus as it starts to close, so that restore has nothing to do.
       const hidePopover = HTMLElement.prototype.hidePopover;
       HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        const hadFocus = this.contains(document.activeElement);
         hidePopover.call(this);
-        trigger.focus();
+        if (hadFocus) {
+          trigger.focus();
+        }
       });
       const matches = HTMLElement.prototype.matches;
       vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
@@ -4528,19 +4560,16 @@ describe('DropdownMenu focus return after a pointer pick', () => {
         selector: string,
       ) {
         return selector === ':focus-visible'
-          ? this === trigger
+          ? this === trigger && document.activeElement === trigger
           : matches.call(this, selector);
       });
       const blur = vi.spyOn(trigger, 'blur');
       const focus = vi.spyOn(trigger, 'focus');
       await user.click(item('Edit'));
-      expect(blur).toHaveBeenCalledTimes(1);
+      expect(blur).not.toHaveBeenCalled();
       expect(focus.mock.calls.at(-1)).toEqual([
         {preventScroll: true, focusVisible: false},
       ]);
-      expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
-        focus.mock.invocationCallOrder.at(-1) ?? 0,
-      );
       expect(trigger).toHaveFocus();
     });
   });

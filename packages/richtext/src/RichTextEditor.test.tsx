@@ -364,7 +364,8 @@ describe('RichTextEditor', () => {
   it('renders a labelled editable textbox', () => {
     render(<RichTextEditor label="Notes" />);
     const textbox = screen.getByRole('textbox', {name: 'Notes'});
-    const label = screen.getByText('Notes');
+    // The label text sits in a direction span inside the label element.
+    const label = screen.getByText('Notes').parentElement!;
 
     expect(textbox).toBeInTheDocument();
     expect(textbox).toHaveAttribute('contenteditable', 'true');
@@ -561,7 +562,11 @@ describe('RichTextEditor', () => {
     const statusButton = screen.getByRole('button', {
       name: /error details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    // The status tooltip's layer mounts at its first show; until then a
+    // hidden copy of its text describes the field.
+    const tooltip = document.getElementById(
+      statusButton.getAttribute('aria-describedby') ?? '',
+    ) as HTMLElement;
     const textbox = screen.getByRole('textbox');
     expect(statusButton).toHaveAttribute('type', 'button');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);

@@ -18,7 +18,7 @@ const anatomy = [
     name: 'Icon-rendered start icon',
     required: false,
     description:
-      'Optional leading semantic icon or icon component rendered through Icon.',
+      'Optional leading icon, by built-in meaning or icon component, rendered through Icon.',
   },
   {
     name: 'Caller-rendered start content',
@@ -43,6 +43,12 @@ const anatomy = [
     required: false,
     description:
       'Shared clear action that removes the selected item when hasClear is enabled.',
+  },
+  {
+    name: 'Status icon',
+    required: false,
+    description:
+      'Error, warning, or success icon at the end of the input. With statusVariant tooltip it is a button that reveals the status message.',
   },
   {
     name: 'Popup surface',
@@ -287,7 +293,7 @@ export const docs = {
     {
       name: 'startIcon',
       type: 'ReactNode | IconType',
-      description: 'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+      description: 'Icon displayed at the start of the input; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'containerXstyle',

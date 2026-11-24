@@ -7,7 +7,12 @@
  */
 import type {ReactNode} from 'react';
 import type {TableColumn} from './types';
+import {sharedWeakMap} from '../utils/sharedRealm';
 const heightSafe = new WeakMap<object, boolean>();
+const fallbackReasons = sharedWeakMap<object, string>(
+  'table/table-column-admission/fallback-reasons',
+  1,
+);
 const logicalRenderers = new WeakMap<
   object,
   (logicalIndex: number) => ReactNode
@@ -22,6 +27,24 @@ export function registerFixedHeightColumn<T extends Record<string, unknown>>(
   if (renderLogicalPosition != null) {
     logicalRenderers.set(column, renderLogicalPosition);
   }
+}
+
+/**
+ * Names why a first-party column keeps Table from windowing its rows, for the
+ * development warning. Without one, the warning reads as a caller's renderCell.
+ */
+export function registerWindowFallbackReason<T extends Record<string, unknown>>(
+  column: TableColumn<T>,
+  reason: string,
+): void {
+  fallbackReasons.set(column, reason);
+}
+
+/** The reason a first-party column keeps Table from windowing, if it has one. */
+export function getWindowFallbackReason<T extends Record<string, unknown>>(
+  column: TableColumn<T>,
+): string | undefined {
+  return fallbackReasons.get(column);
 }
 
 /**

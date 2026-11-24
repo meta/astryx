@@ -32,7 +32,9 @@ import React, {
   useTransition,
   type ReactNode,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
+import {withTextDirection} from '../utils/textDirection';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
@@ -1447,6 +1449,8 @@ export function Selector<T extends SelectorOptionType>(
   // Explicit placement opts out of the selector-specific overlay behavior and
   // uses the standard layer positioning API instead.
   const shouldOverlaySelectedItem = placement == null && !hasSearch;
+  // Written below, once the overlay margin hook has run.
+  const remeasureOverlayRef = useRef<(() => void) | null>(null);
   const surface = useSelectorPresentation({
     presentation,
     onHide: handleLayerHide,
@@ -1469,6 +1473,11 @@ export function Selector<T extends SelectorOptionType>(
       // The overlay margin moves the list after the show, so the overlay
       // writes the entrance's side once it has moved.
       writesEntranceSide: shouldOverlaySelectedItem,
+      // A scroll stop can flip the list, and the overlay margin depends on
+      // the side.
+      onPlacedAfresh: shouldOverlaySelectedItem
+        ? () => remeasureOverlayRef.current?.()
+        : undefined,
     },
   });
   const {popover} = surface;
@@ -1551,14 +1560,18 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
-    useSelectedItemOverlayMargin({
-      isOpen: popover.isOpen && shouldOverlaySelectedItem,
-      selectedItemIndex,
-      listboxId,
-      listboxRef,
-      anchorRef,
-    });
+  const {
+    marginBlockStart: rawMarginBlockStart,
+    isPositioned: rawIsPositioned,
+    remeasure: remeasureOverlay,
+  } = useSelectedItemOverlayMargin({
+    isOpen: popover.isOpen && shouldOverlaySelectedItem,
+    selectedItemIndex,
+    listboxId,
+    listboxRef,
+    anchorRef,
+  });
+  useCommittedRefInto(remeasureOverlayRef, remeasureOverlay);
 
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
@@ -2450,7 +2463,7 @@ export function Selector<T extends SelectorOptionType>(
               ref={statusTooltip.ref}
               type="button"
               aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
-              aria-describedby={statusTooltip.describedBy}
+              aria-describedby={statusTooltip.describedBy || undefined}
               {...keepOpenProps}
               onClick={e => e.stopPropagation()}
               {...stylex.props(
@@ -2499,7 +2512,8 @@ export function Selector<T extends SelectorOptionType>(
 
       {selectionSurface}
 
-      {showStatusTooltip && statusTooltip.renderTooltip(status?.message ?? '')}
+      {showStatusTooltip &&
+        statusTooltip.renderTooltip(withTextDirection(status?.message ?? ''))}
 
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

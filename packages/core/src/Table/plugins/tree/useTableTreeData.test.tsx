@@ -802,6 +802,56 @@ describe('useTableTreeData — treeColumnKey', () => {
   });
 });
 
+describe('useTableTreeData — default tree cell text', () => {
+  interface EventRow extends Record<string, unknown> {
+    id: string;
+    when: Date;
+    children?: EventRow[];
+  }
+  const rows: EventRow[] = [
+    {
+      id: 'broken',
+      when: new Date('not a date'),
+      children: [{id: 'nested', when: new Date('2024-01-01T00:00:00Z')}],
+    },
+    {id: 'valid', when: new Date('2024-03-01T00:00:00Z')},
+  ];
+
+  function EventTree() {
+    const {visibleData, treeConfig} = useTableTreeState<EventRow>({
+      data: rows,
+      idKey: 'id',
+      defaultExpandedIds: ['broken'],
+    });
+    const tree = useTableTreeData(treeConfig);
+    return (
+      <Table
+        data={visibleData}
+        columns={[
+          {key: 'when', header: 'When'},
+          {key: 'id', header: 'ID'},
+        ]}
+        idKey="id"
+        plugins={{tree}}
+      />
+    );
+  }
+
+  it('renders the tree column like a plain column: empty for an Invalid Date, ISO text for a valid one', () => {
+    render(<EventTree />);
+
+    const brokenCell = within(getRowByText('broken')).getAllByRole('cell')[0];
+    expect(brokenCell).not.toHaveTextContent('Invalid Date');
+    expect(brokenCell).not.toHaveTextContent(/\d/);
+    expect(
+      within(getRowByText('nested')).getAllByRole('cell')[0],
+    ).toHaveTextContent('2024-01-01T00:00:00.000Z');
+    expect(
+      within(getRowByText('valid')).getAllByRole('cell')[0],
+    ).toHaveTextContent('2024-03-01T00:00:00.000Z');
+  });
+});
+
 // =============================================================================
 // Lazy loading
 // =============================================================================

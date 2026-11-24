@@ -25,9 +25,10 @@ import {
   ESBUILD_MISSING,
   findEsbuild,
 } from '../../foundation/render/esbuild-dependency.mjs';
-import {RenderError, renderPage} from '../../foundation/render/render-page.mjs';
+import {CARRY_ATTR, RenderError, renderPage} from '../../foundation/render/render-page.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {pageDom, pageDrawn, pageTasks, pageWaitFor} from '../../test-utils/page-dom.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -80,7 +81,7 @@ const LABEL = `export const label = (n: number): string => \`Clicked \${n} times
 /** The page's script: the last script element, after the embedded source. @param {string} file */
 const scriptOf = file =>
   file.slice(
-    file.lastIndexOf('-->\n<script>') + '-->\n<script>'.length,
+    file.lastIndexOf('-->\n<script type="module">') + '-->\n<script type="module">'.length,
     file.lastIndexOf('</script>'),
   );
 
@@ -119,7 +120,7 @@ describe("a render, which carries the page's script", () => {
     expect(html).toContain(`<body><div id="${ROOT_ID}">`);
     expect(html).toContain(`#${ROOT_ID}{display:contents}`);
     const block = html.indexOf(`<script type="${SOURCE_TYPE}">`);
-    const script = html.lastIndexOf('-->\n<script>');
+    const script = html.lastIndexOf('-->\n<script type="module">');
     expect(block).toBeGreaterThan(0);
     expect(script).toBeGreaterThan(block);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
@@ -190,18 +191,87 @@ describe("a render, which carries the page's script", () => {
     expect(stdout).toMatch(/^Export it again: .* --out counter\.html$/m);
   }, 120_000);
 
+  it('keeps a classic script for a page that bundles a CommonJS module that does not ask for strict mode, and the page still works', async () => {
+    put(
+      'src/sloppy/count.js',
+      `// Written for sloppy mode: it assigns a name it never declares.
+module.exports = function next(n) {
+  counted = n + 1;
+  return counted;
+};
+`,
+    );
+    put(
+      'src/sloppy/page.tsx',
+      `import {useState} from 'react';
+import next from './count.js';
+export default function Page() {
+  const [n, setN] = useState(0);
+  return <button type="button" onClick={() => setN(next(n))}>Count {n}</button>;
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/sloppy/page.tsx', {cwd: dir, out: 'sloppy.html'});
+    const file = read('sloppy.html');
+    // A module script would run the module in strict mode, where the write throws.
+    expect(file).not.toContain('<script type="module">');
+    expect(file.slice(file.lastIndexOf('-->\n<script>'))).toMatch(/^-->\n<script>[^<]/);
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
+    const button = /** @type {HTMLButtonElement} */ (dom.window.document.querySelector(`#${ROOT_ID} button`));
+    button.click();
+    await pageWaitFor(() => expect(button.textContent).toBe('Count 1'));
+    dom.window.close();
+  }, 120_000);
+
+  it('keeps a classic script for a page that bundles a package written for sloppy mode, or one that reads document.currentScript', async () => {
+    put('node_modules/sloppy-count/package.json', JSON.stringify({name: 'sloppy-count', main: 'index.js'}));
+    put('node_modules/sloppy-count/index.js', 'module.exports = function next(n) { counted = n + 1; return counted; };\n');
+    put('node_modules/script-base/package.json', JSON.stringify({name: 'script-base', type: 'module', exports: './index.js'}));
+    put(
+      'node_modules/script-base/index.js',
+      "'use strict';\nexport const base = () => globalThis.document?.currentScript?.getAttribute('data-base') ?? 'none';\n",
+    );
+    for (const [name, page] of /** @type {const} */ ([
+      ['pkg-sloppy', `import next from 'sloppy-count';
+export default function Page() { return <button type="button" onClick={() => next(1)}>Go</button>; }
+import '@astryxdesign/core/astryx.css';
+`],
+      ['pkg-current', `import {base} from 'script-base';
+const at = base();
+export default function Page() { return <p>{at}</p>; }
+import '@astryxdesign/core/astryx.css';
+`],
+    ])) {
+      put(`src/${name}/page.tsx`, page);
+      await render(`src/${name}/page.tsx`, {cwd: dir, out: `${name}.html`});
+      const file = read(`${name}.html`);
+      expect(file, name).not.toContain('<script type="module">');
+      expect(file.slice(file.lastIndexOf('-->\n<script>')), name).toMatch(/^-->\n<script>[^<]/);
+    }
+  }, 120_000);
+
+  it('writes a module script for a page whose modules all run in strict mode', async () => {
+    put(
+      'src/strict/page.tsx',
+      `export default function Page() {
+  return <main>strict</main>;
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/strict/page.tsx', {cwd: dir, out: 'strict.html'});
+    expect(read('strict.html')).toContain('-->\n<script type="module">');
+  }, 120_000);
+
   it('runs in a browser: the page draws itself over its markup and its button works', async () => {
     const errors = /** @type {string[]} */ ([]);
-    const dom = new JSDOM(html, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
+    const dom = await pageDom(html);
     dom.window.addEventListener('error', e =>
       errors.push(String(/** @type {any} */ (e).message)),
     );
-    const settle = () =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const root = /** @type {HTMLElement} */ (doc.getElementById(ROOT_ID));
     expect(root.textContent).toContain('Clicked 0 times');
@@ -209,14 +279,42 @@ describe("a render, which carries the page's script", () => {
       doc.querySelector('button')
     );
     button.click();
-    await settle();
-    expect(root.textContent).toContain('Clicked 1 times');
+    await pageWaitFor(() => expect(root.textContent).toContain('Clicked 1 times'));
     button.click();
-    await settle();
-    expect(root.textContent).toContain('Clicked 2 times');
+    await pageWaitFor(() => expect(root.textContent).toContain('Clicked 2 times'));
     expect(errors).toEqual([]);
     dom.window.close();
   });
+
+  it('moves to a place when a viewer that listens once the document has loaded cancels the click', async () => {
+    put(
+      'src/viewer-cancel.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [n, setN] = useState(0);
+  return (
+    <main>
+      <span id="members" />
+      <button onClick={() => setN(n + 1)}>Count {n}</button>
+      <a href="#members">Members</a>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/viewer-cancel.tsx', {cwd: dir, out: 'viewer-cancel.html'});
+    // The viewer adds its document listener from DOMContentLoaded and scrolls
+    // to the place itself, cancelling the browser's own move.
+    const viewer = `<script>document.addEventListener('DOMContentLoaded', () => document.addEventListener('click', e => { if (e.target.closest('a[href^="#"]')) e.preventDefault(); }, true));</script>`;
+    const file = read('viewer-cancel.html').replace('<head>', `<head><base href="https://viewer.test/board">${viewer}`);
+    const dom = await pageDom(file, {url: 'about:srcdoc'});
+    await pageDrawn(dom);
+    const link = [...dom.window.document.querySelectorAll('a')].find(a => a.textContent === 'Members');
+    link?.dispatchEvent(new dom.window.MouseEvent('click', {bubbles: true, cancelable: true, button: 0}));
+    await pageWaitFor(() => expect(dom.window.location.hash).toBe('#members'));
+    dom.window.close();
+  }, 120_000);
 
   it('keeps a link to a place in the page inside the file, in a frame whose address is the viewer\u2019s', async () => {
     put(
@@ -227,6 +325,7 @@ export default function Page() {
   useEffect(() => {
     const onHash = () => setHash(window.location.hash || 'top');
     window.addEventListener('hashchange', onHash);
+    setHash('listening');
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   return (
@@ -259,13 +358,10 @@ import '@astryxdesign/core/astryx.css';
       '<head>',
       '<head><base href="https://viewer.test/board">',
     );
-    const dom = new JSDOM(file, {
-      url: 'about:srcdoc',
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const dom = await pageDom(file, {url: 'about:srcdoc'});
     const doc = dom.window.document;
+    // The page hears hashchange once its effect has run.
+    await pageWaitFor(() => expect(doc.getElementById('hash')?.textContent).toBe('listening'));
     const click = (/** @type {string} */ text) => {
       const link = [...doc.querySelectorAll('a')].find(
         a => a.textContent === text,
@@ -285,7 +381,7 @@ import '@astryxdesign/core/astryx.css';
     /** @type {any} */ (dom.window).stillHere = true;
     const entries = dom.window.history.length;
     expect(click('All').defaultPrevented).toBe(true);
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#');
     expect(/** @type {any} */ (dom.window).stillHere).toBe(true);
     // A new place adds a history entry, as in a tab, so Back stays in the file.
@@ -293,11 +389,11 @@ import '@astryxdesign/core/astryx.css';
     // A link whose handler stops the click on its way still moves inside the
     // file, and the card around it never hears the click.
     expect(click('Stopped').defaultPrevented).toBe(true);
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#big');
-    expect(doc.getElementById('hash')?.textContent).toBe('#big');
+    await pageWaitFor(() => expect(doc.getElementById('hash')?.textContent).toBe('#big'));
     expect(click('Big only').defaultPrevented).toBe(true);
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#big');
     expect(doc.getElementById('hash')?.textContent).toBe('#big');
     // A link whose handler stops the click and cancels it without
@@ -308,38 +404,38 @@ import '@astryxdesign/core/astryx.css';
       '<a id="rv" href="#café" onclick="event.stopPropagation(); event.returnValue = false">Return value</a>';
     click('False');
     click('Return value');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#big');
     // The same link again is a move to the same place, still inside the file.
     expect(click('Big only').defaultPrevented).toBe(true);
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#big');
     // An id the address encodes, and one that is not encoded text.
     click('Café');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.hash).toBe('#caf%C3%A9');
     expect(click('Café').defaultPrevented).toBe(true);
     click('Hundred');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#100%');
     click('Big only');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.hash).toBe('#big');
     // A link whose own handler clicks another element first still moves
     // inside the file once its own click reaches the window.
     click('Big only');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(click('Open then go').defaultPrevented).toBe(true);
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href).toBe('about:srcdoc#caf%C3%A9');
     click('Big only');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     // A listener the page adds on the window after the file's script still
     // cancels the move.
     const cancel = (/** @type {Event} */ e) => e.preventDefault();
     dom.window.addEventListener('click', cancel);
     click('All');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.hash).toBe('#big');
     dom.window.removeEventListener('click', cancel);
     // A handler the page adds on the document after the file's script still
@@ -347,17 +443,16 @@ import '@astryxdesign/core/astryx.css';
     const stop = (/** @type {Event} */ e) => e.preventDefault();
     doc.addEventListener('click', stop);
     click('All');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.hash).toBe('#big');
     doc.removeEventListener('click', stop);
     click('All');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    await pageTasks(dom);
     expect(dom.window.location.href.startsWith('about:srcdoc')).toBe(true);
     expect(dom.window.location.hash).toBe('');
     // A link the page handles itself keeps its own way.
     click('Own');
-    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
-    expect(doc.getElementById('hash')?.textContent).toBe('handled');
+    await pageWaitFor(() => expect(doc.getElementById('hash')?.textContent).toBe('handled'));
     expect(dom.window.location.hash).toBe('');
     dom.window.close();
   }, 120_000);
@@ -405,15 +500,12 @@ import '@astryxdesign/core/astryx.css';
     );
     const painted = new JSDOM(markup).window.document.querySelector('input');
     expect(painted?.hasAttribute('autofocus')).toBe(false);
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
     const input = dom.window.document.querySelector(
       'input[aria-label="Search"]',
     );
-    expect(dom.window.document.activeElement).toBe(input);
+    await pageWaitFor(() => expect(dom.window.document.activeElement).toBe(input));
     dom.window.close();
   });
 
@@ -454,13 +546,8 @@ import '@astryxdesign/core/astryx.css';
     expect(markup).toContain(
       '<a href="https://example.com/self" target="_self">Self</a>',
     );
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    const settle = () =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    await settle();
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const sent = () => doc.getElementById('sent')?.textContent;
     const docs = /** @type {HTMLAnchorElement} */ (
@@ -474,8 +561,7 @@ import '@astryxdesign/core/astryx.css';
     expect(docs.getAttribute('target')).toBe('_blank');
     expect(docs.getAttribute('rel')).toBe('noopener noreferrer');
     /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
-    await settle();
-    expect(sent()).toBe('empty');
+    await pageWaitFor(() => expect(sent()).toBe('empty'));
     doc.querySelector('input[aria-label="Search"]')?.dispatchEvent(
       new dom.window.KeyboardEvent('keydown', {
         key: 'Enter',
@@ -483,8 +569,7 @@ import '@astryxdesign/core/astryx.css';
         cancelable: true,
       }),
     );
-    await settle();
-    expect(sent()).toBe('searched');
+    await pageWaitFor(() => expect(sent()).toBe('searched'));
     dom.window.close();
   }, 120_000);
 
@@ -523,23 +608,21 @@ import '@astryxdesign/core/astryx.css';
     );
     await render('src/shots.tsx', {cwd: dir, out: 'shots.html'});
     const file = read('shots.html');
-    const script = file.slice(file.lastIndexOf('<script>'));
+    const script = file.slice(file.lastIndexOf('<script type="module">'));
     const data = png.toString('base64');
     // The carried image is in the markup per image shown and once in the
     // embedded source; the one the source leaves out keeps its own copy.
     expect(script).not.toContain(data);
     expect(script.split(other.toString('base64')).length - 1).toBe(1);
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    // The script drew the page: only it sets the marker.
-    expect(
-      dom.window.document
-        .querySelector(`#${ROOT_ID} main`)
-        ?.getAttribute('data-drawn'),
-    ).toBe('yes');
+    const dom = await pageDom(file);
+    // The script drew the page: only its effect sets the marker.
+    await pageWaitFor(() =>
+      expect(
+        dom.window.document
+          .querySelector(`#${ROOT_ID} main`)
+          ?.getAttribute('data-drawn'),
+      ).toBe('yes'),
+    );
     const shown = [
       ...dom.window.document.querySelectorAll(`#${ROOT_ID} img`),
     ].map(img => img.getAttribute('src'));
@@ -574,11 +657,15 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/pictured.tsx', {cwd: dir, out: 'pictured.html'});
-    const dom = new JSDOM(read('pictured.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    // The script reads the image from the first paint: the file holds its
+    // data: URI only where the markup shows it; the embedded source keeps
+    // its own copy for --reverse.
+    const html = read('pictured.html');
+    const pageScript = html.slice(html.lastIndexOf('<script type="module">'));
+    expect(pageScript).not.toContain('data:image/png');
+    expect(html.split('data:image/png;base64,').length - 1).toBe(3);
+    const dom = await pageDom(html);
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const photo = doc.querySelector(`#${ROOT_ID} img[alt="Photo"]`);
     const sharp = doc.querySelector(`#${ROOT_ID} img[alt="Sharp"]`);
@@ -588,7 +675,365 @@ import '@astryxdesign/core/astryx.css';
     );
     // The script drew them: they are not the first paint's elements.
     expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('./photo.png');
+    expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain(CARRY_ATTR);
     dom.window.close();
+    // The first paint's own attribute is the render's: the page comes back
+    // exactly, with no change reported.
+    const back = /** @type {any} */ (await render('pictured.html', {cwd: dir, reverse: true, out: 'pictured-back/pictured.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: false});
+    expect(read('pictured-back/pictured.tsx')).not.toContain(CARRY_ATTR);
+  }, 120_000);
+
+  it('reads each local image of a srcset the code builds from the first paint, so the file holds it once', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/pair/a.png', Buffer.concat([png, Buffer.from([1])]));
+    put('src/pair/b.png', Buffer.concat([png, Buffer.from([2])]));
+    put(
+      'src/pair/page.tsx',
+      `const a = './a.png';
+const b = './b.png';
+export default function Page() {
+  return (
+    <main>
+      <img srcSet={\`\${a} 1x, \${b} 2x\`} alt="Pair" />
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/pair/page.tsx', {cwd: dir, out: 'pair.html'});
+    const file = read('pair.html');
+    const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([png, Buffer.from([n])]).toString('base64')}`;
+    // Each image's data: URI is in the file once, in the first paint's
+    // srcset; the embedded source keeps its own copy for --reverse.
+    for (const n of [1, 2]) expect(file.split(dataOf(n)).length - 1, String(n)).toBe(1);
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
+    const drawn = dom.window.document.querySelector(`#${ROOT_ID} img[alt="Pair"]`)?.getAttribute('srcset');
+    expect(drawn).toBe(`${dataOf(1)} 1x, ${dataOf(2)} 2x`);
+    dom.window.close();
+  }, 120_000);
+
+  it('reads no candidate from a whole src that holds a comma and a space, so a later image of a name inside it keeps its own data', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/comma/Logo, dark.png', Buffer.concat([png, Buffer.from([1])]));
+    put('src/comma/dark.png', Buffer.concat([png, Buffer.from([2])]));
+    put(
+      'src/comma/page.tsx',
+      `import {useState} from 'react';
+const DARK = 'dark.png';
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <img src="./Logo, dark.png" alt="Logo" />
+      <noscript><img src="dark.png" alt="Fallback" /></noscript>
+      <button onClick={() => setOpen(true)}>Show</button>
+      {open && <img src={DARK} alt="Later" />}
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/comma/page.tsx', {cwd: dir, out: 'comma.html'});
+    const file = read('comma.html');
+    expect(file).not.toContain('__astryxCandidate');
+    const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([png, Buffer.from([n])]).toString('base64')}`;
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
+    const doc = dom.window.document;
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Logo"]`)?.getAttribute('src')).toBe(dataOf(1));
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await pageWaitFor(() => expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(dataOf(2)));
+    dom.window.close();
+  }, 120_000);
+
+  it('reads the last rewrite of a name that a srcSet names first and a src names after, as the page without marks does', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/order/Logo, dark.png', png);
+    // With `dark.png` there too, the srcSet rewrites to `./Logo, data:…`
+    // first, and the src's later rewrite must win.
+    put('src/order/dark.png', Buffer.concat([png, Buffer.from([7])]));
+    put(
+      'src/order/page.tsx',
+      `import {useState} from 'react';
+const LOGO = './Logo, dark.png';
+export default function Page() {
+  const [n, setN] = useState(0);
+  return (
+    <main>
+      <img srcSet={LOGO} alt="Set" />
+      <img src={LOGO} alt="Logo" />
+      <button onClick={() => setN(n + 1)}>Again {n}</button>
+      {n > 0 && <img src={LOGO} alt="Later" />}
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/order/page.tsx', {cwd: dir, out: 'order.html'});
+    const data = `data:image/png;base64,${png.toString('base64')}`;
+    const dom = await pageDom(read('order.html'));
+    await pageDrawn(dom);
+    const doc = dom.window.document;
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Logo"]`)?.getAttribute('src')).toBe(data);
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await pageWaitFor(() => expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(data));
+    dom.window.close();
+  }, 120_000);
+
+  it('marks nothing after markup a serializer never writes, so every later image keeps its own copy', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/gate/before.png', png);
+    put('src/gate/after.png', Buffer.concat([png, Buffer.from([1])]));
+    const shapes = {
+      // An end tag for an element open below an svg root, and
+      // </foreignObject> with a <span> open.
+      'svg-unclosed': '<svg><rect width="1" height="1"/>',
+      'span-in-foreign': '<svg><foreignObject><span></foreignObject></span></foreignObject></svg>',
+      'stray-end': '<b>bold</i></b>',
+      cdata: '<svg><![CDATA[ a ]]></svg>',
+      'bogus-comment': '<?x ?>',
+      'self-closing-html': '<span/>text',
+      frameset: '<frameset></frameset>',
+      plaintext: '<plaintext>',
+      // A comment a browser ends at --!>, and a start tag inside a select
+      // that Firefox reads its own way.
+      'comment-bang': '<!-- note --!><textarea> --><img src="./after.png"><!-- </textarea> -->',
+      'select-xmp': '<select><xmp><textarea></xmp></select><img src="./after.png"></textarea>',
+      // A browser running scripts reads a noscript's content as text up to
+      // the first </noscript, here inside the style the scanner reads.
+      'noscript-end-in-style': '<noscript><style></noscript><textarea></style></noscript><img src="./after.png"><textarea></textarea>',
+    };
+    for (const [name, html] of Object.entries(shapes)) {
+      put(
+        `src/gate/${name}.tsx`,
+        `export default function Page() {
+  return (
+    <main>
+      <img src="./before.png" alt="Before" />
+      <div dangerouslySetInnerHTML={{__html: ${JSON.stringify(html)}}} />
+      <img src="./after.png" alt="After" />
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+      );
+      await render(`src/gate/${name}.tsx`, {cwd: dir, out: `gate-${name}.html`});
+      const file = read(`gate-${name}.html`);
+      const tag = (/** @type {string} */ alt) => file.match(new RegExp(`<img[^>]*alt="${alt}"[^>]*>`))?.[0] ?? '';
+      // The inner HTML's own image of after.png carries no mark either.
+      expect(file.match(new RegExp(`<img[^>]*${CARRY_ATTR}="[^"]*src:1`)), name).toBeNull();
+      // Before the shape the scanner and a browser agree: the mark stays.
+      expect(tag('Before'), name).toContain(CARRY_ATTR);
+      // After it nothing is marked.
+      if (name !== 'plaintext') expect(tag('After'), name).not.toContain(CARRY_ATTR);
+    }
+  }, 240_000);
+
+  it('keeps an image that a longer string or a <noscript> names, once the script draws the page', async () => {
+    put(
+      'src/shapes/photo.png',
+      Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64'),
+    );
+    put(
+      'src/shapes/page.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <img src="./photo.png" alt="Plain" />
+      <div data-k="inner" dangerouslySetInnerHTML={{__html: '<img src="./photo.png" alt="Inner">'}} />
+      <div data-k="css" style={{backgroundImage: 'url("./photo.png")', width: 4, height: 4}} />
+      <div data-k="bare" style={{backgroundImage: 'url(./photo.png)', width: 4, height: 4}} />
+      <noscript><img src="./photo.png" alt="Fallback" /></noscript>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    put(
+      'src/shapes/nested-template.tsx',
+      `const PATH = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<template><template><i>inner</i></template><img src="./photo.png" alt="Kept"></template>'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    put(
+      'src/shapes/comment-textarea.tsx',
+      `const PATH = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<!-- <img src="./photo.png" alt="Old"> -->'}} />
+      <div dangerouslySetInnerHTML={{__html: '<textarea><img src="./photo.png" alt="Text"></textarea>'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    put(
+      'src/shapes/raw-elements.tsx',
+      `const PATH = './photo.png';
+const IMG = '<img src="./photo.png" alt="Quoted">';
+const SHAPES = [
+  \`<iframe>\${IMG}</iframe>\`,
+  \`<xmp>\${IMG}</xmp>\`,
+  \`<noembed>\${IMG}</noembed>\`,
+  \`<noframes>\${IMG}</noframes>\`,
+  \`<?php \${IMG} ?>\`,
+  \`<!bogus \${IMG}>\`,
+  \`</ \${IMG}>\`,
+  \`<textarea></textareas>\${IMG}</textarea>\`,
+  \`<title></titles>\${IMG}</title>\`,
+  \`<iframe></iframes>\${IMG}</iframe>\`,
+  \`<script><!--<script>\${IMG}</script>x</script>\`,
+  \`<span data-tip='\${IMG}'>tip</span>\`,
+  \`<svg><![CDATA[ a > b \${IMG} ]]></svg>\`,
+  \`<x.y title='\${IMG}'>name</x.y>\`,
+  \`<math></svg><![CDATA[ a > \${IMG} ]]></math>\`,
+  '<frame src="./photo.png">',
+  \`<select><option>Photo \${IMG}</option></select>\`,
+  \`<textarea/>\${IMG}</textarea>\`,
+  \`<iframe/>\${IMG}</iframe>\`,
+  \`<title/>\${IMG}</title>\`,
+  \`<noscript/>\${IMG}</noscript>\`,
+  \`<template/>\${IMG}</template>\`,
+  \`<svg><foreignObject><div></svg><![CDATA[ a > \${IMG} ]]></div></foreignObject></svg>\`,
+  \`<svg><foreignObject><textarea/>\${IMG}</textarea></foreignObject></svg>\`,
+  \`<svg><desc><noscript/>\${IMG}</noscript></desc></svg>\`,
+  \`<svg><title><template/>\${IMG}</template></title></svg>\`,
+  \`<math><mi><iframe/>\${IMG}</iframe></mi></math>\`,
+  \`<math><mtext><style/>\${IMG}</style></mtext></math>\`,
+  \`<svg><p><title/>\${IMG}</title></svg>\`,
+  \`<svg><foreignObject><div></foreignObject><textarea/>\${IMG}</textarea></div></foreignObject></svg>\`,
+  \`<svg><desc></svg></desc><textarea/>\${IMG}</textarea>\`,
+  \`<math><mi><svg></math><textarea/>\${IMG}</textarea>\`,
+  \`<math><annotation-xml encoding="text/html"><textarea/>\${IMG}</textarea></annotation-xml></math>\`,
+];
+export default function Page() {
+  return (
+    <main>
+      {SHAPES.map(html => <div key={html} dangerouslySetInnerHTML={{__html: html}} />)}
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    // Other bytes, so other.png's data differs from photo.png's.
+    put('src/shapes/other.png', Buffer.concat([fs.readFileSync(path.join(dir, 'src/shapes/photo.png')), Buffer.from([0])]));
+    put(
+      'src/shapes/two-src.tsx',
+      `const OTHER = './other.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<img src="./photo.png" src="./other.png" alt="Two">'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={OTHER} alt="Drawn" />}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    put(
+      'src/shapes/alt-gt.tsx',
+      `const PHOTO = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<img src="./photo.png" srcset="./photo.png 2x" alt="Step 1 > Step 2" width="72">'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={PHOTO} alt="Drawn" />}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    put(
+      'src/shapes/only-noscript.tsx',
+      `const PATH = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <noscript><img src={PATH} alt="Fallback" /></noscript>
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    for (const [page, out] of [['src/shapes/page.tsx', 'shapes.html'], ['src/shapes/only-noscript.tsx', 'only-noscript.html'], ['src/shapes/nested-template.tsx', 'nested-template.html'], ['src/shapes/comment-textarea.tsx', 'comment-textarea.html'], ['src/shapes/raw-elements.tsx', 'raw-elements.html'], ['src/shapes/two-src.tsx', 'two-src.html'], ['src/shapes/alt-gt.tsx', 'alt-gt.html']]) {
+      await render(page, {cwd: dir, out});
+    }
+    /** @param {string} file */
+    const drawn = async file => {
+      const dom = await pageDom(read(file));
+      await pageDrawn(dom);
+      const root = /** @type {Element} */ (dom.window.document.getElementById(ROOT_ID));
+      const out = {
+        plain: root.querySelector('img[alt="Plain"]')?.getAttribute('src'),
+        inner: root.querySelector('[data-k="inner"] img')?.getAttribute('src'),
+        css: root.querySelector('[data-k="css"]')?.getAttribute('style'),
+        bare: root.querySelector('[data-k="bare"]')?.getAttribute('style'),
+        drawn: root.querySelector('img[alt="Drawn"]')?.getAttribute('src'),
+      };
+      dom.window.close();
+      return out;
+    };
+    const shapes = await drawn('shapes.html');
+    expect(shapes.plain).toMatch(/^data:image\/png;base64,/);
+    expect(shapes.inner).toMatch(/^data:image\/png;base64,/);
+    expect(shapes.css).toMatch(/url\("?data:image\/png;base64,/);
+    expect(shapes.bare).toMatch(/url\("?data:image\/png;base64,/);
+    // Only the whole string "./photo.png" is read from the first paint.
+    const script = read('shapes.html').slice(read('shapes.html').lastIndexOf('-->\n<script type="module">'));
+    expect(script).not.toMatch(/["'(]__astryxCarried\[/);
+    expect(script).toContain('__astryxCarried[0]');
+    const onlyNoscript = await drawn('only-noscript.html');
+    expect(onlyNoscript.drawn).toMatch(/^data:image\/png;base64,/);
+    // An image inside a <template> that holds another <template> carries
+    // nothing the script can read either.
+    const nested = await drawn('nested-template.html');
+    expect(nested.drawn).toMatch(/^data:image\/png;base64,/);
+    // Nor does one inside a comment or a <textarea>'s text.
+    const quoted = await drawn('comment-textarea.html');
+    expect(quoted.drawn).toMatch(/^data:image\/png;base64,/);
+    // Nor inside <iframe>, <xmp>, <noembed> or <noframes> text, past a longer
+    // end tag (</textareas>), in a script's escaped text, inside another
+    // attribute's value, in a bogus comment (<?…>, <!…>, </ …>), inside a
+    // <select>, after a self-closing raw-text or template tag a browser
+    // opens anyway, or in CDATA a browser still reads as such.
+    expect(read('raw-elements.html')).not.toContain(CARRY_ATTR);
+    const raw = await drawn('raw-elements.html');
+    expect(raw.drawn).toMatch(/^data:image\/png;base64,/);
+    // With two src attributes, only the first, the one a browser keeps, is
+    // carried: the script's ./other.png keeps its own data.
+    expect(read('two-src.html')).toContain(`${CARRY_ATTR}="src:0"`);
+    expect(read('two-src.html')).not.toContain('src:1');
+    const two = await drawn('two-src.html');
+    expect(two.drawn).toMatch(/^data:image\/png;base64,/);
+    // An element's marks come once, after its last attribute, even when a
+    // value before them holds a '>'.
+    expect(read('alt-gt.html')).toMatch(new RegExp(`alt="Step 1 > Step 2" width="72" ${CARRY_ATTR}="src:0 srcset:1"`));
+    const altGt = await drawn('alt-gt.html');
+    expect(altGt.drawn).toMatch(/^data:image\/png;base64,/);
   }, 120_000);
 
   it("keeps a theme's rules for a part Core draws only after a click, and the part shows them", async () => {
@@ -621,18 +1066,12 @@ export default function Notice() {
     expect(renderedMarkupOf(file)).not.toContain('astryx-banner-icon');
     expect(file).toContain('.astryx-banner-icon{outline-style:dotted}');
     expect(file).not.toContain('.astryx-never-a-part');
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    const settle = () =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    await settle();
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
     const doc = dom.window.document;
     /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
-    await settle();
+    await pageWaitFor(() => expect(doc.querySelector(`#${ROOT_ID} .astryx-banner-icon`)).not.toBeNull());
     const icon = doc.querySelector(`#${ROOT_ID} .astryx-banner-icon`);
-    expect(icon).not.toBeNull();
     expect(
       dom.window.getComputedStyle(/** @type {Element} */ (icon)).outlineStyle,
     ).toBe('dotted');
@@ -657,11 +1096,8 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('site/src/shoe.tsx', {cwd: dir, out: 'shoe.html'});
-    const dom = new JSDOM(read('shoe.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const dom = await pageDom(read('shoe.html'));
+    await pageDrawn(dom);
     const doc = dom.window.document;
     expect(doc.querySelector(`#${ROOT_ID} img[alt="Shoe"]`)?.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
     expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('/pics/shoe.png');
@@ -697,18 +1133,13 @@ import '@astryxdesign/core/astryx.css';
     expect(rendered.data.files).toEqual(
       expect.arrayContaining(['public/pics/later.png', 'src/near.png']),
     );
-    const dom = new JSDOM(read('drawn-later.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    const dom = await pageDom(read('drawn-later.html'));
+    await pageDrawn(dom);
     const doc = dom.window.document;
     expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
-    await settle();
+    await pageWaitFor(() => expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(2));
     const srcs = [...doc.querySelectorAll(`#${ROOT_ID} img`)].map(img => img.getAttribute('src'));
-    expect(srcs).toHaveLength(2);
     for (const src of srcs) expect(src).toMatch(/^data:image\/png;base64,/);
     dom.window.close();
     const back = /** @type {any} */ (
@@ -736,14 +1167,14 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('escaped-later/page.tsx', {cwd: dir, out: 'escaped-later.html'});
-    const dom = new JSDOM(read('escaped-later.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
-    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    const dom = await pageDom(read('escaped-later.html'));
+    await pageDrawn(dom);
     const doc = dom.window.document;
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
-    await settle();
-    expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(
-      `data:image/png;base64,${png.toString('base64')}`,
+    await pageWaitFor(() =>
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(
+        `data:image/png;base64,${png.toString('base64')}`,
+      ),
     );
     dom.window.close();
     const back = /** @type {any} */ (await render('escaped-later.html', {cwd: dir, reverse: true, out: 'escaped-later-back/page.tsx'}));
@@ -776,23 +1207,91 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('two-folders/page.tsx', {cwd: dir, out: 'two-folders.html'});
-    const dom = new JSDOM(read('two-folders.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
-    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    const dom = await pageDom(read('two-folders.html'));
+    await pageDrawn(dom);
     const doc = dom.window.document;
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
-    await settle();
     // In a browser both strings name the page folder's photo.png, so both show it.
     const page = `data:image/png;base64,${own(3).toString('base64')}`;
-    for (const alt of ['CardA', 'CardB']) {
-      expect(doc.querySelector(`#${ROOT_ID} img[alt="${alt}"]`)?.getAttribute('src')).toBe(page);
-    }
+    await pageWaitFor(() => {
+      for (const alt of ['CardA', 'CardB']) {
+        expect(doc.querySelector(`#${ROOT_ID} img[alt="${alt}"]`)?.getAttribute('src')).toBe(page);
+      }
+    });
     dom.window.close();
     // Each module's own photo.png is still carried, so a restore lays it out beside the module.
     const back = /** @type {any} */ (await render('two-folders.html', {cwd: dir, reverse: true, out: 'two-folders-back/page.tsx'}));
     expect(back.data.exact).toBe(true);
     expect(fs.readFileSync(path.join(dir, 'two-folders-back/a/photo.png'))).toEqual(own(1));
     expect(fs.readFileSync(path.join(dir, 'two-folders-back/b/photo.png'))).toEqual(own(2));
+  }, 120_000);
+
+  it('keeps every class as written and adds no alias rule with keepClassNames, which reverse refuses', async () => {
+    put(
+      'src/plain/page.tsx',
+      `import {Button} from '@astryxdesign/core/Button';
+export default function Page() {
+  return <main>{Array.from({length: 400}, (_, i) => <Button key={i} label={\`Row \${i}\`} />)}</main>;
+}
+`,
+    );
+    await render('src/plain/page.tsx', {cwd: dir, out: 'plain.html', keepClassNames: true});
+    const html = read('plain.html');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    expect(style).not.toMatch(/\._a[0-9a-z]+/);
+    const root = html.slice(html.indexOf(`<div id="${ROOT_ID}">`), html.indexOf('<script type="application/x-astryx-source"'));
+    const lists = [...root.matchAll(/<button[^>]*\sclass="([^"]*)"/g)].map(m => m[1]);
+    expect(lists).toHaveLength(400);
+    for (const list of lists) {
+      expect(list).toMatch(/^astryx-button(\s\S+)* x[0-9a-z]{5,}/);
+      expect(list).not.toMatch(/(^|\s)_a[0-9a-z]+(\s|$)/);
+    }
+    await expect(render('plain.html', {cwd: dir, reverse: true, keepClassNames: true})).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringContaining('keepClassNames applies only to rendering'),
+    });
+  }, 120_000);
+
+  it('names a repeated StyleX class list by one alias in the first paint only, and still gives the page back', async () => {
+    const PAGE_SRC = `import {Button} from '@astryxdesign/core/Button';
+export default function Page() {
+  return (
+    <main>
+      {Array.from({length: 400}, (_, i) => (
+        <Button key={i} label={\`Row \${i}\`} />
+      ))}
+    </main>
+  );
+}
+`;
+    put('src/many.tsx', PAGE_SRC);
+    await render('src/many.tsx', {cwd: dir, out: 'many.html'});
+    const html = read('many.html');
+    const root = html.slice(html.indexOf(`<div id="${ROOT_ID}">`), html.indexOf('<script type="application/x-astryx-source"'));
+    // Every button keeps its Astryx name; its StyleX classes are one alias.
+    const lists = [...root.matchAll(/<button[^>]*\sclass="([^"]*)"/g)].map(m => m[1]);
+    expect(lists).toHaveLength(400);
+    expect(new Set(lists).size).toBe(1);
+    expect(lists[0]).toMatch(/^astryx-button(\s\S+)* _a[0-9a-z]+$/);
+    expect(lists[0]).not.toMatch(/\sx[0-9a-z]{5,}/);
+    const alias = /** @type {string} */ (lists[0].split(' ').at(-1));
+    expect(html).toContain(`.${alias}`);
+    // The script draws its own buttons with StyleX's classes.
+    const dom = await pageDom(html);
+    await pageDrawn(dom);
+    const drawn = dom.window.document.querySelector(`#${ROOT_ID} button`)?.getAttribute('class') ?? '';
+    expect(drawn).not.toContain(alias);
+    expect(drawn).toMatch(/\sx[0-9a-z]{5,}/);
+    dom.window.close();
+    // The page comes back exactly, with no change reported.
+    const back = /** @type {any} */ (await render('many.html', {cwd: dir, reverse: true, out: 'many-back/many.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: false});
+    expect(read('many-back/many.tsx')).toBe(PAGE_SRC);
+    // Without its embedded source, the rebuild still finds the buttons.
+    put('many-stripped.html', html.replace(/<script type="application\/x-astryx-source">[\s\S]*?<\/script>/, ''));
+    const rebuilt = /** @type {any} */ (await render('many-stripped.html', {cwd: dir, reverse: true}));
+    expect(rebuilt.data.mode).toBe('rebuilt');
+    expect(rebuilt.data.components).toContain('Button');
   }, 120_000);
 
   it("keeps the first paint when the page's script throws", async () => {
@@ -814,12 +1313,15 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/throws.tsx', {cwd: dir, out: 'throws.html'});
-    const dom = new JSDOM(read('throws.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-      virtualConsole: new VirtualConsole(),
+    // React reports the error its boundary caught on the console.
+    let thrown = false;
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('error', () => {
+      thrown = true;
     });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const dom = await pageDom(read('throws.html'), {virtualConsole});
+    // The effect throws after React draws: read the page once it has.
+    await pageWaitFor(() => expect(thrown).toBe(true));
     const root = dom.window.document.getElementById(ROOT_ID);
     expect(root?.textContent).toContain('Saved notes');
     expect(root?.textContent).toContain('Kept on screen');
@@ -845,18 +1347,14 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/copy.tsx', {cwd: dir, out: 'copy.html'});
-    const settle = (/** @type {any} */ dom) =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 100));
     /**
      * @param {boolean} works
      * @param {(window: any) => void} [frame] what the frame gives the page
      */
-    const open = (works, frame) => {
+    const open = async (works, frame) => {
       /** @type {string[]} */
       const copied = [];
-      const dom = new JSDOM(read('copy.html'), {
-        runScripts: 'dangerously',
-        pretendToBeVisual: true,
+      const dom = await pageDom(read('copy.html'), {
         beforeParse(window) {
           frame?.(window);
           // JSDOM has no copy command: this one fires the copy event, as a browser does.
@@ -877,28 +1375,30 @@ import '@astryxdesign/core/astryx.css';
       });
       return {dom, copied};
     };
-    const working = open(true);
-    await settle(working.dom);
+    const working = await open(true);
+    await pageDrawn(working.dom);
     const [copyButton, pasteButton] =
       working.dom.window.document.querySelectorAll('button');
     copyButton.click();
     pasteButton.click();
-    await settle(working.dom);
-    expect(working.copied).toEqual(['a,b\n1,2']);
-    expect(
-      working.dom.window.document.getElementById('status')?.textContent,
-    ).toBe('copied');
-    expect(
-      working.dom.window.document.getElementById('read')?.textContent,
-    ).toBe('NotAllowedError');
+    await pageWaitFor(() => {
+      expect(working.copied).toEqual(['a,b\n1,2']);
+      expect(
+        working.dom.window.document.getElementById('status')?.textContent,
+      ).toBe('copied');
+      expect(
+        working.dom.window.document.getElementById('read')?.textContent,
+      ).toBe('NotAllowedError');
+    });
     working.dom.window.close();
-    const refused = open(false);
-    await settle(refused.dom);
+    const refused = await open(false);
+    await pageDrawn(refused.dom);
     refused.dom.window.document.querySelector('button')?.click();
-    await settle(refused.dom);
-    expect(
-      refused.dom.window.document.getElementById('status')?.textContent,
-    ).toBe('NotAllowedError');
+    await pageWaitFor(() =>
+      expect(
+        refused.dom.window.document.getElementById('status')?.textContent,
+      ).toBe('NotAllowedError'),
+    );
     refused.dom.window.close();
     // Where the Clipboard API is there but refuses the write, or the frame's
     // policy refuses clipboard-write, the copy command copies, as Core's hook does.
@@ -931,14 +1431,15 @@ import '@astryxdesign/core/astryx.css';
         };
       },
     ]) {
-      const page = open(true, frame);
-      await settle(page.dom);
+      const page = await open(true, frame);
+      await pageDrawn(page.dom);
       page.dom.window.document.querySelector('button')?.click();
-      await settle(page.dom);
-      expect(page.copied).toEqual(['a,b\n1,2']);
-      expect(
-        page.dom.window.document.getElementById('status')?.textContent,
-      ).toBe('copied');
+      await pageWaitFor(() => {
+        expect(page.copied).toEqual(['a,b\n1,2']);
+        expect(
+          page.dom.window.document.getElementById('status')?.textContent,
+        ).toBe('copied');
+      });
       page.dom.window.close();
     }
     expect(asked).toEqual(['a,b\n1,2']);
@@ -966,21 +1467,18 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/filter.tsx', {cwd: dir, out: 'filter.html'});
-    const settle = (/** @type {any} */ dom) =>
-      new Promise(resolve => dom.window.setTimeout(resolve, 100));
     // An opaque origin, as in a frame without allow-same-origin: storage throws.
-    const blocked = new JSDOM(read('filter.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await settle(blocked);
+    const blocked = await pageDom(read('filter.html'));
+    await pageDrawn(blocked);
     const doc = blocked.window.document;
     expect(doc.getElementById('filter')?.textContent).toBe('all');
     /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
-    await settle(blocked);
-    expect(doc.getElementById('filter')?.textContent).toBe('open');
-    expect(blocked.window.localStorage.getItem('filter')).toBe('open');
-    expect(blocked.window.sessionStorage.getItem('seen')).toBe('1');
+    // The page writes storage in an effect after it draws the new filter.
+    await pageWaitFor(() => {
+      expect(doc.getElementById('filter')?.textContent).toBe('open');
+      expect(blocked.window.localStorage.getItem('filter')).toBe('open');
+      expect(blocked.window.sessionStorage.getItem('seen')).toBe('1');
+    });
     // Items read, write, list and delete as properties, as in the browser's storage.
     const stored = /** @type {any} */ (blocked.window.localStorage);
     stored.theme = 'dark';
@@ -993,189 +1491,220 @@ import '@astryxdesign/core/astryx.css';
     expect(stored.length).toBe(1);
     blocked.window.close();
     // A real origin keeps the browser's own storage.
-    const open = new JSDOM(read('filter.html'), {
+    const open = await pageDom(read('filter.html'), {
       url: 'https://example.test/',
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
     });
     const real = open.window.localStorage;
-    await settle(open);
+    await pageDrawn(open);
     expect(open.window.localStorage).toBe(real);
-    expect(real.getItem('filter')).toBe('all');
+    await pageWaitFor(() => expect(real.getItem('filter')).toBe('all'));
     open.window.close();
   }, 120_000);
 
-  it('refuses a named import its module does not export, as a build does, naming the file and line', async () => {
-    put('src/lib-x.ts', 'export const a = 1;\n');
-    put(
-      'src/no-export.tsx',
-      "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\nimport '@astryxdesign/core/astryx.css';\n",
-    );
-    const local = await errorOf(() =>
-      render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}),
-    );
-    expect(local?.code).toBe('ERR_RENDER_COMPILE');
-    expect(local?.message).toContain('(src/no-export.tsx, line 1): ./lib-x has no export b');
-    put(
-      'src/no-token.tsx',
-      "import * as stylex from '@stylexjs/stylex';\nimport {colors} from '@astryxdesign/core/theme/tokens.stylex';\nconst styles = stylex.create({p: {color: colors.text}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
-    );
-    const token = await errorOf(() =>
-      render('src/no-token.tsx', {cwd: dir, out: 'no-token.html'}),
-    );
-    expect(token?.code).toBe('ERR_RENDER_COMPILE');
-    expect(token?.message).toContain(
-      '(src/no-token.tsx, line 2): @astryxdesign/core/theme/tokens.stylex has no export colors',
-    );
-    expect(token?.message).not.toMatch(/\/home\/|\/tmp\//);
-    expect(fs.existsSync(path.join(dir, 'no-token.html'))).toBe(false);
-    put(
-      'src/no-component.tsx',
-      "import {Button, Chart, type ButtonProps} from '@astryxdesign/core';\nimport {helper, type Shape} from './lib-y';\nconst props: ButtonProps = {label: 'Go'};\nconst shape: Shape = {n: helper()};\nexport default function Page() { return <main><Button {...props} /><Chart data={[shape]} /></main>; }\n",
-    );
-    put(
-      'src/lib-y.ts',
-      'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\nimport "@astryxdesign/core/astryx.css";\n',
-    );
-    const component = await errorOf(() =>
-      render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}),
-    );
-    expect(component?.code).toBe('ERR_RENDER_COMPILE');
-    expect(component?.message).toContain(
-      '(src/no-component.tsx, line 1): @astryxdesign/core has no export Chart',
-    );
-    put(
-      'src/no-member.tsx',
-      "import {Button} from '@astryxdesign/core/Button';\nexport default function Page() {\n  return <main><Button.Icon /></main>;\n}\n",
-    );
-    const member = await errorOf(() =>
-      render('src/no-member.tsx', {cwd: dir, out: 'no-member.html'}),
-    );
-    expect(member?.code).toBe('ERR_RENDER_COMPILE');
-    expect(member?.message).toContain(
-      '(src/no-member.tsx, line 3): @astryxdesign/core/Button has no export Button.Icon',
-    );
-    put(
-      'src/types-only.tsx',
-      "import {Button, ButtonProps} from '@astryxdesign/core/Button';\nimport Y, {helper} from './lib-y';\nconst props: ButtonProps = {label: String(helper())};\nexport default function Page() { return <main><Button {...props} /><Y /></main>; }\n",
-    );
-    await render('src/types-only.tsx', {cwd: dir, out: 'types-only.html'});
-    expect(fs.existsSync(path.join(dir, 'types-only.html'))).toBe(true);
-    // A parameter or a local binding named like an import is not the import.
-    put(
-      'src/shadowed.tsx',
-      [
-        "import {Button} from '@astryxdesign/core/Button';",
-        "import {Card} from '@astryxdesign/core/Card';",
-        'const Icon = () => <i>icon</i>;',
-        'function Row({Button}: {Button: any}) { return <Button.Icon />; }',
-        'const rows = [{Button: {Icon}}];',
-        'function Lede() { const Card = {Lede: () => <b>lede</b>}; return <Card.Lede />; }',
-        'export default function Page() {',
-        '  return <Card><Button label="Go" /><Row Button={{Icon}} />{rows.map(({Button}, i) => <Button.Icon key={i} />)}<Lede /></Card>;',
-        '}',
-        '',
-      ].join('\n'),
-    );
-    await render('src/shadowed.tsx', {cwd: dir, out: 'shadowed.html'});
-    expect(fs.existsSync(path.join(dir, 'shadowed.html'))).toBe(true);
-    // A type re-exported as a type or plainly, and a file the page reads as
-    // text, are no value uses.
-    put(
-      'src/types-re.ts',
-      "import {ButtonProps} from '@astryxdesign/core/Button';\nexport type {ButtonProps};\nexport {type ButtonProps as Props};\nexport {ButtonProps as Plain};\nexport const label = 'Go';\n",
-    );
-    put(
-      'src/snippet.tsx',
-      "import {Nope} from '@astryxdesign/core';\nexport const shown = <Nope />;\n",
-    );
-    put(
-      'src/re-and-raw.tsx',
-      "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\nimport '@astryxdesign/core/astryx.css';\n",
-    );
-    await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
-    expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
-    // A CommonJS module's exports are read by interop, as a bundler reads them.
-    put('src/lib-cjs.js', 'module.exports = {a: 1};\n');
-    put(
-      'src/from-cjs.tsx',
-      "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
-    );
-    await render('src/from-cjs.tsx', {cwd: dir, out: 'from-cjs.html'});
-    expect(fs.existsSync(path.join(dir, 'from-cjs.html'))).toBe(true);
-    // In JavaScript a plain re-export names a value, so a missing one is refused.
-    put(
-      'src/lib-js.js',
-      "import {Nope} from '@astryxdesign/core';\nexport {Nope};\nexport const ok = 'ok';\n",
-    );
-    put(
-      'src/js-re.tsx',
-      "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
-    );
-    const jsRe = await errorOf(() =>
-      render('src/js-re.tsx', {cwd: dir, out: 'js-re.html'}),
-    );
-    expect(jsRe?.code).toBe('ERR_RENDER_COMPILE');
-    expect(jsRe?.message).toContain(
-      '(src/lib-js.js, line 1): @astryxdesign/core has no export Nope',
-    );
-    // A package subpath the package does not export is refused as a build
-    // refuses it, with no installed path in the message.
-    put(
-      'src/no-subpath.tsx',
-      "import {Chart} from '@astryxdesign/core/Chart';\nexport default function Page() { return <main><Chart /></main>; }\n",
-    );
-    const subpath = await errorOf(() =>
-      render('src/no-subpath.tsx', {cwd: dir, out: 'no-subpath.html'}),
-    );
-    expect(subpath?.code).toBe('ERR_RENDER_COMPILE');
-    expect(subpath?.message).toBe(
-      'The page does not compile (src/no-subpath.tsx, line 1): @astryxdesign/core has no export ./Chart',
-    );
-    put(
-      'src/no-stylex-subpath.tsx',
-      "import * as stylex from '@stylexjs/stylex';\nimport {spacing} from '@astryxdesign/core/tokens/spacing.stylex';\nconst styles = stylex.create({p: {padding: spacing.md}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
-    );
-    const stylexSubpath = await errorOf(() =>
-      render('src/no-stylex-subpath.tsx', {cwd: dir, out: 'no-stylex-subpath.html'}),
-    );
-    expect(stylexSubpath?.code).toBe('ERR_RENDER_COMPILE');
-    expect(stylexSubpath?.message).toBe(
-      'The page does not compile (src/no-stylex-subpath.tsx, line 2): @astryxdesign/core has no export ./tokens/spacing.stylex',
-    );
-    // A missing name the page calls as it loads is named as a build names it.
-    put('src/lib-load.ts', 'export const other = 1;\n');
-    put(
-      'src/load-call.tsx',
-      "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
-    );
-    const atLoad = await errorOf(() =>
-      render('src/load-call.tsx', {cwd: dir, out: 'load-call.html'}),
-    );
-    expect(atLoad?.code).toBe('ERR_RENDER_COMPILE');
-    expect(atLoad?.message).toContain(
-      '(src/load-call.tsx, line 1): ./lib-load has no export makeLabel',
-    );
-    // The script's build names a multi-line import's module, as the server does.
-    put(
-      'node_modules/esm-only/package.json',
-      JSON.stringify({name: 'esm-only', type: 'module', exports: './index.js'}),
-    );
-    put(
-      'node_modules/esm-only/index.js',
-      'export const shout = s => s.toUpperCase();\n',
-    );
-    put(
-      'src/script-only.tsx',
-      "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\nimport '@astryxdesign/core/astryx.css';\n",
-    );
-    const scripted = await errorOf(() =>
-      render('src/script-only.tsx', {cwd: dir, out: 'script-only.html'}),
-    );
-    expect(scripted?.code).toBe('ERR_RENDER_COMPILE');
-    expect(scripted?.message).toContain(
-      '(src/script-only.tsx, line 3): esm-only has no export whisper',
-    );
+  describe('refuses a named import its module does not export, as a build does, naming the file and line', () => {
+    it("names a local module's missing export", async () => {
+      put('src/lib-x.ts', 'export const a = 1;\n');
+      put(
+        'src/no-export.tsx',
+        "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\nimport '@astryxdesign/core/astryx.css';\n",
+      );
+      const local = await errorOf(() =>
+        render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}),
+      );
+      expect(local?.code).toBe('ERR_RENDER_COMPILE');
+      expect(local?.message).toContain('(src/no-export.tsx, line 1): ./lib-x has no export b');
+    });
+
+    it('names a missing token of a Core StyleX subpath, with no installed path, and writes nothing', async () => {
+      put(
+        'src/no-token.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {colors} from '@astryxdesign/core/theme/tokens.stylex';\nconst styles = stylex.create({p: {color: colors.text}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
+      );
+      const token = await errorOf(() =>
+        render('src/no-token.tsx', {cwd: dir, out: 'no-token.html'}),
+      );
+      expect(token?.code).toBe('ERR_RENDER_COMPILE');
+      expect(token?.message).toContain(
+        '(src/no-token.tsx, line 2): @astryxdesign/core/theme/tokens.stylex has no export colors',
+      );
+      expect(token?.message).not.toMatch(/\/home\/|\/tmp\//);
+      expect(fs.existsSync(path.join(dir, 'no-token.html'))).toBe(false);
+    });
+
+    it('names a missing Core component next to type-only imports', async () => {
+      put(
+        'src/no-component.tsx',
+        "import {Button, Chart, type ButtonProps} from '@astryxdesign/core';\nimport {helper, type Shape} from './lib-y';\nconst props: ButtonProps = {label: 'Go'};\nconst shape: Shape = {n: helper()};\nexport default function Page() { return <main><Button {...props} /><Chart data={[shape]} /></main>; }\n",
+      );
+      put(
+        'src/lib-y.ts',
+        'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\nimport "@astryxdesign/core/astryx.css";\n',
+      );
+      const component = await errorOf(() =>
+        render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}),
+      );
+      expect(component?.code).toBe('ERR_RENDER_COMPILE');
+      expect(component?.message).toContain(
+        '(src/no-component.tsx, line 1): @astryxdesign/core has no export Chart',
+      );
+    });
+
+    it('names a member read from a component that has none', async () => {
+      put(
+        'src/no-member.tsx',
+        "import {Button} from '@astryxdesign/core/Button';\nexport default function Page() {\n  return <main><Button.Icon /></main>;\n}\n",
+      );
+      const member = await errorOf(() =>
+        render('src/no-member.tsx', {cwd: dir, out: 'no-member.html'}),
+      );
+      expect(member?.code).toBe('ERR_RENDER_COMPILE');
+      expect(member?.message).toContain(
+        '(src/no-member.tsx, line 3): @astryxdesign/core/Button has no export Button.Icon',
+      );
+    });
+
+    it('renders a page whose names are types, shadowed bindings, type re-exports or raw text', async () => {
+      put(
+        'src/lib-y.ts',
+        'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\nimport "@astryxdesign/core/astryx.css";\n',
+      );
+      put(
+        'src/types-only.tsx',
+        "import {Button, ButtonProps} from '@astryxdesign/core/Button';\nimport Y, {helper} from './lib-y';\nconst props: ButtonProps = {label: String(helper())};\nexport default function Page() { return <main><Button {...props} /><Y /></main>; }\n",
+      );
+      await render('src/types-only.tsx', {cwd: dir, out: 'types-only.html'});
+      expect(fs.existsSync(path.join(dir, 'types-only.html'))).toBe(true);
+      // A parameter or a local binding named like an import is not the import.
+      put(
+        'src/shadowed.tsx',
+        [
+          "import {Button} from '@astryxdesign/core/Button';",
+          "import {Card} from '@astryxdesign/core/Card';",
+          'const Icon = () => <i>icon</i>;',
+          'function Row({Button}: {Button: any}) { return <Button.Icon />; }',
+          'const rows = [{Button: {Icon}}];',
+          'function Lede() { const Card = {Lede: () => <b>lede</b>}; return <Card.Lede />; }',
+          'export default function Page() {',
+          '  return <Card><Button label="Go" /><Row Button={{Icon}} />{rows.map(({Button}, i) => <Button.Icon key={i} />)}<Lede /></Card>;',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      await render('src/shadowed.tsx', {cwd: dir, out: 'shadowed.html'});
+      expect(fs.existsSync(path.join(dir, 'shadowed.html'))).toBe(true);
+      // A type re-exported as a type or plainly, and a file the page reads as
+      // text, are no value uses.
+      put(
+        'src/types-re.ts',
+        "import {ButtonProps} from '@astryxdesign/core/Button';\nexport type {ButtonProps};\nexport {type ButtonProps as Props};\nexport {ButtonProps as Plain};\nexport const label = 'Go';\n",
+      );
+      put(
+        'src/snippet.tsx',
+        "import {Nope} from '@astryxdesign/core';\nexport const shown = <Nope />;\n",
+      );
+      put(
+        'src/re-and-raw.tsx',
+        "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\nimport '@astryxdesign/core/astryx.css';\n",
+      );
+      await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
+      expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
+    });
+
+    it("reads a CommonJS module's exports by interop", async () => {
+      // A CommonJS module's exports are read by interop, as a bundler reads them.
+      put('src/lib-cjs.js', 'module.exports = {a: 1};\n');
+      put(
+        'src/from-cjs.tsx',
+        "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
+      );
+      await render('src/from-cjs.tsx', {cwd: dir, out: 'from-cjs.html'});
+      expect(fs.existsSync(path.join(dir, 'from-cjs.html'))).toBe(true);
+    });
+
+    it('refuses a missing name a JavaScript module re-exports', async () => {
+      // In JavaScript a plain re-export names a value, so a missing one is refused.
+      put(
+        'src/lib-js.js',
+        "import {Nope} from '@astryxdesign/core';\nexport {Nope};\nexport const ok = 'ok';\n",
+      );
+      put(
+        'src/js-re.tsx',
+        "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
+      );
+      const jsRe = await errorOf(() =>
+        render('src/js-re.tsx', {cwd: dir, out: 'js-re.html'}),
+      );
+      expect(jsRe?.code).toBe('ERR_RENDER_COMPILE');
+      expect(jsRe?.message).toContain(
+        '(src/lib-js.js, line 1): @astryxdesign/core has no export Nope',
+      );
+    });
+
+    it('refuses a package subpath the package does not export, with no installed path', async () => {
+      // A package subpath the package does not export is refused as a build
+      // refuses it, with no installed path in the message.
+      put(
+        'src/no-subpath.tsx',
+        "import {Chart} from '@astryxdesign/core/Chart';\nexport default function Page() { return <main><Chart /></main>; }\n",
+      );
+      const subpath = await errorOf(() =>
+        render('src/no-subpath.tsx', {cwd: dir, out: 'no-subpath.html'}),
+      );
+      expect(subpath?.code).toBe('ERR_RENDER_COMPILE');
+      expect(subpath?.message).toBe(
+        'The page does not compile (src/no-subpath.tsx, line 1): @astryxdesign/core has no export ./Chart',
+      );
+      put(
+        'src/no-stylex-subpath.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {spacing} from '@astryxdesign/core/tokens/spacing.stylex';\nconst styles = stylex.create({p: {padding: spacing.md}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
+      );
+      const stylexSubpath = await errorOf(() =>
+        render('src/no-stylex-subpath.tsx', {cwd: dir, out: 'no-stylex-subpath.html'}),
+      );
+      expect(stylexSubpath?.code).toBe('ERR_RENDER_COMPILE');
+      expect(stylexSubpath?.message).toBe(
+        'The page does not compile (src/no-stylex-subpath.tsx, line 2): @astryxdesign/core has no export ./tokens/spacing.stylex',
+      );
+    });
+
+    it('names a missing export the page calls as it loads', async () => {
+      // A missing name the page calls as it loads is named as a build names it.
+      put('src/lib-load.ts', 'export const other = 1;\n');
+      put(
+        'src/load-call.tsx',
+        "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
+      );
+      const atLoad = await errorOf(() =>
+        render('src/load-call.tsx', {cwd: dir, out: 'load-call.html'}),
+      );
+      expect(atLoad?.code).toBe('ERR_RENDER_COMPILE');
+      expect(atLoad?.message).toContain(
+        '(src/load-call.tsx, line 1): ./lib-load has no export makeLabel',
+      );
+    });
+
+    it("names a multi-line import's module in the script's build", async () => {
+      // The script's build names a multi-line import's module, as the server does.
+      put(
+        'node_modules/esm-only/package.json',
+        JSON.stringify({name: 'esm-only', type: 'module', exports: './index.js'}),
+      );
+      put(
+        'node_modules/esm-only/index.js',
+        'export const shout = s => s.toUpperCase();\n',
+      );
+      put(
+        'src/script-only.tsx',
+        "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\nimport '@astryxdesign/core/astryx.css';\n",
+      );
+      const scripted = await errorOf(() =>
+        render('src/script-only.tsx', {cwd: dir, out: 'script-only.html'}),
+      );
+      expect(scripted?.code).toBe('ERR_RENDER_COMPILE');
+      expect(scripted?.message).toContain(
+        '(src/script-only.tsx, line 3): esm-only has no export whisper',
+      );
+    });
   });
 
   it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {
@@ -1213,7 +1742,7 @@ import '@astryxdesign/core/astryx.css';
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB/m);
+    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB( \(most is the script: the page as a live app, with React and the packages it imports\))?$/m);
     for (const key of ['scriptBytes', 'cssBytes', 'markupBytes', 'sourceBytes'])
       expect(page.stdout).toMatch(new RegExp(`^${key}:\\s+[\\d.]+ (?:KB|B)$`, 'm'));
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
@@ -1385,6 +1914,22 @@ import '@astryxdesign/core/astryx.css';
     );
     expect(warning?.message).toBe(
       "The page asks useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 120_000);
+
+  it('warns when text inside a drawing that scales shrinks on a phone', async () => {
+    put(
+      'src/svg-chart.tsx',
+      'export default function Page() {\n  return (\n    <svg viewBox="0 0 960 300" width="100%" role="img" aria-label="Sales">\n      <text x="0" y="20" fontSize="13">January</text>\n    </svg>\n  );\n}\nimport \'@astryxdesign/core/astryx.css\';\n',
+    );
+    const result = /** @type {any} */ (
+      await render('src/svg-chart.tsx', {cwd: dir, out: 'svg-chart.html'})
+    );
+    expect(
+      result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')
+        ?.message,
+    ).toBe(
+      'An SVG drawing scales to fit its box with text inside, so on a 375 px phone that text shows at about 5 px. Put the labels in HTML beside the drawing, or draw the chart with recharts in a ResponsiveContainer, which keeps its text size.',
     );
   }, 120_000);
 
