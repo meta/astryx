@@ -155,6 +155,31 @@ export const StagedChanges: Story = {
   render: () => <StagedChangesExample />,
 };
 
+function SlowSaveExample() {
+  const defaults = ['name', 'owner', 'status'];
+  const [value, setValue] = useState<readonly string[]>(defaults);
+  const reorderable = useMoveReorderable(setValue);
+  return (
+    <TransferListSelector
+      {...BASIC_TRANSFER_LIST_PROPS}
+      description="Each change takes two seconds to save. Until it is saved, the list takes no other change."
+      value={value}
+      onChange={setValue}
+      changeAction={() =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, 2000);
+        })
+      }
+      reorderable={reorderable}
+      triggerLabel={`${value.length} visible fields`}
+    />
+  );
+}
+
+export const SlowSave: Story = {
+  render: () => <SlowSaveExample />,
+};
+
 const GROUPED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
   {
     value: 'name',

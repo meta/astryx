@@ -7,7 +7,7 @@
  * @input Controlled option data, uncontrolled ComplexSelector state, action
  *   controls and the core i18n catalog. Also TransferList with the owner's
  *   reorderable object, adapted through Core's internal reorder entry and
- *   aimed at the draft when staged
+ *   aimed at the draft when staged, and told while a change is pending
  * @output Exports the immediate-or-staged TransferListSelector composition with draft cleanup after dismissal
  * @position Lab collection input shell; consumed by the TransferList entry point, docs, and tests
  *
@@ -33,6 +33,7 @@ import {
   reorderableOptions,
 } from '@astryxdesign/core/internal/reorder';
 import {TransferList, type TransferListProps} from './TransferList';
+import {TransferListBusyContext} from './transferListBusy';
 
 const DEFAULT_SELECTOR_WIDTH = 'min(41rem, calc(100vw - 32px))';
 
@@ -328,41 +329,43 @@ export function TransferListSelector<T extends string = string>({
                 styles.fieldset,
                 state.isBusy && styles.fieldsetBusy,
               )}>
-              <TransferList
-                label={label}
-                isLabelHidden
-                options={options}
-                isDisabled={isDisabled}
-                value={transferListValue}
-                onChange={nextValue => {
-                  if (isDisabled) {
-                    return;
-                  }
-                  // Now that busy no longer disables the fieldset, the controls
-                  // stay live while a change is in flight; ignore transfers
-                  // until it settles so one pending action cannot be stacked.
-                  if (state.isBusy) {
-                    return;
-                  }
-                  if (isStaged) {
-                    setDraftValue(nextValue);
-                  } else {
-                    commit([...nextValue]);
-                  }
-                }}
-                selectedLabel={selectedLabel}
-                availableLabel={availableLabel}
-                hasSearch={hasSearch}
-                searchLabel={searchLabel}
-                searchPlaceholder={searchPlaceholder}
-                reorderable={reorderable}
-                hasSelectAll={hasSelectAll}
-                hasClear={hasClear}
-                renderOption={renderOption}
-                selectedEmptyText={selectedEmptyText}
-                availableEmptyText={availableEmptyText}
-                noResultsText={noResultsText}
-              />
+              <TransferListBusyContext value={state.isBusy}>
+                <TransferList
+                  label={label}
+                  isLabelHidden
+                  options={options}
+                  isDisabled={isDisabled}
+                  value={transferListValue}
+                  onChange={nextValue => {
+                    if (isDisabled) {
+                      return;
+                    }
+                    // The list refuses transfers while a change is pending. A
+                    // change that arrives anyway is dropped, so that actions
+                    // never stack.
+                    if (state.isBusy) {
+                      return;
+                    }
+                    if (isStaged) {
+                      setDraftValue(nextValue);
+                    } else {
+                      commit([...nextValue]);
+                    }
+                  }}
+                  selectedLabel={selectedLabel}
+                  availableLabel={availableLabel}
+                  hasSearch={hasSearch}
+                  searchLabel={searchLabel}
+                  searchPlaceholder={searchPlaceholder}
+                  reorderable={reorderable}
+                  hasSelectAll={hasSelectAll}
+                  hasClear={hasClear}
+                  renderOption={renderOption}
+                  selectedEmptyText={selectedEmptyText}
+                  availableEmptyText={availableEmptyText}
+                  noResultsText={noResultsText}
+                />
+              </TransferListBusyContext>
             </fieldset>
             {isStaged && (
               <HStack gap={2} hAlign="end" padding={3} xstyle={styles.footer}>

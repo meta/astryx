@@ -235,7 +235,7 @@ export const docs = {
       name: 'changeAction',
       type: '(value: readonly T[]) => void | Promise<void>',
       description:
-        'Optional async action run after each immediate commit or a changed staged Apply; drives optimistic and busy state.',
+        "Optional async action run after each immediate commit or a changed staged Apply; drives optimistic and busy state. While it is pending, the list's add, remove, Add all and Clear actions stay focusable but are busy: they make no change and announce none.",
     },
     {
       name: 'controlXstyle',
@@ -777,7 +777,7 @@ export const docsDense = {
     statusVariant: 'Status placement treatment.',
     labelTooltip: 'Field-label tooltip.',
     changeAction:
-      'Async action after each immediate commit or changed staged Apply.',
+      'Async action after each immediate commit or changed staged Apply; list actions are busy while it is pending.',
     controlXstyle: 'External control box StyleX override.',
     controlClassName: 'External control box class name.',
     controlStyle: 'External control box inline styles.',

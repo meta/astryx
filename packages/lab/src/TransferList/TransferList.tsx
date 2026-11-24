@@ -5,9 +5,10 @@
 /**
  * @file TransferList.tsx
  * @input Controlled option data, local action glyphs, core's reorder (List
- *   `reorderable` and ListItem `itemKey`) and the core i18n catalog. The
- *   owner's createReorderable object is adapted through Core's internal
- *   reorder entry, which loads no reorder code of its own
+ *   `reorderable` and ListItem `itemKey`), the core i18n catalog, and the
+ *   busy state a TransferListSelector provides. The owner's createReorderable
+ *   object is adapted through Core's internal reorder entry, which loads no
+ *   reorder code of its own
  * @output Exports TransferList with immediate transfers, vertical reordering, and responsive scroll ownership
  * @position Lab collection input; consumed by index.ts, TransferListSelector, docs, and tests
  *
@@ -25,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  use,
   type ReactNode,
   type RefObject,
   type SVGProps,
@@ -62,6 +64,7 @@ import {
 } from '@astryxdesign/core/utils';
 import {reorderHandle} from '@astryxdesign/core/internal/reorderHandle.stylex';
 import {transferListVars} from './tokens.stylex';
+import {TransferListBusyContext} from './transferListBusy';
 
 // A Lucide glyph the shared icon registry does not carry (there is no `add`
 // semantic name). Typed as icon components and rendered through `Icon`
@@ -506,6 +509,9 @@ export function TransferList<T extends string = string>({
   const currentValueRef = useRef<readonly T[]>(value);
   const [query, setQuery] = useState('');
   const announce = useAnnounce();
+  // While the owner has a change pending, it drops the next one. So the list
+  // makes no change, and announces none, until that change settles.
+  const isBusy = use(TransferListBusyContext);
 
   // Syncs the handlers' ref with the committed `value`. A render React
   // discards, as a suspended transition does, must not leave its value.
@@ -582,10 +588,18 @@ export function TransferList<T extends string = string>({
           side === 'selected'
             ? selectedPanelRef.current
             : availablePanelRef.current;
-        const actions = panel?.querySelectorAll<HTMLButtonElement>(
-          `[data-transfer-list-action="${side}"]:not([disabled]):not([aria-disabled="true"])`,
+        // A busy action is still a target: the owner's pending change makes
+        // every action busy before this frame.
+        const actions = Array.from(
+          panel?.querySelectorAll<HTMLButtonElement>(
+            `[data-transfer-list-action="${side}"]:not([disabled])`,
+          ) ?? [],
+        ).filter(
+          action =>
+            action.getAttribute('aria-disabled') !== 'true' ||
+            action.getAttribute('aria-busy') === 'true',
         );
-        if (actions && actions.length > 0) {
+        if (actions.length > 0) {
           actions[Math.min(index, actions.length - 1)]?.focus();
         } else if (hasSearch) {
           searchRef.current?.focus();
@@ -605,6 +619,7 @@ export function TransferList<T extends string = string>({
   const addOption = useCallback(
     (option: TransferListOption<T>, index: number) => {
       if (
+        isBusy ||
         option.isTransferDisabled ||
         currentValueRef.current.includes(option.value)
       ) {
@@ -620,12 +635,12 @@ export function TransferList<T extends string = string>({
       );
       focusAfterTransfer('available', index);
     },
-    [announce, commit, focusAfterTransfer, t],
+    [announce, commit, focusAfterTransfer, isBusy, t],
   );
 
   const removeOption = useCallback(
     (option: TransferListOption<T>, index: number) => {
-      if (option.isTransferDisabled) {
+      if (isBusy || option.isTransferDisabled) {
         return;
       }
       const nextValue = currentValueRef.current.filter(
@@ -640,10 +655,13 @@ export function TransferList<T extends string = string>({
       );
       focusAfterTransfer('selected', index);
     },
-    [announce, commit, focusAfterTransfer, t],
+    [announce, commit, focusAfterTransfer, isBusy, t],
   );
 
   const addAll = useCallback(() => {
+    if (isBusy) {
+      return;
+    }
     const additions = options
       .filter(
         option =>
@@ -659,9 +677,12 @@ export function TransferList<T extends string = string>({
         }),
       );
     }
-  }, [announce, commit, options, t]);
+  }, [announce, commit, isBusy, options, t]);
 
   const clearSelected = useCallback(() => {
+    if (isBusy) {
+      return;
+    }
     const nextValue = currentValueRef.current.filter(optionValue => {
       const option = optionByValue.get(optionValue);
       return option == null || option.isTransferDisabled;
@@ -671,7 +692,7 @@ export function TransferList<T extends string = string>({
       commit(nextValue);
       announce(t('@astryx.transferList.announceBulkRemoved', {count: removed}));
     }
-  }, [announce, commit, optionByValue, t]);
+  }, [announce, commit, isBusy, optionByValue, t]);
 
   // Reordering is off while a search filters the panel. A hidden row could
   // otherwise move past the shown rows.
@@ -783,6 +804,8 @@ export function TransferList<T extends string = string>({
           size="sm"
           variant="ghost"
           isDisabled={isTransferDisabled}
+          aria-disabled={isBusy || undefined}
+          aria-busy={(isBusy && !isTransferDisabled) || undefined}
           tooltip={isTransferDisabled ? disabledReason : undefined}
           data-transfer-list-action="available"
           onClick={() => addOption(option, index)}
@@ -796,6 +819,8 @@ export function TransferList<T extends string = string>({
         size="sm"
         variant="ghost"
         isDisabled={isTransferDisabled}
+        aria-disabled={isBusy || undefined}
+        aria-busy={(isBusy && !isTransferDisabled) || undefined}
         tooltip={isTransferDisabled ? disabledReason : undefined}
         data-transfer-list-action="selected"
         onClick={() => removeOption(option, index)}
@@ -891,6 +916,13 @@ export function TransferList<T extends string = string>({
     );
   };
 
+  const canClear = value.some(
+    optionValue => !optionByValue.get(optionValue)?.isTransferDisabled,
+  );
+  const canAddAll = options.some(
+    option => !option.isTransferDisabled && !value.includes(option.value),
+  );
+
   const describedBy =
     [ariaDescribedBy, description != null ? descriptionId : undefined]
       .filter(Boolean)
@@ -970,12 +1002,9 @@ export function TransferList<T extends string = string>({
                 variant="ghost"
                 xstyle={styles.headerAction}
                 data-transfer-list-header-action="true"
-                isDisabled={
-                  !value.some(
-                    optionValue =>
-                      !optionByValue.get(optionValue)?.isTransferDisabled,
-                  )
-                }
+                isDisabled={!canClear}
+                aria-disabled={isBusy || undefined}
+                aria-busy={(isBusy && canClear) || undefined}
                 onClick={clearSelected}
               />
             )}
@@ -1028,13 +1057,9 @@ export function TransferList<T extends string = string>({
                 variant="ghost"
                 xstyle={styles.headerAction}
                 data-transfer-list-header-action="true"
-                isDisabled={
-                  !options.some(
-                    option =>
-                      !option.isTransferDisabled &&
-                      !value.includes(option.value),
-                  )
-                }
+                isDisabled={!canAddAll}
+                aria-disabled={isBusy || undefined}
+                aria-busy={(isBusy && canAddAll) || undefined}
                 onClick={addAll}
               />
             )}
