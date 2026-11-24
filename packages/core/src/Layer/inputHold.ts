@@ -8,7 +8,8 @@
  *   and the hold's scope
  * @output holdInput, holdsTouch, isInHeldLayer, isInputShield, LATE_PRESS_MS
  *   and LATE_RELEASE_FRAMES: input held away from a layer while it presents
- *   or dismisses, or while it dismisses with focus kept inside
+ *   or dismisses, or while it dismisses with focus kept inside, and a press
+ *   held outside an open menu
  * @position The Layer module's one input hold, for components whose layer
  *   presents under a finger
  *
@@ -29,7 +30,13 @@ import {
   type MousePoint,
 } from '../utils/inputStream';
 import {timeOn} from '../utils/inputAge';
-import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
+import {
+  isDocument,
+  isElement,
+  isHTMLElement,
+  isNode,
+  isShadowRoot,
+} from '../utils/nodeType';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
@@ -73,6 +80,40 @@ export interface InputHoldOptions {
   focus?: 'blur' | 'kept-inside';
 }
 
+/**
+ * The hold's `'outside'` scope, which an anchored menu takes while it is open
+ * under the touch presentation. A finger's or a pen's press that starts
+ * outside the layer, its owner and any live shield is held to its end. None
+ * of its events reaches the page. Its moves are never canceled, so a pan
+ * still scrolls the page and a pinch still zooms it. The layer closes,
+ * through `onOutside`, as the press begins to pan or at its lift. The scope
+ * ends when its release runs.
+ */
+export interface OutsideInputHoldOptions {
+  scope: 'outside';
+  /** The control that opens the layer. A press on it stays the control's. */
+  owner?: Element | null;
+  /** Closes the layer. */
+  onOutside: () => void;
+  /**
+   * Whether an outside press that went down at `start` has begun to pan at
+   * `point`. The caller passes the pan test, so this module carries no
+   * gesture constants into pages that never open a menu.
+   */
+  hasPanBegun: (
+    start: {readonly x: number; readonly y: number},
+    point: PointerEvent,
+  ) => boolean;
+}
+
+/** An `'outside'` scope while it holds. */
+interface OutsideScope {
+  /** Whether a press with this composed path is the layer's own. */
+  readonly isInside: (path: ReadonlyArray<EventTarget>) => boolean;
+  readonly onOutside: () => void;
+  readonly hasPanBegun: OutsideInputHoldOptions['hasPanBegun'];
+}
+
 interface HeldLayer {
   viewport: number;
   layer: number;
@@ -104,6 +145,8 @@ interface PressHold {
   release: () => void;
   /** Whether the press with this pointer id is held to its end. */
   holds: (pointerId: number) => boolean;
+  /** Brings its `touchmove` subscription in line with the held scopes. */
+  sync: () => void;
   /** Notes a hold that has ended, for a press that went down during it. */
   ended: (hold: EndedHold) => void;
 }
@@ -137,6 +180,12 @@ const {held, heldDocuments, pressHolds, liveShields} = realmValue(
     pressHolds: new WeakMap<Document, PressHold>(),
     liveShields: new WeakSet<Node>(),
   }),
+);
+
+// The layers that hold an `'outside'` scope, registered for the same reason.
+const outsideScopes = realmValue(
+  sharedKey('layer/input-hold-outside', 1),
+  () => new WeakMap<Element, OutsideScope>(),
 );
 
 /** Whether the shared input stream last delivered a mouse's pointer event. */
@@ -481,8 +530,12 @@ function openToEarlierPresses(state: HeldLayer, doc: Document): void {
  */
 export function holdInput(
   layer: Element,
-  {until, scope, focus = 'blur'}: InputHoldOptions,
+  options: InputHoldOptions | OutsideInputHoldOptions,
 ): () => void {
+  if (options.scope === 'outside') {
+    return holdOutside(layer, options);
+  }
+  const {until, scope, focus = 'blur'} = options;
   if (scope === 'layer' && focus === 'kept-inside') {
     return holdKeptInside(layer, until);
   }
@@ -537,6 +590,7 @@ export function holdInput(
     openToEarlierPresses(state, layer.ownerDocument);
   }
   openToMouse(state, layer.ownerDocument);
+  pressHolds.get(layer.ownerDocument)?.sync();
   const clock = layer.ownerDocument.defaultView?.performance;
   const from = clock?.now() ?? 0;
   let isReleased = false;
@@ -573,12 +627,57 @@ export function holdInput(
         current.shield.remove();
       }
       held.delete(layer);
-      stopHolding(layer);
+      if (!outsideScopes.has(layer)) {
+        stopHolding(layer);
+      }
     }
+    pressHolds.get(layer.ownerDocument)?.sync();
   };
   const end = 'finished' in until ? until.finished : until;
   void Promise.resolve(end).then(release, release);
   return release;
+}
+
+/** The `'outside'` scope (see {@link OutsideInputHoldOptions}). */
+function holdOutside(
+  layer: Element,
+  {owner = null, onOutside, hasPanBegun}: OutsideInputHoldOptions,
+): () => void {
+  const doc = layer.ownerDocument;
+  const root = layer.getRootNode();
+  // The window sees a press inside a closed shadow root as a press on its
+  // host, so a press there counts as the layer's.
+  const closedHost =
+    isShadowRoot(root) && root.mode === 'closed' ? root.host : null;
+  const scope: OutsideScope = {
+    isInside: path =>
+      path.some(
+        target =>
+          target === layer ||
+          (owner != null && target === owner) ||
+          (closedHost != null && target === closedHost) ||
+          (isNode(target) && liveShields.has(target)),
+      ),
+    onOutside,
+    hasPanBegun,
+  };
+  outsideScopes.set(layer, scope);
+  startHolding(layer);
+  pressHolds.get(doc)?.sync();
+  let isReleased = false;
+  return () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    if (outsideScopes.get(layer) === scope) {
+      outsideScopes.delete(layer);
+    }
+    if (!held.has(layer) && !outsideScopes.has(layer)) {
+      stopHolding(layer);
+    }
+    pressHolds.get(doc)?.sync();
+  };
 }
 
 /** The keys a dismissing layer that keeps focus lets through. */
@@ -794,16 +893,17 @@ function isPressHeldBy(
  * engine dispatches it after the hold's end. After a release in time, it
  * waits LATE_RELEASE_FRAMES of the hold's frame intervals. After a release in
  * a long task, which the hold reads from the frames that the page draws while
- * it holds, it waits LATE_PRESS_MS. A finger's or a pen's press is judged
- * once: its pointerdown and its touchstart give the same time and target,
- * and the second follows the first, even after the wait. A moving mouse
- * passes through a presentation's shield. The hold hears input through the
- * shared input stream, before its other subscribers, and stops each held
+ * a presentation holds, it waits LATE_PRESS_MS. A finger's or a pen's press is
+ * judged once: its pointerdown and its touchstart give the same time and
+ * target, and the second follows the first, even after the wait. A moving
+ * mouse passes through a presentation's shield. The hold hears input through
+ * the shared input stream, before its other subscribers, and stops each held
  * event there. So no document or element listener hears it, and neither does
- * press feedback or the gesture host.
- * There is one per document. Its subscriptions end once nothing is held, the
- * held presses and their clicks have ended, and no late press can still
- * arrive.
+ * press feedback or the gesture host. Under an `'outside'` scope, a press
+ * that starts outside the layer is held with every finger that joins it. The
+ * layer closes as the press begins to pan or at its lift. There is one per
+ * document. Its subscriptions end once nothing is held, the held presses and
+ * their clicks have ended, and no late press can still arrive.
  */
 function createPressHold(doc: Document): PressHold | null {
   const view = doc.defaultView;
@@ -816,6 +916,24 @@ function createPressHold(doc: Document): PressHold | null {
   /** The held presses still down, by pointer id and by touch identifier. */
   const pointers = new Set<number>();
   const touches = new Set<number>();
+  /** The held touches a presentation holds: their one-finger moves pan nothing. */
+  const presentationTouches = new Set<number>();
+  /**
+   * The held press that started outside an `'outside'` scope's layer: its
+   * fingers, where its first finger went down, and whether it closed the layer.
+   */
+  let outside: {
+    readonly scope: OutsideScope;
+    readonly id: number;
+    readonly x: number;
+    readonly y: number;
+    readonly pointers: Set<number>;
+    readonly touches: Set<number>;
+    isClosed: boolean;
+  } | null = null;
+  /** Whether the `touchmove` subscription cancels, and its end. */
+  let movesCancel: boolean | null = null;
+  let stopMoves: (() => void) | null = null;
   /**
    * The held finger and pen starts whose other start has not come yet. Such
    * a press starts twice, with a pointerdown and a touchstart that give the
@@ -828,6 +946,8 @@ function createPressHold(doc: Document): PressHold | null {
   const heldTouchStarts: HeldStart[] = [];
   /** Whose press the next click is: a held one's, or any other's. */
   let lastPress: 'held' | 'free' | null = null;
+  /** Whether the last held press started outside an `'outside'` scope's layer. */
+  let wasLastOutside = false;
   /** Until when a click with no pointer type is a held press's. */
   let clickUntil = -Infinity;
   /** Ended holds whose late presses can still arrive. */
@@ -846,6 +966,17 @@ function createPressHold(doc: Document): PressHold | null {
   const now = () => view.performance.now();
   const isPressDown = () => pointers.size > 0 || touches.size > 0;
 
+  /** Whether a presentation holds a layer of the document. */
+  const holdsPresentation = () => {
+    for (const layer of heldDocuments.get(doc)?.layers ?? []) {
+      const state = held.get(layer);
+      if (state != null && state.viewport + state.layer + state.surface > 0) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   /** Takes the held start at `time` on `target`, if one is waiting. */
   const takeHeldStart = (
     starts: HeldStart[],
@@ -862,11 +993,16 @@ function createPressHold(doc: Document): PressHold | null {
     return true;
   };
 
-  /** Notes each frame the page draws while a layer is held. */
+  /**
+   * Notes each frame the page draws while a presentation holds a layer. An
+   * `'outside'` scope alone draws on no frame: its release ends no
+   * presentation.
+   */
   const watchFrames = () => {
     if (
       frameRequest != null ||
-      typeof view.requestAnimationFrame !== 'function'
+      typeof view.requestAnimationFrame !== 'function' ||
+      !holdsPresentation()
     ) {
       return;
     }
@@ -1053,6 +1189,43 @@ function createPressHold(doc: Document): PressHold | null {
     return false;
   };
 
+  /**
+   * The newest held layer's `'outside'` scope, when a press with this
+   * composed path starts outside that layer.
+   */
+  const outsideScopeAt = (path: ReadonlyArray<EventTarget>) => {
+    if (!holdsNewPress()) {
+      return null;
+    }
+    const layers = liveLayers(doc);
+    for (let index = layers.length - 1; index >= 0; index -= 1) {
+      const scope = outsideScopes.get(layers[index]);
+      if (scope != null) {
+        return scope.isInside(path) ? null : scope;
+      }
+    }
+    return null;
+  };
+
+  /** The outside press closes its layer, once. */
+  const closeOutside = () => {
+    if (outside != null && !outside.isClosed) {
+      outside.isClosed = true;
+      outside.scope.onOutside();
+    }
+  };
+
+  /** The outside press ends with its last finger. */
+  const endOutsideIfDone = () => {
+    if (
+      outside != null &&
+      outside.pointers.size === 0 &&
+      outside.touches.size === 0
+    ) {
+      outside = null;
+    }
+  };
+
   const pressEnded = () => {
     clickUntil = now() + CLICK_WINDOW_MS;
     settle();
@@ -1135,14 +1308,30 @@ function createPressHold(doc: Document): PressHold | null {
       followPointer(pointerType);
     }
     if (type === 'pointerdown') {
+      const isHeldType = HELD_POINTERS.has(pointerType);
+      // Another finger of an outside press, such as a pinch's second one,
+      // joins it while one of the press's pointers is still down.
+      const joinsOutside =
+        isHeldType && outside != null && outside.pointers.size > 0;
+      // A pointerdown that gives a held touchstart's time and target is the
+      // same press: it takes that start's verdict.
       const followsHeldTouch =
-        HELD_POINTERS.has(pointerType) &&
+        isHeldType &&
+        !joinsOutside &&
         takeHeldStart(heldTouchStarts, time, event.target);
-      const isHeld =
-        followsHeldTouch ||
-        (HELD_POINTERS.has(pointerType) &&
-          (holdsPressAt(event.target) || wasHeldAt(event.target, time)));
-      if (!isHeld) {
+      // A late press is the ended hold's, not the outside scope's: it closes
+      // nothing.
+      const isPresented =
+        isHeldType &&
+        !joinsOutside &&
+        (followsHeldTouch ||
+          holdsPressAt(event.target) ||
+          wasHeldAt(event.target, time));
+      const scope =
+        isHeldType && !joinsOutside && !isPresented
+          ? outsideScopeAt(event.composedPath())
+          : null;
+      if (!joinsOutside && !isPresented && scope == null) {
         // A mouse's press, or one after the hold: its click is its own, and a
         // held press with its id ended unheard.
         pointers.delete(pointerId);
@@ -1151,41 +1340,95 @@ function createPressHold(doc: Document): PressHold | null {
         settle();
         return false;
       }
+      if (scope != null) {
+        const {clientX, clientY} = event as PointerEvent;
+        outside = {
+          scope,
+          id: pointerId,
+          x: clientX,
+          y: clientY,
+          pointers: new Set(),
+          touches: new Set(),
+          isClosed: false,
+        };
+      }
+      outside?.pointers.add(pointerId);
       pointers.add(pointerId);
-      if (!followsHeldTouch) {
+      if (isPresented && !followsHeldTouch) {
         heldPointerStarts.push({time, target: event.target});
       }
       lastPress = 'held';
+      wasLastOutside = outside != null;
       // A late press is held to its end: no stop runs while it is down.
       settle();
-      captureToShield(event as PointerEvent);
-    } else if (!pointers.has(pointerId)) {
+      if (isPresented) {
+        captureToShield(event as PointerEvent);
+      }
+      // Canceling the press keeps the browser from sending its compatibility
+      // mouse events, and with them a focus move.
+      swallow(event);
+      return true;
+    }
+    if (!pointers.has(pointerId)) {
       return false;
     }
-    // Canceling the press keeps the browser from sending its compatibility
-    // mouse events, and with them a focus move.
-    swallow(event);
+    event.stopImmediatePropagation();
+    if (
+      type === 'pointermove' &&
+      outside?.id === pointerId &&
+      outside.scope.hasPanBegun(outside, event as PointerEvent)
+    ) {
+      closeOutside();
+    }
     if (type === 'pointerup' || type === 'pointercancel') {
       pointers.delete(pointerId);
+      const isOutsideLift = outside?.id === pointerId;
+      // The click window opens first: the close can end the hold, and a
+      // pen's mouse events and click follow its lift.
       pressEnded();
+      // The lift of a tap or a hold, or a pan the browser took.
+      if (isOutsideLift) {
+        closeOutside();
+      }
+      outside?.pointers.delete(pointerId);
+      endOutsideIfDone();
     }
     return true;
   };
 
   const onTouch = (event: Event): boolean => {
-    const {changedTouches, touches: down, type} = event as TouchEvent;
+    // A script's touch event may leave out its touch lists.
+    const {changedTouches, touches: down, type} = event as Partial<TouchEvent>;
     const time = timeOfInput(event);
     noteInputAt(time);
-    const changed = Array.from(changedTouches);
+    const changed = Array.from(changedTouches ?? []);
     if (type === 'touchstart') {
       // A held touch that the screen no longer has ended unheard. Its target,
       // the shield, left the document at the release, so its end reached no
       // listener here.
-      const live = new Set(Array.from(down, touch => touch.identifier));
+      const live = new Set(Array.from(down ?? [], touch => touch.identifier));
       for (const identifier of touches) {
         if (!live.has(identifier)) {
           touches.delete(identifier);
+          presentationTouches.delete(identifier);
+          outside?.touches.delete(identifier);
         }
+      }
+      // An outside press whose target left the page with its layer ends here:
+      // its touchend reached no listener on the window.
+      endOutsideIfDone();
+      // A touch joins an outside press on the same terms as its pointer. Once
+      // the browser takes the press's pan, a later finger is a new touch.
+      if (outside != null && outside.pointers.size > 0) {
+        for (const touch of changed) {
+          touches.add(touch.identifier);
+          outside.touches.add(touch.identifier);
+        }
+        lastPress = 'held';
+        // Never canceled: canceling a touch's start would cancel the page's
+        // pinch-zoom with it.
+        event.stopImmediatePropagation();
+        return true;
       }
       const followers = changed.filter(touch =>
         takeHeldStart(heldPointerStarts, time, touch.target),
@@ -1209,10 +1452,12 @@ function createPressHold(doc: Document): PressHold | null {
       }
       for (const touch of heldTouches) {
         touches.add(touch.identifier);
+        presentationTouches.add(touch.identifier);
         if (!followers.includes(touch)) {
           heldTouchStarts.push({time, target: touch.target});
         }
       }
+      sync();
       lastPress = 'held';
       settle();
       // Never canceled: canceling a touch's start would cancel the page's
@@ -1225,8 +1470,13 @@ function createPressHold(doc: Document): PressHold | null {
     }
     if (type === 'touchmove') {
       event.stopImmediatePropagation();
-      // One finger pans nothing; two still zoom the page.
-      if (down.length === 1 && event.cancelable) {
+      // One finger of a presentation's press pans nothing; two still zoom the
+      // page. An outside press's moves are never canceled.
+      if (
+        down?.length === 1 &&
+        event.cancelable &&
+        changed.some(touch => presentationTouches.has(touch.identifier))
+      ) {
         event.preventDefault();
       }
       return true;
@@ -1235,7 +1485,11 @@ function createPressHold(doc: Document): PressHold | null {
     swallow(event);
     for (const touch of changed) {
       touches.delete(touch.identifier);
+      presentationTouches.delete(touch.identifier);
+      outside?.touches.delete(touch.identifier);
     }
+    endOutsideIfDone();
+    sync();
     pressEnded();
     return true;
   };
@@ -1248,11 +1502,14 @@ function createPressHold(doc: Document): PressHold | null {
     }
     // A click that names its pointer is judged by that pointer. A
     // compatibility mouse event, or a click sent as a plain mouse event,
-    // belongs to the last press.
+    // belongs to the last press. So does every click after an outside press:
+    // in a Home Screen web app, WebKit's late click after a tap names the
+    // mouse. A mouse's own press marks the next click free.
     const {pointerType} = event as Partial<PointerEvent>;
     const isHeldPress =
       lastPress === 'held' &&
-      (pointerType == null ||
+      (wasLastOutside ||
+        pointerType == null ||
         pointerType === '' ||
         HELD_POINTERS.has(pointerType));
     if (isHeldPress && (isPressDown() || now() <= clickUntil)) {
@@ -1282,19 +1539,59 @@ function createPressHold(doc: Document): PressHold | null {
     for (const unsubscribe of unsubscribers.splice(0)) {
       unsubscribe();
     }
+    stopMoves?.();
+    stopMoves = null;
+    movesCancel = null;
   }
 
-  // A touch's start and cancel are never canceled, so their subscriptions
-  // keep the stream passive for them. The hold hears each event first, so a
-  // held one reaches no other subscriber: press feedback and the gesture host
-  // never hear it.
+  /**
+   * Whether a held one-finger move is canceled: a presentation holds a layer
+   * of the document, or a touch it held is still down.
+   */
+  const cancelsMoves = () =>
+    presentationTouches.size > 0 || holdsPresentation();
+
+  /** Subscribes `touchmove` to cancel only while a move may be canceled. */
+  const sync = (): void => {
+    if (!isListening) {
+      return;
+    }
+    if (!holdsPresentation()) {
+      stopWatchingFrames();
+    } else if (frameRequest == null) {
+      // A presentation's frames begin at its hold.
+      lastFrameAt = now();
+      frameBeforeAt = null;
+      watchFrames();
+    }
+    const wanted = cancelsMoves();
+    if (wanted === movesCancel) {
+      return;
+    }
+    stopMoves?.();
+    movesCancel = wanted;
+    stopMoves = subscribeInput(view, 'touchmove', onTouch, {
+      cancels: wanted,
+      first: true,
+    });
+  };
+
+  // Of the pointer and touch events, only a held press's `pointerdown`, a
+  // tap's `touchend` and a presentation's one-finger `touchmove` are
+  // canceled. Their other subscriptions stay passive. `touchmove` subscribes
+  // through `sync`. It cancels only while a presentation holds. The hold
+  // hears each event first, so a held one reaches no other subscriber: press
+  // feedback and the gesture host never hear it.
   const unsubscribers = [
     ...POINTER_EVENTS.map(type =>
-      subscribeInput(view, type, onPointer, {cancels: true, first: true}),
+      subscribeInput(view, type, onPointer, {
+        cancels: type === 'pointerdown',
+        first: true,
+      }),
     ),
-    ...TOUCH_EVENTS.map(type =>
+    ...TOUCH_EVENTS.filter(type => type !== 'touchmove').map(type =>
       subscribeInput(view, type, onTouch, {
-        cancels: type === 'touchmove' || type === 'touchend',
+        cancels: type === 'touchend',
         first: true,
       }),
     ),
@@ -1305,16 +1602,11 @@ function createPressHold(doc: Document): PressHold | null {
 
   const pressHold: PressHold = {
     hold() {
-      if (!isHolding) {
-        lastFrameAt = now();
-        frameBeforeAt = null;
-      }
       isHolding = true;
       if (timer !== undefined) {
         clearTimeout(timer);
         timer = undefined;
       }
-      watchFrames();
     },
     release() {
       if (!isHolding) {
@@ -1325,6 +1617,7 @@ function createPressHold(doc: Document): PressHold | null {
       settle();
     },
     holds: pointerId => pointers.has(pointerId),
+    sync,
     ended(hold) {
       forgetEndedHolds(() => false);
       if (!hold.layer.isConnected) {
@@ -1337,7 +1630,6 @@ function createPressHold(doc: Document): PressHold | null {
       watchLayers();
     },
   };
-  watchFrames();
   return pressHold;
 }
 

@@ -45,11 +45,13 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import {useCommittedRefInto} from '../hooks/useCommittedRef';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
+import {holdInput} from '../Layer/inputHold';
+import {hasPanBegun, noteOutsideDismissal} from '../Layer/outsidePress';
 import {usePopoverSurfaceMotion} from '../Popover/usePopoverSurfaceMotion';
 import {
   claimPress,
@@ -1007,6 +1009,10 @@ function DropdownMenuPopover({
   // the list ref exists, and its release is kept for the close.
   const holdEntranceRef = useRef<() => void>(() => {});
   const releaseEntranceRef = useRef<(() => void) | null>(null);
+  // The outside hold also starts as the layer shows, and its release is kept
+  // for the close.
+  const holdOutsideRef = useRef<() => void>(() => {});
+  const releaseOutsideRef = useRef<(() => void) | null>(null);
   // The trigger press that asks the menu to open. The show holds the trigger
   // as the invoker through that press; that hold is set below, once the
   // popover exists.
@@ -1074,6 +1080,8 @@ function DropdownMenuPopover({
     touchOpenRef.current = null;
     releaseEntranceRef.current?.();
     releaseEntranceRef.current = null;
+    releaseOutsideRef.current?.();
+    releaseOutsideRef.current = null;
     // Whatever closed the menu — light dismiss, the dismissal stack, Escape
     // or a controlled close — its flyouts close with it.
     hideOpenFlyouts();
@@ -1149,6 +1157,7 @@ function DropdownMenuPopover({
     presentSurfaceRef.current();
     touchOpenRef.current = null;
     holdEntranceRef.current();
+    holdOutsideRef.current();
     resetFocusReturn();
     if (renderTrigger != null) {
       setTriggerName(readAccessibleName(buttonRef.current));
@@ -1356,11 +1365,39 @@ function DropdownMenuPopover({
   // The show's entrance hold, written at commit before any layout effect. The
   // controlled-open layout effect above can show the menu then.
   useCommittedRefInto(holdEntranceRef, holdEntrance);
-  // The layer runtime's input hold: an unmount during the entrance releases it.
+
+  // Under the touch presentation, a finger's or a pen's touch outside the open
+  // menu only closes it, as a native menu's does. Nothing beneath gets it.
+  const closeMenuRef = useCommittedRef(closeMenu);
+  const holdOutside = useCallback(() => {
+    releaseOutsideRef.current?.();
+    const layer =
+      pressTouchModel === 'uikit'
+        ? listRef.current?.closest('[popover]')
+        : null;
+    releaseOutsideRef.current =
+      layer == null
+        ? null
+        : holdInput(layer, {
+            scope: 'outside',
+            owner: buttonRef.current,
+            hasPanBegun,
+            onOutside: () => {
+              noteOutsideDismissal(layer.ownerDocument);
+              closeMenuRef.current();
+            },
+          });
+  }, [listRef, pressTouchModel, closeMenuRef]);
+  useCommittedRefInto(holdOutsideRef, holdOutside);
+
+  // The layer runtime's input holds: an unmount during the entrance, or while
+  // the menu is open, releases them.
   useEffect(
     () => () => {
       releaseEntranceRef.current?.();
       releaseEntranceRef.current = null;
+      releaseOutsideRef.current?.();
+      releaseOutsideRef.current = null;
     },
     [],
   );

@@ -9,7 +9,7 @@
  *   an open Popover or Selector list, with and without pointercancel. That
  *   includes a pan that the browser itself reads as a tap. A tap outside
  *   still closes the layer, also after a pan. The menus keep their own
- *   outside behavior
+ *   outside behavior: a tap outside a DropdownMenu makes no click
  * @position Evidence for `architecture:layer-runtime` INV7 (native light
  *   dismiss identifies gestures); the watch and the claim are unit-tested in
  *   outsidePress.test.ts and gestureCounter.test.ts
@@ -387,12 +387,24 @@ test.describe('DropdownMenu', () => {
       .toBe(false);
   });
 
-  test('a tap outside closes it', async ({page}) => {
+  test('a tap outside closes it, and the tap makes no click (spec:AST-094 FR32)', async ({
+    page,
+  }) => {
     const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
-    await tapClosesLayer(page, driver, outside);
+    await page.waitForTimeout(TAP_AFTER_PAN_MS);
+    await driver.tap(outside);
+    await expect
+      .poll(async () => isLayerOpen(page), {
+        message: 'a tap outside closes the menu',
+        timeout: 2000,
+      })
+      .toBe(false);
+    const press = await readPress(page);
+    expect(press.types, 'the tap made no click').not.toContain('click');
+    expect(press.types).not.toContain('pointerup');
   });
 
-  test.fixme('a pan that scrolls the page (pointercancel): closes as a pan outside begins (FR21 gap)', async ({
+  test('a pan that scrolls the page (pointercancel): closes as a pan outside begins', async ({
     page,
   }) => {
     const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
@@ -400,7 +412,7 @@ test.describe('DropdownMenu', () => {
     expect(await isLayerOpen(page)).toBe(false);
   });
 
-  test.fixme('a 40 px pan with no pointercancel: closes as a pan outside begins (FR21 gap)', async ({
+  test('a 40 px pan with no pointercancel: closes as a pan outside begins', async ({
     page,
   }) => {
     const {outside} = await openSurface(page, DROPDOWN_MENU);

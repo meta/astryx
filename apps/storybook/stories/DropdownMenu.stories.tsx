@@ -4,7 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Badge} from '@astryxdesign/core/Badge';
 import {IconButton} from '@astryxdesign/core/IconButton';
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -19,6 +19,10 @@ import {
 import {Button} from '@astryxdesign/core/Button';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {List, ListItem} from '@astryxdesign/core/List';
+import {Slider} from '@astryxdesign/core/Slider';
+import {createSwipe} from '@astryxdesign/core/Swipe';
+import {Switch} from '@astryxdesign/core/Switch';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {
   PencilIcon,
@@ -84,6 +88,30 @@ export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
 // Story args the tooltip regression spec drives through the URL.
 type StoryArgs = Omit<DropdownMenuProps, 'items' | 'children'>;
+
+const outsideTouchStyles = stylex.create({
+  page: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacingVars['--spacing-4'],
+  },
+  // Below where the open menu reaches, so a touch can land beside it.
+  controls: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-4'],
+    marginTop: 240,
+    width: 320,
+  },
+  scroller: {
+    height: 160,
+    overflowY: 'auto',
+  },
+  scrollerRow: {
+    paddingBlock: spacingVars['--spacing-2'],
+  },
+});
 
 const readinessStyles = stylex.create({
   viewportStoryCanvas: {
@@ -1766,6 +1794,94 @@ export const InClosedInFlowDialog: Story = {
         </DropdownMenu>
         <output data-testid="clicks">{clicks}</output>
       </dialog>
+    );
+  },
+};
+
+/**
+ * A menu above controls that act on a touch: a Switch, a Slider, a list that
+ * scrolls and a row with a swipe action. Each control shows what reached it.
+ * A touch outside the open menu reaches none of them, and a pan outside it
+ * still scrolls the list.
+ */
+export const OutsideTapReachesNothing: Story = {
+  render: ({presentation: _, ...args}: StoryArgs) => {
+    const [isOn, setIsOn] = useState(false);
+    const [switchActs, setSwitchActs] = useState(0);
+    const [level, setLevel] = useState(50);
+    const [sliderActs, setSliderActs] = useState(0);
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [swipes, setSwipes] = useState(0);
+    const swipe = useMemo(
+      () =>
+        createSwipe({
+          trailing: [
+            {
+              id: 'archive',
+              label: 'Archive',
+              onActivate: () => setSwipes(count => count + 1),
+            },
+          ],
+          swipeBehavior: 'commit',
+        }),
+      [],
+    );
+    return (
+      <div {...stylex.props(outsideTouchStyles.page)}>
+        <DropdownMenu button={{label: 'Actions'}} {...args}>
+          <DropdownMenuItem label="Rename" onClick={() => {}} />
+          <DropdownMenuItem label="Duplicate" onClick={() => {}} />
+          <DropdownMenuItem label="Delete" onClick={() => {}} />
+        </DropdownMenu>
+        <div {...stylex.props(outsideTouchStyles.controls)}>
+          <Switch
+            label="Notifications"
+            value={isOn}
+            onChange={checked => {
+              setIsOn(checked);
+              setSwitchActs(count => count + 1);
+            }}
+          />
+          <output data-testid="switch-acts">Switch acts: {switchActs}</output>
+          <Slider
+            label="Volume"
+            value={level}
+            onChange={(value: number) => {
+              setLevel(value);
+              setSliderActs(count => count + 1);
+            }}
+          />
+          <output data-testid="slider-acts">Slider acts: {sliderActs}</output>
+          <div
+            {...stylex.props(outsideTouchStyles.scroller)}
+            role="region"
+            aria-label="Scrolling list"
+            tabIndex={0}
+            onScroll={event =>
+              setScrollOffset(Math.round(event.currentTarget.scrollTop))
+            }>
+            {Array.from({length: 30}, (_, index) => (
+              <div
+                key={index}
+                {...stylex.props(outsideTouchStyles.scrollerRow)}>
+                Row {index + 1}
+              </div>
+            ))}
+          </div>
+          <output data-testid="scroll-offset">
+            Scroll offset: {scrollOffset}px
+          </output>
+          <List>
+            <ListItem
+              itemKey="swipe-row"
+              label="Swipe this row"
+              swipe={swipe}
+              onClick={() => {}}
+            />
+          </List>
+          <output data-testid="swipes">Swipes: {swipes}</output>
+        </div>
+      </div>
     );
   },
 };
