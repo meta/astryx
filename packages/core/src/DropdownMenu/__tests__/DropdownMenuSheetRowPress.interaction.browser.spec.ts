@@ -179,12 +179,20 @@ const END_CONTROLS_CASES = [
   {kind: 'a native checkbox', role: 'checkbox', name: 'Archived'},
 ] as const;
 
-/** The middle of `locator`'s box: where a person aims at the control. */
-async function controlCenter(locator: Locator): Promise<Point> {
+/** `locator`'s rendered box. */
+async function renderedBox(
+  locator: Locator,
+): Promise<{x: number; y: number; width: number; height: number}> {
   const box = await locator.boundingBox();
   if (box == null) {
     throw new Error('the control has no rendered box');
   }
+  return box;
+}
+
+/** The middle of `locator`'s box: where a person aims at the control. */
+async function controlCenter(locator: Locator): Promise<Point> {
+  const box = await renderedBox(locator);
   return {x: box.x + box.width / 2, y: box.y + box.height / 2};
 }
 
@@ -256,7 +264,7 @@ test.describe("a control in a sheet row's end content", () => {
       .getByRole('dialog')
       .getByRole('switch', {name: 'Pinned'});
     const changes = await countChanges(control);
-    const box = (await control.boundingBox())!;
+    const box = await renderedBox(control);
     const start = {x: box.x + 8, y: box.y + box.height / 2};
     const out = {x: box.x + box.width + 12, y: start.y};
     await driver.play([
@@ -280,7 +288,7 @@ test.describe("a control in a sheet row's end content", () => {
       .getByRole('dialog')
       .getByRole('switch', {name: 'Pinned'});
     const changes = await countChanges(control);
-    const box = (await control.boundingBox())!;
+    const box = await renderedBox(control);
     const y = box.y + box.height / 2;
     await page.mouse.move(box.x + 8, y);
     await page.mouse.down();

@@ -35,7 +35,7 @@ import {useTouchPresentation} from '../utils/touchPresentation';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
 import {lockPressedRow} from '../utils/boxHold';
 import {armClickGuard} from '../utils/clickGuard';
-import {markDragFlipped} from '../privateAttributes/pressHoldsDrag.stylex';
+import {markDragFlipped} from '../privateAttributes/dragFlipped.stylex';
 import {
   commitOnRelease,
   dragTarget,
@@ -599,8 +599,16 @@ export class SwitchTouchController {
     this.lastTravel = 0;
     this.downOffset = this.offsetAt(time);
     this.downIsOn = this.isOn;
-    if (this.elements != null) {
-      markDragFlipped(this.elements.input, false);
+  }
+
+  /**
+   * Clears the drag-flipped mark once the press ends. A menu reads it on the
+   * same release, so it goes in the next task.
+   */
+  private clearDragFlipped(): void {
+    const input = this.elements?.input;
+    if (input != null) {
+      setTimeout(() => markDragFlipped(input, false), 0);
     }
   }
 
@@ -771,6 +779,7 @@ export class SwitchTouchController {
       this.showSide(commit, time, undefined, true);
     }
     this.pressEnded(time, true);
+    this.clearDragFlipped();
     const surface = this.elements?.surface;
     if (byBrowserClick && surface != null) {
       // The lift's own click activates the input natively: the switch then
@@ -828,6 +837,7 @@ export class SwitchTouchController {
     this.drag = null;
     this.showSide(this.isOn, time, undefined, true);
     this.pressEnded(time, true);
+    this.clearDragFlipped();
   }
 
   // --- Visuals ---------------------------------------------------------------
