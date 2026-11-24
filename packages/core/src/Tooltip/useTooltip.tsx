@@ -10,7 +10,7 @@
  *   types
  * @position Tooltip's trigger contract. It loads the tooltip's behavior and
  *   layer (tooltipSurface.tsx) once per page, after first paint. Until the
- *   layer exists, the trigger carries no description reference.
+ *   tooltip loads, the trigger carries no description reference.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tooltip/index.ts
@@ -314,7 +314,10 @@ function scheduleTooltipLoad(view: Window | null): void {
   });
 }
 
-/** The loaded layer's ids, which the trigger names once the layer exists. */
+/**
+ * The loaded tooltip's description id and anchor name, which the trigger
+ * names once the description element exists.
+ */
 export interface TooltipLayerIds {
   readonly describedBy: string;
   readonly anchorId: string;
@@ -350,7 +353,10 @@ export interface TooltipBridge {
     surface: TooltipSurfaceHandle,
     readsHeldIntent: boolean,
   ) => () => void;
-  /** The loaded layer reports its ids when it exists, and null when it goes. */
+  /**
+   * The description element (the hidden copy, then the layer's content)
+   * reports its ids when it exists, and null when it goes.
+   */
   readonly reportLayer: (ids: TooltipLayerIds | null) => void;
   /** Schedules the page's load for an attached trigger, if enabled. */
   readonly scheduleLoad: () => void;
@@ -641,8 +647,8 @@ function createTooltipBridge(
  * ```
  */
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
-  // The layer reports from its commit, so the reference goes out in the
-  // same task, before the frame paints, and never ahead of the layer.
+  // The description element reports from its commit, so the reference goes
+  // out in the same task, before the frame paints, and never ahead of it.
   const [layerIds, setLayerIds] = useState<TooltipLayerIds | null>(null);
   const optionsRef = useCommittedRef(options);
   const [bridge] = useState(() =>

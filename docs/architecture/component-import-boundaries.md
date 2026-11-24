@@ -276,7 +276,7 @@ an allowlist row does.
 ## Current-state impact
 
 - INV1, INV8 gap: Text's and Heading's imports reach the touch tap recognizer
-  through the truncation tooltip, 1.7 KB gzip each, on pages whose text never
+  through the truncation tooltip, 1.2 KB gzip each, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
 - INV1 gap: the `HoverCard`, `Popover`, `DropdownMenu`, and `ContextMenu`

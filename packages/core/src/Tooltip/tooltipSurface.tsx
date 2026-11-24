@@ -186,8 +186,9 @@ function hasComponent(node: ReactNode): boolean {
 
 /**
  * The tooltip's behavior on the trigger elements the bridge records, and its
- * layer. The layer reports its ids from its own commit, so the trigger names
- * it only once it exists.
+ * layer. The description element (the hidden copy, then the layer's content)
+ * reports its ids from its own commit, so the trigger names it only once it
+ * exists.
  */
 function useTooltipSurface(
   options: TooltipOptions,
