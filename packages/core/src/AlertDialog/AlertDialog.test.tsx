@@ -531,8 +531,9 @@ describe('AlertDialog', () => {
 describe('AlertDialog action tracking', () => {
   let touchId = 500;
 
-  // Keep each event's own timestamp. A fixed clock can date a new press
-  // inside the entrance hold that just ended.
+  // Stamp each event on the page clock, as a browser does. jsdom stamps an
+  // event with whole milliseconds of `Date.now()`, which can date a touch
+  // that comes just after the entrance hold inside that hold.
   function touch(
     type: 'touchstart' | 'touchmove' | 'touchend',
     target: Element,
@@ -540,6 +541,7 @@ describe('AlertDialog action tracking', () => {
     id: number,
   ): void {
     const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperty(event, 'timeStamp', {value: performance.now()});
     const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
     Object.defineProperty(event, 'changedTouches', {value: [entry]});
     Object.defineProperty(event, 'touches', {
@@ -754,6 +756,9 @@ describe('AlertDialog action tracking', () => {
 describe('AlertDialog touch motion', () => {
   let touchId = 900;
 
+  // Stamp each event on the page clock, as a browser does. jsdom stamps an
+  // event with whole milliseconds of `Date.now()`, which can date a touch
+  // that comes just after the entrance hold inside that hold.
   function touch(
     type: 'touchstart' | 'touchend',
     target: Element,
@@ -761,6 +766,7 @@ describe('AlertDialog touch motion', () => {
     id: number,
   ): void {
     const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperty(event, 'timeStamp', {value: performance.now()});
     const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
     Object.defineProperty(event, 'changedTouches', {value: [entry]});
     Object.defineProperty(event, 'touches', {

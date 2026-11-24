@@ -114,10 +114,13 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         with:
+          # The Node leg planner reads the real-Chrome test files' sources
+          # (scripts/vitest-node-legs.mjs nodeLegsApart).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/scripts/lib
             scripts/lib
+            packages/cli/api/theme-edit
           path: .ci-admission
           persist-credentials: false
 
@@ -128,10 +131,13 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         with:
+          # The Node leg planner reads the real-Chrome test files' sources
+          # (scripts/vitest-node-legs.mjs nodeLegsApart).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/scripts/lib
             scripts/lib
+            packages/cli/api/theme-edit
           path: .ci-admission
           persist-credentials: false
 

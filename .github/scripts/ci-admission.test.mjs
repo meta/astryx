@@ -262,6 +262,7 @@ describe('where runs wait', () => {
       'interaction-legs',
       'pr-a11y-dependent-audits',
       'pr-component-a11y-contracts',
+      'pr-firefox-hover',
       'pr-interaction',
       'pr-interaction-webkit',
       'pr-touched-components',

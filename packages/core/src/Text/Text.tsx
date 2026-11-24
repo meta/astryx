@@ -292,6 +292,7 @@ export function Text({
   const tooltipInterest = useTruncationTooltipInterest(
     tooltipEnabled,
     truncation.measure,
+    textRef,
   );
 
   // Keep the merged ref stable across rerenders.
@@ -339,9 +340,9 @@ export function Text({
           {...style, ...inlineStyle},
         )}
         {...props}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          props.onPointerEnter,
+        onPointerMove={composeEventHandlers(
+          tooltipInterest.onPointerMove,
+          props.onPointerMove,
         )}
         onPointerLeave={composeEventHandlers(
           tooltipInterest.onPointerLeave,

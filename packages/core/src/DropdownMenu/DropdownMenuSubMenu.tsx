@@ -68,6 +68,7 @@ import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {surfaceEdgeStyles} from '../Popover/surfaceEdge.stylex';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMenuHover} from '../hooks/useMenuHover';
@@ -99,6 +100,11 @@ import {
   rtlStyles,
 } from '../utils';
 import {visibleText} from '../utils/accessibleName';
+import {
+  cutTextDirection,
+  isolatedText,
+  truncatedTextStyles,
+} from '../utils/textDirection';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -222,19 +228,7 @@ const flyoutStyles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors removes box-shadow, which is this surface's only edge.
-    borderWidth: {
-      default: null,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: null,
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'CanvasText',
-    },
+    // Its forced-colors edge is surfaceEdgeStyles.edgeKeepingFocus.
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -369,6 +363,20 @@ const regionStyles = stylex.create({
   },
   hidden: {
     display: 'none',
+  },
+  // A drilled-in view's frame carries the menu target, so a theme's corner
+  // variables reach it; its rows keep the default corners.
+  viewRowCorners: {
+    '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
+    '--_dropdown-menu-padding': spacingVars['--spacing-1'],
   },
 });
 
@@ -511,6 +519,47 @@ function hideRegionedFlyoutsIn(menu: HTMLElement | null): void {
   }
 }
 
+// The parent title goes into the translated "Back to …" text through this
+// slot, so the title can keep its own direction there.
+const PARENT_SLOT = '\u0000';
+
+/**
+ * "Back to <parent>" on one line that ends in an ellipsis. The label takes
+ * the direction of its whole text, so a label that mixes scripts follows the
+ * page. The parent title sits in its own isolated span, so it keeps its own
+ * character order.
+ */
+function backToLabel(template: string, parent: string): ReactNode {
+  if (!template.includes(PARENT_SLOT)) {
+    return template;
+  }
+  const [before, after = ''] = template.split(PARENT_SLOT);
+  const {dir} = cutTextDirection(before + parent + after);
+  return (
+    <span
+      dir={dir}
+      {...stylex.props(
+        backLabelStyles.label,
+        dir != null && truncatedTextStyles.pageAlign,
+      )}>
+      {before}
+      {isolatedText(parent, undefined, cutTextDirection(parent).dir)}
+      {after}
+    </span>
+  );
+}
+
+const backLabelStyles = stylex.create({
+  // One line with an ellipsis, as a string row label is.
+  label: {
+    display: 'block',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+});
+
 /**
  * A single menu row that reveals a nested flyout of its own items. The row
  * adopts DropdownMenuItem semantics (label / icon / description / isDisabled);
@@ -622,7 +671,10 @@ export function DropdownMenuSubMenu(
   const parentLabel = menuCtx?.menuLabel;
   const backLabel =
     parentLabel != null
-      ? t('@astryx.dropdownMenu.backTo', {parent: parentLabel})
+      ? backToLabel(
+          t('@astryx.dropdownMenu.backTo', {parent: PARENT_SLOT}),
+          parentLabel,
+        )
       : t('@astryx.dropdownMenu.back');
 
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
@@ -1223,7 +1275,7 @@ export function DropdownMenuSubMenu(
         : undefined)}
       {...(surface === 'flyout'
         ? // The flyout's frame paints its surface, so the menu target rides
-          // on it; a drilled-in view sits inside the root's surface.
+          // on it.
           mergeProps(
             themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(
@@ -1234,11 +1286,17 @@ export function DropdownMenuSubMenu(
               layerAnimations.end,
             ),
           )
-        : stylex.props(
-            regionStyles.frame,
-            rootSurface?.menuMaxHeight != null &&
-              dynamicRegionStyles.viewMaxHeight(rootSurface.menuMaxHeight),
-            frameProps.hidden === true && regionStyles.hidden,
+        : // A drilled-in view shows while the root's menu, which carries the
+          // menu target, steps aside, so the view carries the target in its
+          // place.
+          mergeProps(
+            themeProps('dropdown-menu', {presentation: 'popover'}),
+            stylex.props(
+              regionStyles.frame,
+              rootSurface?.menuMaxHeight != null &&
+                dynamicRegionStyles.viewMaxHeight(rootSurface.menuMaxHeight),
+              frameProps.hidden === true && regionStyles.hidden,
+            ),
           ))}>
       {isRenderable(header) && (
         <div
@@ -1359,6 +1417,7 @@ export function DropdownMenuSubMenu(
                     {...surfaceOwnerProps}
                     {...stylex.props(
                       regionStyles.menu,
+                      regionStyles.viewRowCorners,
                       hasOverflow && flyoutStyles.scrollable,
                       hasOverflow
                         ? flyoutStyles.touchPanYPinchZoom
@@ -1455,6 +1514,7 @@ export function DropdownMenuSubMenu(
                     themeProps('dropdown-menu', {presentation: 'popover'}),
                     stylex.props(
                       flyoutStyles.menu,
+                      surfaceEdgeStyles.edgeKeepingFocus,
                       hasOverflow
                         ? flyoutStyles.touchPanYPinchZoom
                         : flyoutStyles.touchPinchZoom,

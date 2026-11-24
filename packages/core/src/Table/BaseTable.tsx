@@ -45,6 +45,8 @@ import {
   getLogicalPositionRenderer,
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
+import {cutHeadingStyles} from './table.stylex';
+import {cutTextDirection, truncatedTextStyles} from '../utils/textDirection';
 import {isRenderable} from '../utils/isRenderable';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
@@ -966,9 +968,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
       const hasSlots =
         before != null || after != null || overlay != null || below != null;
 
+      // The label cuts its own text before the "after" controls, so a
+      // plain-text label takes its text's direction.
+      const labelDirection = cutTextDirection(resolvedContent);
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
-          <span {...stylex.props(styles.headerLabel)}>{resolvedContent}</span>
+          <span
+            {...labelDirection}
+            {...stylex.props(
+              styles.headerLabel,
+              labelDirection.dir != null && truncatedTextStyles.pageAlign,
+            )}>
+            {resolvedContent}
+          </span>
           {after}
         </div>
       ) : (
@@ -985,12 +997,30 @@ function BaseTableInner<T extends Record<string, unknown>>({
       const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
       const hasBelow = isRenderable(below);
 
+      // The resize boundary makes the cell's overflow visible, so the cell
+      // cannot cut the label. A plain-text label with no before or after slot
+      // cuts in its own box.
+      const cutsOwnLabel =
+        textOverflow === 'truncate' &&
+        (typeof resolvedContent === 'string' ||
+          typeof resolvedContent === 'number') &&
+        !isRenderable(before) &&
+        !isRenderable(after);
       const headerInner = !hasSlots ? (
         resolvedContent
       ) : namesOwnHeader ? (
         <>
-          {/* Inline, so the cell's text-overflow still reaches the label. */}
-          <span id={labelId}>
+          <span
+            id={labelId}
+            {...(cutsOwnLabel
+              ? {
+                  ...labelDirection,
+                  ...stylex.props(
+                    cutHeadingStyles.label,
+                    labelDirection.dir != null && truncatedTextStyles.pageAlign,
+                  ),
+                }
+              : null)}>
             {before}
             {labelRow}
           </span>

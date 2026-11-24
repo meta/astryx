@@ -71,9 +71,13 @@ const templatesDir = path.resolve(
   '../../packages/cli/assets/templates/pages',
 );
 
-// A tile shows its page at less than half size, so this width is enough on a
-// high-density screen. It must be a width the image optimizer allows.
-export const PREVIEW_IMAGE_WIDTH = 640;
+// A tile lays its page out at full size and scales the whole page down. It
+// draws a photo at about one fifth of the photo's layout size, so the largest
+// photo box of a tile sets this width, not the template's layout. The width
+// is a constant: the generator rewrites a URL in the template's source, and
+// has no `<img>` to give a `srcset` to. It must be a width the image
+// optimizer allows.
+export const PREVIEW_IMAGE_WIDTH = 384;
 
 /**
  * How a preview whose markup the site takes is rendered: the site's own
