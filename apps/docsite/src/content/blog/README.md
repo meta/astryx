@@ -229,7 +229,7 @@ excluded from production builds.
 ## 7. Validate before you push
 
 ```bash
-pnpm generate       # discovers + validates posts into src/generated/blogRegistry.ts
+pnpm generate       # discovers + validates posts into src/generated/ (blogRegistry.ts, blogPostBodies.json)
 pnpm test           # runs blog discovery/validation tests
 pnpm typecheck
 ```

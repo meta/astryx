@@ -1,11 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file package-text-bundle-check.test.ts
- * @input The build's check for package text in browser scripts
- * @output Proof that the check reports a script that holds a README or a
- *   changelog, does not report a script that quotes one line, and fails when
- *   it has no script or no text to check
+ * @file server-text-bundle-check.test.ts
+ * @input The build's check for package text and blog post bodies in browser
+ *   scripts
+ * @output Proof that the check reports a script that holds a README, a
+ *   changelog or the body of a post, does not report a script that quotes
+ *   one line, and fails when it has no script or no package text to check,
+ *   or posts with no body to check
  * @position Docsite unit tests. The docsite build runs the check on the real
  *   scripts.
  * Run: pnpm -F @astryxdesign/docsite test
@@ -16,11 +18,12 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
-  checkPackageTextBundle,
-  sampledTexts,
+  checkServerTextBundle,
+  sampledPackageTexts,
+  sampledPostBodies,
   sampleLines,
   textsInScripts,
-} from '../../scripts/check-package-text-bundle.mjs';
+} from '../../scripts/check-server-text-bundle.mjs';
 
 const lines = (topic: string, count: number) =>
   Array.from(
@@ -33,6 +36,8 @@ const CHANGELOG = ['# 1.2.0', '', ...lines('changelog', 30)].join('\n');
 const PACKAGE_TEXT = [
   {name: '@example/widgets', readme: README, changelog: CHANGELOG},
 ];
+const BODY = ['## A first post', '', ...lines('post', 30)].join('\n');
+const POST_BODIES = {'a-first-post': BODY};
 
 /** A script that holds a value the way a minifier writes a string. */
 const scriptWith = (value: unknown) =>
@@ -81,7 +86,7 @@ describe('sampleLines', () => {
 });
 
 describe('textsInScripts', () => {
-  const TEXTS = sampledTexts(PACKAGE_TEXT);
+  const TEXTS = sampledPackageTexts(PACKAGE_TEXT);
 
   it('reports a script that holds a README', () => {
     expect(
@@ -134,9 +139,9 @@ describe('textsInScripts', () => {
   });
 });
 
-describe('sampledTexts', () => {
+describe('sampledPackageTexts', () => {
   it('labels the README and the changelog of a package', () => {
-    expect(sampledTexts(PACKAGE_TEXT)).toEqual([
+    expect(sampledPackageTexts(PACKAGE_TEXT)).toEqual([
       {label: '@example/widgets README', samples: sampleLines(README)},
       {label: '@example/widgets changelog', samples: sampleLines(CHANGELOG)},
     ]);
@@ -144,7 +149,7 @@ describe('sampledTexts', () => {
 
   it('skips a package with no text, and a text with one line to sample', () => {
     expect(
-      sampledTexts([
+      sampledPackageTexts([
         {name: '@example/empty', readme: null, changelog: null},
         {
           name: '@example/tiny',
@@ -156,7 +161,33 @@ describe('sampledTexts', () => {
   });
 });
 
-describe('checkPackageTextBundle', () => {
+describe('sampledPostBodies', () => {
+  it('labels the body of each post with its slug', () => {
+    expect(
+      sampledPostBodies({
+        'a-first-post': BODY,
+        'a-second-post': lines('second post', 3).join('\n'),
+      }),
+    ).toEqual([
+      {label: 'blog post a-first-post', samples: sampleLines(BODY)},
+      {
+        label: 'blog post a-second-post',
+        samples: lines('second post', 3),
+      },
+    ]);
+  });
+
+  it('skips a body with one line to sample', () => {
+    expect(
+      sampledPostBodies({
+        'a-short-post':
+          'The one line of this body that is long enough to sample.',
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('checkServerTextBundle', () => {
   const roots: string[] = [];
   afterEach(() => {
     for (const root of roots.splice(0)) {
@@ -165,89 +196,137 @@ describe('checkPackageTextBundle', () => {
   });
 
   /** A build in the temporary directory of the system, not in the app. */
-  function build(files: Record<string, string>, packageText: unknown) {
-    const root = mkdtempSync(join(tmpdir(), 'package-text-bundle-'));
+  function build(
+    files: Record<string, string>,
+    packageText: unknown = PACKAGE_TEXT,
+    postBodies: unknown = POST_BODIES,
+  ) {
+    const root = mkdtempSync(join(tmpdir(), 'server-text-bundle-'));
     roots.push(root);
     const chunksRoot = join(root, 'chunks');
     for (const [path, source] of Object.entries(files)) {
       mkdirSync(join(chunksRoot, path, '..'), {recursive: true});
       writeFileSync(join(chunksRoot, path), source);
     }
-    const textPath = join(root, 'packageText.json');
-    writeFileSync(textPath, JSON.stringify(packageText));
-    return {chunksRoot, textPath};
+    const packageTextPath = join(root, 'packageText.json');
+    writeFileSync(packageTextPath, JSON.stringify(packageText));
+    const postBodiesPath = join(root, 'blogPostBodies.json');
+    writeFileSync(postBodiesPath, JSON.stringify(postBodies));
+    return {chunksRoot, packageTextPath, postBodiesPath};
   }
 
   it('passes when no script holds a text, and counts what it checked', () => {
     expect(
-      checkPackageTextBundle(
-        build(
-          {
-            'main.js': scriptWith('no package text'),
-            'app/page.js': scriptWith(sampleLines(README)[0]),
-          },
-          PACKAGE_TEXT,
-        ),
+      checkServerTextBundle(
+        build({
+          'main.js': scriptWith('no server text'),
+          'app/page.js': scriptWith([
+            sampleLines(README)[0],
+            sampleLines(BODY)[0],
+          ]),
+        }),
       ),
     ).toBe(
-      'Package text bundle check passed: 2 browser scripts hold none of 2 README and changelog texts',
+      'Server text bundle check passed: 2 browser scripts hold none of 2 README and changelog texts and 1 blog post bodies',
     );
   });
 
-  it('fails when a script in a nested directory holds a text', () => {
+  it('fails when a script in a nested directory holds package text', () => {
     expect(() =>
-      checkPackageTextBundle(
-        build(
-          {
-            'main.js': scriptWith('no package text'),
-            'app/docs/page.js': scriptWith(PACKAGE_TEXT),
-          },
-          PACKAGE_TEXT,
-        ),
+      checkServerTextBundle(
+        build({
+          'main.js': scriptWith('no server text'),
+          'app/docs/page.js': scriptWith(PACKAGE_TEXT),
+        }),
       ),
     ).toThrow(
-      'Only server modules may import src/lib/packageText.ts:\n' +
+      'Only server modules may import src/lib/packageText.ts and src/lib/blog/postBodies.ts:\n' +
         '- @example/widgets README (10 of 10 sampled lines) in app/docs/page.js\n' +
         '- @example/widgets changelog (10 of 10 sampled lines) in app/docs/page.js',
     );
   });
 
+  it('fails when a script holds the body of a blog post', () => {
+    expect(() =>
+      checkServerTextBundle(
+        build({
+          'main.js': scriptWith('no server text'),
+          'app/blog/page.js': scriptWith(POST_BODIES),
+        }),
+      ),
+    ).toThrow(
+      'Only server modules may import src/lib/packageText.ts and src/lib/blog/postBodies.ts:\n' +
+        '- blog post a-first-post (10 of 10 sampled lines) in app/blog/page.js',
+    );
+  });
+
   it('reads scripts only', () => {
     expect(
-      checkPackageTextBundle(
-        build(
-          {
-            'main.js': scriptWith('no package text'),
-            'main.js.map': JSON.stringify({sourcesContent: [README]}),
-          },
-          PACKAGE_TEXT,
-        ),
+      checkServerTextBundle(
+        build({
+          'main.js': scriptWith('no server text'),
+          'main.js.map': JSON.stringify({sourcesContent: [README, BODY]}),
+        }),
       ),
     ).toContain('1 browser scripts hold none of 2');
   });
 
   it('fails when the build has no scripts directory', () => {
-    const {textPath} = build({}, PACKAGE_TEXT);
+    const paths = build({});
     expect(() =>
-      checkPackageTextBundle({chunksRoot: join(textPath, 'missing'), textPath}),
+      checkServerTextBundle({
+        ...paths,
+        chunksRoot: join(paths.packageTextPath, 'missing'),
+      }),
     ).toThrow('is missing: run next build first.');
   });
 
   it('fails when the build has no script to check', () => {
     expect(() =>
-      checkPackageTextBundle(
-        build({'styles.css': 'body{margin:0}'}, PACKAGE_TEXT),
-      ),
+      checkServerTextBundle(build({'styles.css': 'body{margin:0}'})),
     ).toThrow('No browser script found under');
   });
 
-  it('fails when there is no text to check', () => {
+  it('fails when there is no package text to check', () => {
     expect(() =>
-      checkPackageTextBundle(
+      checkServerTextBundle(
         build({'main.js': scriptWith(PACKAGE_TEXT)}, [
           {name: '@example/empty', readme: null, changelog: null},
         ]),
       ),
     ).toThrow('No README or changelog text to check in');
+  });
+
+  it('fails when the blog has posts and no body to check', () => {
+    expect(() =>
+      checkServerTextBundle(
+        build({'main.js': scriptWith('no server text')}, PACKAGE_TEXT, {
+          'a-short-post':
+            'The one line of this body that is long enough to sample.',
+        }),
+      ),
+    ).toThrow('No blog post body to check in');
+  });
+
+  it('passes when one body of several has one line to sample, and does not count it', () => {
+    expect(
+      checkServerTextBundle(
+        build({'main.js': scriptWith('no server text')}, PACKAGE_TEXT, {
+          ...POST_BODIES,
+          'a-short-post':
+            'The one line of this body that is long enough to sample.',
+        }),
+      ),
+    ).toContain('and 1 blog post bodies');
+  });
+
+  it('passes for a blog with no post', () => {
+    expect(
+      checkServerTextBundle(
+        build({'main.js': scriptWith('no server text')}, PACKAGE_TEXT, {}),
+      ),
+    ).toBe(
+      'Server text bundle check passed: 1 browser scripts hold none of 2 README and changelog texts and 0 blog post bodies',
+    );
   });
 });
