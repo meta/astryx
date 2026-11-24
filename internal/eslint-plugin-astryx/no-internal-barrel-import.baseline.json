@@ -286,11 +286,6 @@
   ],
   "packages/core/src/MetadataList/MetadataList.tsx": ["../utils"],
   "packages/core/src/MetadataList/MetadataListItem.tsx": ["../utils"],
-  "packages/core/src/MobileNav/MobileNav.tsx": [
-    "../Button",
-    "../Icon",
-    "../utils"
-  ],
   "packages/core/src/MobileNav/MobileNavToggle.tsx": [
     "../Button",
     "../Icon",
@@ -310,7 +305,6 @@
   ],
   "packages/core/src/NavIcon/NavIcon.tsx": ["../utils"],
   "packages/core/src/NavMenu/NavHeadingMenu.tsx": ["../utils"],
-  "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": ["../Icon", "../Text"],
   "packages/core/src/NumberInput/NumberInput.tsx": [
     "../Field",
     "../Icon",
