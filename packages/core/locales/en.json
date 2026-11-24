@@ -2339,6 +2339,14 @@
     "defaultMessage": "Agents",
     "description": "Accessible name of a lab CommentComposer's slash-command menu, which lists the AI agents a comment can address."
   },
+  "@astryx.commentComposer.agentCommandUsage": {
+    "defaultMessage": "/{command} '<prompt>'",
+    "description": "First line of an AI agent in a lab CommentComposer's slash-command menu: how to address the agent. {command} is the command after the slash, such as ask. Keep /{command}. Translate only the word prompt, the placeholder for what the viewer asks; the apostrophes keep the angle brackets as text."
+  },
+  "@astryx.commentComposer.agentCommandSummary": {
+    "defaultMessage": "{name} · {description}",
+    "description": "Second line of an AI agent in a lab CommentComposer's slash-command menu. {name} is the agent's name and {description} says what asking it does; the app writes both."
+  },
   "@astryx.commentComposer.uploadFailed": {
     "defaultMessage": "Images couldn't be added",
     "description": "Error Banner title in a lab CommentComposer when uploading attached images failed; a Retry action follows."
