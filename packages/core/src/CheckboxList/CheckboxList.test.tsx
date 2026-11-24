@@ -1317,6 +1317,7 @@ describe('CheckboxListItem ARIA props', () => {
       );
       const group = screen.getByRole('group');
       fireEvent.mouseEnter(group);
+      fireEvent.pointerMove(group);
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));

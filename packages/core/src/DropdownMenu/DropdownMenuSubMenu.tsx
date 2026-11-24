@@ -370,6 +370,20 @@ const regionStyles = stylex.create({
   hidden: {
     display: 'none',
   },
+  // A drilled-in view's frame carries the menu target, so a theme's corner
+  // variables reach it; its rows keep the default corners.
+  viewRowCorners: {
+    '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
+    '--_dropdown-menu-padding': spacingVars['--spacing-1'],
+  },
 });
 
 export type DropdownMenuSubMenuPresentation =
@@ -1223,7 +1237,7 @@ export function DropdownMenuSubMenu(
         : undefined)}
       {...(surface === 'flyout'
         ? // The flyout's frame paints its surface, so the menu target rides
-          // on it; a drilled-in view sits inside the root's surface.
+          // on it.
           mergeProps(
             themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(
@@ -1234,11 +1248,17 @@ export function DropdownMenuSubMenu(
               layerAnimations.end,
             ),
           )
-        : stylex.props(
-            regionStyles.frame,
-            rootSurface?.menuMaxHeight != null &&
-              dynamicRegionStyles.viewMaxHeight(rootSurface.menuMaxHeight),
-            frameProps.hidden === true && regionStyles.hidden,
+        : // A drilled-in view shows while the root's menu, which carries the
+          // menu target, steps aside, so the view carries the target in its
+          // place.
+          mergeProps(
+            themeProps('dropdown-menu', {presentation: 'popover'}),
+            stylex.props(
+              regionStyles.frame,
+              rootSurface?.menuMaxHeight != null &&
+                dynamicRegionStyles.viewMaxHeight(rootSurface.menuMaxHeight),
+              frameProps.hidden === true && regionStyles.hidden,
+            ),
           ))}>
       {isRenderable(header) && (
         <div
@@ -1359,6 +1379,7 @@ export function DropdownMenuSubMenu(
                     {...surfaceOwnerProps}
                     {...stylex.props(
                       regionStyles.menu,
+                      regionStyles.viewRowCorners,
                       hasOverflow && flyoutStyles.scrollable,
                       hasOverflow
                         ? flyoutStyles.touchPanYPinchZoom

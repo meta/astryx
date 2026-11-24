@@ -23,6 +23,7 @@ import {
   type RefCallback,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {holdMouseMoves, isMouseMove} from '../utils/inputStream';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -531,7 +532,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   }, []);
 
   // Event handlers
-  const handleMouseEnter = useCallback(() => {
+  const handleHover = useCallback(() => {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — including the tap that just opened the
     // tooltip, which would otherwise be double-handled.
@@ -541,8 +542,37 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     scheduleShow();
   }, [isTouchPointerRef, scheduleShow]);
 
+  // Set from a mouse or pen's arrival on the trigger until it first moves
+  // there. A browser also sends the arrival when the trigger appears or
+  // moves under a still pointer, after a layout change or a scroll. The user
+  // did not point at the trigger then, so only a move over it opens the
+  // tooltip. A pointer that moves onto the trigger also moves over it in the
+  // same frame, so a real hover opens after `delay`. Firefox sends that
+  // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
+  // counts too. After a scroll WebKit also sends a move at the point where
+  // the mouse already was; that is not a move (isMouseMove).
+  const isArrivalUnmovedRef = useRef(false);
+  const handleMouseEnter = useCallback(() => {
+    isArrivalUnmovedRef.current = !isTouchPointerRef.current;
+  }, [isTouchPointerRef]);
+  const handlePointerMove = useCallback(
+    (event: MouseEvent) => {
+      if (
+        !isArrivalUnmovedRef.current ||
+        (event as Partial<PointerEvent>).pointerType === 'touch' ||
+        !isMouseMove(event)
+      ) {
+        return;
+      }
+      isArrivalUnmovedRef.current = false;
+      handleHover();
+    },
+    [handleHover],
+  );
+
   const handleMouseLeave = useCallback(
     (event: Event) => {
+      isArrivalUnmovedRef.current = false;
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
@@ -671,6 +701,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      // A press before the first move ends that arrival too, so a later move
+      // over the pressed trigger opens nothing until the pointer leaves.
+      isArrivalUnmovedRef.current = false;
       trackTriggerPress();
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict. A show() in a capture handler of this
@@ -708,7 +741,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // The trigger's listeners call the committed handlers through this ref, so
   // the trigger ref callback keeps one identity.
   const handlersRef = useCommittedRef({
+    handleHover,
     handleMouseEnter,
+    handlePointerMove,
     handleMouseLeave,
     handleFocusIn,
     handleFocusOut,
@@ -758,6 +793,43 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     settleDetach();
   });
 
+  // Keeps the input stream of the trigger's window hearing mouse moves
+  // (isMouseMove) while a hover can open this tooltip. A hover can open it
+  // when a trigger is attached, the tooltip is enabled, and `isOpen` does not
+  // control it.
+  const mouseMoveHoldRef = useRef<{
+    view: Window;
+    release: () => void;
+  } | null>(null);
+  const syncMouseMoveHold = useCallback(() => {
+    const latest = handlersRef.current;
+    const view =
+      latest.isEnabled && latest.isOpen === undefined
+        ? (triggerRef.current?.ownerDocument.defaultView ?? null)
+        : null;
+    const held = mouseMoveHoldRef.current;
+    if ((held?.view ?? null) === view) {
+      return;
+    }
+    held?.release();
+    mouseMoveHoldRef.current =
+      view == null ? null : {view, release: holdMouseMoves(view)};
+  }, [handlersRef]);
+  const opensOnHover = isEnabled && isOpen === undefined;
+  // Effect: follows a change to `isEnabled` or `isOpen` after the trigger
+  // attached.
+  useEffect(() => {
+    syncMouseMoveHold();
+  }, [opensOnHover, syncMouseMoveHold]);
+  // Effect: releases the hold when the hook unmounts.
+  useEffect(
+    () => () => {
+      mouseMoveHoldRef.current?.release();
+      mouseMoveHoldRef.current = null;
+    },
+    [],
+  );
+
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
   const interactionRef = useCallback(
@@ -778,6 +850,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       const onPointerEnter = (e: PointerEvent) =>
         latest().handlePointerEnter(e);
       const onMouseEnter = () => latest().handleMouseEnter();
+      const onPointerMove = (e: MouseEvent) => latest().handlePointerMove(e);
       const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
       // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
       const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
@@ -797,12 +870,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
       el.addEventListener('pointerenter', onPointerEnter);
       el.addEventListener('mouseenter', onMouseEnter);
+      el.addEventListener('pointermove', onPointerMove);
+      el.addEventListener('mousemove', onPointerMove);
       el.addEventListener('mouseleave', onMouseLeave);
       el.addEventListener('pointerdown', onPointerDown);
       el.addEventListener('focusin', onFocusIn);
       el.addEventListener('focusout', onFocusOut);
       el.addEventListener('focusout', onHeldFocusOut);
       triggerRef.current = el;
+      syncMouseMoveHold();
 
       // A trigger that attaches again after its wiring was removed
       // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -837,7 +913,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       if (latest().isEnabled && latest().isOpen === undefined) {
         if (interest === 'hover') {
-          latest().handleMouseEnter();
+          // The anchor saw the hover before this tooltip mounted.
+          latest().handleHover();
         } else if (interest === 'tap') {
           latest().answerTap(tapEvent);
         } else if (
@@ -857,6 +934,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         }
         el.removeEventListener('pointerenter', onPointerEnter);
         el.removeEventListener('mouseenter', onMouseEnter);
+        el.removeEventListener('pointermove', onPointerMove);
+        el.removeEventListener('mousemove', onPointerMove);
         el.removeEventListener('mouseleave', onMouseLeave);
         el.removeEventListener('pointerdown', onPointerDown);
         el.removeEventListener('focusin', onFocusIn);
@@ -865,6 +944,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         stopPressTrackingRef.current?.();
         if (triggerRef.current === el) {
           triggerRef.current = null;
+          // React re-attaches a trigger whose ref changes identity in the
+          // same commit. The release waits for that, so the window keeps the
+          // mouse's last point.
+          queueMicrotask(syncMouseMoveHold);
         }
         // This cleanup runs before the commit's insertion Effects write the
         // flags, so the detach settles once they are written.
@@ -874,7 +957,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       detachTriggerRef.current = detach;
       return detach;
     },
-    [handlersRef, settleDetach],
+    [handlersRef, settleDetach, syncMouseMoveHold],
   );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef

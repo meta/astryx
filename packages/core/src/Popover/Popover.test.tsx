@@ -37,6 +37,7 @@ import React, {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
 import {usePopover} from './usePopover';
+import {announceMessage} from '../hooks/useAnnounce';
 import type {UsePopoverReturn} from './usePopover';
 import {Dialog} from '../Dialog';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
@@ -2180,17 +2181,21 @@ describe('usePopover Tab behavior and modality (AST-116 FR12–FR15)', () => {
         </>
       );
     }
-    render(<Step />);
+    // An earlier announcement leaves the page's shared live region, which is
+    // also a status, in the body. The test reads only its own output.
+    announceMessage('Saved', 'polite')?.();
+    const {container} = render(<Step />);
+    const state = () => within(container).getByRole('status');
     fireEvent.click(screen.getByRole('button', {name: 'Start'}));
-    expect(screen.getByRole('status')).toHaveTextContent('open');
+    expect(state()).toHaveTextContent('open');
 
     screen.getByRole('button', {name: 'Elsewhere'}).focus();
     await user.keyboard('{Escape}');
-    expect(screen.getByRole('status')).toHaveTextContent('open');
+    expect(state()).toHaveTextContent('open');
 
     screen.getByRole('button', {name: 'Target'}).focus();
     await user.keyboard('{Escape}');
-    expect(screen.getByRole('status')).toHaveTextContent('closed');
+    expect(state()).toHaveTextContent('closed');
   });
 
   it('rejects an option that usePopover does not have', () => {

@@ -3022,6 +3022,11 @@
       "aliases": []
     },
     {
+      "name": "example-selectable-card-group-shipping-speed",
+      "path": "examples/selectable-card-group/shipping-speed",
+      "aliases": []
+    },
+    {
       "name": "example-selectable-card-elevated",
       "path": "examples/selectable-card/elevated",
       "aliases": []
@@ -3917,6 +3922,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-indicator-focus-ring-custom-checkbox-ring",
+      "path": "examples/use-indicator-focus-ring/custom-checkbox-ring",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-container-search-field-wrapper",
       "path": "examples/use-input-container/search-field-wrapper",
       "aliases": []
@@ -3964,6 +3974,11 @@
     {
       "name": "example-use-locale-invoice-summary",
       "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-long-press-touch-right-click-context-actions",
+      "path": "examples/use-long-press/touch-right-click-context-actions",
       "aliases": []
     },
     {
@@ -5299,6 +5314,11 @@
     {
       "name": "showcase-segmented-control-default",
       "path": "showcases/segmented-control/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-selectable-card-group-plan-picker",
+      "path": "showcases/selectable-card-group/plan-picker",
       "aliases": []
     },
     {

@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Token/ (showcase blocks)
  */
 
-import {use, type ReactNode} from 'react';
+import {use, type ReactElement, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -54,6 +54,11 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Token/Token.generated';
 import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
+import {
+  TokenFocusHandoff,
+  TokenLinkLabel,
+  TokenRemoveButton,
+} from './TokenFocusHandoff';
 
 registerEnglishFallback(english);
 
@@ -333,6 +338,14 @@ export function Token({
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
   const naming = use(TokenNamingContext);
+  // Disabling a link Token, or enabling it again, replaces its structure.
+  // TokenFocusHandoff stays in place above it, so the new label and Remove
+  // button take focus from the old ones.
+  const isLink = href != null;
+  const Label = isLink ? TokenLinkLabel : 'span';
+  const RemoveButton = isLink ? TokenRemoveButton : 'button';
+  const withFocusHandoff = (structure: ReactElement): ReactElement =>
+    isLink ? <TokenFocusHandoff>{structure}</TokenFocusHandoff> : structure;
 
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
@@ -341,7 +354,7 @@ export function Token({
   const labelDirection = cutTextDirection(label);
 
   const removeButton = onRemove != null && (
-    <button
+    <RemoveButton
       type="button"
       aria-label={t('@astryx.token.remove', {
         label: naming?.removeName ?? label,
@@ -361,13 +374,13 @@ export function Token({
         interactionOverlayStyles.backgroundImage,
       )}>
       <Icon icon="close" size="xsm" color="inherit" />
-    </button>
+    </RemoveButton>
   );
 
   const content = (
     <>
       {icon}
-      <span
+      <Label
         {...labelDirection}
         {...stylex.props(
           styles.label,
@@ -375,7 +388,7 @@ export function Token({
           isLabelHidden && styles.labelHidden,
         )}>
         {label}
-      </span>
+      </Label>
       {endContent}
       {removeButton}
     </>
@@ -411,7 +424,7 @@ export function Token({
     // The router LinkComponent is skipped, since a custom router link may
     // require a live href.
     const DisabledAnchor = 'a';
-    return (
+    return withFocusHandoff(
       <DisabledAnchor
         ref={ref as React.Ref<HTMLAnchorElement>}
         role="link"
@@ -435,13 +448,13 @@ export function Token({
         {...disabledInteractionProps(rest.onKeyDown)}
         {...sharedProps}>
         {content}
-      </DisabledAnchor>
+      </DisabledAnchor>,
     );
   }
 
   if (role === 'link' || isDisabledLink) {
     if (onRemove == null) {
-      return (
+      return withFocusHandoff(
         <LinkComponent
           ref={ref as React.Ref<HTMLAnchorElement>}
           href={href as string}
@@ -470,7 +483,7 @@ export function Token({
           {...(isDisabled ? {'aria-disabled': true} : {})}
           {...sharedProps}>
           {content}
-        </LinkComponent>
+        </LinkComponent>,
       );
     }
 
@@ -481,7 +494,7 @@ export function Token({
     // the whole token surface activates the link (including middle-click and
     // cmd/ctrl-click to open in a new tab). Token itself stays presentational
     // (no refs/effects) per the @astryx/presentational-component rule.
-    return (
+    return withFocusHandoff(
       <TokenLink
         ref={ref}
         href={href as string}
@@ -497,7 +510,7 @@ export function Token({
         }}
         {...pressable}
         labelContent={
-          <span
+          <Label
             {...labelDirection}
             {...stylex.props(
               styles.label,
@@ -505,7 +518,7 @@ export function Token({
               isLabelHidden && styles.labelHidden,
             )}>
             {label}
-          </span>
+          </Label>
         }
         {...mergeProps(
           themeProps('token', {
@@ -531,7 +544,7 @@ export function Token({
         {...rest}
         {...labellingProps}
         {...sharedProps}
-      />
+      />,
     );
   }
 
@@ -557,7 +570,7 @@ export function Token({
       );
     };
 
-    return (
+    return withFocusHandoff(
       <span
         ref={ref}
         onClick={isDisabled ? undefined : handleContainerClick}
@@ -598,7 +611,7 @@ export function Token({
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
-          <span
+          <Label
             {...labelDirection}
             {...stylex.props(
               styles.label,
@@ -606,15 +619,15 @@ export function Token({
               isLabelHidden && styles.labelHidden,
             )}>
             {label}
-          </span>
+          </Label>
         </button>
         {endContent}
         {removeButton}
-      </span>
+      </span>,
     );
   }
 
-  return (
+  return withFocusHandoff(
     <span
       ref={ref}
       {...mergeProps(
@@ -637,7 +650,7 @@ export function Token({
       {...labellingProps}
       {...sharedProps}>
       {content}
-    </span>
+    </span>,
   );
 }
 
