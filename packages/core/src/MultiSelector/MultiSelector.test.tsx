@@ -2557,6 +2557,7 @@ describe('MultiSelector', () => {
       expect(tooltip).toHaveTextContent('Select a table first');
 
       fireEvent.mouseEnter(container);
+      fireEvent.pointerMove(container);
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });
