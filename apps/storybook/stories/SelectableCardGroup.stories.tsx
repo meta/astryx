@@ -4,10 +4,8 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
-import {
-  SelectableCardGroup,
-  SelectableCardGroupItem,
-} from '@astryxdesign/lab/SelectableCardGroup';
+import {SelectableCard} from '@astryxdesign/core/SelectableCard';
+import {SelectableCardGroup} from '@astryxdesign/lab/SelectableCardGroup';
 
 const meta: Meta<typeof SelectableCardGroup> = {
   title: 'Lab/SelectableCardGroup',
@@ -56,13 +54,9 @@ export const SingleChoice: Story = {
         value={plan}
         onChange={setPlan}>
         {PLANS.map(p => (
-          <SelectableCardGroupItem
-            key={p.id}
-            value={p.id}
-            label={p.name}
-            width={160}>
+          <SelectableCard key={p.id} value={p.id} label={p.name} width={160}>
             <PlanContent name={p.name} price={p.price} />
-          </SelectableCardGroupItem>
+          </SelectableCard>
         ))}
       </SelectableCardGroup>
     );
@@ -80,13 +74,9 @@ export const MultipleChoice: Story = {
         value={addOns}
         onChange={setAddOns}>
         {PLANS.map(p => (
-          <SelectableCardGroupItem
-            key={p.id}
-            value={p.id}
-            label={p.name}
-            width={160}>
+          <SelectableCard key={p.id} value={p.id} label={p.name} width={160}>
             <PlanContent name={p.name} price={p.price} />
-          </SelectableCardGroupItem>
+          </SelectableCard>
         ))}
       </SelectableCardGroup>
     );
@@ -103,13 +93,9 @@ export const Vertical: Story = {
         value={plan}
         onChange={setPlan}>
         {PLANS.map(p => (
-          <SelectableCardGroupItem
-            key={p.id}
-            value={p.id}
-            label={p.name}
-            maxWidth={320}>
+          <SelectableCard key={p.id} value={p.id} label={p.name} maxWidth={320}>
             <PlanContent name={p.name} price={p.price} />
-          </SelectableCardGroupItem>
+          </SelectableCard>
         ))}
       </SelectableCardGroup>
     );
@@ -124,13 +110,9 @@ export const Disabled: Story = {
       isDisabled
       onChange={() => {}}>
       {PLANS.map(p => (
-        <SelectableCardGroupItem
-          key={p.id}
-          value={p.id}
-          label={p.name}
-          width={160}>
+        <SelectableCard key={p.id} value={p.id} label={p.name} width={160}>
           <PlanContent name={p.name} price={p.price} />
-        </SelectableCardGroupItem>
+        </SelectableCard>
       ))}
     </SelectableCardGroup>
   ),
@@ -150,13 +132,13 @@ export const TwoFormsSharedName: Story = {
             value={first}
             onChange={setFirst}>
             {PLANS.map(p => (
-              <SelectableCardGroupItem
+              <SelectableCard
                 key={p.id}
                 value={p.id}
                 label={`First ${p.name}`}
                 width={160}>
                 <PlanContent name={p.name} price={p.price} />
-              </SelectableCardGroupItem>
+              </SelectableCard>
             ))}
           </SelectableCardGroup>
         </form>
@@ -167,13 +149,13 @@ export const TwoFormsSharedName: Story = {
             value={second}
             onChange={setSecond}>
             {PLANS.map(p => (
-              <SelectableCardGroupItem
+              <SelectableCard
                 key={p.id}
                 value={p.id}
                 label={`Second ${p.name}`}
                 width={160}>
                 <PlanContent name={p.name} price={p.price} />
-              </SelectableCardGroupItem>
+              </SelectableCard>
             ))}
           </SelectableCardGroup>
         </form>

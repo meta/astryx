@@ -771,15 +771,16 @@ export const samples = {
       {maxLines: 2},
       'A long paragraph that runs past two lines, so the clamp cuts it short and shows the rest only when it is expanded by the reader.',
     ),
-  lab__SelectableCardGroup: ({C, React, mod, Pkg}) => {
-    const Item = mod.SelectableCardGroupItem ?? Pkg.SelectableCardGroupItem;
-    return React.createElement(
+  lab__SelectableCardGroup: ({C, React, Core}) =>
+    React.createElement(
       C,
       {label: 'Plan', value: 'pro', onChange: noop},
-      React.createElement(Item, {value: 'basic', label: 'Basic'}),
-      React.createElement(Item, {value: 'pro', label: 'Pro'}),
-    );
-  },
+      React.createElement(Core.SelectableCard, {
+        value: 'basic',
+        label: 'Basic',
+      }),
+      React.createElement(Core.SelectableCard, {value: 'pro', label: 'Pro'}),
+    ),
   lab__Stat: ({C, React}) =>
     React.createElement(C, {label: 'Revenue', value: '$12.4k'}),
   lab__TabBar: ({C, React, mod, Pkg}) => {

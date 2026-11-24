@@ -5,7 +5,7 @@
 /**
  * @file SelectableCard.tsx
  * @input Uses Card, useClickableContainer, StyleX
- * @output Exports SelectableCard component and SelectableCardProps
+ * @output Exports SelectableCard, SelectableCardProps and SelectableCardMemberProps
  * @position Interactive card for toggle selection
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -23,8 +23,8 @@
  * A hidden <input type="checkbox"> inside the card provides the accessible
  * role, label, and checked state — the card surface itself has no role/tabIndex.
  * Space toggles it natively; Enter is wired up as an additional toggle key.
- * Inside a single-choice group (Lab's SelectableCardGroup, through an internal
- * context) the input is a radio: the card selects and never deselects itself.
+ * With a `value`, the card's group owns its selection and input; in a single
+ * choice the input is a radio, which never deselects itself.
  *
  * For static display, use Card.
  * For navigation or action cards, use ClickableCard.
@@ -59,7 +59,8 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {SelectableCardInputContext} from './selectableCardInput';
+import {useDevWarning} from '../hooks/useDevWarning';
+import {SelectableCardGroupContext} from './selectableCardGroupContext';
 // =============================================================================
 // Styles — selection + interaction; Card handles the rest
 // =============================================================================
@@ -328,6 +329,8 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
    * Set to true to disable the card.
    * Disabled cards remain focusable (tabIndex 0) with aria-disabled
    * so screen reader users can discover them.
+   * In a SelectableCardGroup, a disabled group disables every card, and an
+   * enabled group does not enable a card that disables itself.
    */
   isDisabled?: boolean;
 
@@ -361,6 +364,29 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
 
   /** Maximum width of the card. */
   maxWidth?: SizeValue;
+
+  /**
+   * Only a SelectableCardGroup member takes a `value`, in place of
+   * `isSelected` and `onChange` (SelectableCardMemberProps).
+   */
+  value?: never;
+}
+
+/**
+ * A SelectableCard in a SelectableCardGroup: a `value` in place of
+ * `isSelected` and `onChange`. The group gives the card its selection, its
+ * input and its disabled default.
+ */
+export interface SelectableCardMemberProps extends Omit<
+  SelectableCardProps,
+  'isSelected' | 'onChange' | 'value'
+> {
+  /** The value this card stands for in the group's `value`. */
+  value: string;
+
+  isSelected?: never;
+
+  onChange?: never;
 }
 
 // =============================================================================
@@ -416,10 +442,14 @@ function callBeforeLayerHandlers(
  * the accessible role, label, and checked state. The card surface
  * is a plain <div> — no role or tabIndex on the container.
  *
+ * With a `value` instead of `isSelected` and `onChange`, the card is a
+ * member of the SelectableCardGroup around it. The group owns its selection,
+ * and in a single-choice group the card is a radio.
+ *
  * @compositionHint Use for multi-select card groups, managing selection
- * state externally in a Set. Not for single-select: each card is a
- * checkbox, so assistive technology announces a multi-select group.
- * For navigation/action cards, use ClickableCard instead.
+ * state externally in a Set. Standalone cards are checkboxes, so do not
+ * build a single-select set from them: give each card a `value` inside a
+ * SelectableCardGroup. For navigation/action cards, use ClickableCard instead.
  *
  * @example
  * ```
@@ -433,12 +463,13 @@ function callBeforeLayerHandlers(
  */
 export function SelectableCard({
   label,
-  isSelected,
+  isSelected: isSelectedProp,
   onChange,
+  value,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
   onPointerDown: onPointerDownProp,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   children,
   padding,
   variant = 'default',
@@ -451,22 +482,41 @@ export function SelectableCard({
   className: classNameProp,
   style,
   ...props
-}: SelectableCardProps) {
+}: SelectableCardProps | SelectableCardMemberProps) {
   const pressable = usePressFeedback();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const interactiveRef = useRef<HTMLInputElement | null>(null);
 
-  // A group can make the input a radio. A radio only selects: a native radio
-  // stays checked when it is clicked again.
-  const groupInput = use(SelectableCardInputContext);
-  const isRadio = groupInput?.type === 'radio';
+  // A `value` makes the card a member of the group around it. Outside a group,
+  // such a card has no selection to show or change.
+  const groupContext = use(SelectableCardGroupContext);
+  const group = value == null ? null : groupContext;
+  useDevWarning(
+    'SelectableCard',
+    'A card with a `value` takes its selection from a SelectableCardGroup, and no SelectableCardGroup in the same layer is around it. Render it inside one, or pass `isSelected` and `onChange` instead of `value`.',
+    value != null && groupContext == null,
+  );
+  const isSelected =
+    value == null
+      ? isSelectedProp === true
+      : (group?.isSelected(value) ?? false);
+  // Either the group or the card disabling it is enough: a group cannot
+  // enable a card that disables itself.
+  const isDisabled = (group?.isDisabled ?? false) || isDisabledProp;
+  // A radio only selects: a native radio stays checked when it is clicked
+  // again.
+  const isRadio = group?.inputType === 'radio';
   const requestChange = useCallback(() => {
-    if (!isRadio) {
-      onChange(!isSelected);
+    if (value == null) {
+      onChange?.(!isSelected);
+    } else if (group == null) {
+      return;
+    } else if (!isRadio) {
+      group.onMemberChange(value, !isSelected);
     } else if (!isSelected) {
-      onChange(true);
+      group.onMemberChange(value, true);
     }
-  }, [isRadio, isSelected, onChange]);
+  }, [group, isRadio, isSelected, onChange, value]);
 
   const handleClick = useCallback(
     (_event: MouseEvent<HTMLElement>) => {
@@ -589,17 +639,13 @@ export function SelectableCard({
       <input
         ref={interactiveRef}
         type={isRadio ? 'radio' : 'checkbox'}
-        name={groupInput?.name}
-        value={groupInput?.value}
+        name={group?.inputName}
+        value={group == null ? undefined : value}
         // Radios group by name and form owner, so every radio card leaves
-        // the form together and the group stays one tab stop. The group
-        // submits its choice itself. A disabled checkbox card submits
-        // nothing, so it leaves the form too.
-        form={
-          groupInput != null && (groupInput.type === 'radio' || isDisabled)
-            ? ''
-            : undefined
-        }
+        // the form together and the group stays one tab stop. The chosen
+        // radio card submits through the hidden input below. A disabled
+        // checkbox card submits nothing, so it leaves the form too.
+        form={group != null && (isRadio || isDisabled) ? '' : undefined}
         checked={isSelected}
         {...focusOwnerProps}
         aria-label={label}
@@ -613,6 +659,9 @@ export function SelectableCard({
         onKeyDown={handleKeyDown}
         {...stylex.props(styles.srOnly)}
       />
+      {group != null && isRadio && isSelected && !isDisabled ? (
+        <input type="hidden" name={group.submitName} value={value} />
+      ) : null}
       {children}
     </Card>
   );

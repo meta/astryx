@@ -9,7 +9,8 @@
  */
 
 import {useState} from 'react';
-import {SelectableCardGroup, SelectableCardGroupItem} from '@astryxdesign/lab';
+import {SelectableCardGroup} from '@astryxdesign/lab';
+import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 
@@ -39,7 +40,7 @@ export default function SelectableCardGroupShowcase() {
       value={plan}
       onChange={setPlan}>
       {PLANS.map(item => (
-        <SelectableCardGroupItem
+        <SelectableCard
           key={item.value}
           value={item.value}
           label={item.name}
@@ -53,7 +54,7 @@ export default function SelectableCardGroupShowcase() {
               {item.detail}
             </Text>
           </VStack>
-        </SelectableCardGroupItem>
+        </SelectableCard>
       ))}
     </SelectableCardGroup>
   );

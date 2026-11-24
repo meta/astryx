@@ -11,5 +11,5 @@ export default {
   isReady: true,
   isShowcase: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['SelectableCardGroup', 'VStack', 'Text'],
+  componentsUsed: ['SelectableCardGroup', 'SelectableCard', 'VStack', 'Text'],
 };

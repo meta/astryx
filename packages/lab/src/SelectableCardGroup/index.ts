@@ -4,11 +4,5 @@
  * @file SelectableCardGroup component barrel export
  */
 
-export {
-  SelectableCardGroup,
-  SelectableCardGroupItem,
-} from './SelectableCardGroup';
-export type {
-  SelectableCardGroupProps,
-  SelectableCardGroupItemProps,
-} from './SelectableCardGroup';
+export {SelectableCardGroup} from './SelectableCardGroup';
+export type {SelectableCardGroupProps} from './SelectableCardGroup';

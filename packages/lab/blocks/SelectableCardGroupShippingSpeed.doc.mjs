@@ -12,6 +12,7 @@ export default {
   aspectRatio: 4 / 3,
   componentsUsed: [
     'SelectableCardGroup',
+    'SelectableCard',
     'HStack',
     'StackItem',
     'VStack',
