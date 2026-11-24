@@ -10,8 +10,8 @@
  *   open layer's rectangle, its layout box and its computed transform must
  *   match an open that no press touched. A layer that opens on the press must
  *   be placed from the trigger's untransformed box in its first frame and
- *   after the release. A press on a trigger whose own layer is open does
- *   not scale the trigger.
+ *   after the release. A press on a trigger whose own layer is open, or on
+ *   a Selector-family trigger, does not scale the trigger.
  * @position Evidence for architecture:layer-runtime INV22
  */
 
@@ -39,9 +39,6 @@ const desktop = {
 // Layout snaps to 1/64 px. A press that leaks into the layer moves it by a
 // quarter pixel or more.
 const TOLERANCE_PX = 0.02;
-
-// The press scale of Button and the selector triggers.
-const PRESS_SCALE = 0.98;
 
 interface LayerBox {
   /** The rendered rectangle, transforms included. */
@@ -132,8 +129,8 @@ async function scaleOf(locator: Locator): Promise<number> {
 
 /**
  * Waits until the press reaches `trigger`, then checks that it leaves
- * `scaled` at full size: a trigger whose own layer is open takes no press
- * scale.
+ * `scaled` at full size: a trigger whose own layer is open, and a
+ * Selector-family trigger, take no press scale.
  */
 async function expectPressedUnscaled(
   page: Page,
@@ -154,17 +151,8 @@ async function expectPressedUnscaled(
   await settle(page);
   expect(
     await scaleOf(scaled),
-    'the press does not scale a trigger whose layer is open',
+    'the press does not scale the trigger',
   ).toBeCloseTo(1, 4);
-}
-
-/** Waits until the press scale on `scaled` has fully applied. */
-async function expectPressed(scaled: Locator) {
-  await expect
-    .poll(async () => scaleOf(scaled), {
-      message: 'the press scales the trigger',
-    })
-    .toBeCloseTo(PRESS_SCALE, 4);
 }
 
 /**
@@ -273,7 +261,11 @@ test.describe('with a mouse', () => {
       const at = await centerOf(trigger);
       await page.mouse.move(at.x, at.y);
       await page.mouse.down();
-      await expectPressed(page.locator('.astryx-selector').first());
+      await expectPressedUnscaled(
+        page,
+        trigger,
+        page.locator('.astryx-selector').first(),
+      );
       await page.mouse.up();
       await settle(page);
       expectSameBox(await layerBox(page), unpressed, 'after the press');
@@ -398,7 +390,11 @@ test.describe('with a finger', () => {
 
     const touch = await touchDriver(page);
     const finger = await touch.press(await centerOf(trigger));
-    await expectPressed(page.locator('.astryx-selector').first());
+    await expectPressedUnscaled(
+      page,
+      trigger,
+      page.locator('.astryx-selector').first(),
+    );
     await finger.lift();
     await settle(page);
     expectSameBox(await layerBox(page), unpressed, 'after the press');

@@ -146,6 +146,7 @@ and examples remain in `Selector.doc.mjs`.
 | popup semantics        | `listbox`; modal dialog containing one | Semantics follow the active presentation                                                                                                                                | Popover; bottom sheet                     | `listbox`  | Selector | released                       | No separate role prop is public |
 | option-row state       | `highlighted`, `selected`, `disabled`  | Stable theming state on each option row; `highlighted` marks the active option (`aria-activedescendant`), so a theme can style the option the keyboard or pointer is on | Every rendered option                     | neither    | Selector | released                       | Unknown states are not emitted  |
 | read-only state        | `false`, `true`                        | Preserves and submits value without selection affordance                                                                                                                | Closed trigger                            | `false`    | Caller   | additive                       | Boolean normalization           |
+| open state             | `expanded`                             | Stable theming state on the `selector` target while its list is open, so a theme can style the open trigger                                                             | Editable trigger                          | neither    | Selector | additive                       | Unknown states are not emitted  |
 
 ## Behavioral and layout contract
 
