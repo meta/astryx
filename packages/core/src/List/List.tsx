@@ -93,8 +93,16 @@ export interface ListProps extends BaseProps<
 
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
-   * Each ListItem with an `itemKey` gets a reorder handle at its end. One the
-   * object's `isReorderable` rejects keeps its place. Each committed move
+   * Each ListItem with an `itemKey` gets a reorder handle, at its end unless
+   * the object's `handle.placement` is `'start'`. It always shows, in a place
+   * of its own in the row. With `handle.revealBehavior` `'adaptive'`, it shows while
+   * the row is hovered or holds the focus, and hangs outside the row's text,
+   * so the text keeps its place. The list takes that room from its
+   * container's padding, and moves its rows in by any room the padding
+   * lacks. Under a coarse pointer, under `edge` `'outset'` or `'bleed'`, and
+   * after a list marker at the start, it then sits inside the row. A row that
+   * stays put keeps its neighbours' room at the start, so the labels line up.
+   * One the object's `isReorderable` rejects keeps its place. Each committed move
    * calls its `onReorder` once with the row's key and its index after the
    * move. Apply it by rendering the rows in their new order. A drop on the
    * starting place, a cancel, or a move the order does not take changes
@@ -104,8 +112,8 @@ export interface ListProps extends BaseProps<
    * its row. A flick on it still scrolls. The row stays in its place, dimmed,
    * while a copy of it follows the finger. An accent line marks where it
    * would land. The other rows stay still, the list scrolls near the edges,
-   * and on release the rows rearrange. A mouse drags a handle at once, the
-   * same way.
+   * and on release the rows glide to their new places. A mouse drags a handle
+   * at once, and its drop glides the same way.
    *
    * Without a drag, activating a handle (a click, Space or Enter) turns on
    * reorder mode for its row. Each arrow key moves it a place at once,
@@ -456,7 +464,12 @@ export function List({
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)
               : styles.withCounter),
-          reorderSession?.listStyle,
+          reorderSession?.listLayout({
+            edge,
+            density,
+            handle: reorderOptions?.handle,
+            hasMarkers: listStyle !== 'none',
+          }),
           xstyle,
         ),
         className,
