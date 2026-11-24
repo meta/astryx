@@ -1818,10 +1818,12 @@ describe('List reorderable', () => {
       act(() => {
         fireEvent.pointerUp(again, {...MOUSE, clientY: top});
       });
-      // Every glide is long over.
+      // The glide's rest timer was set on the real clock at the drop, and
+      // fires at most about 0.9 s later. This wait is set after it, so it
+      // ends after the row rests, however slowly the test runs.
       clock = start + 5000;
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 1500));
       });
       expect(labels()).toEqual(['B', 'C', 'A', 'D']);
       expect(row.style.zIndex).toBe('');
