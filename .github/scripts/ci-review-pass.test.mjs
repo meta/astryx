@@ -11,12 +11,22 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const HEAVY_MODULE = path.join(root, '.github/scripts/lib/heavy-turn.mjs');
 const turn = await import(HEAVY_MODULE);
+// The runs below are from 2026-11-17 around noon: the clock reads 14:00 that
+// day, so a run from 12:00 is two hours old.
+const NOW = new Date('2026-11-17T14:00:00Z');
+beforeEach(() => {
+  vi.useFakeTimers({toFake: ['Date']});
+  vi.setSystemTime(NOW);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 const workflow = yaml.parse(
   fs.readFileSync(
     path.join(root, '.github/workflows/ci-review-pass.yml'),
@@ -356,6 +366,74 @@ describe('starting the heavy suites', () => {
     expect(stub.calls.reRunWorkflow).toEqual([11]);
   });
 
+  it('re-runs only the newest run at the head, never an older one beside it', async () => {
+    const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
+      runs: [
+        ciRun(12, 'h1', {created_at: '2026-11-17T13:00:00Z'}),
+        ciRun(11, 'h1', {created_at: '2026-11-17T11:00:00Z'}),
+      ],
+      jobs: {11: deferredJobs, 12: deferredJobs},
+      statuses: {h1: passed},
+    });
+    await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([12]);
+  });
+
+  it('re-runs nothing while a newer run at the head is in progress', async () => {
+    const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
+      runs: [
+        ciRun(11, 'h1', {created_at: '2026-11-17T11:00:00Z'}),
+        ciRun(12, 'h1', {
+          created_at: '2026-11-17T13:00:00Z',
+          status: 'in_progress',
+          conclusion: null,
+        }),
+      ],
+      jobs: {11: deferredJobs},
+      statuses: {h1: passed},
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([]);
+    expect(said).toContain('run 12 still runs');
+  });
+
+  it('does not re-run a run older than six hours: its merge with main is stale', async () => {
+    // A re-run replays the run's own merge commit. A run from days ago merges
+    // the head with a main that has moved on, so it can fail on contracts main
+    // has since changed, and finish after a fresh run.
+    const stub = stubGithub({
+      pulls: [pull(1, 'h1')],
+      runs: [ciRun(11, 'h1', {created_at: '2026-11-17T07:59:00Z'})],
+      jobs: {11: deferredJobs},
+      statuses: {h1: passed},
+    });
+    const said = await turn.startHeavy({
+      ...REVIEW,
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([]);
+    expect(said).toMatch(
+      /run 11 is from 2026-11-17T07:59:00Z, more than 6 hours ago/,
+    );
+  });
+
   it("reads the newest run at the head, not an older head's", async () => {
     const stub = stubGithub({
       pulls: [pull(1, 'h1')],
@@ -631,6 +709,7 @@ describe('the workflow', () => {
 
   it('waits for the gate to settle after a review, then starts the deferred run', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     let looks = 0;
     const {calls} = await pass(
       'pull_request_review',
@@ -649,6 +728,7 @@ describe('the workflow', () => {
 
   it('starts nothing for a pull request into a release branch', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const {calls, logs} = await pass(
       'workflow_run',
       {workflow_run: {pull_requests: [{number: 1}]}},
@@ -679,6 +759,7 @@ describe('the workflow', () => {
 
   it("sweeps recent failed runs on the schedule, a fork's and a failed-jobs re-run's included", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const {calls} = await pass(
       'schedule',
       {},
@@ -717,6 +798,7 @@ describe('the workflow', () => {
     // The gates passed before `ci:run`; admitting the head starts a first
     // attempt that defers, and its end starts the review-pass run.
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const run = forkRun(15, 'h5');
     const {calls} = await pass(
       'workflow_run',
@@ -736,6 +818,7 @@ describe('the workflow', () => {
     // A draft runs no CI; marking it ready starts a first attempt that defers,
     // and that run's end starts the review-pass run.
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const run = ciRun(18, 'h7', {pull_requests: [{number: 7}]});
     const {calls} = await pass(
       'workflow_run',
@@ -753,6 +836,7 @@ describe('the workflow', () => {
 
   it("starts a fork head after a review, on Review signal's end: the review event's own token is read-only for a fork", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     let looks = 0;
     const {calls} = await pass(
       'workflow_run',
@@ -801,6 +885,7 @@ describe('the workflow', () => {
 
   it('gives a later head whose gates pass its own review-pass run', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     const {calls} = await pass(
       'pull_request_review',
       {pull_request: {number: 6}},

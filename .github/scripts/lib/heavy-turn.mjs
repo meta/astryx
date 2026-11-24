@@ -35,6 +35,14 @@ export const CI_WORKFLOW = 'ci.yml';
 export const DEFERRED_STEP = 'Heavy CI deferred';
 
 /**
+ * The oldest deferred run the heavy turn starts again. A re-run replays the
+ * run's own merge commit, so an older run merges the head with a main that has
+ * moved on: it can fail on a contract main has since changed, and finish after
+ * a fresh run. The schedule's sweep looks back as far.
+ */
+export const RERUN_MAX_AGE_MS = 6 * 60 * 60_000;
+
+/**
  * Whether a run's jobs show that it deferred its heavy suites: a required
  * check failed at the deferral step.
  * @param {Array<{steps?: Array<{name: string, conclusion: string | null}>}>} jobs
@@ -330,6 +338,8 @@ export async function startHeavy({
   )[0];
   if (run == null) return `${at}: no CI run`;
   if (run.status !== 'completed') return `${at}: run ${run.id} still runs`;
+  if (Date.now() - Date.parse(run.created_at) > RERUN_MAX_AGE_MS)
+    return `${at}: run ${run.id} is from ${run.created_at}, more than ${RERUN_MAX_AGE_MS / 3_600_000} hours ago, so its merge with main is stale; a push or a main merge starts a fresh run`;
   const {
     data: {jobs},
   } = await github.rest.actions.listJobsForWorkflowRun({
