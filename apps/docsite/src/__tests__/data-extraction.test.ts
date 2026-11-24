@@ -249,21 +249,19 @@ describe('componentRegistry', () => {
   it('discovers CLI-configured canary package components', () => {
     expect(components['@astryxdesign/lab'].length).toBeGreaterThan(30);
     expect(components['@astryxdesign/charts'].map(comp => comp.name)).toEqual([
+      'AreaChart',
       'Chart',
       'ChartAxis',
       'ChartGrid',
       'ChartLegend',
       'ChartSwatch',
       'ChartTooltip',
+      'LineChart',
       'MetricTile',
+      'Sparkline',
     ]);
     expect(components['@astryxdesign/richtext'].map(comp => comp.name)).toEqual(
-      [
-        'RichTextEditor',
-        'RichTextEditorAutoLinkPlugin',
-        'RichTextEditorToolbar',
-        'RichTextView',
-      ],
+      ['RichTextEditor'],
     );
     expect(components['@astryxdesign/vega'].map(comp => comp.name)).toEqual([
       'VegaChart',
