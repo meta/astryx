@@ -566,7 +566,7 @@ function createTooltipBridge(
     },
     show: () => {
       if (surface == null) {
-        // While disabled, show() does nothing (FR12).
+        // A disabled tooltip ignores show().
         if (isEnabled()) {
           setShowRequested(true);
           retryFailedLoad();
@@ -628,10 +628,10 @@ function createTooltipBridge(
  * Hook for tooltip behavior with hover/focus triggers.
  *
  * The tooltip's behavior and its layer load once per page, after the page's
- * first paint. Until the layer exists, `describedBy` is empty, so the trigger
- * names no element that is not there. A hover still on the trigger when they load shows the
- * tooltip once its delay has passed since the pointer entered, and keyboard
- * focus still on it shows it at once.
+ * first paint. Until then, `describedBy` is empty. The trigger names no
+ * element that is not there. A hover still on the trigger at the load shows
+ * the tooltip once its delay has passed since the pointer entered. Keyboard
+ * focus still on the trigger shows it at once.
  *
  * Unlike HoverCard, tooltips:
  * - Don't stay open when hovering the tooltip content
