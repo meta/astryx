@@ -725,7 +725,7 @@ describe('preview app', () => {
     );
     // A temp file a stopped command left in the theme folder stays behind.
     fs.writeFileSync(
-      path.join(cwd, 'themes/brand/.brand.css.astryx-999999-abc123.tmp'),
+      path.join(cwd, `themes/brand/.brand.css.astryx-${2 ** 22 + 7}-abc123.tmp`),
       'half\n',
     );
     const r = await themeEditPreviewApp('themed', {cwd, theme: 'brand'});
@@ -787,12 +787,12 @@ describe('preview app', () => {
       fs.existsSync(
         path.join(
           cwd,
-          'themed/themes/brand/.brand.css.astryx-999999-abc123.tmp',
+          `themed/themes/brand/.brand.css.astryx-${2 ** 22 + 7}-abc123.tmp`,
         ),
       ),
     ).toBe(false);
     fs.rmSync(
-      path.join(cwd, 'themes/brand/.brand.css.astryx-999999-abc123.tmp'),
+      path.join(cwd, `themes/brand/.brand.css.astryx-${2 ** 22 + 7}-abc123.tmp`),
       {
         force: true,
       },

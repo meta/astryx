@@ -195,7 +195,10 @@ describe('builds', () => {
     // folder).
     const dir = path.join(cwd, 'themes/sweep');
     fs.mkdirSync(dir, {recursive: true});
-    const left = path.join(dir, '.z.settings.json.astryx-3999999-abc123.tmp');
+    const left = path.join(
+      dir,
+      `.z.settings.json.astryx-${2 ** 22 + 7}-abc123.tmp`,
+    );
     const mine = path.join(dir, '.z.notes.tmp');
     fs.writeFileSync(left, 'x');
     fs.writeFileSync(mine, 'x');

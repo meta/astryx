@@ -697,7 +697,7 @@ describe.skipIf(process.platform === 'win32')(
       fs.writeFileSync(path.join(lockDir, 'npm.pid'), String(pid));
       fs.writeFileSync(
         path.join(lockDir, 'owner.json'),
-        JSON.stringify({pid: 999999, host: os.hostname(), at}),
+        JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at}),
       );
       return lockDir;
     };
@@ -834,7 +834,7 @@ describe.skipIf(process.platform === 'win32')(
       const unknown = lockFor(npm, at);
       fs.writeFileSync(
         path.join(unknown, 'owner.json'),
-        JSON.stringify({pid: 999999, host: os.hostname()}),
+        JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname()}),
       );
       expect(endRecordedInstall(unknown)).toBe('left');
       // A lock taken after the process started: the id names an older process.
@@ -1148,7 +1148,7 @@ describe('tryLock', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(
       path.join(dir, 'owner.json'),
-      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: 1}),
     );
     const old = new Date(Date.now() - 31 * 60_000);
     fs.utimesSync(dir, old, old);
@@ -1189,7 +1189,7 @@ describe('tryLock', () => {
     const owner = path.join(dir, 'owner.json');
     fs.writeFileSync(
       owner,
-      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: 1}),
     );
     const old = new Date(Date.now() - 31 * 60_000);
     fs.utimesSync(dir, old, old);
