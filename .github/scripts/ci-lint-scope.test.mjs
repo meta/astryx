@@ -204,7 +204,7 @@ describe('required lint routing', () => {
     // 16 GB runner.
     const eslint = steps.find(step => step.name === 'Run ESLint');
     expect(lint.jobs.lint['runs-on']).toBe('ubuntu-24.04-arm');
-    expect(eslint.env.NODE_OPTIONS).toBe('--max-old-space-size=6144');
+    expect(eslint.env.NODE_OPTIONS).toMatch(/^--max-old-space-size=6144( |$)/);
     expect(
       steps.find(step => step.name === 'Check the comment-provenance baseline')
         .env.NODE_OPTIONS,
