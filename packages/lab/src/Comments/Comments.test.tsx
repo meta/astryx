@@ -576,7 +576,14 @@ describe('Comments rendering', () => {
 });
 
 describe('Comments live collaboration seams', () => {
-  it('shows typing only after the thread opens', async () => {
+  it('renders typingIndicator once the thread opens, with each typist once and without the viewer', async () => {
+    const typingIndicator = vi.fn(
+      ({users}: {users: readonly CommentUser[]}) => (
+        <span data-testid="typing">
+          {users.map(user => user.name).join(', ')}
+        </span>
+      ),
+    );
     render(
       <Sized>
         <Comments
@@ -588,25 +595,31 @@ describe('Comments live collaboration seams', () => {
             },
           ]}
           currentUser={VIEWER}
+          typingIndicator={typingIndicator}
         />
       </Sized>,
     );
 
-    expect(
-      screen.queryByText('Maya Chen and Release Assistant are typing…'),
-    ).toBeNull();
+    expect(screen.queryByTestId('typing')).toBeNull();
 
     await click(screen.getByRole('button', {name: 'Thread by Avery Kim'}));
-    const typingStatus = screen
-      .getByText('Maya Chen and Release Assistant are typing…')
-      .closest('.astryx-chat-typing-indicator');
-    expect(typingStatus).not.toBeNull();
-    expect(typingStatus).not.toHaveAttribute('role');
-    expect(
-      (typingStatus as HTMLElement).style.getPropertyValue(
-        '--astryx-chat-typing-indicator-dots-column-width',
-      ),
-    ).not.toBe('');
+    expect(screen.getByTestId('typing').textContent).toBe(
+      'Maya Chen, Release Assistant',
+    );
+    expect(typingIndicator).toHaveBeenLastCalledWith({users: [OTHER, AGENT]});
+  });
+
+  it('shows no typing row without typingIndicator', async () => {
+    render(
+      <Sized>
+        <Comments
+          comments={[{...COMMENTS[0], replies: [], typingUsers: [OTHER]}]}
+          currentUser={VIEWER}
+        />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'Thread by Avery Kim'}));
+    expect(document.querySelector('[data-thread-typing-indicator]')).toBeNull();
   });
 
   it('reports a new-comment draft with its anchor and clears it after posting', async () => {
