@@ -331,7 +331,7 @@ describe('builds that stay the same', () => {
     fs.mkdirSync(lock, {recursive: true});
     fs.writeFileSync(
       path.join(lock, 'owner.json'),
-      JSON.stringify({pid: 3999999, host: os.hostname(), at: 1}),
+      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: 1}),
     );
     expect(tryLock(lock)).toBe(true);
     // The second finds a live holder (this process), not the stale one.

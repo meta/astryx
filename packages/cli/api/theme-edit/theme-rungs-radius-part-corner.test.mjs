@@ -321,7 +321,7 @@ describe('rungs radius part corner', () => {
   }, 240_000);
 
   it('a render folder left by a stopped command is removed', async () => {
-    const left = path.join(cwd, 'themes/.astryx-render-999999-abcdef');
+    const left = path.join(cwd, `themes/.astryx-render-${2 ** 22 + 7}-abcdef`);
     fs.mkdirSync(left, {recursive: true});
     fs.writeFileSync(path.join(left, 'preview-t.mjs'), '');
     // A leftover is one more than ten minutes old.

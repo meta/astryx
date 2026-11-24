@@ -333,8 +333,8 @@ describe('review on #11303', () => {
 
   it('a render folder under ten minutes old is kept, whatever its process id', async () => {
     await themeEditNew('rf', {cwd});
-    const young = path.join(cwd, 'themes/.astryx-render-999999-young1');
-    const old = path.join(cwd, 'themes/.astryx-render-999999-oldone');
+    const young = path.join(cwd, `themes/.astryx-render-${2 ** 22 + 7}-young1`);
+    const old = path.join(cwd, `themes/.astryx-render-${2 ** 22 + 7}-oldone`);
     for (const d of [young, old]) fs.mkdirSync(d, {recursive: true});
     const t = new Date(Date.now() - 11 * 60_000);
     fs.utimesSync(old, t, t);
