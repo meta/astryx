@@ -49,7 +49,7 @@ function ReviewFile({file}: {file: DiffViewerFile}) {
     <DiffViewer
       file={file}
       collapsible={{isOpen, onOpenChange: setIsOpen}}
-      headerEnd={
+      endContent={
         <CheckboxInput
           label="Viewed"
           value={isViewed}

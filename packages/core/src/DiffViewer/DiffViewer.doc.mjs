@@ -12,7 +12,7 @@ const anatomy = [
     name: 'File header',
     required: false,
     description:
-      'Row above the hunks with the disclosure, the path, the status token, the line counts, and headerEnd. Renders when the file has a path or headerEnd is set.',
+      'Row above the hunks with the disclosure, the path, the status token, the line counts, and endContent. Renders when the file has a path or endContent renders something.',
   },
   {
     name: 'Disclosure toggle',
@@ -44,7 +44,7 @@ const anatomy = [
       'Added and removed line counts, with one visually hidden sentence for screen readers.',
   },
   {
-    name: 'Header end',
+    name: 'End content',
     required: false,
     description:
       'Caller content at the end of the header, such as a "Viewed" checkbox.',
@@ -101,7 +101,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'Read-only, syntax-highlighted diff of one file for code review surfaces. Renders a file header (path, Added/Deleted/Renamed token, +/− line counts, a headerEnd slot, and an optional disclosure) over the file\'s hunks in unified or split (side-by-side) view. Rows use the same syntax-theme diff slots as CodeBlock with isDiff, so one syntax theme styles both. renderLineAnnotation adds a full-width row under any line (for review comments) and onLineNumberClick turns line numbers into buttons. Build the file model with parseUnifiedDiff(patch), which returns one file per file in a git or diff -u patch, or with createDiffFile({oldValue, newValue}) when you hold two versions of a text. Display options cover how a change is marked (classic +/− glyphs, bars, or none), whether changed rows are tinted, and word- or character-level highlighting of what changed inside each removed/added line pair. Each changed line carries a visually hidden "Added"/"Removed" label, so the change reads without colour in every mode. Unwrapped, line numbers and change indicators stay pinned while the code scrolls; in split view each side is its own scroller, so the split stays fixed at half and half, the sides scroll sideways in lockstep, and a row is as tall as its taller side. While code overflows sideways, sideways overscroll is off, so trackpads neither bounce past a line nor swipe the browser back. In right-to-left pages the hunk area stays left-to-right, like a code editor: annotation content reads in the page direction, and annotation rows scroll with the code. When a change is too large to compare line by line, createDiffFile marks its hunk with isReplacedBlock: it lists every old line as removed and every new line as added. DiffViewer folds those lines behind a "Large change: N lines" row, where N counts the block\'s removed plus added lines, with a Show full diff button. A file with more than 2,000 other changed lines starts folded the same way, because every row costs render time. Its line diff is still there when the reader opens it. A fold opens by itself when a line it would hide has an annotation, so no review comment is hidden. Rows are plain DOM with no virtualization: collapse or window very large files.',
+      'Read-only, syntax-highlighted diff of one file for code review surfaces. Renders a file header (path, Added/Deleted/Renamed token, +/− line counts, an endContent slot, and an optional disclosure) over the file\'s hunks in unified or split (side-by-side) view. Rows use the same syntax-theme diff slots as CodeBlock with isDiff, so one syntax theme styles both. renderLineAnnotation adds a full-width row under any line (for review comments) and onLineNumberClick turns line numbers into buttons. Build the file model with parseUnifiedDiff(patch), which returns one file per file in a git or diff -u patch, or with createDiffFile({oldValue, newValue}) when you hold two versions of a text. Display options cover how a change is marked (classic +/− glyphs, bars, or none), whether changed rows are tinted, and word- or character-level highlighting of what changed inside each removed/added line pair. Each changed line carries a visually hidden "Added"/"Removed" label, so the change reads without colour in every mode. Unwrapped, line numbers and change indicators stay pinned while the code scrolls; in split view each side is its own scroller, so the split stays fixed at half and half, the sides scroll sideways in lockstep, and a row is as tall as its taller side. While code overflows sideways, sideways overscroll is off, so trackpads neither bounce past a line nor swipe the browser back. In right-to-left pages the hunk area stays left-to-right, like a code editor: annotation content reads in the page direction, and annotation rows scroll with the code. When a change is too large to compare line by line, createDiffFile marks its hunk with isReplacedBlock: it lists every old line as removed and every new line as added. DiffViewer folds those lines behind a "Large change: N lines" row, where N counts the block\'s removed plus added lines, with a Show full diff button. A file with more than 2,000 other changed lines starts folded the same way, because every row costs render time. Its line diff is still there when the reader opens it. A fold opens by itself when a line it would hide has an annotation, so no review comment is hidden. Rows are plain DOM with no virtualization: collapse or window very large files.',
     bestPractices: [
       {
         guidance: true,
@@ -116,7 +116,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Put file-level actions such as a "Viewed" checkbox in headerEnd, and drive collapsible={{isOpen, onOpenChange}} from the same state if viewed files should fold away.',
+          'Put file-level actions such as a "Viewed" checkbox in endContent, and drive collapsible={{isOpen, onOpenChange}} from the same state if viewed files should fold away.',
       },
       {
         guidance: false,
@@ -235,7 +235,7 @@ export const docs = {
       default: 'true',
     },
     {
-      name: 'headerEnd',
+      name: 'endContent',
       type: 'ReactNode',
       description:
         'Content at the end of the file header, such as a "Viewed" checkbox or a file actions menu.',
@@ -281,7 +281,7 @@ export const docsDense = {
   description: 'read-only, syntax-highlighted diff of one file for code review',
   usage: {
     description:
-      'One file per DiffViewer: a header (path, Added/Deleted/Renamed token, +/− counts, headerEnd, optional disclosure) over its hunks in unified or split view. Build the file with parseUnifiedDiff(patch) or createDiffFile({oldValue, newValue}). Rows take the CodeBlock isDiff syntax-theme slots. renderLineAnnotation adds a row under a line (review comments); onLineNumberClick makes line numbers buttons. Every changed line carries a hidden "Added"/"Removed" label. The hunk area stays left-to-right in RTL. A change too large to compare, and a file with more than 2,000 other changed lines, start folded. No virtualization: window or collapse very large files.',
+      'One file per DiffViewer: a header (path, Added/Deleted/Renamed token, +/− counts, endContent, optional disclosure) over its hunks in unified or split view. Build the file with parseUnifiedDiff(patch) or createDiffFile({oldValue, newValue}). Rows take the CodeBlock isDiff syntax-theme slots. renderLineAnnotation adds a row under a line (review comments); onLineNumberClick makes line numbers buttons. Every changed line carries a hidden "Added"/"Removed" label. The hunk area stays left-to-right in RTL. A change too large to compare, and a file with more than 2,000 other changed lines, start folded. No virtualization: window or collapse very large files.',
     bestPractices: [
       {
         guidance: true,
@@ -296,7 +296,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Put a "Viewed" checkbox in headerEnd; drive collapsible={{isOpen, onOpenChange}} from the same state to fold viewed files.',
+          'Put a "Viewed" checkbox in endContent; drive collapsible={{isOpen, onOpenChange}} from the same state to fold viewed files.',
       },
       {
         guidance: false,
@@ -318,7 +318,7 @@ export const docsDense = {
     hasChangeBackground: 'tint added and removed rows',
     collapsible:
       'header disclosure for the hunks; default true=starts open. false=no disclosure. {defaultIsOpen:false}=starts collapsed, {isOpen,onOpenChange}=controlled',
-    headerEnd: 'content at the end of the file header',
+    endContent: 'content at the end of the file header',
     renderLineAnnotation:
       'content for a full-width row under a line; null for none',
     onLineNumberClick: "makes each line's anchor-side number a button",

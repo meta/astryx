@@ -24,7 +24,10 @@ const MIN_TARGET_WIDTH = 24;
 // short.
 const PROBE_STEP = 0.25;
 const VIEWPORT = {width: 1280, height: 1000};
-const LINE_BUTTON = '#storybook-root button[data-diff-line-button]';
+const LINE_BUTTON = [
+  '#storybook-root button[aria-label^="Original line "]',
+  '#storybook-root button[aria-label^="Changed line "]',
+].join(', ');
 
 let storybook: StaticServer;
 test.beforeAll(async () => {

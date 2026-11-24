@@ -290,7 +290,7 @@ export const ViewedToggle: Story = {
       <DiffViewer
         {...args}
         collapsible={{isOpen, onOpenChange: setIsOpen}}
-        headerEnd={
+        endContent={
           <CheckboxInput
             label="Viewed"
             value={isViewed}

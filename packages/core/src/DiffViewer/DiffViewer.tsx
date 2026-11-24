@@ -213,7 +213,7 @@ export interface DiffViewerProps extends BaseProps<HTMLDivElement> {
    * Content at the end of the file header, e.g. a "Viewed" checkbox or a menu
    * of file actions.
    */
-  headerEnd?: ReactNode;
+  endContent?: ReactNode;
   /**
    * Render content in a full-width row under a line, e.g. review comments.
    * Return `null` (or `false`) for lines with nothing to show. Called once per line with
@@ -718,10 +718,7 @@ function buildSpans(
       i++;
     }
     parts.push(
-      <span
-        key={`c${first}`}
-        data-diff-change=""
-        {...stylex.props(changeXstyle)}>
+      <span key={`c${first}`} {...stylex.props(changeXstyle)}>
         {run}
       </span>,
     );
@@ -836,7 +833,7 @@ const styles = stylex.create({
   statRemoved: {
     color: colorVars['--color-text-red'],
   },
-  headerEnd: {
+  endContent: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
@@ -1243,7 +1240,6 @@ function DiffViewerPane({
   });
   return (
     <div
-      data-diff-pane={side}
       {...withoutInlineOverscroll(
         getViewportProps<HTMLDivElement>({
           ...stylex.props(
@@ -1314,7 +1310,7 @@ export function DiffViewer({
   inlineHighlight = 'word',
   hasChangeBackground = true,
   collapsible = true,
-  headerEnd,
+  endContent,
   renderLineAnnotation,
   onLineNumberClick,
   maxHeight,
@@ -1525,7 +1521,6 @@ export function DiffViewer({
         {actionRef != null && onLineNumberClick != null ? (
           <button
             type="button"
-            data-diff-line-button=""
             aria-label={t('@astryx.diffViewer.lineNumberButton', {
               side,
               line: number,
@@ -1568,7 +1563,6 @@ export function DiffViewer({
         {isChange && changeIndicator === 'bars' && (
           <span
             aria-hidden="true"
-            data-diff-bar=""
             {...stylex.props(
               styles.bar,
               kind === 'added' ? styles.barAdded : styles.barRemoved,
@@ -1961,11 +1955,7 @@ export function DiffViewer({
       }
       if (hasSizer) {
         rows.push(
-          <div
-            key="sizer"
-            data-diff-sizer=""
-            aria-hidden="true"
-            {...stylex.props(styles.paneRow)}>
+          <div key="sizer" aria-hidden="true" {...stylex.props(styles.paneRow)}>
             <div {...stylex.props(styles.code, styles.ltr, styles.sizer)}>
               {sizerText}
             </div>
@@ -1993,9 +1983,7 @@ export function DiffViewer({
     };
 
     return (
-      <div
-        data-diff-split=""
-        {...stylex.props(styles.split, dynamicStyles.splitRows(rowCount))}>
+      <div {...stylex.props(styles.split, dynamicStyles.splitRows(rowCount))}>
         {renderSide('old')}
         {renderSide('new')}
       </div>
@@ -2021,7 +2009,7 @@ export function DiffViewer({
     body = (
       <>
         {isLargeFile && (
-          <div data-diff-fold="" {...stylex.props(styles.fold)}>
+          <div {...stylex.props(styles.fold)}>
             {renderFoldControl(
               unfoldedChangedLines,
               !isFileFolded,
@@ -2070,7 +2058,7 @@ export function DiffViewer({
   );
 
   const header =
-    displayPath != null || headerEnd != null ? (
+    displayPath != null || isRenderable(endContent) ? (
       <div
         {...mergeProps(
           themeProps('diff-viewer-header'),
@@ -2122,8 +2110,8 @@ export function DiffViewer({
             </VisuallyHidden>
           </span>
         )}
-        {isRenderable(headerEnd) && (
-          <div {...stylex.props(styles.headerEnd)}>{headerEnd}</div>
+        {isRenderable(endContent) && (
+          <div {...stylex.props(styles.endContent)}>{endContent}</div>
         )}
       </div>
     ) : null;
