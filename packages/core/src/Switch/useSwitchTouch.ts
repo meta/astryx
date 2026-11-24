@@ -258,9 +258,9 @@ export class SwitchTouchController {
   /** The thumb's offset when the current finger landed. */
   private downOffset = 0;
   /**
-   * The value when the current finger landed. A lift commits from it, so a
-   * click that already toggled the input during the press (a menu that runs
-   * the press on its release, for example) is not undone by the lift.
+   * The value when the current finger landed. The release commits from it.
+   * A change of value during the press, such as a menu row's click on its
+   * release, is the press's toggle, and the switch adds no click of its own.
    */
   private downIsOn = false;
   private drag: Drag | null = null;
