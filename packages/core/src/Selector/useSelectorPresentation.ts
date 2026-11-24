@@ -40,6 +40,7 @@ import {
   createPresentationHold,
   usePresentationHold,
 } from '../Layer/presentationHold';
+import {preloadSelectorBottomSheet} from './SelectorBottomSheet';
 
 interface UseSelectorPresentationOptions {
   presentation: AdaptivePresentation;
@@ -71,6 +72,8 @@ interface SelectorPresentationController {
   onSheetOpenChange: (isOpen: boolean) => void;
   onTriggerFocus: (event: FocusEvent<HTMLElement>) => void;
   popover: UsePopoverReturn;
+  /** Starts loading the bottom sheet when the sheet presents the list. */
+  preloadSheet: () => void;
   show: () => boolean;
 }
 
@@ -207,6 +210,7 @@ export function useSelectorPresentation({
   const show = useCallback((): boolean => {
     activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
+      preloadSelectorBottomSheet();
       resetFocusReturn();
       onShowRef.current();
       isSheetOpenRef.current = true;
@@ -266,6 +270,14 @@ export function useSelectorPresentation({
     [hide, show],
   );
 
+  // The trigger's intent (a pointer down or focus) starts loading the sheet,
+  // so an open that follows finds it loaded.
+  const preloadSheet = useCallback(() => {
+    if (resolvedPresentation === 'bottom-sheet') {
+      preloadSelectorBottomSheet();
+    }
+  }, [resolvedPresentation]);
+
   const isOpen = popover.isOpen || isSheetOpen;
   const activePresentation =
     isOpen || isSheetPresented
@@ -282,6 +294,7 @@ export function useSelectorPresentation({
     onSheetOpenChange: handleSheetOpenChange,
     onTriggerFocus: handleTriggerFocus,
     popover,
+    preloadSheet,
     show,
   };
 }

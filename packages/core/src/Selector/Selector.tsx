@@ -1275,6 +1275,8 @@ export function Selector<T extends SelectorOptionType>(
       ? 'detached'
       : statusVariant;
   const isEffectivelyReadOnly = isReadOnly && !isDisabled;
+  // Only a selector that can open its list loads the bottom sheet on intent.
+  const canOpenSurface = !isDisabled && !isEffectivelyReadOnly;
 
   // Normalize null to undefined for internal use (null is the clear sentinel)
   const normalizedValue = value === null ? undefined : value;
@@ -2317,6 +2319,9 @@ export function Selector<T extends SelectorOptionType>(
     onFocus: event => {
       onFocus?.(event);
       surface.onTriggerFocus(event);
+      if (canOpenSurface) {
+        surface.preloadSheet();
+      }
     },
     tabIndex: 0,
     ...stylex.props(
@@ -2338,6 +2343,7 @@ export function Selector<T extends SelectorOptionType>(
           disabledMessageTooltip.ref(el);
         }}
         onClick={onTriggerClick}
+        onPointerDownCapture={canOpenSurface ? surface.preloadSheet : undefined}
         {...pressable}
         {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(

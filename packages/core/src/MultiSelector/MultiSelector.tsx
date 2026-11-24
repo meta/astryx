@@ -1236,6 +1236,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       ? 'detached'
       : statusVariant;
   const isEffectivelyReadOnly = isReadOnly && !isDisabled;
+  // Only a selector that can open its list loads the bottom sheet on intent.
+  const canOpenSurface = !isDisabled && !isEffectivelyReadOnly;
 
   const generatedTriggerId = useId();
   // A caller's `id` lands on the trigger, so the label and listbox wiring
@@ -2605,6 +2607,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onFocus: event => {
       onFocus?.(event);
       surface.onTriggerFocus(event);
+      if (canOpenSurface) {
+        surface.preloadSheet();
+      }
     },
     onClick: isDisabled
       ? event => {
@@ -2662,6 +2667,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       onFocus: event => {
         onFocus?.(event);
         surface.onTriggerFocus(event);
+        if (canOpenSurface) {
+          surface.preloadSheet();
+        }
       },
       // A read-only selector has no selection surface to open, so it must
       // not advertise one: `spec:AST-011` FR4. Telling a screen-reader user
@@ -2710,6 +2718,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           disabledMessageTooltip.ref(el);
         }}
         onClick={handleControlBoxClick}
+        onPointerDownCapture={canOpenSurface ? surface.preloadSheet : undefined}
         {...pressable}
         {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
