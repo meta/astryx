@@ -31,13 +31,16 @@ import {Icon} from '../Icon/Icon';
 import {useClipboardCopy} from '../hooks/useClipboard';
 import {IconButton} from '../IconButton/IconButton';
 import {HStack} from '../HStack/HStack';
-import {VStack} from '../VStack/VStack';
 import {OverflowList, type OverflowItem} from '../OverflowList/OverflowList';
 import {Popover} from '../Popover/Popover';
 import {Text} from '../Text/Text';
 import {ToggleButton} from '../ToggleButton/ToggleButton';
 import {Tooltip} from '../Tooltip/Tooltip';
-import {spacingVars} from '../theme/tokens.stylex';
+import {
+  fontWeightVars,
+  spacingVars,
+  typeScaleVars,
+} from '../theme/tokens.stylex';
 import {useListFormatter} from '../i18n/useListFormatter';
 import {
   registerEnglishFallback,
@@ -63,8 +66,34 @@ const styles = stylex.create({
   },
   // Every reaction-row control carries one spacing step of inline padding.
   reactionToggle: {
-    aspectRatio: 'auto',
     paddingInline: spacingVars['--spacing-2'],
+  },
+  // The emoji and the count read as body text, at the normal weight in a
+  // pressed reaction too.
+  reactionContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-1'],
+    fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
+    fontWeight: fontWeightVars['--font-weight-normal'],
+  },
+  reactionTooltip: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacingVars['--spacing-0-5'],
+  },
+  reactionTooltipCount: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-1'],
+    fontWeight: typeScaleVars['--text-body-weight'],
+  },
+  reactionTooltipPeople: {
+    fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
+    fontWeight: typeScaleVars['--text-supporting-weight'],
   },
 });
 
@@ -115,19 +144,13 @@ function ReactionTooltipContent({reaction}: {reaction: CommentReaction}) {
             : names,
         );
   return (
-    <VStack gap={0.5} align="start">
-      <HStack gap={1} align="center">
-        <Text as="span" type="body" color="inherit">
-          {reaction.emoji}
-        </Text>
-        <Text as="span" type="body" color="inherit">
-          {reaction.count}
-        </Text>
-      </HStack>
-      <Text type="supporting" color="inherit">
-        {people}
-      </Text>
-    </VStack>
+    <span {...stylex.props(styles.reactionTooltip)}>
+      <span {...stylex.props(styles.reactionTooltipCount)}>
+        <span>{reaction.emoji}</span>
+        <span>{reaction.count}</span>
+      </span>
+      <span {...stylex.props(styles.reactionTooltipPeople)}>{people}</span>
+    </span>
   );
 }
 
@@ -171,14 +194,10 @@ export function ReactionSummary({
                 onReact(comment, reaction.key);
               }
             }}>
-            <HStack gap={1} align="center">
-              <Text as="span" type="body" color="primary" weight="normal">
-                {reaction.emoji}
-              </Text>
-              <Text as="span" type="body" color="primary" weight="normal">
-                {reaction.count}
-              </Text>
-            </HStack>
+            <span {...stylex.props(styles.reactionContent)}>
+              <span>{reaction.emoji}</span>
+              <span>{reaction.count}</span>
+            </span>
           </ToggleButton>
         </Tooltip>
       ))}
