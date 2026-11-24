@@ -3697,6 +3697,39 @@ describe('BaseTypeahead Enter before the typed text is searched', () => {
     expect(onChange.mock.calls[0][0]).toMatchObject({label: 'Banana'});
   });
 
+  it('picks nothing from the focus list when text matching the last search is typed again', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        hasEntriesOnFocus
+        value={null}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      input.focus();
+      fireEvent.click(input);
+    });
+    fireEvent.change(input, {target: {value: 'Banana'}});
+    await wait(300);
+    // Clearing brings the focus list back.
+    fireEvent.change(input, {target: {value: ''}});
+    await wait(300);
+
+    // "Banana" again: the focus list still shows while it waits.
+    fireEvent.change(input, {target: {value: 'Banana'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).not.toHaveBeenCalled();
+
+    await wait(300);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({label: 'Banana'});
+  });
+
   it('keeps Enter on the list of the current query while that query still loads', async () => {
     const onChange = vi.fn();
     let finish: (items: SearchableItem[]) => void = () => {};

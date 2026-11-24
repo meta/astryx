@@ -800,11 +800,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // cached empty answer belongs to the old query, not the text now typed.
   const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const isSearchPending = isLoading || query !== lastSearchedQuery;
-  // Text below the threshold is never searched; its rows come from the text.
-  const isTypedTextUnsearched =
-    query.length > 0 &&
-    query !== lastSearchedQuery &&
-    !isBelowMinQueryLength(query, minQueryLength);
 
   // An empty query reports nothing: an empty focus bootstrap is not a failed
   // search. A newer query stays silent through debounce and pending work;
@@ -891,6 +886,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // in the closure are stale (a selection cleared them) and shouldn't
   // be re-shown.
   const resultsGenRef = useRef(0);
+  // The typed text the shown rows answer: a search's text, '' for the focus
+  // list, or text below the threshold for rows derived from it.
+  const listQueryRef = useRef<string | null>(null);
   // The generation at which the current searchSource took over. Results
   // populated before it (resultsGenRef below this) came from a replaced
   // source: they can never be re-shown, so focus bootstraps the new source.
@@ -1266,6 +1264,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           : [];
         const shown = [...fetched, ...entries];
         resultsGenRef.current = gen;
+        listQueryRef.current = searchQuery;
         const firstRow = shown.length > 0 ? 0 : -1;
         const previous = shownState;
         const previousEntryCount = shownEntryCount;
@@ -1422,6 +1421,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         return;
       }
       resultsGenRef.current = gen;
+      listQueryRef.current = '';
       const shown = bootstrapResults.slice(0, maxMenuItems);
       const nextHighlightedIndex = shown.length > 0 ? 0 : -1;
       // A focus load that yields no choice, or fails (it arrives here empty),
@@ -1620,6 +1620,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         // never reports "no results" for a query nobody looked for.
         const derived = __queryEntries?.(newQuery, []) ?? [];
         resultsGenRef.current = searchGenRef.current;
+        listQueryRef.current = newQuery;
         replaceResults(derived, derived.length);
         setHeldHeight(null);
         setHighlightedIndex(derived.length > 0 ? 0 : -1);
@@ -2067,9 +2068,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           break;
         case 'Enter':
           e.preventDefault();
-          // Until the typed text's own search starts, the list still answers
-          // an earlier query, so Enter picks nothing from it.
-          if (isTypedTextUnsearched) {
+          // Until the typed text's own rows show, the list still answers an
+          // earlier query, so Enter picks nothing from it.
+          if (query.length > 0 && listQueryRef.current !== query) {
             break;
           }
           if (highlightedIndex >= 0 && highlightedIndex < results.length) {
@@ -2115,7 +2116,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       highlightedIndex,
       handleSelect,
       hasEntriesOnFocus,
-      isTypedTextUnsearched,
       query,
       minQueryLength,
       performBootstrap,

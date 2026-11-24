@@ -1310,6 +1310,46 @@ describe('Tokenizer', () => {
       );
     });
 
+    it('creates nothing from rows for shorter text when the text grows back to the last search', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          minQueryLength={3}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      // Below the threshold, the rows come from "Zi".
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zi'}});
+      });
+      // "Zig" again waits for its search; the "Zi" rows still show.
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Zig'}});
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 300));
+      });
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith(
+        [expect.objectContaining({id: 'Zig', label: 'Zig'})],
+        expect.objectContaining({type: 'create'}),
+      );
+    });
+
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
       // Creating costs no fetch, so a field that can create `QA` should not
