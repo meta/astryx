@@ -2344,6 +2344,9 @@ export function Selector<T extends SelectorOptionType>(
         }}
         onClick={onTriggerClick}
         onPointerDownCapture={canOpenSurface ? surface.preloadSheet : undefined}
+        onPointerEnter={
+          canOpenSurface ? surface.preloadSheetOnPointerEnter : undefined
+        }
         {...pressable}
         {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(

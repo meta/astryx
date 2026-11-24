@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
   type FocusEvent,
+  type PointerEvent,
   type RefObject,
 } from 'react';
 import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
@@ -40,7 +41,7 @@ import {
   createPresentationHold,
   usePresentationHold,
 } from '../Layer/presentationHold';
-import {preloadSelectorBottomSheet} from './SelectorBottomSheet';
+import {loadSelectorBottomSheet} from './SelectorBottomSheet';
 
 interface UseSelectorPresentationOptions {
   presentation: AdaptivePresentation;
@@ -74,6 +75,8 @@ interface SelectorPresentationController {
   popover: UsePopoverReturn;
   /** Starts loading the bottom sheet when the sheet presents the list. */
   preloadSheet: () => void;
+  /** The same, for a mouse or pen entering the trigger. */
+  preloadSheetOnPointerEnter: (event: PointerEvent) => void;
   show: () => boolean;
 }
 
@@ -207,14 +210,22 @@ export function useSelectorPresentation({
   useCommittedRefInto(popoverContentRef, popover.contentRef);
   const {hide: hidePopover, show: showPopover} = popover;
 
+  // The open's failed sheet load closes the open through the latest hide.
+  const hideRef = useRef<() => void>(() => {});
   const show = useCallback((): boolean => {
     activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
-      preloadSelectorBottomSheet();
       resetFocusReturn();
       onShowRef.current();
       isSheetOpenRef.current = true;
       setIsSheetOpen(true);
+      // A sheet that cannot load drops the open, so the trigger does not
+      // report a list that never shows.
+      void loadSelectorBottomSheet().then(isLoaded => {
+        if (!isLoaded && isSheetOpenRef.current) {
+          hideRef.current();
+        }
+      });
       return true;
     }
     releaseSheet();
@@ -240,6 +251,7 @@ export function useSelectorPresentation({
       hidePopover();
     }
   }, [hidePopover, onHideRef, prepareFocusReturn]);
+  useCommittedRefInto(hideRef, hide);
 
   const handleTriggerFocus = useCallback(
     (_event: FocusEvent<HTMLElement>) => {
@@ -274,9 +286,18 @@ export function useSelectorPresentation({
   // so an open that follows finds it loaded.
   const preloadSheet = useCallback(() => {
     if (resolvedPresentation === 'bottom-sheet') {
-      preloadSelectorBottomSheet();
+      void loadSelectorBottomSheet();
     }
   }, [resolvedPresentation]);
+  // A touch reports its own pointer down, which starts the load.
+  const preloadSheetOnPointerEnter = useCallback(
+    (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') {
+        preloadSheet();
+      }
+    },
+    [preloadSheet],
+  );
 
   const isOpen = popover.isOpen || isSheetOpen;
   const activePresentation =
@@ -295,6 +316,7 @@ export function useSelectorPresentation({
     onTriggerFocus: handleTriggerFocus,
     popover,
     preloadSheet,
+    preloadSheetOnPointerEnter,
     show,
   };
 }
