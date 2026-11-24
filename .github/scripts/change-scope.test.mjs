@@ -382,6 +382,8 @@ describe('docs-only changes: no package or docsite code', () => {
     const result = classifyChanges([{filename: 'README.md', status: 'M'}]);
     expect(result.docsOnly).toBe(true);
     expect(result.specOnly).toBe(false);
+    // One field names CI's spec-only lane for every reader.
+    expect(result.specLane).toBe(true);
     expect(result.fullSuite).toBe(false);
     expect(result.vitestFullSuite).toBe(false);
     expect(result.surfaces).toEqual([SURFACES.DOCS]);
@@ -428,6 +430,7 @@ describe('docs-only changes: no package or docsite code', () => {
     const result = classifyChanges([{filename: 'docs/specs/AST-030/spec.md'}]);
     expect(result.specOnly).toBe(true);
     expect(result.docsOnly).toBe(false);
+    expect(result.specLane).toBe(true);
   });
 
   it('narrows a docs change beside package code rather than widening it', () => {
@@ -436,8 +439,19 @@ describe('docs-only changes: no package or docsite code', () => {
       {filename: 'packages/cli/clients/cli/commands/help.mjs'},
     ]);
     expect(result.docsOnly).toBe(false);
+    expect(result.specLane).toBe(false);
     expect(result.fullSuite).toBe(false);
     expect(result.surfaces).toEqual([SURFACES.DOCS, 'runtime:cli']);
+  });
+
+  it('takes a docsite-only change with a document out of the docsite lane, into scoped broad CI', () => {
+    const result = classifyChanges([
+      {filename: 'README.md'},
+      {filename: 'apps/docsite/src/app/page.tsx'},
+    ]);
+    expect(result.docsiteOnly).toBe(false);
+    expect(result.specLane).toBe(false);
+    expect(result.fullSuite).toBe(false);
   });
 
   it('puts a docs-only change in the CI spec lane through --github-output, and names it', () => {

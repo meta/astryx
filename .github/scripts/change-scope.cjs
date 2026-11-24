@@ -340,6 +340,7 @@ function classifyChanges(changes, {expectedCount, patches = null} = {}) {
       specChangesetConflict: false,
       docsiteOnly: false,
       docsOnly: false,
+      specLane: false,
       labOnly: false,
       // No paths to scope from runs everything (spec:AST-030 FR4).
       fullSuite: true,
@@ -450,6 +451,9 @@ function classifyChanges(changes, {expectedCount, patches = null} = {}) {
     specChangesetConflict,
     docsiteOnly,
     docsOnly,
+    // CI's spec-only lane: spec records alone, or no package or docsite code.
+    // Every reader of the lane reads this one field.
+    specLane: specOnly || docsOnly,
     labOnly,
     fullSuite,
     vitestFullSuite,
@@ -549,7 +553,7 @@ if (require.main === module) {
         // CI runs a docs-only change in the spec-only lane: it builds and
         // tests nothing beyond the tests that read a changed document, and it
         // is never deferred (spec:AST-030 FR20). docs_only names it.
-        `spec_only=${result.specOnly || result.docsOnly}\ndocs_only=${result.docsOnly}\ntimes_only=${result.timesOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
+        `spec_only=${result.specLane}\ndocs_only=${result.docsOnly}\ntimes_only=${result.timesOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
       );
     } else {
       process.stdout.write(`${JSON.stringify(result)}\n`);

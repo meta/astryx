@@ -116,8 +116,9 @@ they are separately named.
   that touches no package or docsite code (`docs`, with or without
   `knowledge`) is docs-only: it rides the spec-only lane, is never deferred
   (FR20), and its required contexts say "Not affected: no package or docsite
-  changes". Beside package or docsite code, `docs` narrows nothing and widens
-  nothing.
+  changes". Beside package or docsite code, `docs` never forces the full
+  suite: the change runs broad CI scoped to that code, so a docsite-only or
+  Lab-only change with a document runs broad CI rather than its own lane.
 
 - **FR3 — Classification uses trusted base policy.** Pull-request code MUST NOT
   choose its own lane. The workflow MUST load the classifier and every classifier

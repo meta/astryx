@@ -87,14 +87,14 @@ describe('the docs-only lane', () => {
     expect(join.if).toContain("steps.scope.outputs.docs_only == 'true'");
   });
 
-  it('reads docs-only as the spec-only lane wherever the JSON result is read', () => {
+  it('reads the lane from one field wherever the JSON result is read', () => {
     expect(
       fs.readFileSync(
         path.join(root, '.github/workflows/pr-comment.yml'),
         'utf8',
       ),
     ).toContain(
-      "core.setOutput('spec_only', String(changeScope.specOnly || changeScope.docsOnly === true));",
+      "core.setOutput('spec_only', String(changeScope.specLane ?? changeScope.specOnly));",
     );
     const preflight = fs.readFileSync(
       path.join(root, 'scripts/preflight.mjs'),
@@ -102,9 +102,15 @@ describe('the docs-only lane', () => {
     );
     expect(
       preflight.split(
-        'const specOnly = scope.specOnly || scope.timesOnly || scope.docsOnly === true;',
+        'const specOnly = (scope.specLane ?? scope.specOnly) || scope.timesOnly;',
       ),
     ).toHaveLength(3);
+    expect(
+      fs.readFileSync(
+        path.join(root, '.github/scripts/change-scope.cjs'),
+        'utf8',
+      ),
+    ).toContain('`spec_only=${result.specLane}\\n');
   });
 
   it('keeps the repository guardrails in lint for a docs-only change', () => {
