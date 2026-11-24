@@ -979,23 +979,34 @@ export function useSheetGestures({
     setSheetHeight(height);
     settledDetentIndexRef.current = index;
     const settleInsetBasis = settleInsetBasisRef.current;
-    if (settlingLayoutOffsetRef.current != null && settleInsetBasis != null) {
-      // The settle keeps its layout split until it lands. Only its end
-      // point moves. The transform turns toward the new target from where
-      // the sheet is now. The landing swaps in the new layout offset.
+    const settlingLayoutOffset = settlingLayoutOffsetRef.current;
+    // The settle keeps its layout split until it lands. Below that split the
+    // sheet can rise only as far as the reserve below the screen. A target
+    // higher than that lifts the sheet off the screen's bottom edge.
+    const canRetargetSettle =
+      settlingLayoutOffset != null &&
+      settleInsetBasis != null &&
+      target - settlingLayoutOffset >= -offscreenBlockEndInsetRef.current;
+    if (canRetargetSettle) {
+      // Only the settle's end point moves. The transform turns toward the
+      // new target from where the sheet is now. The landing swaps in the new
+      // layout offset.
       pendingScrollPreservationInsetRef.current = preservationInsetForOffset(
         settleInsetBasis.baseLayoutOffset,
         targetLayoutOffset,
         settleInsetBasis.naturalEndGap,
       );
     } else {
+      // At rest, or when a retarget would lift the sheet, the sheet takes
+      // the new detent at once.
       prepareScrollAreaSettle(
-        baseLayoutOffset,
+        settleInsetBasis?.baseLayoutOffset ?? baseLayoutOffset,
         target,
         targetLayoutOffset,
         target,
-        baseLayoutOffset,
-        naturalEndGapFor(bodyNodeRef.current),
+        settlingLayoutOffset ?? baseLayoutOffset,
+        settleInsetBasis?.naturalEndGap ??
+          naturalEndGapFor(bodyNodeRef.current),
         false,
       );
     }

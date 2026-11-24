@@ -320,6 +320,34 @@ describe('BottomSheet: a window resize while the sheet settles', () => {
     expect(layoutHeight(sheet)).toBeCloseTo(halfDetentLayoutHeightFor(806), 1);
   });
 
+  it('keeps the sheet on the bottom edge when the window loses half its height mid-settle', () => {
+    const observers = mockResizeObservers();
+    render(<Panel state={{kind: 'open', entering: false}} />);
+    const sheet = getSheet();
+    measureBox(sheet);
+    layOut(observers, sheet, borderBoxFor(782));
+    releaseTowardHalfDetent();
+    landSettle(sheet);
+
+    // A short pull from the half detent, cancelled: it settles back there.
+    const handle = getHandle();
+    fireTimedPointer(handle, 'pointerdown', {time: 3000, y: 300});
+    fireTimedPointer(handle, 'pointermove', {time: 3500, y: 360});
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    resizeTo(327);
+
+    const translation =
+      Number.parseFloat(
+        /translateY\((-?[\d.]+)px\)/.exec(sheet.style.transform)?.[1] ?? '0',
+      ) || 0;
+    expect(translation).toBeGreaterThanOrEqual(-reserveOn(sheet));
+    landSettle(sheet);
+    expect(layoutHeight(sheet)).toBeCloseTo(halfDetentLayoutHeightFor(327), 1);
+    expect(snapshot(sheet).visible).toBeCloseTo(0.5 * 327, 1);
+  });
+
   it('re-anchors a resting sheet at once', () => {
     const observers = mockResizeObservers();
     render(<Panel state={{kind: 'open', entering: false}} />);
