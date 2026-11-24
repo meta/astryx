@@ -7657,9 +7657,10 @@ jobs:
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
     # A first run plans at most three legs, or four when that runs every owed
-    # audit; a later run at the same head may plan up to six to run them all. The matrix starts only the
-    # planned legs; a plan that owes no audit starts none (the condition above),
-    # and a plan that did not succeed starts exactly one, which fails.
+    # audit; a later run at the same head may plan up to six to run them all.
+    # The matrix starts only the planned legs; a plan that owes no audit
+    # starts none (the condition above), and a plan that did not succeed
+    # starts exactly one, which fails.
     strategy:
       fail-fast: false
       matrix:

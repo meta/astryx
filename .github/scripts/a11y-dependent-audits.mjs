@@ -157,9 +157,10 @@ export function changedComponents(changed) {
  * The audits a change owes and this run's legs. A changed component's own
  * audits come first, then each changed primitive's and those of the folders
  * that render it, nearest first. A first run fits what it can into
- * {@link MAX_LEGS} legs of about ten minutes and names the rest as deferred; a
- * later run at the same head runs every owed audit, in up to
- * {@link LATER_MAX_LEGS} legs.
+ * {@link MAX_LEGS} legs of about ten minutes, takes
+ * {@link COMPLETING_MAX_LEGS} when that runs every owed audit, and otherwise
+ * names the rest as deferred; a later run at the same head runs every owed
+ * audit, in up to {@link LATER_MAX_LEGS} legs.
  * @param {object} options
  * @param {string[]} options.changed
  * @param {string[]} options.primitives
