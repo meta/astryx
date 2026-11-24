@@ -50,6 +50,12 @@ export const docs = {
         'Puts the given channels at these values at once, ending their motion: follow a finger with it, frame by frame.',
     },
     {
+      name: 'shift',
+      type: '(offsets: {x?, y?, scale?, rotate?, opacity?}) => void',
+      description:
+        'Moves the given channels by these amounts at once, as when the layout moves the element under them, and keeps their motion. A spring goes on from the shifted value with its velocity and target. A coast shifts whole, and a channel at rest takes the amount and stays. After a layout change that moved the element down by `dy`, `shift({y: -dy})` keeps it where it was drawn. No promise resolves.',
+    },
+    {
       name: 'get',
       type: '() => {x, y, scale, rotate, opacity}',
       description: "Every channel's value on screen now.",
@@ -131,6 +137,7 @@ export const docsDense = {
     decay:
       '({x?, y?, scale?, rotate?, opacity?}) => Promise<void>; coasts from a release velocity.',
     set: '(values) => void; jumps, ending motion.',
+    shift: '(offsets) => void; moves by amounts, keeping motion.',
     get: '() => every value on screen.',
     getVelocity: '() => every velocity on screen.',
     stop: '() => void; halts where it is.',

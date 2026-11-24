@@ -25,7 +25,7 @@ import {useAttachment} from './useAttachment';
 
 /**
  * Animates the element behind `ref` with the motion Core uses. Call
- * `animate`, `decay`, `set`, `get`, `getVelocity` or `stop` on the returned
+ * `animate`, `decay`, `set`, `shift`, `get`, `getVelocity` or `stop` on the returned
  * animator from event handlers and effects. Pass the same `ref` to a gesture
  * hook to drag and animate one element.
  *

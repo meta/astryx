@@ -90,6 +90,15 @@ export interface AnimatorHandle {
    * the per-frame write of a drag.
    */
   set(values: AnimatorValues): void;
+  /**
+   * Moves the given channels by these amounts at once, as when the layout
+   * moves the element under them, and keeps their motion. A channel moving
+   * on a spring keeps its spring, velocity and target, so its motion goes on
+   * from the shifted value. A coasting channel shifts whole, its end
+   * included. A channel at rest takes the amount and stays there. No promise
+   * resolves: the motion goes on.
+   */
+  shift(offsets: AnimatorValues): void;
   /** Every channel's value on screen now. */
   get(): AnimatorSnapshot;
   /** Every channel's velocity on screen now, in units per second. */
@@ -256,6 +265,11 @@ export function createAttachableAnimator(): {
         motion.set(motionValues(values));
       }
     },
+    shift(offsets) {
+      if (!inactive()) {
+        motion.rebase(motionValues(offsets));
+      }
+    },
     get() {
       return snapshot(channel => motion.get(channel));
     },
@@ -302,8 +316,9 @@ const REST = {x: 0, y: 0, scale: 1, rotate: 0, opacity: 1} as const;
 /**
  * Animates `element` with the motion Core uses. `animate` springs channels to
  * a target on the state-change motion, and `decay` coasts them from a release
- * velocity. `set` jumps them, `get` and `getVelocity` read them, `stop` halts
- * them, and `destroy` lets the element go. Under Reduce Motion every call is
+ * velocity. `set` jumps them, and `shift` moves them by an amount, as a layout
+ * change does, while their motion goes on. `get` and `getVelocity` read them,
+ * `stop` halts them, and `destroy` lets the element go. Under Reduce Motion every call is
  * planned. A move becomes a short cross-fade on a touch screen, and it lands
  * at once with a mouse.
  *

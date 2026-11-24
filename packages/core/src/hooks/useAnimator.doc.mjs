@@ -32,7 +32,7 @@ export const docs = {
       name: 'animator',
       type: 'AnimatorHandle',
       description:
-        "The element's animator, the same object on every render: `animate(target, {velocity?})` springs channels to a target on the state-change motion Astryx's components use, `decay(velocity)` coasts them from a release velocity, `set(values)` jumps them, `get()` and `getVelocity()` read them, and `stop()` halts them. The channels are `x` and `y` (px), `scale` (1 at the element's size), `rotate` (degrees) and `opacity` (0 to 1). `animate` and `decay` return a promise that resolves when the motion ends. Calling it never re-renders the component. Calls before the ref attaches do nothing and resolve at once.",
+        "The element's animator, the same object on every render: `animate(target, {velocity?})` springs channels to a target on the state-change motion Astryx's components use, `decay(velocity)` coasts them from a release velocity, `set(values)` jumps them, `shift(offsets)` moves them by these amounts as a layout change does while their motion goes on, `get()` and `getVelocity()` read them, and `stop()` halts them. The channels are `x` and `y` (px), `scale` (1 at the element's size), `rotate` (degrees) and `opacity` (0 to 1). `animate` and `decay` return a promise that resolves when the motion ends. Calling it never re-renders the component. Calls before the ref attaches do nothing and resolve at once.",
     },
   ],
   usage: {
@@ -90,7 +90,7 @@ export const docsDense = {
   },
   returnDescriptions: {
     animator:
-      'animate(target, {velocity?}), decay(velocity), set, get, getVelocity, stop; stable, never re-renders.',
+      'animate(target, {velocity?}), decay(velocity), set, shift, get, getVelocity, stop; stable, never re-renders.',
   },
   usage: {
     description:
