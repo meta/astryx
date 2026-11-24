@@ -17,17 +17,6 @@
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
  *
- * UIKit's reorder control (iOS 26.2, measured) is three gray lines at the
- * trailing edge of a row in edit mode. A finger held still on it for the
- * scroll view's content-touch delay (150 ms) claims the drag. A flick that
- * starts on it scrolls the table instead. So until the claim, the handle
- * leaves the browser everything but double-tap zoom (`manipulation`). That
- * `touch-action` applies only where the primary pointer is coarse. Elsewhere
- * a finger gets the browser's defaults until the hold claims it. The handle is the one element the reorder
- * adds to a row. Its lines are a pseudo-element, and it listens to nothing
- * itself. The session's listeners take its drags. Its keys go through
- * React's.
- *
  * SYNC: When modified, update List/listReorderEngine.tsx and
  * List/ListItem.tsx.
  */
@@ -134,7 +123,9 @@ const styles = stylex.create({
     },
     // Where the primary pointer is coarse, the page keeps its scrolling and
     // its pinch-zoom until the hold claims the drag. A flick on the handle
-    // scrolls, as on iOS. That is `manipulation`, what a long press leaves the
+    // scrolls, as on iOS (iOS 26.2, measured: UIKit's reorder control claims
+    // the drag after the scroll view's 150 ms content-touch delay; a flick
+    // scrolls instead). That is `manipulation`, what a long press leaves the
     // browser. The hold's selection lock stops text selection while the
     // finger is down, so a mouse keeps the page's selection. Where the
     // pointer is fine, a finger gets the browser's defaults.
