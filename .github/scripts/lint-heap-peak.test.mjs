@@ -116,6 +116,53 @@ describe('the report', () => {
   });
 });
 
+describe('a preload that fails', () => {
+  // A module loaded before the preload that breaks the heap reads it uses.
+  const BREAK_V8 =
+    "data:text/javascript,import v8 from 'node:v8'; v8.getHeapStatistics = () => { throw new Error('heap read broken'); };";
+  // A script with its own output, a full collection and an exit code.
+  const SCRIPT =
+    "console.log('out'); console.error('err'); globalThis.keep = Array.from({length: 2e5}, (_, i) => ({i})); setTimeout(() => { process.exitCode = 3; }, 250);";
+  const run = (imports, file) =>
+    spawnSync(
+      process.execPath,
+      [...imports.map(each => `--import=${each}`), '-e', SCRIPT],
+      {encoding: 'utf8', env: {...process.env, LINT_HEAP_PEAK_FILE: file}},
+    );
+  const PRELOAD = path.join(root, '.github/scripts/lint-heap-peak.mjs');
+
+  it('changes no output and no exit code when its heap reads throw, and logs the error in its record', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-heap-'));
+    const file = path.join(dir, 'peaks.jsonl');
+    const without = run([BREAK_V8], file);
+    const withPreload = run([BREAK_V8, PRELOAD], file);
+    expect(without.status).toBe(3);
+    expect(withPreload.status).toBe(without.status);
+    expect(withPreload.stdout).toBe(without.stdout);
+    expect(withPreload.stderr).toBe(without.stderr);
+    const [logged] = fs
+      .readFileSync(file, 'utf8')
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    expect(logged.error).toContain('heap read broken');
+    // The report counts it and still passes.
+    expect(reportHeapPeaks([JSON.stringify(logged)]).summary).toBe(
+      'Lint heap: no process recorded its peak. 1 process could not record: heap read broken.',
+    );
+  });
+
+  it('changes no output and no exit code when it cannot write its record', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-heap-'));
+    // A folder where the record file should be: every write fails.
+    const without = run([], dir);
+    const withPreload = run([PRELOAD], dir);
+    expect(withPreload.status).toBe(without.status);
+    expect(withPreload.stdout).toBe(without.stdout);
+    expect(withPreload.stderr).toBe(without.stderr);
+  });
+});
+
 describe('the Lint job', () => {
   it('preloads the recorder into both type-aware steps, and reports after ESLint without failing', () => {
     const preload =
