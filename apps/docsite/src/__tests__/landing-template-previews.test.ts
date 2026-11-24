@@ -17,6 +17,10 @@ import {
 } from '../../scripts/generate-landing-template-previews.mjs';
 import {previewColorModeFragment} from '../app/(site)/_landing/templatePreviewColorMode';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
+import {
+  THEMES_STORE_PHOTOS,
+  themesStorePhotoSources,
+} from '../app/(site)/_landing/themesStorePhotos.mjs';
 
 const docsiteDir = path.resolve(__dirname, '../..');
 const templatesDir = path.resolve(
@@ -193,6 +197,87 @@ export default function Page() {
     expect(markup).toContain(
       '<img fetchpriority="low" decoding="async" src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
     );
+  });
+});
+
+describe('the themes store photos', () => {
+  const photos = Object.values(THEMES_STORE_PHOTOS);
+  const STORE_PHOTO_WIDTHS = [128, 256, 384];
+  const STORE_PHOTO_SIZES = '(min-width: 1024px) 86px, min(28vw - 33px, 101px)';
+
+  it('are six files that the docsite serves', () => {
+    expect(photos).toHaveLength(6);
+    for (const photo of photos) {
+      expect(fs.existsSync(path.join(docsiteDir, 'public', photo))).toBe(true);
+    }
+  });
+
+  it('load through the optimizer at the width that the card and the screen need', () => {
+    const photo = '/landing/themes/butter-watch.webp';
+    expect(themesStorePhotoSources(photo)).toEqual({
+      src: `/_next/image?url=${encodeURIComponent(photo)}&w=384&q=75`,
+      srcSet: STORE_PHOTO_WIDTHS.map(
+        width =>
+          `/_next/image?url=${encodeURIComponent(photo)}&w=${width}&q=75 ${width}w`,
+      ).join(', '),
+      sizes: STORE_PHOTO_SIZES,
+    });
+    for (const each of photos) {
+      expect(themesStorePhotoSources(each)?.srcSet).toContain(
+        encodeURIComponent(each),
+      );
+    }
+  });
+
+  it('give no sources to an image that is not a store photo', () => {
+    expect(
+      themesStorePhotoSources('/landing/hero/butter-watch.webp'),
+    ).toBeNull();
+    expect(themesStorePhotoSources('/template-assets/logo.svg')).toBeNull();
+  });
+
+  it('ask the optimizer for widths that it allows', async () => {
+    const {default: nextConfig} = await import('../../next.config.mjs');
+    const {imageConfigDefault} =
+      await import('next/dist/shared/lib/image-config');
+    const images = {...imageConfigDefault, ...nextConfig.images};
+    expect([...images.deviceSizes, ...images.imageSizes]).toEqual(
+      expect.arrayContaining(STORE_PHOTO_WIDTHS),
+    );
+  });
+
+  it('have their sources in the markup that the build renders for the card', async () => {
+    // The generate step writes this file, so the other tests of this suite
+    // do not import it.
+    const {LANDING_PREVIEWS} = await import('../generated/landingPreviews');
+    const images = [
+      ...LANDING_PREVIEWS['themes-store'].matchAll(/<img\b[^>]*>/gu),
+    ].map(([tag]) => tag);
+    expect(images).toHaveLength(9);
+    for (const tag of images) {
+      const src = /\bsrc="([^"]*)"/u.exec(tag)?.[1].replaceAll('&amp;', '&');
+      const photo = photos.find(each =>
+        src?.includes(encodeURIComponent(each)),
+      );
+      expect(photo, tag).toBeDefined();
+      const sources = themesStorePhotoSources(photo as string);
+      expect(tag).toContain(`sizes="${STORE_PHOTO_SIZES}"`);
+      expect(
+        /\bsrcset="([^"]*)"/u.exec(tag)?.[1].replaceAll('&amp;', '&'),
+      ).toBe(sources?.srcSet);
+      expect(src).toBe(sources?.src);
+    }
+  });
+});
+
+describe('previewMarkup with image sources', () => {
+  it('gives the images of the page the sources for their slots', () => {
+    const markup = previewMarkup(
+      '<html><body><img src="/landing/themes/butter-watch.webp" alt="Watch"/></body></html>',
+      themesStorePhotoSources,
+    );
+    expect(markup).toContain(' 128w, ');
+    expect(markup).toContain('alt="Watch"');
   });
 });
 
