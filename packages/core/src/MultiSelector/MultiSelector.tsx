@@ -1268,6 +1268,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   );
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
+  // A sheet's listbox is in the document only once its frame has loaded and
+  // rendered it; until then the trigger names no listbox.
+  const [isListboxMounted, setIsListboxMounted] = useState(false);
+  const attachListbox = useCallback((node: HTMLDivElement | null) => {
+    listboxRef.current = node;
+    setIsListboxMounted(node != null);
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   // A typed query shows the search row's clear (✕) button, which becomes
@@ -2519,7 +2526,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       <Divider />
       <div {...stylex.props(styles.dropdown)}>
         <div
-          ref={listboxRef}
+          ref={attachListbox}
           id={listboxId}
           role={isGrid ? 'grid' : 'listbox'}
           aria-multiselectable="true"
@@ -2532,7 +2539,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   ) : (
     <div {...stylex.props(styles.dropdown)}>
       <div
-        ref={listboxRef}
+        ref={attachListbox}
         id={listboxId}
         role={isGrid ? 'grid' : 'listbox'}
         aria-multiselectable="true"
@@ -2624,7 +2631,35 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   };
 
+  // A sheet's listbox is in the document only once its frame has loaded and
+  // rendered it, so the trigger names it only from then.
+  const isListboxReferable =
+    !isEffectivelyReadOnly &&
+    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
+
   if (renderTrigger != null) {
+    // A caller's control gets no pointer props from the selector, so its
+    // intent listeners (a pointer down, or a mouse or pen entering it) are
+    // attached here and start the sheet's load.
+    const loadSheetOnIntent = (element: HTMLElement | null) => {
+      if (element == null || !canOpenSurface) {
+        return;
+      }
+      const onPointerDown = () => surface.preloadSheet();
+      const onPointerEnter = (event: PointerEvent) => {
+        if (event.pointerType !== 'touch') {
+          surface.preloadSheet();
+        }
+      };
+      element.addEventListener('pointerdown', onPointerDown, {capture: true});
+      element.addEventListener('pointerenter', onPointerEnter);
+      return () => {
+        element.removeEventListener('pointerdown', onPointerDown, {
+          capture: true,
+        });
+        element.removeEventListener('pointerenter', onPointerEnter);
+      };
+    };
     // Anchor-only mode: the caller renders the opener and spreads these props
     // on it. No Field, no status, no clear button — the caller owns the
     // control; the selector owns the panel, its anchor, and focus return.
@@ -2655,6 +2690,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         },
         triggerModality.ref,
         ref,
+        loadSheetOnIntent,
       ),
       id: triggerId,
       onClick: isEffectivelyReadOnly
@@ -2685,7 +2721,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             ? 'grid'
             : 'listbox',
       'aria-expanded': isEffectivelyReadOnly ? false : surface.isOpen,
-      'aria-controls': isEffectivelyReadOnly ? undefined : listboxId,
+      'aria-controls': isListboxReferable ? listboxId : undefined,
       'aria-busy': isBusy || undefined,
       'aria-disabled': isDisabled || callerProps['aria-disabled'],
       // Withholding the disclosure attributes stops the control lying about
@@ -2802,7 +2838,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                   : 'listbox'
           }
           aria-expanded={isEffectivelyReadOnly ? false : surface.isOpen}
-          aria-controls={isEffectivelyReadOnly ? undefined : listboxId}
+          aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={
             !isEffectivelyReadOnly && !hasSearch

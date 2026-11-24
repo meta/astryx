@@ -2252,6 +2252,12 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   );
 
+  // A sheet's listbox is in the document only once its frame has loaded and
+  // rendered it, so the trigger names it only from then.
+  const isListboxReferable =
+    !isEffectivelyReadOnly &&
+    (surface.activePresentation !== 'bottom-sheet' || isListboxMounted);
+
   let selectionSurface: ReactNode = null;
   if (surface.activePresentation === 'bottom-sheet') {
     if (!isEffectivelyReadOnly || surface.isSheetPresented) {
@@ -2431,7 +2437,7 @@ export function Selector<T extends SelectorOptionType>(
                 : 'listbox'
           }
           aria-expanded={isEffectivelyReadOnly ? false : surface.isOpen}
-          aria-controls={isEffectivelyReadOnly ? undefined : listboxId}
+          aria-controls={isListboxReferable ? listboxId : undefined}
           aria-readonly={isEffectivelyReadOnly || undefined}
           aria-activedescendant={
             !isEffectivelyReadOnly &&

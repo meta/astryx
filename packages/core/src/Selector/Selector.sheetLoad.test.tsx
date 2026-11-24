@@ -94,6 +94,9 @@ describe('Selector bottom-sheet load', () => {
     );
     const [trigger, readOnlyTrigger] = screen.getAllByRole('combobox');
 
+    // Idle: the sheet's listbox is not in the document, so nothing names it.
+    expect(trigger).not.toHaveAttribute('aria-controls');
+
     // No intent yet, and a read-only selector's focus is no intent: nothing
     // loads.
     readOnlyTrigger.focus();
@@ -127,5 +130,6 @@ describe('Selector bottom-sheet load', () => {
     expect(frameModule.requests).toBe(1);
     const listbox = screen.getByRole('listbox', {hidden: true});
     expect(listbox.contains(document.activeElement)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-controls', listbox.id);
   });
 });

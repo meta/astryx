@@ -30,7 +30,6 @@ const frame = createModuleLoader<typeof FrameModule>(
 
 // Hosts that wait for the frame. Each one renders again when it arrives.
 const frameListeners = new Set<() => void>();
-let pendingFrame: Promise<boolean> | null = null;
 
 function subscribeToFrame(listener: () => void): () => void {
   frameListeners.add(listener);
@@ -47,24 +46,20 @@ const readNoFrame = (): null => null;
  * once and is not kept, so the next intent or open asks again.
  */
 export async function loadSelectorBottomSheet(): Promise<boolean> {
-  pendingFrame ??= frame.load().then(
-    () => {
-      for (const listener of frameListeners) {
-        listener();
-      }
-      return true;
-    },
-    () => {
-      pendingFrame = null;
-      warnOnce(
-        'selector:sheet-load-failed',
-        'Selector',
-        'The selection sheet could not load. The next open tries again.',
-      );
-      return false;
-    },
-  );
-  return pendingFrame;
+  try {
+    await frame.load();
+  } catch {
+    warnOnce(
+      'selector:sheet-load-failed',
+      'Selector',
+      'The selection sheet could not load. The next open tries again.',
+    );
+    return false;
+  }
+  for (const listener of frameListeners) {
+    listener();
+  }
+  return true;
 }
 
 export function SelectorBottomSheet(
