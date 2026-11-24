@@ -25,6 +25,13 @@ interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
   isDisabled?: boolean;
   isOpen: boolean;
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load: the open is held, so a second press or Enter repeats
+   * it instead of closing the list or toggling an option no one can see.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
   hasSearch?: boolean;
   onOpen: () => unknown;
   onClose: () => void;
@@ -86,6 +93,7 @@ export function useMultiCombobox({
   selectableItems,
   isDisabled = false,
   isOpen,
+  isListShown = isOpen,
   hasSearch = false,
   onOpen,
   onClose,
@@ -157,6 +165,10 @@ export function useMultiCombobox({
     if (isDisabled) {
       return;
     }
+    if (isOpen && !isListShown) {
+      // The held open stays: a second press repeats it.
+      return;
+    }
     if (isOpen) {
       closeAndReset();
     } else {
@@ -168,6 +180,7 @@ export function useMultiCombobox({
   }, [
     isDisabled,
     isOpen,
+    isListShown,
     onOpen,
     closeAndReset,
     hasSearch,
@@ -283,6 +296,10 @@ export function useMultiCombobox({
             break;
           }
           e.preventDefault();
+          if (isOpen && !isListShown) {
+            // The held open stays, and nothing unseen is toggled.
+            break;
+          }
           if (isOpen && highlightedIndex >= 0) {
             if (isGrid && highlightedCell === 'action') {
               // The highlight is on the caller's control: fire it, and only
@@ -362,6 +379,7 @@ export function useMultiCombobox({
     [
       isDisabled,
       isOpen,
+      isListShown,
       onOpen,
       closeAndReset,
       selectableItems,

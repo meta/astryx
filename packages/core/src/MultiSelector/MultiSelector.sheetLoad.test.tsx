@@ -113,12 +113,13 @@ describe('MultiSelector bottom-sheet load', () => {
 
   // First in the file: the frame is still held here, so the open waits for it.
   it('keeps a held open collapsed, naming nothing, until the sheet renders its listbox', async () => {
+    const onChange = vi.fn();
     render(
       <MultiSelector
         label="Labels"
         options={['Bug', 'Feature']}
         value={[]}
-        onChange={() => {}}
+        onChange={onChange}
         presentation="bottom-sheet"
       />,
     );
@@ -131,6 +132,13 @@ describe('MultiSelector bottom-sheet load', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).not.toHaveAttribute('aria-controls');
     expect(trigger).not.toHaveAttribute('aria-activedescendant');
+
+    // A second press, Enter or Space during the hold keeps the open and
+    // toggles nothing.
+    fireEvent.click(trigger);
+    fireEvent.keyDown(trigger, {key: 'Enter'});
+    fireEvent.keyDown(trigger, {key: ' '});
+    expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => {
       frameModule.release();
@@ -148,6 +156,8 @@ describe('MultiSelector bottom-sheet load', () => {
     if (active != null) {
       expect(document.getElementById(active)).not.toBeNull();
     }
+    expect(screen.getAllByRole('dialog', {hidden: true})).toHaveLength(1);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("starts the load on a pointer down on a caller's control", () => {

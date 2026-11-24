@@ -370,6 +370,13 @@ interface UseComboboxOptions<T extends ComboboxOption> {
   value?: string;
   isDisabled?: boolean;
   isOpen: boolean;
+  /**
+   * Whether the open list is in the document. False while an open waits for
+   * its surface to load: the open is held, so a second press or Enter repeats
+   * it instead of closing the list or picking an option no one can see.
+   * Defaults to `isOpen`.
+   */
+  isListShown?: boolean;
   hasSearch?: boolean;
   onOpen: () => unknown;
   onClose: () => void;
@@ -464,6 +471,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
   value,
   isDisabled = false,
   isOpen,
+  isListShown = isOpen,
   hasSearch = false,
   onOpen,
   onClose,
@@ -521,6 +529,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     if (isDisabled) {
       return;
     }
+    if (isOpen && !isListShown) {
+      // The held open stays: a second press repeats it.
+      return;
+    }
     if (isOpen) {
       closeAndReset();
     } else {
@@ -529,7 +541,15 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         setHighlightedIndex(findOpeningIndex(false));
       }
     }
-  }, [isDisabled, isOpen, onOpen, closeAndReset, findOpeningIndex, hasSearch]);
+  }, [
+    isDisabled,
+    isOpen,
+    isListShown,
+    onOpen,
+    closeAndReset,
+    findOpeningIndex,
+    hasSearch,
+  ]);
 
   // The scroll effect lives here, the highlight owner, so every consumer
   // (Selector, CommandPalette) shares one hover/keyboard split (#6077).
@@ -596,6 +616,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         // falls through
         case 'Enter':
           e.preventDefault();
+          if (isOpen && !isListShown) {
+            // The held open stays, and nothing unseen is picked.
+            break;
+          }
           if (isOpen && highlightedIndex >= 0) {
             const item = selectableItems[highlightedIndex];
             if (item && !item.disabled) {
@@ -686,6 +710,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     [
       isDisabled,
       isOpen,
+      isListShown,
       onOpen,
       closeAndReset,
       selectableItems,

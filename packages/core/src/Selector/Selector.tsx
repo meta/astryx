@@ -1656,6 +1656,7 @@ export function Selector<T extends SelectorOptionType>(
     value: optimisticValue,
     isDisabled: isDisabled || isEffectivelyReadOnly,
     isOpen: surface.isOpen,
+    isListShown: surface.isListShown,
     hasSearch,
     onOpen: useCallback(() => surface.show(), [surface]),
     onClose: surface.hide,

@@ -1904,6 +1904,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
     isOpen: surface.isOpen,
+    isListShown: surface.isListShown,
     hasSearch,
     onOpen: useCallback(() => surface.show(), [surface]),
     onClose: surface.hide,
