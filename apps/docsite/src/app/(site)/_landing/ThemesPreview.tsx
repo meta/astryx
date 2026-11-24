@@ -127,6 +127,8 @@ const styles = stylex.create({
   // window with a hair to spare — no right-clip, no gutter — at any card width.
   // calc() dividing a length by a length yields the unitless number scale()
   // requires.
+  // SYNC: PHOTO_SIZES in themesStorePhotos.mjs states the size that this
+  // scale draws a store photo at.
   scaleInner: {
     width: STORE_RENDER_WIDTH,
     transform: `scale(calc(min(${STORE_MAX}px, calc(100cqw - ${RAIL_RESERVE}px)) / ${STORE_RENDER_WIDTH + 4}px))`,

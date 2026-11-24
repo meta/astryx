@@ -17,6 +17,7 @@ import {themeObjects} from '@/generated/themeRegistry';
 // CSS and skips runtime injection. BRAND_BLUE (logo-only) lives in @/constants.
 import {astryxTheme} from '@/themes/astryx';
 import {BRAND_BLUE} from '@/constants';
+import {optimizedImageSources} from '../../../../lib/optimizedImageUrl.mjs';
 
 // Sentinel for the docsite's local brand theme (not an @astryxdesign/theme-* package).
 const ASTRYX = 'astryx';
@@ -96,9 +97,9 @@ const REEL_THEMES: ReadonlyArray<string> = [
 ];
 
 // Per-theme card content, keyed by theme name (or the ASTRYX sentinel).
-// The photos are WebP copies of the theme product PNGs, at most 960 px wide.
-// The largest card draws a photo at about 315 px, so 960 px is sharp at 3x
-// pixel density. A PNG that is narrower than 960 px keeps its own width.
+// The photos are WebP copies of the theme product PNGs, 700 to 960 px wide.
+// A card loads a photo through reelPhotoSources or reelThumbSources, at the
+// width that its slot and the screen need.
 const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   [ASTRYX]: {
     // Product photos reuse the Neutral theme's image set (watch / headphones /
@@ -416,20 +417,46 @@ export const HERO_THEME_SLIDES: ReadonlyArray<HeroThemeSlide> = REEL_THEMES.map(
   },
 ).filter((s): s is HeroThemeSlide => s !== null);
 
+// The photos are square and cover their boxes, so the longer side of a box
+// is the size that its photo needs. Each value is the largest box of the
+// five slides in one layout of HeroFloatingCards. The layouts are the wide
+// one, the collage from 768 px, and the narrow collage.
+const PHOTO_SIZES =
+  '(min-width: 1024px) 258px, (min-width: 768px) 315px, 216px';
+// 1080 px gives a photo its own width, which is 700 to 960 px.
+const PHOTO_WIDTHS = [256, 384, 640, 750, 1080];
+// The thumbnail's frame is a spacing token, so its size comes from the
+// theme of the slide: 38 to 65 px. A file this small loses detail at the
+// exact size, so each width is well above the size that a screen needs.
+const THUMB_SIZES = '66px';
+const THUMB_WIDTHS = [128, 256];
+
+/** What an `<img>` or a warm-up `Image` loads a reel photo from. */
+export interface ReelImageSources {
+  src: string;
+  srcSet: string;
+  sizes: string;
+}
+
+/** The sources of a product card or feature card photo. */
+export function reelPhotoSources(image: string): ReelImageSources {
+  return optimizedImageSources(image, PHOTO_WIDTHS, PHOTO_SIZES);
+}
+
+/** The sources of the buy card's thumbnail. */
+export function reelThumbSources(image: string): ReelImageSources {
+  return optimizedImageSources(image, THUMB_WIDTHS, THUMB_SIZES);
+}
+
 /**
- * Every product photo the reel cards reference, deduped and in slide order. The
- * cards use plain <img> (no next/image priority), so on a fresh visit a slide's
- * remote CDN photos aren't fetched until that slide renders — they pop in as
- * the reel advances. The hero warms this list on mount so the images are in the
- * browser cache before the first auto-advance. Scoped to just the reel's photos
- * (3 per slide) so it doesn't bloat the rest of the landing page's initial load.
+ * The three photos of each slide, in slide order, with the sources that the
+ * slide's cards give their <img>. A card loads a photo only when its slide
+ * shows. The hero loads this list after the page loads, so that the browser
+ * has each file before the reel advances to its slide.
  */
-export const REEL_IMAGE_SRCS: ReadonlyArray<string> = Array.from(
-  new Set(
-    HERO_THEME_SLIDES.flatMap(slide => [
-      slide.content.product.image,
-      slide.content.feature.image,
-      slide.content.mini.image,
-    ]),
-  ),
-);
+export const REEL_IMAGES: ReadonlyArray<ReelImageSources> =
+  HERO_THEME_SLIDES.flatMap(slide => [
+    reelPhotoSources(slide.content.product.image),
+    reelPhotoSources(slide.content.feature.image),
+    reelThumbSources(slide.content.mini.image),
+  ]);

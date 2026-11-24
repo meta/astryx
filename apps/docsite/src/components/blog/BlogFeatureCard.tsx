@@ -6,7 +6,7 @@
  * covers absorb extra height so the title + byline stay tight at the bottom.
  * Custom artwork keeps its 16:9 frame and remains fully visible.
  *
- * @input  a blog post; hideDescription
+ * @input  a blog post; hideDescription; coverSizes, the width of the cover's slot
  * @output a full-height feature card for the home "Stay in the know" split
  * @position Used only by BlogShowcase's featured-split layout.
  */
@@ -22,7 +22,7 @@ import {AuthorByline} from './AuthorByline';
 import {BlogCoverArt} from './BlogCoverArt';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
 import {parseReleaseVersion} from '../../lib/blog/release';
-import {blogCoverUrl} from '../../lib/blog/coverImage';
+import {blogCoverSources, blogCoverUrl} from '../../lib/blog/coverImage';
 import css from './BlogCard.module.css';
 
 const styles = stylex.create({
@@ -74,14 +74,26 @@ const styles = stylex.create({
 export function BlogFeatureCard({
   post,
   hideDescription = false,
+  coverSizes,
 }: {
   post: BlogPost;
   hideDescription?: boolean;
+  /**
+   * How wide the card's layout draws the cover, as an `<img>` `sizes` value.
+   * The browser then loads the cover at that width. Without it, the cover
+   * loads at the width that its article also uses.
+   */
+  coverSizes?: string;
 }) {
   const releaseVersion = parseReleaseVersion(post.title);
 
   const coverContent = post.coverImage ? (
-    <img src={blogCoverUrl(post.coverImage)} alt={post.coverAlt ?? ''} />
+    <img
+      {...(coverSizes == null
+        ? {src: blogCoverUrl(post.coverImage)}
+        : blogCoverSources(post.coverImage, coverSizes))}
+      alt={post.coverAlt ?? ''}
+    />
   ) : releaseVersion ? (
     <ReleaseCoverArt
       version={releaseVersion}

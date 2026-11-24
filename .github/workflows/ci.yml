@@ -861,7 +861,7 @@ jobs:
             exit 0
           fi
           echo 'deferred=true' >> "$GITHUB_OUTPUT"
-          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes; re-run all jobs of this run to run everything now."
+          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes, while this run is at most six hours old. After that, mark the pull request draft, then ready, for a fresh run on the current main (a fork head needs its ci:run label first); a push or a main merge also works."
           echo "Heavy CI deferred: runs when review passes and before merge." >> "$GITHUB_STEP_SUMMARY"
 
   docsite-build:
