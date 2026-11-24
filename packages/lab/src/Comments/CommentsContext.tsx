@@ -140,6 +140,7 @@ export interface CommentsContextValue {
   markdownPlugins?: readonly MarkdownPluginEntry[];
   markdownInlinePlugins?: readonly MarkdownInlinePlugin[];
   emojiPicker?: CommentThreadSharedProps['emojiPicker'];
+  typingIndicator?: CommentThreadSharedProps['typingIndicator'];
   onUploadImages?: CommentImageUploader;
   renderAnchor?: CommentThreadSharedProps['renderAnchor'];
   renderBody?: CommentThreadSharedProps['renderBody'];
@@ -242,6 +243,7 @@ export function useCommentsController({
   markdownInlinePlugins,
   getReplyMention,
   emojiPicker,
+  typingIndicator,
   isSubmitting = false,
   onComposerDraftChange,
   onSubmit,
@@ -620,6 +622,7 @@ export function useCommentsController({
     markdownPlugins,
     markdownInlinePlugins,
     emojiPicker,
+    typingIndicator,
     onUploadImages,
     renderAnchor,
     renderBody,

@@ -74,7 +74,7 @@ export const docs = {
         name: 'Live state',
         required: false,
         description:
-          'Controlled typing state appears at the end of an open thread, with its pulsing dots in the avatar column and its label on the comment-text line.',
+          'With `typingIndicator`, controlled typing state appears at the end of an open thread: Comments passes the people typing, each once and without the viewer, and places what the function returns.',
       },
       {
         name: 'Activity event',
@@ -133,7 +133,7 @@ export const docs = {
         category: 'Content',
         criterion: '4.1.3 Status Messages',
         description:
-          'Typing is a polite status message with reduced-motion-safe dots.',
+          'Comments adds no live region for typing. The indicator `typingIndicator` returns owns its announcement: say who is typing once per change, politely, and keep its motion safe under reduced motion.',
       },
       {
         name: 'Thread toggle',
@@ -446,6 +446,12 @@ export const docs = {
             'Renders the emoji picker that composers open from their Add emoji button; pass `onSelect` to it. Without it, composers show no emoji button.',
         },
         {
+          name: 'typingIndicator',
+          type: '(props: {users: readonly CommentUser[]}) => ReactNode',
+          description:
+            'Renders the typing indicator at the end of an open thread while its `typingUsers` name someone besides the viewer. `users` lists each person once, without the viewer. Without it, typing shows nothing.',
+        },
+        {
           name: 'emptyState',
           type: 'ReactNode',
           description: 'Replaces the default no-comments state.',
@@ -614,7 +620,7 @@ import {Comments} from '@astryxdesign/lab';
     },
     {
       label: 'Live collaboration state',
-      code: `import {Comments} from '@astryxdesign/lab';
+      code: `import {ChatTypingIndicator, Comments} from '@astryxdesign/lab';
 
 <Comments
   comments={comments.map(thread => ({
@@ -622,6 +628,9 @@ import {Comments} from '@astryxdesign/lab';
     typingUsers: typingUsersByThread[thread.id] ?? [],
   }))}
   currentUser={viewer}
+  typingIndicator={({users}) => (
+    <ChatTypingIndicator names={users.map(user => user.name)} />
+  )}
   onSubmit={post}
   onComposerDraftChange={(value, context) =>
     publishTyping({context, isTyping: value.trim() !== ''})

@@ -50,7 +50,7 @@ export const docs = {
         name: 'Live state',
         required: false,
         description:
-          'Controlled typing state follows the conversation while the thread is open, with its pulsing dots in the avatar column and its label on the comment-text line.',
+          'With `typingIndicator`, controlled typing state follows the conversation while the thread is open: the thread passes the people typing, each once and without the viewer.',
       },
       {
         name: 'Reply composer',
@@ -277,6 +277,12 @@ export const docs = {
         'Renders the emoji picker the reply composer opens; pass `onSelect` to it. Without it, there is no emoji button.',
     },
     {
+      name: 'typingIndicator',
+      type: '(props: {users: readonly CommentUser[]}) => ReactNode',
+      description:
+        'Renders the typing indicator at the end of the open thread while `typingUsers` name someone besides the viewer. Without it, typing shows nothing.',
+    },
+    {
       name: 'renderAnchor',
       type: '(comment: CommentThreadData, defaultAnchor: ReactNode) => ReactNode',
       description: 'Replaces the thread’s quoted passage.',
@@ -464,6 +470,8 @@ export const docsZh = {
     getReplyMention: '回复某条回复时，用提及其作者的内容预填。',
     emojiPicker:
       '渲染回复输入框打开的表情选择器，并将 `onSelect` 传给它；省略时没有表情按钮。',
+    typingIndicator:
+      '线程展开且 `typingUsers` 中有查看者以外的人时，在线程末尾渲染输入状态指示；省略时不显示输入状态。',
     renderAnchor: '替换线程引用的段落。',
     renderBody: '替换评论的 Markdown 正文。',
     renderVersionBody: '替换编辑历史中某个版本的正文。',
@@ -576,6 +584,8 @@ export const docsDense = {
     getReplyMention: 'Seeds a reply-to-reply with an author mention.',
     emojiPicker:
       '({onSelect}) => picker for the reply composer; none = no emoji button.',
+    typingIndicator:
+      '({users}) => typing row at the end of the open thread; none = no typing row.',
     renderAnchor: 'Replaces the quoted passage.',
     renderBody: 'Replaces a comment’s Markdown body.',
     renderVersionBody: 'Replaces a history version’s body.',

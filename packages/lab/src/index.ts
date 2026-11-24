@@ -74,6 +74,7 @@ export {
   type CommentReactionOption,
   type CommentThreadData,
   type CommentThreadSharedProps,
+  type CommentTypingIndicatorRenderProps,
   type CommentUploadedImage,
   type CommentUser,
   type CommentVersion,

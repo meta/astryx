@@ -5,21 +5,15 @@
 /**
  * @file CommentRow.tsx
  * @input Uses React, StyleX, Astryx Card/Section/Link/Timestamp/Badge,
- *   useContainerReveal, useClickableContainer, ChatMessageMetadata,
- *   ChatTypingIndicator, and the Comments family's context and parts
+ *   useContainerReveal, useClickableContainer, ChatMessageMetadata, the
+ *   caller's typing indicator, and the Comments family's context and parts
  * @output Exports CommentRow: a thread (its first comment, render-derived open
- *   replies, typing state, hidden seen metadata, and reply composer, on a
- *   selectable Card or Section) at depth 0, or a reply at depth 1
+ *   replies, typing state, and reply composer, on a selectable Card or
+ *   Section) at depth 0, or a reply at depth 1
  * @position Internal row renderer shared by Comments and CommentThread
  */
 
-import {
-  useCallback,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import {useCallback, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
@@ -49,7 +43,6 @@ import {
 } from './CommentActions';
 import {CommentComposerBase} from './CommentComposer';
 import {CommentMarkdown} from './CommentMarkdown';
-import {ChatTypingIndicator} from '../Chat/ChatTypingIndicator';
 import {
   AuthorName,
   AvatarSpacer,
@@ -86,10 +79,6 @@ export type ThreadDivider = 'top' | 'bottom';
 
 /** The 28px avatar column (StyleX resolves only same-file constants). */
 const AVATAR_SIZE = `calc(${spacingVars['--spacing-6']} + ${spacingVars['--spacing-1']})`;
-const TYPING_INDICATOR_STYLE: CSSProperties &
-  Record<'--astryx-chat-typing-indicator-dots-column-width', string> = {
-  '--astryx-chat-typing-indicator-dots-column-width': AVATAR_SIZE,
-};
 export const THREAD_DIVIDERS: readonly ThreadDivider[] = ['top', 'bottom'];
 
 const styles = stylex.create({
@@ -128,9 +117,6 @@ const styles = stylex.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 0,
-  },
-  typingIndicator: {
-    width: '100%',
   },
   // Row controls carry one spacing step of inline padding. Pulling the row
   // back by that step puts their glyphs on the body text line, so only their
@@ -349,6 +335,7 @@ export function CommentRow({
     replyError,
     replyTarget,
     selectedThreadId,
+    typingIndicator,
   } = scope;
   const [isMetadataMenuOpen, setIsMetadataMenuOpen] = useState(false);
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
@@ -814,15 +801,14 @@ export function CommentRow({
             ))}
           </VStack>
         )}
-        {depth === 0 && isThreadSelected && typingUsers.length > 0 && (
-          <HStack width="100%" data-thread-typing-indicator="true">
-            <ChatTypingIndicator
-              names={typingUsers.map(user => user.name)}
-              xstyle={styles.typingIndicator}
-              style={TYPING_INDICATOR_STYLE}
-            />
-          </HStack>
-        )}
+        {depth === 0 &&
+          isThreadSelected &&
+          typingIndicator != null &&
+          typingUsers.length > 0 && (
+            <HStack width="100%" data-thread-typing-indicator="true">
+              {typingIndicator({users: typingUsers})}
+            </HStack>
+          )}
       </VStack>
 
       {depth === 0 &&
