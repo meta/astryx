@@ -1796,19 +1796,27 @@ describe('List reorderable', () => {
     const list = screen.getByRole('list');
     layOut(list);
     const handle = handleOf('A');
-    mouseDrag(handle, 322, 322 + 70);
-    act(() => {
-      fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
-    });
-    expect(labels()).toEqual(['B', 'C', 'A', 'D']);
-    // Grabbed again while the drop's glide still runs, and let go in place.
-    const again = handleOf('A');
-    const row = again.closest('li')!;
-    const top = 300 + 2 * 44 + 22;
-    mouseDrag(again, top, top);
-    act(() => {
-      fireEvent.pointerUp(again, {...MOUSE, clientY: top});
-    });
+    const row = handle.closest('li')!;
+    // jsdom's rectangles omit animated translate. Hold the glide at its start
+    // until the re-grab ends, so elapsed query time cannot change its place.
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(performance.now());
+    try {
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(animatorFor(row).get('y')).not.toBe(0);
+      // Grabbed again while the drop's glide still runs, and let go in place.
+      const again = handleOf('A');
+      const top = 300 + 2 * 44 + 22;
+      mouseDrag(again, top, top);
+      act(() => {
+        fireEvent.pointerUp(again, {...MOUSE, clientY: top});
+      });
+    } finally {
+      clock.mockRestore();
+    }
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
     });
