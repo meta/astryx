@@ -54,7 +54,12 @@ import {listReorderHandleProps} from '../privateAttributes/listReorder.stylex';
 import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
 import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
-import {MIN_TOUCH_TARGET, type HitInsets, type HitRect} from '../utils/hitArea';
+import {
+  centeredGrowth,
+  MIN_TOUCH_TARGET,
+  type HitInsets,
+  type HitRect,
+} from '../utils/hitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {
   registerEnglishFallback,
@@ -118,19 +123,17 @@ export function reorderHandleGrowth(
   toLayout: (rect: HitRect) => HitRect,
   element: HTMLElement,
 ): HitInsets {
-  const x = Math.max(0, (MIN_TOUCH_TARGET - (target.right - target.left)) / 2);
-  const y = Math.max(0, (MIN_TOUCH_TARGET - (target.bottom - target.top)) / 2);
+  const full = centeredGrowth(target, MIN_TOUCH_TARGET);
   const list = element.closest('ul, ol');
   if (list == null) {
-    return {top: y, right: x, bottom: y, left: x};
+    return full;
   }
   const {top, bottom, left, right} = list.getBoundingClientRect();
   const box = toLayout({top, bottom, left, right});
   return {
-    top: Math.max(0, Math.min(y, target.top - box.top)),
-    right: x,
-    bottom: Math.max(0, Math.min(y, box.bottom - target.bottom)),
-    left: x,
+    ...full,
+    top: Math.max(0, Math.min(full.top, target.top - box.top)),
+    bottom: Math.max(0, Math.min(full.bottom, box.bottom - target.bottom)),
   };
 }
 
