@@ -5,7 +5,8 @@
 /**
  * @file CommentComposer.tsx
  * @input Uses React, StyleX, ChatComposer, ChatComposerInput, ChatSendButton,
- *   Popover, IconButton, Card, EmojiPicker, Typeahead's static source
+ *   Popover, IconButton, Card, the caller's emoji picker, Typeahead's static
+ *   source
  * @output Exports CommentComposer and CommentComposerProps, and the internal
  *   CommentComposerBase the Comments family's threads use
  * @position A comment's two-row composer: the input (growing to five lines,
@@ -50,7 +51,6 @@ import {createStaticSource} from '@astryxdesign/core/Typeahead';
 import {radiusVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 import {useTranslator} from '@astryxdesign/core/i18n';
-import {EmojiPicker} from '../EmojiPicker';
 import {agentToken} from './CommentMarkdown';
 import {
   ErrorBanner,
@@ -66,6 +66,7 @@ import type {
   CommentAnchor,
   CommentComposerContext,
   CommentComposerRenderProps,
+  CommentEmojiPickerRenderProps,
   CommentHighlightColor,
   CommentUploadedImage,
 } from './types';
@@ -202,7 +203,7 @@ export interface CommentComposerBaseProps {
     readonly CommentUploadedImage[] | Promise<readonly CommentUploadedImage[]>;
   triggers: readonly ChatComposerTrigger[];
   agentCommands: readonly CommentAgentCommand[];
-  hasEmojiPicker: boolean;
+  emojiPicker?: (props: CommentEmojiPickerRenderProps) => ReactNode;
   controls?: ReactNode;
   /** Focuses the input whenever it changes, e.g. when Reply opens it. */
   focusKey?: string;
@@ -221,8 +222,8 @@ export function CommentComposerBase({
   contextLabel,
   controls,
   error,
+  emojiPicker,
   focusKey,
-  hasEmojiPicker,
   highlightColor,
   isSubmitting,
   label,
@@ -514,7 +515,7 @@ export function CommentComposerBase({
                   />
                 </>
               )}
-              {hasEmojiPicker && (
+              {emojiPicker != null && (
                 <Popover
                   isOpen={isPickerOpen}
                   onOpenChange={setIsPickerOpen}
@@ -527,17 +528,17 @@ export function CommentComposerBase({
                   // The picker's headings run edge to edge.
                   padding={0}
                   content={
-                    isPickerOpen ? (
-                      <EmojiPicker
-                        onSelect={emoji => {
-                          onChange(
-                            appendDraftInline(latestValueRef.current, emoji),
-                          );
-                          setIsPickerOpen(false);
-                          inputRef.current?.focus();
-                        }}
-                      />
-                    ) : null
+                    isPickerOpen
+                      ? emojiPicker({
+                          onSelect: emoji => {
+                            onChange(
+                              appendDraftInline(latestValueRef.current, emoji),
+                            );
+                            setIsPickerOpen(false);
+                            inputRef.current?.focus();
+                          },
+                        })
+                      : null
                   }>
                   {triggerProps => (
                     <IconButton
@@ -678,8 +679,11 @@ export interface CommentComposerProps extends Omit<
   triggers?: readonly ChatComposerTrigger[];
   /** Agents the comment can address: typing `/` lists them. */
   agentCommands?: readonly CommentAgentCommand[];
-  /** Whether the emoji picker button shows. @default true */
-  hasEmojiPicker?: boolean;
+  /**
+   * Renders the emoji picker the emoji button opens. Pass `onSelect` to the
+   * picker. Without it, there is no emoji button.
+   */
+  emojiPicker?: (props: CommentEmojiPickerRenderProps) => ReactNode;
   /**
    * Product-owned controls after the attach and emoji buttons, such as a
    * choice the host reads when the comment posts. Keep it to one short
@@ -713,7 +717,7 @@ export function CommentComposer({
   onUploadImages,
   triggers = NO_TRIGGERS,
   agentCommands = NO_AGENT_COMMANDS,
-  hasEmojiPicker = true,
+  emojiPicker,
   controls,
   ref,
   ...rootProps
@@ -736,7 +740,7 @@ export function CommentComposer({
       onUploadImages={onUploadImages}
       triggers={triggers}
       agentCommands={agentCommands}
-      hasEmojiPicker={hasEmojiPicker}
+      emojiPicker={emojiPicker}
       controls={controls}
       rootRef={ref}
       rootProps={rootProps}

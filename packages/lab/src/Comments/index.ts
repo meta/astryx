@@ -23,6 +23,7 @@ export type {
   CommentComposerContext,
   CommentComposerRenderProps,
   CommentData,
+  CommentEmojiPickerRenderProps,
   CommentStatus,
   CommentHighlightColor,
   CommentImageUploader,

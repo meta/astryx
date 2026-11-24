@@ -14,18 +14,6 @@ import {
   it,
   vi,
 } from 'vitest';
-// The full emoji set renders slowly in jsdom; the composer only needs a few.
-vi.mock('../EmojiPicker/emojiData', () => ({
-  EMOJI_GROUPS: [
-    {
-      name: 'Activities',
-      emojis: [
-        ['🎉', 'Party popper', 'celebration tada'],
-        ['🎈', 'Balloon', 'celebration'],
-      ],
-    },
-  ],
-}));
 
 import * as stylex from '@stylexjs/stylex';
 import {Popover} from '@astryxdesign/core/Popover';
@@ -38,12 +26,21 @@ import {
 } from './useCommentThreadDismissal';
 import type {
   CommentComposerRenderProps,
+  CommentEmojiPickerRenderProps,
   CommentThreadData,
   CommentUser,
 } from './types';
 
 const VIEWER: CommentUser = {id: 'avery', name: 'Avery Kim'};
 const OTHER: CommentUser = {id: 'maya', name: 'Maya Chen'};
+
+function renderEmojiPicker({onSelect}: CommentEmojiPickerRenderProps) {
+  return (
+    <button type="button" onClick={() => onSelect('🎉')}>
+      Party popper
+    </button>
+  );
+}
 
 const THREAD: CommentThreadData = {
   id: 'margin',
@@ -580,7 +577,7 @@ describe('CommentThread dismissal', () => {
   });
 
   it('leaves an outside press to an open emoji picker above the thread', async () => {
-    const {onDismiss} = renderThread();
+    const {onDismiss} = renderThread({emojiPicker: renderEmojiPicker});
     await settle();
     typeDraft(await openReply(), 'Draft');
     fireEvent.click(screen.getByRole('button', {name: 'Add emoji'}));
@@ -612,7 +609,7 @@ describe('CommentThread dismissal', () => {
   });
 
   it('closes an open emoji picker on Escape before the thread', async () => {
-    const {onDismiss} = renderThread();
+    const {onDismiss} = renderThread({emojiPicker: renderEmojiPicker});
     await settle();
     await openReply();
     const emoji = screen.getByRole('button', {name: 'Add emoji'});

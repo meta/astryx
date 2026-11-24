@@ -104,7 +104,7 @@ function ReactionTooltipContent({reaction}: {reaction: CommentReaction}) {
     <VStack gap={0.5} align="start">
       <HStack gap={1} align="center">
         <Text as="span" type="body" color="inherit">
-          {reaction.label}
+          {reaction.emoji}
         </Text>
         <Text as="span" type="body" color="inherit">
           {reaction.count}
@@ -148,7 +148,7 @@ export function ReactionSummary({
               count: reaction.count,
             })}
             size="sm"
-            isPressed={reaction.reactedByViewer === true}
+            isPressed={reaction.isSelected === true}
             isDisabled={!canReact}
             data-comment-reaction={reaction.key}
             xstyle={styles.reactionToggle}
@@ -159,7 +159,7 @@ export function ReactionSummary({
             }}>
             <HStack gap={1} align="center">
               <Text as="span" type="body" color="primary" weight="normal">
-                {reaction.label}
+                {reaction.emoji}
               </Text>
               <Text as="span" type="body" color="primary" weight="normal">
                 {reaction.count}
@@ -193,7 +193,7 @@ function ReactionPicker({
           data-reaction-option={option.key}
           icon={
             <Text as="span" type="large">
-              {option.label}
+              {option.emoji}
             </Text>
           }
           isDisabled={isBusy}
@@ -365,7 +365,7 @@ export function CommentActions({
         label: reactionDescription(t, option),
         icon: (
           <Text as="span" type="body">
-            {option.label}
+            {option.emoji}
           </Text>
         ),
         isDisabled: isBusy,

@@ -11,7 +11,7 @@
 import {useState} from 'react';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
-import {CommentComposer} from '@astryxdesign/lab';
+import {CommentComposer, EmojiPicker} from '@astryxdesign/lab';
 
 export default function CommentComposerShowcase() {
   const [draft, setDraft] = useState('');
@@ -33,6 +33,7 @@ export default function CommentComposerShowcase() {
       <CommentComposer
         value={draft}
         onChange={setDraft}
+        emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
         onSubmit={body => {
           setPosted(current => [...current, body]);
           setDraft('');

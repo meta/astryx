@@ -592,6 +592,5 @@
   ],
   "packages/core/src/Typeahead/TypeaheadItem.tsx": ["../utils"],
   "packages/core/src/hooks/useKeyboardHint.tsx": ["../Kbd"],
-  "packages/lab/src/Comments/CommentComposer.tsx": ["../EmojiPicker"],
   "packages/lab/src/Schedule/Schedule.tsx": ["./plugins"]
 }

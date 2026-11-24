@@ -48,20 +48,20 @@ export interface CommentReactionOption {
   /** Stable key the host stores, such as `like`. */
   key: string;
   /** Emoji or compact glyph shown in the picker and on the reaction. */
-  label: string;
+  emoji: string;
   /**
    * Human-readable name, such as "Like", for the reaction's accessible label
    * and tooltip. Optional for the keys in DEFAULT_COMMENT_REACTIONS, which
    * take their localized names.
    */
-  description?: string;
+  label?: string;
 }
 
 /** A reaction summary on a comment. */
 export interface CommentReaction extends CommentReactionOption {
   count: number;
   /** Whether the viewer is one of the people who reacted. */
-  reactedByViewer?: boolean;
+  isSelected?: boolean;
   /** Who reacted, named in the reaction's tooltip. */
   actors?: readonly Pick<CommentUser, 'id' | 'name'>[];
 }
@@ -134,19 +134,13 @@ export interface CommentData {
   /** Markdown. */
   body: string;
   createdAt: string | number;
-  updatedAt?: string | number;
-  /** Shows Edited beside the time; opens the edit history when there is one. */
+  /**
+   * Shows Edited beside the time. With `loadVersions`, Edited also opens the
+   * edit history.
+   */
   isEdited?: boolean;
   /** Host-owned unread state. Shows a New badge that fades after five seconds. */
   isUnread?: boolean;
-  /** Earlier versions, newest first, when the host already has them. */
-  previousVersions?: readonly CommentVersion[];
-  /**
-   * Host-controlled metadata for people who have seen this comment. Comments
-   * does not render it by default; render callbacks receive it with the comment.
-   * To associate each person once, attach them only to their newest seen comment.
-   */
-  seenBy?: readonly CommentUser[];
   reactions?: readonly CommentReaction[];
   /** @default 'sent' */
   status?: CommentStatus;
@@ -249,6 +243,12 @@ export interface CommentAgentCommand {
   logoUrl?: string;
 }
 
+/** What an `emojiPicker` render function receives. */
+export interface CommentEmojiPickerRenderProps {
+  /** Inserts the emoji in the draft and closes the picker. */
+  onSelect: (emoji: string) => void;
+}
+
 /** Uploads images for a composer and returns where they were stored. */
 export type CommentImageUploader = (
   files: readonly File[],
@@ -302,10 +302,10 @@ export interface CommentThreadSharedProps {
    */
   getReplyMention?: (author: CommentUser) => string | undefined;
   /**
-   * Whether composers offer the emoji picker.
-   * @default true
+   * Renders the emoji picker that composers open from an emoji button. Pass
+   * `onSelect` to the picker. Without it, composers show no emoji button.
    */
-  hasEmojiPicker?: boolean;
+  emojiPicker?: (props: CommentEmojiPickerRenderProps) => ReactNode;
   /** Host-controlled pending state for a post or reply. */
   isSubmitting?: boolean;
   /**
@@ -340,8 +340,14 @@ export interface CommentThreadSharedProps {
   onResolveThread?: (commentId: string) => MaybePromise;
   /** Adds Reopen to resolved threads. */
   onReopenThread?: (commentId: string) => MaybePromise;
-  /** Loads a comment's full edit history, newest first, current version included. */
-  loadVersions?: (commentId: string) => Promise<readonly CommentVersion[]>;
+  /**
+   * Returns a comment's full edit history, newest first, current version
+   * included, at once or as a Promise. An edited comment opens its history
+   * only when this is set.
+   */
+  loadVersions?: (
+    commentId: string,
+  ) => readonly CommentVersion[] | Promise<readonly CommentVersion[]>;
   /**
    * Uploads images attached, pasted, or dropped in a composer and appends
    * them to the draft as Markdown images. Your upload endpoint must
@@ -369,10 +375,10 @@ export interface CommentThreadSharedProps {
  */
 export const DEFAULT_COMMENT_REACTIONS: readonly CommentReactionOption[] =
   Object.freeze([
-    {key: 'like', label: '👍'},
-    {key: 'love', label: '❤️'},
-    {key: 'laugh', label: '😂'},
-    {key: 'wow', label: '😮'},
-    {key: 'sad', label: '😢'},
-    {key: 'celebrate', label: '🎉'},
+    {key: 'like', emoji: '👍'},
+    {key: 'love', emoji: '❤️'},
+    {key: 'laugh', emoji: '😂'},
+    {key: 'wow', emoji: '😮'},
+    {key: 'sad', emoji: '😢'},
+    {key: 'celebrate', emoji: '🎉'},
   ]);

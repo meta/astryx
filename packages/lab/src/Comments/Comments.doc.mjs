@@ -23,7 +23,7 @@ export const docs = {
     'conversation',
   ],
   description:
-    'The comments on one item: comment threads with one level of replies, reactions, edit history, controlled typing and seen metadata, inline-comment quotes, and activity events in time order, with a composer for new comments. Controlled: your app owns the data and every mutation; the panel owns presentation, selection, and focus.',
+    'The comments on one item: comment threads with one level of replies, reactions, edit history, controlled typing, inline-comment quotes, and activity events in time order, with a composer for new comments. Controlled: your app owns the data and every mutation; the panel owns presentation, selection, and focus.',
   usage: {
     description:
       'The Comments panel shows the conversation about a document, task, or record: its comment threads and activity, with a composer for new comments. Use it as a side panel or section that fills a sized container, or embedded at its content height inside a card or popover. Render a single thread with CommentThread and a standalone composer with CommentComposer.',
@@ -44,7 +44,7 @@ export const docs = {
         name: 'Header',
         required: true,
         description:
-          'One avatar tall: name, relative time, Edited (opens the edit history), and Resolved. Mark as resolved or Reopen, Add reaction, Reply, Copy link, and the more menu (Edit, Delete) appear while the pointer or focus is on the thread, collapsing into the more menu when room runs out.',
+          'One avatar tall: name, relative time, Edited (opens the edit history with `loadVersions`), and Resolved. Mark as resolved or Reopen, Add reaction, Reply, Copy link, and the more menu (Edit, Delete) appear while the pointer or focus is on the thread, collapsing into the more menu when room runs out.',
       },
       {
         name: 'Quoted passage',
@@ -74,7 +74,7 @@ export const docs = {
         name: 'Live state',
         required: false,
         description:
-          'Controlled typing state appears at the end of an open thread, with its pulsing dots in the avatar column and its label on the comment-text line. Controlled `seenBy` metadata is available to comment render callbacks but has no default presentation.',
+          'Controlled typing state appears at the end of an open thread, with its pulsing dots in the avatar column and its label on the comment-text line.',
       },
       {
         name: 'Activity event',
@@ -108,7 +108,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Keep live state controlled and transport-neutral: map your collaboration layer to `typingUsers` and `seenBy`, and use `onComposerDraftChange` to publish local activity. `seenBy` stays hidden unless a comment render callback presents it. Debounce and expire transient activity in your app.',
+          'Keep live state controlled and transport-neutral: map your collaboration layer to `typingUsers`, and use `onComposerDraftChange` to publish local activity. Keep other per-comment metadata, such as who has seen a comment, beside your own records and look it up by comment id in a render callback. Debounce and expire transient activity in your app.',
       },
       {
         guidance: false,
@@ -133,7 +133,7 @@ export const docs = {
         category: 'Content',
         criterion: '4.1.3 Status Messages',
         description:
-          'Typing is a polite status message with reduced-motion-safe dots. `seenBy` metadata has no default presentation and introduces no additional live region.',
+          'Typing is a polite status message with reduced-motion-safe dots.',
       },
       {
         name: 'Thread toggle',
@@ -197,7 +197,7 @@ export const docs = {
           type: 'readonly CommentThreadData[]',
           required: true,
           description:
-            'The threads: each thread’s first comment, carrying `replies` (one level), `reactions`, transient `typingUsers`, hidden per-comment `seenBy` metadata, `anchor` for inline comments, `isResolved`, `status`, `progress`, and per-comment permissions. `seenBy` remains available to comment render callbacks. Shown in time order with `events`.',
+            'The threads: each thread’s first comment, carrying `replies` (one level), `reactions`, transient `typingUsers`, `anchor` for inline comments, `isResolved`, `status`, `progress`, and per-comment permissions. Shown in time order with `events`.',
         },
         {
           name: 'events',
@@ -355,7 +355,7 @@ export const docs = {
           type: 'readonly CommentReactionOption[]',
           default: 'DEFAULT_COMMENT_REACTIONS',
           description:
-            'The reactions Add reaction offers: Like, Love, Haha, Wow, Sad, and Celebrate by default, named in the viewer’s language. Give your own options a `description` to name them.',
+            'The reactions Add reaction offers: Like, Love, Haha, Wow, Sad, and Celebrate by default, named in the viewer’s language. Each option is `{key, emoji, label?}`; give your own options a `label` to name them.',
         },
         {
           name: 'onSubmit',
@@ -399,9 +399,9 @@ export const docs = {
         },
         {
           name: 'loadVersions',
-          type: '(commentId: string) => Promise<readonly CommentVersion[]>',
+          type: '(commentId: string) => readonly CommentVersion[] | Promise<readonly CommentVersion[]>',
           description:
-            'Loads a comment’s edit history, newest first. `previousVersions` works when the data is already loaded.',
+            'Returns a comment’s full edit history, newest first, current version included: at once when you already hold it, or as a Promise. An edited comment opens its history only when this is set.',
         },
         {
           name: 'onUploadImages',
@@ -440,10 +440,10 @@ export const docs = {
             'Seeds a reply to a reply with a mention of its author in your mention format.',
         },
         {
-          name: 'hasEmojiPicker',
-          type: 'boolean',
-          default: 'true',
-          description: 'Whether composers offer the emoji picker.',
+          name: 'emojiPicker',
+          type: '(props: {onSelect: (emoji: string) => void}) => ReactNode',
+          description:
+            'Renders the emoji picker that composers open from their Add emoji button; pass `onSelect` to it. Without it, composers show no emoji button.',
         },
         {
           name: 'emptyState',
@@ -499,9 +499,9 @@ export const docs = {
           reactions: [
             {
               key: 'like',
-              label: '👍',
+              emoji: '👍',
               count: 2,
-              reactedByViewer: true,
+              isSelected: true,
             },
           ],
           replies: [
@@ -532,7 +532,7 @@ export const docs = {
       label: 'Comments panel',
       code: `import {useState} from 'react';
 import {VStack} from '@astryxdesign/core/Layout';
-import {Comments} from '@astryxdesign/lab';
+import {Comments, EmojiPicker} from '@astryxdesign/lab';
 
 const viewer = {id: 'avery', name: 'Avery Kim'};
 
@@ -568,6 +568,7 @@ export default function Example() {
         comments={comments}
         currentUser={viewer}
         density="compact"
+        emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
         onSubmit={post}
       />
     </VStack>
@@ -619,11 +620,6 @@ import {Comments} from '@astryxdesign/lab';
   comments={comments.map(thread => ({
     ...thread,
     typingUsers: typingUsersByThread[thread.id] ?? [],
-    seenBy: seenByComment[thread.id] ?? [],
-    replies: thread.replies?.map(reply => ({
-      ...reply,
-      seenBy: seenByComment[reply.id] ?? [],
-    })),
   }))}
   currentUser={viewer}
   onSubmit={post}

@@ -25,16 +25,16 @@ const DEFAULT_REACTION_NAME_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
- * A reaction's human-readable name: the host's `description`, else the
- * localized name of a default reaction, else its glyph.
+ * A reaction's human-readable name: the host's `label`, else the localized
+ * name of a default reaction, else its emoji.
  */
 export function reactionDescription(
   t: TranslatorFn,
-  reaction: Pick<CommentReactionOption, 'key' | 'label' | 'description'>,
+  reaction: Pick<CommentReactionOption, 'key' | 'emoji' | 'label'>,
 ): string {
-  if (reaction.description != null && reaction.description !== '') {
-    return reaction.description;
+  if (reaction.label != null && reaction.label !== '') {
+    return reaction.label;
   }
   const key = DEFAULT_REACTION_NAME_KEYS[reaction.key];
-  return key != null ? t(key) : reaction.label;
+  return key != null ? t(key) : reaction.emoji;
 }

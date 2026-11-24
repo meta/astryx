@@ -31,7 +31,7 @@ export const docs = {
         name: 'Footer',
         required: true,
         description:
-          'Attach images (with `onUploadImages`), Add emoji, your `controls`, then Post at the end.',
+          'Attach images (with `onUploadImages`), Add emoji (with `emojiPicker`), your `controls`, then Post at the end.',
       },
     ],
     bestPractices: [
@@ -142,10 +142,10 @@ export const docs = {
       description: 'Agents the comment can address: typing `/` lists them.',
     },
     {
-      name: 'hasEmojiPicker',
-      type: 'boolean',
-      default: 'true',
-      description: 'Whether the Add emoji button shows.',
+      name: 'emojiPicker',
+      type: '(props: {onSelect: (emoji: string) => void}) => ReactNode',
+      description:
+        'Renders the emoji picker the Add emoji button opens; pass `onSelect` to it. Without it, there is no Add emoji button.',
     },
     {
       name: 'controls',
@@ -157,7 +157,7 @@ export const docs = {
     {
       label: 'New comment',
       code: `import {useState} from 'react';
-import {CommentComposer} from '@astryxdesign/lab';
+import {CommentComposer, EmojiPicker} from '@astryxdesign/lab';
 
 export default function Example() {
   const [draft, setDraft] = useState('');
@@ -165,6 +165,7 @@ export default function Example() {
     <CommentComposer
       value={draft}
       onChange={setDraft}
+      emojiPicker={({onSelect}) => <EmojiPicker onSelect={onSelect} />}
       onSubmit={body => {
         post(body);
         setDraft('');

@@ -17,7 +17,7 @@ export const docs = {
     'annotation',
   ],
   description:
-    'One comment thread on its own: its first comment, one level of replies, reactions, edit history, controlled typing and seen metadata, and a reply composer. For a margin comment beside a document, a popover under a highlight, or any surface that shows a single thread.',
+    'One comment thread on its own: its first comment, one level of replies, reactions, edit history, controlled typing, and a reply composer. For a margin comment beside a document, a popover under a highlight, or any surface that shows a single thread.',
   usage: {
     description:
       'A comment thread shows one conversation: its first comment and the replies under it. Use it where a surface shows a single thread, such as a margin card beside a document or a popover opened from a highlight. To show many threads with a composer for new ones, use Comments.',
@@ -50,7 +50,7 @@ export const docs = {
         name: 'Live state',
         required: false,
         description:
-          'Controlled typing state follows the conversation while the thread is open, with its pulsing dots in the avatar column and its label on the comment-text line. Controlled `seenBy` metadata remains available to comment render callbacks but has no default presentation.',
+          'Controlled typing state follows the conversation while the thread is open, with its pulsing dots in the avatar column and its label on the comment-text line.',
       },
       {
         name: 'Reply composer',
@@ -78,7 +78,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Map your collaboration state to `typingUsers` and `seenBy`, then publish local reply and edit activity with `onComposerDraftChange`. `seenBy` stays hidden unless a comment render callback presents it. The thread never opens a connection or expires participants.',
+          'Map your collaboration state to `typingUsers`, then publish local reply and edit activity with `onComposerDraftChange`. The thread never opens a connection or expires participants.',
       },
       {
         guidance: false,
@@ -125,7 +125,7 @@ export const docs = {
       type: 'CommentThreadData',
       required: true,
       description:
-        'The thread: its first comment, carrying its replies, reactions, optional anchor, transient `typingUsers`, and per-comment `seenBy` metadata. `seenBy` is not rendered by default but remains available to comment render callbacks.',
+        'The thread: its first comment, carrying its replies, reactions, optional anchor, and transient `typingUsers`.',
     },
     {
       name: 'isSelected',
@@ -208,8 +208,9 @@ export const docs = {
     },
     {
       name: 'loadVersions',
-      type: '(commentId: string) => Promise<readonly CommentVersion[]>',
-      description: 'Loads a comment’s edit history, newest first.',
+      type: '(commentId: string) => readonly CommentVersion[] | Promise<readonly CommentVersion[]>',
+      description:
+        'Returns a comment’s full edit history, newest first, current version included, at once or as a Promise.',
     },
     {
       name: 'onUploadImages',
@@ -270,10 +271,10 @@ export const docs = {
       description: 'Seeds a reply to a reply with a mention of its author.',
     },
     {
-      name: 'hasEmojiPicker',
-      type: 'boolean',
-      default: 'true',
-      description: 'Whether the reply composer offers the emoji picker.',
+      name: 'emojiPicker',
+      type: '(props: {onSelect: (emoji: string) => void}) => ReactNode',
+      description:
+        'Renders the emoji picker the reply composer opens; pass `onSelect` to it. Without it, there is no emoji button.',
     },
     {
       name: 'renderAnchor',
@@ -362,7 +363,7 @@ function CommentPopover({thread, viewer}) {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsZh = {
   description:
-    '单独呈现的一个评论线程：首条评论、一级回复、表情回应、编辑历史、受控的输入中与已读元数据，以及回复输入框。适用于文档旁的边注、高亮下方的弹出层，或任何只显示单个线程的界面。',
+    '单独呈现的一个评论线程：首条评论、一级回复、表情回应、编辑历史、受控的输入中状态，以及回复输入框。适用于文档旁的边注、高亮下方的弹出层，或任何只显示单个线程的界面。',
   usage: {
     description:
       '评论线程展示一段对话：首条评论及其下的回复。用于只显示单个线程的界面，例如文档旁的边注卡片，或从高亮处打开的弹出层。要显示多个线程并提供新评论输入框，请使用 Comments。',
@@ -385,7 +386,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '将协作状态映射到 `typingUsers` 和 `seenBy`，再通过 `onComposerDraftChange` 发布本地的回复和编辑动态。`seenBy` 默认不显示，除非评论渲染回调展示它。线程从不建立连接，也不会让参与者过期。',
+          '将协作状态映射到 `typingUsers`，再通过 `onComposerDraftChange` 发布本地的回复和编辑动态。线程从不建立连接，也不会让参与者过期。',
       },
       {
         guidance: false,
@@ -428,7 +429,7 @@ export const docsZh = {
   },
   propDescriptions: {
     comment:
-      '线程：首条评论，携带其回复、表情回应、可选锚点、临时的 `typingUsers`，以及每条评论的 `seenBy` 元数据。`seenBy` 默认不渲染，但评论渲染回调可以使用。',
+      '线程：首条评论，携带其回复、表情回应、可选锚点和临时的 `typingUsers`。',
     isSelected:
       '线程是否展开（受控）：正文不截断并显示回复。省略时由线程自行管理选中。宿主控制的选中从不移动焦点或打开回复输入框；查看者点击“回复”才会。',
     onSelectedChange: '查看者展开或收起线程时调用。',
@@ -448,7 +449,8 @@ export const docsZh = {
     onRetryComment: '为 `status` 为 `error` 的评论添加“重试”。',
     onResolveThread: '为未解决的线程添加“标记为已解决”。',
     onReopenThread: '为已解决的线程添加“重新打开”。',
-    loadVersions: '加载评论的编辑历史，最新的在前。',
+    loadVersions:
+      '返回评论的完整编辑历史（最新的在前，包含当前版本），可直接返回或返回 Promise。',
     onUploadImages:
       '上传在回复输入框中附加、粘贴或拖入的图片，并以 Markdown 图片追加。',
     isSubmitting: '宿主控制的回复输入框等待状态。',
@@ -460,7 +462,8 @@ export const docsZh = {
     markdownPlugins: '评论正文的块级 Markdown 插件。',
     markdownInlinePlugins: '评论正文的行内 Markdown 插件，例如提及。',
     getReplyMention: '回复某条回复时，用提及其作者的内容预填。',
-    hasEmojiPicker: '回复输入框是否提供表情选择器。',
+    emojiPicker:
+      '渲染回复输入框打开的表情选择器，并将 `onSelect` 传给它；省略时没有表情按钮。',
     renderAnchor: '替换线程引用的段落。',
     renderBody: '替换评论的 Markdown 正文。',
     renderVersionBody: '替换编辑历史中某个版本的正文。',
@@ -472,7 +475,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'One comment thread alone: first comment, one reply level, reactions, edit history, controlled typing/seen metadata, reply composer. For margin comments, highlight popovers, any single-thread surface.',
+    'One comment thread alone: first comment, one reply level, reactions, edit history, controlled typing, reply composer. For margin comments, highlight popovers, any single-thread surface.',
   usage: {
     description:
       'One conversation: first comment plus replies. For margin cards or highlight popovers. Many threads with a new-comment composer: use Comments.',
@@ -495,7 +498,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Map collaboration state to `typingUsers`/`seenBy`; publish local drafts via `onComposerDraftChange`. `seenBy` hidden unless a render callback shows it. No connections, no participant expiry.',
+          'Map collaboration state to `typingUsers`; publish local drafts via `onComposerDraftChange`. No connections, no participant expiry.',
       },
       {
         guidance: false,
@@ -538,7 +541,7 @@ export const docsDense = {
   },
   propDescriptions: {
     comment:
-      'The thread: first comment with replies, reactions, optional anchor, transient `typingUsers`, per-comment `seenBy` (not rendered by default).',
+      'The thread: first comment with replies, reactions, optional anchor, transient `typingUsers`.',
     isSelected:
       'Controlled open state. Omit for uncontrolled. Never moves focus or opens the composer.',
     onSelectedChange: 'Viewer opened or closed the thread.',
@@ -558,7 +561,8 @@ export const docsDense = {
     onRetryComment: 'Adds Retry to `status: error` comments.',
     onResolveThread: 'Adds Mark as resolved to an open thread.',
     onReopenThread: 'Adds Reopen to a resolved thread.',
-    loadVersions: 'Loads edit history, newest first.',
+    loadVersions:
+      'Returns edit history, newest first, current included; sync or Promise.',
     onUploadImages: 'Uploads composer images; appends Markdown images.',
     isSubmitting: 'Host pending state for the reply composer.',
     composerPlaceholder:
@@ -570,7 +574,8 @@ export const docsDense = {
     markdownPlugins: 'Block Markdown plugins for bodies.',
     markdownInlinePlugins: 'Inline Markdown plugins for bodies, e.g. mentions.',
     getReplyMention: 'Seeds a reply-to-reply with an author mention.',
-    hasEmojiPicker: 'Whether the reply composer offers the emoji picker.',
+    emojiPicker:
+      '({onSelect}) => picker for the reply composer; none = no emoji button.',
     renderAnchor: 'Replaces the quoted passage.',
     renderBody: 'Replaces a comment’s Markdown body.',
     renderVersionBody: 'Replaces a history version’s body.',
