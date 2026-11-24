@@ -97,7 +97,6 @@ import {
   isImeKeyEvent,
   isRenderable,
   mergeProps,
-  rtlStyles,
 } from '../utils';
 import {visibleText} from '../utils/accessibleName';
 import {
@@ -106,6 +105,7 @@ import {
   truncatedTextStyles,
 } from '../utils/textDirection';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuDirectionMirror} from './menuDirectionMirror.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -1190,7 +1190,7 @@ export function DropdownMenuSubMenu(
         icon="chevronRight"
         size="sm"
         color="secondary"
-        xstyle={rtlStyles.mirror}
+        xstyle={menuDirectionMirror.mirror}
         {...themeProps('dropdown-menu-indicator-icon')}
       />
     </span>
@@ -1217,7 +1217,7 @@ export function DropdownMenuSubMenu(
                 icon="chevronLeft"
                 size="sm"
                 color="secondary"
-                xstyle={rtlStyles.mirror}
+                xstyle={menuDirectionMirror.mirror}
               />
             }
             label={backLabel}

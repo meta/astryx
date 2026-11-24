@@ -18,7 +18,6 @@ import {
 import {createRef, useState} from 'react';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
@@ -27,7 +26,6 @@ import {IconButton} from '../IconButton';
 import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {Theme, defineTheme} from '../theme';
-import {rtlStyles} from '../utils';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 
 beforeEach(() => {
@@ -209,9 +207,6 @@ describe('DropdownMenuSubMenu', () => {
 
   it('mirrors its indicator and keyboard directions under RTL', async () => {
     const user = userEvent.setup();
-    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
-    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
-    expect(mirrorClasses.length).toBeGreaterThan(0);
     render(
       <div dir="rtl" style={{direction: 'rtl'}}>
         <MoveMenu />
@@ -225,9 +220,9 @@ describe('DropdownMenuSubMenu', () => {
     });
     const indicator = trigger.querySelector('.astryx-icon');
     expect(indicator).not.toBeNull();
-    for (const className of mirrorClasses) {
-      expect(indicator).toHaveClass(className);
-    }
+    expect(getComputedStyle(indicator as HTMLElement).transform).toBe(
+      'scaleX(-1)',
+    );
 
     await waitFor(() => {
       expect(
@@ -251,6 +246,26 @@ describe('DropdownMenuSubMenu', () => {
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
     expect(trigger).toHaveFocus();
+  });
+
+  it('does not flip its indicator by the document direction alone', async () => {
+    const user = userEvent.setup();
+    render(
+      <div dir="rtl">
+        <div dir="ltr">
+          <MoveMenu />
+        </div>
+      </div>,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const indicator = screen
+      .getByRole('menuitem', {name: /Move to/, hidden: true})
+      .querySelector('.astryx-icon');
+    expect(indicator).not.toBeNull();
+    expect(getComputedStyle(indicator as HTMLElement).transform).not.toBe(
+      'scaleX(-1)',
+    );
   });
 
   it('names the flyout from its trigger via aria-labelledby', async () => {
@@ -1822,6 +1837,42 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
       expect(trigger).toHaveAttribute('aria-expanded', 'false'),
     );
   });
+
+  it.each([
+    {documentDir: 'rtl', menuDir: 'rtl', isFlipped: true},
+    {documentDir: 'ltr', menuDir: 'rtl', isFlipped: true},
+    {documentDir: 'rtl', menuDir: 'ltr', isFlipped: false},
+  ] as const)(
+    'flips the Back icon with the menu direction only (document $documentDir, menu $menuDir)',
+    async ({documentDir, menuDir, isFlipped}) => {
+      stubCompactTouch(true);
+      const user = userEvent.setup();
+      render(
+        <div dir={documentDir}>
+          <div dir={menuDir}>
+            <PhoneMenu />
+          </div>
+        </div>,
+      );
+      const trigger = screen.getByRole('button', {name: /Actions/});
+      await user.click(trigger);
+      await waitFor(() =>
+        expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+      );
+      fireEvent.click(shownRow('Move to'), {detail: 1});
+
+      const backIcon = await waitFor(() =>
+        shownRow('Back to Actions').querySelector('.astryx-icon'),
+      );
+      expect(backIcon).not.toBeNull();
+      const transform = getComputedStyle(backIcon as HTMLElement).transform;
+      if (isFlipped) {
+        expect(transform).toBe('scaleX(-1)');
+      } else {
+        expect(transform).not.toBe('scaleX(-1)');
+      }
+    },
+  );
 
   it('typeahead and arrows scope to the drilled rows', async () => {
     stubCompactTouch(true);
